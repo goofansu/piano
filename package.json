@@ -1,0 +1,20 @@
+{
+  "name": "piano",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Web UI to start or continue pi threads across projects and worktrunk worktrees, each thread a long-lived pi RPC process.",
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.87.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.0",
+    "typescript": "^5.9.0"
+  }
+}
