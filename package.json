@@ -5,16 +5,23 @@
   "type": "module",
   "description": "Web UI to start or continue pi threads across projects and worktrunk worktrees, each thread a long-lived pi RPC process.",
   "scripts": {
-    "start": "node src/server.ts",
-    "dev": "node --watch src/server.ts"
+    "start": "node server/main.ts",
+    "dev": "node --watch server/main.ts",
+    "dev:web": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "test": "node --test 'test/**/*.test.ts'",
+    "typecheck": "tsc -p tsconfig.json && npm --prefix web run typecheck"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.87.1",
-    "ws": "^8.22.0"
+    "@effect/platform-node": "4.0.0-rc.118",
+    "effect": "4.0.0-rc.118"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "@types/ws": "^8.18.0",
     "typescript": "^5.9.0"
-  }
+  },
+  "workspaces": [
+    "web"
+  ]
 }
