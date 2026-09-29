@@ -105,12 +105,9 @@ export const RegistryLive = Layer.effect(
           yield* update((x) => ({ ...x, projects: [...x.projects, path] }));
           return path;
         }),
-      removeProject: (path) =>
-        update((d) => ({
-          ...d,
-          projects: d.projects.filter((p) => p !== path),
-          worktrees: d.worktrees.filter((w) => w.project !== path),
-        })),
+      // Closing a project only hides it; its worktrees and sessions stay registered so
+      // starting a session in that directory again brings everything back.
+      removeProject: (path) => update((d) => ({ ...d, projects: d.projects.filter((p) => p !== path) })),
       addWorktree: (entry) =>
         update((d) => (d.worktrees.some((w) => w.path === entry.path) ? d : { ...d, worktrees: [...d.worktrees, entry] })),
       addSession: (cwd, sessionId, title) =>

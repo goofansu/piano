@@ -71,7 +71,7 @@ the sidebar, so sessions started from the terminal do not appear here.
    created through piano.
 2. The directory picker on the New page also offers **New worktree…**, which runs
    `wt switch --create <branch> --no-cd` in a project (hooks skipped unless ticked), registers the
-   result and selects it. The project menu (…) offers **Remove**.
+   result and selects it. The project menu (…) offers **Close**, which takes the project out of the sidebar; its sessions stay in the registry and come back when the directory is used again.
 3. The **+** on a project row opens New session with that directory prefilled; click an existing
    session to load its history (nothing is started).
 4. The **model** picker is filled by pi itself: at startup piano runs a short-lived
