@@ -1,51 +1,40 @@
-/** Sidebar view: projects → worktrees → threads, with running-host markers. */
+/** Sidebar view: projects with their worktrees and a flat, recent-first session list, all from piano's registry. */
+import { existsSync } from "node:fs";
 import { Effect } from "effect";
-import type { ProjectView, ThreadInfo } from "../shared/wire.ts";
-import { listProjects } from "./Projects.ts";
-import { listSessions } from "./Sessions.ts";
-import { ThreadHosts } from "./ThreadHosts.ts";
-import { listWorktrees } from "./Worktrees.ts";
+import type { ProjectView, SessionInfo, WorktreeView } from "../shared/wire.ts";
+import { Registry } from "./Registry.ts";
+import { SessionHosts } from "./SessionHosts.ts";
+import { currentBranch } from "./Worktrees.ts";
 
-export const buildProjects: Effect.Effect<ProjectView[], never, ThreadHosts> = Effect.gen(function* () {
-  const hosts = yield* ThreadHosts;
+export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | Registry> = Effect.gen(function* () {
+  const hosts = yield* SessionHosts;
+  const registry = yield* Registry;
   const running = yield* hosts.list;
+  const data = yield* registry.get;
   const hostOf = (cwd: string, sessionId: string) => running.find((h) => h.cwd === cwd && h.sessionId === sessionId);
-  const projects = yield* listProjects;
-  return yield* Effect.forEach(
-    projects,
-    (path) =>
-      Effect.gen(function* () {
-        const worktrees = yield* listWorktrees(path);
-        const views = yield* Effect.forEach(
-          worktrees,
-          (wt) =>
-            Effect.gen(function* () {
-              const sessions = yield* listSessions(wt.path);
-              const threads: ThreadInfo[] = sessions.map((s) => {
-                const h = hostOf(wt.path, s.sessionId);
-                return { ...s, hosted: !!h, streaming: !!h?.streaming };
-              });
-              // Running threads that have not written a session file yet.
-              for (const h of running) {
-                if (h.cwd !== wt.path || threads.some((t) => t.sessionId === h.sessionId)) continue;
-                const now = new Date().toISOString();
-                threads.unshift({
-                  sessionId: h.sessionId,
-                  path: "",
-                  firstMessage: "",
-                  created: now,
-                  modified: now,
-                  messageCount: 0,
-                  hosted: true,
-                  streaming: h.streaming,
-                });
-              }
-              return { ...wt, threads };
-            }),
-          { concurrency: 4 },
-        );
-        return { path, name: path.split("/").filter(Boolean).pop() ?? path, worktrees: views };
-      }),
-    { concurrency: 4 },
-  );
+
+  return yield* Effect.forEach(data.projects, (path) => Effect.gen(function* () {
+    const worktrees: WorktreeView[] = [
+      { branch: yield* currentBranch(path), path, main: true },
+      ...data.worktrees.filter((w) => w.project === path && existsSync(w.path)).map((w) => ({ branch: w.branch, path: w.path, main: false })),
+    ];
+    const branchOf = new Map(worktrees.map((w) => [w.path, w.branch]));
+    const sessions: SessionInfo[] = data.sessions
+      .filter((t) => !t.archived && branchOf.has(t.cwd))
+      .map((t) => {
+        const h = hostOf(t.cwd, t.sessionId);
+        return {
+          sessionId: t.sessionId,
+          cwd: t.cwd,
+          branch: branchOf.get(t.cwd) ?? "",
+          title: t.title,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+          hosted: !!h,
+          streaming: !!h?.streaming,
+        };
+      })
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return { path, name: path.split("/").filter(Boolean).pop() ?? path, worktrees, sessions };
+  }), { concurrency: 4 });
 });

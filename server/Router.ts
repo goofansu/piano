@@ -1,33 +1,53 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Effect } from "effect";
+import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { DirListing } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
 import { expandHome } from "./PiEnv.ts";
 import { buildProjects } from "./Views.ts";
-import { handleSocket } from "./WsSession.ts";
+import { handleSocket } from "./WsClient.ts";
 
-/** Subdirectories for the folder picker. Hidden folders are skipped. */
-function listDirectory(raw: string): DirListing {
-  const path = resolve(expandHome(raw || "~"));
-  if (!existsSync(path) || !statSync(path).isDirectory()) throw new Error(`Not a directory: ${path}`);
-  const entries: DirListing["entries"][number][] = [];
-  for (const name of readdirSync(path)) {
-    if (name.startsWith(".")) continue;
-    const full = join(path, name);
-    try {
-      if (!statSync(full).isDirectory()) continue;
-    } catch {
-      continue;
+/** Subdirectories for the folder picker, with git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
+const listDirectory = (raw: string) =>
+  Effect.gen(function* () {
+    const path = resolve(expandHome(raw || "~"));
+    if (!existsSync(path) || !statSync(path).isDirectory()) return yield* Effect.fail(new Error(`Not a directory: ${path}`));
+    const names: string[] = [];
+    for (const name of readdirSync(path)) {
+      if (name.startsWith(".")) continue;
+      try {
+        if (statSync(join(path, name)).isDirectory()) names.push(name);
+      } catch {
+        /* unreadable entry */
+      }
     }
-    entries.push({ name, path: full, git: existsSync(join(full, ".git")) });
-  }
-  entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-  const parent = dirname(path);
-  return { path, parent: parent === path ? null : parent, home: homedir(), entries };
-}
+    names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    const entries = yield* Effect.forEach(
+      names,
+      (name) =>
+        Effect.gen(function* () {
+          const full = join(path, name);
+          const gitSubject = existsSync(join(full, ".git")) ? yield* gitHeadSubject(full) : undefined;
+          return { name, path: full, gitSubject: gitSubject || undefined };
+        }),
+      { concurrency: 8 },
+    );
+    const gitRoot = yield* gitTopLevel(path);
+    const gitSubject = gitRoot ? yield* gitHeadSubject(path) : undefined;
+    const parent = dirname(path);
+    const listing: DirListing = {
+      path,
+      parent: parent === path ? null : parent,
+      home: homedir(),
+      gitSubject: gitSubject || undefined,
+      gitRoot: gitRoot || undefined,
+      entries,
+    };
+    return listing;
+  });
 
 const json = (body: unknown, status = 200) =>
   HttpServerResponse.text(JSON.stringify(body, null, 2), { status, contentType: "application/json" });
@@ -52,8 +72,31 @@ export const AppRouter = HttpRouter.use((router) =>
         const request = yield* HttpServerRequest.HttpServerRequest;
         const params = HttpServerRequest.searchParamsFromURL(new URL(request.url, "http://localhost"));
         const raw = typeof params.path === "string" ? params.path : "~";
+        return yield* listDirectory(raw).pipe(
+          Effect.map((listing) => json(listing)),
+          Effect.catchCause((cause) => Effect.succeed(json({ error: String(cause).replace(/^Error: /, "") }, 400))),
+        );
+      }),
+    );
+
+    // mkdir -p for the folder picker's "New folder".
+    yield* router.add(
+      "POST",
+      "/api/mkdir",
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const body = yield* request.text.pipe(Effect.orElseSucceed(() => ""));
+        let target = "";
         try {
-          return json(listDirectory(raw));
+          target = String((JSON.parse(body) as { path?: string }).path ?? "");
+        } catch {
+          /* fall through */
+        }
+        const path = resolve(expandHome(target));
+        if (!target || path === "/" ) return json({ error: "path is required" }, 400);
+        try {
+          mkdirSync(path, { recursive: true });
+          return json({ path });
         } catch (e) {
           return json({ error: e instanceof Error ? e.message : String(e) }, 400);
         }

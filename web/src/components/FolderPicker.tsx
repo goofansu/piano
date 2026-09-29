@@ -1,121 +1,247 @@
-import { useEffect, useState } from "react";
-import { ArrowUpIcon, FolderIcon, HomeIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeftIcon, CheckIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, HomeIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { DirListing } from "@shared/wire";
 import { abbrevHome } from "@/lib/format";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPick: (path: string) => void;
+  initialPath?: string;
 }
 
-/** Browsers cannot reveal absolute directory paths, so the picker browses the server's filesystem. */
-export function FolderPicker({ open, onOpenChange, onPick }: Props) {
-  const [listing, setListing] = useState<DirListing | null>(null);
-  const [input, setInput] = useState("");
+const LAST_KEY = "piano.pickerPath";
+const MAX_VISIBLE = 500;
 
-  const load = async (path: string) => {
-    try {
-      const r = await fetch(`/api/ls?path=${encodeURIComponent(path || "~")}`);
-      const d = (await r.json()) as DirListing | { error: string };
-      if ("error" in d) {
-        toast.error(d.error);
-        return;
-      }
-      setListing(d);
-      setInput(d.path);
-      try {
-        localStorage.setItem("piano.pickerPath", d.path);
-      } catch {
-        /* ignore */
-      }
-    } catch (e) {
-      toast.error(String(e));
-    }
-  };
+/**
+ * Directory picker in the style of Shelley's: one path input is the whole model.
+ * A trailing slash browses inside that directory; text after the last slash filters
+ * the listing by prefix. Enter selects the directory being typed.
+ */
+export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props) {
+  const [input, setInput] = useState("");
+  const [dir, setDir] = useState<DirListing | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const cache = useRef(new Map<string, DirListing>());
+  const seq = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { dirPath, prefix } = useMemo(() => parseInput(input), [input]);
 
   useEffect(() => {
     if (!open) return;
-    let start = "~";
+    let start = initialPath || "";
+    if (!start) {
+      try {
+        start = localStorage.getItem(LAST_KEY) || "";
+      } catch {
+        /* ignore */
+      }
+    }
+    setInput(start ? withSlash(start) : "~/");
+    setCreating(false);
+    setError(null);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, [open, initialPath]);
+
+  // Load whatever directory the input currently points at.
+  useEffect(() => {
+    if (!open) return;
+    const key = dirPath || "~";
+    const cached = cache.current.get(key);
+    if (cached) {
+      setDir(cached);
+      setError(null);
+      return;
+    }
+    const mine = ++seq.current;
+    setLoading(true);
+    fetch(`/api/ls?path=${encodeURIComponent(key)}`)
+      .then((r) => r.json() as Promise<DirListing | { error: string }>)
+      .then((d) => {
+        if (mine !== seq.current) return;
+        if ("error" in d) {
+          setError(d.error);
+          setDir(null);
+        } else {
+          cache.current.set(key, d);
+          cache.current.set(d.path, d);
+          setDir(d);
+          setError(null);
+        }
+      })
+      .catch((e) => mine === seq.current && setError(String(e)))
+      .finally(() => mine === seq.current && setLoading(false));
+  }, [open, dirPath]);
+
+  const entries = useMemo(() => {
+    const all = dir?.entries ?? [];
+    return prefix ? all.filter((e) => e.name.toLowerCase().startsWith(prefix.toLowerCase())) : all;
+  }, [dir, prefix]);
+  const visible = entries.slice(0, MAX_VISIBLE);
+  const hidden = entries.length - visible.length;
+
+  const goTo = (path: string) => setInput(withSlash(path));
+  const selected = dir && !prefix ? dir.path : dir ? dir.path : "";
+
+  const select = () => {
+    const path = input.endsWith("/") ? dirPath || dir?.path : entries.length === 1 && prefix ? entries[0].path : dir?.path;
+    if (!path) return;
     try {
-      start = localStorage.getItem("piano.pickerPath") || "~";
+      localStorage.setItem(LAST_KEY, path);
     } catch {
       /* ignore */
     }
-    void load(start);
-  }, [open]);
+    onPick(path);
+    onOpenChange(false);
+  };
 
-  const crumbs = listing ? listing.path.split("/").filter(Boolean) : [];
+  const createFolder = async () => {
+    const name = newName.trim();
+    if (!name || !dir) return;
+    if (/[\\/]/.test(name)) {
+      toast.error("Folder name cannot contain slashes");
+      return;
+    }
+    const r = await fetch("/api/mkdir", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: `${dir.path}/${name}` }) });
+    const d = (await r.json()) as { path?: string; error?: string };
+    if (d.error || !d.path) {
+      toast.error(d.error ?? "Could not create folder");
+      return;
+    }
+    cache.current.delete(dir.path);
+    cache.current.delete(dirPath || "~");
+    setCreating(false);
+    setNewName("");
+    goTo(d.path);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[80vh] flex-col gap-3 sm:max-w-xl">
+      <DialogContent className="flex flex-col gap-3 sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Choose a project folder</DialogTitle>
+          <DialogTitle>Select directory</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-wrap items-center gap-1 font-mono text-xs">
-          <Button variant="ghost" size="sm" className="h-6 px-1" onClick={() => load("/")}>/</Button>
-          {crumbs.map((seg, i) => {
-            const path = `/${crumbs.slice(0, i + 1).join("/")}`;
-            return (
-              <span key={path} className="flex items-center gap-1">
-                <span className="text-muted-foreground">/</span>
-                {i === crumbs.length - 1 ? <span className="px-1">{seg}</span> : <Button variant="ghost" size="sm" className="h-6 px-1" onClick={() => load(path)}>{seg}</Button>}
-              </span>
-            );
-          })}
-        </div>
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void load(input.trim());
+
+        <Input
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              select();
+            }
           }}
-        >
-          <Button type="button" variant="outline" size="icon" aria-label="Home" onClick={() => load(listing?.home ?? "~")}><HomeIcon /></Button>
-          <Button type="button" variant="outline" size="icon" aria-label="Up" disabled={!listing?.parent} onClick={() => listing?.parent && load(listing.parent)}><ArrowUpIcon /></Button>
-          <Input value={input} onChange={(e) => setInput(e.target.value)} className="font-mono text-xs" placeholder="/absolute/path or ~/…" />
-          <Button type="submit" variant="secondary">Go</Button>
-        </form>
-        <ScrollArea className="h-72 rounded-md border">
-          {listing && listing.entries.length === 0 && <p className="p-6 text-center text-xs text-muted-foreground">No subfolders. Use this folder, or go up.</p>}
-          {listing?.entries.map((e) => (
-            <button
-              type="button"
-              key={e.path}
-              onClick={() => load(e.path)}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent"
-            >
-              <FolderIcon className="size-4 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">{e.name}</span>
-              {e.git && <Badge variant="outline" className="h-4 px-1 text-[9px] text-emerald-600 dark:text-emerald-400">git</Badge>}
+          placeholder="/path/to/directory"
+          spellCheck={false}
+          className="font-mono text-sm"
+        />
+
+        {dir && (
+          <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-1 font-mono text-xs">
+            <span className="min-w-0 truncate">
+              {abbrevHome(dir.path, dir.home)}
+              {prefix && <span className="text-muted-foreground">/{prefix}*</span>}
+            </span>
+            {dir.gitSubject && (
+              <span className="ml-auto flex min-w-0 items-center gap-1 truncate text-muted-foreground" title={dir.gitSubject}>
+                <GitBranchIcon className="size-3 shrink-0" /> <span className="truncate">{dir.gitSubject}</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-1">
+          {dir && dir.path !== dir.home && (
+            <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => goTo(dir.home)}>
+              <HomeIcon className="size-3.5" /> Home
+            </Button>
+          )}
+          {dir?.gitRoot && dir.gitRoot !== dir.path && (
+            <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => goTo(dir.gitRoot as string)}>
+              <GitBranchIcon className="size-3.5" /> Git root <span className="font-mono text-muted-foreground">{abbrevHome(dir.gitRoot, dir.home)}</span>
+            </Button>
+          )}
+        </div>
+
+        {error && <div className="text-xs text-destructive">{error}</div>}
+
+        <div className="h-48 shrink-0 overflow-y-auto rounded-md border">
+          {loading && !dir && <p className="p-4 text-xs text-muted-foreground">Loading…</p>}
+          {dir?.parent && (
+            <button type="button" onClick={() => goTo(dir.parent as string)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent">
+              <ArrowLeftIcon className="size-4 text-muted-foreground" /> <span className="font-mono">..</span>
+            </button>
+          )}
+          {visible.map((e) => (
+            <button type="button" key={e.path} onClick={() => goTo(e.path)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent">
+              <FolderIcon className={cn("size-4 shrink-0", e.gitSubject ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} />
+              <span className="min-w-0 flex-1 truncate">
+                {prefix ? (
+                  <>
+                    <strong>{e.name.slice(0, prefix.length)}</strong>
+                    {e.name.slice(prefix.length)}
+                  </>
+                ) : (
+                  e.name
+                )}
+              </span>
+              {e.gitSubject && <span className="max-w-[45%] truncate text-xs text-muted-foreground" title={e.gitSubject}>{e.gitSubject}</span>}
             </button>
           ))}
-        </ScrollArea>
-        <DialogFooter className="items-center sm:justify-between">
-          <span className="truncate font-mono text-xs text-muted-foreground">{listing ? abbrevHome(listing.path, listing.home) : ""}</span>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button
-              disabled={!listing}
-              onClick={() => {
-                if (!listing) return;
-                onPick(listing.path);
-                onOpenChange(false);
-                toast(`Added ${abbrevHome(listing.path, listing.home)}`);
+          {creating && dir && (
+            <form
+              className="flex items-center gap-2 px-3 py-1.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void createFolder();
               }}
             >
-              Use this folder
-            </Button>
+              <FolderPlusIcon className="size-4 text-muted-foreground" />
+              <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New folder name" className="h-7 font-mono text-xs" aria-label="New folder name" />
+              <Button type="submit" size="icon" className="size-7" aria-label="Create" disabled={!newName.trim()}><CheckIcon /></Button>
+              <Button type="button" size="icon" variant="ghost" className="size-7" aria-label="Cancel" onClick={() => setCreating(false)}><XIcon /></Button>
+            </form>
+          )}
+          {hidden > 0 && <p className="px-3 py-1.5 text-xs text-muted-foreground">{hidden.toLocaleString()} more, type to filter</p>}
+          {dir && entries.length === 0 && !creating && (
+            <p className="p-4 text-center text-xs text-muted-foreground">{prefix ? "No matching directories" : "No subdirectories"}</p>
+          )}
+        </div>
+
+        <DialogFooter className="items-center sm:justify-between">
+          <Button type="button" variant="ghost" size="sm" disabled={!dir || creating} onClick={() => setCreating(true)}>
+            <FolderPlusIcon /> New folder
+          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" disabled={!dir || loading} onClick={select}>Select</Button>
           </div>
         </DialogFooter>
+        <span className="sr-only">{selected}</span>
       </DialogContent>
     </Dialog>
   );
+}
+
+function withSlash(p: string): string {
+  return p === "/" ? "/" : p.endsWith("/") ? p : `${p}/`;
+}
+
+function parseInput(path: string): { dirPath: string; prefix: string } {
+  if (!path) return { dirPath: "", prefix: "" };
+  if (path.endsWith("/")) return { dirPath: path.slice(0, -1) || "/", prefix: "" };
+  const i = path.lastIndexOf("/");
+  if (i === -1) return { dirPath: "", prefix: path };
+  if (i === 0) return { dirPath: "/", prefix: path.slice(1) };
+  return { dirPath: path.slice(0, i), prefix: path.slice(i + 1) };
 }

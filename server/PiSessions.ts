@@ -1,6 +1,6 @@
 /**
- * PiThreads: one running `pi --mode rpc` child per thread, behind a small
- * interface in the browser's own vocabulary (ThreadEvent / ThreadAction).
+ * PiSessions: one running `pi --mode rpc` child per session, behind a small
+ * interface in the browser's own vocabulary (SessionEvent / SessionAction).
  *
  * Behind the seam: command construction, strict JSONL framing, request
  * correlation, streaming reconstruction, dialog retention, state tracking,
@@ -12,34 +12,36 @@ import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
-import type { Dialog, Snapshot, ThreadAction, ThreadEvent, ThreadState } from "../shared/wire.ts";
+import type { Dialog, Snapshot, SessionAction, SessionEvent, SessionState } from "../shared/wire.ts";
 import { PiCli } from "./PiCli.ts";
 import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } from "./PiRecords.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
 
-export interface PiThreadSpec {
+export interface PiSessionSpec {
   readonly cwd: string;
   readonly sessionId: string;
   /** "provider/id" passed as --model */
   readonly model?: string;
+  /** Passed as --thinking */
+  readonly thinkingLevel?: string;
   /** Passed as --name; callers pass it only for a brand-new session. */
   readonly name?: string;
 }
 
-export class PiThreadError extends Data.TaggedError("PiThreadError")<{
+export class PiSessionError extends Data.TaggedError("PiSessionError")<{
   readonly reason: "spawn" | "exited" | "protocol" | "rejected";
   readonly detail: string;
 }> {}
 
-export interface PiThread {
-  readonly spec: PiThreadSpec;
+export interface PiSession {
+  readonly spec: PiSessionSpec;
   /** A snapshot first, then live events, until `closed` or the subscriber's scope ends. */
-  readonly events: Stream.Stream<ThreadEvent>;
+  readonly events: Stream.Stream<SessionEvent>;
   /** Apply a browser action. Fails only when pi rejects it or the child is gone. */
-  readonly act: (action: ThreadAction) => Effect.Effect<void, PiThreadError>;
+  readonly act: (action: SessionAction) => Effect.Effect<void, PiSessionError>;
   /** Current state without subscribing. */
-  readonly state: Effect.Effect<ThreadState>;
+  readonly state: Effect.Effect<SessionState>;
 }
 
 export interface ProbeResult {
@@ -48,15 +50,15 @@ export interface ProbeResult {
   readonly defaultThinkingLevel?: string;
 }
 
-export class PiThreads extends Context.Service<
-  PiThreads,
+export class PiSessions extends Context.Service<
+  PiSessions,
   {
-    /** Spawn pi for a thread. The child lives as long as the calling Scope. */
-    readonly open: (spec: PiThreadSpec) => Effect.Effect<PiThread, PiThreadError, Scope.Scope>;
+    /** Spawn pi for a session. The child lives as long as the calling Scope. */
+    readonly open: (spec: PiSessionSpec) => Effect.Effect<PiSession, PiSessionError, Scope.Scope>;
     /** One-shot `pi --mode rpc --no-session`: available models and pi's default. */
-    readonly probe: (cwd: string) => Effect.Effect<ProbeResult, PiThreadError>;
+    readonly probe: (cwd: string) => Effect.Effect<ProbeResult, PiSessionError>;
   }
->()("piano/PiThreads") {}
+>()("piano/PiSessions") {}
 
 // ── Implementation ───────────────────────────────────────────────────────────
 
@@ -71,6 +73,11 @@ interface Response extends PiRecord {
   error?: string;
 }
 
+interface RawStats {
+  cost?: number;
+  contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
+}
+
 interface RawState {
   model?: { provider: string; id: string };
   thinkingLevel?: string;
@@ -80,7 +87,7 @@ interface RawState {
   sessionName?: string;
 }
 
-const toState = (s: RawState): ThreadState => ({
+const toState = (s: RawState): SessionState => ({
   sessionId: s.sessionId,
   sessionFile: s.sessionFile,
   sessionName: s.sessionName,
@@ -91,14 +98,14 @@ const toState = (s: RawState): ThreadState => ({
 
 /** A spawned pi child with request correlation. Everything above builds on `request` and `records`. */
 interface Child {
-  readonly request: (command: Record<string, unknown>) => Effect.Effect<unknown, PiThreadError>;
-  readonly write: (record: Record<string, unknown>) => Effect.Effect<void, PiThreadError>;
+  readonly request: (command: Record<string, unknown>) => Effect.Effect<unknown, PiSessionError>;
+  readonly write: (record: Record<string, unknown>) => Effect.Effect<void, PiSessionError>;
   /** Every non-response record, in stdout order. Ends when the child exits. */
   readonly records: Queue.Dequeue<PiRecord, Cause.Done>;
   readonly exited: Deferred.Deferred<string>;
 }
 
-const debug = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[PiThreads]", ...a); };
+const debug = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[PiSessions]", ...a); };
 
 const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
   Effect.gen(function* () {
@@ -106,7 +113,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     debug("spawning", cli.node, cli.cli, args);
     const stdin = yield* Queue.unbounded<Uint8Array, Cause.Done>();
     const records = yield* Queue.unbounded<PiRecord, Cause.Done>();
-    const pending = new Map<string, Deferred.Deferred<unknown, PiThreadError>>();
+    const pending = new Map<string, Deferred.Deferred<unknown, PiSessionError>>();
     const exited = yield* Deferred.make<string>();
     let stderr = "";
     let closed = false;
@@ -118,7 +125,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       stdin: Stream.fromQueue(stdin),
       stdout: "pipe",
       stderr: "pipe",
-    }).pipe(Effect.mapError((e) => new PiThreadError({ reason: "spawn", detail: String(e) })));
+    }).pipe(Effect.mapError((e) => new PiSessionError({ reason: "spawn", detail: String(e) })));
     debug("spawned pid", handle.pid);
 
     const onLine = (line: string) =>
@@ -131,11 +138,11 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
           return;
         }
         if (record.type === "response" && typeof record.id === "string" && pending.has(record.id)) {
-          const d = pending.get(record.id) as Deferred.Deferred<unknown, PiThreadError>;
+          const d = pending.get(record.id) as Deferred.Deferred<unknown, PiSessionError>;
           pending.delete(record.id);
           const r = record as Response;
           if (r.success) yield* Deferred.succeed(d, r.data);
-          else yield* Deferred.fail(d, new PiThreadError({ reason: "rejected", detail: r.error ?? r.command }));
+          else yield* Deferred.fail(d, new PiSessionError({ reason: "rejected", detail: r.error ?? r.command }));
           return;
         }
         yield* Queue.offer(records, record);
@@ -160,7 +167,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         closed = true;
         yield* Deferred.succeed(exited, reason);
         for (const d of pending.values()) {
-          yield* Deferred.fail(d, new PiThreadError({ reason: "exited", detail: reason }));
+          yield* Deferred.fail(d, new PiSessionError({ reason: "exited", detail: reason }));
         }
         pending.clear();
         yield* Queue.end(records);
@@ -184,7 +191,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
 
     const write = (record: Record<string, unknown>) =>
       Effect.gen(function* () {
-        if (closed) return yield* new PiThreadError({ reason: "exited", detail: yield* Deferred.await(exited) });
+        if (closed) return yield* new PiSessionError({ reason: "exited", detail: yield* Deferred.await(exited) });
         yield* Queue.offer(stdin, encoder.encode(`${JSON.stringify(record)}\n`));
       });
 
@@ -192,7 +199,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       Effect.gen(function* () {
         seq += 1;
         const id = `q${seq}`;
-        const d = yield* Deferred.make<unknown, PiThreadError>();
+        const d = yield* Deferred.make<unknown, PiSessionError>();
         pending.set(id, d);
         debug("request", id, command.type);
         yield* write({ id, ...command });
@@ -203,10 +210,11 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     return child;
   });
 
-const openThread = (spec: PiThreadSpec) =>
+const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
     const args = ["--session-id", spec.sessionId];
     if (spec.model) args.push("--model", spec.model);
+    if (spec.thinkingLevel) args.push("--thinking", spec.thinkingLevel);
     if (spec.name) args.push("--name", spec.name);
     const child = yield* spawnChild(args, spec.cwd);
 
@@ -217,21 +225,21 @@ const openThread = (spec: PiThreadSpec) =>
     ]).pipe(
       Effect.race(
         Deferred.await(child.exited).pipe(
-          Effect.flatMap((reason) => new PiThreadError({ reason: "spawn", detail: reason })),
+          Effect.flatMap((reason) => new PiSessionError({ reason: "spawn", detail: reason })),
         ),
       ),
     );
-    const stateRef = yield* Ref.make<ThreadState>(toState(initial[0] as RawState));
+    const stateRef = yield* Ref.make<SessionState>(toState(initial[0] as RawState));
     const messagesRef = yield* Ref.make(
       serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
     );
     const dialogsRef = yield* Ref.make(new Map<string, Dialog>());
-    const pubsub = yield* PubSub.unbounded<ThreadEvent>();
+    const pubsub = yield* PubSub.unbounded<SessionEvent>();
     const lock = yield* Semaphore.make(1);
     const assembler = new StreamAssembler();
 
     /** Update local state and publish, atomically with respect to snapshots. */
-    const apply = (events: ReadonlyArray<ThreadEvent>) =>
+    const apply = (events: ReadonlyArray<SessionEvent>) =>
       Semaphore.withPermits(lock, 1)(
         Effect.gen(function* () {
           for (const event of events) {
@@ -260,7 +268,7 @@ const openThread = (spec: PiThreadSpec) =>
         }),
       );
 
-    const patchState = (patch: Partial<ThreadState>) =>
+    const patchState = (patch: Partial<SessionState>) =>
       Effect.gen(function* () {
         const current = yield* Ref.get(stateRef);
         const next = { ...current, ...patch };
@@ -268,13 +276,23 @@ const openThread = (spec: PiThreadSpec) =>
         yield* apply([{ _tag: "state", state: next }]);
       });
 
+    /** Context usage and cost from pi; best effort, never fails. */
+    const refreshStats = child.request({ type: "get_session_stats" }).pipe(
+      Effect.flatMap((data) => {
+        const stats = data as RawStats;
+        return patchState({ context: stats.contextUsage, cost: stats.cost });
+      }),
+      Effect.ignore,
+    );
+
     const onRecord = (record: PiRecord) =>
       Effect.gen(function* () {
         switch (record.type) {
           case "agent_start":
             return yield* patchState({ isStreaming: true });
           case "agent_settled":
-            return yield* patchState({ isStreaming: false });
+            yield* patchState({ isStreaming: false });
+            return yield* refreshStats;
           case "session_info_changed":
             return yield* patchState({ sessionName: record.name as string | undefined });
           case "thinking_level_changed":
@@ -309,14 +327,21 @@ const openThread = (spec: PiThreadSpec) =>
       });
 
     yield* Stream.fromQueue(child.records).pipe(Stream.runForEach(onRecord), Effect.ignore, Effect.forkScoped);
-    // Announce the child's exit to subscribers. Its own fiber, so interrupting the
-    // consumer above during shutdown never waits on an exit that has not happened yet.
-    yield* Deferred.await(child.exited).pipe(
-      Effect.flatMap((reason) => apply([{ _tag: "closed", reason }])),
-      Effect.forkScoped,
-    );
 
-    const events: Stream.Stream<ThreadEvent> = Stream.unwrap(
+    // Subscribers learn exactly once that pi is gone: from the child's own exit (a crash),
+    // or from this scope closing (a deliberate release), whichever comes first. The
+    // finalizer is registered after the child's, so it runs before pi is shut down.
+    let announced = false;
+    const announceClosed = (reason: string) =>
+      Effect.suspend(() => {
+        if (announced) return Effect.void;
+        announced = true;
+        return apply([{ _tag: "closed", reason }]);
+      });
+    yield* Effect.addFinalizer(() => announceClosed("released"));
+    yield* Deferred.await(child.exited).pipe(Effect.flatMap(announceClosed), Effect.forkScoped);
+
+    const events: Stream.Stream<SessionEvent> = Stream.unwrap(
       Semaphore.withPermits(lock, 1)(
         Effect.gen(function* () {
           const scope = yield* Scope.make();
@@ -326,7 +351,7 @@ const openThread = (spec: PiThreadSpec) =>
             messages: yield* Ref.get(messagesRef),
             dialogs: [...(yield* Ref.get(dialogsRef)).values()],
           };
-          return Stream.make<[ThreadEvent]>({ _tag: "snapshot", snapshot }).pipe(
+          return Stream.make<[SessionEvent]>({ _tag: "snapshot", snapshot }).pipe(
             Stream.concat(Stream.fromSubscription(sub)),
             Stream.takeUntil((e) => e._tag === "closed"),
             Stream.ensuring(Scope.close(scope, { _tag: "Success", value: undefined } as never)),
@@ -335,13 +360,13 @@ const openThread = (spec: PiThreadSpec) =>
       ),
     );
 
-    const act = (action: ThreadAction): Effect.Effect<void, PiThreadError> =>
+    const act = (action: SessionAction): Effect.Effect<void, PiSessionError> =>
       Effect.gen(function* () {
         switch (action._tag) {
           case "prompt": {
             const streaming = (yield* Ref.get(stateRef)).isStreaming;
             yield* child.request({ type: streaming ? "follow_up" : "prompt", message: action.text }).pipe(
-              Effect.catchTag("PiThreadError", (e) =>
+              Effect.catchTag("PiSessionError", (e) =>
                 // Our streaming flag can lag pi's by one event; retry as a follow-up once.
                 !streaming && e.reason === "rejected" && /streaming/i.test(e.detail)
                   ? child.request({ type: "follow_up", message: action.text })
@@ -355,7 +380,7 @@ const openThread = (spec: PiThreadSpec) =>
             return;
           case "set_model": {
             const slash = action.model.indexOf("/");
-            if (slash <= 0) return yield* new PiThreadError({ reason: "rejected", detail: `Model must be provider/id, got "${action.model}"` });
+            if (slash <= 0) return yield* new PiSessionError({ reason: "rejected", detail: `Model must be provider/id, got "${action.model}"` });
             const data = (yield* child.request({
               type: "set_model",
               provider: action.model.slice(0, slash),
@@ -366,7 +391,7 @@ const openThread = (spec: PiThreadSpec) =>
           }
           case "answer": {
             const known = (yield* Ref.get(dialogsRef)).has(action.id);
-            if (!known) return yield* new PiThreadError({ reason: "rejected", detail: `No open dialog ${action.id}` });
+            if (!known) return yield* new PiSessionError({ reason: "rejected", detail: `No open dialog ${action.id}` });
             const response: Record<string, unknown> = { type: "extension_ui_response", id: action.id };
             if (action.cancelled) response.cancelled = true;
             else if (action.confirmed !== undefined) response.confirmed = action.confirmed;
@@ -378,11 +403,12 @@ const openThread = (spec: PiThreadSpec) =>
         }
       });
 
-    const thread: PiThread = { spec, events, act, state: Ref.get(stateRef) };
-    return thread;
+    yield* refreshStats;
+    const session: PiSession = { spec, events, act, state: Ref.get(stateRef) };
+    return session;
   });
 
-const probe = (cwd: string): Effect.Effect<ProbeResult, PiThreadError, ChildProcessSpawner> =>
+const probe = (cwd: string): Effect.Effect<ProbeResult, PiSessionError, ChildProcessSpawner> =>
   Effect.gen(function* () {
     const child = yield* spawnChild(["--no-session"], cwd);
     const [models, state] = yield* Effect.all([
@@ -391,7 +417,7 @@ const probe = (cwd: string): Effect.Effect<ProbeResult, PiThreadError, ChildProc
     ]).pipe(
       Effect.race(
         Deferred.await(child.exited).pipe(
-          Effect.flatMap((reason) => new PiThreadError({ reason: "spawn", detail: reason })),
+          Effect.flatMap((reason) => new PiSessionError({ reason: "spawn", detail: reason })),
         ),
       ),
     );
@@ -403,12 +429,12 @@ const probe = (cwd: string): Effect.Effect<ProbeResult, PiThreadError, ChildProc
     };
   }).pipe(Effect.scoped);
 
-export const PiThreadsLive: Layer.Layer<PiThreads, never, ChildProcessSpawner> = Layer.effect(
-  PiThreads,
+export const PiSessionsLive: Layer.Layer<PiSessions, never, ChildProcessSpawner> = Layer.effect(
+  PiSessions,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner;
-    return PiThreads.of({
-      open: (spec) => openThread(spec).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
+    return PiSessions.of({
+      open: (spec) => openSession(spec).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
       probe: (cwd) => probe(cwd).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
     });
   }),

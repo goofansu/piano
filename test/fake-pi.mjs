@@ -1,5 +1,5 @@
 // A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
-// exercise PiThreads through its interface. Behaviour is driven by the prompt text.
+// exercise PiSessions through its interface. Behaviour is driven by the prompt text.
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
@@ -29,6 +29,7 @@ function handle(cmd) {
   switch (cmd.type) {
     case "get_state": return respond(cmd, state());
     case "get_messages": return respond(cmd, { messages });
+    case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: { tokens: 1200 * messages.length, contextWindow: 200000, percent: 0.6 * messages.length } });
     case "get_available_models": return respond(cmd, { models: [
       { provider: "fake", id: "alpha", reasoning: true, contextWindow: 1000 },
       { provider: "fake", id: "beta", reasoning: false, contextWindow: 2000 } ] });

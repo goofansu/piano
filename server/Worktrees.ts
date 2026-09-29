@@ -12,17 +12,43 @@ export interface Worktree {
   main: boolean;
 }
 
-const wt = (args: string[]): Effect.Effect<string, WorktreeError> =>
+const run = (cmd: string, args: string[]): Effect.Effect<string, WorktreeError> =>
   Effect.tryPromise({
     try: () =>
       new Promise<string>((resolve, reject) => {
-        execFile("wt", args, { maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+        execFile(cmd, args, { maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
           if (err) reject(new Error(String(stderr || err.message).trim()));
           else resolve(stdout);
         });
       }),
     catch: (e) => new WorktreeError({ detail: e instanceof Error ? e.message : String(e) }),
   });
+const wt = (args: string[]) => run("wt", args);
+
+/** HEAD commit subject of a checkout, or "" when there is none. */
+export const gitHeadSubject = (path: string): Effect.Effect<string> =>
+  run("git", ["-C", path, "log", "-1", "--format=%s"]).pipe(
+    Effect.map((out) => out.trim().slice(0, 120)),
+    Effect.timeoutOption("2 seconds"),
+    Effect.map((o) => (o._tag === "Some" ? o.value : "")),
+    Effect.orElseSucceed(() => ""),
+  );
+
+/** Top-level directory of the checkout containing `path`, or "" when not inside one. */
+export const gitTopLevel = (path: string): Effect.Effect<string> =>
+  run("git", ["-C", path, "rev-parse", "--show-toplevel"]).pipe(
+    Effect.map((out) => out.trim()),
+    Effect.timeoutOption("2 seconds"),
+    Effect.map((o) => (o._tag === "Some" ? o.value : "")),
+    Effect.orElseSucceed(() => ""),
+  );
+
+/** Current branch of a checkout, or "" when it is not a git repo or is detached. */
+export const currentBranch = (path: string): Effect.Effect<string> =>
+  run("git", ["-C", path, "symbolic-ref", "--short", "-q", "HEAD"]).pipe(
+    Effect.map((out) => out.trim()),
+    Effect.orElseSucceed(() => ""),
+  );
 
 interface WtListItem {
   branch?: string;

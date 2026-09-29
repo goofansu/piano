@@ -1,14 +1,14 @@
 /**
  * Wire vocabulary shared by the server and the React client.
  *
- * ThreadEvent / ThreadAction are the native language of the PiThreads module:
- * a browser client consumes ThreadEvents and produces ThreadActions, and the
+ * SessionEvent / SessionAction are the native language of the PiSessions module:
+ * a browser client consumes SessionEvents and produces SessionActions, and the
  * WebSocket layer is a pass-through. Everything is an effect Schema so both
  * sides decode with the same definitions.
  */
 import { Schema } from "effect";
 
-// ── Thread rendering ────────────────────────────────────────────────────────
+// ── Session rendering ────────────────────────────────────────────────────────
 
 export const ToolCall = Schema.Struct({
   id: Schema.String,
@@ -39,7 +39,14 @@ export const Dialog = Schema.Struct({
 });
 export type Dialog = typeof Dialog.Type;
 
-export const ThreadState = Schema.Struct({
+export const ContextUsage = Schema.Struct({
+  tokens: Schema.NullOr(Schema.Number),
+  contextWindow: Schema.Number,
+  percent: Schema.NullOr(Schema.Number),
+});
+export type ContextUsage = typeof ContextUsage.Type;
+
+export const SessionState = Schema.Struct({
   sessionId: Schema.String,
   sessionFile: Schema.optional(Schema.String),
   sessionName: Schema.optional(Schema.String),
@@ -47,20 +54,24 @@ export const ThreadState = Schema.Struct({
   model: Schema.optional(Schema.String),
   thinkingLevel: Schema.optional(Schema.String),
   isStreaming: Schema.Boolean,
+  /** Current context-window usage, refreshed after each turn. */
+  context: Schema.optional(ContextUsage),
+  /** Session cost in USD so far. */
+  cost: Schema.optional(Schema.Number),
 });
-export type ThreadState = typeof ThreadState.Type;
+export type SessionState = typeof SessionState.Type;
 
 export const Snapshot = Schema.Struct({
-  state: ThreadState,
+  state: SessionState,
   messages: Schema.Array(RenderMsg),
   dialogs: Schema.Array(Dialog),
 });
 export type Snapshot = typeof Snapshot.Type;
 
-/** Everything a browser client renders for one thread. A subscription always starts with `snapshot`. */
-export const ThreadEvent = Schema.Union([
+/** Everything a browser client renders for one session. A subscription always starts with `snapshot`. */
+export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("snapshot", { snapshot: Snapshot }),
-  Schema.TaggedStruct("state", { state: ThreadState }),
+  Schema.TaggedStruct("state", { state: SessionState }),
   Schema.TaggedStruct("message_update", { message: RenderMsg }),
   Schema.TaggedStruct("message_end", { message: RenderMsg }),
   Schema.TaggedStruct("tool_start", { toolCallId: Schema.String, toolName: Schema.String }),
@@ -70,10 +81,10 @@ export const ThreadEvent = Schema.Union([
   Schema.TaggedStruct("notice", { level: Schema.Literals(["info", "warning", "error"]), message: Schema.String }),
   Schema.TaggedStruct("closed", { reason: Schema.String }),
 ]);
-export type ThreadEvent = typeof ThreadEvent.Type;
+export type SessionEvent = typeof SessionEvent.Type;
 
-/** Everything a browser client may do to a running thread. */
-export const ThreadAction = Schema.Union([
+/** Everything a browser client may do to a running session. */
+export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", { text: Schema.String }),
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
@@ -84,35 +95,38 @@ export const ThreadAction = Schema.Union([
     cancelled: Schema.optional(Schema.Boolean),
   }),
 ]);
-export type ThreadAction = typeof ThreadAction.Type;
+export type SessionAction = typeof SessionAction.Type;
 
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
-export const ThreadInfo = Schema.Struct({
+export const SessionInfo = Schema.Struct({
   sessionId: Schema.String,
-  path: Schema.String,
-  name: Schema.optional(Schema.String),
-  firstMessage: Schema.String,
-  created: Schema.String,
-  modified: Schema.String,
-  messageCount: Schema.Number,
+  /** Directory the session runs in: the project root or one of its worktrees. */
+  cwd: Schema.String,
+  /** Branch of that worktree; empty for the project root. */
+  branch: Schema.String,
+  title: Schema.optional(Schema.String),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
   hosted: Schema.Boolean,
   streaming: Schema.Boolean,
 });
-export type ThreadInfo = typeof ThreadInfo.Type;
+export type SessionInfo = typeof SessionInfo.Type;
 
 export const WorktreeView = Schema.Struct({
   branch: Schema.String,
   path: Schema.String,
   main: Schema.Boolean,
-  threads: Schema.Array(ThreadInfo),
 });
 export type WorktreeView = typeof WorktreeView.Type;
 
 export const ProjectView = Schema.Struct({
   path: Schema.String,
   name: Schema.String,
+  /** The root first, then worktrees created through piano. */
   worktrees: Schema.Array(WorktreeView),
+  /** All of the project's sessions across its worktrees, most recent first. */
+  sessions: Schema.Array(SessionInfo),
 });
 export type ProjectView = typeof ProjectView.Type;
 
@@ -136,11 +150,20 @@ export const ModelCatalog = Schema.Struct({
 });
 export type ModelCatalog = typeof ModelCatalog.Type;
 
-export const DirEntry = Schema.Struct({ name: Schema.String, path: Schema.String, git: Schema.Boolean });
+export const DirEntry = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  /** Set when the folder is a git checkout: its HEAD commit subject. */
+  gitSubject: Schema.optional(Schema.String),
+});
 export const DirListing = Schema.Struct({
   path: Schema.String,
   parent: Schema.NullOr(Schema.String),
   home: Schema.String,
+  /** HEAD subject when `path` itself is inside a git checkout. */
+  gitSubject: Schema.optional(Schema.String),
+  /** Top-level directory of the checkout containing `path`, when any. */
+  gitRoot: Schema.optional(Schema.String),
   entries: Schema.Array(DirEntry),
 });
 export type DirListing = typeof DirListing.Type;
@@ -150,8 +173,12 @@ export type HostInfo = typeof HostInfo.Type;
 
 // ── WebSocket protocol ──────────────────────────────────────────────────────
 
+export const ThinkingLevel = Schema.Literals(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+export type ThinkingLevel = typeof ThinkingLevel.Type;
+
 export const StartOptions = Schema.Struct({
   model: Schema.optional(Schema.String),
+  thinkingLevel: Schema.optional(ThinkingLevel),
   name: Schema.optional(Schema.String),
 });
 export type StartOptions = typeof StartOptions.Type;
@@ -163,10 +190,12 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("remove_project", { path: Schema.String }),
   Schema.TaggedStruct("create_worktree", { project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
   Schema.TaggedStruct("select", { cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
-  Schema.TaggedStruct("start", { options: StartOptions }),
-  /** Act on the selected thread. `start` lets a prompt start the thread when it is not running. */
-  Schema.TaggedStruct("act", { action: ThreadAction, start: Schema.optional(StartOptions) }),
-  Schema.TaggedStruct("release", {}),
+  /** Create and start a session in a directory (registering it as a project when needed) and send its first prompt. */
+  Schema.TaggedStruct("create_session", { cwd: Schema.String, options: StartOptions, text: Schema.optional(Schema.String) }),
+  /** Act on the selected session. `start` carries the options used to start pi when it is not running. */
+  Schema.TaggedStruct("act", { action: SessionAction, start: Schema.optional(StartOptions) }),
+  /** Hide a session from the sidebar (and stop pi for it if running). */
+  Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),
 ]);
 export type ClientMessage = typeof ClientMessage.Type;
 
@@ -174,14 +203,15 @@ export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView) }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
-  /** Result of `select`: the thread now shown. `hosted` false means a read-only peek of the session file. */
+  /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */
   Schema.TaggedStruct("selected", {
     cwd: Schema.String,
     sessionId: Schema.NullOr(Schema.String),
     hosted: Schema.Boolean,
     snapshot: Snapshot,
   }),
-  Schema.TaggedStruct("thread", { event: ThreadEvent }),
+  Schema.TaggedStruct("session", { event: SessionEvent }),
+  Schema.TaggedStruct("worktree_created", { project: Schema.String, path: Schema.String, branch: Schema.String }),
   Schema.TaggedStruct("error", { message: Schema.String }),
   Schema.TaggedStruct("toast", { message: Schema.String }),
 ]);

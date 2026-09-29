@@ -2,7 +2,7 @@
  * Translation of pi's raw RPC records into the shared wire vocabulary.
  * Pure functions plus one small stateful assembler for streaming partials.
  */
-import type { RenderMsg, ThreadEvent } from "../shared/wire.ts";
+import type { RenderMsg, SessionEvent } from "../shared/wire.ts";
 
 interface RawContent {
   type: string;
@@ -91,7 +91,7 @@ interface MessageEventRecord extends PiRecord {
 }
 
 /**
- * Turns pi session events into ThreadEvents. Owns the partial assistant
+ * Turns pi session events into SessionEvents. Owns the partial assistant
  * message being streamed (pi sends deltas only).
  */
 type MutableToolCall = { id: string; name: string; args: string };
@@ -106,7 +106,7 @@ export class StreamAssembler {
     return `e${Date.now().toString(36)}-${this.seq}`;
   }
 
-  handle(raw: PiRecord): ThreadEvent[] {
+  handle(raw: PiRecord): SessionEvent[] {
     const event = raw as MessageEventRecord;
     switch (event.type) {
       case "message_start": {
@@ -140,7 +140,7 @@ export class StreamAssembler {
     return { ...p, toolCalls: p.toolCalls ? p.toolCalls.map((t) => ({ ...t })) : undefined };
   }
 
-  private applyDelta(ev: MessageEventRecord["assistantMessageEvent"]): ThreadEvent[] {
+  private applyDelta(ev: MessageEventRecord["assistantMessageEvent"]): SessionEvent[] {
     if (!ev) return [];
     if (!this.partial) this.partial = { id: "pending", role: "assistant", text: "" };
     const p = this.partial;

@@ -1,7 +1,7 @@
 /**
  * One browser client. Decodes ClientMessages from the socket, keeps the
- * client's selected thread, and forwards ThreadEvents from the attached
- * PiThread as ServerMessages. The thread module already speaks the wire
+ * client's selected session, and forwards SessionEvents from the attached
+ * PiSession as ServerMessages. The session module already speaks the wire
  * vocabulary, so this is mostly routing.
  */
 import { randomUUID } from "node:crypto";
@@ -16,10 +16,10 @@ import {
 } from "../shared/wire.ts";
 import { Broadcast } from "./Broadcast.ts";
 import { Catalog } from "./Catalog.ts";
-import type { PiThread } from "./PiThreads.ts";
-import { addProject, removeProject } from "./Projects.ts";
-import { emptySnapshot, findSessionFile, peekSession } from "./Sessions.ts";
-import { ThreadHosts } from "./ThreadHosts.ts";
+import type { PiSession } from "./PiSessions.ts";
+import { Registry } from "./Registry.ts";
+import { emptySnapshot, findSessionFile, peekSession } from "./SessionFiles.ts";
+import { SessionHosts } from "./SessionHosts.ts";
 import { buildProjects } from "./Views.ts";
 import { createWorktree } from "./Worktrees.ts";
 
@@ -33,9 +33,10 @@ const describe = (e: unknown): string => {
 
 export const handleSocket = (socket: Socket.Socket) =>
   Effect.gen(function* () {
-    const hosts = yield* ThreadHosts;
+    const hosts = yield* SessionHosts;
     const catalog = yield* Catalog;
     const broadcast = yield* Broadcast;
+    const registry = yield* Registry;
     const reader = yield* socket.reader;
     const writer = yield* socket.writer;
 
@@ -53,7 +54,7 @@ export const handleSocket = (socket: Socket.Socket) =>
 
     // ── selection / attachment ──
     let selected: { cwd: string; sessionId: string | null } | null = null;
-    let attachment: { thread: PiThread; scope: Scope.Closeable } | null = null;
+    let attachment: { session: PiSession; scope: Scope.Closeable } | null = null;
 
     const detach = Effect.suspend(() => {
       const a = attachment;
@@ -62,18 +63,22 @@ export const handleSocket = (socket: Socket.Socket) =>
     });
     yield* Effect.addFinalizer(() => detach);
 
-    const attachTo = (thread: PiThread) =>
+    const attachTo = (session: PiSession) =>
       Effect.gen(function* () {
         yield* detach;
         const scope = yield* Scope.make();
-        yield* hosts.attach(thread.spec.cwd, thread.spec.sessionId).pipe(Scope.provide(scope));
-        attachment = { thread, scope };
-        yield* thread.events.pipe(
+        const mine = { session, scope };
+        attachment = mine;
+        yield* session.events.pipe(
           Stream.runForEach((event) =>
             event._tag === "snapshot"
-              ? send({ _tag: "selected", cwd: thread.spec.cwd, sessionId: thread.spec.sessionId, hosted: true, snapshot: event.snapshot })
-              : send({ _tag: "thread", event }),
+              ? send({ _tag: "selected", cwd: session.spec.cwd, sessionId: session.spec.sessionId, hosted: true, snapshot: event.snapshot })
+              : send({ _tag: "session", event }),
           ),
+          // The stream ends when pi is gone; the next message will start it again.
+          Effect.ensuring(Effect.sync(() => {
+            if (attachment === mine) attachment = null;
+          })),
           Effect.ignore,
           Effect.forkIn(scope),
         );
@@ -89,12 +94,14 @@ export const handleSocket = (socket: Socket.Socket) =>
 
     const start = (options: StartOptions) =>
       Effect.gen(function* () {
-        if (!selected) return yield* Effect.fail(new Error("Select a thread first"));
+        if (!selected) return yield* Effect.fail(new Error("Select a session first"));
         if (!selected.sessionId) selected = { cwd: selected.cwd, sessionId: randomUUID() };
-        const thread = yield* hosts.open({ cwd: selected.cwd, sessionId: selected.sessionId as string, model: options.model, name: options.name });
-        yield* attachTo(thread);
+        const { cwd, sessionId } = selected as { cwd: string; sessionId: string };
+        const session = yield* hosts.open({ cwd, sessionId, model: options.model, thinkingLevel: options.thinkingLevel, name: options.name });
+        yield* registry.addSession(cwd, sessionId, options.name);
+        yield* attachTo(session);
         yield* publishProjects;
-        return thread;
+        return session;
       });
 
     const handle = (msg: ClientMessage) =>
@@ -105,14 +112,15 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "models":
             return yield* send({ _tag: "models", catalog: yield* catalog.refresh });
           case "add_project":
-            yield* addProject(msg.path);
+            yield* registry.addProject(msg.path);
             return yield* publishProjects;
           case "remove_project":
-            yield* removeProject(msg.path);
+            yield* registry.removeProject(msg.path);
             return yield* publishProjects;
           case "create_worktree": {
             const wt = yield* createWorktree(msg.project, msg.branch.trim(), { hooks: msg.hooks });
-            yield* send({ _tag: "toast", message: `Worktree ${wt.branch} at ${wt.path}` });
+            yield* registry.addWorktree({ project: msg.project, path: wt.path, branch: wt.branch });
+            yield* send({ _tag: "worktree_created", project: msg.project, path: wt.path, branch: wt.branch });
             return yield* publishProjects;
           }
           case "select": {
@@ -121,24 +129,38 @@ export const handleSocket = (socket: Socket.Socket) =>
             if (running) return yield* attachTo(running);
             return yield* showUnhosted(msg.cwd, msg.sessionId);
           }
-          case "start":
-            yield* start(msg.options);
-            return;
-          case "act": {
-            let thread = attachment?.thread;
-            if (!thread) {
-              if (!msg.start) return yield* Effect.fail(new Error("Thread is not running; start it first"));
-              thread = yield* start(msg.start);
-            }
-            return yield* thread.act(msg.action);
-          }
-          case "release": {
-            const a = attachment;
-            if (!a) return;
+          case "create_session": {
+            const cwd = yield* registry.ensureProject(msg.cwd);
             yield* detach;
-            yield* hosts.release(a.thread.spec.cwd, a.thread.spec.sessionId);
+            selected = { cwd, sessionId: null };
+            const session = yield* start(msg.options);
+            const text = msg.text?.trim();
+            if (!text) return;
+            yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, text);
             yield* publishProjects;
-            return yield* showUnhosted(a.thread.spec.cwd, a.thread.spec.sessionId);
+            return yield* session.act({ _tag: "prompt", text });
+          }
+          case "act": {
+            let session = attachment?.session;
+            if (!session) {
+              if (!msg.start) return yield* Effect.fail(new Error("Session is not running; start it first"));
+              session = yield* start(msg.start);
+            }
+            if (msg.action._tag === "prompt") {
+              yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, msg.action.text);
+              yield* publishProjects;
+            }
+            return yield* session.act(msg.action);
+          }
+          case "archive_session": {
+            if (attachment?.session.spec.cwd === msg.cwd && attachment.session.spec.sessionId === msg.sessionId) yield* detach;
+            if (yield* hosts.get(msg.cwd, msg.sessionId)) yield* hosts.release(msg.cwd, msg.sessionId);
+            yield* registry.archiveSession(msg.cwd, msg.sessionId);
+            if (selected?.cwd === msg.cwd && selected.sessionId === msg.sessionId) {
+              selected = null;
+              yield* send({ _tag: "selected", cwd: msg.cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
+            }
+            return yield* publishProjects;
           }
         }
       });

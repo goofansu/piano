@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { Context, Effect, Layer, Ref } from "effect";
 import type { ModelCatalog, ModelChoice } from "../shared/wire.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
-import { PiThreads } from "./PiThreads.ts";
+import { PiSessions } from "./PiSessions.ts";
 
 export class Catalog extends Context.Service<
   Catalog,
@@ -33,12 +33,12 @@ function patternMatcher(patterns: string[]): (ref: string, id: string) => boolea
 export const CatalogLive = Layer.effect(
   Catalog,
   Effect.gen(function* () {
-    const threads = yield* PiThreads;
+    const sessions = yield* PiSessions;
     const cache = yield* Ref.make<ModelCatalog | undefined>(undefined);
 
     const load: Effect.Effect<ModelCatalog> = Effect.gen(function* () {
       const cwd = homedir();
-      const probe = yield* threads.probe(cwd);
+      const probe = yield* sessions.probe(cwd);
       const isEnabled = patternMatcher(enabledModelPatterns(cwd));
       const models: ModelChoice[] = probe.models.map((m) => {
         const ref = `${m.provider}/${m.id}`;
@@ -52,7 +52,6 @@ export const CatalogLive = Layer.effect(
           enabled: isEnabled(ref, m.id),
         };
       });
-      models.sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.ref.localeCompare(b.ref));
       const catalog: ModelCatalog = {
         models,
         defaultModel: probe.defaultModel,
@@ -61,7 +60,7 @@ export const CatalogLive = Layer.effect(
       };
       return catalog;
     }).pipe(
-      Effect.catchTag("PiThreadError", (e) => {
+      Effect.catchTag("PiSessionError", (e) => {
         const failed: ModelCatalog = { models: [], fetchedAt: new Date().toISOString(), error: e.detail };
         return Effect.succeed(failed);
       }),

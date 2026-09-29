@@ -4,7 +4,8 @@ import type { ClientMessage, ServerMessage } from "@shared/wire";
 import { useConnection } from "@/lib/ws";
 import { initialState, reduce } from "@/store";
 import { Sidebar } from "@/components/Sidebar";
-import { ThreadView } from "@/components/ThreadView";
+import { SessionView } from "@/components/SessionView";
+import { NewSession } from "@/components/NewSession";
 import { DialogHost } from "@/components/DialogHost";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
@@ -16,12 +17,13 @@ export default function App() {
     dispatch({ type: "server", message: m });
     if (m._tag === "error") toast.error(m.message);
     else if (m._tag === "toast") toast(m.message);
-    else if (m._tag === "thread" && m.event._tag === "notice") {
+    else if (m._tag === "worktree_created") toast(`Worktree ${m.branch} created`);
+    else if (m._tag === "session" && m.event._tag === "notice") {
       const { level, message } = m.event;
       if (level === "error") toast.error(message);
       else if (level === "warning") toast.warning(message);
       else toast(message);
-    } else if (m._tag === "thread" && m.event._tag === "closed") toast.warning(`pi stopped: ${m.event.reason}`);
+    } else if (m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) toast.warning(`pi stopped: ${m.event.reason}`);
   }, []);
   const onStatus = useCallback((connected: boolean) => dispatch({ type: "connected", connected }), []);
   const conn = useConnection(onMessage, onStatus);
@@ -36,13 +38,18 @@ export default function App() {
     [send],
   );
 
-  // Re-select the current thread after a reconnect so the server re-attaches us.
+  // Re-select the current session after a reconnect so the server re-attaches us.
   useEffect(() => {
-    if (state.connected && state.thread) send({ _tag: "select", cwd: state.thread.cwd, sessionId: state.thread.sessionId });
+    if (state.connected && state.session) send({ _tag: "select", cwd: state.session.cwd, sessionId: state.session.sessionId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.connected]);
 
-  const sidebar = <Sidebar state={state} send={send} select={select} />;
+  const openNew = useCallback((cwd?: string) => {
+    dispatch({ type: "new", cwd });
+    setMenuOpen(false);
+  }, []);
+
+  const sidebar = <Sidebar state={state} send={send} select={select} openNew={openNew} />;
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
@@ -53,9 +60,13 @@ export default function App() {
         </SheetContent>
       </Sheet>
       <main className="flex min-w-0 flex-1 flex-col">
-        <ThreadView state={state} send={send} onMenu={() => setMenuOpen(true)} />
+        {state.view.kind === "new" ? (
+          <NewSession state={state} send={send} initialCwd={state.view.cwd} onMenu={() => setMenuOpen(true)} />
+        ) : (
+          <SessionView state={state} send={send} select={select} onMenu={() => setMenuOpen(true)} />
+        )}
       </main>
-      <DialogHost dialogs={state.thread?.dialogs ?? []} send={send} />
+      <DialogHost dialogs={state.session?.dialogs ?? []} send={send} />
     </div>
   );
 }

@@ -1,25 +1,25 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Effect, Fiber, Layer, Scope, Stream } from "effect";
+import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import type { ThreadEvent } from "../shared/wire.ts";
+import type { SessionEvent } from "../shared/wire.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { PiThreads, PiThreadsLive } from "../server/PiThreads.ts";
+import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 
 const fakeCli = { node: process.execPath, cli: new URL("./fake-pi.mjs", import.meta.url).pathname, extraArgs: [] };
-const TestLayer = PiThreadsLive.pipe(Layer.provide(NodeServices.layer));
-const run = <A, E>(effect: Effect.Effect<A, E, PiThreads>) =>
+const TestLayer = PiSessionsLive.pipe(Layer.provide(NodeServices.layer));
+const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>) =>
   Effect.runPromise(effect.pipe(Effect.provide(TestLayer), Effect.provideService(PiCli, fakeCli)));
 
-const collectUntil = (events: Stream.Stream<ThreadEvent>, pred: (e: ThreadEvent) => boolean) =>
+const collectUntil = (events: Stream.Stream<SessionEvent>, pred: (e: SessionEvent) => boolean) =>
   events.pipe(Stream.takeUntil(pred), Stream.runCollect, Effect.map((c) => [...c]));
 
 const step = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[test]", ...a); };
 
 test("snapshot first, then a streamed turn", async () => {
   const seen = await run(Effect.gen(function* () {
-    const threads = yield* PiThreads;
-    const t = yield* threads.open({ cwd: process.cwd(), sessionId: "s1", model: "fake/alpha" });
+    const sessions = yield* PiSessions;
+    const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s1", model: "fake/alpha" });
     step("opened");
     const collector = yield* collectUntil(t.events, (e) => e._tag === "message_end" && e.message.role === "assistant").pipe(Effect.forkChild);
     step("collector forked");
@@ -32,24 +32,24 @@ test("snapshot first, then a streamed turn", async () => {
   }).pipe(Effect.scoped));
   step("scope closed");
   assert.equal(seen[0]._tag, "snapshot");
-  assert.equal((seen[0] as Extract<ThreadEvent, { _tag: "snapshot" }>).snapshot.state.model, "fake/alpha");
+  assert.equal((seen[0] as Extract<SessionEvent, { _tag: "snapshot" }>).snapshot.state.model, "fake/alpha");
   const tags = seen.map((e) => e._tag);
   assert.ok(tags.includes("message_update"), "streams partials");
-  const last = seen[seen.length - 1] as Extract<ThreadEvent, { _tag: "message_end" }>;
+  const last = seen[seen.length - 1] as Extract<SessionEvent, { _tag: "message_end" }>;
   assert.equal(last.message.text, "echo: hello");
 });
 
 test("late subscriber sees transcript and a retained dialog; answering resolves it", async () => {
   const result = await run(Effect.gen(function* () {
-    const threads = yield* PiThreads;
-    const t = yield* threads.open({ cwd: process.cwd(), sessionId: "s2" });
+    const sessions = yield* PiSessions;
+    const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s2" });
     const first = yield* collectUntil(t.events, (e) => e._tag === "dialog").pipe(Effect.forkChild);
     yield* Effect.sleep("50 millis");
     yield* t.act({ _tag: "prompt", text: "ask me" });
     yield* Fiber.join(first);
     // A second client attaches after the dialog was raised.
     const late = yield* collectUntil(t.events, (e) => e._tag === "snapshot").pipe(Effect.map((es) => es[0]));
-    const snap = (late as Extract<ThreadEvent, { _tag: "snapshot" }>).snapshot;
+    const snap = (late as Extract<SessionEvent, { _tag: "snapshot" }>).snapshot;
     const after = yield* collectUntil(t.events, (e) => e._tag === "state" && !e.state.isStreaming).pipe(Effect.forkChild);
     yield* Effect.sleep("50 millis"); // let the collector subscribe before acting
     yield* t.act({ _tag: "answer", id: snap.dialogs[0].id, value: "42" });
@@ -66,8 +66,8 @@ test("late subscriber sees transcript and a retained dialog; answering resolves 
 
 test("model switch and child crash", async () => {
   const result = await run(Effect.gen(function* () {
-    const threads = yield* PiThreads;
-    const t = yield* threads.open({ cwd: process.cwd(), sessionId: "s3" });
+    const sessions = yield* PiSessions;
+    const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s3" });
     yield* t.act({ _tag: "set_model", model: "fake/beta" });
     const model = (yield* t.state).model;
     const closed = yield* collectUntil(t.events, (e) => e._tag === "closed").pipe(Effect.forkChild);
@@ -77,7 +77,7 @@ test("model switch and child crash", async () => {
     return { model, events, failed };
   }).pipe(Effect.scoped));
   assert.equal(result.model, "fake/beta");
-  const closed = result.events[result.events.length - 1] as Extract<ThreadEvent, { _tag: "closed" }>;
+  const closed = result.events[result.events.length - 1] as Extract<SessionEvent, { _tag: "closed" }>;
   assert.equal(closed._tag, "closed");
   assert.match(closed.reason, /code 3/);
   assert.equal(result.failed.reason, "exited");
@@ -85,8 +85,24 @@ test("model switch and child crash", async () => {
 
 test("probe reports models and default", async () => {
   const r = await run(Effect.gen(function* () {
-    return yield* (yield* PiThreads).probe(process.cwd());
+    return yield* (yield* PiSessions).probe(process.cwd());
   }));
   assert.equal(r.models.length, 2);
   assert.equal(r.defaultModel, "fake/alpha");
+});
+
+test("releasing a session tells subscribers it closed", async () => {
+  const events = await run(Effect.gen(function* () {
+    const sessions = yield* PiSessions;
+    const scope = yield* Scope.make();
+    const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s4" }).pipe(Scope.provide(scope));
+    const collector = yield* collectUntil(t.events, (e) => e._tag === "closed").pipe(Effect.forkChild);
+    yield* Effect.sleep("50 millis");
+    yield* Scope.close(scope, Exit.succeed(undefined));
+    return yield* Fiber.join(collector).pipe(Effect.timeoutOption("5 seconds"));
+  }));
+  assert.equal(events._tag, "Some", "subscriber saw the stream end");
+  const last = events.value[events.value.length - 1] as Extract<SessionEvent, { _tag: "closed" }>;
+  assert.equal(last._tag, "closed");
+  assert.equal(last.reason, "released");
 });

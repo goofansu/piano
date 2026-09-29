@@ -1,5 +1,5 @@
 /**
- * Threads are pi sessions. Read them from pi's session store without starting
+ * Sessions are pi sessions. Read them from pi's session store without starting
  * an agent, using the SDK's SessionManager as a file reader.
  */
 import { SessionManager } from "@earendil-works/pi-coding-agent";

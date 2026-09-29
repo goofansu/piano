@@ -1,6 +1,6 @@
 /**
- * Piano: start or continue pi threads across projects and worktrees.
- * Every running thread is one `pi --mode rpc` child (see PiThreads).
+ * Piano: start or continue pi sessions across projects and worktrees.
+ * Every running session is one `pi --mode rpc` child (see PiSessions).
  */
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -10,20 +10,20 @@ import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { BroadcastLive } from "./Broadcast.ts";
 import { CatalogLive } from "./Catalog.ts";
 import { agentDir } from "./PiEnv.ts";
-import { PiThreadsLive } from "./PiThreads.ts";
-import { CONFIG_PATH } from "./Projects.ts";
+import { PiSessionsLive } from "./PiSessions.ts";
+import { CONFIG_PATH, RegistryLive } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
-import { ThreadHostsLive } from "./ThreadHosts.ts";
+import { SessionHostsLive } from "./SessionHosts.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
-const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
+const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 5) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
 
 const Infra = NodeHttpServer.layer(() => createServer(), { port: PORT, host: HOST });
 
-const Core = Layer.mergeAll(ThreadHostsLive({ idleMs: IDLE_MS }), CatalogLive, BroadcastLive).pipe(
-  Layer.provideMerge(PiThreadsLive),
+const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), CatalogLive, BroadcastLive, RegistryLive).pipe(
+  Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),
 );
 
