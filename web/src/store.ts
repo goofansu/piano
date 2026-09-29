@@ -18,6 +18,8 @@ export interface AppState {
   /** What the main pane shows. */
   view: { kind: "session" } | { kind: "new"; cwd?: string };
   projects: ProjectView[];
+  /** The server has sent the project list at least once since connecting. */
+  projectsLoaded: boolean;
   hosts: HostInfo[];
   catalog: ModelCatalog | null;
   session: SessionView | null;
@@ -35,6 +37,7 @@ export const initialState: AppState = {
   connected: false,
   view: { kind: "new" },
   projects: [],
+  projectsLoaded: false,
   hosts: [],
   catalog: null,
   session: null,
@@ -65,7 +68,7 @@ export function reduce(s: AppState, a: Action): AppState {
 function applyServer(s: AppState, m: ServerMessage): AppState {
   switch (m._tag) {
     case "projects":
-      return { ...s, projects: [...m.projects] };
+      return { ...s, projects: [...m.projects], projectsLoaded: true };
     case "hosts": {
       // A host that was working and no longer is has finished a turn. Unless it is on screen, remember that.
       const viewing = s.session ? sessionKey(s.session) : s.selecting ? sessionKey(s.selecting) : null;

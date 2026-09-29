@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import type { ClientMessage, ServerMessage } from "@shared/wire";
 import { useConnection } from "@/lib/ws";
 import { initialState, reduce } from "@/store";
+import { parseRoute, routePath, type Route } from "@/lib/routes";
 import { Sidebar } from "@/components/Sidebar";
 import { SessionView } from "@/components/SessionView";
 import { NewSession } from "@/components/NewSession";
@@ -53,6 +54,51 @@ export default function App() {
     dispatch({ type: "new", cwd });
     setMenuOpen(false);
   }, []);
+
+  // ── routing ──
+  // A route read from the address bar (on load, or on back/forward) that has not been applied yet.
+  const wanted = useRef<Route | null>(parseRoute(location));
+  const applyRoute = useCallback(() => {
+    const r = wanted.current;
+    if (!r) return;
+    const s = latest.current;
+    if (r.kind === "new") {
+      wanted.current = null;
+      dispatch({ type: "new", cwd: r.cwd });
+      return;
+    }
+    // A session needs its directory, which only the project list knows.
+    if (!s.projectsLoaded) return;
+    wanted.current = null;
+    const owner = s.projects.find((p) => p.sessions.some((t) => t.sessionId === r.sessionId));
+    const session = owner?.sessions.find((t) => t.sessionId === r.sessionId);
+    if (session) select(session.cwd, session.sessionId);
+    else dispatch({ type: "new", cwd: owner?.path });
+  }, [select]);
+  useEffect(applyRoute, [applyRoute, state.projectsLoaded, state.projects]);
+  useEffect(() => {
+    const onPop = () => {
+      wanted.current = parseRoute(location);
+      applyRoute();
+    };
+    addEventListener("popstate", onPop);
+    return () => removeEventListener("popstate", onPop);
+  }, [applyRoute]);
+  // The address bar follows the state; a route that is still being applied already matches it.
+  useEffect(() => {
+    if (wanted.current) return;
+    const current = state.session ?? state.selecting;
+    const route: Route | null = state.view.kind === "new" ? { kind: "new", cwd: state.view.cwd } : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
+    if (!route) return;
+    const path = routePath(route);
+    if (path !== location.pathname + location.search) {
+      // The bare root is only ever an alias for /new; do not leave it in history.
+      if (location.pathname === "/") history.replaceState(null, "", path);
+      else history.pushState(null, "", path);
+    }
+    const title = route.kind === "new" ? "New session" : state.projects.flatMap((p) => p.sessions).find((t) => t.sessionId === route.sessionId)?.title || "Session";
+    document.title = `${title} - piano`;
+  }, [state.view, state.session, state.selecting, state.projects]);
 
   const sidebar = <Sidebar state={state} send={send} select={select} openNew={openNew} />;
 
