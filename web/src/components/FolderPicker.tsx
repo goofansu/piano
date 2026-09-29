@@ -128,7 +128,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex flex-col gap-3 sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Select directory</DialogTitle>
+          <DialogTitle>Choose a directory</DialogTitle>
         </DialogHeader>
 
         <Input
@@ -147,13 +147,13 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
         />
 
         {dir && (
-          <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-1 font-mono text-xs">
+          <div className="flex items-center gap-2 rounded-md bg-fill px-2.5 py-1.5 font-mono text-sm">
             <span className="min-w-0 truncate">
               {abbrevHome(dir.path, dir.home)}
-              {prefix && <span className="text-muted-foreground">/{prefix}*</span>}
+              {prefix && <span className="text-ink-3">/{prefix}*</span>}
             </span>
             {dir.gitSubject && (
-              <span className="ml-auto flex min-w-0 items-center gap-1 truncate text-muted-foreground" title={dir.gitSubject}>
+              <span className="ml-auto flex min-w-0 items-center gap-1 truncate text-ink-2" title={dir.gitSubject}>
                 <GitBranchIcon className="size-3 shrink-0" /> <span className="truncate">{dir.gitSubject}</span>
               </span>
             )}
@@ -162,29 +162,29 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
 
         <div className="flex flex-wrap gap-1">
           {dir && dir.path !== dir.home && (
-            <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => goTo(dir.home)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => goTo(dir.home)}>
               <HomeIcon className="size-3.5" /> Home
             </Button>
           )}
           {dir?.gitRoot && dir.gitRoot !== dir.path && (
-            <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => goTo(dir.gitRoot as string)}>
-              <GitBranchIcon className="size-3.5" /> Git root <span className="font-mono text-muted-foreground">{abbrevHome(dir.gitRoot, dir.home)}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => goTo(dir.gitRoot as string)}>
+              <GitBranchIcon className="size-3.5" /> Git root <span className="font-mono text-ink-2">{abbrevHome(dir.gitRoot, dir.home)}</span>
             </Button>
           )}
         </div>
 
-        {error && <div className="text-xs text-destructive">{error}</div>}
+        {error && <div className="text-sm text-err">{error}</div>}
 
-        <div className="h-48 shrink-0 overflow-y-auto rounded-md border">
-          {loading && !dir && <p className="p-4 text-xs text-muted-foreground">Loading…</p>}
+        <div className="h-56 shrink-0 overflow-y-auto rounded-md border border-line bg-surface-1">
+          {loading && !dir && <p className="p-4 text-sm text-ink-2">Loading</p>}
           {dir?.parent && (
-            <button type="button" onClick={() => goTo(dir.parent as string)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent">
-              <ArrowLeftIcon className="size-4 text-muted-foreground" /> <span className="font-mono">..</span>
+            <button type="button" onClick={() => goTo(dir.parent as string)} className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm outline-none hover:bg-fill-hover focus-visible:bg-fill-hover">
+              <ArrowLeftIcon className="size-4 text-ink-2" /> <span className="font-mono">..</span>
             </button>
           )}
           {visible.map((e) => (
-            <button type="button" key={e.path} onClick={() => goTo(e.path)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent">
-              <FolderIcon className={cn("size-4 shrink-0", e.gitSubject ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} />
+            <button type="button" key={e.path} onClick={() => goTo(e.path)} className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm outline-none hover:bg-fill-hover focus-visible:bg-fill-hover">
+              <FolderIcon className={cn("size-4 shrink-0", e.gitSubject ? "text-brand" : "text-ink-3")} />
               <span className="min-w-0 flex-1 truncate">
                 {prefix ? (
                   <>
@@ -195,26 +195,26 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
                   e.name
                 )}
               </span>
-              {e.gitSubject && <span className="max-w-[45%] truncate text-xs text-muted-foreground" title={e.gitSubject}>{e.gitSubject}</span>}
+              {e.gitSubject && <span className="max-w-[45%] truncate text-ink-3" title={e.gitSubject}>{e.gitSubject}</span>}
             </button>
           ))}
           {creating && dir && (
             <form
-              className="flex items-center gap-2 px-3 py-1.5"
+              className="flex items-center gap-2 px-3 py-1"
               onSubmit={(e) => {
                 e.preventDefault();
                 void createFolder();
               }}
             >
-              <FolderPlusIcon className="size-4 text-muted-foreground" />
-              <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New folder name" className="h-7 font-mono text-xs" aria-label="New folder name" />
-              <Button type="submit" size="icon" className="size-7" aria-label="Create" disabled={!newName.trim()}><CheckIcon /></Button>
-              <Button type="button" size="icon" variant="ghost" className="size-7" aria-label="Cancel" onClick={() => setCreating(false)}><XIcon /></Button>
+              <FolderPlusIcon className="size-4 text-ink-2" />
+              <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New folder name" className="h-8 font-mono text-sm" aria-label="New folder name" />
+              <Button type="submit" size="icon-xs" aria-label="Create" disabled={!newName.trim()}><CheckIcon /></Button>
+              <Button type="button" size="icon-xs" variant="ghost" aria-label="Cancel" onClick={() => setCreating(false)}><XIcon /></Button>
             </form>
           )}
-          {hidden > 0 && <p className="px-3 py-1.5 text-xs text-muted-foreground">{hidden.toLocaleString()} more, type to filter</p>}
+          {hidden > 0 && <p className="px-3 py-2 text-sm text-ink-3">{hidden.toLocaleString()} more. Type to filter.</p>}
           {dir && entries.length === 0 && !creating && (
-            <p className="p-4 text-center text-xs text-muted-foreground">{prefix ? "No matching directories" : "No subdirectories"}</p>
+            <p className="p-4 text-center text-sm text-ink-2">{prefix ? "No matching directories" : "No subdirectories"}</p>
           )}
         </div>
 
@@ -224,7 +224,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           </Button>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="button" disabled={!dir || loading} onClick={select}>Select</Button>
+            <Button type="button" disabled={!dir || loading} onClick={select}>Use this directory</Button>
           </div>
         </DialogFooter>
         <span className="sr-only">{selected}</span>

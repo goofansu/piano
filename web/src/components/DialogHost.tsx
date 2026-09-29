@@ -14,21 +14,20 @@ export function DialogHost({ dialogs, send }: { dialogs: PiDialog[]; send: (m: C
 
   const answer = (a: { value?: string; confirmed?: boolean; cancelled?: boolean }) =>
     send({ _tag: "act", action: { _tag: "answer", id: d.id, ...a } });
+  const more = dialogs.length - 1;
 
   return (
     <Dialog open onOpenChange={(open) => !open && answer({ cancelled: true })}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-            pi asks · {d.method}{dialogs.length > 1 ? ` · ${dialogs.length - 1} more` : ""}
-          </div>
-          <DialogTitle>{d.title || "pi needs input"}</DialogTitle>
+          <DialogTitle>{d.title || "pi needs an answer"}</DialogTitle>
           {d.message && <DialogDescription className="whitespace-pre-wrap">{d.message}</DialogDescription>}
+          {more > 0 && <p className="text-sm text-ink-3">{more} more {more === 1 ? "question" : "questions"} after this one.</p>}
         </DialogHeader>
         {d.method === "select" && (
           <div className="flex flex-col gap-2">
             {(d.options ?? []).map((o) => (
-              <Button key={o} variant="outline" className="justify-start" onClick={() => answer({ value: o })}>{o}</Button>
+              <Button key={o} variant="outline" size="lg" className="justify-start font-normal" onClick={() => answer({ value: o })}>{o}</Button>
             ))}
           </div>
         )}
@@ -56,7 +55,7 @@ export function DialogHost({ dialogs, send }: { dialogs: PiDialog[]; send: (m: C
           ) : (
             <>
               <Button variant="outline" onClick={() => answer({ cancelled: true })}>Cancel</Button>
-              {d.method !== "select" && <Button type="submit" form="pi-dialog-form">OK</Button>}
+              {d.method !== "select" && <Button type="submit" form="pi-dialog-form">Send answer</Button>}
             </>
           )}
         </DialogFooter>

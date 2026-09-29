@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, MenuIcon, SendHorizonalIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GaugeIcon, GitBranchIcon, GitBranchPlusIcon, MenuIcon } from "lucide-react";
 import type { ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
+import { composerCard, picker } from "@/lib/styles";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -76,56 +77,57 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
 
   return (
     <>
-      <header className="flex items-center gap-2 border-b bg-card px-3 py-2 text-xs text-muted-foreground">
-        <Button variant="ghost" size="icon" className="md:hidden" aria-label="Menu" onClick={onMenu}><MenuIcon /></Button>
-        <span className="font-semibold text-foreground">New</span>
-      </header>
-      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6">
-        <div className="w-full max-w-2xl space-y-4">
-          <h1 className="text-center text-xl font-semibold tracking-tight">What should we work on?</h1>
-          <div className="rounded-xl border bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring">
+      {/* No header on this page; the sidebar toggle still needs a home on small screens. */}
+      <Button variant="ghost" size="icon-sm" className="absolute top-2 left-2 md:hidden" aria-label="Menu" onClick={onMenu}><MenuIcon /></Button>
+      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-16 md:px-6">
+        <div className="w-full max-w-2xl">
+          <h1 className="mb-5 text-2xl font-medium tracking-tight">What should we work on?</h1>
+          <div className={composerCard}>
             <Textarea
               ref={textarea}
               autoFocus
               value={text}
               rows={3}
-              className="max-h-64 min-h-20 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+              aria-label="First message"
+              placeholder="Describe the work. pi starts in the directory below."
+              className="max-h-72 min-h-24 resize-none border-0 bg-transparent px-4 pt-3.5 shadow-none focus-visible:ring-0"
               onChange={(e) => {
                 setText(e.target.value);
                 e.target.style.height = "auto";
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 256)}px`;
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 288)}px`;
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   submit();
                 }
               }}
             />
-            <div className="flex flex-wrap items-center gap-1 px-2 pb-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2">
               <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
               <ModelSelect catalog={state.catalog} value={model} onChange={setModel} />
               <Select value={effectiveEffort} onValueChange={(v) => setEffort(v as ThinkingLevel)}>
-                <SelectTrigger className="h-7 gap-1 border-0 bg-transparent px-1.5 text-xs shadow-none" aria-label="Effort">
-                  <SelectValue>{effectiveEffort}</SelectValue>
+                <SelectTrigger size="sm" className={cn(picker, "border-0 bg-transparent shadow-none focus-visible:ring-2 focus-visible:ring-ring")} aria-label="Effort">
+                  <GaugeIcon className="size-3.5 text-ink-3" />
+                  <SelectValue>{effectiveEffort} effort</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {LEVELS.map((l) => (
-                    <SelectItem key={l} value={l} className="flex items-center gap-2">
+                    <SelectItem key={l} value={l}>
                       <span className="flex-1">{l}</span>
-                      {l === state.catalog?.defaultThinkingLevel && <span className="text-[10px] text-muted-foreground">default</span>}
+                      {l === state.catalog?.defaultThinkingLevel && <span className="text-ink-3">default</span>}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <span className="flex-1" />
-              <Button size="icon" className="size-8" aria-label="Send" disabled={!ready} onClick={submit}>
-                <SendHorizonalIcon />
+              <Button size="icon-sm" className="rounded-full" aria-label="Send" disabled={!ready} onClick={submit}>
+                <ArrowUpIcon />
               </Button>
             </div>
           </div>
-          <p className="text-center text-[11px] text-muted-foreground">
-            {creating ? "Starting pi…" : "Enter to send. A new directory becomes a project."}
+          <p className="mt-3 text-sm text-ink-3" role="status">
+            {creating ? "Starting pi" : "Enter to send, Shift+Enter for a new line. A new directory becomes a project."}
           </p>
         </div>
       </div>
@@ -134,25 +136,38 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   );
 }
 
-/** Known directories (project roots and their worktrees) plus a Browse… escape hatch. */
+/** Known directories (project roots and their worktrees) plus a Browse escape hatch. */
 function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: AppState; value: string; onChange: (cwd: string) => void; onBrowse: () => void; send: (m: ClientMessage) => void }) {
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
   const known = state.projects.flatMap((p) => p.worktrees.map((w) => ({ project: p.name, path: w.path, branch: w.branch, main: w.main })));
   const current = known.find((k) => k.path === value);
-  const label = !value ? "choose directory" : current ? (current.main ? current.project : `${current.project} · ${current.branch}`) : abbrevHome(value);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className="h-7 max-w-[280px] gap-1 px-1.5 text-xs font-normal" title={value}>
-          <FolderIcon className="size-3.5 shrink-0 opacity-70" />
-          <span className="truncate">{label}</span>
-          <ChevronDownIcon className="size-3.5 opacity-60" />
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className={picker} title={value}>
+          <FolderIcon className="size-3.5 shrink-0 text-ink-3" />
+          {!value ? (
+            <span>Choose a directory</span>
+          ) : current ? (
+            <>
+              <span className="truncate">{current.project}</span>
+              {!current.main && (
+                <span className="inline-flex min-w-0 items-center gap-1 font-mono text-ink-3">
+                  <GitBranchIcon className="size-3 shrink-0" />
+                  <span className="truncate">{current.branch}</span>
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="truncate font-mono">{abbrevHome(value)}</span>
+          )}
+          <ChevronDownIcon className="size-3.5 text-ink-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[360px] p-0">
+      <PopoverContent align="start" className="w-[380px] p-0">
         <Command>
-          <CommandInput placeholder="Search directories…" autoFocus />
+          <CommandInput placeholder="Search directories" autoFocus />
           <CommandList className="max-h-72">
             <CommandEmpty>No directory matches.</CommandEmpty>
             {known.length > 0 && (
@@ -166,16 +181,15 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                       onChange(k.path);
                       setOpen(false);
                     }}
-                    className="flex items-center gap-2"
                   >
-                    <CheckIcon className={cn("size-3.5 shrink-0", k.path === value ? "opacity-100" : "opacity-0")} />
+                    <CheckIcon className={cn("size-4 shrink-0", k.path === value ? "opacity-100" : "opacity-0")} />
                     <span className="min-w-0 flex-1 truncate">
                       {k.project}
                       {!k.main && (
-                        <span className="ml-1.5 inline-flex items-center gap-0.5 text-muted-foreground"><GitBranchIcon className="size-3" />{k.branch}</span>
+                        <span className="ml-2 inline-flex items-center gap-1 font-mono text-ink-2"><GitBranchIcon className="size-3" />{k.branch}</span>
                       )}
                     </span>
-                    <span className="max-w-[140px] truncate font-mono text-[10px] text-muted-foreground">{abbrevHome(k.path)}</span>
+                    <span className="max-w-[150px] truncate font-mono text-ink-3">{abbrevHome(k.path)}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -189,7 +203,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                   onBrowse();
                 }}
               >
-                <FolderOpenIcon className="size-3.5" /> Browse…
+                <FolderOpenIcon /> Browse for a directory
               </CommandItem>
               {state.projects.length > 0 && (
                 <CommandItem
@@ -199,7 +213,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                     setWtOpen(true);
                   }}
                 >
-                  <GitBranchPlusIcon className="size-3.5" /> New worktree…
+                  <GitBranchPlusIcon /> New worktree
                 </CommandItem>
               )}
             </CommandGroup>
@@ -232,36 +246,36 @@ function NewWorktreeDialog({ open, onOpenChange, state, currentCwd, send }: { op
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New worktree</DialogTitle>
-          <DialogDescription>Runs `wt switch --create` in the project and starts the session there.</DialogDescription>
+          <DialogDescription>Creates a branch and checkout with worktrunk, then starts the session there.</DialogDescription>
         </DialogHeader>
         <form
           id="new-worktree-form"
-          className="space-y-3"
+          className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             submit();
           }}
         >
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="wt-project">Project</label>
+            <label className="block text-sm font-medium text-ink-2" htmlFor="wt-project">Project</label>
             <Select value={project} onValueChange={setProject}>
-              <SelectTrigger id="wt-project" className="w-full text-sm"><SelectValue placeholder="project" /></SelectTrigger>
+              <SelectTrigger id="wt-project" className="w-full"><SelectValue placeholder="Project" /></SelectTrigger>
               <SelectContent>
                 {state.projects.map((p) => <SelectItem key={p.path} value={p.path}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="wt-branch">Branch</label>
+            <label className="block text-sm font-medium text-ink-2" htmlFor="wt-branch">Branch</label>
             <Input id="wt-branch" autoFocus value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="feature-name" className="font-mono text-sm" />
           </div>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input type="checkbox" checked={hooks} onChange={(e) => setHooks(e.target.checked)} /> run worktrunk hooks
+          <label className="flex items-center gap-2 text-sm text-ink-2">
+            <input type="checkbox" className="size-4 accent-brand" checked={hooks} onChange={(e) => setHooks(e.target.checked)} /> Run worktrunk hooks
           </label>
         </form>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" form="new-worktree-form" disabled={!branch.trim() || !project}>Create</Button>
+          <Button type="submit" form="new-worktree-form" disabled={!branch.trim() || !project}>Create worktree</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

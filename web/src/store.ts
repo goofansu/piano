@@ -25,7 +25,11 @@ export interface AppState {
   lastWorktree: { project: string; path: string; branch: string } | null;
   /** Local selection while the server's `selected` answer is in flight. */
   selecting: { cwd: string; sessionId: string | null } | null;
+  /** Sessions whose turn finished while another one was on screen; cleared when opened. */
+  done: string[];
 }
+
+export const sessionKey = (s: { cwd: string; sessionId: string | null }) => `${s.cwd}\n${s.sessionId ?? ""}`;
 
 export const initialState: AppState = {
   connected: false,
@@ -36,6 +40,7 @@ export const initialState: AppState = {
   session: null,
   lastWorktree: null,
   selecting: null,
+  done: [],
 };
 
 export type Action =
@@ -49,7 +54,7 @@ export function reduce(s: AppState, a: Action): AppState {
     case "connected":
       return { ...s, connected: a.connected };
     case "selecting":
-      return { ...s, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId }, session: null };
+      return { ...s, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId }, session: null, done: s.done.filter((k) => k !== sessionKey(a)) };
     case "new":
       return { ...s, view: { kind: "new", cwd: a.cwd }, selecting: null, session: null };
     case "server":
@@ -61,17 +66,31 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
   switch (m._tag) {
     case "projects":
       return { ...s, projects: [...m.projects] };
-    case "hosts":
-      return { ...s, hosts: [...m.hosts] };
+    case "hosts": {
+      // A host that was working and no longer is has finished a turn. Unless it is on screen, remember that.
+      const viewing = s.session ? sessionKey(s.session) : s.selecting ? sessionKey(s.selecting) : null;
+      const done = new Set(s.done);
+      for (const prev of s.hosts) {
+        if (!prev.streaming) continue;
+        const now = m.hosts.find((h) => h.cwd === prev.cwd && h.sessionId === prev.sessionId);
+        const k = sessionKey(prev);
+        if (!now?.streaming && k !== viewing) done.add(k);
+      }
+      return { ...s, hosts: [...m.hosts], done: [...done] };
+    }
     case "models":
       return { ...s, catalog: m.catalog };
     case "worktree_created":
       return { ...s, lastWorktree: { project: m.project, path: m.path, branch: m.branch } };
     case "selected":
+      // A selection without a session (what the server answers after archiving the one
+      // being viewed) has nothing to show; sessions start from the New page.
+      if (m.sessionId === null) return { ...s, view: { kind: "new", cwd: m.cwd }, selecting: null, session: null };
       return {
         ...s,
         view: { kind: "session" },
         selecting: null,
+        done: s.done.filter((k) => k !== sessionKey(m)),
         session: {
           cwd: m.cwd,
           sessionId: m.sessionId,

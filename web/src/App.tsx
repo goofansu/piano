@@ -51,19 +51,20 @@ export default function App() {
 
   const sidebar = <Sidebar state={state} send={send} select={select} openNew={openNew} />;
 
+  // Layer 0 throughout: the sidebar and the main pane share the canvas and meet at a hairline.
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
-      <aside className="hidden w-80 shrink-0 border-r bg-sidebar text-sidebar-foreground md:flex md:flex-col">{sidebar}</aside>
+    <div className="flex h-dvh w-full overflow-hidden bg-surface-0 text-ink">
+      <aside className="hidden w-72 shrink-0 border-r border-line md:flex md:flex-col">{sidebar}</aside>
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-80 p-0">
+        <SheetContent side="left" className="w-72 p-0" showCloseButton={false}>
           {sidebar}
         </SheetContent>
       </Sheet>
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-0 flex-1 flex-col">
         {state.view.kind === "new" ? (
           <NewSession state={state} send={send} initialCwd={state.view.cwd} onMenu={() => setMenuOpen(true)} />
         ) : (
-          <SessionView state={state} send={send} select={select} onMenu={() => setMenuOpen(true)} />
+          <SessionView state={state} send={send} onMenu={() => setMenuOpen(true)} />
         )}
       </main>
       <DialogHost dialogs={state.session?.dialogs ?? []} send={send} />
