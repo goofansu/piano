@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import type { ContextUsage, ModelCatalog, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { composerCard } from "@/lib/styles";
+import { useTypeToFocus } from "@/lib/typeToFocus";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -29,12 +30,19 @@ const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 export function Composer({ disabled, streaming, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost }: Props) {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
+  // The box grows with its text up to a cap, whichever way the text got there.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
+  }, [text]);
+  useTypeToFocus(ref, useCallback((s: string) => setText((t) => t + s), []), !disabled);
   const send = () => {
     const t = text.trim();
     if (!t) return;
     onSend(t);
     setText("");
-    if (ref.current) ref.current.style.height = "auto";
   };
   const percent = context?.percent ?? null;
   const left = percent === null ? null : Math.max(0, 100 - percent);
@@ -50,11 +58,7 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
           aria-label="Message"
           placeholder={streaming ? "pi is working. Type to queue the next message." : "What should pi do next?"}
           className="max-h-48 min-h-12 resize-none border-0 bg-transparent px-4 pt-3 shadow-none focus-visible:ring-0"
-          onChange={(e) => {
-            setText(e.target.value);
-            e.target.style.height = "auto";
-            e.target.style.height = `${Math.min(e.target.scrollHeight, 192)}px`;
-          }}
+          onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();

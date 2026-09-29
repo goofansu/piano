@@ -199,6 +199,8 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("act", { action: SessionAction, start: Schema.optional(StartOptions) }),
   /** Hide a session from the sidebar (and stop pi for it if running). */
   Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),
+  /** Stop pi for a session, delete its file from pi's session store, and forget it. */
+  Schema.TaggedStruct("delete_session", { cwd: Schema.String, sessionId: Schema.String }),
 ]);
 export type ClientMessage = typeof ClientMessage.Type;
 

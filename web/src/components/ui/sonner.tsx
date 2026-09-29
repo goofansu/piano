@@ -19,16 +19,24 @@ const Toaster = ({ ...props }: ToasterProps) => {
         error: <OctagonXIcon className="size-4" />,
         loading: <Loader2Icon className="size-4 animate-spin" />,
       }}
-      toastOptions={{ className: "font-sans text-sm" }}
-      style={
-        {
-          "--normal-bg": "var(--surface-2)",
-          "--normal-text": "var(--ink)",
-          "--normal-border": "var(--line)",
-          "--border-radius": "var(--radius)",
-          "--font-size": "0.875rem",
-        } as React.CSSProperties
-      }
+      toastOptions={{
+        unstyled: true,
+        classNames: {
+          toast: "flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 font-sans text-sm text-ink shadow-2",
+          content: "flex min-w-0 flex-col gap-0.5",
+          title: "font-medium",
+          description: "text-ink-2",
+          icon: "flex size-4 shrink-0 items-center justify-center [&_svg]:size-4",
+          success: "[&_[data-icon]]:text-ok",
+          error: "[&_[data-icon]]:text-err",
+          warning: "[&_[data-icon]]:text-warn",
+          info: "[&_[data-icon]]:text-ink-2",
+          loading: "[&_[data-icon]]:text-ink-2",
+          actionButton: "ml-2 h-7 rounded-md bg-brand px-2.5 text-sm font-medium text-brand-ink",
+          cancelButton: "ml-2 h-7 rounded-md bg-fill px-2.5 text-sm font-medium text-ink",
+          closeButton: "text-ink-3 hover:text-ink",
+        },
+      }}
       {...props}
     />
   )

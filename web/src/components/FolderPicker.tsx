@@ -143,6 +143,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           }}
           placeholder="/path/to/directory"
           spellCheck={false}
+          autoComplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other"
           className="font-mono text-sm"
         />
 
@@ -207,7 +208,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
               }}
             >
               <FolderPlusIcon className="size-4 text-ink-2" />
-              <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New folder name" className="h-8 font-mono text-sm" aria-label="New folder name" />
+              <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New folder name" className="h-8 font-mono text-sm" aria-label="New folder name" autoComplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
               <Button type="submit" size="icon-xs" aria-label="Create" disabled={!newName.trim()}><CheckIcon /></Button>
               <Button type="button" size="icon-xs" variant="ghost" aria-label="Cancel" onClick={() => setCreating(false)}><XIcon /></Button>
             </form>

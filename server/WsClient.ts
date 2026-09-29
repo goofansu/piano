@@ -5,6 +5,7 @@
  * vocabulary, so this is mostly routing.
  */
 import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
 import { Cause, Effect, Exit, Queue, Scope, Stream } from "effect";
 import type { Socket } from "effect/socket";
 import {
@@ -151,6 +152,19 @@ export const handleSocket = (socket: Socket.Socket) =>
               yield* publishProjects;
             }
             return yield* session.act(msg.action);
+          }
+          case "delete_session": {
+            if (attachment?.session.spec.cwd === msg.cwd && attachment.session.spec.sessionId === msg.sessionId) yield* detach;
+            if (yield* hosts.get(msg.cwd, msg.sessionId)) yield* hosts.release(msg.cwd, msg.sessionId);
+            const file = yield* findSessionFile(msg.cwd, msg.sessionId);
+            if (file) yield* Effect.tryPromise({ try: () => rm(file, { force: true }), catch: (e) => new Error(`Could not delete session file: ${describe(e)}`) });
+            yield* registry.removeSession(msg.cwd, msg.sessionId);
+            if (selected?.cwd === msg.cwd && selected.sessionId === msg.sessionId) {
+              selected = null;
+              yield* send({ _tag: "selected", cwd: msg.cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
+            }
+            yield* send({ _tag: "toast", message: "Session deleted" });
+            return yield* publishProjects;
           }
           case "archive_session": {
             if (attachment?.session.spec.cwd === msg.cwd && attachment.session.spec.sessionId === msg.sessionId) yield* detach;

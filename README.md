@@ -83,7 +83,8 @@ the sidebar, so sessions started from the terminal do not appear here.
    session's process is retired five minutes after its last activity, and the next message starts it
    again in about half a second from the session file. Re-selecting a session re-attaches with a full
    snapshot, including any dialog pi is still waiting on.
-6. A session's menu (…) offers **Archive**, which stops pi for it and hides it. An Archived page to
+6. A session's menu (…) offers **Archive**, which stops pi for it and hides it, and **Delete**,
+   which stops pi, deletes the session file from pi's session store and forgets the session. An Archived page to
    find and restore archived sessions is planned but not built yet.
 
 ## Design

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, MenuIcon } from "lucide-react";
 import type { ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
 import { composerCard, picker } from "@/lib/styles";
+import { useTypeToFocus } from "@/lib/typeToFocus";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -45,6 +46,13 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   useEffect(() => {
     if (initialCwd) setCwd(initialCwd);
   }, [initialCwd]);
+  useEffect(() => {
+    const el = textarea.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 288)}px`;
+  }, [text]);
+  useTypeToFocus(textarea, useCallback((s: string) => setText((t) => t + s), []));
   // Fall back to the first known project when nothing is remembered.
   useEffect(() => {
     if (!cwd && state.projects[0]) setCwd(state.projects[0].path);
@@ -92,11 +100,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               aria-label="First message"
               placeholder="Describe the work. pi starts in the directory below."
               className="max-h-72 min-h-24 resize-none border-0 bg-transparent px-4 pt-3.5 shadow-none focus-visible:ring-0"
-              onChange={(e) => {
-                setText(e.target.value);
-                e.target.style.height = "auto";
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 288)}px`;
-              }}
+              onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
@@ -255,7 +259,7 @@ function NewWorktreeDialog({ open, onOpenChange, state, currentCwd, send }: { op
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-ink-2" htmlFor="wt-branch">Branch</label>
-            <Input id="wt-branch" autoFocus value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="feature-name" className="font-mono text-sm" />
+            <Input id="wt-branch" autoFocus value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="feature-name" className="font-mono text-sm" autoComplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
           </div>
           <label className="flex items-center gap-2 text-sm text-ink-2">
             <input type="checkbox" className="size-4 accent-brand" checked={hooks} onChange={(e) => setHooks(e.target.checked)} /> Run worktrunk hooks

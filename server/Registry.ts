@@ -73,6 +73,7 @@ export class Registry extends Context.Service<
     /** Bump a session's activity time; sets the title from the first prompt when none was given. */
     readonly touchSession: (cwd: string, sessionId: string, text?: string) => Effect.Effect<void>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void>;
+    readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void>;
   }
 >()("piano/Registry") {}
 
@@ -127,6 +128,7 @@ export const RegistryLive = Layer.effect(
         })),
       archiveSession: (cwd, sessionId) =>
         update((d) => ({ ...d, sessions: d.sessions.map((t) => (isSession(cwd, sessionId)(t) ? { ...t, archived: true } : t)) })),
+      removeSession: (cwd, sessionId) => update((d) => ({ ...d, sessions: d.sessions.filter((t) => !isSession(cwd, sessionId)(t)) })),
     });
   }),
 );

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { DirListing } from "../shared/wire.ts";
@@ -14,7 +14,8 @@ import { handleSocket } from "./WsClient.ts";
 const listDirectory = (raw: string) =>
   Effect.gen(function* () {
     const path = resolve(expandHome(raw || "~"));
-    if (!existsSync(path) || !statSync(path).isDirectory()) return yield* Effect.fail(new Error(`Not a directory: ${path}`));
+    if (!existsSync(path)) return yield* Effect.fail(new Error(`No such directory: ${path}`));
+    if (!statSync(path).isDirectory()) return yield* Effect.fail(new Error(`${path} is a file, not a directory`));
     const names: string[] = [];
     for (const name of readdirSync(path)) {
       if (name.startsWith(".")) continue;
@@ -74,7 +75,12 @@ export const AppRouter = HttpRouter.use((router) =>
         const raw = typeof params.path === "string" ? params.path : "~";
         return yield* listDirectory(raw).pipe(
           Effect.map((listing) => json(listing)),
-          Effect.catchCause((cause) => Effect.succeed(json({ error: String(cause).replace(/^Error: /, "") }, 400))),
+          // Answer with the failure's own message, never the Effect cause wrapper.
+          Effect.catchCause((cause) => {
+            const e = Cause.squash(cause);
+            const message = e instanceof Error ? (e as NodeJS.ErrnoException).code === "EACCES" ? `Cannot read ${raw}: permission denied` : e.message : String(e);
+            return Effect.succeed(json({ error: message }, 400));
+          }),
         );
       }),
     );

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PlusIcon, XIcon } from "lucide-react";
+import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -97,6 +98,7 @@ const hoverSlot = "opacity-0 transition-opacity group-hover:opacity-100 group-fo
 
 function Project({ project, current, open, onOpenChange, state, send, select, openNew }: ProjectProps) {
   const isNewSelected = state.view.kind === "new" && state.view.cwd === project.path;
+  const [deleting, setDeleting] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
 
   return (
     <section>
@@ -180,6 +182,10 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
                     <DropdownMenuItem onClick={() => send({ _tag: "archive_session", cwd: t.cwd, sessionId: t.sessionId })}>
                       <ArchiveIcon /> Archive
                     </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem variant="destructive" onClick={() => setDeleting({ cwd: t.cwd, sessionId: t.sessionId, title: t.title || "Untitled" })}>
+                      <Trash2Icon /> Delete
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </li>
@@ -187,6 +193,28 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           })}
         </ul>
       )}
+      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete this session?</DialogTitle>
+            <DialogDescription>
+              "{deleting?.title}" and its transcript are removed from pi's session store. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleting) send({ _tag: "delete_session", cwd: deleting.cwd, sessionId: deleting.sessionId });
+                setDeleting(null);
+              }}
+            >
+              Delete session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
