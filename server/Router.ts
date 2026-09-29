@@ -9,6 +9,7 @@ import { Catalog } from "./Catalog.ts";
 import { expandHome } from "./PiEnv.ts";
 import { buildProjects } from "./Views.ts";
 import { handleSocket } from "./WsClient.ts";
+import { lookupPullRequests } from "./PullRequests.ts";
 
 /** Subdirectories for the folder picker, with git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
 const listDirectory = (raw: string) =>
@@ -106,6 +107,18 @@ export const AppRouter = HttpRouter.use((router) =>
         } catch (e) {
           return json({ error: e instanceof Error ? e.message : String(e) }, 400);
         }
+      }),
+    );
+
+    // Pull requests for a session: the GitHub PR URLs seen in its transcript.
+    yield* router.add(
+      "GET",
+      "/api/prs",
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const params = HttpServerRequest.searchParamsFromURL(new URL(request.url, "http://localhost"));
+        const urls = typeof params.urls === "string" && params.urls ? params.urls.split(" ").filter((u) => /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(u)) : [];
+        return json({ prs: yield* lookupPullRequests(urls.slice(0, 10)) });
       }),
     );
 

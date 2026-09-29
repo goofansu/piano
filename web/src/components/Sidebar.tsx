@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -14,6 +14,8 @@ interface Props {
   send: (m: ClientMessage) => void;
   select: (cwd: string, sessionId: string | null) => void;
   openNew: (cwd?: string) => void;
+  /** Hide the sidebar (or close the sheet it is shown in). */
+  onHide: () => void;
 }
 
 const OPEN_KEY = "piano.openProjects";
@@ -25,7 +27,7 @@ const loadOpen = (): Set<string> => {
   }
 };
 
-export function Sidebar({ state, send, select, openNew }: Props) {
+export function Sidebar({ state, send, select, openNew, onHide }: Props) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
   const current = state.session ?? state.selecting;
 
@@ -56,6 +58,14 @@ export function Sidebar({ state, send, select, openNew }: Props) {
         <span className="text-base font-semibold tracking-tight">piano</span>
         <span className="flex-1" />
         <ThemeToggle />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Hide sidebar" onClick={onHide}>
+              <PanelLeftCloseIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Hide sidebar (⌘B)</TooltipContent>
+        </Tooltip>
       </div>
       <div className="px-3 pb-3">
         <Button variant="outline" className={cn("w-full justify-start", state.view.kind === "new" && !state.view.cwd && "border-brand/40 bg-brand-soft hover:bg-brand-soft")} onClick={() => openNew()}>
@@ -86,6 +96,30 @@ export function Sidebar({ state, send, select, openNew }: Props) {
   );
 }
 
+/** The collapsed sidebar: a vertical rail with the two things you still reach for. */
+export function SidebarRail({ onShow, onNew }: { onShow: () => void; onNew: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center gap-1 pt-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Show sidebar" onClick={onShow}>
+            <PanelLeftOpenIcon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">Show sidebar (⌘B)</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="New session" onClick={onNew}>
+            <PlusIcon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">New session</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
 interface ProjectProps extends Pick<Props, "send" | "select" | "state" | "openNew"> {
   project: ProjectView;
   current: { cwd: string; sessionId: string | null } | null;
@@ -97,12 +131,11 @@ interface ProjectProps extends Pick<Props, "send" | "select" | "state" | "openNe
 const hoverSlot = "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
 
 function Project({ project, current, open, onOpenChange, state, send, select, openNew }: ProjectProps) {
-  const isNewSelected = state.view.kind === "new" && state.view.cwd === project.path;
   const [deleting, setDeleting] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
 
   return (
     <section>
-      <div className="group flex h-9 items-center rounded-md pr-1 hover:bg-fill-hover">
+      <div className="group flex h-9 items-center gap-1 rounded-md pr-1 hover:bg-fill-hover">
         <button
           type="button"
           onClick={() => onOpenChange(!open)}
@@ -118,7 +151,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             <Button
               variant="ghost"
               size="icon-xs"
-              className={cn(hoverSlot, isNewSelected && "bg-brand-soft text-ink opacity-100")}
+              className={hoverSlot}
               aria-label={`New session in ${project.name}`}
               onClick={() => openNew(project.path)}
             >

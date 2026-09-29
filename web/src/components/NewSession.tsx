@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, MenuIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon } from "lucide-react";
 import type { ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
@@ -86,8 +86,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
 
   return (
     <>
-      {/* No header on this page; the sidebar toggle still needs a home on small screens. */}
-      <Button variant="ghost" size="icon-sm" className="absolute top-2 left-2 md:hidden" aria-label="Menu" onClick={onMenu}><MenuIcon /></Button>
+      {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
+      <Button variant="ghost" size="icon-sm" className="absolute top-2 left-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
       <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-16 md:px-6">
         <div className="w-full max-w-2xl">
           <h1 className="mb-5 text-2xl font-medium tracking-tight">What should we work on?</h1>
@@ -118,9 +118,11 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               </Button>
             </div>
           </div>
-          <p className="mt-3 text-sm text-ink-3" role="status">
-            {creating ? "Starting pi" : "Enter to send, Shift+Enter for a new line. A new directory becomes a project."}
-          </p>
+          {creating && (
+            <p className="mt-3 text-sm text-ink-3" role="status">
+              Starting pi
+            </p>
+          )}
         </div>
       </div>
       <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={(path) => setCwd(path)} initialPath={cwd || undefined} />

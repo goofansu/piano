@@ -3,6 +3,7 @@
  * Every running session is one `pi --mode rpc` child (see PiSessions).
  */
 import { createServer } from "node:http";
+import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
@@ -20,14 +21,31 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 5) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
 
-const Infra = NodeHttpServer.layer(() => createServer(), { port: PORT, host: HOST });
+// Closing the HTTP server waits for its connections, and browsers hold WebSockets open
+// indefinitely. The platform starts that close the moment a signal arrives, before any
+// finalizer runs, so the sockets are torn down on the signal itself; otherwise Ctrl-C
+// waits for the whole grace timeout.
+const server = createServer();
+const upgraded = new Set<Duplex>();
+server.on("upgrade", (_req, socket) => {
+  upgraded.add(socket);
+  socket.once("close", () => upgraded.delete(socket));
+});
+const drain = () => {
+  for (const s of upgraded) s.destroy();
+  server.closeAllConnections();
+};
+process.once("SIGINT", drain);
+process.once("SIGTERM", drain);
+const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds" });
+const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
 const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), CatalogLive, BroadcastLive, RegistryLive).pipe(
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),
 );
 
-const Routes = Layer.mergeAll(AppRouter, HttpStaticServer.layer({ root: WEB_DIST, index: "index.html", spa: true }));
+const Routes = Layer.mergeAll(AppRouter, HttpStaticServer.layer({ root: WEB_DIST, index: "index.html", spa: true }), Drain);
 
 const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog: true }).pipe(
   Layer.provide(Core),

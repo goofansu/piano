@@ -2,13 +2,27 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ClientMessage, ServerMessage } from "@shared/wire";
 import { useConnection } from "@/lib/ws";
-import { initialState, reduce } from "@/store";
+import { type AppState, initialState, reduce } from "@/store";
 import { parseRoute, routePath, type Route } from "@/lib/routes";
-import { Sidebar } from "@/components/Sidebar";
+import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { SessionView } from "@/components/SessionView";
 import { NewSession } from "@/components/NewSession";
 import { DialogHost } from "@/components/DialogHost";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { cn } from "cn";
+
+const SIDEBAR_KEY = "piano.sidebar";
+/** Collapsed, the sidebar is a rail just wide enough for its icons. */
+const RAIL_WIDTH = 48;
+
+/** The project of the session on screen, so a new session from the rail starts in the same place. */
+function currentProjectPath(s: AppState): string | undefined {
+  const cwd = (s.session ?? s.selecting)?.cwd ?? (s.view.kind === "new" ? s.view.cwd : undefined);
+  return cwd ? s.projects.find((p) => p.worktrees.some((w) => w.path === cwd))?.path : undefined;
+}
+const WIDTH_KEY = "piano.sidebarWidth";
+/** Sidebar width bounds in px; dragging under the minimum by a margin collapses it. */
+const WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
 
 export default function App() {
   const [state, dispatch] = useReducer(reduce, initialState);
@@ -16,17 +30,91 @@ export default function App() {
   const latest = useRef(state);
   latest.current = state;
 
+  // ── sidebar ──
+  // Hidden or shown on wide screens, remembered per browser; on narrow screens it is a sheet.
+  const [collapsed, setCollapsedState] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === "hidden";
+    } catch {
+      return false;
+    }
+  });
+  const setCollapsed = useCallback((v: boolean) => {
+    setCollapsedState(v);
+    try {
+      localStorage.setItem(SIDEBAR_KEY, v ? "hidden" : "shown");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const wide = () => matchMedia("(min-width: 768px)").matches;
+  const showSidebar = useCallback(() => (wide() ? setCollapsed(false) : setMenuOpen(true)), [setCollapsed]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        if (wide()) setCollapsed(!latestCollapsed.current);
+        else setMenuOpen((o) => !o);
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [setCollapsed]);
+  const latestCollapsed = useRef(collapsed);
+  latestCollapsed.current = collapsed;
+
+  // Resizable by dragging its edge; the width is remembered, and a drag past the minimum collapses it.
+  const [width, setWidthState] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem(WIDTH_KEY));
+      return v >= WIDTH.min && v <= WIDTH.max ? v : WIDTH.default;
+    } catch {
+      return WIDTH.default;
+    }
+  });
+  const [dragging, setDragging] = useState(false);
+  const setWidth = useCallback((v: number) => {
+    setWidthState(v);
+    try {
+      localStorage.setItem(WIDTH_KEY, String(v));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const startResize = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      setDragging(true);
+      let last = width;
+      const move = (ev: PointerEvent) => {
+        last = ev.clientX;
+        setWidthState(Math.min(WIDTH.max, Math.max(WIDTH.min, ev.clientX)));
+      };
+      const up = () => {
+        removeEventListener("pointermove", move);
+        removeEventListener("pointerup", up);
+        setDragging(false);
+        if (last < WIDTH.collapseBelow) {
+          // Collapsed by dragging: come back at the width it had before the drag.
+          setWidthState(width);
+          setCollapsed(true);
+        } else setWidth(Math.min(WIDTH.max, Math.max(WIDTH.min, last)));
+      };
+      addEventListener("pointermove", move);
+      addEventListener("pointerup", up);
+    },
+    [width, setWidth, setCollapsed],
+  );
+
   const onMessage = useCallback((m: ServerMessage) => {
     dispatch({ type: "server", message: m });
-    if (m._tag === "error") toast.error(m.message);
-    else if (m._tag === "toast") toast(m.message);
-    else if (m._tag === "worktree_created") toast(`Worktree ${m.branch} created`);
-    else if (m._tag === "session" && m.event._tag === "notice") {
-      const { level, message } = m.event;
-      if (level === "error") toast.error(message);
-      else if (level === "warning") toast.warning(message);
-      else toast(message);
-    } else if (m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) toast.warning(`pi stopped: ${m.event.reason}`);
+    const notify = (message: string, level?: "success" | "info" | "warning" | "error") =>
+      level === "success" ? toast.success(message) : level === "info" ? toast.info(message) : level === "warning" ? toast.warning(message) : level === "error" ? toast.error(message) : toast(message);
+    if (m._tag === "error") notify(m.message, "error");
+    else if (m._tag === "toast") notify(m.message, m.level);
+    else if (m._tag === "worktree_created") notify(`Worktree ${m.branch} created`, "success");
+    else if (m._tag === "session" && m.event._tag === "notice") notify(m.event.message, m.event.level);
+    else if (m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) toast.warning(`pi stopped: ${m.event.reason}`);
   }, []);
   const onStatus = useCallback((connected: boolean) => dispatch({ type: "connected", connected }), []);
   const conn = useConnection(onMessage, onStatus);
@@ -64,7 +152,8 @@ export default function App() {
     const s = latest.current;
     if (r.kind === "new") {
       wanted.current = null;
-      dispatch({ type: "new", cwd: r.cwd });
+      // Back or forward onto the New page keeps whatever directory it already had.
+      if (s.view.kind !== "new") dispatch({ type: "new" });
       return;
     }
     // A session needs its directory, which only the project list knows.
@@ -88,34 +177,68 @@ export default function App() {
   useEffect(() => {
     if (wanted.current) return;
     const current = state.session ?? state.selecting;
-    const route: Route | null = state.view.kind === "new" ? { kind: "new", cwd: state.view.cwd } : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
+    const route: Route | null = state.view.kind === "new" ? { kind: "new" } : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
     if (!route) return;
     const path = routePath(route);
     if (path !== location.pathname + location.search) {
-      // The bare root is only ever an alias for /new; do not leave it in history.
-      if (location.pathname === "/") history.replaceState(null, "", path);
+      // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
+      if (location.pathname === "/" || location.pathname === path) history.replaceState(null, "", path);
       else history.pushState(null, "", path);
     }
     const title = route.kind === "new" ? "New session" : state.projects.flatMap((p) => p.sessions).find((t) => t.sessionId === route.sessionId)?.title || "Session";
     document.title = `${title} - piano`;
   }, [state.view, state.session, state.selecting, state.projects]);
 
-  const sidebar = <Sidebar state={state} send={send} select={select} openNew={openNew} />;
+  const sidebarProps = { state, send, select, openNew };
 
   // Layer 0 throughout: the sidebar and the main pane share the canvas and meet at a hairline.
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-surface-0 text-ink">
-      <aside className="hidden w-72 shrink-0 border-r border-line md:flex md:flex-col">{sidebar}</aside>
+      <aside
+        className={cn(
+          "relative hidden shrink-0 border-r border-line md:flex md:flex-col",
+          !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+        )}
+        style={{ width: collapsed ? RAIL_WIDTH : width }}
+      >
+        {collapsed ? (
+          <SidebarRail onShow={() => setCollapsed(false)} onNew={() => openNew(currentProjectPath(latest.current))} />
+        ) : (
+          <div className="h-full overflow-hidden">
+            <div className="h-full shrink-0" style={{ width }}>
+              <Sidebar {...sidebarProps} onHide={() => setCollapsed(true)} />
+            </div>
+          </div>
+        )}
+        {!collapsed && (
+          // The edge is the handle: drag to resize, double-click to reset, drag past the minimum to hide.
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            aria-valuenow={width}
+            aria-valuemin={WIDTH.min}
+            aria-valuemax={WIDTH.max}
+            title="Drag to resize. Double-click to reset."
+            onPointerDown={startResize}
+            onDoubleClick={() => setWidth(WIDTH.default)}
+            className={cn(
+              "absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize select-none after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-brand after:opacity-0 after:transition-opacity hover:after:opacity-100",
+              dragging && "after:opacity-100",
+            )}
+          />
+        )}
+      </aside>
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="w-72 p-0" showCloseButton={false}>
-          {sidebar}
+          <Sidebar {...sidebarProps} onHide={() => setMenuOpen(false)} />
         </SheetContent>
       </Sheet>
       <main className="relative flex min-w-0 flex-1 flex-col">
         {state.view.kind === "new" ? (
-          <NewSession state={state} send={send} initialCwd={state.view.cwd} onMenu={() => setMenuOpen(true)} />
+          <NewSession state={state} send={send} initialCwd={state.view.cwd} onMenu={showSidebar} />
         ) : (
-          <SessionView state={state} send={send} onMenu={() => setMenuOpen(true)} />
+          <SessionView state={state} send={send} onMenu={showSidebar} />
         )}
       </main>
       <DialogHost dialogs={state.session?.dialogs ?? []} send={send} />

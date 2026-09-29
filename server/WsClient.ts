@@ -163,7 +163,7 @@ export const handleSocket = (socket: Socket.Socket) =>
               selected = null;
               yield* send({ _tag: "selected", cwd: msg.cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
             }
-            yield* send({ _tag: "toast", message: "Session deleted" });
+            yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
             return yield* publishProjects;
           }
           case "archive_session": {

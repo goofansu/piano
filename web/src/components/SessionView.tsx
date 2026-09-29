@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { GitBranchIcon, ListCollapseIcon, ListIcon, MenuIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { GitBranchIcon, ListCollapseIcon, ListIcon, PanelLeftOpenIcon } from "lucide-react";
 import type { ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { cn } from "cn";
@@ -8,6 +8,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Composer } from "@/components/Composer";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList, type TranscriptView } from "@/components/MessageList";
+import { PullRequestStack } from "@/components/PullRequestStack";
+import { pullRequestUrls, usePullRequests } from "@/lib/pullRequests";
 
 interface Props {
   state: AppState;
@@ -51,6 +53,9 @@ export function SessionView({ state, send, onMenu }: Props) {
   useEffect(() => setWorkingSince(streaming ? Date.now() : null), [streaming, t?.sessionId]);
 
   // Herdr's colours: yellow is working, hollow green is idle, hollow grey is no process, red is attention.
+  const prUrls = useMemo(() => (t ? pullRequestUrls(t.messages) : []), [t?.messages]);
+  const prs = usePullRequests(prUrls, !streaming);
+
   const status = !state.connected
     ? { word: "Reconnecting", dot: "border border-err", why: "The connection to piano dropped. Retrying." }
     : !t
@@ -64,7 +69,7 @@ export function SessionView({ state, send, onMenu }: Props) {
   return (
     <>
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4 text-sm">
-        <Button variant="ghost" size="icon-sm" className="-ml-2 md:hidden" aria-label="Menu" onClick={onMenu}><MenuIcon /></Button>
+        <Button variant="ghost" size="icon-sm" className="-ml-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="flex items-center gap-2 text-ink-2">
@@ -120,6 +125,7 @@ export function SessionView({ state, send, onMenu }: Props) {
       ) : (
         <div className="flex flex-1 items-center justify-center text-base text-ink-2">Loading</div>
       )}
+      {t && <PullRequestStack prs={prs} />}
       <Composer
         disabled={!state.connected || !t}
         streaming={streaming}

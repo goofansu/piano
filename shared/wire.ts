@@ -174,6 +174,19 @@ export const DirListing = Schema.Struct({
 });
 export type DirListing = typeof DirListing.Type;
 
+/** A GitHub pull request tied to a session: the worktree's branch, or a URL that appeared in the transcript. */
+export const PullRequest = Schema.Struct({
+  url: Schema.String,
+  /** "owner/name" */
+  repo: Schema.String,
+  number: Schema.Number,
+  title: Schema.String,
+  state: Schema.Literals(["open", "draft", "merged", "closed"]),
+  checks: Schema.Literals(["none", "pending", "success", "failure"]),
+  review: Schema.Literals(["none", "approved", "changes_requested", "review_required"]),
+});
+export type PullRequest = typeof PullRequest.Type;
+
 export const HostInfo = Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, streaming: Schema.Boolean });
 export type HostInfo = typeof HostInfo.Type;
 
@@ -218,7 +231,8 @@ export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("session", { event: SessionEvent }),
   Schema.TaggedStruct("worktree_created", { project: Schema.String, path: Schema.String, branch: Schema.String }),
   Schema.TaggedStruct("error", { message: Schema.String }),
-  Schema.TaggedStruct("toast", { message: Schema.String }),
+  /** A notice for the person; `level` picks the icon. */
+  Schema.TaggedStruct("toast", { message: Schema.String, level: Schema.optional(Schema.Literals(["success", "info", "warning", "error"])) }),
 ]);
 export type ServerMessage = typeof ServerMessage.Type;
 
