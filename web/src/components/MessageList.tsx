@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowDownIcon } from "lucide-react";
 import type { RenderMsg } from "@shared/wire";
+import { Button } from "@/components/ui/button";
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
-import { abbrevHome, clamp, modelShort } from "@/lib/format";
+import { abbrevHome, clamp } from "@/lib/format";
 import { renderMarkdown } from "@/lib/markdown";
 import { cn } from "cn";
 
@@ -40,12 +42,32 @@ function endOfTurnIds(messages: RenderMsg[]): Set<string> {
  */
 export function MessageList({ messages, pending, activeTools, placeholder, workingSince, view }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
   // Keep the view pinned to the bottom unless the reader scrolled up.
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [messages, pending, activeTools]);
+  // Content can grow without a scroll event (a prompt opens, output expands). That only
+  // changes whether the bottom is in view; it never moves the reader.
+  useEffect(() => {
+    const el = ref.current;
+    const inner = content.current;
+    if (!el || !inner) return;
+    const measure = () => setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+    const ro = new ResizeObserver(measure);
+    ro.observe(inner);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const scrollToBottom = () => {
+    const el = ref.current;
+    if (!el) return;
+    stick.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
 
   const results = new Map<string, RenderMsg>();
   for (const m of messages) if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
@@ -54,15 +76,18 @@ export function MessageList({ messages, pending, activeTools, placeholder, worki
   const keep = repliesOnly ? endOfTurnIds(messages) : null;
 
   return (
-    <div
-      ref={ref}
-      onScroll={(e) => {
-        const el = e.currentTarget;
-        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-      }}
-      className="min-h-0 flex-1 overflow-y-auto"
-    >
-      <div className="mx-auto w-full max-w-2xl px-4 py-6 md:px-6">
+    <div className="relative min-h-0 flex-1">
+      <div
+        ref={ref}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          stick.current = near;
+          setAtBottom(near);
+        }}
+        className="h-full overflow-y-auto"
+      >
+      <div ref={content} className="mx-auto w-full max-w-2xl px-4 py-6 md:px-6">
         {messages.length === 0 && !pending && <p className="py-16 text-center text-base text-ink-2">{placeholder}</p>}
         <div className="flex flex-col gap-4">
           {messages.map((m) => {
@@ -78,6 +103,19 @@ export function MessageList({ messages, pending, activeTools, placeholder, worki
           {workingSince !== null && <Working since={workingSince} />}
         </div>
       </div>
+      </div>
+      {!atBottom && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          aria-label="Scroll to bottom"
+          onClick={scrollToBottom}
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full shadow-2 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none"
+        >
+          <ArrowDownIcon />
+        </Button>
+      )}
     </div>
   );
 }
@@ -95,16 +133,7 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
 }
 
 function Message({ msg, results, active, hideTools, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; active: Set<string>; hideTools: boolean; streaming?: boolean }) {
-  if (msg.role === "user") {
-    return (
-      <article className="rounded-lg border border-line bg-surface-1 px-4 py-3">
-        <Row glyph={<span className="font-semibold text-brand">›</span>}>
-          <span className="sr-only">You said</span>
-          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-        </Row>
-      </article>
-    );
-  }
+  if (msg.role === "user") return <UserMessage text={msg.text} />;
   if (msg.role === "assistant") {
     return (
       <article className="flex flex-col gap-2">
@@ -119,7 +148,6 @@ function Message({ msg, results, active, hideTools, streaming }: { msg: RenderMs
               // renderMarkdown escapes all HTML before adding its own tags
               dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
             />
-            {msg.model && !streaming && <div className="mt-1.5 text-sm text-ink-3">{modelShort(msg.model)}</div>}
           </Row>
         )}
         {!hideTools && msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
@@ -128,6 +156,54 @@ function Message({ msg, results, active, hideTools, streaming }: { msg: RenderMs
   }
   // An orphan result: its call never reached us.
   return <Tool call={{ id: msg.toolCallId ?? msg.id, name: msg.toolName ?? "tool", args: "" }} result={msg} running={false} />;
+}
+
+/** A prompt shows at most this many lines until opened; pasted logs and long briefs stay out of the way. */
+const USER_LINES = 6;
+
+function UserMessage({ text }: { text: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  // Measure against the cap while closed; re-measure when the column resizes.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text, open]);
+  const clamped = !open && overflows;
+  const long = overflows || open;
+  const toggle = () => setOpen((o) => !o);
+  // A long prompt is its own control: click or press Enter to open and close it.
+  return (
+    <article
+      className={cn("rounded-lg border border-line bg-surface-1 px-4 py-3 outline-none", long && "cursor-pointer select-text hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring")}
+      tabIndex={long ? 0 : undefined}
+      aria-expanded={long ? open : undefined}
+      onClick={() => long && !window.getSelection()?.toString() && toggle()}
+      onKeyDown={(e) => {
+        if (long && (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+          e.preventDefault();
+          toggle();
+        }
+      }}
+    >
+      <Row glyph={<span className="font-semibold text-brand">›</span>}>
+        <span className="sr-only">You said</span>
+        <div
+          ref={ref}
+          className={cn("whitespace-pre-wrap break-words", !open && "overflow-hidden", clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}
+          style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
+        >
+          {text}
+        </div>
+      </Row>
+    </article>
+  );
 }
 
 const VERBS: Record<string, [running: string, done: string]> = {

@@ -6,7 +6,8 @@ const args = process.argv.slice(2);
 const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";
 const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "fake/alpha";
 let model = { provider: modelArg.split("/")[0], id: modelArg.split("/")[1] };
-const state = () => ({ model, thinkingLevel: "medium", isStreaming: streaming, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName: "fake" });
+let thinkingLevel = "medium";
+const state = () => ({ model, thinkingLevel, isStreaming: streaming, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName: "fake" });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 let streaming = false;
 const messages = [];
@@ -31,9 +32,10 @@ function handle(cmd) {
     case "get_messages": return respond(cmd, { messages });
     case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: { tokens: 1200 * messages.length, contextWindow: 200000, percent: 0.6 * messages.length } });
     case "get_available_models": return respond(cmd, { models: [
-      { provider: "fake", id: "alpha", reasoning: true, contextWindow: 1000 },
+      { provider: "fake", id: "alpha", reasoning: true, contextWindow: 1000, thinkingLevelMap: { minimal: null, xhigh: "xhigh" } },
       { provider: "fake", id: "beta", reasoning: false, contextWindow: 2000 } ] });
     case "set_model": model = { provider: cmd.provider, id: cmd.modelId }; return respond(cmd, model);
+    case "set_thinking_level": thinkingLevel = cmd.level; out({ type: "thinking_level_changed", level: cmd.level }); return respond(cmd, undefined);
     case "abort": streaming = false; out({ type: "agent_end", messages: [], willRetry: false }); out({ type: "agent_settled" }); return respond(cmd, undefined);
     case "follow_up": return respond(cmd, undefined);
     case "extension_ui_response": {

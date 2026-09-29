@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
-import type { ContextUsage, ModelCatalog } from "@shared/wire";
+import type { ContextUsage, ModelCatalog, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { composerCard } from "@/lib/styles";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { ModelSelect } from "@/components/ModelSelect";
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
   catalog: ModelCatalog | null;
   model: string | undefined;
   onModelChange: (ref: string) => void;
+  effort: ThinkingLevel;
+  onEffortChange: (level: ThinkingLevel) => void;
   context?: ContextUsage;
   cost?: number;
 }
@@ -23,7 +26,7 @@ interface Props {
 const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ disabled, streaming, onSend, onStop, catalog, model, onModelChange, context, cost }: Props) {
+export function Composer({ disabled, streaming, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost }: Props) {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   const send = () => {
@@ -64,6 +67,7 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
         />
         <div className="flex items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2">
           <ModelSelect catalog={catalog} value={model} onChange={onModelChange} disabled={disabled} />
+          <EffortSelect value={effort} onChange={onEffortChange} levels={levelsFor(catalog, model || catalog?.defaultModel)} defaultLevel={catalog?.defaultThinkingLevel} disabled={disabled} />
           {context && (
             <Tooltip>
               <TooltipTrigger asChild>

@@ -45,7 +45,15 @@ export interface PiSession {
 }
 
 export interface ProbeResult {
-  readonly models: ReadonlyArray<{ provider: string; id: string; name?: string; reasoning: boolean; contextWindow: number }>;
+  readonly models: ReadonlyArray<{
+    provider: string;
+    id: string;
+    name?: string;
+    reasoning: boolean;
+    contextWindow: number;
+    /** pi's per-model effort table: null disables a level, a value enables xhigh or max. */
+    thinkingLevelMap?: Record<string, string | null | undefined>;
+  }>;
   readonly defaultModel?: string;
   readonly defaultThinkingLevel?: string;
 }
@@ -389,6 +397,10 @@ const openSession = (spec: PiSessionSpec) =>
             yield* patchState({ model: data?.provider && data.id ? `${data.provider}/${data.id}` : action.model });
             return;
           }
+          case "set_thinking_level":
+            yield* child.request({ type: "set_thinking_level", level: action.level });
+            yield* patchState({ thinkingLevel: action.level });
+            return;
           case "answer": {
             const known = (yield* Ref.get(dialogsRef)).has(action.id);
             if (!known) return yield* new PiSessionError({ reason: "rejected", detail: `No open dialog ${action.id}` });

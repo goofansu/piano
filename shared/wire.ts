@@ -83,11 +83,15 @@ export const SessionEvent = Schema.Union([
 ]);
 export type SessionEvent = typeof SessionEvent.Type;
 
+export const ThinkingLevel = Schema.Literals(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+export type ThinkingLevel = typeof ThinkingLevel.Type;
+
 /** Everything a browser client may do to a running session. */
 export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", { text: Schema.String }),
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
+  Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
   Schema.TaggedStruct("answer", {
     id: Schema.String,
     value: Schema.optional(Schema.String),
@@ -138,6 +142,8 @@ export const ModelChoice = Schema.Struct({
   reasoning: Schema.Boolean,
   contextWindow: Schema.Number,
   enabled: Schema.Boolean,
+  /** Efforts this model accepts, in ascending order; `["off"]` when it cannot reason. */
+  thinkingLevels: Schema.Array(ThinkingLevel),
 });
 export type ModelChoice = typeof ModelChoice.Type;
 
@@ -172,9 +178,6 @@ export const HostInfo = Schema.Struct({ cwd: Schema.String, sessionId: Schema.St
 export type HostInfo = typeof HostInfo.Type;
 
 // ── WebSocket protocol ──────────────────────────────────────────────────────
-
-export const ThinkingLevel = Schema.Literals(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-export type ThinkingLevel = typeof ThinkingLevel.Type;
 
 export const StartOptions = Schema.Struct({
   model: Schema.optional(Schema.String),

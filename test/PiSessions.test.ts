@@ -69,14 +69,16 @@ test("model switch and child crash", async () => {
     const sessions = yield* PiSessions;
     const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s3" });
     yield* t.act({ _tag: "set_model", model: "fake/beta" });
-    const model = (yield* t.state).model;
+    yield* t.act({ _tag: "set_thinking_level", level: "high" });
+    const { model, thinkingLevel } = yield* t.state;
     const closed = yield* collectUntil(t.events, (e) => e._tag === "closed").pipe(Effect.forkChild);
     yield* t.act({ _tag: "prompt", text: "crash now" }).pipe(Effect.ignore);
     const events = yield* Fiber.join(closed);
     const failed = yield* t.act({ _tag: "abort" }).pipe(Effect.flip);
-    return { model, events, failed };
+    return { model, thinkingLevel, events, failed };
   }).pipe(Effect.scoped));
   assert.equal(result.model, "fake/beta");
+  assert.equal(result.thinkingLevel, "high");
   const closed = result.events[result.events.length - 1] as Extract<SessionEvent, { _tag: "closed" }>;
   assert.equal(closed._tag, "closed");
   assert.match(closed.reason, /code 3/);

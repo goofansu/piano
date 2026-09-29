@@ -4,7 +4,7 @@
  */
 import { homedir } from "node:os";
 import { Context, Effect, Layer, Ref } from "effect";
-import type { ModelCatalog, ModelChoice } from "../shared/wire.ts";
+import type { ModelCatalog, ModelChoice, ThinkingLevel } from "../shared/wire.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import { PiSessions } from "./PiSessions.ts";
 
@@ -30,6 +30,19 @@ function patternMatcher(patterns: string[]): (ref: string, id: string) => boolea
   return (ref, id) => tests.some((t) => t(ref.toLowerCase(), id.toLowerCase()));
 }
 
+const LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/** The same rule pi applies (pi-ai getSupportedThinkingLevels): a non-reasoning model only has off; a level mapped to null is out; xhigh and max need an explicit mapping. */
+function supportedThinkingLevels(m: { reasoning: boolean; thinkingLevelMap?: Record<string, string | null | undefined> }): ThinkingLevel[] {
+  if (!m.reasoning) return ["off"];
+  return LEVELS.filter((level) => {
+    const mapped = m.thinkingLevelMap?.[level];
+    if (mapped === null) return false;
+    if (level === "xhigh" || level === "max") return mapped !== undefined;
+    return true;
+  });
+}
+
 export const CatalogLive = Layer.effect(
   Catalog,
   Effect.gen(function* () {
@@ -50,6 +63,7 @@ export const CatalogLive = Layer.effect(
           reasoning: !!m.reasoning,
           contextWindow: m.contextWindow,
           enabled: isEnabled(ref, m.id),
+          thinkingLevels: supportedThinkingLevels(m),
         };
       });
       const catalog: ModelCatalog = {

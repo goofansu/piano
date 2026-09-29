@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { GitBranchIcon, ListCollapseIcon, ListIcon, MenuIcon } from "lucide-react";
-import type { ClientMessage } from "@shared/wire";
+import type { ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Composer } from "@/components/Composer";
+import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList, type TranscriptView } from "@/components/MessageList";
 
 interface Props {
@@ -37,10 +38,14 @@ export function SessionView({ state, send, onMenu }: Props) {
   const project = t ? state.projects.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
   const worktree = project?.worktrees.find((w) => w.path === t?.cwd);
   const [model, setModel] = useState<string | undefined>(undefined);
-  // Follow the session's own model when it is known; otherwise pi's default.
+  // Follow the session's own model and effort when known; otherwise pi's defaults.
   useEffect(() => setModel(t?.state.model), [t?.cwd, t?.sessionId, t?.state.model]);
+  const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
+  useEffect(() => setEffort(t?.state.thinkingLevel as ThinkingLevel | undefined), [t?.cwd, t?.sessionId, t?.state.thinkingLevel]);
+  const effectiveModel = model || state.catalog?.defaultModel;
+  const effectiveEffort = clampEffort(levelsFor(state.catalog, effectiveModel), effort || (state.catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
 
-  const startOptions = () => ({ model: model || state.catalog?.defaultModel });
+  const startOptions = () => ({ model: effectiveModel, thinkingLevel: effectiveEffort });
   const streaming = !!t?.state.isStreaming;
   const [workingSince, setWorkingSince] = useState<number | null>(null);
   useEffect(() => setWorkingSince(streaming ? Date.now() : null), [streaming, t?.sessionId]);
@@ -84,17 +89,18 @@ export function SessionView({ state, send, onMenu }: Props) {
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="sm"
-              className="-mr-2 font-normal"
-              aria-label="Show end-of-turn messages only"
+              size="icon-sm"
+              className="-mr-2"
+              aria-label="End-of-turn messages only"
               aria-pressed={view === "replies"}
               onClick={() => setView(view === "all" ? "replies" : "all")}
             >
-              {view === "all" ? <ListIcon className="text-ink-3" /> : <ListCollapseIcon className="text-ink-3" />}
-              <span className="hidden sm:inline">{view === "all" ? "All messages" : "End of turn only"}</span>
+              {view === "all" ? <ListIcon /> : <ListCollapseIcon className="text-brand" />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{view === "all" ? "See end-of-turn messages only" : "See all messages"}</TooltipContent>
+          <TooltipContent>
+            {view === "all" ? "Showing every message, including tool calls. Click to show only the last reply of each turn." : "Showing only the last reply of each turn. Click to show every message."}
+          </TooltipContent>
         </Tooltip>
       </header>
 
@@ -124,6 +130,11 @@ export function SessionView({ state, send, onMenu }: Props) {
         onModelChange={(ref) => {
           setModel(ref);
           if (t?.hosted) send({ _tag: "act", action: { _tag: "set_model", model: ref } });
+        }}
+        effort={effectiveEffort}
+        onEffortChange={(level) => {
+          setEffort(level);
+          if (t?.hosted) send({ _tag: "act", action: { _tag: "set_thinking_level", level } });
         }}
         context={t?.state.context}
         cost={t?.state.cost}

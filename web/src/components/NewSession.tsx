@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GaugeIcon, GitBranchIcon, GitBranchPlusIcon, MenuIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, MenuIcon } from "lucide-react";
 import type { ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
@@ -12,6 +12,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { clampEffort, EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
 
@@ -22,7 +23,6 @@ interface Props {
   onMenu: () => void;
 }
 
-const LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
@@ -61,7 +61,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   }, [creating]);
 
   const effectiveModel = model || state.catalog?.defaultModel;
-  const effectiveEffort = effort || (state.catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium";
+  const levels = levelsFor(state.catalog, effectiveModel);
+  const effectiveEffort = clampEffort(levels, effort || (state.catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
   const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && text.trim().length > 0 && !creating;
 
   const submit = () => {
@@ -106,20 +107,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
             <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2">
               <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
               <ModelSelect catalog={state.catalog} value={model} onChange={setModel} />
-              <Select value={effectiveEffort} onValueChange={(v) => setEffort(v as ThinkingLevel)}>
-                <SelectTrigger size="sm" className={cn(picker, "border-0 bg-transparent shadow-none focus-visible:ring-2 focus-visible:ring-ring")} aria-label="Effort">
-                  <GaugeIcon className="size-3.5 text-ink-3" />
-                  <SelectValue>{effectiveEffort} effort</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {LEVELS.map((l) => (
-                    <SelectItem key={l} value={l}>
-                      <span className="flex-1">{l}</span>
-                      {l === state.catalog?.defaultThinkingLevel && <span className="text-ink-3">default</span>}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EffortSelect value={effectiveEffort} onChange={setEffort} levels={levels} defaultLevel={state.catalog?.defaultThinkingLevel} />
               <span className="flex-1" />
               <Button size="icon-sm" className="rounded-full" aria-label="Send" disabled={!ready} onClick={submit}>
                 <ArrowUpIcon />

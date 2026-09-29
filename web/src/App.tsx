@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ClientMessage, ServerMessage } from "@shared/wire";
 import { useConnection } from "@/lib/ws";
@@ -12,6 +12,8 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 export default function App() {
   const [state, dispatch] = useReducer(reduce, initialState);
   const [menuOpen, setMenuOpen] = useState(false);
+  const latest = useRef(state);
+  latest.current = state;
 
   const onMessage = useCallback((m: ServerMessage) => {
     dispatch({ type: "server", message: m });
@@ -31,9 +33,12 @@ export default function App() {
   const send = useCallback((m: ClientMessage) => conn.send(m), [conn]);
   const select = useCallback(
     (cwd: string, sessionId: string | null) => {
+      setMenuOpen(false);
+      // Clicking the session already on screen (or already being fetched) is a no-op.
+      const current = latest.current.session ?? latest.current.selecting;
+      if (current && current.cwd === cwd && current.sessionId === sessionId && latest.current.view.kind === "session") return;
       dispatch({ type: "selecting", cwd, sessionId });
       send({ _tag: "select", cwd, sessionId });
-      setMenuOpen(false);
     },
     [send],
   );
