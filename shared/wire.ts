@@ -208,11 +208,11 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("select", { cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
   /** Create and start a session in a directory (registering it as a project when needed) and send its first prompt. */
   Schema.TaggedStruct("create_session", { cwd: Schema.String, options: StartOptions, text: Schema.optional(Schema.String) }),
-  /** Act on the selected session. `start` carries the options used to start pi when it is not running. */
+  /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
   Schema.TaggedStruct("act", { action: SessionAction, start: Schema.optional(StartOptions) }),
-  /** Hide a session from the sidebar (and stop pi for it if running). */
+  /** Hide a session from the sidebar (and stop Pi for it if running). */
   Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),
-  /** Stop pi for a session, delete its file from pi's session store, and forget it. */
+  /** Stop Pi for a session, delete its file from Pi's session store, and forget it. */
   Schema.TaggedStruct("delete_session", { cwd: Schema.String, sessionId: Schema.String }),
 ]);
 export type ClientMessage = typeof ClientMessage.Type;

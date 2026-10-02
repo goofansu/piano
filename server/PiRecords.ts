@@ -1,5 +1,5 @@
 /**
- * Translation of pi's raw RPC records into the shared wire vocabulary.
+ * Translation of Pi's raw RPC records into the shared wire vocabulary.
  * Pure functions plus one small stateful assembler for streaming partials.
  */
 import type { RenderMsg, SessionEvent } from "../shared/wire.ts";
@@ -68,7 +68,7 @@ export function serializeMessages(msgs: ReadonlyArray<RawMessage>, prefix = "m")
   return out;
 }
 
-/** Any record pi writes to stdout. */
+/** Any record Pi writes to stdout. */
 export interface PiRecord {
   type: string;
   id?: string;
@@ -91,8 +91,8 @@ interface MessageEventRecord extends PiRecord {
 }
 
 /**
- * Turns pi session events into SessionEvents. Owns the partial assistant
- * message being streamed (pi sends deltas only).
+ * Turns Pi session events into SessionEvents. Owns the partial assistant
+ * message being streamed (Pi sends deltas only).
  */
 type MutableToolCall = { id: string; name: string; args: string };
 type PartialMsg = { -readonly [K in keyof RenderMsg]: RenderMsg[K] } & { toolCalls?: MutableToolCall[] };

@@ -1,5 +1,5 @@
 /**
- * Model catalog for the picker: pi's own list of usable models and its
+ * Model catalog for the picker: Pi's own list of usable models and its
  * default, from a one-shot probe. `enabledModels` marks the preferred subset.
  */
 import { homedir } from "node:os";
@@ -32,7 +32,7 @@ function patternMatcher(patterns: string[]): (ref: string, id: string) => boolea
 
 const LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
-/** The same rule pi applies (pi-ai getSupportedThinkingLevels): a non-reasoning model only has off; a level mapped to null is out; xhigh and max need an explicit mapping. */
+/** The same rule Pi applies (pi-ai getSupportedThinkingLevels): a non-reasoning model only has off; a level mapped to null is out; xhigh and max need an explicit mapping. */
 function supportedThinkingLevels(m: { reasoning: boolean; thinkingLevelMap?: Record<string, string | null | undefined> }): ThinkingLevel[] {
   if (!m.reasoning) return ["off"];
   return LEVELS.filter((level) => {

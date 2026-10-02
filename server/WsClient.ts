@@ -76,7 +76,7 @@ export const handleSocket = (socket: Socket.Socket) =>
               ? send({ _tag: "selected", cwd: session.spec.cwd, sessionId: session.spec.sessionId, hosted: true, snapshot: event.snapshot })
               : send({ _tag: "session", event }),
           ),
-          // The stream ends when pi is gone; the next message will start it again.
+          // The stream ends when Pi is gone; the next message will start it again.
           Effect.ensuring(Effect.sync(() => {
             if (attachment === mine) attachment = null;
           })),

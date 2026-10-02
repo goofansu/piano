@@ -1,5 +1,5 @@
 /**
- * Resolve pi's directories the same way the pi CLI does, so piano lists the
+ * Resolve Pi's directories the same way the Pi CLI does, so piano lists the
  * same sessions the `pi --mode rpc` children read and write.
  *
  *   agent dir   : PI_CODING_AGENT_DIR, else ~/.pi/agent            (getAgentDir)

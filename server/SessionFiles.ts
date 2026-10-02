@@ -1,5 +1,5 @@
 /**
- * Sessions are pi sessions. Read them from pi's session store without starting
+ * Sessions are Pi sessions. Read them from Pi's session store without starting
  * an agent, using the SDK's SessionManager as a file reader.
  */
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -39,7 +39,7 @@ export const listSessions = (cwd: string): Effect.Effect<SessionSummary[]> =>
 export const findSessionFile = (cwd: string, sessionId: string): Effect.Effect<string | undefined> =>
   listSessions(cwd).pipe(Effect.map((s) => s.find((i) => i.sessionId === sessionId)?.path));
 
-/** Read the active branch of a session file as a Snapshot. Safe while pi is writing to it. */
+/** Read the active branch of a session file as a Snapshot. Safe while Pi is writing to it. */
 export const peekSession = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
   Effect.sync(() => {
     const sm = SessionManager.open(path);

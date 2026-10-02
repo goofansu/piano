@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const ALL: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
-/** Efforts a model accepts, from pi's catalog; every level while the model is unknown. */
+/** Efforts a model accepts, from Pi's catalog; every level while the model is unknown. */
 export function levelsFor(catalog: ModelCatalog | null, model: string | undefined): ThinkingLevel[] {
   const m = catalog?.models.find((x) => x.ref === model);
   return m ? [...m.thinkingLevels] : ALL;
@@ -23,7 +23,7 @@ interface Props {
   value: ThinkingLevel;
   onChange: (level: ThinkingLevel) => void;
   levels: ThinkingLevel[];
-  /** pi's own default, marked in the list. */
+  /** Pi's own default, marked in the list. */
   defaultLevel?: string;
   disabled?: boolean;
 }

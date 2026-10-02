@@ -14,7 +14,7 @@ interface Props {
   disabled?: boolean;
 }
 
-/** Searchable model picker (fuzzy, via cmdk). Every model pi can use, in pi's own order; pi's default preselected. */
+/** Searchable model picker (fuzzy, via cmdk). Every model Pi can use, in Pi's own order; Pi's default preselected. */
 export function ModelSelect({ catalog, value, onChange, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const want = value || catalog?.defaultModel || "";

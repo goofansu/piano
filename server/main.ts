@@ -1,5 +1,5 @@
 /**
- * Piano: start or continue pi sessions across projects and worktrees.
+ * Piano: start or continue Pi sessions across projects and worktrees.
  * Every running session is one `pi --mode rpc` child (see PiSessions).
  */
 import { createServer } from "node:http";
@@ -57,5 +57,5 @@ const main = Layer.launch(Server).pipe(
 );
 
 console.log(`[piano] http://${HOST}:${PORT}`);
-console.log(`[piano] config ${CONFIG_PATH}; pi agent dir ${agentDir()}; web ${WEB_DIST}`);
+console.log(`[piano] config ${CONFIG_PATH}; Pi agent dir ${agentDir()}; web ${WEB_DIST}`);
 NodeRuntime.runMain(main);

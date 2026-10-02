@@ -24,7 +24,8 @@ interface Props {
   cost?: number;
 }
 
-const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+/** 7667 → "7.7k", 61200 → "61k", 272000 → "272k". */
+const k = (n: number) => (n >= 10_000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
 export function Composer({ disabled, streaming, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost }: Props) {
@@ -56,7 +57,7 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
           disabled={disabled}
           rows={1}
           aria-label="Message"
-          placeholder={streaming ? "pi is working. Type to queue the next message." : "What should pi do next?"}
+          placeholder={streaming ? "Pi is working. Type to queue the next message." : "What should Pi do next?"}
           className="max-h-48 min-h-12 resize-none border-0 bg-transparent px-4 pt-3 shadow-none focus-visible:ring-0"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -81,11 +82,13 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
                       <span className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(currentColor ${Math.min(100, percent)}%, transparent 0)` }} />
                     )}
                   </span>
-                  {left === null ? `${k(context.contextWindow)} context` : `${Math.round(left)}% context left`}
+                  {context.tokens ? `${context.tokens.toLocaleString()} tokens` : `${k(context.contextWindow)} context`}
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                {context.tokens === null ? "Context usage not known yet" : `${k(context.tokens)} of ${k(context.contextWindow)} tokens used`}
+                {context.tokens === null
+                  ? "Context usage not known yet"
+                  : `${k(context.tokens)} of ${k(context.contextWindow)} tokens, ${left === null ? "" : `${left < 1 ? left.toFixed(1) : Math.round(left)}% left`}`}
                 {cost !== undefined ? `, $${cost.toFixed(2)} so far` : ""}
               </TooltipContent>
             </Tooltip>

@@ -38,7 +38,7 @@ export interface PiSession {
   readonly spec: PiSessionSpec;
   /** A snapshot first, then live events, until `closed` or the subscriber's scope ends. */
   readonly events: Stream.Stream<SessionEvent>;
-  /** Apply a browser action. Fails only when pi rejects it or the child is gone. */
+  /** Apply a browser action. Fails only when Pi rejects it or the child is gone. */
   readonly act: (action: SessionAction) => Effect.Effect<void, PiSessionError>;
   /** Current state without subscribing. */
   readonly state: Effect.Effect<SessionState>;
@@ -51,7 +51,7 @@ export interface ProbeResult {
     name?: string;
     reasoning: boolean;
     contextWindow: number;
-    /** pi's per-model effort table: null disables a level, a value enables xhigh or max. */
+    /** Pi's per-model effort table: null disables a level, a value enables xhigh or max. */
     thinkingLevelMap?: Record<string, string | null | undefined>;
   }>;
   readonly defaultModel?: string;
@@ -61,9 +61,9 @@ export interface ProbeResult {
 export class PiSessions extends Context.Service<
   PiSessions,
   {
-    /** Spawn pi for a session. The child lives as long as the calling Scope. */
+    /** Spawn Pi for a session. The child lives as long as the calling Scope. */
     readonly open: (spec: PiSessionSpec) => Effect.Effect<PiSession, PiSessionError, Scope.Scope>;
-    /** One-shot `pi --mode rpc --no-session`: available models and pi's default. */
+    /** One-shot `pi --mode rpc --no-session`: available models and Pi's default. */
     readonly probe: (cwd: string) => Effect.Effect<ProbeResult, PiSessionError>;
   }
 >()("piano/PiSessions") {}
@@ -104,7 +104,7 @@ const toState = (s: RawState): SessionState => ({
   isStreaming: s.isStreaming,
 });
 
-/** A spawned pi child with request correlation. Everything above builds on `request` and `records`. */
+/** A spawned Pi child with request correlation. Everything above builds on `request` and `records`. */
 interface Child {
   readonly request: (command: Record<string, unknown>) => Effect.Effect<unknown, PiSessionError>;
   readonly write: (record: Record<string, unknown>) => Effect.Effect<void, PiSessionError>;
@@ -182,12 +182,12 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       });
 
     yield* handle.exitCode.pipe(
-      Effect.flatMap((code) => finish(`pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}`)),
-      Effect.catchCause((cause) => finish(`pi exit could not be observed: ${String(cause)}`)),
+      Effect.flatMap((code) => finish(`Pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}`)),
+      Effect.catchCause((cause) => finish(`Pi exit could not be observed: ${String(cause)}`)),
       Effect.forkScoped,
     );
 
-    // Orderly shutdown: close stdin, give pi a moment, then kill.
+    // Orderly shutdown: close stdin, give Pi a moment, then kill.
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
         if (closed) return;
@@ -284,7 +284,7 @@ const openSession = (spec: PiSessionSpec) =>
         yield* apply([{ _tag: "state", state: next }]);
       });
 
-    /** Context usage and cost from pi; best effort, never fails. */
+    /** Context usage and cost from Pi; best effort, never fails. */
     const refreshStats = child.request({ type: "get_session_stats" }).pipe(
       Effect.flatMap((data) => {
         const stats = data as RawStats;
@@ -336,9 +336,9 @@ const openSession = (spec: PiSessionSpec) =>
 
     yield* Stream.fromQueue(child.records).pipe(Stream.runForEach(onRecord), Effect.ignore, Effect.forkScoped);
 
-    // Subscribers learn exactly once that pi is gone: from the child's own exit (a crash),
+    // Subscribers learn exactly once that Pi is gone: from the child's own exit (a crash),
     // or from this scope closing (a deliberate release), whichever comes first. The
-    // finalizer is registered after the child's, so it runs before pi is shut down.
+    // finalizer is registered after the child's, so it runs before Pi is shut down.
     let announced = false;
     const announceClosed = (reason: string) =>
       Effect.suspend(() => {
@@ -375,7 +375,7 @@ const openSession = (spec: PiSessionSpec) =>
             const streaming = (yield* Ref.get(stateRef)).isStreaming;
             yield* child.request({ type: streaming ? "follow_up" : "prompt", message: action.text }).pipe(
               Effect.catchTag("PiSessionError", (e) =>
-                // Our streaming flag can lag pi's by one event; retry as a follow-up once.
+                // Our streaming flag can lag Pi's by one event; retry as a follow-up once.
                 !streaming && e.reason === "rejected" && /streaming/i.test(e.detail)
                   ? child.request({ type: "follow_up", message: action.text })
                   : Effect.fail(e),

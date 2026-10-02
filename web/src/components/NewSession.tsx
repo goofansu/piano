@@ -98,7 +98,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               value={text}
               rows={3}
               aria-label="First message"
-              placeholder="Describe the work. pi starts in the directory below."
+              placeholder="Describe the work. Pi starts in the directory below."
               className="max-h-72 min-h-24 resize-none border-0 bg-transparent px-4 pt-3.5 shadow-none focus-visible:ring-0"
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
@@ -120,7 +120,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
           </div>
           {creating && (
             <p className="mt-3 text-sm text-ink-3" role="status">
-              Starting pi
+              Starting Pi
             </p>
           )}
         </div>

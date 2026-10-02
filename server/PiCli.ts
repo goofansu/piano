@@ -1,5 +1,5 @@
 /**
- * How to spawn pi. A Context.Reference so tests can point it at a fake pi
+ * How to spawn Pi. A Context.Reference so tests can point it at a fake Pi
  * without touching the module that spawns it.
  */
 import { join } from "node:path";
@@ -9,9 +9,9 @@ import { Context } from "effect";
 export interface PiCliConfig {
   /** Node binary used to run the CLI entry. */
   readonly node: string;
-  /** pi CLI entry point (dist/cli.js). */
+  /** Pi CLI entry point (dist/cli.js). */
   readonly cli: string;
-  /** Extra arguments appended to every spawned pi (PIANO_PI_ARGS). */
+  /** Extra arguments appended to every spawned Pi (PIANO_PI_ARGS). */
   readonly extraArgs: ReadonlyArray<string>;
 }
 

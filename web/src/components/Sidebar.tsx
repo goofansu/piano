@@ -231,7 +231,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           <DialogHeader>
             <DialogTitle>Delete this session?</DialogTitle>
             <DialogDescription>
-              "{deleting?.title}" and its transcript are removed from pi's session store. This cannot be undone.
+              "{deleting?.title}" and its transcript are removed from Pi's session store. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

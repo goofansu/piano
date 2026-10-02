@@ -16,7 +16,7 @@ interface Props {
   pending: RenderMsg | null;
   activeTools: Record<string, string>;
   placeholder: string;
-  /** When pi started the current turn, or null while it rests. */
+  /** When Pi started the current turn, or null while it rests. */
   workingSince: number | null;
   view: TranscriptView;
 }
@@ -37,7 +37,7 @@ function endOfTurnIds(messages: RenderMsg[]): Set<string> {
 
 /**
  * The transcript. Every row is a glyph in a narrow gutter followed by its content:
- * `›` for what you said, `•` for what pi said, a dot for each tool call whose colour is its outcome.
+ * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
 export function MessageList({ messages, pending, activeTools, placeholder, workingSince, view }: Props) {
@@ -139,7 +139,7 @@ function Message({ msg, results, active, hideTools, streaming }: { msg: RenderMs
       <article className="flex flex-col gap-2">
         {msg.text && (
           <Row glyph={<span className="text-ink-3">•</span>}>
-            <span className="sr-only">pi said</span>
+            <span className="sr-only">Pi said</span>
             <div
               className={cn(
                 "prose-chat",

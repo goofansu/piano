@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-/** Extension dialogs (select / confirm / input / editor) raised by pi; answered one at a time. */
+/** Extension dialogs (select / confirm / input / editor) raised by Pi; answered one at a time. */
 export function DialogHost({ dialogs, send }: { dialogs: PiDialog[]; send: (m: ClientMessage) => void }) {
   const d = dialogs[0];
   const [value, setValue] = useState("");
@@ -20,7 +20,7 @@ export function DialogHost({ dialogs, send }: { dialogs: PiDialog[]; send: (m: C
     <Dialog open onOpenChange={(open) => !open && answer({ cancelled: true })}>
       <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{d.title || "pi needs an answer"}</DialogTitle>
+          <DialogTitle>{d.title || "Pi needs an answer"}</DialogTitle>
           {d.message && <DialogDescription className="whitespace-pre-wrap">{d.message}</DialogDescription>}
           {more > 0 && <p className="text-sm text-ink-3">{more} more {more === 1 ? "question" : "questions"} after this one.</p>}
         </DialogHeader>

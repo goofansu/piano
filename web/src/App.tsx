@@ -114,7 +114,7 @@ export default function App() {
     else if (m._tag === "toast") notify(m.message, m.level);
     else if (m._tag === "worktree_created") notify(`Worktree ${m.branch} created`, "success");
     else if (m._tag === "session" && m.event._tag === "notice") notify(m.event.message, m.event.level);
-    else if (m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) toast.warning(`pi stopped: ${m.event.reason}`);
+    else if (m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) toast.warning(`Pi stopped: ${m.event.reason}`);
   }, []);
   const onStatus = useCallback((connected: boolean) => dispatch({ type: "connected", connected }), []);
   const conn = useConnection(onMessage, onStatus);

@@ -40,7 +40,7 @@ export function SessionView({ state, send, onMenu }: Props) {
   const project = t ? state.projects.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
   const worktree = project?.worktrees.find((w) => w.path === t?.cwd);
   const [model, setModel] = useState<string | undefined>(undefined);
-  // Follow the session's own model and effort when known; otherwise pi's defaults.
+  // Follow the session's own model and effort when known; otherwise Pi's defaults.
   useEffect(() => setModel(t?.state.model), [t?.cwd, t?.sessionId, t?.state.model]);
   const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
   useEffect(() => setEffort(t?.state.thinkingLevel as ThinkingLevel | undefined), [t?.cwd, t?.sessionId, t?.state.thinkingLevel]);
@@ -61,10 +61,10 @@ export function SessionView({ state, send, onMenu }: Props) {
     : !t
       ? { word: "Loading", dot: "bg-ink-3", why: "Fetching this session." }
       : streaming
-        ? { word: "Working", dot: "animate-live bg-busy", why: "pi is running a turn." }
+        ? { word: "Working", dot: "animate-live bg-busy", why: "Pi is running a turn." }
         : t.hosted
-          ? { word: "Ready", dot: "border border-ok", why: "pi is running for this session and waiting for your message." }
-          : { word: "Not running", dot: "border border-ink-3", why: "pi is not running. Your next message starts it and continues this session." };
+          ? { word: "Ready", dot: "border border-ok", why: "Pi is running for this session and waiting for your message." }
+          : { word: "Not running", dot: "border border-ink-3", why: "Pi is not running. Your next message starts it and continues this session." };
 
   return (
     <>
@@ -110,7 +110,7 @@ export function SessionView({ state, send, onMenu }: Props) {
       </header>
 
       {t?.closedReason && !/released|code 0\b/.test(t.closedReason) && (
-        <div className="border-b border-line bg-err-soft px-4 py-2 text-sm text-err">pi stopped: {t.closedReason}</div>
+        <div className="border-b border-line bg-err-soft px-4 py-2 text-sm text-err">Pi stopped: {t.closedReason}</div>
       )}
 
       {t ? (

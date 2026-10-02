@@ -31,9 +31,9 @@ export class SessionHosts extends Context.Service<
   {
     /** The running session for a key, if any. */
     readonly get: (cwd: string, sessionId: string) => Effect.Effect<PiSession | undefined>;
-    /** Start pi for a session, or return the one already running. */
+    /** Start Pi for a session, or return the one already running. */
     readonly open: (spec: OpenSpec) => Effect.Effect<PiSession, PiSessionError>;
-    /** Stop pi for a session; the session file is kept. */
+    /** Stop Pi for a session; the session file is kept. */
     readonly release: (cwd: string, sessionId: string) => Effect.Effect<void>;
     readonly list: Effect.Effect<ReadonlyArray<HostInfo>>;
     /** Emits whenever the set of hosts or their streaming state changes. */
