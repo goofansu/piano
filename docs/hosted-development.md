@@ -85,6 +85,9 @@ On October 4, 2026: Node 24.21.0, locked Pi 1.0.0, Vite 8.3.1 and Worktrunk
 0.80.0. The dependency lockfiles were preserved; this setup does not perform the
 planned Pi runtime upgrade.
 
+For the subsequent Pi 1.0.2 upgrade and reasoning-effort fix, see the
+[same-day investigation](research/2026-10-04-pi-update-effort.md).
+
 `npm test` (5 tests), `npm run typecheck`, `npm run build` and systemd unit
 validation passed. An isolated registry and fake-Pi instance on ports 7171/7172
 were observed through `agent-browser`: directory selection, prompt/reply,
