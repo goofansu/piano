@@ -6,7 +6,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
-import { Cause, Effect, Exit, Queue, Scope, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Queue, Scope, Stream } from "effect";
 import type { Socket } from "effect/socket";
 import {
   type ClientMessage,
@@ -70,12 +70,13 @@ export const handleSocket = (socket: Socket.Socket) =>
         const scope = yield* Scope.make();
         const mine = { session, scope };
         attachment = mine;
+        const ready = yield* Deferred.make<void>();
         yield* session.events.pipe(
-          Stream.runForEach((event) =>
-            event._tag === "snapshot"
-              ? send({ _tag: "selected", cwd: session.spec.cwd, sessionId: session.spec.sessionId, hosted: true, snapshot: event.snapshot })
-              : send({ _tag: "session", event }),
-          ),
+          Stream.runForEach((event) => event._tag === "snapshot"
+            ? send({ _tag: "selected", cwd: session.spec.cwd, sessionId: session.spec.sessionId, hosted: true, snapshot: event.snapshot }).pipe(
+              Effect.andThen(Deferred.succeed(ready, undefined)),
+            )
+            : send({ _tag: "session", event })),
           // The stream ends when Pi is gone; the next message will start it again.
           Effect.ensuring(Effect.sync(() => {
             if (attachment === mine) attachment = null;
@@ -83,6 +84,8 @@ export const handleSocket = (socket: Socket.Socket) =>
           Effect.ignore,
           Effect.forkIn(scope),
         );
+        // A fast first prompt must not complete before this client observes it.
+        yield* Deferred.await(ready);
       });
 
     const showUnhosted = (cwd: string, sessionId: string | null) =>

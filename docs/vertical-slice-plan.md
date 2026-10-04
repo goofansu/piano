@@ -162,6 +162,11 @@ interaction contracts this plan relies on. **INV-01, INV-11–12.**
   fixing slice. Reobserve each affected real-runtime fixture at the 0–6 checkpoint before declaring
   runtime completion; an unresolved compatibility failure cannot be waived by a fake-Pi pass.
 
+**Observed checkpoint:** [October 4 implementation evidence](research/2026-10-04-phase0-compatibility.md)
+records real MCP/trust controls, supported dialog/abort/exit/browser observations and the readiness
+error fix. Idle command-dialog abort still fails; awaited startup dialogs remain unsupported with
+bounded failure. The checkpoint is implemented, not full runtime acceptance.
+
 ### Phase 1 — Submit a prompt and explain its disposition/activity
 
 **Claim:** submit once; display started, queued, handled, rejected or delivery-uncertain truthfully,

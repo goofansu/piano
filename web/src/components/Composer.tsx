@@ -18,6 +18,7 @@ interface Props {
   onRestoreQueue: () => void;
   disabled: boolean;
   streaming: boolean;
+  compacting?: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
   catalog: ModelCatalog | null;
@@ -31,7 +32,7 @@ interface Props {
 }
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, queuedMessages = [] }: Props) {
+export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // The box grows with its text up to a cap, whichever way the text got there.
   useEffect(() => {
@@ -43,7 +44,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
   useTypeToFocus(ref, onTextAppend, !disabled);
   const send = () => {
     const t = text.trim();
-    if (!t) return;
+    if (disabled || !t) return;
     onSend(t);
     onTextChange("");
   };
@@ -84,7 +85,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
           disabled={disabled}
           rows={1}
           aria-label="Message"
-          placeholder={streaming ? "Pi is working. Type to queue the next message." : "What should Pi do next?"}
+          placeholder={compacting ? "Pi is compacting. Ordinary input may be rejected." : streaming ? "Send a follow-up; extension commands run immediately." : "What should Pi do next?"}
           className="max-h-48 min-h-12 resize-none border-0 bg-transparent px-4 pt-3 shadow-none focus-visible:ring-0"
           onChange={(e) => onTextChange(e.target.value)}
           onKeyDown={(e) => {
@@ -129,7 +130,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
             size="icon-sm"
             variant={showStop ? "outline" : "default"}
             className="ml-auto rounded-full"
-            aria-label={showStop ? "Stop" : streaming ? "Queue message" : "Send"}
+            aria-label={showStop ? "Stop" : streaming && !compacting ? "Queue message" : "Send"}
             disabled={disabled || (!showStop && !hasText)}
             onClick={showStop ? onStop : send}
           >

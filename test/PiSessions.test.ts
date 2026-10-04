@@ -4,7 +4,7 @@ import { Deferred, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import type { SessionEvent } from "../shared/wire.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 
 const fakeCli = { node: process.execPath, cli: new URL("./fake-pi.mjs", import.meta.url).pathname, extraArgs: [] };
 const TestLayer = PiSessionsLive.pipe(Layer.provide(NodeServices.layer));
@@ -21,22 +21,47 @@ test("snapshot first, then a streamed turn", async () => {
     const sessions = yield* PiSessions;
     const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s1", model: "fake/alpha" });
     step("opened");
-    const collector = yield* collectUntil(t.events, (e) => e._tag === "message_end" && e.message.role === "assistant").pipe(Effect.forkChild);
+    const ready = yield* Deferred.make<void>();
+    const collector = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+    ), (e) => e._tag === "state" && !e.state.isStreaming).pipe(Effect.forkChild);
     step("collector forked");
-    yield* Effect.sleep("50 millis"); // let the subscriber take its snapshot before the turn starts
+    yield* Deferred.await(ready);
     yield* t.act({ _tag: "prompt", text: "hello" });
     step("prompted");
     const events = yield* Fiber.join(collector);
     step("collected", events.length);
+    assert.equal((yield* t.state).submission?.outcome, "started");
+    assert.equal((yield* t.state).isStreaming, false, "acceptance must not reactivate a completed run");
     return events;
-  }).pipe(Effect.scoped));
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
   step("scope closed");
   assert.equal(seen[0]._tag, "snapshot");
   assert.equal((seen[0] as Extract<SessionEvent, { _tag: "snapshot" }>).snapshot.state.model, "fake/alpha");
   const tags = seen.map((e) => e._tag);
   assert.ok(tags.includes("message_update"), "streams partials");
-  const last = seen[seen.length - 1] as Extract<SessionEvent, { _tag: "message_end" }>;
-  assert.equal(last.message.text, "echo: hello");
+  const reply = seen.find((e) => e._tag === "message_end" && e.message.role === "assistant");
+  assert.ok(reply && reply._tag === "message_end");
+  assert.equal(reply.message.text, "echo: hello");
+});
+
+test("handled input acknowledges consumption without starting work or inventing history", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "handled" });
+    const ready = yield* Deferred.make<void>();
+    const collector = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+    ), (e) => e._tag === "submission" && e.submission.outcome === "handled").pipe(Effect.forkChild);
+    yield* Deferred.await(ready);
+    yield* t.act({ _tag: "prompt", text: "/handled" });
+    const events = yield* Fiber.join(collector);
+    assert.equal(events.some((e) => e._tag === "message_end"), false);
+    const state = yield* t.state;
+    assert.equal(state.submission?.outcome, "handled");
+    assert.equal(state.isStreaming, false);
+    assert.equal(state.model, "fake/beta", "reconcile extension-command state from Pi");
+    assert.equal(state.thinkingLevel, "high");
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
 });
 
 test("canonical context updates after a response and compaction while still running", async () => {
@@ -119,6 +144,7 @@ test("model switch and child crash", async () => {
   const closed = result.events[result.events.length - 1] as Extract<SessionEvent, { _tag: "closed" }>;
   assert.equal(closed._tag, "closed");
   assert.match(closed.reason, /code 3/);
+  assert.ok(result.events.some((e) => e._tag === "message_end" && e.message.text === "crash now"), "output already read before exit is not discarded");
   assert.equal(result.failed.reason, "exited");
 });
 
@@ -170,6 +196,124 @@ test("Pi's queue remains paused after abort and can be restored without starting
     assert.equal(restoreEvents.some((e) => e._tag === "message_end"), false, "restoring does not create history or model work");
     assert.deepEqual(yield* t.act({ _tag: "restore_queue" }), { _tag: "queue_restored", messages: [] }, "an empty queue restores nothing");
   }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+});
+
+test("busy input preserves extension commands and retry/compaction remain active after agent_end", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "activity" });
+    // Each observation is installed before its action, including immediate transitions.
+    const actUntil = (text: string, pred: (e: SessionEvent) => boolean) => Effect.gen(function* () {
+      const ready = yield* Deferred.make<void>();
+      const collector = yield* collectUntil(t.events.pipe(
+        Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+      ), pred).pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
+      const result = yield* t.act({ _tag: "prompt", text }).pipe(Effect.result);
+      const events = yield* Fiber.join(collector);
+      return { result, events };
+    });
+    yield* actUntil("ask queue", (e) => e._tag === "dialog");
+    yield* actUntil("expand queue", (e) => e._tag === "submission" && e.submission.outcome === "queued");
+    assert.deepEqual((yield* t.state).queuedMessages, [{ kind: "follow-up", text: "expanded follow-up" }]);
+    yield* actUntil("/handled", (e) => e._tag === "submission" && e.submission.outcome === "handled");
+    assert.equal((yield* t.state).model, "fake/beta", "busy commands go through prompt, not follow_up");
+    yield* actUntil("/retry", (e) => e._tag === "state" && !!e.state.isRetrying);
+    assert.equal((yield* t.state).isStreaming, true, "agent_end is not settlement");
+    yield* actUntil("/compact", (e) => e._tag === "state" && !!e.state.isCompacting);
+    assert.equal((yield* t.state).isStreaming, true);
+    assert.equal((yield* t.state).isRetrying, true, "independent facts may overlap");
+    const rejected = yield* actUntil("ordinary input during compaction", (e) => e._tag === "submission" && e.submission.outcome === "rejected");
+    assert.equal(rejected.result._tag, "Failure");
+    assert.match((yield* t.state).submission?.detail ?? "", /compaction/);
+    assert.equal(rejected.events.some((e) => e._tag === "message_end"), false, "no synthetic history on rejection");
+    yield* actUntil("/summary-retry", (e) => e._tag === "notice" && e.message.includes("Retrying summary"));
+    yield* actUntil("/recover", (e) => e._tag === "state" && !e.state.isStreaming && !e.state.isCompacting && !e.state.isRetrying);
+    const state = yield* t.state;
+    assert.equal(state.isStreaming, false);
+    assert.equal(state.isCompacting, false);
+    assert.equal(state.isRetrying, false);
+    assert.deepEqual(state.queuedMessages, []);
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+});
+
+test("missing acknowledgement is delivery-uncertain, never retried; a late response cannot undo newer handling", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "uncertain" });
+    const ready = yield* Deferred.make<void>();
+    const collector = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+    ), (e) => e._tag === "submission" && e.submission.outcome === "uncertain").pipe(Effect.forkChild);
+    yield* Deferred.await(ready);
+    const error = yield* t.act({ _tag: "prompt", text: "withhold acknowledgement" }).pipe(Effect.flip);
+    assert.equal(error.reason, "timeout");
+    const events = yield* Fiber.join(collector);
+    assert.equal(events.filter((e) => e._tag === "notice" && e.message.includes("without acknowledging")).length, 1, "write the input once");
+    const state = yield* t.state;
+    assert.equal(state.submission?.outcome, "uncertain");
+    assert.equal(state.isStreaming, true, "uncertain acceptance is not fictional settlement");
+    yield* t.act({ _tag: "prompt", text: "/release-ack" });
+    assert.equal((yield* t.state).submission?.outcome, "handled");
+    assert.equal((yield* t.state).submission?.id, 2);
+    assert.equal((yield* t.state).isStreaming, true);
+    const snapshot = yield* t.events.pipe(Stream.take(1), Stream.runCollect);
+    assert.equal(snapshot[0]._tag, "snapshot");
+    if (snapshot[0]._tag === "snapshot") assert.equal(snapshot[0].snapshot.state.submission?.outcome, "handled");
+  }).pipe(Effect.provideService(PiRequestTimeoutMs, 500), Effect.timeout("5 seconds"), Effect.scoped));
+});
+
+test("submission acknowledgement outlives its disconnected caller", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "disconnect-submit" });
+    const ready = yield* Deferred.make<void>();
+    const received = yield* Deferred.make<void>();
+    const collector = yield* collectUntil(t.events.pipe(Stream.tap((e) =>
+      e._tag === "snapshot" ? Deferred.succeed(ready, undefined)
+        : e._tag === "notice" && e.message.includes("without acknowledging") ? Deferred.succeed(received, undefined) : Effect.void,
+    )), (e) => e._tag === "submission" && e.submission.outcome === "uncertain").pipe(Effect.forkChild);
+    yield* Deferred.await(ready);
+    const callerScope = yield* Scope.make();
+    yield* t.act({ _tag: "prompt", text: "withhold acknowledgement" }).pipe(Effect.forkIn(callerScope));
+    yield* Deferred.await(received);
+    yield* Scope.close(callerScope, Exit.void);
+    yield* Fiber.join(collector);
+    assert.equal((yield* t.state).submission?.outcome, "uncertain", "disconnect must not strand the acknowledgement as submitting forever");
+    assert.equal((yield* t.state).isStreaming, true, "caller disconnect does not abort work");
+  }).pipe(Effect.provideService(PiRequestTimeoutMs, 500), Effect.timeout("5 seconds"), Effect.scoped));
+});
+
+test("a delayed command state observation cannot revert a newer model change", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "late-state" });
+    const ready = yield* Deferred.make<void>();
+    const captured = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+    ), (e) => e._tag === "notice" && e.message.includes("old state response")).pipe(Effect.forkChild);
+    yield* Deferred.await(ready);
+    const oldCommand = yield* t.act({ _tag: "prompt", text: "/hold-state" }).pipe(Effect.forkChild);
+    yield* Fiber.join(captured);
+    yield* t.act({ _tag: "set_model", model: "fake/beta" });
+    assert.equal((yield* t.state).model, "fake/beta");
+    yield* t.act({ _tag: "prompt", text: "/release-state" });
+    yield* Fiber.join(oldCommand);
+    assert.equal((yield* t.state).model, "fake/beta");
+    assert.equal((yield* t.state).submission?.id, 2, "older completion does not replace the latest submission");
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+});
+
+test("open and probe return a typed readiness timeout even while the child stays alive", async () => {
+  for (const operation of ["open", "probe"] as const) {
+    await run(Effect.gen(function* () {
+      const sessions = yield* PiSessions;
+      const error = yield* (operation === "open"
+        ? sessions.open({ cwd: process.cwd(), sessionId: "silent-startup" }).pipe(Effect.flip)
+        : sessions.probe(process.cwd()).pipe(Effect.flip));
+      assert.equal(error.reason, "timeout", `${operation} must not wait for child exit after its readiness deadline`);
+      assert.match(error.detail, /get_state/);
+    }).pipe(
+      Effect.provideService(PiCli, { ...fakeCli, extraArgs: ["--silence-readiness"] }),
+      Effect.provideService(PiRequestTimeoutMs, 200), Effect.timeout("2 seconds"), Effect.scoped,
+    ));
+  }
 });
 
 test("probe reports models and default", async () => {

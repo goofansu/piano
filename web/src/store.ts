@@ -135,6 +135,9 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           return { ...s, session: { ...t, state: e.state, pending: e.state.isStreaming ? t.pending : null, activeTools: e.state.isStreaming ? t.activeTools : {} } };
         case "queue_update":
           return { ...s, session: { ...t, state: { ...t.state, queuedMessages: [...e.messages] } } };
+        case "submission":
+          if (t.state.submission && e.submission.id < t.state.submission.id) return s;
+          return { ...s, session: { ...t, state: { ...t.state, submission: e.submission } } };
         case "message_update":
           return { ...s, session: { ...t, pending: e.message } };
         case "message_end":
@@ -151,7 +154,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         case "dialog_resolved":
           return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.id) } };
         case "closed":
-          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, queuedMessages: [] }, pending: null, activeTools: {}, dialogs: [], closedReason: e.reason } };
+          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }, pending: null, activeTools: {}, dialogs: [], closedReason: e.reason } };
         case "notice":
           return s;
       }

@@ -52,6 +52,16 @@ export const QueuedMessage = Schema.Struct({
 });
 export type QueuedMessage = typeof QueuedMessage.Type;
 
+/** Last input's handling, independent of the session's current execution activity.
+ * IDs order submissions within this running child; they are not retry/deduplication keys.
+ */
+export const PromptSubmission = Schema.Struct({
+  id: Schema.Number,
+  outcome: Schema.Literals(["submitting", "started", "queued", "handled", "rejected", "uncertain"]),
+  detail: Schema.optional(Schema.String),
+});
+export type PromptSubmission = typeof PromptSubmission.Type;
+
 export const SessionState = Schema.Struct({
   sessionId: Schema.String,
   sessionFile: Schema.optional(Schema.String),
@@ -59,7 +69,11 @@ export const SessionState = Schema.Struct({
   /** "provider/id" */
   model: Schema.optional(Schema.String),
   thinkingLevel: Schema.optional(Schema.String),
+  /** A session-level run remains active until agent_settled, not merely agent_end. */
   isStreaming: Schema.Boolean,
+  isCompacting: Schema.optional(Schema.Boolean),
+  isRetrying: Schema.optional(Schema.Boolean),
+  submission: Schema.optional(PromptSubmission),
   /** Pi's current pending queue, not submitted prompts inferred by the browser. */
   queuedMessages: Schema.optional(Schema.Array(QueuedMessage)),
   /** Pi's context-window estimate, refreshed at finalized-message and compaction boundaries. */
@@ -81,6 +95,7 @@ export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("snapshot", { snapshot: Snapshot }),
   Schema.TaggedStruct("state", { state: SessionState }),
   Schema.TaggedStruct("queue_update", { messages: Schema.Array(QueuedMessage) }),
+  Schema.TaggedStruct("submission", { submission: PromptSubmission }),
   Schema.TaggedStruct("message_update", { message: RenderMsg }),
   Schema.TaggedStruct("message_end", { message: RenderMsg }),
   Schema.TaggedStruct("tool_start", { toolCallId: Schema.String, toolName: Schema.String }),

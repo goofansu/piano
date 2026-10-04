@@ -7,9 +7,13 @@ const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";
 const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "fake/alpha";
 let model = { provider: modelArg.split("/")[0], id: modelArg.split("/")[1] };
 let thinkingLevel = "medium";
-const state = () => ({ model, thinkingLevel, isStreaming: streaming, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName: "fake" });
+const state = () => ({ model, thinkingLevel, isStreaming: streaming, isCompacting: compacting, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName: "fake" });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 let streaming = false;
+let compacting = false;
+let delayedPrompt;
+let heldState;
+let holdNextState = false;
 let liveContext;
 let liveStage = 0;
 const followUp = [];
@@ -49,7 +53,14 @@ const respond = (cmd, data, error) => out({ id: cmd.id, type: "response", comman
 
 function handle(cmd) {
   switch (cmd.type) {
-    case "get_state": return respond(cmd, state());
+    case "get_state":
+      if (args.includes("--silence-readiness")) return; // alive, but never ready
+      if (holdNextState) {
+        holdNextState = false; heldState = { cmd, data: state() };
+        out({ type: "extension_ui_request", id: "held-state", method: "notify", message: "Fixture captured an old state response" });
+        return;
+      }
+      return respond(cmd, state());
     case "get_messages": return respond(cmd, { messages });
     case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: liveContext ?? { tokens: 1200 * messages.length, contextWindow: model.id === "beta" ? 400000 : 200000, percent: (model.id === "beta" ? 0.3 : 0.6) * messages.length } });
     case "get_available_models": return respond(cmd, { models: [
@@ -92,8 +103,61 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
-      if (streaming) return respond(cmd, undefined, "Agent is streaming; specify streamingBehavior");
-      respond(cmd, undefined);
+      // Extension commands run before busy checks. Never accept these through follow_up.
+      if (cmd.message === "/handled") {
+        model = { provider: "fake", id: "beta" }; thinkingLevel = "high";
+        return respond(cmd, { disposition: "handled" });
+      }
+      if (cmd.message === "handled input" || cmd.message === "handled queue") return respond(cmd, { disposition: "handled" });
+      if (cmd.message === "/hold-state") { holdNextState = true; return respond(cmd, { disposition: "handled" }); }
+      if (cmd.message === "/release-state") {
+        respond(cmd, { disposition: "handled" });
+        if (heldState) { respond(heldState.cmd, heldState.data); heldState = undefined; }
+        return;
+      }
+      if (cmd.message === "withhold acknowledgement") {
+        delayedPrompt = cmd;
+        streaming = true;
+        out({ type: "agent_start" });
+        out({ type: "extension_ui_request", id: "withheld", method: "notify", message: "Fixture received input without acknowledging it" });
+        return;
+      }
+      if (cmd.message === "/release-ack") {
+        respond(cmd, { disposition: "handled" });
+        if (delayedPrompt) { respond(delayedPrompt, { disposition: "started" }); delayedPrompt = undefined; }
+        return;
+      }
+      if (cmd.message === "/retry") {
+        out({ type: "agent_end", messages: [], willRetry: true });
+        out({ type: "auto_retry_start", attempt: 1, maxAttempts: 3, delayMs: 2000, errorMessage: "fixture overload" });
+        return respond(cmd, { disposition: "handled" });
+      }
+      if (cmd.message === "/compact") {
+        compacting = true;
+        out({ type: "agent_end", messages: [], willRetry: false });
+        out({ type: "compaction_start", reason: "overflow" });
+        return respond(cmd, { disposition: "handled" });
+      }
+      if (cmd.message === "/summary-retry") {
+        out({ type: "summarization_retry_scheduled", attempt: 1, maxAttempts: 3, delayMs: 1000, errorMessage: "fixture summary error" });
+        return respond(cmd, { disposition: "handled" });
+      }
+      if (cmd.message === "/recover") {
+        compacting = false;
+        out({ type: "summarization_retry_finished" });
+        out({ type: "compaction_end", reason: "overflow", aborted: false, willRetry: true });
+        out({ type: "auto_retry_end", success: true, attempt: 1 });
+        settle();
+        return respond(cmd, { disposition: "handled" });
+      }
+      if (cmd.message === "reject queue" || cmd.message === "reject input" || compacting) return respond(cmd, undefined, compacting ? "Cannot prompt during compaction" : "input rejected");
+      if (streaming) {
+        if (cmd.streamingBehavior !== "followUp") return respond(cmd, undefined, "Agent is streaming; specify streamingBehavior");
+        followUp.push(cmd.message === "expand queue" ? "expanded follow-up" : cmd.message);
+        queueUpdate();
+        return respond(cmd, { disposition: "queued" });
+      }
+      respond(cmd, { disposition: "started" });
       streaming = true;
       const user = { role: "user", content: cmd.message, timestamp: Date.now() };
       messages.push(user);

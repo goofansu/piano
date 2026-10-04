@@ -13,7 +13,7 @@ import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 
 const TestLayer = PiSessionsLive.pipe(Layer.provide(NodeServices.layer));
 
-test("real Pi abort retains queued text; native clear_queue restores it without a model request", async () => {
+test("real Pi reports started/queued/handled input; abort and native queue restore add no model request", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "piano-real-queue-"));
   const agentDir = join(scratch, "agent");
   mkdirSync(agentDir);
@@ -36,6 +36,11 @@ test("real Pi abort retains queued text; native clear_queue restores it without 
       models: [{ id: "local", reasoning: false, input: ["text"], contextWindow: 200000, maxTokens: 128, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
     },
   } }));
+  const extension = join(scratch, "handled.ts");
+  writeFileSync(extension, `export default function(pi) {
+    pi.registerCommand("phase1-handled", { handler: async (_args, ctx) => ctx.ui.notify("Handled command fixture") });
+    pi.on("cache_warming_decision", () => ({ action: "stop" }));
+  }`);
   const shim = join(scratch, "real-pi.mjs");
   const cli = new URL("../node_modules/@earendil-works/pi-coding-agent/dist/cli.js", import.meta.url).href;
   writeFileSync(shim, `for(const key of Object.keys(process.env))if(key!=="PATH")delete process.env[key];
@@ -56,9 +61,14 @@ await import(${JSON.stringify(cli)});`);
       );
       yield* Deferred.await(ready);
       yield* session.act({ _tag: "prompt", text: "hold" });
+      assert.equal((yield* session.state).submission?.outcome, "started");
       yield* Deferred.await(working);
+      yield* session.act({ _tag: "prompt", text: "/phase1-handled" });
+      assert.equal((yield* session.state).submission?.outcome, "handled", "real extension commands work even while streaming");
+      assert.equal((yield* session.state).isStreaming, true, "handled input must not settle independent work");
       yield* session.act({ _tag: "prompt", text: "queued one" });
       yield* session.act({ _tag: "prompt", text: "queued two" });
+      assert.equal((yield* session.state).submission?.outcome, "queued");
       yield* Fiber.join(queued);
       const expected = [{ kind: "follow-up", text: "queued one" }, { kind: "follow-up", text: "queued two" }];
       const idleReady = yield* Deferred.make<void>();
@@ -87,7 +97,7 @@ await import(${JSON.stringify(cli)});`);
       assert.equal(requests, 1, "stop/restore never starts a new model request");
     }).pipe(
       Effect.timeout("15 seconds"), Effect.scoped, Effect.provide(TestLayer),
-      Effect.provideService(PiCli, { node: process.execPath, cli: shim, extraArgs: ["--no-tools", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve", "--offline"] }),
+      Effect.provideService(PiCli, { node: process.execPath, cli: shim, extraArgs: ["--extension", extension, "--no-tools", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve", "--offline"] }),
     ));
   } finally {
     modelServer.closeAllConnections();

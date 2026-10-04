@@ -51,7 +51,21 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   const effectiveEffort = clampEffort(levelsFor(state.catalog, effectiveModel), effort || (state.catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
 
   const startOptions = () => ({ model: effectiveModel, thinkingLevel: effectiveEffort });
-  const streaming = !!t?.state.isStreaming;
+  const streaming = !!(t?.state.isStreaming || t?.state.isCompacting || t?.state.isRetrying);
+  const activity = [
+    t?.dialogs.length ? "Waiting for input" : null,
+    t?.state.isCompacting ? "Compacting" : null,
+    t?.state.isRetrying ? "Retrying" : null,
+  ].filter(Boolean).join(" · ");
+  const submission = t?.state.submission;
+  const submissionText = submission ? {
+    submitting: "Submitting — waiting for Pi to acknowledge this input.",
+    started: "Started — Pi accepted this input to start work. See current activity above.",
+    queued: "Queued — Pi accepted this input for later. The queue below shows what is still pending.",
+    handled: "Handled — Pi consumed this input without starting a run for it. This is not proof of command success.",
+    rejected: "Rejected — Pi did not accept this input.",
+    uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
+  }[submission.outcome] : undefined;
   const [workingSince, setWorkingSince] = useState<number | null>(null);
   useEffect(() => setWorkingSince(streaming ? Date.now() : null), [streaming, t?.sessionId]);
 
@@ -63,8 +77,12 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
     ? { word: "Reconnecting", dot: "border border-err", why: "The connection to piano dropped. Retrying." }
     : !t
       ? { word: "Loading", dot: "bg-ink-3", why: "Fetching this session." }
+      : t.closedReason
+        ? { word: "Exited", dot: "border border-ink-3", why: `Pi stopped: ${t.closedReason}. A new message restarts Pi, not the interrupted operation.` }
+      : activity
+        ? { word: activity, dot: "animate-live bg-busy", why: "Pi's reported activity and retained dialogs. Waiting, compaction and retry are separate from input acceptance." }
       : streaming
-        ? { word: "Working", dot: "animate-live bg-busy", why: "Pi is running a turn." }
+        ? { word: "Working", dot: "animate-live bg-busy", why: "Pi has not settled; it can still continue automatically." }
         : t.hosted
           ? { word: "Ready", dot: "border border-ok", why: "Pi is running for this session and waiting for your message." }
           : { word: "Not running", dot: "border border-ink-3", why: "Pi is not running. Your next message starts it and continues this session." };
@@ -129,6 +147,14 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         <div className="flex flex-1 items-center justify-center text-base text-ink-2">Loading</div>
       )}
       {t && <PullRequestStack prs={prs} />}
+      {submissionText && (
+        <section aria-label="Last input" role="status" className={cn("px-4 pt-2 text-sm md:px-6", submission?.outcome === "uncertain" || submission?.outcome === "rejected" ? "text-warn" : "text-ink-2")}>
+          <div className="mx-auto max-w-2xl break-words">
+            <p>{submissionText}</p>
+            {submission?.detail && <p className="mt-1">{submission.detail}</p>}
+          </div>
+        </section>
+      )}
       <Composer
         text={draftKey ? state.drafts[draftKey] ?? "" : ""}
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
@@ -136,6 +162,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         onRestoreQueue={() => send({ _tag: "act", action: { _tag: "restore_queue" } })}
         disabled={!state.connected || !t}
         streaming={streaming}
+        compacting={t?.state.isCompacting}
         onSend={(text) => send({ _tag: "act", action: { _tag: "prompt", text }, start: startOptions() })}
         onStop={() => send({ _tag: "act", action: { _tag: "abort" } })}
         catalog={state.catalog}

@@ -7,12 +7,12 @@
  * fan-out to any number of subscribers, stderr capture, exit handling and
  * orderly shutdown. The only external seam is ChildProcessSpawner.
  */
-import { type Cause, Context, Data, Deferred, Effect, Layer, PubSub, Queue, Ref, Scope, Semaphore, Stream } from "effect";
+import { type Cause, Context, Data, Deferred, Effect, Fiber, Layer, PubSub, Queue, Ref, Scope, Semaphore, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
-import type { Dialog, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionState } from "../shared/wire.ts";
+import type { Dialog, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionState } from "../shared/wire.ts";
 import { PiCli } from "./PiCli.ts";
 import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } from "./PiRecords.ts";
 
@@ -30,7 +30,7 @@ export interface PiSessionSpec {
 }
 
 export class PiSessionError extends Data.TaggedError("PiSessionError")<{
-  readonly reason: "spawn" | "exited" | "protocol" | "rejected";
+  readonly reason: "spawn" | "exited" | "protocol" | "rejected" | "timeout";
   readonly detail: string;
 }> {}
 
@@ -70,6 +70,9 @@ export class PiSessions extends Context.Service<
 
 // ── Implementation ───────────────────────────────────────────────────────────
 
+/** Host acknowledgement deadline, not a deadline for model work or extension execution. */
+export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTimeoutMs", { defaultValue: () => 30_000 });
+
 const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
 const encoder = new TextEncoder();
 
@@ -90,6 +93,7 @@ interface RawState {
   model?: { provider: string; id: string };
   thinkingLevel?: string;
   isStreaming: boolean;
+  isCompacting?: boolean;
   sessionFile?: string;
   sessionId: string;
   sessionName?: string;
@@ -113,6 +117,8 @@ const toState = (s: RawState): SessionState => ({
   model: s.model ? `${s.model.provider}/${s.model.id}` : undefined,
   thinkingLevel: s.thinkingLevel,
   isStreaming: s.isStreaming,
+  isCompacting: s.isCompacting ?? false,
+  isRetrying: false,
   queuedMessages: [],
 });
 
@@ -130,6 +136,7 @@ const debug = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error(
 const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
   Effect.gen(function* () {
     const cli = yield* PiCli;
+    const timeoutMs = yield* PiRequestTimeoutMs;
     debug("spawning", cli.node, cli.cli, args);
     const stdin = yield* Queue.unbounded<Uint8Array, Cause.Done>();
     const records = yield* Queue.unbounded<PiRecord, Cause.Done>();
@@ -157,7 +164,9 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         } catch {
           return;
         }
-        if (record.type === "response" && typeof record.id === "string" && pending.has(record.id)) {
+        if (record.type === "response") {
+          // Late/unmatched acknowledgements must not become session activity.
+          if (typeof record.id !== "string" || !pending.has(record.id)) return;
           const d = pending.get(record.id) as Deferred.Deferred<unknown, PiSessionError>;
           pending.delete(record.id);
           const r = record as Response;
@@ -222,8 +231,14 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         const d = yield* Deferred.make<unknown, PiSessionError>();
         pending.set(id, d);
         debug("request", id, command.type);
-        yield* write({ id, ...command });
-        return yield* Deferred.await(d);
+        return yield* write({ id, ...command }).pipe(
+          Effect.andThen(Deferred.await(d)),
+          Effect.timeoutOrElse({
+            duration: timeoutMs,
+            orElse: () => Effect.fail(new PiSessionError({ reason: "timeout", detail: `Pi did not acknowledge ${command.type} within ${timeoutMs}ms. Delivery may have occurred; inspect the session before sending again.` })),
+          }),
+          Effect.ensuring(Effect.sync(() => { pending.delete(id); })),
+        );
       });
 
     const child: Child = { request, write, records, exited };
@@ -237,13 +252,16 @@ const openSession = (spec: PiSessionSpec) =>
     if (spec.thinkingLevel) args.push("--thinking", spec.thinkingLevel);
     if (spec.name) args.push("--name", spec.name);
     const child = yield* spawnChild(args, spec.cwd);
+    const sessionScope = yield* Effect.scope;
 
     // Ready check and initial transcript. Both race the child exiting early.
     const initial = yield* Effect.all([
       child.request({ type: "get_state" }),
       child.request({ type: "get_messages" }),
     ]).pipe(
-      Effect.race(
+      // Readiness failure wins too: race waits for a first success and would
+      // suppress a deadline until a still-live child eventually exits.
+      Effect.raceFirst(
         Deferred.await(child.exited).pipe(
           Effect.flatMap((reason) => new PiSessionError({ reason: "spawn", detail: reason })),
         ),
@@ -257,6 +275,14 @@ const openSession = (spec: PiSessionSpec) =>
     const pubsub = yield* PubSub.unbounded<SessionEvent>();
     const lock = yield* Semaphore.make(1);
     const assembler = new StreamAssembler();
+    const metadataFields = ["model", "thinkingLevel", "sessionName", "sessionFile"] as const;
+    const factVersions = { model: 0, thinkingLevel: 0, sessionName: 0, sessionFile: 0 };
+    let statsVersion = 0;
+    let operationVersion = 0;
+    let submissionId = 0;
+    let turnRetry = false;
+    let summaryRetry = false;
+    let announced = false;
 
     /** Update local state and publish, atomically with respect to snapshots. */
     const apply = (events: ReadonlyArray<SessionEvent>) =>
@@ -273,8 +299,12 @@ const openSession = (spec: PiSessionSpec) =>
               case "queue_update":
                 yield* Ref.update(stateRef, (state) => ({ ...state, queuedMessages: event.messages }));
                 break;
+              case "submission":
+                yield* Ref.update(stateRef, (state) => !state.submission || event.submission.id >= state.submission.id
+                  ? { ...state, submission: event.submission } : state);
+                break;
               case "closed":
-                yield* Ref.update(stateRef, (state) => ({ ...state, queuedMessages: [] }));
+                yield* Ref.update(stateRef, (state) => ({ ...state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }));
                 break;
               case "dialog":
                 yield* Ref.update(dialogsRef, (m) => new Map(m).set(event.dialog.id, event.dialog));
@@ -294,11 +324,12 @@ const openSession = (spec: PiSessionSpec) =>
         }),
       );
 
-    const patchState = (patch: Partial<SessionState>) =>
+    const patchState = (patch: Partial<SessionState> | (() => Partial<SessionState>)) =>
       Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         const current = yield* Ref.get(stateRef);
-        const next = { ...current, ...patch };
+        const next = { ...current, ...(typeof patch === "function" ? patch() : patch) };
         if (JSON.stringify(next) === JSON.stringify(current)) return;
+        for (const field of metadataFields) if (next[field] !== current[field]) factVersions[field] += 1;
         yield* Ref.set(stateRef, next);
         yield* PubSub.publish(pubsub, { _tag: "state", state: next });
       }));
@@ -306,16 +337,40 @@ const openSession = (spec: PiSessionSpec) =>
     /** Canonical projected context and billed cost from Pi, not partial response usage.
      * Refresh at persisted boundaries, never per token/delta. Best effort.
      */
-    const refreshStats = child.request({ type: "get_session_stats" }).pipe(
-      Effect.flatMap((data) => {
-        const stats = data as RawStats;
-        return patchState({ context: stats.contextUsage, cost: stats.cost });
-      }),
-      Effect.ignore,
-    );
+    const refreshStats = Effect.gen(function* () {
+      const version = ++statsVersion;
+      const modelVersion = factVersions.model;
+      const stats = (yield* child.request({ type: "get_session_stats" })) as RawStats;
+      yield* patchState(() => version === statsVersion && modelVersion === factVersions.model && !announced
+        ? { context: stats.contextUsage, cost: stats.cost } : {});
+    }).pipe(Effect.ignore);
+
+    /** Read command-controlled facts back from Pi. Do not replace session-level
+     * activity with get_state.isStreaming (which describes the low-level run).
+     * Neither a stale observation nor an old command may overwrite newer facts.
+     */
+    const refreshState = (operation: number) => Effect.gen(function* () {
+      if (operation !== operationVersion) return;
+      const versions = { ...factVersions };
+      const raw = (yield* child.request({ type: "get_state" })) as RawState;
+      yield* patchState(() => {
+        if (operation !== operationVersion || announced) return {};
+        const observed = {
+          model: raw.model ? `${raw.model.provider}/${raw.model.id}` : undefined,
+          thinkingLevel: raw.thinkingLevel,
+          sessionName: raw.sessionName,
+          sessionFile: raw.sessionFile,
+        };
+        const patch: Partial<Record<typeof metadataFields[number], string | undefined>> = {};
+        // Unrelated streaming/queue events must not discard a model observation.
+        for (const field of metadataFields) if (versions[field] === factVersions[field]) patch[field] = observed[field];
+        return patch;
+      });
+    }).pipe(Effect.ignore);
 
     const onRecord = (record: PiRecord) =>
       Effect.gen(function* () {
+        if (announced) return;
         switch (record.type) {
           case "agent_start":
             return yield* patchState({ isStreaming: true });
@@ -325,12 +380,15 @@ const openSession = (spec: PiSessionSpec) =>
             return yield* apply([{ _tag: "queue_update", messages }]);
           }
           case "agent_settled":
-            yield* patchState({ isStreaming: false });
+            turnRetry = false;
+            summaryRetry = false;
+            yield* patchState({ isStreaming: false, isCompacting: false, isRetrying: false });
             return yield* refreshStats;
           case "message_end":
             yield* apply(assembler.handle(record));
             return yield* refreshStats;
           case "compaction_end":
+            yield* patchState({ isCompacting: false });
             // Pi reports null tokens/percent until fresh post-compaction usage exists.
             return yield* refreshStats;
           case "session_info_changed":
@@ -356,8 +414,21 @@ const openSession = (spec: PiSessionSpec) =>
             return yield* apply([{ _tag: "dialog", dialog }]);
           }
           case "auto_retry_start":
+            turnRetry = true;
+            yield* patchState({ isStreaming: true, isRetrying: true });
             return yield* apply([{ _tag: "notice", level: "warning", message: `Retrying (${record.attempt}/${record.maxAttempts}): ${record.errorMessage}` }]);
+          case "auto_retry_end":
+            turnRetry = false;
+            return yield* patchState({ isRetrying: summaryRetry });
+          case "summarization_retry_scheduled":
+            summaryRetry = true;
+            yield* patchState({ isRetrying: true });
+            return yield* apply([{ _tag: "notice", level: "warning", message: `Retrying summary (${record.attempt}/${record.maxAttempts}): ${record.errorMessage}` }]);
+          case "summarization_retry_finished":
+            summaryRetry = false;
+            return yield* patchState({ isRetrying: turnRetry });
           case "compaction_start":
+            yield* patchState({ isCompacting: true });
             return yield* apply([{ _tag: "notice", level: "info", message: `Compacting context (${record.reason})` }]);
           case "extension_error":
             return yield* apply([{ _tag: "notice", level: "error", message: `Extension error: ${record.error}` }]);
@@ -366,20 +437,32 @@ const openSession = (spec: PiSessionSpec) =>
         }
       });
 
-    yield* Stream.fromQueue(child.records).pipe(Stream.runForEach(onRecord), Effect.ignore, Effect.forkScoped);
+    const recordsDrained = yield* Deferred.make<void>();
+    yield* Stream.fromQueue(child.records).pipe(
+      Stream.runForEach(onRecord), Effect.ignore,
+      Effect.ensuring(Deferred.succeed(recordsDrained, undefined)), Effect.forkScoped,
+    );
 
     // Subscribers learn exactly once that Pi is gone: from the child's own exit (a crash),
     // or from this scope closing (a deliberate release), whichever comes first. The
     // finalizer is registered after the child's, so it runs before Pi is shut down.
-    let announced = false;
     const announceClosed = (reason: string) =>
       Effect.suspend(() => {
         if (announced) return Effect.void;
         announced = true;
-        return apply([{ _tag: "closed", reason }]);
+        return Effect.gen(function* () {
+          const submission = (yield* Ref.get(stateRef)).submission;
+          if (submission?.outcome === "submitting") yield* apply([{ _tag: "submission", submission: { ...submission, outcome: "uncertain", detail: `Pi stopped before acknowledging this input: ${reason}` } }]);
+          yield* apply([{ _tag: "closed", reason }]);
+        });
       });
     yield* Effect.addFinalizer(() => announceClosed("released"));
-    yield* Deferred.await(child.exited).pipe(Effect.flatMap(announceClosed), Effect.forkScoped);
+    // Preserve already-read output before announcing an exit. The record-loop
+    // finalizer only signals completion; it never waits for a later child finalizer.
+    yield* Deferred.await(child.exited).pipe(
+      Effect.flatMap((reason) => Deferred.await(recordsDrained).pipe(Effect.andThen(announceClosed(reason)))),
+      Effect.forkScoped,
+    );
 
     const events: Stream.Stream<SessionEvent> = Stream.unwrap(
       Semaphore.withPermits(lock, 1)(
@@ -402,18 +485,30 @@ const openSession = (spec: PiSessionSpec) =>
 
     const act = (action: SessionAction): Effect.Effect<void | SessionActionResult, PiSessionError> =>
       Effect.gen(function* () {
+        const operation = ++operationVersion;
         switch (action._tag) {
           case "prompt": {
-            const streaming = (yield* Ref.get(stateRef)).isStreaming;
-            yield* child.request({ type: streaming ? "follow_up" : "prompt", message: action.text }).pipe(
-              Effect.catchTag("PiSessionError", (e) =>
-                // Our streaming flag can lag Pi's by one event; retry as a follow-up once.
-                !streaming && e.reason === "rejected" && /streaming/i.test(e.detail)
-                  ? child.request({ type: "follow_up", message: action.text })
-                  : Effect.fail(e),
-              ),
-            );
-            return;
+            const id = ++submissionId;
+            const submit = (outcome: PromptSubmission["outcome"], detail?: string) => apply([{ _tag: "submission", submission: { id, outcome, detail } }]);
+            // Once dispatched, acknowledgement tracking belongs to the session,
+            // not the browser/caller that may disconnect while Pi handles input.
+            const work = Effect.gen(function* () {
+              yield* submit("submitting");
+              yield* child.request({ type: "prompt", message: action.text, streamingBehavior: "followUp" }).pipe(
+                Effect.flatMap((data) => {
+                  const disposition = (data as { disposition?: unknown } | undefined)?.disposition;
+                  if (disposition !== "started" && disposition !== "queued" && disposition !== "handled") {
+                    return Effect.fail(new PiSessionError({ reason: "protocol", detail: "Pi acknowledged the input without a recognized disposition. Inspect the session before sending again." }));
+                  }
+                  return submit(disposition);
+                }),
+                Effect.catchTag("PiSessionError", (error) => submit(error.reason === "rejected" ? "rejected" : "uncertain", error.detail).pipe(
+                  Effect.andThen(Effect.fail(error)),
+                )),
+              );
+              yield* refreshState(operation);
+            });
+            return yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
           }
           case "abort":
             yield* child.request({ type: "abort" });
@@ -426,18 +521,18 @@ const openSession = (spec: PiSessionSpec) =>
           case "set_model": {
             const slash = action.model.indexOf("/");
             if (slash <= 0) return yield* new PiSessionError({ reason: "rejected", detail: `Model must be provider/id, got "${action.model}"` });
-            const data = (yield* child.request({
+            yield* child.request({
               type: "set_model",
               provider: action.model.slice(0, slash),
               modelId: action.model.slice(slash + 1),
-            })) as { provider?: string; id?: string } | undefined;
-            yield* patchState({ model: data?.provider && data.id ? `${data.provider}/${data.id}` : action.model });
+            });
+            yield* refreshState(operation);
             yield* refreshStats;
             return;
           }
           case "set_thinking_level":
             yield* child.request({ type: "set_thinking_level", level: action.level });
-            yield* patchState({ thinkingLevel: action.level });
+            yield* refreshState(operation);
             return;
           case "answer": {
             const known = (yield* Ref.get(dialogsRef)).has(action.id);
@@ -465,7 +560,7 @@ const probe = (cwd: string): Effect.Effect<ProbeResult, PiSessionError, ChildPro
       child.request({ type: "get_available_models" }),
       child.request({ type: "get_state" }),
     ]).pipe(
-      Effect.race(
+      Effect.raceFirst(
         Deferred.await(child.exited).pipe(
           Effect.flatMap((reason) => new PiSessionError({ reason: "spawn", detail: reason })),
         ),

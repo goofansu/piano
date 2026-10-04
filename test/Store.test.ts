@@ -22,6 +22,19 @@ test("a late queue restore appends to its original session draft without changin
   assert.equal(state.view.kind, "session");
 });
 
+test("a late submission outcome cannot replace the explanation for newer input", () => {
+  let state = reduce(initialState, { type: "server", message: {
+    _tag: "selected", cwd: "/scratch/a", sessionId: "a", hosted: true,
+    snapshot: { state: { sessionId: "a", isStreaming: true, submission: { id: 2, outcome: "queued" } }, messages: [], dialogs: [] },
+  } });
+  state = reduce(state, { type: "server", message: { _tag: "session", event: {
+    _tag: "submission", submission: { id: 1, outcome: "handled" },
+  } } });
+  assert.equal(state.session?.state.submission?.outcome, "queued");
+  assert.equal(state.session?.state.isStreaming, true, "handling input never settles current activity");
+  assert.deepEqual(state.session?.messages, [], "handling input never invents a user message");
+});
+
 test("an empty native queue result does not erase editor text", () => {
   const identity = { cwd: "/scratch/a", sessionId: "a" };
   const state = reduce(initialState, { type: "draft_changed", key: sessionKey(identity), text: "keep this" });

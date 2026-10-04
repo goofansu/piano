@@ -54,7 +54,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         const out: HostInfo[] = [];
         for (const h of (yield* Ref.get(hosts)).values()) {
           const state = yield* h.session.state;
-          out.push({ cwd: h.session.spec.cwd, sessionId: h.session.spec.sessionId, streaming: state.isStreaming });
+          out.push({ cwd: h.session.spec.cwd, sessionId: h.session.spec.sessionId, streaming: !!(state.isStreaming || state.isCompacting || state.isRetrying) });
         }
         return out;
       });
@@ -113,7 +113,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           for (const h of (yield* Ref.get(hosts)).values()) {
             if (now - h.lastActivity < options.idleMs || h.openDialogs.size > 0) continue;
             const state = yield* h.session.state;
-            if (state.isStreaming || state.queuedMessages?.length) continue;
+            if (state.isStreaming || state.isCompacting || state.isRetrying || state.queuedMessages?.length ||
+                state.submission?.outcome === "submitting" || state.submission?.outcome === "uncertain") continue;
             yield* Effect.logInfo(`idle ${Math.round((now - h.lastActivity) / 1000)}s, releasing ${h.session.spec.sessionId.slice(0, 8)}`);
             yield* release(h.session.spec.cwd, h.session.spec.sessionId);
           }
