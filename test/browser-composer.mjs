@@ -1,4 +1,5 @@
-// Browser-seam regression. Requires `npm run build`; uses npx agent-browser, no model calls.
+// Browser-seam regression against separate scratch backend/dev UI processes.
+// Uses npx agent-browser, no model calls or systemd built-UI interaction.
 // Run: node test/browser-composer.mjs /tmp/piano-composer-evidence
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -17,9 +18,20 @@ const longModel = 'alpha-with-a-very-long-model-name-for-responsive-verification
 writeFileSync(join(scratch, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replaceAll('"alpha"', JSON.stringify(longModel)).replaceAll('fake/alpha', `fake/${longModel}`).replace('out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });', '// Browser fixture: pause without a modal covering the composer.'));
 writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [] }));
 const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: join(scratch, 'registry.json'), PIANO_PI_CLI: join(scratch, 'fake.mjs'), PI_CODING_AGENT_DIR: join(scratch, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(scratch, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
+const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let serverLog = '';
-server.stdout.on('data', d => serverLog += d);
-server.stderr.on('data', d => serverLog += d);
+for (const proc of [server, frontend]) {
+  proc.stdout.on('data', d => serverLog += d);
+  proc.stderr.on('data', d => serverLog += d);
+}
+const appUrl = 'http://127.0.0.1:7172';
+const observe = join(scratch, 'observe.js');
+writeFileSync(observe, `window.pageToken=crypto.randomUUID(); window.observedSockets=[]; window.sent=[];
+const NativeWebSocket=WebSocket;
+window.WebSocket=class extends NativeWebSocket {
+  constructor(...args){super(...args);window.observedSockets.push(this);}
+  send(data){if(this.url.endsWith('/ws'))window.sent.push(JSON.parse(data));return super.send(data);}
+};`);
 let session = `composer-${process.pid}`;
 const log = [];
 const failures = [];
@@ -59,11 +71,11 @@ async function capture(journey) {
 }
 try {
   for (let i=0;i<50;i++) {
-    try { const r=await fetch('http://127.0.0.1:7171'); if(r.ok) break; } catch {}
+    try { const r=await fetch(appUrl); if(r.ok) break; } catch {}
     if (i===49) throw new Error('Scratch server did not start');
     await delay(100);
   }
-  ab('--args', '--blink-settings=primaryPointerType=2', 'open', 'http://127.0.0.1:7171');
+  ab('--init-script', observe, '--args', '--blink-settings=primaryPointerType=2', 'open', appUrl);
   ab('set', 'device', 'iPhone 16');
   if (!evaluate(`matchMedia('(pointer: coarse)').matches`)) throw new Error('Mobile fixture has no coarse pointer');
   await until(`!!document.querySelector('[aria-label="Model"]')?.title.includes('${longModel}')`);
@@ -97,12 +109,21 @@ try {
   if (!evaluate(`!!document.querySelector('[aria-label="Stop"]')`)) throw new Error('Queue stopped the session');
   ab('click', '[aria-label="Stop"]');
   await until(`!document.querySelector('[aria-label="Stop"]')`);
+  // A dropped Piano connection should reconnect in place, preserving a mobile draft.
+  ab('fill', '[aria-label="Message"]', 'draft after background');
+  const before = evaluate(`({pageToken, path:location.pathname, sockets:observedSockets.length, prompts:sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length})`);
+  evaluate(`observedSockets.find(s=>s.url.endsWith('/ws')&&s.readyState===1).close(); true`);
+  ab('wait', '--fn', `observedSockets.length > ${before.sockets} && !document.querySelector('[aria-label="Send"]')?.disabled`);
+  const after = evaluate(`({pageToken, path:location.pathname, text:document.querySelector('textarea').value, prompts:sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length})`);
+  if (before.pageToken !== after.pageToken || before.path !== after.path || after.text !== 'draft after background' || before.prompts !== after.prompts) throw new Error('Reconnect reloaded the page, lost the draft/selection, or replayed a prompt');
+  writeFileSync(join(evidence, 'mobile-reconnect.json'), JSON.stringify({before, after}, null, 2));
+  ab('screenshot', join(evidence, 'mobile-reconnect.png'));
   // Fine-pointer desktop: retain Shift+Enter newline and Enter send.
   const sessionUrl = ab('get', 'url');
   ab('close');
   session += '-desktop';
   ab('set', 'viewport', '1280', '800');
-  ab('open', sessionUrl);
+  ab('--init-script', observe, 'open', sessionUrl);
   await until(`!!document.querySelector('[aria-label="Message"]')`);
   if (evaluate(`matchMedia('(pointer: coarse)').matches`)) throw new Error('Desktop fixture has coarse pointer');
   ab('fill', '[aria-label="Message"]', 'desktop');
@@ -112,13 +133,13 @@ try {
   await until(`document.querySelector('textarea').value === ''`);
   ab('errors');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ failures }, null, 2));
-  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: all composer controls fit; pickers, context, Queue/Stop and keyboard checks passed');
+  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: all composer controls fit; pickers, context, Queue/Stop, keyboard and in-place mobile reconnect checks passed');
   process.exitCode = failures.length ? 1 : 0;
 } catch (e) { console.error(e); process.exitCode = 1; }
 finally {
   try { ab('close'); } catch {}
-  server.kill('SIGTERM');
-  await new Promise(r => server.once('exit', r));
+  for (const proc of [server, frontend]) proc.kill('SIGTERM');
+  await Promise.all([server, frontend].map(proc => proc.exitCode !== null ? Promise.resolve() : new Promise(r => proc.once('exit', r))));
   writeFileSync(join(evidence, 'browser-commands.json'), JSON.stringify(log, null, 2));
   writeFileSync(join(evidence, 'server.log'), serverLog);
   rmSync(scratch, { recursive: true, force: true });

@@ -91,8 +91,17 @@ Use an absolute scratch path that you created:
 HOST=127.0.0.1 PIANO_CONFIG=<scratch-path>/piano-config.json PORT=7171 node server/main.ts
 ```
 
-Run in a dedicated terminal and retain the PID if backgrounding; stop only your process. Observe
-through `agent-browser` and retain output. For credentialed smoke checks use a short prompt such
+Start the development UI separately, pointing it only at that scratch backend:
+
+```bash
+PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort
+```
+
+Observe `http://127.0.0.1:7172` through `npx agent-browser`, retaining output. The systemd
+instance serves the built UI for daily use; it is not the browser-verification target. See
+[the hosted workflow](hosted-development.md) for deliberate build/deploy steps.
+Run both scratch processes in dedicated terminals and retain their PIDs if backgrounding;
+stop only your processes. For credentialed smoke checks use a short prompt such
 as "Reply with exactly: PIANO102", read it back, reload, and confirm history. Use fake Pi for
 race/fault scenarios; do not pay for model calls to simulate protocol races.
 

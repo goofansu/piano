@@ -25,12 +25,17 @@ On exe.dev, keep the unauthenticated server on loopback behind private authentic
 
 ## Running against the user's instance
 
-The user keeps their own piano running on port 7070 with the real registry. Verify on a scratch
-instance and leave theirs alone:
+The user's systemd instance serves the built UI on port 8000 through the backend on 8001
+with the real registry (local instances may use 7070). Verify in separate scratch processes:
 
 ```bash
-PIANO_CONFIG=<scratchpad>/piano-config.json PORT=7171 node server/main.ts &
+HOST=127.0.0.1 PIANO_CONFIG=<scratchpad>/piano-config.json PORT=7171 node server/main.ts &
+PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort &
 ```
+
+Use `npx agent-browser` against the scratch development UI on 7172, not the user's built UI.
+Leave the real registry and running backend alone. Rebuild/deploy only when requested; see
+[the hosted workflow](docs/hosted-development.md).
 
 Stop only the process you started, by its pid. Register only scratch directories (a throwaway git
 repo in the scratchpad) in the scratch registry. When a check creates worktrees or pi session files,
@@ -45,7 +50,7 @@ only for a meaningful failure not already protected; test observable contracts, 
 mock choreography or implementation shape. No coverage quota or one-test-per-function requirement.
 Documentation-only changes need document/link review, not new unit tests or an application run.
 
-For application behavior changes, observe the affected journey through `agent-browser`, with output
+For application behavior changes, observe the affected journey through `npx agent-browser`, with output
 kept. Model calls cost real credits; use short prompts such as "Reply with exactly: X" and read the
 reply back. Radix
 menus and popovers open on pointer events, so open them with `agent-browser click`, not a DOM

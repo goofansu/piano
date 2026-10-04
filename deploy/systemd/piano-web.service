@@ -1,18 +1,16 @@
 [Unit]
-Description=Piano Vite frontend with hot reload on port 8000
+Description=Piano built UI and session connection proxy
 Wants=piano.service
-After=network.target piano.service
+Requires=piano-web.socket
+After=network.target piano.service piano-web.socket
 
 [Service]
 Type=simple
 User=exedev
 Group=exedev
-WorkingDirectory=/home/exedev/piano/web
-Environment=HOME=/home/exedev
-Environment=PATH=/home/exedev/.local/bin:/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin
-Environment=PIANO_DEV_BACKEND=http://127.0.0.1:8001
-Environment=__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=yejun-dev.exe.xyz
-ExecStart=/home/exedev/.local/bin/node ../node_modules/vite/bin/vite.js --host 127.0.0.1 --port 8000 --strictPort
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:8001
+NoNewPrivileges=yes
+PrivateTmp=yes
 Restart=on-failure
 RestartSec=2
 TimeoutStopSec=15
