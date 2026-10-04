@@ -1,5 +1,12 @@
 # Direction for the piano harness after Pi 1.0
 
+> Historical research, verified against Pi 1.0.0 on 2026-10-02. The
+> [ADR](../adr/0001-pi-rpc-workspace-workbench.md), [development invariants](../development-invariants.md)
+> and [roadmap](../roadmap.md) supersede this note's phase ordering, registry-based evidence proposal,
+> and broad workspace-layer wording. Worktrunk is the initial worktree lifecycle backend; Piano owns
+> workspace and integration policy, while development methodology remains skill-agnostic.
+> Its original audit and source findings are retained; they are not a Pi 1.0.2 compatibility test.
+
 Research note, 2026-10-02. Question: given Pi 1.0.0 (released 2026-10-01) and Pi Durable, what runtime
 and workspace foundations should piano build on, and what should the product optimise for? A long
 recommendation written by another model was pasted into the session the same day; this note checks its

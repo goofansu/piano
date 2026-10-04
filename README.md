@@ -9,6 +9,14 @@ the SDK or one process per turn because it isolates sessions from each other, ke
 follow-up semantics, and forwards extension dialogs (`select`, `confirm`, `input`, `editor`,
 `notify`) so they can be answered from the browser.
 
+## Development direction
+
+The [docs index](docs/README.md) links the proposed ADR, development invariants, implementation
+roadmap and exe.dev handoff. The direction is a Pi + Worktrunk workspace workbench with
+revision-bound evidence. These documents distinguish planned contracts from current capabilities.
+Piano owns workspace and verification policy; Worktrunk is the initial worktree lifecycle backend.
+Development methodology remains skill-agnostic.
+
 ## Stack
 
 - Server: Node 24 running TypeScript directly, on **Effect 4.0.0-rc.118** (pinned exactly; the RC

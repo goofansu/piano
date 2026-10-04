@@ -8,7 +8,20 @@ session is one pi session; each running session is one `pi --mode rpc` child. Se
 
 Use these in code, UI and prose: **project** (a directory the user added), **worktree** (a checkout
 created through piano with `wt`), **session** (one pi session; never "thread"), **registry** (the
-config file that is the source of truth for all three; pi's session store is read only for history).
+config file that records selected projects, worktrees and session references; Pi owns session history).
+See [the glossary](docs/glossary.md) for the planned workspace, task and evidence vocabulary.
+
+## Direction and guardrails
+
+For architecture and workflow changes, read [docs/README.md](docs/README.md), then the ADR,
+development invariants and roadmap it links. Reference affected invariant IDs in implementation PRs.
+They are target contracts, not claims that all gaps are fixed. Keep Pi authoritative for history,
+Git authoritative for repository facts, Worktrunk behind the lifecycle adapter, and evidence outside
+the registry config. Piano owns workspace and integration policy. Skills guide development without
+defining product requirements or verification truth. A workspace is
+the product context around a project root or worktree; retain the existing code vocabulary above.
+On exe.dev, keep the unauthenticated server on loopback behind private authenticated access; follow
+[the development handoff](docs/development-on-exe-dev.md).
 
 ## Running against the user's instance
 
@@ -26,11 +39,20 @@ the session directory under `~/.pi/agent/sessions` whose name encodes the scratc
 
 ## Verification
 
-Done means observed in the browser through `agent-browser`, with the output kept. Model calls cost
-real credits; use short prompts such as "Reply with exactly: X" and read the reply back. Radix
+Develop Piano using [evidence-based development and testing](docs/testing.md). Before changing
+behavior, identify the claim, relevant invariant and smallest useful check. Add a regression test
+only for a meaningful failure not already protected; test observable contracts, not private helpers,
+mock choreography or implementation shape. No coverage quota or one-test-per-function requirement.
+Documentation-only changes need document/link review, not new unit tests or an application run.
+
+For application behavior changes, observe the affected journey through `agent-browser`, with output
+kept. Model calls cost real credits; use short prompts such as "Reply with exactly: X" and read the
+reply back. Radix
 menus and popovers open on pointer events, so open them with `agent-browser click`, not a DOM
 `.click()` from `eval`. `npm test` runs the module tests against `test/fake-pi.mjs` and needs no
-credentials; run it and `npm run typecheck` before calling a change done.
+credentials; run it and `npm run typecheck` for code or dependency changes. Retain command outcomes,
+tested revision/environment and limitations. Stop expanding verification once the relevant risk is
+covered and required gates pass; explain when existing tests or inspection suffice.
 
 ## Design
 
