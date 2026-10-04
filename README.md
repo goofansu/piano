@@ -38,6 +38,10 @@ During UI work run `npm start` and `npm run dev:web` together; the Vite dev serv
 proxies `/api` and `/ws` to the server. `npm test` runs the module tests (they use a scripted fake
 Pi, no credentials needed). `npm run typecheck` checks server and client.
 
+For the private development instance at `https://yejun-dev.exe.xyz/` (port 8000),
+see [hosted development](docs/hosted-development.md). Its frontend hot-reloads;
+backend restarts are deliberate so self-development does not interrupt active Pi sessions.
+
 Requires a working `pi` setup (credentials in the Pi agent dir) and `wt` on `PATH` for worktree
 support.
 

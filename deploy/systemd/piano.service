@@ -1,0 +1,22 @@
+[Unit]
+Description=Piano backend (manual restart for safe self-development)
+After=network.target
+
+[Service]
+Type=simple
+User=exedev
+Group=exedev
+WorkingDirectory=/home/exedev/piano
+Environment=HOME=/home/exedev
+Environment=PATH=/home/exedev/.local/bin:/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOST=127.0.0.1
+Environment=PORT=8001
+ExecStart=/home/exedev/.local/bin/node server/main.ts
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+KillSignal=SIGTERM
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
