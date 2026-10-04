@@ -14,6 +14,8 @@ follow-up semantics, and forwards extension dialogs (`select`, `confirm`, `input
 The [docs index](docs/README.md) links the proposed ADR, development invariants, implementation
 roadmap and exe.dev handoff. The direction is a Pi + Worktrunk workspace workbench with
 revision-bound evidence. These documents distinguish planned contracts from current capabilities.
+Piano owns workspace and verification policy; Worktrunk is the initial worktree lifecycle backend.
+Development methodology remains skill-agnostic.
 
 ## Stack
 

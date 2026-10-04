@@ -68,6 +68,18 @@ and [RPC contract](https://github.com/earendil-works/pi/blob/v1.0.2/packages/cod
 including the linked commands, JSON events and extension UI documentation. 1.0.2 sampling settings
 and 1.0.1 project MCP overrides remain Pi configuration; Piano should preserve their normal loading.
 
+## Optional contributor skills
+
+You may use Matt Pocock's skills, custom skills or ordinary prompting to develop Piano. Configure
+them through your normal Pi environment and follow the installed version's instructions; the
+[upstream collection](https://github.com/mattpocock/skills) evolves independently of Piano.
+Use the repository's glossary, ADRs and invariant IDs as project context. Skill-generated specs,
+plans and review findings can reference these documents without dictating Piano's product schema.
+
+No specific skill package, invocation sequence or document template is required to use Piano.
+Skill execution does not establish verification: retain the actual test/browser evidence and the
+requirement and revision it supports. See INV-09 and INV-13.
+
 ## Scratch verification
 
 Follow root AGENTS.md: leave the user's running instance and real registry alone. Use a throwaway

@@ -11,7 +11,8 @@ module boundary rather than reproducing implementation details.
 ## INV-01 — One authoritative owner per state
 
 Pi owns session history and agent semantics. Registry owns selected projects, workspace identity,
-session references and preferences. Worktrunk/Git own checkout facts. The evidence store owns
+session references and preferences. Git owns repository facts; Worktrunk is the initial backend for
+worktree lifecycle and structured observations. Piano owns workspace and integration policy. The evidence store owns
 executions and artifacts. Browser state and cached summaries are projections.
 
 **Verify:** reopening a session loads Pi's authoritative history; restarting Piano preserves workspace
@@ -84,13 +85,17 @@ memory growth or stall Pi stdout draining.
 Assert the supported `wt list` schema and consume complete structured output (currently schema 2
 with `--no-progressive`). Preserve null, unavailable, absent, detached, clean and failed states.
 Use Worktrunk's returned identity and lifecycle results instead of synthesizing paths or duplicating
-its Git/PR calculations.
+its available Git/PR summaries. Keep the adapter narrow and translate into Piano's domain types.
+Direct Git reads/snapshots for exact revision capture and validation are allowed; summary observations
+are not authoritative proof that a particular candidate passed checks.
 
 **Verify:** valid output, unsupported schema, malformed output, unavailable PR/check data and a failed
 command. None of the failure cases becomes a healthy project-root-only list or a passing check.
 
 **Guardrail:** hooks, interactive approval and foreground completion follow the pinned Worktrunk
 contract. Worktree removal coordinates running sessions/processes before destroying their checkout.
+Record and test the supported backend version. Do not build another backend until a concrete need
+justifies it; lifecycle implementation details must not become Piano's domain model.
 
 ## INV-07 — Every observation identifies its workspace
 
@@ -125,21 +130,29 @@ invalidation is the initial policy.
 A check record includes ID, workspace, captured revision, command/check configuration, environment
 and tool versions, start/end times, exit status, outcome, and artifact references. Browser evidence
 names the running app and the journey/assertions observed. Outcomes distinguish pass, fail, cancelled,
-error, stale and unknown; success applies only to the checks actually executed.
+error, stale and unknown; success applies only to the checks actually executed. Verification records
+link evidence to acceptance criterion IDs, their version/content digest and the applicable policy.
+Intent may come from an issue, repository document or short task description; no PRD template or
+tracker is mandatory. Preserve the original requirement reference and captured version.
 
 **Verify:** run against a candidate, mutate during/after the run, cancel, lose an artifact, or change
 check configuration. The UI retains the historical result but cannot present it as current proof.
 Use an immutable execution snapshot where possible; otherwise detect mutations across execution and
 mark unstable runs inconclusive. A matching end fingerprint alone cannot exclude transient edits.
+Change a requirement while keeping the code unchanged: the historical observation remains available,
+but affected verification conclusions must be reevaluated before acceptance.
 
 **Guardrail:** authoritative acceptance gates belong to the harness. Changes to tests or gates are
 visible and reviewed; the coding agent cannot weaken a gate and self-award verification. Acceptance
 criteria and required evidence are recorded proportionally to the task.
+Skill invocation and Worktrunk command success are not proof of required check execution. Record
+actual results, including missing/skipped hooks. Enforce gates at Piano action boundaries; unrestricted
+shell access remains a potential bypass unless separately constrained.
 
 ## INV-10 — Integration applies to the approved candidate
 
 Integration approval identifies workspace, candidate revision, target branch/revision, action,
-applicable hooks and expiry. Remove approval identifies the checkout and the consequences for dirty
+acceptance-criteria/policy version, applicable hooks and expiry. Remove approval identifies the checkout and the consequences for dirty
 work, sessions and processes. Revalidate immediately before execution and report the actual outcome.
 
 **Verify:** edit after approval, advance the target, and rebase during Worktrunk merge. Any changed
@@ -149,7 +162,12 @@ revalidation is not followed by an unchecked mutation.
 **Guardrail:** Worktrunk pre-merge hooks run after rebase; pre-rebase evidence or approval cannot
 silently cover changed post-rebase content. Establish a preparation/validation boundary before the
 irreversible integration step. External effects interrupted by a crash require reconciliation,
-not blind replay.
+not blind replay. Keep preparation, verification, approval, integration and cleanup separately
+observable. Choose tested Worktrunk options that preserve the prepared candidate; reconcile partial
+failures from Git state. Local integration does not imply a forge PR was merged.
+
+Approval to integrate is not approval to discard the workspace immediately: coordinate cleanup
+with sessions, processes and artifact retention. A failed cleanup must not conceal a successful merge.
 
 ## INV-11 — Private development is an explicit trust boundary
 
@@ -179,6 +197,20 @@ fixture and confirm selected model/thinking settings without leaking credentials
 
 **Guardrail:** neither a semver range nor a tagged documentation review proves runtime compatibility.
 Do not implement a second settings/MCP/credential loader just to reproduce what the CLI already owns.
+
+## INV-13 — Development methodology is skill-agnostic
+
+Piano works with different compatible skill collections, custom instructions or no skills. Pi owns
+skill discovery and execution. Piano's state, evidence and approvals do not depend on skill names,
+slash commands, Markdown headings or a mandatory planning/development/review sequence.
+
+**Verify:** perform equivalent work using Matt Pocock's skills, a custom skill and ordinary prompting.
+All three use the same workspace identities, evidence-validity rules and integration gates. A skill
+claiming "verified" without supporting evidence cannot change authoritative verification state.
+
+**Guardrail:** skills guide procedure; human/project policy defines required outcomes. Optional skill
+provenance may aid debugging, but only record observed usage and never treat installation as invocation.
+Contributor preferences for developing Piano must not become requirements for using Piano.
 
 ## Applying the guardrails
 

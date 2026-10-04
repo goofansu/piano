@@ -19,7 +19,9 @@ A fuller transcript alone does not establish a better development product.
 
 ## Decision
 
-Build Piano as a workspace workbench for Pi, with revision-bound evidence.
+Build Piano as the control plane and web workbench for evidence-based software development.
+The initial scope is intent → implementation → verification → review → integration, not production
+operations or a prescribed development methodology. Use the [glossary](../glossary.md) for domain terms.
 
 1. **Keep the process boundary.** One active session has at most one server-owned
    `pi --mode rpc` child. Keep Pi protocol details behind `server/PiSessions.ts` and its
@@ -29,10 +31,12 @@ Build Piano as a workspace workbench for Pi, with revision-bound evidence.
    selected checkout, including project MCP overrides. Forward supported RPC extension UI and state.
    Document terminal-only limitations instead of promising arbitrary TUI rendering in a browser.
    Pi remains authoritative for session semantics and history.
-3. **Keep Worktrunk authoritative for worktree lifecycle.** Consume its supported structured schema
-   and drive create, remove and integration through its documented contracts. Piano adds product
-   identity, process supervision and evidence; it does not build a second worktree manager.
-   Herdr remains an optional sibling interface.
+3. **Use Worktrunk as the initial worktree lifecycle backend.** Keep a narrow adapter, validate
+   supported versions/schemas and translate results into Piano's domain types. Delegate checkout
+   creation, discovery and removal; Piano owns workspace identity, processes and integration policy.
+   Direct Git operations for snapshots, revision identity and precise validation are complementary.
+   Do not build a second backend now; reconsider only for a concrete limitation. Herdr remains an
+   optional sibling interface.
 4. **Make the workspace the product context.** A project has workspaces; a workspace attaches
    sessions, a revision, processes, evidence and integration state. A workspace can refer to the
    project root or a Worktrunk checkout. Retain the existing words `project`, `worktree`,
@@ -40,7 +44,8 @@ Build Piano as a workspace workbench for Pi, with revision-bound evidence.
 5. **Bind evidence to actual content.** A workspace revision includes base HEAD and a deterministic
    index/working-tree fingerprint, with explicit treatment of untracked files and relevant inputs.
    A commit hash alone cannot identify uncommitted work. Checks and reviews name the inspected
-   revision and environment; changes make affected evidence stale.
+   revision and environment, and identify the acceptance criteria/version they support. Code,
+   requirements or policy changes invalidate affected verification conclusions.
 6. **Give each store one responsibility.** Registry owns selected projects, workspace identity,
    session references and preferences. Pi owns conversation history. A separate evidence store owns
    check executions, artifacts and revision references. Cached summaries may live in Registry;
@@ -52,6 +57,29 @@ Build Piano as a workspace workbench for Pi, with revision-bound evidence.
    authentication or execution isolation on Piano. Keep the current unauthenticated server on
    loopback and access it through a private authenticated tunnel. General remote access requires
    an explicit architecture for authorization, isolation, credentials and preview origins.
+9. **Keep methodology in skills and project instructions.** Pi loads and executes skills. Piano
+   works with any compatible skill collection, custom instructions or no skills; it does not require
+   particular command names, templates or workflow sequences. Human/project policy defines acceptance
+   criteria and required checks; Piano evaluates recorded evidence and enforces configured gates at
+   its action boundaries. Invoking a skill is not proof that its procedure was followed.
+
+## Worktrunk and integration policy
+
+Piano models prepare candidate → verify → approve → integrate → clean up as separate outcomes.
+Worktrunk may execute operations within that flow; its defaults must not silently move an approval
+boundary. Local target-branch integration and merging a forge PR are distinct actions.
+
+The [merge contract](https://worktrunk.dev/merge/) includes commit/squash, rebase, hooks and cleanup.
+The adapter must use tested options to preserve the approved candidate and defer cleanup when needed,
+and reconcile actual Git state after partial failure. A command failure after integration must not
+be reported as though nothing changed.
+
+[Hooks](https://worktrunk.dev/hook/) can be skipped, and some run in the background. Therefore,
+Worktrunk command success alone cannot satisfy required checks. Piano records their actual execution,
+scope and outcomes. These are version-sensitive contracts; pin the supported backend and test it.
+
+Skills and hooks are not security boundaries. With unrestricted shell access, an agent may bypass
+Piano's actions; do not claim universal policy enforcement without execution restrictions.
 
 ## Alternatives and consequences
 

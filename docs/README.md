@@ -1,6 +1,8 @@
 # Development direction
 
 Piano turns agent activity into inspectable software work.
+It is a control plane for evidence-based development, with skill-agnostic methodology and Worktrunk
+as its initial worktree lifecycle backend. Piano owns workspace, evidence and integration policy.
 
 Read these documents in order:
 
@@ -12,9 +14,12 @@ Read these documents in order:
 4. [Developing on exe.dev](development-on-exe-dev.md) describes the private development workflow,
    scratch verification, and the Pi 1.0.2 upgrade handoff.
 
+Use the [domain glossary](glossary.md) to distinguish sessions, tasks, evidence and verification.
+Contributor skill preferences are optional; see the development handoff.
+
 The [2026-10-02 research note](research/2026-10-02-harness-direction.md) retains the original
 Pi 1.0.0 findings and citations. Its implementation audit is dated, and its phase ordering and
-registry-based evidence proposal are superseded by the documents above.
+registry-based evidence proposal and broad Worktrunk ownership wording are superseded by the documents above.
 
 Changes to these decisions belong in a new or superseding ADR, with the affected invariant IDs
 and verification consequences made explicit. Routine implementation choices remain within the

@@ -8,14 +8,17 @@ session is one pi session; each running session is one `pi --mode rpc` child. Se
 
 Use these in code, UI and prose: **project** (a directory the user added), **worktree** (a checkout
 created through piano with `wt`), **session** (one pi session; never "thread"), **registry** (the
-config file that is the source of truth for all three; pi's session store is read only for history).
+config file that records selected projects, worktrees and session references; Pi owns session history).
+See [the glossary](docs/glossary.md) for the planned workspace, task and evidence vocabulary.
 
 ## Direction and guardrails
 
 For architecture and workflow changes, read [docs/README.md](docs/README.md), then the ADR,
 development invariants and roadmap it links. Reference affected invariant IDs in implementation PRs.
 They are target contracts, not claims that all gaps are fixed. Keep Pi authoritative for history,
-Worktrunk authoritative for checkout facts, and evidence outside the registry config. A workspace is
+Git authoritative for repository facts, Worktrunk behind the lifecycle adapter, and evidence outside
+the registry config. Piano owns workspace and integration policy. Skills guide development without
+defining product requirements or verification truth. A workspace is
 the product context around a project root or worktree; retain the existing code vocabulary above.
 On exe.dev, keep the unauthenticated server on loopback behind private authenticated access; follow
 [the development handoff](docs/development-on-exe-dev.md).

@@ -13,7 +13,8 @@ All milestones below are planned; the original research audit describes the 2026
   acknowledgements from changing a newer operation.
 - Reconcile authoritative message endings, selected versus physically routed model, usage and
   nested tool calls where the current translation drops them.
-- Validate Worktrunk schema/output and preserve unknown/error states.
+- Validate the supported Worktrunk version/schema/output behind a narrow adapter and preserve
+  unknown/error states; allow direct Git inspection for exact revision capture.
 - Add event sequence + host generation, snapshot/live ordering, slow-client handling and consistent
   redaction. Keep reconnect snapshot based; defer historical replay.
 
@@ -31,19 +32,26 @@ Covers INV-01–06 and INV-11–12.
 - Define revision capture and separate evidence-store ownership now. Start with one configured check
   action recording revision, command, exit status and output; edits visibly stale its result.
 - Separate agent activity from verification and integration status.
+- Attach lightweight task/acceptance-criterion references to work and evidence, with captured
+  requirement versions. Avoid requiring a skill set, document template or issue tracker.
 
 **Exit:** prompt → changed files → run app/check → inspect diff and current/stale result → follow up.
 Two simultaneous workspaces cannot confuse previews or checks. This is the first useful evidence
-loop, before full TUI parity. Covers INV-01, INV-07–09.
+loop, before full TUI parity. Equivalent work with different skills or ordinary prompting follows
+the same contracts. Covers INV-01, INV-07–09 and INV-13.
 
 ## 3. Repeatable verification and controlled integration
 
 - Record proportional acceptance criteria and authoritative check configuration.
 - Add browser journeys, traces/screenshots and repeatable regression checks with revision/environment
   provenance. Execute against stable snapshots or mark racing checks inconclusive.
-- Retain evidence history and invalidate affected results on edits, configuration changes and rebase.
+- Retain evidence history and reevaluate affected conclusions on edits, requirement/policy changes,
+  configuration changes and rebase.
 - Add Worktrunk merge/remove jobs with streamed output, process coordination and explicit outcomes.
   Establish post-rebase validation and approval tied to the actual candidate before integration.
+- Separate prepare → verify → approve → integrate → clean up. Test candidate-preserving Worktrunk
+  options, skipped/background hooks and partial failures. Distinguish local integration from forge PR
+  merge. Required checks need recorded results, not just a successful lifecycle command.
 - Test interrupted external effects and reconcile before retries.
 
 **Exit:** a real feature meets recorded acceptance criteria; changing the candidate makes evidence
