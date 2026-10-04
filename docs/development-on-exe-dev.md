@@ -6,6 +6,7 @@ connection details and repository credentials.
 
 Read [ADR 0001](adr/0001-pi-rpc-workspace-workbench.md), the
 [invariants](development-invariants.md) and [roadmap](roadmap.md) before continuing.
+Use [the testing policy](testing.md) to choose proportional evidence for each change to Piano.
 
 ## Private access
 

@@ -16,6 +16,8 @@ Read these documents in order:
 
 Use the [domain glossary](glossary.md) to distinguish sessions, tasks, evidence and verification.
 Contributor skill preferences are optional; see the development handoff.
+When developing Piano, follow [evidence-based development and testing](testing.md): choose checks
+from the risk and acceptance claim, and add regression tests only where they provide durable value.
 
 The [2026-10-02 research note](research/2026-10-02-harness-direction.md) retains the original
 Pi 1.0.0 findings and citations. Its implementation audit is dated, and its phase ordering and

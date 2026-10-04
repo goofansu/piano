@@ -39,11 +39,20 @@ the session directory under `~/.pi/agent/sessions` whose name encodes the scratc
 
 ## Verification
 
-Done means observed in the browser through `agent-browser`, with the output kept. Model calls cost
-real credits; use short prompts such as "Reply with exactly: X" and read the reply back. Radix
+Develop Piano using [evidence-based development and testing](docs/testing.md). Before changing
+behavior, identify the claim, relevant invariant and smallest useful check. Add a regression test
+only for a meaningful failure not already protected; test observable contracts, not private helpers,
+mock choreography or implementation shape. No coverage quota or one-test-per-function requirement.
+Documentation-only changes need document/link review, not new unit tests or an application run.
+
+For application behavior changes, observe the affected journey through `agent-browser`, with output
+kept. Model calls cost real credits; use short prompts such as "Reply with exactly: X" and read the
+reply back. Radix
 menus and popovers open on pointer events, so open them with `agent-browser click`, not a DOM
 `.click()` from `eval`. `npm test` runs the module tests against `test/fake-pi.mjs` and needs no
-credentials; run it and `npm run typecheck` before calling a change done.
+credentials; run it and `npm run typecheck` for code or dependency changes. Retain command outcomes,
+tested revision/environment and limitations. Stop expanding verification once the relevant risk is
+covered and required gates pass; explain when existing tests or inspection suffice.
 
 ## Design
 
