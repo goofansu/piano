@@ -59,6 +59,12 @@ credentials; run it and `npm run typecheck` for code or dependency changes. Reta
 tested revision/environment and limitations. Stop expanding verification once the relevant risk is
 covered and required gates pass; explain when existing tests or inspection suffice.
 
+## Phase completion
+
+After a phase passes its required verification and review, commit its changes and push the current
+branch to its upstream. Report the commit and push outcome; a blocked push is not completion.
+Pushing changes does not authorize rebuilding or deploying the user's instance.
+
 ## Design
 
 `server/PiSessions.ts` is the deep module: `open`, `probe`, and per session `events`, `act`,

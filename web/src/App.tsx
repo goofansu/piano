@@ -256,7 +256,7 @@ export default function App() {
           <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} />
         )}
       </main>
-      <DialogHost dialogs={state.session?.dialogs ?? []} send={send} />
+      <DialogHost dialogs={state.session?.dialogs ?? []} send={send} connected={state.connected} />
     </div>
   );
 }

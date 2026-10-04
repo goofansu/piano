@@ -84,7 +84,9 @@ test("canonical context updates after a response and compaction while still runn
       Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(compactReady, undefined) : Effect.void),
     ), (e) => e._tag === "dialog" && e.dialog.id === "live2").pipe(Effect.forkChild);
     yield* Deferred.await(compactReady);
-    yield* t.act({ _tag: "answer", id: "live1", value: "continue" });
+    const dialog = events.find((e) => e._tag === "dialog");
+    assert.ok(dialog?._tag === "dialog");
+    yield* t.act({ _tag: "answer", id: "live1", generation: dialog.dialog.generation, value: "continue" });
     yield* Fiber.join(compacted);
     const state = yield* t.state;
     assert.equal(state.isStreaming, true);
@@ -105,16 +107,18 @@ test("late subscriber sees transcript and a retained dialog; answering resolves 
   const result = await run(Effect.gen(function* () {
     const sessions = yield* PiSessions;
     const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s2" });
-    const first = yield* collectUntil(t.events, (e) => e._tag === "dialog").pipe(Effect.forkChild);
-    yield* Effect.sleep("50 millis");
+    const ready = yield* Deferred.make<void>();
+    const first = yield* collectUntil(t.events.pipe(Stream.tap(e => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void)), (e) => e._tag === "dialog").pipe(Effect.forkChild);
+    yield* Deferred.await(ready);
     yield* t.act({ _tag: "prompt", text: "ask me" });
     yield* Fiber.join(first);
     // A second client attaches after the dialog was raised.
     const late = yield* collectUntil(t.events, (e) => e._tag === "snapshot").pipe(Effect.map((es) => es[0]));
     const snap = (late as Extract<SessionEvent, { _tag: "snapshot" }>).snapshot;
-    const after = yield* collectUntil(t.events, (e) => e._tag === "state" && !e.state.isStreaming).pipe(Effect.forkChild);
-    yield* Effect.sleep("50 millis"); // let the collector subscribe before acting
-    yield* t.act({ _tag: "answer", id: snap.dialogs[0].id, value: "42" });
+    const answerReady = yield* Deferred.make<void>();
+    const after = yield* collectUntil(t.events.pipe(Stream.tap(e => e._tag === "snapshot" ? Deferred.succeed(answerReady, undefined) : Effect.void)), (e) => e._tag === "state" && !e.state.isStreaming).pipe(Effect.forkChild);
+    yield* Deferred.await(answerReady);
+    yield* t.act({ _tag: "answer", id: snap.dialogs[0].id, generation: snap.dialogs[0].generation, value: "42" });
     const events = yield* Fiber.join(after);
     return { snap, events, state: yield* t.state };
   }).pipe(Effect.scoped));

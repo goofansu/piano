@@ -164,8 +164,9 @@ interaction contracts this plan relies on. **INV-01, INV-11–12.**
 
 **Observed checkpoint:** [October 4 implementation evidence](research/2026-10-04-phase0-compatibility.md)
 records real MCP/trust controls, supported dialog/abort/exit/browser observations and the readiness
-error fix. Idle command-dialog abort still fails; awaited startup dialogs remain unsupported with
-bounded failure. The checkpoint is implemented, not full runtime acceptance.
+error fix. Its idle command-dialog abort failure is fixed and reobserved in the
+[Phase 2 evidence](research/2026-10-04-phase2-dialog-lifecycle.md). Awaited startup dialogs remain
+unsupported with bounded failure. The checkpoint is implemented, not full runtime acceptance.
 
 ### Phase 1 — Submit a prompt and explain its disposition/activity
 
@@ -187,6 +188,10 @@ without waiting for a run that never starts or calling `agent_end` settled. **IN
   retrying work stays active; uncertain delivery invites inspection rather than resubmission.
 - **Stop:** these distinct outcomes are explained, baseline gates pass. Do not add steering controls,
   queue editing, compaction buttons or autonomous retries yet.
+
+**Observed slice:** [Phase 1 implementation evidence](research/2026-10-04-phase1-prompt-activity.md)
+records disposition/activity checks. The Phase 2 review additionally fixes command-state reconciliation
+after answering a dialog; the broader runtime checkpoint remains open.
 
 ### Phase 2 — Resolve a supported dialog exactly once
 
@@ -214,6 +219,11 @@ supported dialog blocks an extension or reappears on refresh. **INV-02–04, INV
   blocking fixture and a newer turn is not cleared by an old acknowledgement.
 - **Stop:** supported dialog lifecycle is closed and observable. Terminal-only `custom()` rendering
   stays unsupported and documented.
+
+**Observed slice:** [Phase 2 implementation evidence and Phases 0–2 review](research/2026-10-04-phase2-dialog-lifecycle.md)
+records atomic claims, child-scoped dialog identity, estimated deadlines, bounded host recovery,
+abort-current semantics and uncertain transport outcomes. Module and two-tab browser gates pass for
+supported post-readiness dialogs; startup/custom UI limitations and Phases 3–6 remain open.
 
 ### Phase 3 — Inspect faithful and safely projected session output
 

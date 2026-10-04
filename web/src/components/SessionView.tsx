@@ -147,6 +147,11 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         <div className="flex flex-1 items-center justify-center text-base text-ink-2">Loading</div>
       )}
       {t && <PullRequestStack prs={prs} />}
+      {t?.state.dialogResolution && (
+        <section aria-label="Last dialog" role="status" className="px-4 pt-2 text-sm text-ink-2 md:px-6">
+          <p className="mx-auto max-w-2xl break-words">Dialog {t.state.dialogResolution.reason}: {t.state.dialogResolution.detail}</p>
+        </section>
+      )}
       {submissionText && (
         <section aria-label="Last input" role="status" className={cn("px-4 pt-2 text-sm md:px-6", submission?.outcome === "uncertain" || submission?.outcome === "rejected" ? "text-warn" : "text-ink-2")}>
           <div className="mx-auto max-w-2xl break-words">

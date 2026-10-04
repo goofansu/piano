@@ -96,6 +96,9 @@ function handle(cmd) {
         return;
       }
       out({ type: "extension_ui_request", id: "n1", method: "notify", message: `answered ${cmd.id} with ${cmd.value ?? cmd.confirmed ?? "cancel"}`, notifyType: "info" });
+      // A dialog released after native abort must not fabricate an assistant
+      // reply or drain the queue that real Pi has paused.
+      if (cmd.cancelled && !streaming) return;
       const asst = { role: "assistant", content: [{ type: "text", text: `you said ${cmd.value ?? ""}` }], model: model.id, provider: model.provider, timestamp: Date.now() };
       messages.push(asst);
       out({ type: "message_end", message: asst });

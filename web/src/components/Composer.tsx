@@ -131,6 +131,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
             variant={showStop ? "outline" : "default"}
             className="ml-auto rounded-full"
             aria-label={showStop ? "Stop" : streaming && !compacting ? "Queue message" : "Send"}
+            title={showStop ? "Abort current operation. Pending queued input is not cleared." : undefined}
             disabled={disabled || (!showStop && !hasText)}
             onClick={showStop ? onStop : send}
           >

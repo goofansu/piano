@@ -96,7 +96,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             Stream.runForEach((e) => {
               host.lastActivity = Date.now();
               if (e._tag === "dialog") host.openDialogs.add(e.dialog.id);
-              if (e._tag === "dialog_resolved") host.openDialogs.delete(e.id);
+              if (e._tag === "dialog_resolved") host.openDialogs.delete(e.resolution.id);
               return e._tag === "state" ? announce : e._tag === "closed" ? release(spec.cwd, spec.sessionId) : Effect.void;
             }),
             Effect.ignore,

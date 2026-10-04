@@ -39,6 +39,10 @@ test("real Pi reports started/queued/handled input; abort and native queue resto
   const extension = join(scratch, "handled.ts");
   writeFileSync(extension, `export default function(pi) {
     pi.registerCommand("phase1-handled", { handler: async (_args, ctx) => ctx.ui.notify("Handled command fixture") });
+    pi.registerCommand("phase2-dialog", { handler: async (_args, ctx) => {
+      const value = await ctx.ui.input("Queue abort dialog");
+      ctx.ui.notify(value === undefined ? "DIALOG_CANCELLED" : "DIALOG_ANSWERED");
+    } });
     pi.on("cache_warming_decision", () => ({ action: "stop" }));
   }`);
   const shim = join(scratch, "real-pi.mjs");
@@ -78,8 +82,17 @@ await import(${JSON.stringify(cli)});`);
         Stream.runCollect, Effect.forkChild,
       );
       yield* Deferred.await(idleReady);
+      const dialogReady = yield* Deferred.make<void>();
+      const dialog = yield* session.events.pipe(
+        Stream.tap(event => event._tag === "snapshot" ? Deferred.succeed(dialogReady, undefined) : Effect.void),
+        Stream.takeUntil(event => event._tag === "dialog"), Stream.runCollect, Effect.forkChild,
+      );
+      yield* Deferred.await(dialogReady);
+      const command = yield* session.act({ _tag: "prompt", text: "/phase2-dialog" }).pipe(Effect.forkChild);
+      yield* Fiber.join(dialog);
       yield* session.act({ _tag: "abort" });
-      yield* Fiber.join(idle);
+      yield* Fiber.join(idle); yield* Fiber.join(command);
+      assert.equal((yield* session.state).dialogResolution?.reason, "aborted", "native abort plus host cancellation releases a real command dialog before its prompt acknowledgement");
       assert.deepEqual((yield* session.state).queuedMessages, expected, "real Pi leaves the queue paused after abort");
       const clearReady = yield* Deferred.make<void>();
       const cleared = yield* session.events.pipe(

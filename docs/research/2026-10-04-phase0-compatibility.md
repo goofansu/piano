@@ -8,6 +8,10 @@ Relevant contracts: **INV-01, INV-11, INV-12**, with a reproduced **INV-04 / Pha
 has ten passing checks, one failing check and two blocked startup-support observations. No dependency
 upgrade, production trust policy or deployment change was made. This is not runtime-milestone acceptance.
 
+**Phase 2 follow-up:** [The later dialog lifecycle evidence](2026-10-04-phase2-dialog-lifecycle.md)
+fixes and reobserves idle supported-dialog abort. Its checkpoint has no failing checks, but both
+startup-support observations remain blocked. The results below preserve the original checkpoint.
+
 ## What was added
 
 - [`test/phase0-checkpoint.ts`](../../test/phase0-checkpoint.ts) observes the locked normal CLI through

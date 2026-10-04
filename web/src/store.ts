@@ -150,9 +150,9 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           return { ...s, session: { ...t, activeTools } };
         }
         case "dialog":
-          return t.dialogs.some((d) => d.id === e.dialog.id) ? s : { ...s, session: { ...t, dialogs: [...t.dialogs, e.dialog] } };
+          return t.dialogs.some((d) => d.id === e.dialog.id && d.generation === e.dialog.generation) ? s : { ...s, session: { ...t, dialogs: [...t.dialogs, e.dialog] } };
         case "dialog_resolved":
-          return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.id) } };
+          return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.resolution.id || d.generation !== e.resolution.generation) } };
         case "closed":
           return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }, pending: null, activeTools: {}, dialogs: [], closedReason: e.reason } };
         case "notice":

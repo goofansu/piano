@@ -130,7 +130,7 @@ try {
     const snapshot = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
     assert.ok(snapshot[0]._tag === "snapshot"); assert.equal(snapshot[0].snapshot.dialogs.length, 1);
     const answered = yield* watch(session, "dialog-answer", event => event._tag === "notice" && event.message === "PHASE0_DIALOG_RESULT CHECKPOINT0");
-    yield* session.act({ _tag: "answer", id: event.dialog.id, value: "CHECKPOINT0" });
+    yield* session.act({ _tag: "answer", id: event.dialog.id, generation: event.dialog.generation, value: "CHECKPOINT0" });
     yield* Fiber.join(action); yield* Fiber.join(answered);
     assert.equal((yield* session.state).submission?.outcome, "handled");
     const after = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
@@ -168,7 +168,7 @@ try {
     const retained = after[0].snapshot.dialogs.some(pending => pending.id === dialog.dialog.id);
     const pendingAcknowledgement = (yield* session.state).submission?.outcome === "submitting";
     // Recover explicitly so the check never abandons a fixture child or extension.
-    if (retained) yield* session.act({ _tag: "answer", id: dialog.dialog.id, cancelled: true });
+    if (retained) yield* session.act({ _tag: "answer", id: dialog.dialog.id, generation: dialog.dialog.generation, cancelled: true });
     yield* Fiber.join(action);
     return { abortAcknowledged: true, dialogRetained: retained, originatingPromptPending: pendingAcknowledgement, recovery: retained ? "explicit dialog cancellation" : "none" };
   }));

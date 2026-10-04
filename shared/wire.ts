@@ -30,6 +30,13 @@ export type RenderMsg = typeof RenderMsg.Type;
 
 export const Dialog = Schema.Struct({
   id: Schema.String,
+  /** One RPC child incarnation; old tabs cannot answer a restarted child's dialog. */
+  generation: Schema.String,
+  receivedAt: Schema.Number,
+  timeoutMs: Schema.optional(Schema.Number),
+  /** Host estimate only: Pi does not acknowledge timeout or extension-owned cancellation. */
+  deadlineAt: Schema.Number,
+  deadlineKind: Schema.Literals(["pi-timeout", "host-recovery"]),
   method: Schema.Literals(["select", "confirm", "input", "editor"]),
   title: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
@@ -38,6 +45,16 @@ export const Dialog = Schema.Struct({
   prefill: Schema.optional(Schema.String),
 });
 export type Dialog = typeof Dialog.Type;
+
+/** Local terminal claim and transport observation, never proof Pi consumed the response. */
+export const DialogResolution = Schema.Struct({
+  id: Schema.String,
+  generation: Schema.String,
+  reason: Schema.Literals(["answered", "cancelled", "expired", "aborted", "recovery", "exited"]),
+  delivery: Schema.Literals(["pending", "written", "uncertain", "not-sent"]),
+  detail: Schema.String,
+});
+export type DialogResolution = typeof DialogResolution.Type;
 
 export const ContextUsage = Schema.Struct({
   tokens: Schema.NullOr(Schema.Number),
@@ -74,6 +91,7 @@ export const SessionState = Schema.Struct({
   isCompacting: Schema.optional(Schema.Boolean),
   isRetrying: Schema.optional(Schema.Boolean),
   submission: Schema.optional(PromptSubmission),
+  dialogResolution: Schema.optional(DialogResolution),
   /** Pi's current pending queue, not submitted prompts inferred by the browser. */
   queuedMessages: Schema.optional(Schema.Array(QueuedMessage)),
   /** Pi's context-window estimate, refreshed at finalized-message and compaction boundaries. */
@@ -101,7 +119,7 @@ export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("tool_start", { toolCallId: Schema.String, toolName: Schema.String }),
   Schema.TaggedStruct("tool_end", { toolCallId: Schema.String, isError: Schema.Boolean }),
   Schema.TaggedStruct("dialog", { dialog: Dialog }),
-  Schema.TaggedStruct("dialog_resolved", { id: Schema.String }),
+  Schema.TaggedStruct("dialog_resolved", { resolution: DialogResolution }),
   Schema.TaggedStruct("notice", { level: Schema.Literals(["info", "warning", "error"]), message: Schema.String }),
   Schema.TaggedStruct("closed", { reason: Schema.String }),
 ]);
@@ -119,6 +137,7 @@ export const SessionAction = Schema.Union([
   Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
   Schema.TaggedStruct("answer", {
     id: Schema.String,
+    generation: Schema.String,
     value: Schema.optional(Schema.String),
     confirmed: Schema.optional(Schema.Boolean),
     cancelled: Schema.optional(Schema.Boolean),

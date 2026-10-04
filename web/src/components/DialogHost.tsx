@@ -6,24 +6,37 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 /** Extension dialogs (select / confirm / input / editor) raised by Pi; answered one at a time. */
-export function DialogHost({ dialogs, send }: { dialogs: PiDialog[]; send: (m: ClientMessage) => void }) {
+export function DialogHost({ dialogs, send, connected }: { dialogs: PiDialog[]; send: (m: ClientMessage) => void; connected: boolean }) {
   const d = dialogs[0];
-  const [value, setValue] = useState("");
-  useEffect(() => setValue(d?.prefill ?? ""), [d?.id, d?.prefill]);
-  if (!d) return null;
+  return d ? <DialogView key={`${d.generation}/${d.id}`} d={d} more={dialogs.length - 1} send={send} connected={connected} /> : null;
+}
 
-  const answer = (a: { value?: string; confirmed?: boolean; cancelled?: boolean }) =>
-    send({ _tag: "act", action: { _tag: "answer", id: d.id, ...a } });
-  const more = dialogs.length - 1;
+function DialogView({ d, more, send, connected }: { d: PiDialog; more: number; send: (m: ClientMessage) => void; connected: boolean }) {
+  const [value, setValue] = useState(d.prefill ?? "");
+  const [submitted, setSubmitted] = useState(false);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(timer); }, []);
+  const disabled = submitted || !connected || now >= d.deadlineAt;
+  const answer = (a: { value?: string; confirmed?: boolean; cancelled?: boolean }) => {
+    if (disabled) return;
+    setSubmitted(true);
+    send({ _tag: "act", action: { _tag: "answer", id: d.id, generation: d.generation, ...a } });
+  };
 
   return (
     <Dialog open onOpenChange={(open) => !open && answer({ cancelled: true })}>
       <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{d.title || "Pi needs an answer"}</DialogTitle>
-          {d.message && <DialogDescription className="whitespace-pre-wrap">{d.message}</DialogDescription>}
+          <DialogDescription className="whitespace-pre-wrap">
+            {d.message && <>{d.message}<br /></>}
+            {d.deadlineKind === "pi-timeout" ? "Estimated Pi timeout" : "Host recovery cancellation"}: {Math.max(0, Math.ceil((d.deadlineAt - now) / 1000))}s remaining.
+            {" "}<time dateTime={new Date(d.deadlineAt).toISOString()}>{new Date(d.deadlineAt).toLocaleTimeString()}</time>.
+            {" "}Pi may have already closed this dialog; it sends no closure acknowledgement.
+          </DialogDescription>
           {more > 0 && <p className="text-sm text-ink-3">{more} more {more === 1 ? "question" : "questions"} after this one.</p>}
         </DialogHeader>
+        <fieldset disabled={disabled} className="contents">
         {d.method === "select" && (
           <div className="flex flex-col gap-2">
             {(d.options ?? []).map((o) => (
@@ -59,6 +72,15 @@ export function DialogHost({ dialogs, send }: { dialogs: PiDialog[]; send: (m: C
             </>
           )}
         </DialogFooter>
+        </fieldset>
+        <div className="flex items-center gap-3 border-t border-line pt-3 text-xs text-ink-2">
+          <Button variant="outline" size="sm" disabled={!connected || submitted} onClick={() => {
+            setSubmitted(true);
+            send({ _tag: "act", action: { _tag: "abort" } });
+          }}>Abort current</Button>
+          <p>Cancels waiting dialogs and requests native abort. Pending queued input is not cleared.</p>
+        </div>
+        {submitted && <p role="status" className="text-sm text-ink-2">Waiting for the host’s resolution. Do not resend on reconnect.</p>}
       </DialogContent>
     </Dialog>
   );

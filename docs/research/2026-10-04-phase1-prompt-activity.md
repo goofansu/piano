@@ -76,8 +76,10 @@ recorded in `browser-inputs.sha256` and `inputs.sha256`.
 
 ## Limits and cleanup
 
-- Phase 0's project-MCP, trust-loading, startup-dialog and broader real dialog/abort compatibility
-  gaps remain open. Fake retry/compaction observations do not prove provider recovery behavior.
+- This Phase 1 journey does not itself establish project-MCP/trust-loading or broader dialog/abort
+  compatibility. See the [Phase 0 checkpoint](2026-10-04-phase0-compatibility.md) for the observed
+  MCP/trust controls and [Phase 2 follow-up](2026-10-04-phase2-dialog-lifecycle.md) for dialog lifecycle
+  fixes. Startup dialogs remain unsupported; fake retry/compaction does not prove provider recovery.
 - Dialog timeout/claim/abort races, faithful transcript projection and ordered host generations
   remain phases 2–5. The view retains the **last** input outcome, not a complete submission audit.
 - Uncertain delivery conservatively prevents idle retirement until subsequent input or explicit

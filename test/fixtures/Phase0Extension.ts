@@ -46,6 +46,15 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify(`PHASE0_DIALOG_RESULT ${value ?? "cancelled"}`);
     },
   });
+  pi.registerCommand("phase2-timeout", {
+    description: "Supported timed dialog for the Phase 2 browser check",
+    handler: async (_args, ctx) => {
+      record("timed-dialog", ctx);
+      const value = await ctx.ui.input("Phase 2 timed dialog", "Expires in 12 seconds", { timeout: 12_000 });
+      record("timed-dialog-returned", ctx, { value: value ?? null });
+      ctx.ui.notify(`PHASE2_TIMEOUT_RESULT ${value ?? "cancelled"}`);
+    },
+  });
   pi.registerCommand("phase0-wait", {
     description: "Start one local synthetic stream that waits for native abort",
     handler: async (_args, ctx) => {
