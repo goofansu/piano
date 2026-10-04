@@ -19,6 +19,14 @@ export function clamp(text: string | undefined, max: number): string {
   return `${text.slice(0, max)}\n…(truncated)`;
 }
 
+/** Compact token units, promoting rounded values at the million/billion boundaries. */
+export function formatTokenCount(tokens: number): string {
+  if (tokens >= 999_500_000) return `${(tokens / 1e9).toFixed(1)}B`;
+  if (tokens >= 999_500) return `${(tokens / 1e6).toFixed(1)}M`;
+  if (tokens >= 1_000) return `${(tokens / 1e3).toFixed(0)}k`;
+  return String(tokens);
+}
+
 export function modelShort(ref: string | undefined): string {
   return ref ? ref.split("/").pop() ?? ref : "";
 }

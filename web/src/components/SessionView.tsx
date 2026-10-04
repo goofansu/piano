@@ -144,6 +144,7 @@ export function SessionView({ state, send, onMenu }: Props) {
         }}
         context={t?.state.context}
         cost={t?.state.cost}
+        queuedMessages={t?.state.queuedMessages}
       />
     </>
   );

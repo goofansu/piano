@@ -16,7 +16,7 @@ spawnSync('git', ['init', cwd]);
 const longModel = 'alpha-with-a-very-long-model-name-for-responsive-verification';
 // Keep the existing fake untouched. Adapt only its external protocol labels.
 writeFileSync(join(scratch, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replaceAll('"alpha"', JSON.stringify(longModel)).replaceAll('fake/alpha', `fake/${longModel}`).replace('out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });', '// Browser fixture: pause without a modal covering the composer.'));
-writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [] }));
+writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: 'saved-without-context', title: 'Saved session', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z', archived: false }] }));
 const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: join(scratch, 'registry.json'), PIANO_PI_CLI: join(scratch, 'fake.mjs'), PI_CODING_AGENT_DIR: join(scratch, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(scratch, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let serverLog = '';
@@ -42,6 +42,10 @@ function ab(...args) {
   return r.stdout.trim();
 }
 function evaluate(js) { return JSON.parse(ab('eval', js)); }
+function expectAction(label) {
+  const labels = evaluate(`[...document.querySelectorAll('main button[aria-label="Stop"], main button[aria-label="Queue message"], main button[aria-label="Send"]')].map(button=>button.getAttribute('aria-label'))`);
+  if (JSON.stringify(labels) !== JSON.stringify([label])) throw new Error(`Expected only ${label}, got ${labels.join(', ')}`);
+}
 async function until(js) {
   for (let i = 0; i < 20; i++) { if (evaluate(js)) return; await delay(100); }
   ab('snapshot');
@@ -56,6 +60,8 @@ const geometry = `(() => {
   const controls = [...footer.querySelectorAll('button, [data-slot="tooltip-trigger"]')].map(el => ({label:el.getAttribute('aria-label') || el.textContent, ...rect(el)}));
   const c = rect(card);
   const problems = controls.filter(r => r.x < c.x || r.right > c.right + 1 || r.right > innerWidth || r.bottom > innerHeight || r.width < 24).map(r => r.label);
+  const queue = card.querySelector('[aria-label="Queued messages"]');
+  if (queue && queue.scrollWidth > queue.clientWidth) problems.push('Queued text overflow');
   const overlaps = controls.flatMap((a,i) => controls.slice(i+1).filter(b => a.x < b.right-1 && b.x < a.right-1 && a.y < b.bottom-1 && b.y < a.bottom-1).map(b => a.label+' overlaps '+b.label));
   return { viewport:[innerWidth,innerHeight], coarse:matchMedia('(pointer: coarse)').matches, card:c, textarea:rect(t), footer:rect(footer), controls, documentWidth:document.documentElement.scrollWidth, problems:[...problems,...overlaps] };
 })()`;
@@ -75,8 +81,15 @@ try {
     if (i===49) throw new Error('Scratch server did not start');
     await delay(100);
   }
-  ab('--init-script', observe, '--args', '--blink-settings=primaryPointerType=2', 'open', appUrl);
+  ab('--init-script', observe, '--args', '--blink-settings=primaryPointerType=2', 'open', `${appUrl}/s/saved-without-context`);
   ab('set', 'device', 'iPhone 16');
+  ab('wait', '--text', 'Not running');
+  ab('screenshot', join(evidence, 'saved-unknown-context.png'));
+  if (evaluate(`document.querySelector('button[aria-label="Context usage"]')?.textContent.trim()`) !== '—') throw new Error('Missing context must remain visible as unknown, not disappear');
+  ab('click', '[aria-label="Context usage"]');
+  ab('wait', '--text', 'Context usage unavailable');
+  ab('press', 'Escape');
+  ab('open', `${appUrl}/new`);
   if (!evaluate(`matchMedia('(pointer: coarse)').matches`)) throw new Error('Mobile fixture has no coarse pointer');
   await until(`!!document.querySelector('[aria-label="Model"]')?.title.includes('${longModel}')`);
   ab('fill', '[aria-label="First message"]', 'mobile first');
@@ -96,19 +109,58 @@ try {
   ab('click', '[aria-label="Send"]');
   await until(`!!document.querySelector('[aria-label="Message"]') && !document.querySelector('[aria-label="Stop"]')`);
   ab('fill', '[aria-label="Message"]', 'idle draft');
+  expectAction('Send');
   await capture('idle');
+  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '2k') throw new Error('Settled context must use compact units');
+  ab('click', '[aria-label="Context usage"]');
+  ab('wait', '--text', '2,400 tokens');
+  ab('press', 'Escape');
   ab('fill', '[aria-label="Message"]', 'live context');
   ab('click', '[aria-label="Send"]');
-  await until(`!!document.querySelector('[aria-label="Stop"]') && document.body.textContent.includes('42,000 tokens')`);
+  await until(`!!document.querySelector('[aria-label="Stop"]') && document.querySelector('[aria-label="Context usage"]')?.textContent.trim() === '42k'`);
+  expectAction('Stop');
+  ab('fill', '[aria-label="Message"]', ' \n  ');
+  expectAction('Stop');
   ab('fill', '[aria-label="Message"]', 'queued draft');
+  expectAction('Queue message');
   await capture('streaming');
   // Exercise the actual actions at the narrowest phone width, not just their geometry.
   ab('set', 'viewport', '320', '640');
   ab('click', '[aria-label="Queue message"]');
   await until(`document.querySelector('[aria-label="Message"]').value === ''`);
-  if (!evaluate(`!!document.querySelector('[aria-label="Stop"]')`)) throw new Error('Queue stopped the session');
+  expectAction('Stop');
+  ab('wait', '--text', 'Queued messages (1)');
+  ab('fill', '[aria-label="Message"]', `queued second ${'x'.repeat(80)}`);
+  expectAction('Queue message');
+  ab('click', '[aria-label="Queue message"]');
+  ab('wait', '--text', 'Queued messages (2)');
+  const queueText = () => evaluate(`[...document.querySelectorAll('[aria-label="Queued messages"] li')].map(li=>li.lastElementChild.textContent)`);
+  if (JSON.stringify(queueText()) !== JSON.stringify(['queued draft', `queued second ${'x'.repeat(80)}`])) throw new Error('Accepted queued messages are missing or reordered');
+  if (evaluate(`[...document.querySelectorAll('article')].some(article=>article.textContent.includes('queued draft'))`)) throw new Error('Pending input was incorrectly added to completed history');
+  await capture('queued');
+  if (!evaluate(`(() => { const q=document.querySelector('[aria-label="Queued messages"]'); return q.scrollWidth<=q.clientWidth; })()`)) throw new Error('Queue text overflows');
+  ab('reload');
+  ab('wait', '--text', 'Queued messages (2)');
+  if (JSON.stringify(queueText()) !== JSON.stringify(['queued draft', `queued second ${'x'.repeat(80)}`])) throw new Error('Reload lost the authoritative queue snapshot');
+  ab('set', 'viewport', '320', '640');
+  ab('screenshot', join(evidence, 'queued-after-reload.png'));
+  expectAction('Stop');
+  ab('fill', '[aria-label="Message"]', 'unsent draft');
+  expectAction('Queue message');
+  ab('focus', '[aria-label="Message"]');
+  ab('press', 'Control+a');
+  ab('press', 'Backspace');
+  expectAction('Stop');
   ab('click', '[aria-label="Stop"]');
   await until(`!document.querySelector('[aria-label="Stop"]')`);
+  expectAction('Send');
+  if (evaluate(`!!document.querySelector('[aria-label="Queued messages"]')`)) throw new Error('Delivered messages remained in the pending queue');
+  ab('wait', '--text', 'echo: queued draft');
+  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '42k') throw new Error('Context count disappeared after settlement');
+  ab('click', '[aria-label="Context usage"]');
+  ab('wait', '--text', '42,000 tokens');
+  ab('screenshot', join(evidence, 'settled-context-details.png'));
+  ab('press', 'Escape');
   // A dropped Piano connection should reconnect in place, preserving a mobile draft.
   ab('fill', '[aria-label="Message"]', 'draft after background');
   const before = evaluate(`({pageToken, path:location.pathname, sockets:observedSockets.length, prompts:sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length})`);
@@ -133,7 +185,7 @@ try {
   await until(`document.querySelector('textarea').value === ''`);
   ab('errors');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ failures }, null, 2));
-  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: all composer controls fit; pickers, context, Queue/Stop, keyboard and in-place mobile reconnect checks passed');
+  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: all composer controls fit; pickers, context, visible queue/reload/delivery, Queue/Stop, keyboard and in-place mobile reconnect checks passed');
   process.exitCode = failures.length ? 1 : 0;
 } catch (e) { console.error(e); process.exitCode = 1; }
 finally {

@@ -122,6 +122,45 @@ test("model switch and child crash", async () => {
   assert.equal(result.failed.reason, "exited");
 });
 
+test("Pi's queued messages are visible live and in snapshots, then removed as they are delivered", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "queue" });
+    const ready = yield* Deferred.make<void>();
+    const queued = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+    ), (e) => e._tag === "queue_update" && e.messages.length === 3).pipe(Effect.forkChild);
+    yield* Deferred.await(ready);
+    yield* t.act({ _tag: "prompt", text: "ask queue" });
+    yield* t.act({ _tag: "prompt", text: "expand queue" });
+    yield* t.act({ _tag: "prompt", text: "duplicate" });
+    yield* t.act({ _tag: "prompt", text: "duplicate" });
+    const observed = yield* Fiber.join(queued).pipe(Effect.timeoutOption("2 seconds"));
+    assert.equal(observed._tag, "Some", "Pi's queue_update must reach session subscribers");
+    const expected = [
+      { kind: "follow-up", text: "expanded follow-up" },
+      { kind: "follow-up", text: "duplicate" },
+      { kind: "follow-up", text: "duplicate" },
+    ];
+    assert.deepEqual((yield* t.state).queuedMessages, expected, "show Pi's expanded text, including duplicates, not a client-side guess");
+    const late = yield* t.events.pipe(Stream.take(1), Stream.runCollect);
+    assert.equal(late[0]._tag, "snapshot");
+    if (late[0]._tag === "snapshot") assert.deepEqual(late[0].snapshot.state.queuedMessages, expected);
+    yield* t.act({ _tag: "prompt", text: "handled queue" });
+    yield* t.act({ _tag: "prompt", text: "reject queue" }).pipe(Effect.flip);
+    assert.deepEqual((yield* t.state).queuedMessages, expected, "handled/rejected input does not create phantom queue entries");
+    const drainReady = yield* Deferred.make<void>();
+    const drained = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(drainReady, undefined) : Effect.void),
+    ), (e) => e._tag === "state" && !e.state.isStreaming).pipe(Effect.forkChild);
+    yield* Deferred.await(drainReady);
+    yield* t.act({ _tag: "abort" }); // Pi continues queued work after aborting the current operation.
+    const events = yield* Fiber.join(drained);
+    assert.deepEqual(events.filter((e) => e._tag === "queue_update").map((e) => e.messages.length), [2, 1, 0]);
+    assert.deepEqual((yield* t.state).queuedMessages, []);
+    assert.equal(events.filter((e) => e._tag === "message_end" && e.message.role === "user" && e.message.text === "duplicate").length, 2);
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+});
+
 test("probe reports models and default", async () => {
   const r = await run(Effect.gen(function* () {
     return yield* (yield* PiSessions).probe(process.cwd());

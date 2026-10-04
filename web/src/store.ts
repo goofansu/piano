@@ -16,7 +16,7 @@ export interface SessionView {
 export interface AppState {
   connected: boolean;
   /** What the main pane shows. */
-  view: { kind: "session" } | { kind: "new"; cwd?: string };
+  view: { kind: "session" } | { kind: "new"; cwd?: string } | { kind: "missing-session"; sessionId: string };
   projects: ProjectView[];
   /** The server has sent the project list at least once since connecting. */
   projectsLoaded: boolean;
@@ -50,7 +50,8 @@ export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
   | { type: "selecting"; cwd: string; sessionId: string | null }
-  | { type: "new"; cwd?: string };
+  | { type: "new"; cwd?: string }
+  | { type: "missing-session"; sessionId: string };
 
 export function reduce(s: AppState, a: Action): AppState {
   switch (a.type) {
@@ -60,6 +61,8 @@ export function reduce(s: AppState, a: Action): AppState {
       return { ...s, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId }, session: null, done: s.done.filter((k) => k !== sessionKey(a)) };
     case "new":
       return { ...s, view: { kind: "new", cwd: a.cwd }, selecting: null, session: null };
+    case "missing-session":
+      return { ...s, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null };
     case "server":
       return applyServer(s, a.message);
   }
@@ -114,6 +117,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           return { ...s, session: { ...t, hosted: true, state: e.snapshot.state, messages: [...e.snapshot.messages], dialogs: [...e.snapshot.dialogs], pending: null, activeTools: {} } };
         case "state":
           return { ...s, session: { ...t, state: e.state, pending: e.state.isStreaming ? t.pending : null, activeTools: e.state.isStreaming ? t.activeTools : {} } };
+        case "queue_update":
+          return { ...s, session: { ...t, state: { ...t.state, queuedMessages: [...e.messages] } } };
         case "message_update":
           return { ...s, session: { ...t, pending: e.message } };
         case "message_end":
@@ -130,7 +135,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         case "dialog_resolved":
           return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.id) } };
         case "closed":
-          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false }, pending: null, activeTools: {}, dialogs: [], closedReason: e.reason } };
+          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, queuedMessages: [] }, pending: null, activeTools: {}, dialogs: [], closedReason: e.reason } };
         case "notice":
           return s;
       }

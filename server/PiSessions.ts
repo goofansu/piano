@@ -102,6 +102,7 @@ const toState = (s: RawState): SessionState => ({
   model: s.model ? `${s.model.provider}/${s.model.id}` : undefined,
   thinkingLevel: s.thinkingLevel,
   isStreaming: s.isStreaming,
+  queuedMessages: [],
 });
 
 /** A spawned Pi child with request correlation. Everything above builds on `request` and `records`. */
@@ -258,6 +259,12 @@ const openSession = (spec: PiSessionSpec) =>
               case "state":
                 yield* Ref.set(stateRef, event.state);
                 break;
+              case "queue_update":
+                yield* Ref.update(stateRef, (state) => ({ ...state, queuedMessages: event.messages }));
+                break;
+              case "closed":
+                yield* Ref.update(stateRef, (state) => ({ ...state, queuedMessages: [] }));
+                break;
               case "dialog":
                 yield* Ref.update(dialogsRef, (m) => new Map(m).set(event.dialog.id, event.dialog));
                 break;
@@ -277,12 +284,13 @@ const openSession = (spec: PiSessionSpec) =>
       );
 
     const patchState = (patch: Partial<SessionState>) =>
-      Effect.gen(function* () {
+      Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         const current = yield* Ref.get(stateRef);
         const next = { ...current, ...patch };
         if (JSON.stringify(next) === JSON.stringify(current)) return;
-        yield* apply([{ _tag: "state", state: next }]);
-      });
+        yield* Ref.set(stateRef, next);
+        yield* PubSub.publish(pubsub, { _tag: "state", state: next });
+      }));
 
     /** Canonical projected context and billed cost from Pi, not partial response usage.
      * Refresh at persisted boundaries, never per token/delta. Best effort.
@@ -300,6 +308,18 @@ const openSession = (spec: PiSessionSpec) =>
         switch (record.type) {
           case "agent_start":
             return yield* patchState({ isStreaming: true });
+          case "queue_update": {
+            const steering = record.steering;
+            const followUp = record.followUp;
+            if (!Array.isArray(steering) || !Array.isArray(followUp) ||
+                ![...steering, ...followUp].every((text) => typeof text === "string")) {
+              return yield* apply([{ _tag: "notice", level: "warning", message: "Pi sent an invalid queue update." }]);
+            }
+            return yield* apply([{ _tag: "queue_update", messages: [
+              ...steering.map((text: string) => ({ kind: "steering" as const, text })),
+              ...followUp.map((text: string) => ({ kind: "follow-up" as const, text })),
+            ] }]);
+          }
           case "agent_settled":
             yield* patchState({ isStreaming: false });
             return yield* refreshStats;

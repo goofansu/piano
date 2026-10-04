@@ -12,7 +12,26 @@ const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 let streaming = false;
 let liveContext;
 let liveStage = 0;
+const followUp = [];
 const messages = [];
+const queueUpdate = () => out({ type: "queue_update", steering: [], followUp: [...followUp] });
+const settle = (last) => {
+  out({ type: "agent_end", messages: last ? [last] : [], willRetry: false });
+  while (followUp.length) {
+    const text = followUp.shift();
+    queueUpdate(); // Pi removes a pending message before it starts appearing in history.
+    const user = { role: "user", content: text, timestamp: Date.now() };
+    const assistant = { role: "assistant", content: [{ type: "text", text: `echo: ${text}` }], model: model.id, provider: model.provider, timestamp: Date.now() };
+    out({ type: "agent_start" });
+    messages.push(user);
+    out({ type: "message_start", message: user }); out({ type: "message_end", message: user });
+    messages.push(assistant);
+    out({ type: "message_end", message: assistant });
+    out({ type: "agent_end", messages: [assistant], willRetry: false });
+  }
+  streaming = false;
+  out({ type: "agent_settled" });
+};
 const dec = new StringDecoder("utf8");
 let buf = "";
 
@@ -38,8 +57,14 @@ function handle(cmd) {
       { provider: "fake", id: "beta", reasoning: false, contextWindow: 2000 } ] });
     case "set_model": model = { provider: cmd.provider, id: cmd.modelId }; return respond(cmd, model);
     case "set_thinking_level": thinkingLevel = cmd.level; out({ type: "thinking_level_changed", level: cmd.level }); return respond(cmd, undefined);
-    case "abort": streaming = false; out({ type: "agent_end", messages: [], willRetry: false }); out({ type: "agent_settled" }); return respond(cmd, undefined);
-    case "follow_up": return respond(cmd, undefined);
+    case "abort": settle(); return respond(cmd, undefined);
+    case "follow_up": {
+      if (cmd.message === "reject queue") return respond(cmd, undefined, "queue rejected");
+      if (cmd.message === "handled queue") return respond(cmd, { disposition: "handled" });
+      followUp.push(cmd.message === "expand queue" ? "expanded follow-up" : cmd.message);
+      queueUpdate();
+      return respond(cmd, { disposition: "queued" });
+    }
     case "extension_ui_response": {
       if (liveStage === 1) {
         liveStage = 2;
@@ -52,8 +77,7 @@ function handle(cmd) {
       const asst = { role: "assistant", content: [{ type: "text", text: `you said ${cmd.value ?? ""}` }], model: model.id, provider: model.provider, timestamp: Date.now() };
       messages.push(asst);
       out({ type: "message_end", message: asst });
-      streaming = false;
-      out({ type: "agent_end", messages: [asst], willRetry: false }); out({ type: "agent_settled" });
+      settle(asst);
       return;
     }
     case "prompt": {
@@ -82,8 +106,7 @@ function handle(cmd) {
         out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });
         return; // deterministic pause before the next response, not agent_settled
       }
-      streaming = false;
-      out({ type: "agent_end", messages: [asst], willRetry: false }); out({ type: "agent_settled" });
+      settle(asst);
       return;
     }
     default: return respond(cmd, undefined, `unknown ${cmd.type}`);

@@ -9,6 +9,7 @@ import { SessionView } from "@/components/SessionView";
 import { NewSession } from "@/components/NewSession";
 import { DialogHost } from "@/components/DialogHost";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 
 const SIDEBAR_KEY = "piano.sidebar";
@@ -25,7 +26,9 @@ const WIDTH_KEY = "piano.sidebarWidth";
 const WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
 
 export default function App() {
-  const [state, dispatch] = useReducer(reduce, initialState);
+  const [state, dispatch] = useReducer(reduce, initialState, (s): AppState =>
+    parseRoute(location).kind === "session" ? { ...s, view: { kind: "session" } } : s,
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const latest = useRef(state);
   latest.current = state;
@@ -162,7 +165,7 @@ export default function App() {
     const owner = s.projects.find((p) => p.sessions.some((t) => t.sessionId === r.sessionId));
     const session = owner?.sessions.find((t) => t.sessionId === r.sessionId);
     if (session) select(session.cwd, session.sessionId);
-    else dispatch({ type: "new", cwd: owner?.path });
+    else dispatch({ type: "missing-session", sessionId: r.sessionId });
   }, [select]);
   useEffect(applyRoute, [applyRoute, state.projectsLoaded, state.projects]);
   useEffect(() => {
@@ -177,7 +180,11 @@ export default function App() {
   useEffect(() => {
     if (wanted.current) return;
     const current = state.session ?? state.selecting;
-    const route: Route | null = state.view.kind === "new" ? { kind: "new" } : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
+    const route: Route | null = state.view.kind === "new"
+      ? { kind: "new" }
+      : state.view.kind === "missing-session"
+        ? { kind: "session", sessionId: state.view.sessionId }
+        : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
     if (!route) return;
     const path = routePath(route);
     if (path !== location.pathname + location.search) {
@@ -185,7 +192,7 @@ export default function App() {
       if (location.pathname === "/" || location.pathname === path) history.replaceState(null, "", path);
       else history.pushState(null, "", path);
     }
-    const title = route.kind === "new" ? "New session" : state.projects.flatMap((p) => p.sessions).find((t) => t.sessionId === route.sessionId)?.title || "Session";
+    const title = state.view.kind === "missing-session" ? "Session not found" : route.kind === "new" ? "New session" : state.projects.flatMap((p) => p.sessions).find((t) => t.sessionId === route.sessionId)?.title || "Session";
     document.title = `${title} - piano`;
   }, [state.view, state.session, state.selecting, state.projects]);
 
@@ -237,6 +244,12 @@ export default function App() {
       <main className="relative flex min-w-0 flex-1 flex-col">
         {state.view.kind === "new" ? (
           <NewSession state={state} send={send} initialCwd={state.view.cwd} onMenu={showSidebar} />
+        ) : state.view.kind === "missing-session" ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center" role="alert">
+            <h1 className="text-xl font-medium">Session not found</h1>
+            <p className="text-sm text-ink-2">This session is not in the registry.</p>
+            <Button variant="outline" onClick={() => openNew()}>New session</Button>
+          </div>
         ) : (
           <SessionView state={state} send={send} onMenu={showSidebar} />
         )}

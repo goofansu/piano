@@ -46,6 +46,12 @@ export const ContextUsage = Schema.Struct({
 });
 export type ContextUsage = typeof ContextUsage.Type;
 
+export const QueuedMessage = Schema.Struct({
+  kind: Schema.Literals(["steering", "follow-up"]),
+  text: Schema.String,
+});
+export type QueuedMessage = typeof QueuedMessage.Type;
+
 export const SessionState = Schema.Struct({
   sessionId: Schema.String,
   sessionFile: Schema.optional(Schema.String),
@@ -54,6 +60,8 @@ export const SessionState = Schema.Struct({
   model: Schema.optional(Schema.String),
   thinkingLevel: Schema.optional(Schema.String),
   isStreaming: Schema.Boolean,
+  /** Pi's current pending queue, not submitted prompts inferred by the browser. */
+  queuedMessages: Schema.optional(Schema.Array(QueuedMessage)),
   /** Pi's context-window estimate, refreshed at finalized-message and compaction boundaries. */
   context: Schema.optional(ContextUsage),
   /** Session cost in USD so far. */
@@ -72,6 +80,7 @@ export type Snapshot = typeof Snapshot.Type;
 export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("snapshot", { snapshot: Snapshot }),
   Schema.TaggedStruct("state", { state: SessionState }),
+  Schema.TaggedStruct("queue_update", { messages: Schema.Array(QueuedMessage) }),
   Schema.TaggedStruct("message_update", { message: RenderMsg }),
   Schema.TaggedStruct("message_end", { message: RenderMsg }),
   Schema.TaggedStruct("tool_start", { toolCallId: Schema.String, toolName: Schema.String }),

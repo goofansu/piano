@@ -113,7 +113,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           for (const h of (yield* Ref.get(hosts)).values()) {
             if (now - h.lastActivity < options.idleMs || h.openDialogs.size > 0) continue;
             const state = yield* h.session.state;
-            if (state.isStreaming) continue;
+            if (state.isStreaming || state.queuedMessages?.length) continue;
             yield* Effect.logInfo(`idle ${Math.round((now - h.lastActivity) / 1000)}s, releasing ${h.session.spec.sessionId.slice(0, 8)}`);
             yield* release(h.session.spec.cwd, h.session.spec.sessionId);
           }
