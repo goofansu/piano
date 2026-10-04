@@ -10,6 +10,8 @@ let thinkingLevel = "medium";
 const state = () => ({ model, thinkingLevel, isStreaming: streaming, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName: "fake" });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 let streaming = false;
+let liveContext;
+let liveStage = 0;
 const messages = [];
 const dec = new StringDecoder("utf8");
 let buf = "";
@@ -30,7 +32,7 @@ function handle(cmd) {
   switch (cmd.type) {
     case "get_state": return respond(cmd, state());
     case "get_messages": return respond(cmd, { messages });
-    case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: { tokens: 1200 * messages.length, contextWindow: 200000, percent: 0.6 * messages.length } });
+    case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: liveContext ?? { tokens: 1200 * messages.length, contextWindow: model.id === "beta" ? 400000 : 200000, percent: (model.id === "beta" ? 0.3 : 0.6) * messages.length } });
     case "get_available_models": return respond(cmd, { models: [
       { provider: "fake", id: "alpha", reasoning: true, contextWindow: 1000, thinkingLevelMap: { minimal: null, xhigh: "xhigh" } },
       { provider: "fake", id: "beta", reasoning: false, contextWindow: 2000 } ] });
@@ -39,6 +41,13 @@ function handle(cmd) {
     case "abort": streaming = false; out({ type: "agent_end", messages: [], willRetry: false }); out({ type: "agent_settled" }); return respond(cmd, undefined);
     case "follow_up": return respond(cmd, undefined);
     case "extension_ui_response": {
+      if (liveStage === 1) {
+        liveStage = 2;
+        liveContext = { tokens: null, contextWindow: 200000, percent: null };
+        out({ type: "compaction_end", reason: "threshold", result: { summary: "compacted", tokensBefore: 42000 }, aborted: false, willRetry: false });
+        out({ type: "extension_ui_request", id: "live2", method: "input", title: "After compaction" });
+        return;
+      }
       out({ type: "extension_ui_request", id: "n1", method: "notify", message: `answered ${cmd.id} with ${cmd.value ?? cmd.confirmed ?? "cancel"}`, notifyType: "info" });
       const asst = { role: "assistant", content: [{ type: "text", text: `you said ${cmd.value ?? ""}` }], model: model.id, provider: model.provider, timestamp: Date.now() };
       messages.push(asst);
@@ -65,8 +74,14 @@ function handle(cmd) {
       for (const ch of text) out({ type: "message_update", usage: {}, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: ch } });
       const asst = { role: "assistant", content: [{ type: "text", text }], model: model.id, provider: model.provider, timestamp: Date.now() };
       messages.push(asst);
+      if (cmd.message === "live context") liveContext = { tokens: 42000, contextWindow: 200000, percent: 21 };
       out({ type: "message_end", message: asst });
       out({ type: "turn_end", message: asst, toolResults: [] });
+      if (cmd.message === "live context") {
+        liveStage = 1;
+        out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });
+        return; // deterministic pause before the next response, not agent_settled
+      }
       streaming = false;
       out({ type: "agent_end", messages: [asst], willRetry: false }); out({ type: "agent_settled" });
       return;

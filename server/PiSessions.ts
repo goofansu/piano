@@ -284,7 +284,9 @@ const openSession = (spec: PiSessionSpec) =>
         yield* apply([{ _tag: "state", state: next }]);
       });
 
-    /** Context usage and cost from Pi; best effort, never fails. */
+    /** Canonical projected context and billed cost from Pi, not partial response usage.
+     * Refresh at persisted boundaries, never per token/delta. Best effort.
+     */
     const refreshStats = child.request({ type: "get_session_stats" }).pipe(
       Effect.flatMap((data) => {
         const stats = data as RawStats;
@@ -300,6 +302,12 @@ const openSession = (spec: PiSessionSpec) =>
             return yield* patchState({ isStreaming: true });
           case "agent_settled":
             yield* patchState({ isStreaming: false });
+            return yield* refreshStats;
+          case "message_end":
+            yield* apply(assembler.handle(record));
+            return yield* refreshStats;
+          case "compaction_end":
+            // Pi reports null tokens/percent until fresh post-compaction usage exists.
             return yield* refreshStats;
           case "session_info_changed":
             return yield* patchState({ sessionName: record.name as string | undefined });
@@ -395,6 +403,7 @@ const openSession = (spec: PiSessionSpec) =>
               modelId: action.model.slice(slash + 1),
             })) as { provider?: string; id?: string } | undefined;
             yield* patchState({ model: data?.provider && data.id ? `${data.provider}/${data.id}` : action.model });
+            yield* refreshStats;
             return;
           }
           case "set_thinking_level":

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import type { SessionEvent } from "../shared/wire.ts";
 import { PiCli } from "../server/PiCli.ts";
@@ -37,6 +37,43 @@ test("snapshot first, then a streamed turn", async () => {
   assert.ok(tags.includes("message_update"), "streams partials");
   const last = seen[seen.length - 1] as Extract<SessionEvent, { _tag: "message_end" }>;
   assert.equal(last.message.text, "echo: hello");
+});
+
+test("canonical context updates after a response and compaction while still running", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "live" });
+    assert.equal((yield* t.state).context?.tokens, 0, "initial authoritative stats");
+    const ready = yield* Deferred.make<void>();
+    const collector = yield* t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+      Stream.takeUntil((e) => e._tag === "dialog" && e.dialog.id === "live1"),
+      Stream.runCollect, Effect.forkChild,
+    );
+    yield* Deferred.await(ready);
+    yield* t.act({ _tag: "prompt", text: "live context" });
+    const events = yield* Fiber.join(collector);
+    assert.ok(events.some((e) => e._tag === "state" && e.state.isStreaming && e.state.context?.tokens === 42000), "publishes latest canonical context before settlement");
+    assert.equal((yield* t.state).context?.percent, 21);
+    const compactReady = yield* Deferred.make<void>();
+    const compacted = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(compactReady, undefined) : Effect.void),
+    ), (e) => e._tag === "dialog" && e.dialog.id === "live2").pipe(Effect.forkChild);
+    yield* Deferred.await(compactReady);
+    yield* t.act({ _tag: "answer", id: "live1", value: "continue" });
+    yield* Fiber.join(compacted);
+    const state = yield* t.state;
+    assert.equal(state.isStreaming, true);
+    assert.deepEqual(state.context, { tokens: null, contextWindow: 200000, percent: null }, "does not retain pre-compaction usage or substitute an estimate");
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+});
+
+test("model switch refreshes the authoritative context window", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "context-model" });
+    assert.equal((yield* t.state).context?.contextWindow, 200000);
+    yield* t.act({ _tag: "set_model", model: "fake/beta" });
+    assert.equal((yield* t.state).context?.contextWindow, 400000);
+  }).pipe(Effect.scoped));
 });
 
 test("late subscriber sees transcript and a retained dialog; answering resolves it", async () => {

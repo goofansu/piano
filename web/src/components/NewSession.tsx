@@ -102,7 +102,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               className="max-h-72 min-h-24 resize-none border-0 bg-transparent px-4 pt-3.5 shadow-none focus-visible:ring-0"
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
+                    e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
                   e.preventDefault();
                   submit();
                 }
@@ -159,7 +160,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           <ChevronDownIcon className="size-3.5 text-ink-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[380px] p-0">
+      <PopoverContent align="start" className="w-[380px] max-w-[calc(100vw-2rem)] p-0">
         <Command>
           <CommandInput placeholder="Search directories" autoFocus />
           <CommandList className="max-h-72">

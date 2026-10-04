@@ -61,7 +61,8 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
           className="max-h-48 min-h-12 resize-none border-0 bg-transparent px-4 pt-3 shadow-none focus-visible:ring-0"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
+                e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
               e.preventDefault();
               send();
             } else if (e.key === "Escape" && streaming) {
@@ -70,13 +71,13 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
             }
           }}
         />
-        <div className="flex items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2">
+        <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2">
           <ModelSelect catalog={catalog} value={model} onChange={onModelChange} disabled={disabled} />
           <EffortSelect value={effort} onChange={onEffortChange} levels={levelsFor(catalog, model || catalog?.defaultModel)} defaultLevel={catalog?.defaultThinkingLevel} disabled={disabled} />
           {context && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className={cn("inline-flex h-8 items-center gap-1.5 rounded-md px-2 tabular-nums", left !== null && left < 15 && "text-warn")}>
+                <span className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 tabular-nums", left !== null && left < 15 && "text-warn")}>
                   <span className="relative inline-block size-3.5 rounded-full border border-current/40">
                     {percent !== null && (
                       <span className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(currentColor ${Math.min(100, percent)}%, transparent 0)` }} />
@@ -93,16 +94,16 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
               </TooltipContent>
             </Tooltip>
           )}
-          <span className="flex-1" />
-          {streaming ? (
-            <Button size="icon-sm" variant="outline" className="rounded-full" aria-label="Stop" disabled={disabled} onClick={onStop}>
-              <SquareIcon className="size-3.5 fill-current" />
-            </Button>
-          ) : (
-            <Button size="icon-sm" className="rounded-full" aria-label="Send" disabled={disabled || !text.trim()} onClick={send}>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {streaming && (
+              <Button size="icon-sm" variant="outline" className="rounded-full" aria-label="Stop" disabled={disabled} onClick={onStop}>
+                <SquareIcon className="size-3.5 fill-current" />
+              </Button>
+            )}
+            <Button size="icon-sm" className="rounded-full" aria-label={streaming ? "Queue message" : "Send"} disabled={disabled || !text.trim()} onClick={send}>
               <ArrowUpIcon />
             </Button>
-          )}
+          </div>
         </div>
       </div>
     </div>

@@ -54,7 +54,7 @@ export const SessionState = Schema.Struct({
   model: Schema.optional(Schema.String),
   thinkingLevel: Schema.optional(Schema.String),
   isStreaming: Schema.Boolean,
-  /** Current context-window usage, refreshed after each turn. */
+  /** Pi's context-window estimate, refreshed at finalized-message and compaction boundaries. */
   context: Schema.optional(ContextUsage),
   /** Session cost in USD so far. */
   cost: Schema.optional(Schema.Number),

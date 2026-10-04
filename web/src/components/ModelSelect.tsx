@@ -48,7 +48,7 @@ export function ModelSelect({ catalog, value, onChange, disabled }: Props) {
           <ChevronDownIcon className="size-3.5 text-ink-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[360px] p-0">
+      <PopoverContent align="start" className="w-[360px] max-w-[calc(100vw-2rem)] p-0">
         <Command>
           <CommandInput placeholder="Search models" autoFocus />
           <CommandList className="max-h-72">
