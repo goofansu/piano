@@ -57,7 +57,18 @@ function handle(cmd) {
       { provider: "fake", id: "beta", reasoning: false, contextWindow: 2000 } ] });
     case "set_model": model = { provider: cmd.provider, id: cmd.modelId }; return respond(cmd, model);
     case "set_thinking_level": thinkingLevel = cmd.level; out({ type: "thinking_level_changed", level: cmd.level }); return respond(cmd, undefined);
-    case "abort": settle(); return respond(cmd, undefined);
+    case "abort":
+      // Pi 1.0.2 abort pauses pending work; it does not consume its queues.
+      streaming = false;
+      out({ type: "agent_end", messages: [], willRetry: false });
+      out({ type: "agent_settled" });
+      return respond(cmd, undefined);
+    case "clear_queue": {
+      const restored = [...followUp];
+      followUp.length = 0;
+      queueUpdate();
+      return respond(cmd, { steering: [], followUp: restored });
+    }
     case "follow_up": {
       if (cmd.message === "reject queue") return respond(cmd, undefined, "queue rejected");
       if (cmd.message === "handled queue") return respond(cmd, { disposition: "handled" });

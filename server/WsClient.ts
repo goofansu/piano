@@ -151,7 +151,9 @@ export const handleSocket = (socket: Socket.Socket) =>
               yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, msg.action.text);
               yield* publishProjects;
             }
-            return yield* session.act(msg.action);
+            const result = yield* session.act(msg.action);
+            if (result) yield* send({ _tag: "action_result", cwd: session.spec.cwd, sessionId: session.spec.sessionId, result });
+            return;
           }
           case "delete_session": {
             if (attachment?.session.spec.cwd === msg.cwd && attachment.session.spec.sessionId === msg.sessionId) yield* detach;

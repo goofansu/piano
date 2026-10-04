@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { GitBranchIcon, ListCollapseIcon, ListIcon, PanelLeftOpenIcon } from "lucide-react";
 import type { ClientMessage, ThinkingLevel } from "@shared/wire";
-import type { AppState } from "@/store";
+import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -15,6 +15,8 @@ interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
   onMenu: () => void;
+  onDraftChange: (key: string, text: string) => void;
+  onDraftAppend: (key: string, text: string) => void;
 }
 
 const VIEW_KEY = "piano.transcriptView";
@@ -26,7 +28,7 @@ const loadView = (): TranscriptView => {
   }
 };
 
-export function SessionView({ state, send, onMenu }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend }: Props) {
   const [view, setViewState] = useState<TranscriptView>(loadView);
   const setView = (v: TranscriptView) => {
     setViewState(v);
@@ -37,6 +39,7 @@ export function SessionView({ state, send, onMenu }: Props) {
     }
   };
   const t = state.session;
+  const draftKey = t ? sessionKey(t) : undefined;
   const project = t ? state.projects.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
   const worktree = project?.worktrees.find((w) => w.path === t?.cwd);
   const [model, setModel] = useState<string | undefined>(undefined);
@@ -127,6 +130,10 @@ export function SessionView({ state, send, onMenu }: Props) {
       )}
       {t && <PullRequestStack prs={prs} />}
       <Composer
+        text={draftKey ? state.drafts[draftKey] ?? "" : ""}
+        onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
+        onTextAppend={(text) => { if (draftKey) onDraftAppend(draftKey, text); }}
+        onRestoreQueue={() => send({ _tag: "act", action: { _tag: "restore_queue" } })}
         disabled={!state.connected || !t}
         streaming={streaming}
         onSend={(text) => send({ _tag: "act", action: { _tag: "prompt", text }, start: startOptions() })}

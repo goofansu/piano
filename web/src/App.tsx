@@ -196,6 +196,8 @@ export default function App() {
     document.title = `${title} - piano`;
   }, [state.view, state.session, state.selecting, state.projects]);
 
+  const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
+  const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
   const sidebarProps = { state, send, select, openNew };
 
   // Layer 0 throughout: the sidebar and the main pane share the canvas and meet at a hairline.
@@ -251,7 +253,7 @@ export default function App() {
             <Button variant="outline" onClick={() => openNew()}>New session</Button>
           </div>
         ) : (
-          <SessionView state={state} send={send} onMenu={showSidebar} />
+          <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} />
         )}
       </main>
       <DialogHost dialogs={state.session?.dialogs ?? []} send={send} />

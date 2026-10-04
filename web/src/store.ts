@@ -29,6 +29,8 @@ export interface AppState {
   selecting: { cwd: string; sessionId: string | null } | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
+  /** Unsent editor text belongs to this browser, keyed by session identity. */
+  drafts: Record<string, string>;
 }
 
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) => `${s.cwd}\n${s.sessionId ?? ""}`;
@@ -44,6 +46,7 @@ export const initialState: AppState = {
   lastWorktree: null,
   selecting: null,
   done: [],
+  drafts: {},
 };
 
 export type Action =
@@ -51,7 +54,9 @@ export type Action =
   | { type: "server"; message: ServerMessage }
   | { type: "selecting"; cwd: string; sessionId: string | null }
   | { type: "new"; cwd?: string }
-  | { type: "missing-session"; sessionId: string };
+  | { type: "missing-session"; sessionId: string }
+  | { type: "draft_changed"; key: string; text: string }
+  | { type: "draft_appended"; key: string; text: string };
 
 export function reduce(s: AppState, a: Action): AppState {
   switch (a.type) {
@@ -63,6 +68,10 @@ export function reduce(s: AppState, a: Action): AppState {
       return { ...s, view: { kind: "new", cwd: a.cwd }, selecting: null, session: null };
     case "missing-session":
       return { ...s, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null };
+    case "draft_changed":
+      return { ...s, drafts: { ...s.drafts, [a.key]: a.text } };
+    case "draft_appended":
+      return { ...s, drafts: { ...s.drafts, [a.key]: (s.drafts[a.key] ?? "") + a.text } };
     case "server":
       return applyServer(s, a.message);
   }
@@ -108,6 +117,13 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           activeTools: {},
         },
       };
+    case "action_result": {
+      const restored = m.result.messages.map((message) => message.text).join("\n\n");
+      if (!restored) return s;
+      const key = sessionKey(m);
+      const existing = s.drafts[key] ?? "";
+      return { ...s, drafts: { ...s.drafts, [key]: existing ? `${existing}\n\n${restored}` : restored } };
+    }
     case "session": {
       const t = s.session;
       if (!t) return s;

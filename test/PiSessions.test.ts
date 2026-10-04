@@ -122,7 +122,7 @@ test("model switch and child crash", async () => {
   assert.equal(result.failed.reason, "exited");
 });
 
-test("Pi's queued messages are visible live and in snapshots, then removed as they are delivered", async () => {
+test("Pi's queue remains paused after abort and can be restored without starting work", async () => {
   await run(Effect.gen(function* () {
     const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "queue" });
     const ready = yield* Deferred.make<void>();
@@ -153,11 +153,22 @@ test("Pi's queued messages are visible live and in snapshots, then removed as th
       Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(drainReady, undefined) : Effect.void),
     ), (e) => e._tag === "state" && !e.state.isStreaming).pipe(Effect.forkChild);
     yield* Deferred.await(drainReady);
-    yield* t.act({ _tag: "abort" }); // Pi continues queued work after aborting the current operation.
+    yield* t.act({ _tag: "abort" });
     const events = yield* Fiber.join(drained);
-    assert.deepEqual(events.filter((e) => e._tag === "queue_update").map((e) => e.messages.length), [2, 1, 0]);
+    assert.deepEqual((yield* t.state).queuedMessages, expected, "abort leaves Pi's queue paused");
+    assert.equal(events.filter((e) => e._tag === "message_end" && e.message.role === "user" && e.message.text === "duplicate").length, 0, "abort must not automatically resend pending input");
+    const restoreReady = yield* Deferred.make<void>();
+    const cleared = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(restoreReady, undefined) : Effect.void),
+    ), (e) => e._tag === "queue_update" && e.messages.length === 0).pipe(Effect.forkChild);
+    yield* Deferred.await(restoreReady);
+    const result = yield* t.act({ _tag: "restore_queue" });
+    assert.deepEqual(result, { _tag: "queue_restored", messages: expected }, "return Pi's text to the requesting caller, including duplicates");
+    const restoreEvents = yield* Fiber.join(cleared);
     assert.deepEqual((yield* t.state).queuedMessages, []);
-    assert.equal(events.filter((e) => e._tag === "message_end" && e.message.role === "user" && e.message.text === "duplicate").length, 2);
+    assert.equal((yield* t.state).isStreaming, false);
+    assert.equal(restoreEvents.some((e) => e._tag === "message_end"), false, "restoring does not create history or model work");
+    assert.deepEqual(yield* t.act({ _tag: "restore_queue" }), { _tag: "queue_restored", messages: [] }, "an empty queue restores nothing");
   }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
 });
 

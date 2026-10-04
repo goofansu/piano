@@ -154,8 +154,32 @@ try {
   ab('click', '[aria-label="Stop"]');
   await until(`!document.querySelector('[aria-label="Stop"]')`);
   expectAction('Send');
-  if (evaluate(`!!document.querySelector('[aria-label="Queued messages"]')`)) throw new Error('Delivered messages remained in the pending queue');
-  ab('wait', '--text', 'echo: queued draft');
+  ab('wait', '--text', 'Paused queue (2)');
+  if (JSON.stringify(queueText()) !== JSON.stringify(['queued draft', `queued second ${'x'.repeat(80)}`])) throw new Error('Stop consumed the queue instead of pausing it');
+  if (evaluate(`[...document.querySelectorAll('article')].some(article=>article.textContent.includes('queued draft'))`)) throw new Error('Stop automatically resent a pending message');
+  ab('screenshot', join(evidence, 'paused-queue.png'));
+  const originalTab = JSON.parse(ab('tab', 'list', '--json')).data.tabs.find(tab => tab.active).tabId;
+  ab('tab', 'new', '--label', 'peer', ab('get', 'url'));
+  ab('wait', '--text', 'Paused queue (2)');
+  ab('fill', '[aria-label="Message"]', 'other tab draft');
+  ab('tab', originalTab);
+  ab('fill', '[aria-label="Message"]', 'my unsent draft');
+  const promptsBeforeRestore = evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`);
+  ab('click', '[aria-label="Restore queued messages to draft"]');
+  const restoredText = `my unsent draft\n\nqueued draft\n\nqueued second ${'x'.repeat(80)}`;
+  await until(`document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(restoredText)} && !document.querySelector('[aria-label="Queued messages"]')`);
+  expectAction('Send');
+  if (evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`) !== promptsBeforeRestore) throw new Error('Restore automatically sent a prompt');
+  ab('screenshot', join(evidence, 'restored-draft.png'));
+  ab('tab', 'peer');
+  await until(`!document.querySelector('[aria-label="Queued messages"]')`);
+  if (evaluate(`document.querySelector('[aria-label="Message"]').value`) !== 'other tab draft') throw new Error('Restoring in one tab changed another tab draft');
+  ab('tab', 'close', 'peer');
+  ab('tab', originalTab);
+  // Explicit Send, not restore, starts the next prompt; the mobile control remains reachable.
+  ab('click', '[aria-label="Send"]');
+  ab('wait', '--text', 'echo: my unsent draft');
+  if (evaluate(`sent.filter(m=>m.action?._tag==='prompt').at(-1).action.text`) !== restoredText) throw new Error('Manual Send did not submit the recovered draft');
   if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '42k') throw new Error('Context count disappeared after settlement');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', '42,000 tokens');
@@ -185,7 +209,7 @@ try {
   await until(`document.querySelector('textarea').value === ''`);
   ab('errors');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ failures }, null, 2));
-  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: all composer controls fit; pickers, context, visible queue/reload/delivery, Queue/Stop, keyboard and in-place mobile reconnect checks passed');
+  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: all composer controls fit; pickers, context, queue/reload/pause/native restore, peer-tab isolation, single actions, keyboard and in-place mobile reconnect checks passed');
   process.exitCode = failures.length ? 1 : 0;
 } catch (e) { console.error(e); process.exitCode = 1; }
 finally {

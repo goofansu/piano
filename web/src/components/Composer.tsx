@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import type { ContextUsage, ModelCatalog, QueuedMessage, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
@@ -12,6 +12,10 @@ import { EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { ModelSelect } from "@/components/ModelSelect";
 
 interface Props {
+  text: string;
+  onTextChange: (text: string) => void;
+  onTextAppend: (text: string) => void;
+  onRestoreQueue: () => void;
   disabled: boolean;
   streaming: boolean;
   onSend: (text: string) => void;
@@ -27,8 +31,7 @@ interface Props {
 }
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ disabled, streaming, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, queuedMessages = [] }: Props) {
-  const [text, setText] = useState("");
+export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // The box grows with its text up to a cap, whichever way the text got there.
   useEffect(() => {
@@ -37,12 +40,12 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
   }, [text]);
-  useTypeToFocus(ref, useCallback((s: string) => setText((t) => t + s), []), !disabled);
+  useTypeToFocus(ref, onTextAppend, !disabled);
   const send = () => {
     const t = text.trim();
     if (!t) return;
     onSend(t);
-    setText("");
+    onTextChange("");
   };
   const tokens = context?.tokens ?? null;
   const selectedModel = catalog?.models.find((m) => m.ref === (model || catalog.defaultModel));
@@ -57,7 +60,14 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
       <div className={cn("mx-auto w-full max-w-2xl", composerCard)}>
         {queuedMessages.length > 0 && (
           <section className="border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
-            <h2 className="mb-2 font-medium text-ink-2">Queued messages ({queuedMessages.length})</h2>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
+              <h2 className="font-medium text-ink-2">{streaming ? "Queued messages" : "Paused queue"} ({queuedMessages.length})</h2>
+              {!streaming && (
+                <Button variant="ghost" size="sm" aria-label="Restore queued messages to draft" disabled={disabled} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
+                  Restore to draft
+                </Button>
+              )}
+            </div>
             <ol className="max-h-[min(9rem,20dvh)] space-y-2 overflow-y-auto">
               {queuedMessages.map((message, index) => (
                 <li key={`${message.kind}-${index}`} className="flex min-w-0 gap-2">
@@ -76,7 +86,7 @@ export function Composer({ disabled, streaming, onSend, onStop, catalog, model, 
           aria-label="Message"
           placeholder={streaming ? "Pi is working. Type to queue the next message." : "What should Pi do next?"}
           className="max-h-48 min-h-12 resize-none border-0 bg-transparent px-4 pt-3 shadow-none focus-visible:ring-0"
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => onTextChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
                 e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {

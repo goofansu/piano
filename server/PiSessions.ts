@@ -12,7 +12,7 @@ import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
-import type { Dialog, Snapshot, SessionAction, SessionEvent, SessionState } from "../shared/wire.ts";
+import type { Dialog, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionState } from "../shared/wire.ts";
 import { PiCli } from "./PiCli.ts";
 import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } from "./PiRecords.ts";
 
@@ -38,8 +38,8 @@ export interface PiSession {
   readonly spec: PiSessionSpec;
   /** A snapshot first, then live events, until `closed` or the subscriber's scope ends. */
   readonly events: Stream.Stream<SessionEvent>;
-  /** Apply a browser action. Fails only when Pi rejects it or the child is gone. */
-  readonly act: (action: SessionAction) => Effect.Effect<void, PiSessionError>;
+  /** Apply a browser action; command results belong only to the requesting caller. */
+  readonly act: (action: SessionAction) => Effect.Effect<void | SessionActionResult, PiSessionError>;
   /** Current state without subscribing. */
   readonly state: Effect.Effect<SessionState>;
 }
@@ -94,6 +94,17 @@ interface RawState {
   sessionId: string;
   sessionName?: string;
 }
+
+const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
+  if (!value || typeof value !== "object") return;
+  const { steering, followUp } = value as { steering?: unknown; followUp?: unknown };
+  if (!Array.isArray(steering) || !Array.isArray(followUp) ||
+      ![...steering, ...followUp].every((text) => typeof text === "string")) return;
+  return [
+    ...steering.map((text: string) => ({ kind: "steering" as const, text })),
+    ...followUp.map((text: string) => ({ kind: "follow-up" as const, text })),
+  ];
+};
 
 const toState = (s: RawState): SessionState => ({
   sessionId: s.sessionId,
@@ -309,16 +320,9 @@ const openSession = (spec: PiSessionSpec) =>
           case "agent_start":
             return yield* patchState({ isStreaming: true });
           case "queue_update": {
-            const steering = record.steering;
-            const followUp = record.followUp;
-            if (!Array.isArray(steering) || !Array.isArray(followUp) ||
-                ![...steering, ...followUp].every((text) => typeof text === "string")) {
-              return yield* apply([{ _tag: "notice", level: "warning", message: "Pi sent an invalid queue update." }]);
-            }
-            return yield* apply([{ _tag: "queue_update", messages: [
-              ...steering.map((text: string) => ({ kind: "steering" as const, text })),
-              ...followUp.map((text: string) => ({ kind: "follow-up" as const, text })),
-            ] }]);
+            const messages = queuedMessagesOf(record);
+            if (!messages) return yield* apply([{ _tag: "notice", level: "warning", message: "Pi sent an invalid queue update." }]);
+            return yield* apply([{ _tag: "queue_update", messages }]);
           }
           case "agent_settled":
             yield* patchState({ isStreaming: false });
@@ -396,7 +400,7 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
 
-    const act = (action: SessionAction): Effect.Effect<void, PiSessionError> =>
+    const act = (action: SessionAction): Effect.Effect<void | SessionActionResult, PiSessionError> =>
       Effect.gen(function* () {
         switch (action._tag) {
           case "prompt": {
@@ -414,6 +418,11 @@ const openSession = (spec: PiSessionSpec) =>
           case "abort":
             yield* child.request({ type: "abort" });
             return;
+          case "restore_queue": {
+            const messages = queuedMessagesOf(yield* child.request({ type: "clear_queue" }));
+            if (!messages) return yield* new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid cleared queue." });
+            return { _tag: "queue_restored", messages };
+          }
           case "set_model": {
             const slash = action.model.indexOf("/");
             if (slash <= 0) return yield* new PiSessionError({ reason: "rejected", detail: `Model must be provider/id, got "${action.model}"` });

@@ -13,6 +13,9 @@
     "types": [
       "node"
     ],
+    "paths": {
+      "@shared/*": ["./shared/*.ts"]
+    },
     "lib": [
       "es2023"
     ]

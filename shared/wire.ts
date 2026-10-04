@@ -99,6 +99,7 @@ export type ThinkingLevel = typeof ThinkingLevel.Type;
 export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", { text: Schema.String }),
   Schema.TaggedStruct("abort", {}),
+  Schema.TaggedStruct("restore_queue", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
   Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
   Schema.TaggedStruct("answer", {
@@ -109,6 +110,12 @@ export const SessionAction = Schema.Union([
   }),
 ]);
 export type SessionAction = typeof SessionAction.Type;
+
+/** A command result for its caller, not a broadcast session event. */
+export const SessionActionResult = Schema.TaggedStruct("queue_restored", {
+  messages: Schema.Array(QueuedMessage),
+});
+export type SessionActionResult = typeof SessionActionResult.Type;
 
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
@@ -238,6 +245,7 @@ export const ServerMessage = Schema.Union([
     snapshot: Snapshot,
   }),
   Schema.TaggedStruct("session", { event: SessionEvent }),
+  Schema.TaggedStruct("action_result", { cwd: Schema.String, sessionId: Schema.String, result: SessionActionResult }),
   Schema.TaggedStruct("worktree_created", { project: Schema.String, path: Schema.String, branch: Schema.String }),
   Schema.TaggedStruct("error", { message: Schema.String }),
   /** A notice for the person; `level` picks the icon. */
