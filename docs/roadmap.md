@@ -2,12 +2,16 @@
 
 This is the working order under [ADR 0001](adr/0001-pi-rpc-workspace-workbench.md).
 The [invariants](development-invariants.md) are acceptance contracts, not a claim of completed work.
-All milestones below are planned; the original research audit describes the 2026-10-02 implementation.
+These are target milestones, not completion claims. The original research audit describes the
+2026-10-02 implementation; the [vertical-slice plan](vertical-slice-plan.md) records the October 4
+baseline and breaks the milestones into separately verifiable journeys.
 
 ## 1. Runtime correctness
 
-- Upgrade the package and lockfile deliberately to Pi 1.0.2 and record the tested version. Inspect the
-  RPC/extension UI changes against the tagged docs; do not assume the caret range upgraded the lock.
+- Preserve the deliberate exact Pi 1.0.2 package/lockfile upgrade, recorded in the
+  [October 4 report](research/2026-10-04-pi-update-effort.md). Complete the remaining compatibility
+  checks, including project MCP overrides and dialog/abort behavior. Inspect RPC/extension UI changes
+  against the tagged docs; the completed dependency upgrade is not full runtime-milestone acceptance.
 - Surface prompt disposition; distinguish settled, queued, waiting, compacting, retrying and exited.
 - Atomically claim dialogs, propagate cancellation on abort, expose deadlines and prevent late
   acknowledgements from changing a newer operation.

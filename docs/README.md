@@ -11,6 +11,8 @@ Read these documents in order:
 2. [Development invariants](development-invariants.md) defines the guardrails and their verification
    scenarios. These are target contracts; a documented invariant is not a claim that it is implemented.
 3. [Implementation roadmap](roadmap.md) orders the work and defines milestone exit criteria.
+   The [verification-gated vertical-slice plan](vertical-slice-plan.md) breaks those milestones into observable
+   journeys with focused implementation gates, based on the October 4 source/documentation audit.
 4. [Developing on exe.dev](development-on-exe-dev.md) describes the private development workflow,
    scratch verification, and the Pi 1.0.2 upgrade handoff.
 
