@@ -39,8 +39,8 @@ proxies `/api` and `/ws` to the server. `npm test` runs the module tests (they u
 Pi, no credentials needed). `npm run typecheck` checks server and client.
 
 For the private development instance at `https://yejun-dev.exe.xyz/` (port 8000),
-see [hosted development](docs/hosted-development.md). Its frontend hot-reloads;
-backend restarts are deliberate so self-development does not interrupt active Pi sessions.
+see [hosted development](docs/hosted-development.md). It serves the built frontend;
+builds and backend restarts are deliberate so self-development does not interrupt active Pi sessions.
 
 Requires a working `pi` setup (credentials in the Pi agent dir) and `wt` on `PATH` for worktree
 support.
@@ -86,10 +86,11 @@ the sidebar, so sessions started from the terminal do not appear here.
    result and selects it. The project menu (…) offers **Close**, which takes the project out of the sidebar; its sessions stay in the registry and come back when the directory is used again.
 3. The **+** on a project row opens New session with that directory prefilled; click an existing
    session to load its history (nothing is started).
-4. The **model** picker is filled by Pi itself: at startup piano runs a short-lived
-   `pi --mode rpc --no-session` probe for the available models and Pi's default. An existing
-   session preselects the model it last used. Changing the picker on a running session switches
-   immediately.
+4. The **model** picker is filled by Pi itself: Piano runs a short-lived
+   `pi --mode rpc --no-session` probe in the selected directory for its available models and default.
+   Project resources remain subject to Pi's trust policy. An existing session shows its recorded
+   selection; starting it lets Pi restore or fall back unless you explicitly change the picker.
+   Running selections and effort are read back from Pi, including clamping.
 5. Sending a message starts Pi for the session and registers it; the first prompt becomes the title.
    Like Codex, there is nothing to start or stop by hand: Pi processes outlive browser tabs, a
    session's process is retired five minutes after its last activity, and the next message starts it
@@ -98,6 +99,38 @@ the sidebar, so sessions started from the terminal do not appear here.
 6. A session's menu (…) offers **Archive**, which stops Pi for it and hides it, and **Delete**,
    which stops Pi, deletes the session file from Pi's session store and forgets the session. An Archived page to
    find and restore archived sessions is planned but not built yet.
+
+## Session display and limits
+
+The transcript is **Current Pi context**, not all raw history. Live output is corrected by Pi's
+content/message endings; settled work, handled commands and compaction reload the authoritative
+context. File peeks use Pi's own active-branch, compaction and context-edit projection. System
+messages, thinking blocks and images are omitted. Raw history stays in Pi, unchanged by display
+redaction. A failed or repeatedly racing refresh is labeled rather than silently called current.
+
+**Selected** identifies the running selection; **Routed** on a response identifies the physical
+model/effort that answered. A stopped file shows only the *recorded* selection until Pi confirms it.
+Response/tool usage is cumulative per result. Full-session totals come from Pi (including work
+outside the current context), and are unavailable on a read-only file peek.
+
+Tool previews show the **latest update**, not an assumed append-only log. Final execution output
+replaces it. Nested calls remain execution details, not extra messages or additional usage. Pi
+persists bounded nested-call identity/status, not their output; that output is available only while
+the hosting process retains it. An unfinished retained call is labeled incomplete.
+
+Supported extension statuses, string widgets, title and editor requests survive browser reload
+while Pi is hosted. Editor requests are opt-in **Append to draft**, never automatic submission or
+draft replacement. Widget placement is labeled within a shared extension panel. Pi must reissue
+transient extension state after process restart; terminal `custom()`/component factories and other
+RPC no-ops remain unsupported. Awaited startup dialogs retain the documented bounded-startup limit.
+
+All outbound display data uses the same heuristic redaction: known secret-valued environment
+variables (at least eight characters), common token shapes, bearer values, credential assignments
+and private-key blocks. Known-secret prefixes are held during text streaming. Text/tool/widget
+markup is untrusted; no raw executable HTML is accepted. **This is not credential containment**:
+unknown, encoded, split-across-unrelated-fields or tool-specific values may escape heuristics, and
+false positives are possible. Pi history/child credentials are not scrubbed. Ambiguous redacted
+selection options must be cancelled instead of guessed. Keep the control plane private.
 
 ## Design
 
@@ -128,7 +161,8 @@ server/Router.ts       /ws upgrade, /api/ls, /api/projects, /api/models; static 
 server/SessionFiles.ts     read-only session peeking via Pi's SessionManager
 server/Worktrees.ts    wt list / wt switch
 server/Registry.ts     piano's registry: projects, worktrees and sessions (the config file)
-server/PiRecords.ts    Pi record → wire translation, streaming partial assembly
+server/PiRecords.ts    Pi record → wire translation, indexed partial assembly and execution previews
+server/DisplayProjection.ts  consistent outbound display redaction (not credential containment)
 server/PiEnv.ts        agent dir / session dir resolution matching the Pi CLI
 shared/wire.ts         Schemas: RenderMsg, SessionEvent, SessionAction, ClientMessage, ServerMessage…
 web/                   React client

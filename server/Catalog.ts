@@ -2,8 +2,7 @@
  * Model catalog for the picker: Pi's own list of usable models and its
  * default, from a one-shot probe. `enabledModels` marks the preferred subset.
  */
-import { homedir } from "node:os";
-import { Context, Effect, Layer, Ref } from "effect";
+import { Context, Effect, Layer } from "effect";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "../shared/wire.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import { PiSessions } from "./PiSessions.ts";
@@ -12,9 +11,9 @@ export class Catalog extends Context.Service<
   Catalog,
   {
     /** Cached catalog, loading it on first use. */
-    readonly get: Effect.Effect<ModelCatalog>;
+    readonly get: (cwd: string) => Effect.Effect<ModelCatalog>;
     /** Re-run the probe. */
-    readonly refresh: Effect.Effect<ModelCatalog>;
+    readonly refresh: (cwd: string) => Effect.Effect<ModelCatalog>;
   }
 >()("piano/Catalog") {}
 
@@ -47,10 +46,9 @@ export const CatalogLive = Layer.effect(
   Catalog,
   Effect.gen(function* () {
     const sessions = yield* PiSessions;
-    const cache = yield* Ref.make<ModelCatalog | undefined>(undefined);
+    const cache = new Map<string, ModelCatalog>();
 
-    const load: Effect.Effect<ModelCatalog> = Effect.gen(function* () {
-      const cwd = homedir();
+    const load = (cwd: string): Effect.Effect<ModelCatalog> => Effect.gen(function* () {
       const probe = yield* sessions.probe(cwd);
       const isEnabled = patternMatcher(enabledModelPatterns(cwd));
       const models: ModelChoice[] = probe.models.map((m) => {
@@ -67,7 +65,7 @@ export const CatalogLive = Layer.effect(
         };
       });
       const catalog: ModelCatalog = {
-        models,
+        cwd, models,
         defaultModel: probe.defaultModel,
         defaultThinkingLevel: probe.defaultThinkingLevel,
         fetchedAt: new Date().toISOString(),
@@ -75,10 +73,10 @@ export const CatalogLive = Layer.effect(
       return catalog;
     }).pipe(
       Effect.catchTag("PiSessionError", (e) => {
-        const failed: ModelCatalog = { models: [], fetchedAt: new Date().toISOString(), error: e.detail };
+        const failed: ModelCatalog = { cwd, models: [], fetchedAt: new Date().toISOString(), error: e.detail };
         return Effect.succeed(failed);
       }),
-      Effect.tap((c) => Ref.set(cache, c)),
+      Effect.tap((c) => Effect.sync(() => { cache.set(cwd, c); })),
       Effect.tap((c) =>
         c.error
           ? Effect.logWarning(`model catalog: ${c.error}`)
@@ -87,7 +85,7 @@ export const CatalogLive = Layer.effect(
     );
 
     return Catalog.of({
-      get: Ref.get(cache).pipe(Effect.flatMap((c) => (c ? Effect.succeed(c) : load))),
+      get: cwd => Effect.suspend(() => cache.has(cwd) ? Effect.succeed(cache.get(cwd)!) : load(cwd)),
       refresh: load,
     });
   }),

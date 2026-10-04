@@ -256,6 +256,12 @@ INV-11–12.**
 - **Stop:** changed supported projections are faithful and safe within the stated scope. Do not
   chase arbitrary TUI parity or add unrelated image/model capabilities.
 
+**Observed slice:** [Phase 3 implementation evidence](research/2026-10-04-phase3-session-projection.md)
+records indexed authoritative endings, current-context file/live projections, selected/routed facts,
+usage and nested execution previews, cwd-scoped catalogs, retained extension state and heuristic
+redaction. Module, locked-CLI discovery/UI and scratch-browser gates pass for the supported text
+scope. Credential containment, terminal-only UI and Phases 4–6 remain outside this acceptance.
+
 ### Phase 4 — Keep one canonical server-owned execution
 
 **Claim:** concurrent tabs, path aliases, release/reopen and idle retirement never create overlapping

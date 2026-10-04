@@ -6,6 +6,7 @@ import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { DirListing } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
 import { expandHome } from "./PiEnv.ts";
 import { buildProjects } from "./Views.ts";
 import { handleSocket } from "./WsClient.ts";
@@ -52,7 +53,7 @@ const listDirectory = (raw: string) =>
   });
 
 const json = (body: unknown, status = 200) =>
-  HttpServerResponse.text(JSON.stringify(body, null, 2), { status, contentType: "application/json" });
+  HttpServerResponse.text(JSON.stringify(projectDisplay(body), null, 2), { status, contentType: "application/json" });
 
 export const AppRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
@@ -126,10 +127,11 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* router.add(
       "GET",
       "/api/models",
-      Catalog.pipe(
-        Effect.flatMap((c) => c.get),
-        Effect.map((catalog) => json(catalog)),
-      ),
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const cwd = new URL(request.url, "http://localhost").searchParams.get("cwd") ?? homedir();
+        return json(yield* (yield* Catalog).get(resolve(expandHome(cwd))));
+      }),
     );
   }),
 );

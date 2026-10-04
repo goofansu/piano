@@ -5,6 +5,10 @@
  * vocabulary, so this is mostly routing.
  */
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
+import { expandHome } from "./PiEnv.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
 import { rm } from "node:fs/promises";
 import { Cause, Deferred, Effect, Exit, Queue, Scope, Stream } from "effect";
 import type { Socket } from "effect/socket";
@@ -44,7 +48,7 @@ export const handleSocket = (socket: Socket.Socket) =>
     // Single writer fiber so concurrent producers never interleave frames.
     const outbox = yield* Queue.unbounded<ServerMessage>();
     yield* Stream.fromQueue(outbox).pipe(
-      Stream.runForEach((m) => writer.write(encodeServerMessage(m))),
+      Stream.runForEach((m) => writer.write(encodeServerMessage(projectDisplay(m)))),
       Effect.ignore,
       Effect.forkScoped,
     );
@@ -114,7 +118,7 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "projects":
             return yield* send({ _tag: "projects", projects: yield* buildProjects });
           case "models":
-            return yield* send({ _tag: "models", catalog: yield* catalog.refresh });
+            return yield* send({ _tag: "models", catalog: yield* catalog.refresh(resolve(expandHome(msg.cwd ?? selected?.cwd ?? homedir()))) });
           case "add_project":
             yield* registry.addProject(msg.path);
             return yield* publishProjects;
@@ -187,7 +191,8 @@ export const handleSocket = (socket: Socket.Socket) =>
     // ── initial state and global updates ──
     yield* send({ _tag: "projects", projects: yield* buildProjects });
     yield* send({ _tag: "hosts", hosts: yield* hosts.list });
-    yield* catalog.get.pipe(Effect.flatMap((c) => send({ _tag: "models", catalog: c })), Effect.forkScoped);
+    // The browser requests models for its selected cwd; home cannot establish
+    // project-local providers/resources and must not stand in for that catalog.
     yield* broadcast.stream.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
     yield* hosts.changes.pipe(
       Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),

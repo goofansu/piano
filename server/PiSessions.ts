@@ -15,6 +15,7 @@ const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionState } from "../shared/wire.ts";
 import { PiCli } from "./PiCli.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
 import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } from "./PiRecords.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
@@ -90,6 +91,7 @@ interface Response extends PiRecord {
 
 interface RawStats {
   cost?: number;
+  tokens?: SessionState["tokens"];
   contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
 }
 
@@ -133,9 +135,11 @@ interface Child {
   /** Every non-response record, in stdout order. Ends when the child exits. */
   readonly records: Queue.Dequeue<{ record: PiRecord; receivedAt: number }, Cause.Done>;
   readonly exited: Deferred.Deferred<string>;
+  /** Includes queued records, so readbacks cannot race output not yet projected. */
+  readonly observationVersion: () => number;
 }
 
-const debug = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[PiSessions]", ...a); };
+const debug = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[PiSessions]", ...projectDisplay(a)); };
 
 const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
   Effect.gen(function* () {
@@ -151,6 +155,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     let stderr = "";
     let closed = false;
     let seq = 0;
+    let observationVersion = 0;
 
     const handle = yield* ChildProcess.make(cli.node, [cli.cli, "--mode", "rpc", ...args, ...cli.extraArgs], {
       cwd,
@@ -164,12 +169,12 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     const onLine = (line: string) =>
       Effect.gen(function* () {
         let record: PiRecord;
-        debug("line", line.slice(0, 120));
         try {
           record = JSON.parse(line.endsWith("\r") ? line.slice(0, -1) : line) as PiRecord;
         } catch {
           return;
         }
+        debug("record", record.type); // Never log unprojected protocol content.
         if (record.type === "response") {
           // Late/unmatched acknowledgements must not become session activity.
           if (typeof record.id !== "string" || !pending.has(record.id)) return;
@@ -180,6 +185,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
           else yield* Deferred.fail(d, new PiSessionError({ reason: "rejected", detail: r.error ?? r.command }));
           return;
         }
+        observationVersion += 1;
         yield* Queue.offer(records, { record, receivedAt: yield* Clock.currentTimeMillis });
       });
 
@@ -271,7 +277,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         );
       });
 
-    const child: Child = { request, write, records, exited };
+    const child: Child = { request, write, records, exited, observationVersion: () => observationVersion };
     return child;
   });
 
@@ -310,6 +316,7 @@ const openSession = (spec: PiSessionSpec) =>
     const metadataFields = ["model", "thinkingLevel", "sessionName", "sessionFile"] as const;
     const factVersions = { model: 0, thinkingLevel: 0, sessionName: 0, sessionFile: 0 };
     let statsVersion = 0;
+    let contextVersion = 0;
     let operationVersion = 0;
     let submissionId = 0;
     let turnRetry = false;
@@ -328,6 +335,9 @@ const openSession = (spec: PiSessionSpec) =>
             switch (event._tag) {
               case "message_end":
                 yield* Ref.update(messagesRef, (ms) => [...ms, event.message]);
+                break;
+              case "context":
+                yield* Ref.set(messagesRef, [...event.messages]);
                 break;
               case "state":
                 yield* Ref.set(stateRef, event.state);
@@ -348,7 +358,7 @@ const openSession = (spec: PiSessionSpec) =>
               default:
                 break;
             }
-            yield* PubSub.publish(pubsub, event);
+            yield* PubSub.publish(pubsub, projectDisplay(event));
           }
         }),
       );
@@ -360,7 +370,7 @@ const openSession = (spec: PiSessionSpec) =>
         if (JSON.stringify(next) === JSON.stringify(current)) return;
         for (const field of metadataFields) if (next[field] !== current[field]) factVersions[field] += 1;
         yield* Ref.set(stateRef, next);
-        yield* PubSub.publish(pubsub, { _tag: "state", state: next });
+        yield* PubSub.publish(pubsub, projectDisplay({ _tag: "state", state: next }));
       }));
 
     /** All terminal paths compete under the snapshot lock, before any transport yield. */
@@ -387,8 +397,8 @@ const openSession = (spec: PiSessionSpec) =>
         dialogClosed.delete(dialog.id);
         const state = { ...yield* Ref.get(stateRef), dialogResolution: resolution };
         yield* Ref.set(stateRef, state);
-        yield* PubSub.publish(pubsub, { _tag: "dialog_resolved", resolution });
-        yield* PubSub.publish(pubsub, { _tag: "state", state });
+        yield* PubSub.publish(pubsub, projectDisplay({ _tag: "dialog_resolved", resolution }));
+        yield* PubSub.publish(pubsub, projectDisplay({ _tag: "state", state }));
         return resolution;
       }));
       if (!resolution || resolution.delivery === "not-sent") return resolution;
@@ -406,9 +416,9 @@ const openSession = (spec: PiSessionSpec) =>
         if (state.dialogResolution?.id === dialog.id && !announced) {
           const next = { ...state, dialogResolution: final };
           yield* Ref.set(stateRef, next);
-          yield* PubSub.publish(pubsub, { _tag: "state", state: next });
+          yield* PubSub.publish(pubsub, projectDisplay({ _tag: "state", state: next }));
         }
-        if (result._tag === "Failure") yield* PubSub.publish(pubsub, { _tag: "notice", level: "error", message: final.detail });
+        if (result._tag === "Failure") yield* PubSub.publish(pubsub, projectDisplay({ _tag: "notice", level: "error", message: final.detail }));
       }));
       if (result._tag === "Failure") return yield* result.failure;
       return final;
@@ -428,7 +438,7 @@ const openSession = (spec: PiSessionSpec) =>
       const modelVersion = factVersions.model;
       const stats = (yield* child.request({ type: "get_session_stats" })) as RawStats;
       yield* patchState(() => version === statsVersion && modelVersion === factVersions.model && !announced
-        ? { context: stats.contextUsage, cost: stats.cost } : {});
+        ? { context: stats.contextUsage, cost: stats.cost, tokens: stats.tokens } : {});
     }).pipe(Effect.ignore);
 
     /** Read command-controlled facts back from Pi. Do not replace session-level
@@ -454,6 +464,27 @@ const openSession = (spec: PiSessionSpec) =>
       });
     }).pipe(Effect.ignore);
 
+    /** Replace current context, never concatenate raw history. Retry readbacks
+     * raced by Pi output; bound churn and make an unresolved projection visible.
+     * This is not historical replay or the phase-5 transport sequencing contract. */
+    const refreshContext = Effect.gen(function* () {
+      const version = ++contextVersion;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const outputVersion = child.observationVersion();
+        const data = (yield* child.request({ type: "get_messages" })) as { messages: RawMessage[] };
+        if (version !== contextVersion || announced) return;
+        const applied = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
+          if (version !== contextVersion || outputVersion !== child.observationVersion() || announced) return false;
+          const messages = serializeMessages(data.messages);
+          yield* Ref.set(messagesRef, messages);
+          yield* PubSub.publish(pubsub, { _tag: "context", messages });
+          return true;
+        }));
+        if (applied) return yield* patchState({ projectionError: undefined });
+      }
+      yield* patchState({ projectionError: "Pi context changed during refresh. This view may be stale until the next command or settled boundary." });
+    }).pipe(Effect.catchTag("PiSessionError", error => patchState({ projectionError: `Current context refresh failed: ${error.detail}` })));
+
     const onRecord = ({ record, receivedAt }: { record: PiRecord; receivedAt: number }) =>
       Effect.gen(function* () {
         if (announced) return;
@@ -468,7 +499,10 @@ const openSession = (spec: PiSessionSpec) =>
           case "agent_settled":
             turnRetry = false;
             summaryRetry = false;
+            yield* apply(assembler.handle(record));
             yield* patchState({ isStreaming: false, isCompacting: false, isRetrying: false });
+            yield* refreshContext;
+            yield* refreshState(operationVersion);
             return yield* refreshStats;
           case "message_end":
             yield* apply(assembler.handle(record));
@@ -476,6 +510,7 @@ const openSession = (spec: PiSessionSpec) =>
           case "compaction_end":
             yield* patchState({ isCompacting: false });
             // Pi reports null tokens/percent until fresh post-compaction usage exists.
+            yield* refreshContext;
             return yield* refreshStats;
           case "session_info_changed":
             return yield* patchState({ sessionName: record.name as string | undefined });
@@ -486,6 +521,22 @@ const openSession = (spec: PiSessionSpec) =>
             if (method === "notify") {
               const level = record.notifyType === "error" ? "error" : record.notifyType === "warning" ? "warning" : "info";
               return yield* apply([{ _tag: "notice", level, message: String(record.message ?? "") }]);
+            }
+            if (["setStatus", "setWidget", "setTitle", "set_editor_text"].includes(method)) {
+              const current = (yield* Ref.get(stateRef)).extension ?? { statuses: [], widgets: [] };
+              const extension = { ...current };
+              if (method === "setStatus") extension.statuses = [
+                ...current.statuses.filter(s => s.key !== record.statusKey),
+                ...(typeof record.statusText === "string" ? [{ key: String(record.statusKey), text: record.statusText }] : []),
+              ];
+              if (method === "setWidget") extension.widgets = [
+                ...current.widgets.filter(w => w.key !== record.widgetKey),
+                ...(Array.isArray(record.widgetLines) ? [{ key: String(record.widgetKey), lines: record.widgetLines.map(String), placement: record.widgetPlacement === "belowEditor" ? "belowEditor" as const : "aboveEditor" as const }] : []),
+              ];
+              if (method === "setTitle") extension.title = String(record.title ?? "");
+              if (method === "set_editor_text") extension.editorRequest = { id: `${generation}:${record.id}`, text: String(record.text ?? "") };
+              yield* patchState({ extension });
+              return;
             }
             if (!DIALOG_METHODS.has(method)) return;
             const id = String(record.id);
@@ -559,7 +610,7 @@ const openSession = (spec: PiSessionSpec) =>
           for (const dialog of (yield* Ref.get(dialogsRef)).values()) yield* resolveDialog(dialog, "exited").pipe(Effect.ignore);
           const resolution = (yield* Ref.get(stateRef)).dialogResolution;
           if (resolution?.delivery === "pending") yield* patchState({ dialogResolution: { ...resolution, delivery: "uncertain", detail: "Pi stopped during response delivery. Do not resend this dialog response." } });
-          yield* apply([{ _tag: "closed", reason }]);
+          yield* apply([...assembler.handle({ type: "piano_closed" }), { _tag: "closed", reason }]);
         });
       });
     yield* Effect.addFinalizer(() => announceClosed("released"));
@@ -579,8 +630,9 @@ const openSession = (spec: PiSessionSpec) =>
             state: yield* Ref.get(stateRef),
             messages: yield* Ref.get(messagesRef),
             dialogs: [...(yield* Ref.get(dialogsRef)).values()],
+            ...assembler.snapshot(),
           };
-          return Stream.make<[SessionEvent]>({ _tag: "snapshot", snapshot }).pipe(
+          return Stream.make<[SessionEvent]>({ _tag: "snapshot", snapshot: projectDisplay(snapshot) }).pipe(
             Stream.concat(Stream.fromSubscription(sub)),
             Stream.takeUntil((e) => e._tag === "closed"),
             Stream.ensuring(Scope.close(scope, { _tag: "Success", value: undefined } as never)),
@@ -620,6 +672,8 @@ const openSession = (spec: PiSessionSpec) =>
                 )),
               );
               yield* refreshState(operation);
+              // Handled commands may edit context without a run/compaction event.
+              if (!(yield* Ref.get(stateRef)).isStreaming) yield* refreshContext;
             });
             return yield* work.pipe(Effect.ensuring(endAbortingPrompt(operation)), Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
           }
@@ -671,7 +725,15 @@ const openSession = (spec: PiSessionSpec) =>
             const work = Effect.gen(function* () {
               const dialog = (yield* Ref.get(dialogsRef)).get(action.id);
               if (!dialog || action.generation !== generation) return yield* new PiSessionError({ reason: "rejected", detail: "Dialog is no longer open in this Pi process. Refresh the session; do not resend the answer." });
-              const response = action.confirmed !== undefined ? { confirmed: action.confirmed } : { value: action.value ?? "" };
+              let value = action.value ?? "";
+              if (dialog.method === "select" && !action.cancelled) {
+                // Keep protocol values private. Redacted labels must not change
+                // what Pi receives, nor silently choose between colliding labels.
+                const options = dialog.options?.filter(option => projectDisplay(option) === value) ?? [];
+                if (options.length !== 1) return yield* new PiSessionError({ reason: "rejected", detail: "This option is unavailable or ambiguous after redaction. Cancel the dialog instead." });
+                value = options[0];
+              }
+              const response = action.confirmed !== undefined ? { confirmed: action.confirmed } : { value };
               const resolution = yield* resolveDialog(dialog, action.cancelled ? "cancelled" : "answered", response);
               if (!resolution || resolution.reason === "expired" || resolution.reason === "recovery") return yield* new PiSessionError({ reason: "rejected", detail: "Dialog was already claimed or its host deadline elapsed. The answer was not sent." });
             });
@@ -681,7 +743,10 @@ const openSession = (spec: PiSessionSpec) =>
       });
 
     yield* refreshStats;
-    const session: PiSession = { spec, events, act, state: Ref.get(stateRef) };
+    const session: PiSession = { spec, events,
+      act: action => act(action).pipe(Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
+      state: Ref.get(stateRef).pipe(Effect.map(projectDisplay)),
+    };
     return session;
   });
 

@@ -47,10 +47,18 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   useEffect(() => setModel(t?.state.model), [t?.cwd, t?.sessionId, t?.state.model]);
   const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
   useEffect(() => setEffort(t?.state.thinkingLevel as ThinkingLevel | undefined), [t?.cwd, t?.sessionId, t?.state.thinkingLevel]);
-  const effectiveModel = model || state.catalog?.defaultModel;
-  const effectiveEffort = clampEffort(levelsFor(state.catalog, effectiveModel), effort || (state.catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
-
-  const startOptions = () => ({ model: effectiveModel, thinkingLevel: effectiveEffort });
+  const catalog = t ? state.catalogs[t.cwd] ?? null : null;
+  useEffect(() => { if (state.connected && t?.cwd) send({ _tag: "models", cwd: t.cwd }); }, [t?.cwd, state.connected, send]);
+  const effectiveModel = model || catalog?.defaultModel;
+  const effectiveEffort = (t?.hosted ? t.state.thinkingLevel as ThinkingLevel | undefined : undefined)
+    ?? clampEffort(levelsFor(catalog, effectiveModel), effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
+  const extension = t?.state.extension;
+  const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
+  const [overrides, setOverrides] = useState<{ model?: string; thinkingLevel?: ThinkingLevel }>({});
+  useEffect(() => setOverrides({}), [t?.cwd, t?.sessionId]);
+  // Continuing a file lets Pi restore/check its own selection. Only deliberate
+  // offline picker changes override that, not a read-only recorded-model hint.
+  const startOptions = () => overrides;
   const streaming = !!(t?.state.isStreaming || t?.state.isCompacting || t?.state.isRetrying);
   const activity = [
     t?.dialogs.length ? "Waiting for input" : null,
@@ -134,11 +142,17 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         <div className="border-b border-line bg-err-soft px-4 py-2 text-sm text-err">Pi stopped: {t.closedReason}</div>
       )}
 
+      {t && <section aria-label="Display scope" className="border-b border-line px-4 py-1 text-xs text-ink-3">
+        Current Pi context · not all history · system, thinking and images omitted
+        {t.state.model && <p>{t.hosted ? "Selected" : "Recorded selection (Pi confirms on start)"}: {t.state.model} · {t.state.thinkingLevel ?? "effort unknown"}</p>}
+        {t.state.tokens && <p>Full-session usage: {t.state.tokens.total.toLocaleString()} tokens · totals from Pi</p>}
+        {t.state.projectionError && <p className="text-warn">{t.state.projectionError}</p>}
+      </section>}
       {t ? (
         <MessageList
           messages={t.messages}
           pending={t.pending}
-          activeTools={t.activeTools}
+          tools={t.tools}
           placeholder="Nothing here yet. Send the first message."
           workingSince={workingSince}
           view={view}
@@ -160,6 +174,18 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           </div>
         </section>
       )}
+      {extension && <section aria-label="Extension state" className="max-h-40 overflow-auto border-t border-line px-4 py-2 text-xs text-ink-2">
+        {extension.title && <p>Extension title: {extension.title}</p>}
+        {extension.statuses.map(status => <p key={status.key}>{status.key}: {status.text}</p>)}
+        {extension.widgets.map(widget => <div key={widget.key}><p>{widget.key} · {widget.placement === "aboveEditor" ? "above editor" : "below editor"}</p><pre className="whitespace-pre-wrap break-words">{widget.lines.join("\n")}</pre></div>)}
+        {extension.editorRequest && <div>
+          <p>Extension editor request (never sent automatically)</p>
+          <pre className="whitespace-pre-wrap break-words">{extension.editorRequest.text}</pre>
+          <Button size="sm" variant="outline" disabled={usedEditorRequest === extension.editorRequest.id} onClick={() => {
+            if (draftKey && extension.editorRequest) { onDraftAppend(draftKey, `${state.drafts[draftKey] ? "\n\n" : ""}${extension.editorRequest.text}`); setUsedEditorRequest(extension.editorRequest.id); }
+          }}>Append to draft</Button>
+        </div>}
+      </section>}
       <Composer
         text={draftKey ? state.drafts[draftKey] ?? "" : ""}
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
@@ -170,16 +196,16 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         compacting={t?.state.isCompacting}
         onSend={(text) => send({ _tag: "act", action: { _tag: "prompt", text }, start: startOptions() })}
         onStop={() => send({ _tag: "act", action: { _tag: "abort" } })}
-        catalog={state.catalog}
+        catalog={catalog}
         model={model}
         onModelChange={(ref) => {
-          setModel(ref);
           if (t?.hosted) send({ _tag: "act", action: { _tag: "set_model", model: ref } });
+          else { setModel(ref); setOverrides(o => ({ ...o, model: ref })); }
         }}
         effort={effectiveEffort}
         onEffortChange={(level) => {
-          setEffort(level);
           if (t?.hosted) send({ _tag: "act", action: { _tag: "set_thinking_level", level } });
+          else { setEffort(level); setOverrides(o => ({ ...o, thinkingLevel: level })); }
         }}
         context={t?.state.context}
         cost={t?.state.cost}

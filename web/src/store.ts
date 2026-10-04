@@ -1,5 +1,5 @@
 /** Client state: one reducer over ServerMessages plus local UI actions. */
-import type { Dialog, HostInfo, ModelCatalog, ProjectView, RenderMsg, ServerMessage, SessionState } from "@shared/wire";
+import type { Dialog, HostInfo, ModelCatalog, ProjectView, RenderMsg, ServerMessage, SessionState, ToolExecution } from "@shared/wire";
 
 export interface SessionView {
   cwd: string;
@@ -9,7 +9,7 @@ export interface SessionView {
   messages: RenderMsg[];
   pending: RenderMsg | null;
   dialogs: Dialog[];
-  activeTools: Record<string, string>;
+  tools: Record<string, ToolExecution>;
   closedReason?: string;
 }
 
@@ -21,7 +21,7 @@ export interface AppState {
   /** The server has sent the project list at least once since connecting. */
   projectsLoaded: boolean;
   hosts: HostInfo[];
-  catalog: ModelCatalog | null;
+  catalogs: Record<string, ModelCatalog>;
   session: SessionView | null;
   /** Last worktree created from this client, so the New page can select it. */
   lastWorktree: { project: string; path: string; branch: string } | null;
@@ -41,7 +41,7 @@ export const initialState: AppState = {
   projects: [],
   projectsLoaded: false,
   hosts: [],
-  catalog: null,
+  catalogs: {},
   session: null,
   lastWorktree: null,
   selecting: null,
@@ -94,7 +94,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       return { ...s, hosts: [...m.hosts], done: [...done] };
     }
     case "models":
-      return { ...s, catalog: m.catalog };
+      return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
     case "worktree_created":
       return { ...s, lastWorktree: { project: m.project, path: m.path, branch: m.branch } };
     case "selected":
@@ -112,9 +112,9 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           hosted: m.hosted,
           state: m.snapshot.state,
           messages: [...m.snapshot.messages],
-          pending: null,
+          pending: m.snapshot.pending ?? null,
           dialogs: [...m.snapshot.dialogs],
-          activeTools: {},
+          tools: Object.fromEntries((m.snapshot.tools ?? []).map(tool => [tool.id, tool])),
         },
       };
     case "action_result": {
@@ -130,9 +130,9 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       const e = m.event;
       switch (e._tag) {
         case "snapshot":
-          return { ...s, session: { ...t, hosted: true, state: e.snapshot.state, messages: [...e.snapshot.messages], dialogs: [...e.snapshot.dialogs], pending: null, activeTools: {} } };
+          return { ...s, session: { ...t, hosted: true, state: e.snapshot.state, messages: [...e.snapshot.messages], dialogs: [...e.snapshot.dialogs], pending: e.snapshot.pending ?? null, tools: Object.fromEntries((e.snapshot.tools ?? []).map(tool => [tool.id, tool])) } };
         case "state":
-          return { ...s, session: { ...t, state: e.state, pending: e.state.isStreaming ? t.pending : null, activeTools: e.state.isStreaming ? t.activeTools : {} } };
+          return { ...s, session: { ...t, state: e.state, pending: e.state.isStreaming ? t.pending : null } };
         case "queue_update":
           return { ...s, session: { ...t, state: { ...t.state, queuedMessages: [...e.messages] } } };
         case "submission":
@@ -141,20 +141,17 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         case "message_update":
           return { ...s, session: { ...t, pending: e.message } };
         case "message_end":
-          return { ...s, session: { ...t, messages: [...t.messages, e.message], pending: null } };
-        case "tool_start":
-          return { ...s, session: { ...t, activeTools: { ...t.activeTools, [e.toolCallId]: e.toolName } } };
-        case "tool_end": {
-          const activeTools = { ...t.activeTools };
-          delete activeTools[e.toolCallId];
-          return { ...s, session: { ...t, activeTools } };
-        }
+          return { ...s, session: { ...t, messages: [...t.messages, e.message], pending: e.message.role === "assistant" ? null : t.pending } };
+        case "context":
+          return { ...s, session: { ...t, messages: [...e.messages] } };
+        case "tool_update":
+          return { ...s, session: { ...t, tools: { ...t.tools, [e.tool.id]: e.tool } } };
         case "dialog":
           return t.dialogs.some((d) => d.id === e.dialog.id && d.generation === e.dialog.generation) ? s : { ...s, session: { ...t, dialogs: [...t.dialogs, e.dialog] } };
         case "dialog_resolved":
           return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.resolution.id || d.generation !== e.resolution.generation) } };
         case "closed":
-          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }, pending: null, activeTools: {}, dialogs: [], closedReason: e.reason } };
+          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }, pending: null, dialogs: [], closedReason: e.reason } };
         case "notice":
           return s;
       }

@@ -68,9 +68,14 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
     return () => clearTimeout(t);
   }, [creating]);
 
-  const effectiveModel = model || state.catalog?.defaultModel;
-  const levels = levelsFor(state.catalog, effectiveModel);
-  const effectiveEffort = clampEffort(levels, effort || (state.catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
+  const catalog = state.catalogs[cwd] ?? null;
+  useEffect(() => {
+    setModel(undefined); setEffort(undefined);
+    if (state.connected && cwd) send({ _tag: "models", cwd });
+  }, [cwd, state.connected, send]);
+  const effectiveModel = model || catalog?.defaultModel;
+  const levels = levelsFor(catalog, effectiveModel);
+  const effectiveEffort = clampEffort(levels, effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
   const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && text.trim().length > 0 && !creating;
 
   const submit = () => {
@@ -111,8 +116,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
             />
             <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2">
               <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
-              <ModelSelect catalog={state.catalog} value={model} onChange={setModel} />
-              <EffortSelect value={effectiveEffort} onChange={setEffort} levels={levels} defaultLevel={state.catalog?.defaultThinkingLevel} />
+              <ModelSelect catalog={catalog} value={model} onChange={setModel} />
+              <EffortSelect value={effectiveEffort} onChange={setEffort} levels={levels} defaultLevel={catalog?.defaultThinkingLevel} />
               <span className="flex-1" />
               <Button size="icon-sm" className="rounded-full" aria-label="Send" disabled={!ready} onClick={submit}>
                 <ArrowUpIcon />

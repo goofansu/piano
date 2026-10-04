@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowDownIcon } from "lucide-react";
-import type { RenderMsg } from "@shared/wire";
+import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { Button } from "@/components/ui/button";
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
@@ -14,7 +14,7 @@ export type TranscriptView = "all" | "replies";
 interface Props {
   messages: RenderMsg[];
   pending: RenderMsg | null;
-  activeTools: Record<string, string>;
+  tools: Record<string, ToolExecution>;
   placeholder: string;
   /** When Pi started the current turn, or null while it rests. */
   workingSince: number | null;
@@ -40,7 +40,7 @@ function endOfTurnIds(messages: RenderMsg[]): Set<string> {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, activeTools, placeholder, workingSince, view }: Props) {
+export function MessageList({ messages, pending, tools, placeholder, workingSince, view }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -49,7 +49,7 @@ export function MessageList({ messages, pending, activeTools, placeholder, worki
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [messages, pending, activeTools]);
+  }, [messages, pending, tools]);
   // Content can grow without a scroll event (a prompt opens, output expands). That only
   // changes whether the bottom is in view; it never moves the reader.
   useEffect(() => {
@@ -71,7 +71,7 @@ export function MessageList({ messages, pending, activeTools, placeholder, worki
 
   const results = new Map<string, RenderMsg>();
   for (const m of messages) if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
-  const active = new Set(Object.keys(activeTools));
+  const active = new Set(Object.values(tools).filter(t => t.status === "running").map(t => t.id));
   const repliesOnly = view === "replies";
   const keep = repliesOnly ? endOfTurnIds(messages) : null;
 
@@ -97,9 +97,9 @@ export function MessageList({ messages, pending, activeTools, placeholder, worki
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            return <Message key={m.id} msg={m} results={results} active={active} hideTools={repliesOnly} />;
+            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} hideTools={repliesOnly} />;
           })}
-          {pending && <Message msg={pending} results={results} active={active} hideTools={repliesOnly} streaming />}
+          {pending && <Message msg={pending} results={results} tools={tools} active={active} hideTools={repliesOnly} streaming />}
           {workingSince !== null && <Working since={workingSince} />}
         </div>
       </div>
@@ -132,7 +132,8 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, results, active, hideTools, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; active: Set<string>; hideTools: boolean; streaming?: boolean }) {
+function Message({ msg, results, tools, active, hideTools, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; hideTools: boolean; streaming?: boolean }) {
+  if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
   if (msg.role === "user") return <UserMessage text={msg.text} />;
   if (msg.role === "assistant") {
     return (
@@ -150,12 +151,15 @@ function Message({ msg, results, active, hideTools, streaming }: { msg: RenderMs
             />
           </Row>
         )}
-        {!hideTools && msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
+        {msg.model && <p className="pl-7 text-xs text-ink-3">Routed: {msg.model}{msg.thinkingLevel ? ` · ${msg.thinkingLevel}` : ""}{msg.responseModel ? ` · provider response: ${msg.responseModel}` : ""}</p>}
+        {msg.usage && <p className="pl-7 text-xs text-ink-3">{msg.usage.totalTokens.toLocaleString()} response tokens · ${msg.usage.cost.toFixed(4)}{streaming ? " · cumulative so far" : ""}</p>}
+        {msg.errorMessage && <p className="pl-7 text-sm text-err">{msg.stopReason}: {msg.errorMessage}</p>}
+        {!hideTools && msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
       </article>
     );
   }
   // An orphan result: its call never reached us.
-  return <Tool call={{ id: msg.toolCallId ?? msg.id, name: msg.toolName ?? "tool", args: "" }} result={msg} running={false} />;
+  return <Tool call={{ id: msg.toolCallId ?? msg.id, name: msg.toolName ?? "tool", args: "" }} result={msg} executions={tools} running={false} />;
 }
 
 /** A prompt shows at most this many lines until opened; pasted logs and long briefs stay out of the way. */
@@ -231,14 +235,18 @@ function summarize(args: string): string {
 
 const PREVIEW_LINES = 5;
 
-function Tool({ call, result, running }: { call: ToolCall; result: RenderMsg | undefined; running: boolean }) {
+function Tool({ call, result, running, executions = {} }: { call: ToolCall; result: RenderMsg | undefined; running: boolean; executions?: Record<string, ToolExecution> }) {
+  const execution = executions[call.id];
+  const nested = new Map((result?.nestedCalls ?? []).map(c => [c.id, c]));
+  for (const child of Object.values(executions)) if (child.parentId === call.id || child.id.startsWith(`${call.id}/`)) nested.set(child.id, child);
+  const output = result?.text ?? execution?.text;
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const [verbRunning, verbDone] = VERBS[call.name] ?? ["Calling", "Called"];
-  const failed = !!result?.isError;
-  const verb = running ? verbRunning : failed ? "Failed" : verbDone;
+  const failed = !!result?.isError || execution?.status === "error";
+  const verb = running ? verbRunning : failed ? "Failed" : execution?.status === "incomplete" ? "Incomplete" : verbDone;
   const summary = summarize(call.args);
-  const lines = (result?.text ?? "").split("\n");
+  const lines = (output ?? "").split("\n");
   const shown = all ? lines : lines.slice(0, PREVIEW_LINES);
   const hidden = lines.length - shown.length;
 
@@ -270,8 +278,9 @@ function Tool({ call, result, running }: { call: ToolCall; result: RenderMsg | u
           <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-fill px-3 py-2 text-ink-2">{clamp(call.args, 4000)}</pre>
         </Row>
       )}
-      {result?.text && (
+      {output && (
         <Row glyph={<span className="font-mono text-ink-3">{open && call.args ? " " : "└"}</span>} className="mt-1">
+          {!result && <p className="text-xs text-ink-3">{execution?.outputKind === "final" ? "Final execution output" : "Latest tool update (not an append-only log)"}</p>}
           <pre className={cn("whitespace-pre-wrap break-all", failed ? "text-err" : "text-ink-2")}>{clamp(shown.join("\n"), all ? 20000 : 2000)}</pre>
           {hidden > 0 && (
             <button type="button" onClick={() => setAll(true)} className="mt-0.5 rounded text-ink-3 hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
@@ -285,6 +294,14 @@ function Tool({ call, result, running }: { call: ToolCall; result: RenderMsg | u
           )}
         </Row>
       )}
+      {result?.usage && <p className="pl-7 text-xs text-ink-3">{result.usage.totalTokens} tool tokens · includes nested usage once</p>}
+      {[...nested.values()].map(child => <div key={child.id} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
+        <p>Nested {child.name} · {child.status} · parent: {child.parentId}</p>
+        <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
+        <p className="text-ink-3">{child.outputKind === "unavailable" ? "Output not persisted by Pi" : child.outputKind === "final" ? "Final execution output" : "Latest tool update (not an append-only log)"}</p>
+        {child.text && <pre className="whitespace-pre-wrap break-words">{clamp(child.text, 4000)}</pre>}
+      </div>)}
+      {result?.nestedCallsComplete === false && <p className="pl-7 text-xs text-warn">Pi retained an incomplete nested-call record.</p>}
     </div>
   );
 }

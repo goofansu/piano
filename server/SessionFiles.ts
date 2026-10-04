@@ -4,9 +4,10 @@
  */
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
-import type { RenderMsg, Snapshot } from "../shared/wire.ts";
+import type { Snapshot } from "../shared/wire.ts";
 import { sessionDirFor } from "./PiEnv.ts";
-import { type RawMessage, serializeMessage } from "./PiRecords.ts";
+import { type RawMessage, serializeMessages } from "./PiRecords.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
 
 export interface SessionSummary {
   sessionId: string;
@@ -43,27 +44,23 @@ export const findSessionFile = (cwd: string, sessionId: string): Effect.Effect<s
 export const peekSession = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
   Effect.sync(() => {
     const sm = SessionManager.open(path);
-    const messages: RenderMsg[] = [];
-    let model: string | undefined;
-    let thinkingLevel: string | undefined;
-    for (const entry of sm.getBranch()) {
-      if (entry.type === "model_change") model = `${entry.provider}/${entry.modelId}`;
-      if (entry.type === "thinking_level_change") thinkingLevel = entry.thinkingLevel;
-      if (entry.type !== "message") continue;
-      const raw = entry.message as unknown as RawMessage;
-      const m = serializeMessage(entry.id, raw);
-      if (!m) continue;
-      messages.push(m);
-      if (raw.role === "assistant" && raw.provider && raw.model) model = `${raw.provider}/${raw.model}`;
-    }
-    return {
-      state: { sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel, isStreaming: false },
-      messages,
+    // Use Pi's own compaction/context-edit/active-branch projection, the same
+    // display scope as RPC get_messages. Never infer selection from an answer.
+    const context = sm.buildSessionContext();
+    // Pi's context builder uses the last assistant's physical model. Selection
+    // is recorded separately; this read-only peek cannot check whether a virtual
+    // model is still registered. The next CLI open confirms/falls back itself.
+    const selection = sm.getBranch().findLast(entry => entry.type === "model_change");
+    const model = selection?.type === "model_change" ? `${selection.provider}/${selection.modelId}`
+      : context.model ? `${context.model.provider}/${context.model.modelId}` : undefined;
+    return projectDisplay({
+      state: { sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel: context.thinkingLevel, isStreaming: false },
+      messages: serializeMessages(context.messages as RawMessage[]),
       dialogs: [],
-    };
+    });
   }).pipe(
     Effect.orElseSucceed(() => ({
-      state: { sessionId, sessionFile: path, isStreaming: false },
+      state: { sessionId, sessionFile: path, isStreaming: false, projectionError: "Could not read Pi's current context. History was not replaced or repaired." },
       messages: [],
       dialogs: [],
     })),

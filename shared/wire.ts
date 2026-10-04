@@ -16,15 +16,51 @@ export const ToolCall = Schema.Struct({
   args: Schema.String,
 });
 
+/** Latest cumulative usage for ONE response/result, never a streaming delta. */
+export const Usage = Schema.Struct({
+  input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number,
+  totalTokens: Schema.Number, cost: Schema.Number,
+});
+export type Usage = typeof Usage.Type;
+
+/** Execution preview, not a transcript message or an additional billable result. */
+export const ToolExecution = Schema.Struct({
+  id: Schema.String,
+  parentId: Schema.optional(Schema.String),
+  name: Schema.String,
+  args: Schema.String,
+  text: Schema.String,
+  status: Schema.Literals(["running", "success", "error", "incomplete"]),
+  outputKind: Schema.Literals(["latest-update", "final", "unavailable"]),
+});
+export type ToolExecution = typeof ToolExecution.Type;
+
+export const ExtensionState = Schema.Struct({
+  statuses: Schema.Array(Schema.Struct({ key: Schema.String, text: Schema.String })),
+  widgets: Schema.Array(Schema.Struct({ key: Schema.String, lines: Schema.Array(Schema.String), placement: Schema.Literals(["aboveEditor", "belowEditor"]) })),
+  title: Schema.optional(Schema.String),
+  editorRequest: Schema.optional(Schema.Struct({ id: Schema.String, text: Schema.String })),
+});
+export type ExtensionState = typeof ExtensionState.Type;
+
 export const RenderMsg = Schema.Struct({
   id: Schema.String,
-  role: Schema.Literals(["user", "assistant", "tool_result"]),
+  role: Schema.Literals(["user", "assistant", "tool_result", "context"]),
   text: Schema.String,
   toolCalls: Schema.optional(Schema.Array(ToolCall)),
   toolName: Schema.optional(Schema.String),
   toolCallId: Schema.optional(Schema.String),
   isError: Schema.optional(Schema.Boolean),
+  /** Physical dispatched model for this response, not the session selection. */
   model: Schema.optional(Schema.String),
+  thinkingLevel: Schema.optional(Schema.String),
+  responseModel: Schema.optional(Schema.String),
+  usage: Schema.optional(Usage),
+  stopReason: Schema.optional(Schema.String),
+  errorMessage: Schema.optional(Schema.String),
+  label: Schema.optional(Schema.String),
+  nestedCalls: Schema.optional(Schema.Array(ToolExecution)),
+  nestedCallsComplete: Schema.optional(Schema.Boolean),
 });
 export type RenderMsg = typeof RenderMsg.Type;
 
@@ -96,8 +132,11 @@ export const SessionState = Schema.Struct({
   queuedMessages: Schema.optional(Schema.Array(QueuedMessage)),
   /** Pi's context-window estimate, refreshed at finalized-message and compaction boundaries. */
   context: Schema.optional(ContextUsage),
-  /** Session cost in USD so far. */
+  /** Full-session totals from Pi, not a sum of displayed current-context messages. */
   cost: Schema.optional(Schema.Number),
+  tokens: Schema.optional(Schema.Struct({ input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number, total: Schema.Number })),
+  extension: Schema.optional(ExtensionState),
+  projectionError: Schema.optional(Schema.String),
 });
 export type SessionState = typeof SessionState.Type;
 
@@ -105,6 +144,8 @@ export const Snapshot = Schema.Struct({
   state: SessionState,
   messages: Schema.Array(RenderMsg),
   dialogs: Schema.Array(Dialog),
+  pending: Schema.optional(RenderMsg),
+  tools: Schema.optional(Schema.Array(ToolExecution)),
 });
 export type Snapshot = typeof Snapshot.Type;
 
@@ -116,8 +157,8 @@ export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("submission", { submission: PromptSubmission }),
   Schema.TaggedStruct("message_update", { message: RenderMsg }),
   Schema.TaggedStruct("message_end", { message: RenderMsg }),
-  Schema.TaggedStruct("tool_start", { toolCallId: Schema.String, toolName: Schema.String }),
-  Schema.TaggedStruct("tool_end", { toolCallId: Schema.String, isError: Schema.Boolean }),
+  Schema.TaggedStruct("context", { messages: Schema.Array(RenderMsg) }),
+  Schema.TaggedStruct("tool_update", { tool: ToolExecution }),
   Schema.TaggedStruct("dialog", { dialog: Dialog }),
   Schema.TaggedStruct("dialog_resolved", { resolution: DialogResolution }),
   Schema.TaggedStruct("notice", { level: Schema.Literals(["info", "warning", "error"]), message: Schema.String }),
@@ -198,6 +239,7 @@ export const ModelChoice = Schema.Struct({
 export type ModelChoice = typeof ModelChoice.Type;
 
 export const ModelCatalog = Schema.Struct({
+  cwd: Schema.String,
   models: Schema.Array(ModelChoice),
   defaultModel: Schema.optional(Schema.String),
   defaultThinkingLevel: Schema.optional(Schema.String),
@@ -251,7 +293,7 @@ export type StartOptions = typeof StartOptions.Type;
 
 export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("projects", {}),
-  Schema.TaggedStruct("models", {}),
+  Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String) }),
   Schema.TaggedStruct("add_project", { path: Schema.String }),
   Schema.TaggedStruct("remove_project", { path: Schema.String }),
   Schema.TaggedStruct("create_worktree", { project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
