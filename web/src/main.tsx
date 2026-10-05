@@ -11,7 +11,8 @@ createRoot(document.getElementById("root")!).render(
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <TooltipProvider>
         <App />
-        <Toaster position="bottom-right" visibleToasts={4} />
+        {/* Keep notices below the header and away from Send/Stop, including on phones. */}
+        <Toaster position="top-right" offset={{ top: 64, right: 24 }} mobileOffset={{ top: 64, left: 16, right: 16 }} visibleToasts={4} closeButton />
       </TooltipProvider>
     </ThemeProvider>
   </StrictMode>,

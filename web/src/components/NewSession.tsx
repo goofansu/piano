@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, LoaderCircleIcon, PanelLeftOpenIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
@@ -15,6 +15,7 @@ import { clampEffort, EffortSelect, levelsFor } from "@/components/EffortSelect"
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
 import { WorkspaceChanges } from "@/components/WorkspaceChanges";
+import { PianoMark } from "@/components/PianoMark";
 
 interface Props {
   state: AppState;
@@ -91,17 +92,21 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
       <Button variant="ghost" size="icon-sm" className="absolute top-2 left-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
       <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-16 md:px-6">
-        <div className="w-full max-w-2xl">
-          <h1 className="mb-5 text-2xl font-medium tracking-tight">What should we work on?</h1>
-          <div className={composerCard}>
+        <div className="w-full max-w-3xl">
+          <div className="welcome-enter mb-7 flex flex-col items-center text-center">
+            <PianoMark className="mb-5 size-12 rounded-2xl [&>span]:w-1 [&>span]:scale-y-125" />
+            <h1 className="text-2xl font-medium tracking-tight sm:text-[2rem]">What should we work on?</h1>
+            <p className="mt-2 text-sm text-ink-2 sm:text-base">A little progress starts with an idea.</p>
+          </div>
+          <div className={cn(composerCard, "welcome-enter welcome-composer")}>
             <Textarea
               ref={textarea}
               autoFocus
               value={text}
               rows={3}
               aria-label="First message"
-              placeholder="Describe the work. Pi starts in the directory below."
-              className="max-h-72 min-h-24 resize-none border-0 bg-transparent px-4 pt-3.5 shadow-none focus-visible:ring-0"
+              placeholder="Ask a question, plan a change, or build something…"
+              className="max-h-72 min-h-28 resize-none border-0 bg-transparent px-5 pt-5 shadow-none focus-visible:ring-0"
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
@@ -116,8 +121,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               <ModelSelect catalog={catalog} value={model} onChange={setModel} />
               <EffortSelect value={effectiveEffort} onChange={setEffort} levels={levels} defaultLevel={catalog?.defaultThinkingLevel} />
               <span className="flex-1" />
-              <Button size="icon-sm" className="rounded-full" aria-label="Send" disabled={!ready} onClick={submit}>
-                <ArrowUpIcon />
+              <Button size="icon" className="rounded-xl" aria-label="Send" disabled={!ready} onClick={submit}>
+                {creating ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
               </Button>
             </div>
           </div>
@@ -127,7 +132,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
           </div>}
           {project?.discovery.status === "error" && <p role="alert" className="mt-2 text-sm text-err">Git status unavailable. Open Worktrees to inspect and refresh.</p>}
           {creating && (
-            <p className="mt-3 text-sm text-ink-3" role="status">
+            <p className="control-enter mt-3 text-center text-sm text-ink-2" role="status">
               Starting Pi
             </p>
           )}

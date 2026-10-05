@@ -8,7 +8,7 @@ import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { SessionView } from "@/components/SessionView";
 import { NewSession } from "@/components/NewSession";
 import { DialogHost } from "@/components/DialogHost";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 
@@ -225,12 +225,12 @@ export default function App() {
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
   const sidebarProps = { state, send, select, openNew };
 
-  // Layer 0 throughout: the sidebar and the main pane share the canvas and meet at a hairline.
+  // An inset conversation sheet separates the work from the navigation without extra chrome.
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-surface-0 text-ink">
       <aside
         className={cn(
-          "relative hidden shrink-0 border-r border-line md:flex md:flex-col",
+          "relative hidden shrink-0 md:flex md:flex-col",
           !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
         )}
         style={{ width: collapsed ? RAIL_WIDTH : width }}
@@ -264,15 +264,16 @@ export default function App() {
         )}
       </aside>
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-72 p-0" showCloseButton={false} onCloseAutoFocus={event => {
+        <SheetContent side="left" className="w-72 bg-surface-0 p-0" showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={event => {
           const target = sidebarReturnFocus.current;
           sidebarReturnFocus.current = null;
           if (target?.isConnected) { event.preventDefault(); target.focus(); }
         }}>
+          <SheetTitle className="sr-only">Projects and sessions</SheetTitle>
           <Sidebar {...sidebarProps} onHide={() => setMenuOpen(false)} />
         </SheetContent>
       </Sheet>
-      <main className="relative flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
         {state.view.kind === "new" ? (
           <NewSession state={state} send={send} initialCwd={state.view.cwd} onMenu={showSidebar} />
         ) : state.view.kind === "missing-session" ? (

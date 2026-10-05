@@ -7,7 +7,7 @@
  *
  * Layers: every surface belongs to one of four layers, and a layer decides its
  * background, its edge and its shadow. Nothing borrows an edge from another layer.
- *   0 canvas   the app itself: sidebar, header, conversation
+ *   0 canvas   the navigation shell; the conversation is a quiet inset sheet
  *   1 surface  things placed on the canvas: the composer, inputs, user prompts, code
  *   2 raised   things that float over the canvas: menus, popovers, tooltips
  *   3 overlay  things that take over: dialogs, the mobile sidebar sheet
@@ -26,7 +26,8 @@
   --radius: 0.625rem;
 
   /* layers */
-  --surface-0: oklch(0.985 0.004 85);
+  --surface-0: oklch(0.967 0.006 85);
+  --conversation: oklch(0.995 0.002 85);
   --surface-1: oklch(1 0 0);
   --surface-2: oklch(1 0 0);
   --surface-3: oklch(1 0 0);
@@ -42,7 +43,7 @@
   /* ink */
   --ink: oklch(0.22 0.01 85);
   --ink-2: oklch(0.5 0.012 85);
-  --ink-3: oklch(0.66 0.012 85);
+  --ink-3: oklch(0.55 0.012 85);
 
   /* the one colour */
   --brand: oklch(0.52 0.1 160);
@@ -87,8 +88,9 @@
 }
 
 .dark {
-  --surface-0: oklch(0.15 0.006 270);
-  --surface-1: oklch(0.185 0.006 270);
+  --surface-0: oklch(0.155 0.006 270);
+  --conversation: oklch(0.185 0.006 270);
+  --surface-1: oklch(0.215 0.007 270);
   --surface-2: oklch(0.22 0.007 270);
   --surface-3: oklch(0.23 0.007 270);
   --line: oklch(1 0 0 / 8%);
@@ -102,7 +104,7 @@
 
   --ink: oklch(0.93 0.005 85);
   --ink-2: oklch(0.7 0.008 85);
-  --ink-3: oklch(0.55 0.008 85);
+  --ink-3: oklch(0.64 0.008 85);
 
   --brand: oklch(0.74 0.1 160);
   --brand-ink: oklch(0.15 0.02 160);
@@ -137,6 +139,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
+  --color-conversation: var(--conversation);
   --color-surface-0: var(--surface-0);
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
@@ -190,7 +193,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   --animate-caret: caret 1s steps(2) infinite;
-  --animate-live: live 1.6s steps(6) infinite;
+  --animate-live: live 1.8s ease-in-out infinite;
 }
 
 @layer base {
@@ -224,9 +227,10 @@
 /* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */
 .prose-chat {
   overflow-wrap: anywhere;
+  line-height: 1.7;
 }
 .prose-chat > * + * {
-  margin-top: 0.6em;
+  margin-top: 0.8em;
 }
 .prose-chat h1,
 .prose-chat h2,
@@ -267,10 +271,10 @@
   padding: 0.1em 0.35em;
 }
 .prose-chat pre {
-  background: var(--surface-1);
+  background: var(--fill);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  padding: 0.75rem 0.875rem;
+  padding: 1rem 1.125rem;
   overflow-x: auto;
   line-height: 1.5;
 }
@@ -305,7 +309,48 @@
 }
 .prose-chat th { font-weight: 600; color: var(--ink-2); }
 
-/* Motion. Two live signals: the caret while text streams and the dot while pi works. */
+/* Short, interruptible motion for navigation and controls; never animate transcript
+ * updates or remount the conversation to get a transition. */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.composer-card {
+  border-radius: 1.25rem;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.composer-card:focus-within {
+  border-color: color-mix(in oklab, var(--brand) 45%, var(--line-strong));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 7%, transparent), var(--shadow-1);
+}
+.welcome-enter {
+  animation: welcome-enter 420ms var(--ease-out) both;
+}
+.welcome-composer { animation-delay: 65ms; }
+.control-enter { animation: control-enter 180ms var(--ease-out); }
+.disclosure-content { overflow: hidden; }
+.disclosure-content[data-state="open"] { animation: disclosure-open 220ms var(--ease-out); }
+.disclosure-content[data-state="closed"] { animation: disclosure-close 160ms ease-out; }
+@keyframes welcome-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes control-enter {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes disclosure-open {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-collapsible-content-height); opacity: 1; }
+}
+@keyframes disclosure-close {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
+}
+
+/* Live signals: a streaming caret and a gently breathing activity dot. */
 @keyframes caret {
   50% { opacity: 0; }
 }
@@ -314,8 +359,9 @@
   50% { opacity: 0.45; transform: scale(0.8); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .animate-caret,
-  .animate-live {
-    animation: none;
+  *, ::before, ::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
 }

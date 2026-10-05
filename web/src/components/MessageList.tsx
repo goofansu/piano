@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDownIcon } from "lucide-react";
+import { ArrowDownIcon, CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react";
+import { toast } from "sonner";
 import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 import { abbrevHome, clamp } from "@/lib/format";
@@ -85,11 +87,11 @@ export function MessageList({ messages, pending, tools, placeholder, workingSinc
           stick.current = near;
           setAtBottom(near);
         }}
-        className="h-full overflow-y-auto"
+        className="h-full overflow-y-auto px-4 md:px-6"
       >
-      <div ref={content} className="mx-auto w-full max-w-2xl px-4 py-6 md:px-6">
+      <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
         {messages.length === 0 && !pending && <p className="py-16 text-center text-base text-ink-2">{placeholder}</p>}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
           {messages.map((m) => {
             if (keep) {
               if (m.role === "tool_result" || (m.role === "assistant" && !keep.has(m.id))) return null;
@@ -137,7 +139,7 @@ function Message({ msg, results, tools, active, hideTools, streaming }: { msg: R
   if (msg.role === "user") return <UserMessage text={msg.text} />;
   if (msg.role === "assistant") {
     return (
-      <article className="flex flex-col gap-2">
+      <article className="group/reply flex flex-col gap-3">
         {msg.text && (
           <Row glyph={<span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
@@ -149,6 +151,7 @@ function Message({ msg, results, tools, active, hideTools, streaming }: { msg: R
               // renderMarkdown escapes all HTML before adding its own tags
               dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
             />
+            {!streaming && !msg.toolCalls?.length && <CopyResponse text={msg.text} />}
           </Row>
         )}
         {msg.errorMessage && <p className="pl-7 text-sm text-err">{msg.stopReason}: {msg.errorMessage}</p>}
@@ -162,6 +165,35 @@ function Message({ msg, results, tools, active, hideTools, streaming }: { msg: R
 
 /** A prompt shows at most this many lines until opened; pasted logs and long briefs stay out of the way. */
 const USER_LINES = 6;
+
+function CopyResponse({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-label={copied ? "Response copied" : "Copy response"}
+      className={cn("mt-2 -ml-2 h-7 gap-1.5 px-2 text-xs text-ink-3 opacity-0 group-hover/reply:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100", copied && "text-brand opacity-100")}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+        } catch {
+          setCopied(false);
+          toast.error("Couldn’t copy. Select the reply text to copy it.");
+        }
+      }}
+    >
+      {copied ? <CheckIcon className="control-enter size-3.5" /> : <CopyIcon className="size-3.5" />}
+      <span role="status">{copied ? "Copied" : "Copy"}</span>
+    </Button>
+  );
+}
 
 function UserMessage({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -183,7 +215,7 @@ function UserMessage({ text }: { text: string }) {
   // A long prompt is its own control: click or press Enter to open and close it.
   return (
     <article
-      className={cn("rounded-lg border border-line bg-surface-1 px-4 py-3 outline-none", long && "cursor-pointer select-text hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring")}
+      className={cn("rounded-2xl border border-line bg-fill px-4 py-3.5 outline-none transition-colors", long && "cursor-pointer select-text hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring")}
       tabIndex={long ? 0 : undefined}
       aria-expanded={long ? open : undefined}
       onClick={() => long && !window.getSelection()?.toString() && toggle()}
@@ -249,7 +281,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
   const hidden = lines.length - shown.length;
 
   return (
-    <div role="group" aria-label={`${call.name} tool call`} className="text-sm">
+    <Collapsible open={open} onOpenChange={setOpen} role="group" aria-label={`${call.name} tool call`} className="text-sm">
       <Row
         glyph={
           <span
@@ -257,28 +289,31 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
           />
         }
       >
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          className="flex w-full min-w-0 items-baseline gap-2 rounded-md text-left outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
-            {verb}
-            {(VERBS[call.name] ?? null) === null && <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>}
-          </span>
-          {summary && <span className={cn("min-w-0 flex-1 font-mono text-ink-2", !open && "truncate")}>{summary}</span>}
-          {VERBS[call.name] && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
-        </button>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="-ml-2 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
+              {verb}
+              {(VERBS[call.name] ?? null) === null && <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>}
+            </span>
+            {summary && <span className={cn("min-w-0 flex-1 font-mono text-ink-2", !open && "truncate")}>{summary}</span>}
+            {VERBS[call.name] && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
+            <ChevronRightIcon className={cn("ml-auto size-3.5 shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />
+          </button>
+        </CollapsibleTrigger>
       </Row>
-      {open && call.args && (
-        <Row glyph={<span className="font-mono text-ink-3">└</span>} className="mt-1">
-          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-fill px-3 py-2 text-ink-2">{clamp(call.args, 4000)}</pre>
-        </Row>
+      {call.args && (
+        <CollapsibleContent className="disclosure-content">
+          <Row glyph={null} className="pt-2">
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-fill px-3 py-2 text-ink-2">{clamp(call.args, 4000)}</pre>
+          </Row>
+        </CollapsibleContent>
       )}
       {output && (
-        <Row glyph={<span className="font-mono text-ink-3">{open && call.args ? " " : "└"}</span>} className="mt-1">
-          <pre className={cn("whitespace-pre-wrap break-all", failed ? "text-err" : "text-ink-2")}>{clamp(shown.join("\n"), all ? 20000 : 2000)}</pre>
+        <Row glyph={null} className="mt-1">
+          <pre className={cn("border-l-2 border-line py-1 pl-3 whitespace-pre-wrap break-all", failed ? "text-err" : "text-ink-2")}>{clamp(shown.join("\n"), all ? 20000 : 2000)}</pre>
           {hidden > 0 && (
             <button type="button" onClick={() => setAll(true)} className="mt-0.5 rounded text-ink-3 hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
               … {hidden} more {hidden === 1 ? "line" : "lines"}
@@ -298,7 +333,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
         {child.text && <pre className="whitespace-pre-wrap break-words">{clamp(child.text, 4000)}</pre>}
       </div>)}
       {result?.nestedCallsComplete === false && <p className="pl-7 text-xs text-warn">Some tool details are unavailable.</p>}
-    </div>
+    </Collapsible>
   );
 }
 

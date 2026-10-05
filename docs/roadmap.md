@@ -6,6 +6,16 @@ These are target milestones, not completion claims. The original research audit 
 2026-10-02 implementation; the [vertical-slice plan](vertical-slice-plan.md) records the October 4
 baseline and breaks the milestones into separately verifiable journeys.
 
+## Current priority: joyful daily use
+
+On October 5, the user prioritized a polished everyday web experience before deeper workflow
+features. Keep the architecture below, but defer phases 9–13 while improving the existing
+session → conversation → changes journey. Start with visual hierarchy, responsive interaction,
+useful motion and keyboard/focus behavior; let daily use identify the next friction rather than
+chasing full TUI parity or adding more backend machinery. Preserve runtime correctness and the
+quiet-UI principle throughout. The [first UX pass](research/2026-10-05-daily-ux-first-pass.md)
+records the initial changes and verification, not completion of the broader UX goal.
+
 ## 1. Runtime correctness
 
 - Preserve the deliberate exact Pi 1.0.2 package/lockfile upgrade, recorded in the

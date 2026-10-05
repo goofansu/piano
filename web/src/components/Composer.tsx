@@ -60,10 +60,10 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
   const showStop = streaming && !hasText;
 
   return (
-    <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 md:px-6">
-      <div className={cn("mx-auto w-full max-w-2xl", composerCard)}>
+    <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-5">
+      <div className={cn("mx-auto w-full max-w-3xl", composerCard)}>
         {queuedMessages.length > 0 && (
-          <section className="border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
+          <section className="control-enter border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
               <h2 className="font-medium text-ink-2">{streaming ? "Queued messages" : "Paused queue"} ({queuedMessages.length})</h2>
               {!streaming && (
@@ -89,7 +89,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
           rows={1}
           aria-label="Message"
           placeholder={compacting ? "Pi is compacting. Ordinary input may be rejected." : streaming ? "Send a follow-up; extension commands run immediately." : "What should Pi do next?"}
-          className="max-h-48 min-h-12 resize-none border-0 bg-transparent px-4 pt-3 shadow-none focus-visible:ring-0"
+          className="max-h-48 min-h-14 resize-none border-0 bg-transparent px-5 pt-4 shadow-none focus-visible:ring-0"
           onChange={(e) => onTextChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
@@ -132,15 +132,17 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
             </PopoverContent>
           </Popover>
           <Button
-            size="icon-sm"
+            size="icon"
             variant={showStop ? "outline" : "default"}
-            className="ml-auto rounded-full"
+            className="ml-auto rounded-xl"
             aria-label={showStop ? "Stop" : streaming && !compacting ? "Queue message" : "Send"}
             title={showStop ? "Abort current operation. Pending queued input is not cleared." : undefined}
             disabled={disabled || (!showStop && !hasText)}
             onClick={showStop ? onStop : send}
           >
-            {showStop ? <SquareIcon className="size-3.5 fill-current" /> : <ArrowUpIcon />}
+            <span key={showStop ? "stop" : "send"} className="control-enter inline-flex" aria-hidden>
+              {showStop ? <SquareIcon className="size-3.5 fill-current" /> : <ArrowUpIcon />}
+            </span>
           </Button>
         </div>
       </div>

@@ -8,6 +8,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { PianoMark } from "@/components/PianoMark";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface Props {
   state: AppState;
@@ -54,8 +56,9 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-1 px-4">
-        <span className="text-base font-semibold tracking-tight">piano</span>
+      <div className="flex h-16 shrink-0 items-center gap-2.5 px-4">
+        <PianoMark />
+        <span className="text-lg font-semibold tracking-tight">piano</span>
         <span className="flex-1" />
         <ThemeToggle />
         <Tooltip>
@@ -68,7 +71,7 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
         </Tooltip>
       </div>
       <div className="px-3 pb-3">
-        <Button variant="outline" className={cn("w-full justify-start", state.view.kind === "new" && !state.view.cwd && "border-brand/40 bg-brand-soft hover:bg-brand-soft")} onClick={() => openNew()}>
+        <Button variant="outline" className={cn("h-10 w-full justify-start rounded-xl border-line bg-conversation shadow-none", state.view.kind === "new" && !state.view.cwd && "border-brand/25 bg-brand-soft text-brand hover:bg-brand-soft")} onClick={() => openNew()}>
           <PlusIcon /> New session
         </Button>
       </div>
@@ -134,18 +137,18 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
   const [deleting, setDeleting] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
 
   return (
-    <section>
-      <div className="group flex h-9 items-center gap-1 rounded-md pr-1 hover:bg-fill-hover">
-        <button
-          type="button"
-          onClick={() => onOpenChange(!open)}
-          aria-expanded={open}
-          className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-md pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-          title={project.path}
-        >
-          <ChevronRightIcon className={cn("size-4 shrink-0 text-ink-3 transition-transform motion-reduce:transition-none", open && "rotate-90")} />
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{project.name}</span>
-        </button>
+    <Collapsible open={open} onOpenChange={onOpenChange}>
+      <div className="group flex h-9 items-center gap-1 rounded-lg pr-1 transition-colors hover:bg-fill-hover">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            title={project.path}
+          >
+            <ChevronRightIcon className={cn("size-4 shrink-0 text-ink-3 transition-transform motion-reduce:transition-none", open && "rotate-90")} />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{project.name}</span>
+          </button>
+        </CollapsibleTrigger>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -175,9 +178,9 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
       </div>
       {project.discovery.status === "error" && <p className="pl-7 text-xs text-err" title={project.discovery.detail}>Git status unavailable</p>}
       {project.discovery.status === "non-git" && <p className="pl-7 text-xs text-ink-3">Non-Git</p>}
-      {open && project.sessions.length === 0 && <p className="py-1.5 pl-7 text-sm text-ink-3">No sessions yet</p>}
-      {open && (
-        <ul className="mt-0.5 space-y-px">
+      <CollapsibleContent className="disclosure-content">
+        {project.sessions.length === 0 && <p className="py-2 pl-7 text-sm text-ink-3">No sessions yet</p>}
+        <ul className="space-y-1 py-1">
           {project.sessions.map((t) => {
             const selected = current?.cwd === t.cwd && current.sessionId === t.sessionId;
             // Live host state comes from the `hosts` broadcast, which changes more often than the project list.
@@ -188,10 +191,11 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             // The branch is only news when the session runs somewhere other than the project root.
             const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
             return (
-              <li key={t.sessionId} className={cn("group flex h-8 items-center rounded-md pr-1 hover:bg-fill-hover", selected && "bg-fill-active hover:bg-fill-active")}>
+              <li key={t.sessionId} className={cn("group relative flex h-9 items-center rounded-lg pr-1 transition-colors duration-150 hover:bg-fill-hover", selected && "bg-conversation shadow-1 after:absolute after:inset-y-2.5 after:left-0 after:w-0.5 after:rounded-full after:bg-brand")}>
                 <button
                   type="button"
                   title={t.title || t.sessionId}
+                  aria-current={selected ? "page" : undefined}
                   onClick={() => select(t.cwd, t.sessionId)}
                   className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 >
@@ -227,7 +231,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             );
           })}
         </ul>
-      )}
+      </CollapsibleContent>
       <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
@@ -250,6 +254,6 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </Collapsible>
   );
 }

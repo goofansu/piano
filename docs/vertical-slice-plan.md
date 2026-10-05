@@ -115,9 +115,15 @@ to expose the control plane. See [the development handoff](development-on-exe-de
 | 12 | Approve and locally integrate exactly that candidate | 11 | 3 |
 | 13 | Clean up separately and recover truthful lifecycle outcomes | 9, 12 | 3 |
 
-Suggested execution is numeric. Phase 6 can proceed alongside runtime slices without sharing their
-wire edits. Do not parallelize two writing tasks in one checkout; use separate workspaces and explicit
-handoffs. No unsupported time estimates: size PRs around claims, not a speculative calendar.
+**Current priority (October 5):** the user wants a joyful everyday web experience before deeper
+workflow features. Phases 9–13 are deferred for focused UX improvements to the existing product;
+see the [roadmap priority](roadmap.md#current-priority-joyful-daily-use) and
+[first UX pass](research/2026-10-05-daily-ux-first-pass.md). Runtime contracts remain in force;
+this does not require full TUI parity or revive Phase 8.
+
+When deeper workflow work resumes, use the dependency order above. Do not parallelize two writing
+tasks in one checkout; use separate workspaces and explicit handoffs. No unsupported time estimates:
+size PRs around claims, not a speculative calendar.
 
 **Runtime checkpoint (0–6):** remaining Pi compatibility observations, fake-Pi failure/race gates and
 Worktrunk discovery/create compatibility are recorded. No automatic prompt resubmission.
