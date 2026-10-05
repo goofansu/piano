@@ -18,7 +18,7 @@ import { SessionHostsLive } from "./SessionHosts.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
-const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 60) * 60_000;
+const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
 
 // Closing the HTTP server waits for its connections, and browsers hold WebSockets open
