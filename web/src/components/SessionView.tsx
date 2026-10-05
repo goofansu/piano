@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PanelLeftOpenIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -99,10 +100,11 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   return (
     <>
       <header className="flex h-12 shrink-0 items-center justify-end border-b border-line px-4">
+        <Button variant="ghost" size="icon-sm" className="-ml-2 mr-auto md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
         {/* Preserve live status announcements; visible session facts live in the menu. */}
         <span role="status" className="sr-only">{status.word}</span>
         {t && <SessionMenu key={draftKey} session={t} title={title} projectName={project?.name} worktree={worktree}
-          status={status} connected={state.connected && !state.resync} view={view} onViewChange={setView} onShowSidebar={onMenu} send={send} />}
+          status={status} connected={state.connected && !state.resync} view={view} onViewChange={setView} send={send} />}
       </header>
 
       {project?.discovery.status === "error" && <div role="alert" className="border-b border-line px-4 py-2 text-sm text-err">

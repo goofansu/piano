@@ -43,15 +43,15 @@ async function ab(...args) {
 const evaluate = async js => JSON.parse(await ab('eval', js));
 const menuItem = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
 const click = async name => {
-  // Header actions live in the session menu.
-  if (name === 'Changes' || name === 'Show sidebar') { await click('Session menu'); return menuItem(name); }
+  // Session actions live in the menu; global navigation stays directly accessible.
+  if (name === 'Changes') { await click('Session menu'); return menuItem(name); }
   return ab('find', 'role', 'button', 'click', '--name', name, '--exact');
 };
 const revision = () => evaluate(`document.querySelector('[data-revision]')?.dataset.revision`);
 const complete = () => ab('wait', '--fn', `document.querySelector('[role="dialog"] [role="status"]')?.textContent !== 'Capturing…' && !!document.querySelector('[role="dialog"] [role="status"]')`);
 async function capture(name) { writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot')); await ab('screenshot', join(evidence, `${name}.png`)); observations.push(name); }
 async function refresh() { await click('Refresh changes'); await complete(); }
-// The user's menu-only header replaces the earlier always-visible metadata contract.
+// Session metadata stays in the menu; sidebar navigation must not be buried there.
 // Keep controls reachable and preserve the screen-reader live status without a visible label.
 async function checkHeader() {
   const failures = [];
@@ -70,20 +70,23 @@ async function checkHeader() {
     if (geometry.status.height > 1 || geometry.status.width > 1) failures.push(`${width}: status is still visible outside the menu`);
     assert.equal(geometry.statusText, 'Not running', 'Live status remains available to assistive technology');
     assert.equal(geometry.remainingText, '', 'All visible session labels belong in the menu');
-    assert.deepEqual(geometry.controls.map(c=>c.name), ['Session menu'], 'The hamburger is the only header control');
+    assert.deepEqual(geometry.controls.map(c=>c.name), width < 768 ? ['Show sidebar', 'Session menu'] : ['Session menu'], 'Navigation is separate from session actions');
     for (const control of geometry.controls) if (control.left < geometry.header.left || control.right > geometry.header.right + 1 || control.top < geometry.header.top || control.bottom > geometry.header.bottom + 1 || !control.clickable) failures.push(`${width}: ${control.name} is outside/obscured`);
   }
   writeFileSync(join(evidence, 'header-failures.json'), JSON.stringify(failures, null, 2));
-  assert.deepEqual(failures, [], 'Only the hamburger remains visible in a compact header');
+  assert.deepEqual(failures, [], 'Navigation and session controls stay accessible in a compact header');
+  await click('Hide sidebar'); await click('Show sidebar');
+  await ab('wait', '--fn', `!!document.querySelector('aside button[title="Session A"]')`);
   // Actions still work on the narrowest viewport, including pointer-triggered UI.
   await ab('set', 'viewport', '320', '844'); await click('Changes'); await complete(); await ab('wait', '--text', 'WORKSPACE_A'); await click('Close');
   await click('Session menu'); await ab('find', 'role', 'menuitemcheckbox', 'click', '--name', 'End-of-turn messages only', '--exact');
   await click('Session menu');
   assert.equal(await evaluate(`document.querySelector('[role="menuitemcheckbox"]').getAttribute('aria-checked')`), 'true');
+  assert.equal(await evaluate(`[...document.querySelectorAll('[role="menuitem"]')].some(e=>e.textContent.includes('Show sidebar'))`), false);
   await ab('press', 'Escape');
   await click('Show sidebar'); await ab('wait', '--fn', `!!document.querySelector('[role="dialog"] nav[aria-label="Projects"]')`);
   await ab('press', 'Escape');
-  await ab('wait', '--fn', `document.activeElement?.getAttribute('aria-label') === 'Session menu'`);
+  await ab('wait', '--fn', `document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
 }
 async function checkSessionMenu() {
   const facts = () => evaluate(`(() => {const info=document.querySelector('[aria-label="Session information"]');return {text:info.textContent,values:Object.fromEntries([...info.querySelectorAll('dt')].map(dt=>[dt.textContent,dt.nextElementSibling.textContent]))};})()`);
