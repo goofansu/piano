@@ -28,7 +28,6 @@ export function SessionMenu({ session, title, projectName, worktree, status, con
   const branch = worktree?.branch ?? (worktree?.facts?.detached ? "Detached HEAD" : worktree?.status === "non-git" ? "Non-Git" : "Unknown branch");
   const info = session.state;
   const context = info.context?.tokens;
-  const contextIsLastKnown = !connected || !session.hosted || info.contextIsLastKnown !== false;
   return <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -49,7 +48,7 @@ export function SessionMenu({ session, title, projectName, worktree, status, con
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
             <dt className="text-ink-3">Session model</dt><dd className="break-all text-right">{info.model ?? "Not recorded"}</dd>
             <dt className="text-ink-3">Effort</dt><dd className="text-right">{info.thinkingLevel ?? "Not recorded"}</dd>
-            <dt className="text-ink-3">Context</dt><dd className="text-right tabular-nums">{context == null ? "Unavailable" : `${formatTokenCount(context)} tokens${contextIsLastKnown ? " · last-known" : ""}`}</dd>
+            <dt className="text-ink-3">Context</dt><dd className="text-right tabular-nums">{context == null ? "Unavailable" : `${formatTokenCount(context)} tokens`}</dd>
             {info.tokens && <><dt className="text-ink-3">Session tokens</dt><dd className="text-right tabular-nums">{formatTokenCount(info.tokens.total)}</dd></>}
             <dt className="text-ink-3">Session cost</dt><dd className="text-right tabular-nums">{info.cost === undefined ? "Unavailable" : `$${info.cost.toFixed(2)}`}</dd>
           </dl>

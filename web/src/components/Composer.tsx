@@ -27,7 +27,6 @@ interface Props {
   effort: ThinkingLevel;
   onEffortChange: (level: ThinkingLevel) => void;
   context?: ContextUsage;
-  contextIsLastKnown?: boolean;
   cost?: number;
   totalTokens?: number;
   responseModel?: string;
@@ -36,7 +35,7 @@ interface Props {
 }
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, contextIsLastKnown, cost, totalTokens, responseModel, responseEffort, queuedMessages = [] }: Props) {
+export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, totalTokens, responseModel, responseEffort, queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // The box grows with its text up to a cap, whichever way the text got there.
   useEffect(() => {
@@ -112,7 +111,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
                 variant="ghost"
                 size="sm"
                 aria-label="Context usage"
-                aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens${contextIsLastKnown ? " · last-known" : ""}`}
+                aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
                 className={cn("h-8 gap-1.5 whitespace-nowrap px-2 tabular-nums", left !== null && left < 15 && "text-warn")}
               >
                 <span className="relative inline-block size-3.5 rounded-full border border-current/40" aria-hidden>
@@ -124,7 +123,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" aria-label="Context usage details" className="w-64 max-w-[calc(100vw-2rem)] space-y-1 text-sm">
-              <p>{tokens === null ? "Context usage unavailable" : `${contextIsLastKnown ? "Last-known context" : "Current context"}: ${tokens.toLocaleString()} tokens`}</p>
+              <p>{tokens === null ? "Context usage unavailable" : `Context: ${tokens.toLocaleString()} tokens`}</p>
               {contextWindow !== undefined && contextWindow > 0 && <p className="text-ink-2">Context window: {contextWindow.toLocaleString()} tokens</p>}
               {left !== null && <p className="text-ink-2">{left < 1 ? left.toFixed(1) : Math.round(left)}% left</p>}
               {totalTokens !== undefined && <p className="text-ink-2">Session total: {totalTokens.toLocaleString()} tokens</p>}

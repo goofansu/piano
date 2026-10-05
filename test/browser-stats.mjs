@@ -40,7 +40,12 @@ async function ab(...args) {
 const evaluate = async js => JSON.parse(await ab('eval', js));
 const click = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
 const info = () => evaluate(`Object.fromEntries([...document.querySelectorAll('[aria-label="Session information"] dt')].map(dt=>[dt.textContent,dt.nextElementSibling.textContent]))`);
-async function capture(name) { writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot')); await ab('screenshot', join(evidence, `${name}.png`)); observations.push(name); }
+async function capture(name) {
+  const snapshot = await ab('snapshot');
+  writeFileSync(join(evidence, `${name}.txt`), snapshot);
+  assert.doesNotMatch(snapshot, /last-known/i, 'cache freshness stays internal, including menus and accessible descriptions');
+  await ab('screenshot', join(evidence, `${name}.png`)); observations.push(name);
+}
 async function send(text) { await ab('fill', 'textarea[aria-label="Message"]', text); await click('Send'); }
 async function ready() {
   for (let n = 0; n < 100; n++) {
@@ -64,21 +69,21 @@ try {
   await stop(server);
   await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Reconnecting'`);
   assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '50', 'keep the composer count uncluttered');
-  assert.match(await evaluate(`document.querySelector('button[aria-label="Context usage"]').getAttribute('aria-description')`), /last-known/);
-  await capture('disconnected-last-known');
+  assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').getAttribute('aria-description')`), '50 tokens');
+  await capture('disconnected-cached-values');
   server = startServer('--hold-stats'); await ready();
   await ab('reload'); await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Not running'`);
   await ab('wait', '--text', 'Final cached');
   await click('Session menu'); facts = await info();
-  assert.equal(facts.Context, '50 tokens · last-known'); assert.equal(facts['Session cost'], '$1.23');
+  assert.equal(facts.Context, '50 tokens'); assert.equal(facts['Session cost'], '$1.23');
   await capture('restarted-file-history-with-cached-stats'); await ab('press', 'Escape');
-  await click('Context usage'); await ab('wait', '--text', 'Last-known context: 50 tokens'); await capture('cached-context-popover'); await ab('press', 'Escape');
+  await click('Context usage'); await ab('wait', '--text', 'Context: 50 tokens'); await capture('cached-context-popover'); await ab('press', 'Escape');
   await ab('click', 'button[title="unknown"]'); await click('Session menu'); facts = await info();
   assert.equal(facts.Context, 'Unavailable'); assert.equal(facts['Session cost'], 'Unavailable'); await ab('press', 'Escape');
   await ab('click', 'button[title="cached"]');
   await send('/alive'); await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Ready'`);
   await click('Session menu'); facts = await info();
-  assert.equal(facts.Context, '50 tokens · last-known'); assert.equal(facts['Session cost'], '$1.23');
+  assert.equal(facts.Context, '50 tokens'); assert.equal(facts['Session cost'], '$1.23');
   await capture('resumed-before-stats-reply'); await ab('press', 'Escape');
   writeFileSync(statsFile, JSON.stringify({ cost: 2.34, contextUsage: { tokens: 400, contextWindow: 1000, percent: 40 } }));
   const pid = readFileSync(audit, 'utf8').trim().split('\n').map(JSON.parse).findLast(r => r.sessionId === 'cached' && r.event === 'spawn').pid;
@@ -90,12 +95,12 @@ try {
   writeFileSync(statsFile, JSON.stringify({ error: 'fixture usage refresh unavailable' }));
   await send('/settle'); await ab('wait', '--text', 'Unable to refresh session details.');
   await click('Session menu'); facts = await info();
-  assert.equal(facts.Context, '400 tokens · last-known'); assert.equal(facts['Session cost'], '$2.34');
-  await ab('set', 'viewport', '320', '844'); await capture('failed-refresh-last-known-mobile');
+  assert.equal(facts.Context, '400 tokens'); assert.equal(facts['Session cost'], '$2.34');
+  await ab('set', 'viewport', '320', '844'); await capture('failed-refresh-cached-values-mobile');
   await ab('press', 'Escape');
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '400');
-  await click('Context usage'); await ab('wait', '--text', 'Last-known context: 400 tokens'); await capture('mobile-context-details'); await ab('press', 'Escape');
+  await click('Context usage'); await ab('wait', '--text', 'Context: 400 tokens'); await capture('mobile-context-details'); await ab('press', 'Escape');
   writeFileSync(statsFile, JSON.stringify({ cost: 0, contextUsage: { tokens: null, contextWindow: 1000, percent: null } }));
   await send('/settle'); await click('Session menu');
   await ab('wait', '--fn', `document.querySelector('[aria-label="Session information"]')?.textContent.includes('$0.00')`);
