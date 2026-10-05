@@ -113,7 +113,6 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
                 value={text}
                 rows={1}
                 aria-label="First message"
-                placeholder="Ask a question, plan a change, or build something…"
                 className={cn(composerInput, "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5")}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {

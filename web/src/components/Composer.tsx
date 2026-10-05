@@ -87,7 +87,6 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
           disabled={disabled}
           rows={1}
           aria-label="Message"
-          placeholder={compacting ? "Pi is compacting. Ordinary input may be rejected." : streaming ? "Send a follow-up; extension commands run immediately." : "What should Pi do next?"}
           className={composerInput}
           onChange={(e) => onTextChange(e.target.value)}
           onKeyDown={(e) => {
