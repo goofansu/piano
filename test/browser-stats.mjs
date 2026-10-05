@@ -63,7 +63,8 @@ try {
 
   await stop(server);
   await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Reconnecting'`);
-  assert.match(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), /50.*last-known/);
+  assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '50', 'keep the composer count uncluttered');
+  assert.match(await evaluate(`document.querySelector('button[aria-label="Context usage"]').getAttribute('aria-description')`), /last-known/);
   await capture('disconnected-last-known');
   server = startServer('--hold-stats'); await ready();
   await ab('reload'); await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Not running'`);
@@ -93,6 +94,7 @@ try {
   await ab('set', 'viewport', '320', '844'); await capture('failed-refresh-last-known-mobile');
   await ab('press', 'Escape');
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+  assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '400');
   await click('Context usage'); await ab('wait', '--text', 'Last-known context: 400 tokens'); await capture('mobile-context-details'); await ab('press', 'Escape');
   writeFileSync(statsFile, JSON.stringify({ cost: 0, contextUsage: { tokens: null, contextWindow: 1000, percent: null } }));
   await send('/settle'); await click('Session menu');

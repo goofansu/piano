@@ -121,7 +121,6 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
                   )}
                 </span>
                 {tokens === null ? "—" : formatTokenCount(tokens)}
-                {tokens !== null && contextIsLastKnown && <span className="text-xs text-ink-3">last-known</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" aria-label="Context usage details" className="w-64 max-w-[calc(100vw-2rem)] space-y-1 text-sm">
