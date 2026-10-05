@@ -49,7 +49,7 @@ function ab(...args) {
 }
 const evaluate = js => JSON.parse(ab('eval', js));
 const header = () => evaluate(`document.querySelector('main header [role="status"]').textContent`);
-const lastInput = () => evaluate(`document.querySelector('[aria-label="Last input"]').textContent`);
+const lastInput = () => evaluate(`document.querySelector('[aria-label="Last input"]')?.textContent ?? null`);
 function send(text) {
   // Existing bottom-right toast placement can cover the composer action; hovering pauses expiry.
   ab('mouse', 'move', '10', '10');
@@ -73,7 +73,7 @@ try {
   ab('--init-script', init, 'open', 'http://127.0.0.1:7172/new');
   ab('fill', '[aria-label="First message"]', 'handled input');
   ab('click', '[aria-label="Send"]');
-  ab('wait', '--text', 'Handled —');
+  ab('wait', '--text', 'Command handled.');
   assert.equal(header(), 'Ready');
   assert.equal(evaluate(`document.querySelectorAll('article').length`), 0, 'handled input is not finalized history');
   assert.equal(evaluate(`document.querySelector('[aria-label="Message"]').disabled`), false);
@@ -82,7 +82,7 @@ try {
   send('immediate completion');
   ab('wait', '--text', 'echo: immediate completion');
   assert.equal(header(), 'Ready');
-  assert.match(lastInput(), /^Started —/);
+  assert.equal(lastInput(), null, 'completed turns need no redundant input receipt');
   capture('immediate');
 
   send('ask me');
@@ -98,17 +98,17 @@ try {
   ab('wait', '[aria-label="Stop"]');
   send('expand queue');
   ab('wait', '--text', 'Queued messages (1)');
-  assert.match(lastInput(), /^Queued —/);
+  assert.equal(lastInput(), null, 'the queue itself shows pending input');
   assert.equal(evaluate(`document.querySelector('[aria-label="Queued messages"] li').lastElementChild.textContent`), 'expanded follow-up');
   assert.equal(evaluate(`[...document.querySelectorAll('article')].some(e=>e.textContent.includes('expanded follow-up'))`), false);
   capture('queued');
   ab('reload');
   ab('wait', '--text', 'Queued messages (1)');
-  assert.match(lastInput(), /^Queued —/);
+  assert.equal(lastInput(), null);
   capture('queued-reload');
 
   send('/handled');
-  ab('wait', '--text', 'Handled —');
+  ab('wait', '--text', 'Command handled.');
   assert.equal(header(), 'Working', 'handled does not settle independent work');
   assert.equal(evaluate(`document.querySelector('[aria-label="Model"]').title`), 'fake/beta');
   capture('busy-command');
@@ -122,7 +122,7 @@ try {
   assert.equal(header(), 'Compacting · Retrying');
   assert.match(evaluate(`document.querySelector('[aria-label="Message"]').placeholder`), /may be rejected/);
   send('ordinary input during compaction');
-  ab('wait', '--text', 'Rejected —');
+  ab('wait', '--text', 'Message rejected.');
   assert.match(lastInput(), /Cannot prompt during compaction/);
   assert.equal(header(), 'Compacting · Retrying');
   capture('rejected-during-compaction');
@@ -145,7 +145,7 @@ try {
   assert.equal(evaluate(`sent.filter(m=>m.action?._tag==='prompt').length`), 0, 'reload never resubmits');
   capture('uncertain-reload');
   send('/release-ack');
-  ab('wait', '--text', 'Handled —');
+  ab('wait', '--text', 'Command handled.');
   assert.equal(header(), 'Working', 'old acceptance cannot settle or reactivate work');
   capture('late-ack');
   send('/recover');

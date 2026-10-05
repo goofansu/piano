@@ -53,6 +53,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   const effectiveEffort = (t?.hosted ? t.state.thinkingLevel as ThinkingLevel | undefined : undefined)
     ?? clampEffort(levelsFor(catalog, effectiveModel), effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
   const extension = t?.state.extension;
+  const lastResponse = t?.messages.findLast(message => message.role === "assistant");
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
   const [overrides, setOverrides] = useState<{ model?: string; thinkingLevel?: ThinkingLevel }>({});
   useEffect(() => setOverrides({}), [t?.cwd, t?.sessionId]);
@@ -67,11 +68,11 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   ].filter(Boolean).join(" · ");
   const submission = t?.state.submission;
   const submissionText = submission ? {
-    submitting: "Submitting — waiting for Pi to acknowledge this input.",
-    started: "Started — Pi accepted this input to start work. See current activity above.",
-    queued: "Queued — Pi accepted this input for later. The queue below shows what is still pending.",
-    handled: "Handled — Pi consumed this input without starting a run for it. This is not proof of command success.",
-    rejected: "Rejected — Pi did not accept this input.",
+    submitting: "Submitting — waiting for Pi.",
+    started: undefined, // Running/ready state already describes the work.
+    queued: undefined, // The queue itself shows pending input.
+    handled: "Command handled.",
+    rejected: "Message rejected.",
     uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
   }[submission.outcome] : undefined;
   const [workingSince, setWorkingSince] = useState<number | null>(null);
@@ -142,12 +143,12 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         <div className="border-b border-line bg-err-soft px-4 py-2 text-sm text-err">Pi stopped: {t.closedReason}</div>
       )}
 
-      {t && <section aria-label="Display scope" className="border-b border-line px-4 py-1 text-xs text-ink-3">
-        Current Pi context · not all history · system, thinking and images omitted
-        {t.state.model && <p>{t.hosted ? "Selected" : "Recorded selection (Pi confirms on start)"}: {t.state.model} · {t.state.thinkingLevel ?? "effort unknown"}</p>}
-        {t.state.tokens && <p>Full-session usage: {t.state.tokens.total.toLocaleString()} tokens · totals from Pi</p>}
-        {t.state.projectionError && <p className="text-warn">{t.state.projectionError}</p>}
-      </section>}
+      {t?.state.projectionError && (
+        <div role="alert" className="border-b border-line px-4 py-2 text-sm text-warn">
+          <p>Unable to refresh the conversation. Recent changes may be missing.</p>
+          <details className="mt-1"><summary className="cursor-pointer">Details</summary><p className="break-words">{t.state.projectionError}</p></details>
+        </div>
+      )}
       {t ? (
         <MessageList
           messages={t.messages}
@@ -179,7 +180,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         {extension.statuses.map(status => <p key={status.key}>{status.key}: {status.text}</p>)}
         {extension.widgets.map(widget => <div key={widget.key}><p>{widget.key} · {widget.placement === "aboveEditor" ? "above editor" : "below editor"}</p><pre className="whitespace-pre-wrap break-words">{widget.lines.join("\n")}</pre></div>)}
         {extension.editorRequest && <div>
-          <p>Extension editor request (never sent automatically)</p>
+          <p>Suggested message</p>
           <pre className="whitespace-pre-wrap break-words">{extension.editorRequest.text}</pre>
           <Button size="sm" variant="outline" disabled={usedEditorRequest === extension.editorRequest.id} onClick={() => {
             if (draftKey && extension.editorRequest) { onDraftAppend(draftKey, `${state.drafts[draftKey] ? "\n\n" : ""}${extension.editorRequest.text}`); setUsedEditorRequest(extension.editorRequest.id); }
@@ -209,6 +210,9 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         }}
         context={t?.state.context}
         cost={t?.state.cost}
+        totalTokens={t?.state.tokens?.total}
+        responseModel={lastResponse?.model}
+        responseEffort={lastResponse?.thinkingLevel}
         queuedMessages={t?.state.queuedMessages}
       />
     </>

@@ -238,9 +238,11 @@ INV-11–12.**
   reopening the Pi file. Read selected model/effort back when Pi clamps or changes it. Make catalog
   observations relevant to the selected cwd; a home-directory probe cannot establish project-local
   models/resources or MCP overrides. Let Pi load them rather than building another configuration loader.
-- Choose and label a consistent display scope: `get_messages` is Pi's current model-context view,
+- Choose and document a consistent display scope: `get_messages` is Pi's current model-context view,
   not all raw history. Compaction/context edits and active-branch reopening must use authoritative Pi
   projections for the chosen scope, never concatenated stale cache or a second Piano context builder.
+  Enforce this in code/tests; scope and protocol caveats are not permanent header copy. Keep model
+  selection in the composer and additional response/usage facts available on demand.
 - Show tool updates and retained supported status/widgets/editor requests with documented RPC limits.
   Interpret partial tool results using their actual contract, not an unconditional append rule.
 - Apply one consistent projection/redaction rule to live output, authoritative reload snapshots,
@@ -251,8 +253,9 @@ INV-11–12.**
   indexes, nested tools, status set/clear, usage, virtual/physical models and clamped effort. Include
   split secret canaries and malicious markup in both live and reloaded paths. Assert caller-visible
   results, not private assembler methods.
-- **Browser gate:** corrected final text, selected/routed labels, tool parent/output and extension
-  state remain consistent after reload; secret canaries are absent and markup cannot run code.
+- **Browser gate:** corrected final text, the model picker and on-demand response/usage details,
+  nested tool output and extension state remain consistent after reload; secret canaries are absent
+  and markup cannot run code. Actual refresh failures remain visible without routine caveat banners.
 - **Stop:** changed supported projections are faithful and safe within the stated scope. Do not
   chase arbitrary TUI parity or add unrelated image/model capabilities.
 
@@ -260,7 +263,9 @@ INV-11–12.**
 records indexed authoritative endings, current-context file/live projections, selected/routed facts,
 usage and nested execution previews, cwd-scoped catalogs, retained extension state and heuristic
 redaction. Module, locked-CLI discovery/UI and scratch-browser gates pass for the supported text
-scope. Credential containment, terminal-only UI and Phases 4–6 remain outside this acceptance.
+scope. The [October 5 presentation correction](research/2026-10-05-quiet-session-ui.md) records the
+user-requested Codex/T3 Code reference pattern: preserve these contracts in code, without permanent
+provenance banners. Credential containment, terminal-only UI and Phases 4–6 remain outside this acceptance.
 
 ### Phase 4 — Keep one canonical server-owned execution
 

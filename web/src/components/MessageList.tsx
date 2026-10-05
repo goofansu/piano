@@ -151,8 +151,6 @@ function Message({ msg, results, tools, active, hideTools, streaming }: { msg: R
             />
           </Row>
         )}
-        {msg.model && <p className="pl-7 text-xs text-ink-3">Routed: {msg.model}{msg.thinkingLevel ? ` · ${msg.thinkingLevel}` : ""}{msg.responseModel ? ` · provider response: ${msg.responseModel}` : ""}</p>}
-        {msg.usage && <p className="pl-7 text-xs text-ink-3">{msg.usage.totalTokens.toLocaleString()} response tokens · ${msg.usage.cost.toFixed(4)}{streaming ? " · cumulative so far" : ""}</p>}
         {msg.errorMessage && <p className="pl-7 text-sm text-err">{msg.stopReason}: {msg.errorMessage}</p>}
         {!hideTools && msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
       </article>
@@ -251,7 +249,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
   const hidden = lines.length - shown.length;
 
   return (
-    <div className="text-sm">
+    <div role="group" aria-label={`${call.name} tool call`} className="text-sm">
       <Row
         glyph={
           <span
@@ -280,7 +278,6 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
       )}
       {output && (
         <Row glyph={<span className="font-mono text-ink-3">{open && call.args ? " " : "└"}</span>} className="mt-1">
-          {!result && <p className="text-xs text-ink-3">{execution?.outputKind === "final" ? "Final execution output" : "Latest tool update (not an append-only log)"}</p>}
           <pre className={cn("whitespace-pre-wrap break-all", failed ? "text-err" : "text-ink-2")}>{clamp(shown.join("\n"), all ? 20000 : 2000)}</pre>
           {hidden > 0 && (
             <button type="button" onClick={() => setAll(true)} className="mt-0.5 rounded text-ink-3 hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
@@ -294,14 +291,13 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
           )}
         </Row>
       )}
-      {result?.usage && <p className="pl-7 text-xs text-ink-3">{result.usage.totalTokens} tool tokens · includes nested usage once</p>}
-      {[...nested.values()].map(child => <div key={child.id} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
-        <p>Nested {child.name} · {child.status} · parent: {child.parentId}</p>
+      {[...nested.values()].map(child => <div key={child.id} role="group" aria-label={`${child.name} tool call`} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
+        <p>{child.name} · {{ running: "Running", success: "Done", error: "Failed", incomplete: "Incomplete" }[child.status]}</p>
         <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
-        <p className="text-ink-3">{child.outputKind === "unavailable" ? "Output not persisted by Pi" : child.outputKind === "final" ? "Final execution output" : "Latest tool update (not an append-only log)"}</p>
+        {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}
         {child.text && <pre className="whitespace-pre-wrap break-words">{clamp(child.text, 4000)}</pre>}
       </div>)}
-      {result?.nestedCallsComplete === false && <p className="pl-7 text-xs text-warn">Pi retained an incomplete nested-call record.</p>}
+      {result?.nestedCallsComplete === false && <p className="pl-7 text-xs text-warn">Some tool details are unavailable.</p>}
     </div>
   );
 }

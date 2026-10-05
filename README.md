@@ -108,10 +108,12 @@ context. File peeks use Pi's own active-branch, compaction and context-edit proj
 messages, thinking blocks and images are omitted. Raw history stays in Pi, unchanged by display
 redaction. A failed or repeatedly racing refresh is labeled rather than silently called current.
 
-**Selected** identifies the running selection; **Routed** on a response identifies the physical
-model/effort that answered. A stopped file shows only the *recorded* selection until Pi confirms it.
-Response/tool usage is cumulative per result. Full-session totals come from Pi (including work
-outside the current context), and are unavailable on a read-only file peek.
+The composer model picker shows the selection. Its value from a stopped file is a recorded hint;
+Pi confirms or restores it on start. The existing **Context usage** popover provides session totals,
+cost and the latest displayed response's physical model/effort on demand. Response/tool usage remains
+cumulative per result in the wire data. Full-session totals come from Pi (including work outside the
+current context), and are unavailable on a read-only file peek. These guarantees are enforced in
+state handling and tests, not repeated as permanent header or per-message disclaimers.
 
 Tool previews show the **latest update**, not an assumed append-only log. Final execution output
 replaces it. Nested calls remain execution details, not extra messages or additional usage. Pi

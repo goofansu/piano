@@ -74,7 +74,7 @@ try {
   await ab('fill', '[aria-label="First message"]', fake ? '/hold-abort' : '/phase0-dialog');
   await ab('click', '[aria-label="Send"]');
   if (fake) {
-    await ab('wait', '--text', 'Handled —');
+    await ab('wait', '--text', 'Command handled.');
     await send('/dialog input');
     await ab('wait', '--text', 'Fixture d1');
     await ab('find', 'role', 'button', 'click', '--name', 'Abort current', '--exact');

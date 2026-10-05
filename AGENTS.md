@@ -75,6 +75,10 @@ for documentation-only changes.
 
 ## Design
 
+Keep correctness in authoritative state handling and regression checks, not permanent protocol
+caveats in the UI. Follow Codex/T3 Code's quiet interaction pattern: normal controls and concise
+status in the main view, optional metadata on demand, persistent warnings for actionable problems.
+
 `server/PiSessions.ts` is the deep module: `open`, `probe`, and per session `events`, `act`,
 `state`, all in the browser's wire vocabulary from `shared/wire.ts`. Add capabilities as new
 `SessionAction` or `SessionEvent` variants; everything pi-protocol-specific stays behind that seam.

@@ -28,11 +28,14 @@ interface Props {
   onEffortChange: (level: ThinkingLevel) => void;
   context?: ContextUsage;
   cost?: number;
+  totalTokens?: number;
+  responseModel?: string;
+  responseEffort?: string;
   queuedMessages?: ReadonlyArray<QueuedMessage>;
 }
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, queuedMessages = [] }: Props) {
+export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, totalTokens, responseModel, responseEffort, queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // The box grows with its text up to a cap, whichever way the text got there.
   useEffect(() => {
@@ -123,7 +126,9 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
               <p>{tokens === null ? "Context usage unavailable" : `Current context: ${tokens.toLocaleString()} tokens`}</p>
               {contextWindow !== undefined && contextWindow > 0 && <p className="text-ink-2">Context window: {contextWindow.toLocaleString()} tokens</p>}
               {left !== null && <p className="text-ink-2">{left < 1 ? left.toFixed(1) : Math.round(left)}% left</p>}
+              {totalTokens !== undefined && <p className="text-ink-2">Session total: {totalTokens.toLocaleString()} tokens</p>}
               {cost !== undefined && <p className="text-ink-2">${cost.toFixed(2)} so far</p>}
+              {responseModel && <p className="break-words text-ink-2">Last response: {responseModel}{responseEffort ? ` · ${responseEffort}` : ""}</p>}
             </PopoverContent>
           </Popover>
           <Button

@@ -6,7 +6,7 @@ const args = process.argv.slice(2);
 const sessionId = args[args.indexOf('--session-id') + 1] ?? 'projection';
 const canary = process.env.PIANO_TEST_SECRET ?? 'sk-projection-canary-123456789';
 const usage = n => ({ input: 10, output: n, cacheRead: 0, cacheWrite: 0, totalTokens: 10 + n, cost: { total: n / 100 } });
-let messages = [], streaming = false, thinkingLevel = 'low', raceContext = false;
+let messages = [], streaming = false, thinkingLevel = 'low', raceContext = false, failRefresh = false;
 const assistant = content => ({ role: 'assistant', provider: 'physical', model: 'answer', thinkingLevel: 'high', content, usage: usage(5), stopReason: 'stop' });
 const ui = (method, fields) => out({ type: 'extension_ui_request', id: method, method, ...fields });
 const delta = (type, contentIndex, fields = {}, n = 1) => out({ type: 'message_update', usage: usage(n), assistantMessageEvent: { type, contentIndex, ...fields } });
@@ -15,6 +15,7 @@ function handle(c) {
   switch (c.type) {
     case 'get_state': return reply(c, { sessionId, model: { provider: 'router', id: 'auto' }, thinkingLevel, isStreaming: streaming });
     case 'get_messages': {
+      if (failRefresh) return reply(c, undefined, 'Fixture refresh failed ' + canary);
       if (raceContext) {
         raceContext = false;
         const stale = messages;
@@ -60,6 +61,10 @@ function handle(c) {
       } else if (c.message === '/compact') {
         messages = [{ role: 'compactionSummary', summary: 'STALE readback' }]; raceContext = true;
         out({ type: 'compaction_end', result: { summary: 'different event summary' } });
+      } else if (c.message === '/refresh-fail') {
+        failRefresh = true;
+      } else if (c.message === '/refresh-recover') {
+        failRefresh = false;
       } else if (c.message === '/edit-context') {
         messages = [{ role: 'custom', content: 'Authoritative context edit', display: true }];
       } else if (c.message === '/select-secret') {
