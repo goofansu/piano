@@ -140,7 +140,7 @@ export default function App() {
       conn.send({ ...m, selectionId });
     } else if (m._tag === "act") {
       const s = latest.current;
-      if (s.connected && !s.resync && s.selectionId) conn.send({ ...m, selectionId: s.selectionId });
+      if (s.connected && !s.resync && !s.selecting && s.selectionId) conn.send({ ...m, selectionId: s.selectionId });
     } else conn.send(m);
   }, [conn, dispatch]);
   const select = useCallback(
@@ -162,7 +162,8 @@ export default function App() {
   }, [state.connected]);
   useEffect(() => {
     const current = latest.current.session;
-    if (state.connected && state.resync && current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
+    // The reconnect effect above may already have started a fresh attachment.
+    if (state.connected && latest.current.resync && current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
   }, [state.connected, state.resync, send]);
 
   const openNew = useCallback((cwd?: string) => {
@@ -284,7 +285,7 @@ export default function App() {
           <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} />
         )}
       </main>
-      <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync} />
+      <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </div>
   );
 }

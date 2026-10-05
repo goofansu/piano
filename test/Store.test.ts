@@ -30,8 +30,11 @@ test("INV-05: superseded selection, duplicate, cross-session and gapped frames n
   deliver({ ...message, cursor: { ...message.cursor, sequence: 13 }, event: { _tag: "notice", level: "error", message: "gap" } });
   assert.equal(state.resync, true);
   assert.equal(sessionDelivery(state, message), "ignore", "no stale notifications while resynchronizing");
+  const retained = state.session;
   state = reduce(state, { type: "selecting", cwd: "/scratch", sessionId: "b", selectionId: "b2" });
-  deliver(selection("b", "b1", 50)); assert.equal(Boolean(state.session), false, "even a newer sequence cannot revive an old attachment");
+  assert.equal(state.session, retained, "resynchronizing the same session keeps its visible projection");
+  const awaiting = state;
+  deliver(selection("b", "b1", 50)); assert.equal(state, awaiting, "even a newer sequence cannot revive an old attachment");
   deliver(selection("b", "b2", 20));
   assert.equal(state.session?.pending?.text, "current partial"); assert.equal(state.resync, false);
   deliver({ ...message, selectionId: "b2", cursor: { ...message.cursor, generation: "restarted", sequence: 1 } });
@@ -42,6 +45,41 @@ test("INV-05: superseded selection, duplicate, cross-session and gapped frames n
   state = reduce(state, { type: "new" });
   const newPage = state;
   deliver(selection("b", "b3", 100, "restarted")); assert.equal(state, newPage, "returning to New invalidates selection responses too");
+});
+
+test("INV-02/05: reconnect retains the view and draft until a fresh attachment snapshot, even at the same cursor", () => {
+  const identity = { cwd: "/scratch", sessionId: "a" };
+  let state = reduce({ ...initialState, connected: true }, { type: "selecting", ...identity, selectionId: "before" });
+  state = reduce(state, { type: "server", message: selection("a", "before") });
+  state = reduce(state, { type: "draft_changed", key: sessionKey(identity), text: "unsent draft" });
+  const visible = state.session;
+  state = reduce(state, { type: "connected", connected: false });
+  assert.equal(state.session, visible);
+  const disconnected = state;
+  state = reduce(state, { type: "server", message: selection("a", "before", 50) });
+  assert.equal(state, disconnected, "the disconnected attachment cannot update the retained view");
+  state = reduce(state, { type: "connected", connected: true });
+  assert.equal(state.selectionId, null, "a new connection is not yet an attachment");
+  state = reduce(state, { type: "selecting", ...identity, selectionId: "after" });
+  assert.equal(state.session, visible);
+  assert.equal(state.drafts[sessionKey(identity)], "unsent draft");
+  const delta: Extract<ServerMessage, { _tag: "session" }> = {
+    _tag: "session", selectionId: "after", cursor: { ...identity, generation: "child", sequence: 11 },
+    event: { _tag: "message_end", message: { id: "too-early", role: "assistant", text: "not synchronized" } },
+  };
+  assert.equal(sessionDelivery(state, { ...delta, selectionId: "before" }), "ignore");
+  assert.equal(sessionDelivery(state, delta), "ignore", "wait for the new snapshot before accepting deltas or notices");
+  const awaiting = state;
+  state = reduce(state, { type: "server", message: delta });
+  assert.equal(state, awaiting);
+  const fresh = selection("a", "after");
+  state = reduce(state, { type: "server", message: { ...fresh, snapshot: { ...fresh.snapshot, pending: { id: "partial", role: "assistant", text: "refreshed projection" } } } });
+  assert.equal(state.selecting, null, "an unchanged cursor still completes reattachment");
+  assert.equal(state.session?.pending?.text, "refreshed projection");
+  assert.equal(state.drafts[sessionKey(identity)], "unsent draft");
+  assert.equal(sessionDelivery(state, delta), "apply");
+  state = reduce(state, { type: "selecting", cwd: "/scratch", sessionId: "b", selectionId: "other" });
+  assert.equal(state.session, null, "actual navigation must not show the previous session as the new one");
 });
 
 test("a late queue restore appends to its original session draft without changing the current view", () => {

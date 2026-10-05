@@ -28,7 +28,7 @@ export interface AppState {
   session: SessionView | null;
   /** Correlated result; only the requesting directory picker may change its selection. */
   worktreeResult: Extract<ServerMessage, { _tag: "worktree_result" }> | null;
-  /** Local selection while the server's `selected` answer is in flight. */
+  /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
@@ -66,9 +66,12 @@ export type Action =
 export function reduce(s: AppState, a: Action): AppState {
   switch (a.type) {
     case "connected":
-      return { ...s, connected: a.connected };
+      // A reopened socket is not attached until it receives a new selection snapshot.
+      return { ...s, connected: a.connected, selectionId: a.connected ? s.selectionId : null };
     case "selecting":
-      return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId }, session: null, done: s.done.filter((k) => k !== sessionKey(a)) };
+      return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId },
+        session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
+        done: s.done.filter((k) => k !== sessionKey(a)) };
     case "new":
       return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd }, selecting: null, session: null };
     case "missing-session":
@@ -85,7 +88,7 @@ export function reduce(s: AppState, a: Action): AppState {
 /** Shared by projection and notifications: rejected frames cannot toast either. */
 export function sessionDelivery(s: AppState, m: Extract<ServerMessage, { _tag: "session" }>): "apply" | "ignore" | "resync" {
   const t = s.session;
-  if (!t || !s.connected || s.resync || m.selectionId !== s.selectionId || m.cursor.cwd !== t.cwd || m.cursor.sessionId !== t.sessionId) return "ignore";
+  if (!t || !s.connected || s.resync || s.selecting || m.selectionId !== s.selectionId || m.cursor.cwd !== t.cwd || m.cursor.sessionId !== t.sessionId) return "ignore";
   if (!t.cursor || m.cursor.generation !== t.cursor.generation) return "resync";
   if (m.cursor.sequence <= t.cursor.sequence) return "ignore";
   return m.cursor.sequence === t.cursor.sequence + 1 ? "apply" : "resync";
@@ -114,7 +117,9 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
       if (m.cursor && (m.cursor.cwd !== m.cwd || m.cursor.sessionId !== m.sessionId || m.snapshot.state.sessionId !== m.sessionId)) return { ...s, resync: true };
-      if (s.session?.cursor && m.cursor) {
+      // The first snapshot for a new attachment may have the same sequence or
+      // a new host generation. Only compare cursors within an established attachment.
+      if (!s.selecting && s.session?.cursor && m.cursor) {
         if (m.cursor.generation !== s.session.cursor.generation) return { ...s, resync: true };
         if (m.cursor.sequence <= s.session.cursor.sequence) return s;
       }

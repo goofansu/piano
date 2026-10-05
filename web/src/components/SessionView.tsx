@@ -39,6 +39,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
     }
   };
   const t = state.session;
+  const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const draftKey = t ? sessionKey(t) : undefined;
   const project = t ? state.projects.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
   const worktree = project?.worktrees.find((w) => w.path === t?.cwd);
@@ -83,8 +84,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   const prUrls = useMemo(() => (t ? pullRequestUrls(t.messages) : []), [t?.messages]);
   const prs = usePullRequests(prUrls, !streaming);
 
-  const status = !state.connected
-    ? { word: "Reconnecting", dot: "border border-err", why: "The connection to piano dropped. Retrying." }
+  const status = !state.connected || (t !== null && !ready)
+    ? { word: "Reconnecting", dot: "border border-err", why: "Refreshing this session's connection." }
     : !t
       ? { word: "Loading", dot: "bg-ink-3", why: "Fetching this session." }
       : t.closedReason
@@ -104,7 +105,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         {/* Preserve live status announcements; visible session facts live in the menu. */}
         <span role="status" className="sr-only">{status.word}</span>
         {t && <SessionMenu key={draftKey} session={t} title={title} projectName={project?.name} worktree={worktree}
-          status={status} connected={state.connected && !state.resync} view={view} onViewChange={setView} send={send} />}
+          status={status} connected={ready} view={view} onViewChange={setView} send={send} />}
       </header>
 
       {project?.discovery.status === "error" && <div role="alert" className="border-b border-line px-4 py-2 text-sm text-err">
@@ -172,7 +173,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
         onTextAppend={(text) => { if (draftKey) onDraftAppend(draftKey, text); }}
         onRestoreQueue={() => send({ _tag: "act", action: { _tag: "restore_queue" } })}
-        disabled={!state.connected || !t}
+        disabled={!ready || !t}
         streaming={streaming}
         compacting={t?.state.isCompacting}
         onSend={(text) => send({ _tag: "act", action: { _tag: "prompt", text }, start: startOptions() })}
@@ -189,7 +190,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           else { setEffort(level); setOverrides(o => ({ ...o, thinkingLevel: level })); }
         }}
         context={t?.state.context}
-        contextIsLastKnown={!state.connected || state.resync || !t?.hosted || t.state.contextIsLastKnown !== false}
+        contextIsLastKnown={!ready || !t?.hosted || t.state.contextIsLastKnown !== false}
         cost={t?.state.cost}
         totalTokens={t?.state.tokens?.total}
         responseModel={lastResponse?.model}
