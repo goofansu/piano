@@ -344,6 +344,13 @@ returned checkout identity and does not silently bypass hook approval. **INV-01,
 - **Stop:** tested supported lifecycle discovery/create only. Branch PR/check summaries may be shown
   as observations, never as revision-bound verification; defer merge/remove.
 
+**Observed slice:** [Phase 6 implementation evidence](research/2026-10-05-phase6-worktree-discovery.md)
+records the enforced 0.80.0/schema-2 contract, explicit checkout discovery/selection, returned custom
+creation paths, non-Git/unknown/error states, and approval-preserving hooks with partial-failure
+reconciliation. Module, real scratch Worktrunk and browser gates pass for discovery/new-branch creation.
+PR/check collection, exact revisions, merge/remove and durable lifecycle jobs remain outside this
+acceptance. This does not retroactively certify every earlier runtime-checkpoint scenario.
+
 ### Phase 7 — Identify a workspace and inspect its exact revision/diff
 
 **Claim:** every session/diff/observation names its workspace; materially different relevant content

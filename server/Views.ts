@@ -1,10 +1,9 @@
-/** Sidebar view: projects with their worktrees and a flat, recent-first session list, all from piano's registry. */
-import { existsSync } from "node:fs";
+/** Registry selects directories/sessions; Git/Worktrunk supply current facts, never cached registry branches. */
 import { Effect } from "effect";
 import type { ProjectView, SessionInfo, WorktreeView } from "../shared/wire.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
-import { currentBranch } from "./Worktrees.ts";
+import { listWorktrees } from "./Worktrees.ts";
 
 export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | Registry> = Effect.gen(function* () {
   const hosts = yield* SessionHosts;
@@ -14,10 +13,13 @@ export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | R
   const hostOf = (cwd: string, sessionId: string) => running.find((h) => h.cwd === cwd && h.sessionId === sessionId);
 
   return yield* Effect.forEach(data.projects, (path) => Effect.gen(function* () {
-    const worktrees: WorktreeView[] = [
-      { branch: yield* currentBranch(path), path, main: true },
-      ...data.worktrees.filter((w) => w.project === path && existsSync(w.path)).map((w) => ({ branch: w.branch, path: w.path, main: false })),
-    ];
+    const discovery = yield* listWorktrees(path);
+    const paths = new Set([path, ...data.worktrees.filter(w => w.project === path).map(w => w.path)]);
+    const worktrees: WorktreeView[] = [...paths].map(cwd => {
+      const facts = discovery.status === "ready" ? discovery.worktrees.find(w => w.path === (cwd === path ? discovery.currentPath : cwd)) : undefined;
+      return { path: cwd, branch: facts?.branch ?? null, root: cwd === path, facts,
+        status: facts ? "current" : discovery.status === "ready" ? "missing" : discovery.status === "non-git" && cwd === path ? "non-git" : "unknown" };
+    });
     const branchOf = new Map(worktrees.map((w) => [w.path, w.branch]));
     const sessions: SessionInfo[] = data.sessions
       .filter((t) => !t.archived && branchOf.has(t.cwd))
@@ -35,6 +37,6 @@ export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | R
         };
       })
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    return { path, name: path.split("/").filter(Boolean).pop() ?? path, worktrees, sessions };
+    return { path, name: path.split("/").filter(Boolean).pop() ?? path, worktrees, discovery, sessions };
   }), { concurrency: 4 });
 });

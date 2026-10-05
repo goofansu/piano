@@ -7,11 +7,9 @@ import { composerCard, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { directoryStatus, WorktreesDialog } from "@/components/Worktrees";
 import { Textarea } from "@/components/ui/textarea";
 import { clampEffort, EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
@@ -58,16 +56,14 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
     if (!cwd && state.projects[0]) setCwd(state.projects[0].path);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.projects.length]);
-  // A worktree created from this page becomes the directory.
-  useEffect(() => {
-    if (state.lastWorktree) setCwd(state.lastWorktree.path);
-  }, [state.lastWorktree]);
   useEffect(() => {
     if (!creating) return;
     const t = setTimeout(() => setCreating(false), 15000);
     return () => clearTimeout(t);
   }, [creating]);
 
+  const project = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
+  const directory = project?.worktrees.find(w => w.path === cwd);
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
     setModel(undefined); setEffort(undefined);
@@ -124,6 +120,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               </Button>
             </div>
           </div>
+          {directory && <p className="mt-2 text-sm text-ink-3" title={cwd}>{!state.connected && "Last observation · "}{directoryStatus(directory)}</p>}
+          {project?.discovery.status === "error" && <p role="alert" className="mt-2 text-sm text-err">Git status unavailable. Open Worktrees to inspect and refresh.</p>}
           {creating && (
             <p className="mt-3 text-sm text-ink-3" role="status">
               Starting Pi
@@ -140,7 +138,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
 function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: AppState; value: string; onChange: (cwd: string) => void; onBrowse: () => void; send: (m: ClientMessage) => void }) {
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
-  const known = state.projects.flatMap((p) => p.worktrees.map((w) => ({ project: p.name, path: w.path, branch: w.branch, main: w.main })));
+  const known = state.projects.flatMap((p) => p.worktrees.map((w) => ({ project: p.name, ...w })));
   const current = known.find((k) => k.path === value);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -152,10 +150,10 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           ) : current ? (
             <>
               <span className="truncate">{current.project}</span>
-              {!current.main && (
+              {!current.root && (
                 <span className="inline-flex min-w-0 items-center gap-1 font-mono text-ink-3">
                   <GitBranchIcon className="size-3 shrink-0" />
-                  <span className="truncate">{current.branch}</span>
+                  <span className="truncate">{current.branch ?? (current.facts?.detached ? "Detached" : "Unknown branch")}</span>
                 </span>
               )}
             </>
@@ -176,7 +174,8 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                   <CommandItem
                     key={k.path}
                     value={k.path}
-                    keywords={[k.project, k.branch]}
+                    keywords={[k.project, k.branch ?? ""]}
+                    disabled={k.status === "missing"}
                     onSelect={() => {
                       onChange(k.path);
                       setOpen(false);
@@ -185,8 +184,8 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                     <CheckIcon className={cn("size-4 shrink-0", k.path === value ? "opacity-100" : "opacity-0")} />
                     <span className="min-w-0 flex-1 truncate">
                       {k.project}
-                      {!k.main && (
-                        <span className="ml-2 inline-flex items-center gap-1 font-mono text-ink-2"><GitBranchIcon className="size-3" />{k.branch}</span>
+                      {!k.root && (
+                        <span className="ml-2 inline-flex items-center gap-1 font-mono text-ink-2"><GitBranchIcon className="size-3" />{k.branch ?? (k.facts?.detached ? "Detached" : "Unknown branch")}</span>
                       )}
                     </span>
                     <span className="max-w-[150px] truncate font-mono text-ink-3">{abbrevHome(k.path)}</span>
@@ -213,71 +212,14 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                     setWtOpen(true);
                   }}
                 >
-                  <GitBranchPlusIcon /> New worktree
+                  <GitBranchPlusIcon /> Worktrees
                 </CommandItem>
               )}
             </CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>
-      <NewWorktreeDialog open={wtOpen} onOpenChange={setWtOpen} state={state} currentCwd={value} send={send} />
+      <WorktreesDialog open={wtOpen} onOpenChange={setWtOpen} state={state} currentCwd={value} send={send} onSelect={onChange} />
     </Popover>
-  );
-}
-
-/** Create a worktree with worktrunk in one of the known projects; the result becomes the directory. */
-function NewWorktreeDialog({ open, onOpenChange, state, currentCwd, send }: { open: boolean; onOpenChange: (o: boolean) => void; state: AppState; currentCwd: string; send: (m: ClientMessage) => void }) {
-  const owner = state.projects.find((p) => p.worktrees.some((w) => w.path === currentCwd))?.path ?? state.projects[0]?.path ?? "";
-  const [project, setProject] = useState(owner);
-  const [branch, setBranch] = useState("");
-  const [hooks, setHooks] = useState(false);
-  useEffect(() => {
-    if (open) setProject(owner);
-  }, [open, owner]);
-  const submit = () => {
-    const b = branch.trim();
-    if (!b || !project) return;
-    send({ _tag: "create_worktree", project, branch: b, hooks });
-    setBranch("");
-    onOpenChange(false);
-  };
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>New worktree</DialogTitle>
-          <DialogDescription>Creates a branch and checkout with worktrunk, then starts the session there.</DialogDescription>
-        </DialogHeader>
-        <form
-          id="new-worktree-form"
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-ink-2" htmlFor="wt-project">Project</label>
-            <Select value={project} onValueChange={setProject}>
-              <SelectTrigger id="wt-project" className="w-full"><SelectValue placeholder="Project" /></SelectTrigger>
-              <SelectContent>
-                {state.projects.map((p) => <SelectItem key={p.path} value={p.path}>{p.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-ink-2" htmlFor="wt-branch">Branch</label>
-            <Input id="wt-branch" autoFocus value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="feature-name" className="font-mono text-sm" autoComplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
-          </div>
-          <label className="flex items-center gap-2 text-sm text-ink-2">
-            <input type="checkbox" className="size-4 accent-brand" checked={hooks} onChange={(e) => setHooks(e.target.checked)} /> Run worktrunk hooks
-          </label>
-        </form>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" form="new-worktree-form" disabled={!branch.trim() || !project}>Create worktree</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -26,7 +26,7 @@ import { Registry } from "./Registry.ts";
 import { emptySnapshot } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { buildProjects } from "./Views.ts";
-import { createWorktree } from "./Worktrees.ts";
+import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
 
 const describe = (e: unknown): string => {
   if (e && typeof e === "object") {
@@ -163,10 +163,26 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "remove_project":
             yield* registry.removeProject(msg.path);
             return yield* publishProjects;
-          case "create_worktree": {
-            const wt = yield* createWorktree(msg.project, msg.branch.trim(), { hooks: msg.hooks });
-            yield* registry.addWorktree({ project: msg.project, path: wt.path, branch: wt.branch });
-            yield* send({ _tag: "worktree_created", project: msg.project, path: wt.path, branch: wt.branch });
+          case "create_worktree":
+          case "add_worktree": {
+            yield* Effect.gen(function* () {
+              if (!(yield* registry.get).projects.includes(msg.project)) return yield* new WorktreeError({ detail: "Select a registered project first." });
+              const result = msg._tag === "create_worktree"
+                ? yield* createWorktree(msg.project, msg.branch.trim(), { hooks: msg.hooks }).pipe(Effect.map(w => ({
+                    status: "ready" as const, project: msg.project, path: w.path, branch: w.branch,
+                    creation: { baseBranch: w.baseBranch, hooks: w.hooks },
+                  })))
+                : yield* Effect.gen(function* () {
+                    const discovery = yield* listWorktrees(msg.project);
+                    if (discovery.status !== "ready") return yield* new WorktreeError({ detail: discovery.status === "error" ? discovery.detail : "This project is non-Git." });
+                    const w = discovery.worktrees.find(w => w.path === msg.path);
+                    if (!w || w.prunable !== undefined) return yield* new WorktreeError({ detail: "This checkout is absent or unavailable. Refresh discovery and inspect it before selecting." });
+                    return { status: "ready" as const, project: msg.project, path: w.path, branch: w.branch };
+                  });
+              if (result.path !== msg.project) yield* registry.addWorktree({ project: msg.project, path: result.path, branch: result.branch ?? "" });
+              yield* send({ _tag: "worktree_result", requestId: msg.requestId, result });
+            }).pipe(Effect.catchTag("WorktreeError", e => send({ _tag: "worktree_result", requestId: msg.requestId, result: { status: "error", detail: e.detail } })));
+            // Failure may have left a checkout behind. Refresh rather than retrying a mutation.
             return yield* publishProjects;
           }
           case "ack": {

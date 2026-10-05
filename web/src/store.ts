@@ -26,8 +26,8 @@ export interface AppState {
   hosts: HostInfo[];
   catalogs: Record<string, ModelCatalog>;
   session: SessionView | null;
-  /** Last worktree created from this client, so the New page can select it. */
-  lastWorktree: { project: string; path: string; branch: string } | null;
+  /** Correlated result; only the requesting directory picker may change its selection. */
+  worktreeResult: Extract<ServerMessage, { _tag: "worktree_result" }> | null;
   /** Local selection while the server's `selected` answer is in flight. */
   selecting: { cwd: string; sessionId: string | null } | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
@@ -48,7 +48,7 @@ export const initialState: AppState = {
   hosts: [],
   catalogs: {},
   session: null,
-  lastWorktree: null,
+  worktreeResult: null,
   selecting: null,
   done: [],
   drafts: {},
@@ -109,8 +109,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     }
     case "models":
       return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
-    case "worktree_created":
-      return { ...s, lastWorktree: { project: m.project, path: m.path, branch: m.branch } };
+    case "worktree_result":
+      return { ...s, worktreeResult: m };
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
       if (m.cursor && (m.cursor.cwd !== m.cwd || m.cursor.sessionId !== m.sessionId || m.snapshot.state.sessionId !== m.sessionId)) return { ...s, resync: true };

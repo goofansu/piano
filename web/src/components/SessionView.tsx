@@ -114,7 +114,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
             <span className="h-4 w-px bg-line-strong" aria-hidden />
             {project && <span className="font-medium">{project.name}</span>}
             <span className="inline-flex items-center gap-1 rounded-md bg-fill px-1.5 font-mono text-ink-2">
-              <GitBranchIcon className="size-3.5" /> {worktree?.branch || "root"}
+              <GitBranchIcon className="size-3.5" /> {worktree?.branch ?? (worktree?.facts?.detached ? "Detached" : worktree?.status === "non-git" ? "Non-Git" : "Unknown branch")}
             </span>
             {t.state.sessionName ? <span className="truncate text-ink-2">{t.state.sessionName}</span> : null}
           </span>
@@ -139,6 +139,10 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         </Tooltip>
       </header>
 
+      {project?.discovery.status === "error" && <div role="alert" className="border-b border-line px-4 py-2 text-sm text-err">
+        Git status unavailable. <Button variant="ghost" size="sm" onClick={() => send({ _tag: "projects" })}>Refresh</Button>
+        <details><summary className="cursor-pointer">Details</summary><p className="whitespace-pre-wrap break-words">{project.discovery.detail}</p></details>
+      </div>}
       {t?.closedReason && t.closedReason !== "released" && (
         <div role="alert" className="border-b border-line bg-err-soft px-4 py-2 text-sm text-err">Pi stopped: {t.closedReason}. Interrupted operations are not resumed. Inspect the checkout before continuing.</div>
       )}

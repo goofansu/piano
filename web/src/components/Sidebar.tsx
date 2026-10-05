@@ -173,6 +173,8 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      {project.discovery.status === "error" && <p className="pl-7 text-xs text-err" title={project.discovery.detail}>Git status unavailable</p>}
+      {project.discovery.status === "non-git" && <p className="pl-7 text-xs text-ink-3">Non-Git</p>}
       {open && project.sessions.length === 0 && <p className="py-1.5 pl-7 text-sm text-ink-3">No sessions yet</p>}
       {open && (
         <ul className="mt-0.5 space-y-px">
@@ -184,7 +186,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             // Herdr's dots: yellow working, teal done, hollow green idle, nothing when no process.
             const dot = host?.streaming ? "animate-live bg-busy" : done ? "bg-done" : host ? "border border-ok" : null;
             // The branch is only news when the session runs somewhere other than the project root.
-            const inWorktree = !project.worktrees.some((w) => w.main && w.path === t.cwd);
+            const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
             return (
               <li key={t.sessionId} className={cn("group flex h-8 items-center rounded-md pr-1 hover:bg-fill-hover", selected && "bg-fill-active hover:bg-fill-active")}>
                 <button

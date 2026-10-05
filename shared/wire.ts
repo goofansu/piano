@@ -220,18 +220,41 @@ export const SessionInfo = Schema.Struct({
 });
 export type SessionInfo = typeof SessionInfo.Type;
 
+/** Point-in-time observations, not exact revisions or verification evidence. */
+export const WorktreeFacts = Schema.Struct({
+  path: Schema.String, branch: Schema.NullOr(Schema.String), main: Schema.Boolean,
+  head: Schema.NullOr(Schema.String), detached: Schema.Boolean,
+  changes: Schema.optional(Schema.NullOr(Schema.Struct({
+    staged: Schema.Boolean, modified: Schema.Boolean, untracked: Schema.Boolean,
+    renamed: Schema.Boolean, deleted: Schema.Boolean, conflicted: Schema.NullOr(Schema.Boolean),
+  }))),
+  operation: Schema.optional(Schema.NullOr(Schema.Literals(["merge", "rebase", "cherry_pick", "revert", "bisect"]))),
+  locked: Schema.optional(Schema.NullOr(Schema.Struct({ reason: Schema.NullOr(Schema.String) }))),
+  prunable: Schema.optional(Schema.NullOr(Schema.Struct({ reason: Schema.NullOr(Schema.String) }))),
+});
+export type WorktreeFacts = typeof WorktreeFacts.Type;
+export const WorktreeDiscovery = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("ready"), observedAt: Schema.String, currentPath: Schema.String,
+    defaultBranch: Schema.optional(Schema.NullOr(Schema.String)), worktrees: Schema.Array(WorktreeFacts) }),
+  Schema.Struct({ status: Schema.Literal("non-git"), observedAt: Schema.String }),
+  Schema.Struct({ status: Schema.Literal("error"), observedAt: Schema.String, detail: Schema.String }),
+]);
+export type WorktreeDiscovery = typeof WorktreeDiscovery.Type;
 export const WorktreeView = Schema.Struct({
-  branch: Schema.String,
-  path: Schema.String,
-  main: Schema.Boolean,
+  branch: Schema.NullOr(Schema.String), path: Schema.String,
+  /** Registry project root, not necessarily Git's primary worktree. */
+  root: Schema.Boolean,
+  status: Schema.Literals(["current", "missing", "unknown", "non-git"]),
+  facts: Schema.optional(WorktreeFacts),
 });
 export type WorktreeView = typeof WorktreeView.Type;
 
 export const ProjectView = Schema.Struct({
   path: Schema.String,
   name: Schema.String,
-  /** The root first, then worktrees created through piano. */
+  /** Explicitly selected directories only; discovery does not register anything. */
   worktrees: Schema.Array(WorktreeView),
+  discovery: WorktreeDiscovery,
   /** All of the project's sessions across its worktrees, most recent first. */
   sessions: Schema.Array(SessionInfo),
 });
@@ -308,7 +331,8 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String) }),
   Schema.TaggedStruct("add_project", { path: Schema.String }),
   Schema.TaggedStruct("remove_project", { path: Schema.String }),
-  Schema.TaggedStruct("create_worktree", { project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
+  Schema.TaggedStruct("create_worktree", { requestId: Schema.String, project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
+  Schema.TaggedStruct("add_worktree", { requestId: Schema.String, project: Schema.String, path: Schema.String }),
   Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
   /** Create and start a session in a directory (registering it as a project when needed) and send its first prompt. */
   Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, options: StartOptions, text: Schema.optional(Schema.String) }),
@@ -323,6 +347,13 @@ export const ClientMessage = Schema.Union([
 export type ClientMessage = typeof ClientMessage.Type;
 /** UI intent; the connection's selection controller supplies correlation. */
 export type ClientCommand = ClientMessage extends infer M ? M extends ClientMessage ? Omit<M, "selectionId"> : never : never;
+
+export const WorktreeResult = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("ready"), project: Schema.String, path: Schema.String, branch: Schema.NullOr(Schema.String),
+    creation: Schema.optional(Schema.Struct({ baseBranch: Schema.String, hooks: Schema.Literals(["enabled", "skipped"]) })) }),
+  Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
+]);
+export type WorktreeResult = typeof WorktreeResult.Type;
 
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView) }),
@@ -339,7 +370,7 @@ export const ServerMessage = Schema.Union([
   }),
   Schema.TaggedStruct("session", { selectionId: Schema.String, cursor: SessionCursor, event: SessionEvent }),
   Schema.TaggedStruct("action_result", { cwd: Schema.String, sessionId: Schema.String, result: SessionActionResult }),
-  Schema.TaggedStruct("worktree_created", { project: Schema.String, path: Schema.String, branch: Schema.String }),
+  Schema.TaggedStruct("worktree_result", { requestId: Schema.String, result: WorktreeResult }),
   Schema.TaggedStruct("error", { message: Schema.String }),
   /** A notice for the person; `level` picks the icon. */
   Schema.TaggedStruct("toast", { message: Schema.String, level: Schema.optional(Schema.Literals(["success", "info", "warning", "error"])) }),
