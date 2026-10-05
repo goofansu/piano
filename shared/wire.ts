@@ -137,6 +137,11 @@ export const SessionState = Schema.Struct({
   tokens: Schema.optional(Schema.Struct({ input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number, total: Schema.Number })),
   extension: Schema.optional(ExtensionState),
   projectionError: Schema.optional(Schema.String),
+  stateRefreshError: Schema.optional(Schema.String),
+  statsRefreshError: Schema.optional(Schema.String),
+  /** Host observation used for retirement; no pending/unobserved work, not task success. */
+  isQuiescent: Schema.optional(Schema.Boolean),
+  closedReason: Schema.optional(Schema.String),
 });
 export type SessionState = typeof SessionState.Type;
 

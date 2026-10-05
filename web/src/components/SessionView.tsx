@@ -139,14 +139,22 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         </Tooltip>
       </header>
 
-      {t?.closedReason && !/released|code 0\b/.test(t.closedReason) && (
-        <div className="border-b border-line bg-err-soft px-4 py-2 text-sm text-err">Pi stopped: {t.closedReason}</div>
+      {t?.closedReason && t.closedReason !== "released" && (
+        <div role="alert" className="border-b border-line bg-err-soft px-4 py-2 text-sm text-err">Pi stopped: {t.closedReason}. Interrupted operations are not resumed. Inspect the checkout before continuing.</div>
       )}
 
       {t?.state.projectionError && (
         <div role="alert" className="border-b border-line px-4 py-2 text-sm text-warn">
           <p>Unable to refresh the conversation. Recent changes may be missing.</p>
           <details className="mt-1"><summary className="cursor-pointer">Details</summary><p className="break-words">{t.state.projectionError}</p></details>
+        </div>
+      )}
+      {(t?.state.stateRefreshError || t?.state.statsRefreshError) && (
+        <div role="alert" className="border-b border-line px-4 py-2 text-sm text-warn">
+          <p>Unable to refresh session details. Some information may be stale.</p>
+          <details className="mt-1"><summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{t.state.stateRefreshError}</p><p className="break-words">{t.state.statsRefreshError}</p>
+          </details>
         </div>
       )}
       {t ? (

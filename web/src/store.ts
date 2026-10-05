@@ -89,7 +89,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         if (!prev.streaming) continue;
         const now = m.hosts.find((h) => h.cwd === prev.cwd && h.sessionId === prev.sessionId);
         const k = sessionKey(prev);
-        if (!now?.streaming && k !== viewing) done.add(k);
+        if (now && !now.streaming && k !== viewing) done.add(k);
       }
       return { ...s, hosts: [...m.hosts], done: [...done] };
     }
@@ -111,6 +111,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           sessionId: m.sessionId,
           hosted: m.hosted,
           state: m.snapshot.state,
+          closedReason: m.snapshot.state.closedReason,
           messages: [...m.snapshot.messages],
           pending: m.snapshot.pending ?? null,
           dialogs: [...m.snapshot.dialogs],

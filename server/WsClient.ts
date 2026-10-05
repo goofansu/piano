@@ -9,7 +9,6 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { expandHome } from "./PiEnv.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
-import { rm } from "node:fs/promises";
 import { Cause, Deferred, Effect, Exit, Queue, Scope, Stream } from "effect";
 import type { Socket } from "effect/socket";
 import {
@@ -23,7 +22,7 @@ import { Broadcast } from "./Broadcast.ts";
 import { Catalog } from "./Catalog.ts";
 import type { PiSession } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
-import { emptySnapshot, findSessionFile, peekSession } from "./SessionFiles.ts";
+import { emptySnapshot } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { buildProjects } from "./Views.ts";
 import { createWorktree } from "./Worktrees.ts";
@@ -95,18 +94,18 @@ export const handleSocket = (socket: Socket.Socket) =>
     const showUnhosted = (cwd: string, sessionId: string | null) =>
       Effect.gen(function* () {
         yield* detach;
-        const file = sessionId ? yield* findSessionFile(cwd, sessionId) : undefined;
-        const snapshot = file && sessionId ? yield* peekSession(file, sessionId) : emptySnapshot(sessionId ?? "");
-        yield* send({ _tag: "selected", cwd, sessionId, hosted: false, snapshot });
+        const view = sessionId ? yield* hosts.peek(cwd, sessionId) : { cwd, snapshot: emptySnapshot("") };
+        yield* send({ _tag: "selected", cwd: view.cwd, sessionId, hosted: false, snapshot: view.snapshot });
       });
 
     const start = (options: StartOptions) =>
       Effect.gen(function* () {
         if (!selected) return yield* Effect.fail(new Error("Select a session first"));
-        if (!selected.sessionId) selected = { cwd: selected.cwd, sessionId: randomUUID() };
-        const { cwd, sessionId } = selected as { cwd: string; sessionId: string };
-        const session = yield* hosts.open({ cwd, sessionId, model: options.model, thinkingLevel: options.thinkingLevel, name: options.name });
-        yield* registry.addSession(cwd, sessionId, options.name);
+        const create = selected.sessionId === null;
+        const { cwd } = selected;
+        const sessionId = selected.sessionId ?? randomUUID();
+        const session = yield* hosts.open({ cwd, sessionId, create, model: options.model, thinkingLevel: options.thinkingLevel, name: options.name });
+        selected = { cwd: session.spec.cwd, sessionId };
         yield* attachTo(session);
         yield* publishProjects;
         return session;
@@ -164,10 +163,7 @@ export const handleSocket = (socket: Socket.Socket) =>
           }
           case "delete_session": {
             if (attachment?.session.spec.cwd === msg.cwd && attachment.session.spec.sessionId === msg.sessionId) yield* detach;
-            if (yield* hosts.get(msg.cwd, msg.sessionId)) yield* hosts.release(msg.cwd, msg.sessionId);
-            const file = yield* findSessionFile(msg.cwd, msg.sessionId);
-            if (file) yield* Effect.tryPromise({ try: () => rm(file, { force: true }), catch: (e) => new Error(`Could not delete session file: ${describe(e)}`) });
-            yield* registry.removeSession(msg.cwd, msg.sessionId);
+            yield* hosts.delete(msg.cwd, msg.sessionId);
             if (selected?.cwd === msg.cwd && selected.sessionId === msg.sessionId) {
               selected = null;
               yield* send({ _tag: "selected", cwd: msg.cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
@@ -177,8 +173,7 @@ export const handleSocket = (socket: Socket.Socket) =>
           }
           case "archive_session": {
             if (attachment?.session.spec.cwd === msg.cwd && attachment.session.spec.sessionId === msg.sessionId) yield* detach;
-            if (yield* hosts.get(msg.cwd, msg.sessionId)) yield* hosts.release(msg.cwd, msg.sessionId);
-            yield* registry.archiveSession(msg.cwd, msg.sessionId);
+            yield* hosts.archive(msg.cwd, msg.sessionId);
             if (selected?.cwd === msg.cwd && selected.sessionId === msg.sessionId) {
               selected = null;
               yield* send({ _tag: "selected", cwd: msg.cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });

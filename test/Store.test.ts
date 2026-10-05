@@ -35,6 +35,15 @@ test("a late submission outcome cannot replace the explanation for newer input",
   assert.deepEqual(state.session?.messages, [], "handling input never invents a user message");
 });
 
+test("a disappearing host is not a completed turn; an actual idle transition is", () => {
+  const host = { cwd: "/scratch/a", sessionId: "a", streaming: true };
+  const running = reduce(initialState, { type: "server", message: { _tag: "hosts", hosts: [host] } });
+  const exited = reduce(running, { type: "server", message: { _tag: "hosts", hosts: [] } });
+  assert.deepEqual(exited.done, []);
+  const settled = reduce(running, { type: "server", message: { _tag: "hosts", hosts: [{ ...host, streaming: false }] } });
+  assert.deepEqual(settled.done, [sessionKey(host)]);
+});
+
 test("an empty native queue result does not erase editor text", () => {
   const identity = { cwd: "/scratch/a", sessionId: "a" };
   const state = reduce(initialState, { type: "draft_changed", key: sessionKey(identity), text: "keep this" });

@@ -23,6 +23,8 @@ import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } fr
 export interface PiSessionSpec {
   readonly cwd: string;
   readonly sessionId: string;
+  /** Existing Pi file, including an old alias-based reference. Never copied or moved. */
+  readonly sessionFile?: string;
   /** "provider/id" passed as --model */
   readonly model?: string;
   /** Passed as --thinking */
@@ -137,6 +139,7 @@ interface Child {
   readonly exited: Deferred.Deferred<string>;
   /** Includes queued records, so readbacks cannot race output not yet projected. */
   readonly observationVersion: () => number;
+  readonly hasPendingWork: () => boolean;
 }
 
 const debug = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[PiSessions]", ...projectDisplay(a)); };
@@ -156,6 +159,8 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     let closed = false;
     let seq = 0;
     let observationVersion = 0;
+    let uncertainMutation = false;
+    let uncertainWrite = false;
 
     const handle = yield* ChildProcess.make(cli.node, [cli.cli, "--mode", "rpc", ...args, ...cli.extraArgs], {
       cwd,
@@ -163,6 +168,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
+      forceKillAfter: "1 second",
     }).pipe(Effect.mapError((e) => new PiSessionError({ reason: "spawn", detail: String(e) })));
     debug("spawned pid", handle.pid);
 
@@ -242,7 +248,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         if (closed) return;
         yield* Queue.end(stdin);
         const done = yield* Deferred.await(exited).pipe(Effect.timeoutOption("3 seconds"));
-        if (done._tag === "None") yield* handle.kill().pipe(Effect.ignore);
+        if (done._tag === "None") yield* handle.kill({ forceKillAfter: "1 second" }).pipe(Effect.ignore);
       }),
     );
 
@@ -255,6 +261,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         yield* Queue.offer(stdin, { bytes: encoder.encode(`${JSON.stringify(record)}\n`), done });
         yield* Deferred.await(done).pipe(
           Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => Effect.fail(new PiSessionError({ reason: "transport", detail: "Pi stdin write timed out; delivery is uncertain. Do not resend this response." })) }),
+          Effect.tapError(() => Effect.sync(() => { uncertainWrite = true; })),
           Effect.ensuring(Effect.sync(() => { writes.delete(done); })),
         );
       });
@@ -273,17 +280,24 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
             duration: timeoutMs,
             orElse: () => Effect.fail(new PiSessionError({ reason: "timeout", detail: `Pi did not acknowledge ${command.type} within ${timeoutMs}ms. Delivery may have occurred; inspect the session before sending again.` })),
           }),
+          Effect.tapError(error => Effect.sync(() => {
+            // Timeout is not cancellation. A newer successful command cannot
+            // establish that an older, unacknowledged mutation stopped running.
+            if (!String(command.type).startsWith("get_") && error.reason !== "rejected") uncertainMutation = true;
+          })),
           Effect.ensuring(Effect.sync(() => { pending.delete(id); })),
         );
       });
 
-    const child: Child = { request, write, records, exited, observationVersion: () => observationVersion };
+    const child: Child = { request, write, records, exited, observationVersion: () => observationVersion,
+      hasPendingWork: () => pending.size > 0 || writes.size > 0 || uncertainMutation || uncertainWrite,
+    };
     return child;
   });
 
 const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
-    const args = ["--session-id", spec.sessionId];
+    const args = spec.sessionFile ? ["--session", spec.sessionFile] : ["--session-id", spec.sessionId];
     if (spec.model) args.push("--model", spec.model);
     if (spec.thinkingLevel) args.push("--thinking", spec.thinkingLevel);
     if (spec.name) args.push("--name", spec.name);
@@ -305,6 +319,7 @@ const openSession = (spec: PiSessionSpec) =>
         ),
       ),
     );
+    if ((initial[0] as RawState).sessionId !== spec.sessionId) return yield* new PiSessionError({ reason: "protocol", detail: "Pi opened a different session ID. History was not merged; check the saved reference." });
     const stateRef = yield* Ref.make<SessionState>(toState(initial[0] as RawState));
     const messagesRef = yield* Ref.make(
       serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
@@ -322,6 +337,7 @@ const openSession = (spec: PiSessionSpec) =>
     let turnRetry = false;
     let summaryRetry = false;
     let announced = false;
+    let processedVersion = 0;
     const seenDialogs = new Set<string>();
     const dialogClosed = new Map<string, Deferred.Deferred<void>>();
     const promptOperations = new Set<number>();
@@ -350,7 +366,7 @@ const openSession = (spec: PiSessionSpec) =>
                   ? { ...state, submission: event.submission } : state);
                 break;
               case "closed":
-                yield* Ref.update(stateRef, (state) => ({ ...state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }));
+                yield* Ref.update(stateRef, (state) => ({ ...state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [], closedReason: event.reason }));
                 break;
               case "dialog":
                 yield* Ref.update(dialogsRef, (m) => new Map(m).set(event.dialog.id, event.dialog));
@@ -436,10 +452,13 @@ const openSession = (spec: PiSessionSpec) =>
     const refreshStats = Effect.gen(function* () {
       const version = ++statsVersion;
       const modelVersion = factVersions.model;
-      const stats = (yield* child.request({ type: "get_session_stats" })) as RawStats;
-      yield* patchState(() => version === statsVersion && modelVersion === factVersions.model && !announced
-        ? { context: stats.contextUsage, cost: stats.cost, tokens: stats.tokens } : {});
-    }).pipe(Effect.ignore);
+      yield* Effect.gen(function* () {
+        const stats = (yield* child.request({ type: "get_session_stats" })) as RawStats;
+        yield* patchState(() => version === statsVersion && modelVersion === factVersions.model && !announced
+          ? { context: stats.contextUsage, cost: stats.cost, tokens: stats.tokens, statsRefreshError: undefined } : {});
+      }).pipe(Effect.catchTag("PiSessionError", error => patchState(() => announced || version !== statsVersion
+        ? {} : { statsRefreshError: `Usage refresh failed: ${error.detail}` })));
+    });
 
     /** Read command-controlled facts back from Pi. Do not replace session-level
      * activity with get_state.isStreaming (which describes the low-level run).
@@ -460,9 +479,9 @@ const openSession = (spec: PiSessionSpec) =>
         const patch: Partial<Record<typeof metadataFields[number], string | undefined>> = {};
         // Unrelated streaming/queue events must not discard a model observation.
         for (const field of metadataFields) if (versions[field] === factVersions[field]) patch[field] = observed[field];
-        return patch;
+        return { ...patch, stateRefreshError: undefined };
       });
-    }).pipe(Effect.ignore);
+    }).pipe(Effect.catchTag("PiSessionError", error => announced || operation !== operationVersion ? Effect.void : patchState({ stateRefreshError: `Session state refresh failed: ${error.detail}` })));
 
     /** Replace current context, never concatenate raw history. Retry readbacks
      * raced by Pi output; bound churn and make an unresolved projection visible.
@@ -485,6 +504,22 @@ const openSession = (spec: PiSessionSpec) =>
       yield* patchState({ projectionError: "Pi context changed during refresh. This view may be stale until the next command or settled boundary." });
     }).pipe(Effect.catchTag("PiSessionError", error => patchState({ projectionError: `Current context refresh failed: ${error.detail}` })));
 
+    // At most one worker per readback kind. Never await RPC inspection from the
+    // record consumer: Pi may need a later dialog answered before replying.
+    const refreshers = { stats: refreshStats, context: refreshContext, state: Effect.suspend(() => refreshState(operationVersion)) };
+    const refreshing = new Set<keyof typeof refreshers>();
+    const requested = new Set<keyof typeof refreshers>();
+    const scheduleRefresh = (...kinds: Array<keyof typeof refreshers>) => Effect.gen(function* () {
+      for (const kind of kinds) {
+        requested.add(kind);
+        if (refreshing.has(kind)) continue;
+        refreshing.add(kind);
+        yield* Effect.gen(function* () {
+          while (requested.delete(kind) && !announced) yield* refreshers[kind];
+        }).pipe(Effect.ensuring(Effect.sync(() => { refreshing.delete(kind); })), Effect.forkIn(sessionScope));
+      }
+    });
+
     const onRecord = ({ record, receivedAt }: { record: PiRecord; receivedAt: number }) =>
       Effect.gen(function* () {
         if (announced) return;
@@ -501,17 +536,14 @@ const openSession = (spec: PiSessionSpec) =>
             summaryRetry = false;
             yield* apply(assembler.handle(record));
             yield* patchState({ isStreaming: false, isCompacting: false, isRetrying: false });
-            yield* refreshContext;
-            yield* refreshState(operationVersion);
-            return yield* refreshStats;
+            return yield* scheduleRefresh("context", "state", "stats");
           case "message_end":
             yield* apply(assembler.handle(record));
-            return yield* refreshStats;
+            return yield* scheduleRefresh("stats");
           case "compaction_end":
             yield* patchState({ isCompacting: false });
             // Pi reports null tokens/percent until fresh post-compaction usage exists.
-            yield* refreshContext;
-            return yield* refreshStats;
+            return yield* scheduleRefresh("context", "stats");
           case "session_info_changed":
             return yield* patchState({ sessionName: record.name as string | undefined });
           case "thinking_level_changed":
@@ -593,7 +625,7 @@ const openSession = (spec: PiSessionSpec) =>
 
     const recordsDrained = yield* Deferred.make<void>();
     yield* Stream.fromQueue(child.records).pipe(
-      Stream.runForEach(onRecord), Effect.ignore,
+      Stream.runForEach(item => onRecord(item).pipe(Effect.ensuring(Effect.sync(() => { processedVersion++; })))), Effect.ignore,
       Effect.ensuring(Deferred.succeed(recordsDrained, undefined)), Effect.forkScoped,
     );
 
@@ -621,19 +653,30 @@ const openSession = (spec: PiSessionSpec) =>
       Effect.forkScoped,
     );
 
+    const currentState = Effect.gen(function* () {
+      const state = yield* Ref.get(stateRef);
+      return { ...state, isQuiescent: !announced && !child.hasPendingWork() && processedVersion === child.observationVersion() &&
+        refreshing.size === 0 && promptOperations.size === 0 && (yield* Ref.get(dialogsRef)).size === 0 &&
+        !state.isStreaming && !state.isCompacting && !state.isRetrying && !state.queuedMessages?.length &&
+        state.dialogResolution?.delivery !== "pending" && state.dialogResolution?.delivery !== "uncertain" &&
+        state.submission?.outcome !== "submitting" && state.submission?.outcome !== "uncertain" };
+    });
+
     const events: Stream.Stream<SessionEvent> = Stream.unwrap(
       Semaphore.withPermits(lock, 1)(
         Effect.gen(function* () {
           const scope = yield* Scope.make();
           const sub = yield* PubSub.subscribe(pubsub).pipe(Scope.provide(scope));
           const snapshot: Snapshot = {
-            state: yield* Ref.get(stateRef),
+            state: yield* currentState,
             messages: yield* Ref.get(messagesRef),
             dialogs: [...(yield* Ref.get(dialogsRef)).values()],
             ...assembler.snapshot(),
           };
           return Stream.make<[SessionEvent]>({ _tag: "snapshot", snapshot: projectDisplay(snapshot) }).pipe(
-            Stream.concat(Stream.fromSubscription(sub)),
+            Stream.concat(snapshot.state.closedReason
+              ? Stream.make<[SessionEvent]>({ _tag: "closed", reason: snapshot.state.closedReason })
+              : Stream.fromSubscription(sub)),
             Stream.takeUntil((e) => e._tag === "closed"),
             Stream.ensuring(Scope.close(scope, { _tag: "Success", value: undefined } as never)),
           );
@@ -643,6 +686,7 @@ const openSession = (spec: PiSessionSpec) =>
 
     const act = (action: SessionAction): Effect.Effect<void | SessionActionResult, PiSessionError> =>
       Effect.gen(function* () {
+        if (announced) return yield* new PiSessionError({ reason: "exited", detail: "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume." });
         // Answer/abort/queue restoration do not supersede the command whose
         // dialog they unblock. Keep its subsequent model/effort readback valid.
         const operation = action._tag === "prompt" || action._tag === "set_model" || action._tag === "set_thinking_level"
@@ -745,7 +789,7 @@ const openSession = (spec: PiSessionSpec) =>
     yield* refreshStats;
     const session: PiSession = { spec, events,
       act: action => act(action).pipe(Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
-      state: Ref.get(stateRef).pipe(Effect.map(projectDisplay)),
+      state: Semaphore.withPermits(lock, 1)(currentState).pipe(Effect.map(projectDisplay)),
     };
     return session;
   });

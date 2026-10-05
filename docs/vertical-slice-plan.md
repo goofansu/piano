@@ -288,6 +288,13 @@ children for one canonical checkout/session; browser detachment does not stop wo
 - **Stop:** ownership and retirement contracts are demonstrated. No browser-owned Pi stdin, second
   TUI writer, or transparent replay of interrupted work.
 
+**Observed slice:** [Phase 4 implementation evidence](research/2026-10-05-phase4-session-ownership.md)
+records canonical acquisition, server-owned startup/actions, shutdown-before-reopen, atomic retention,
+quiescent retirement, nonblocking bounded readbacks and interruption-aware history reopening. Public
+host, real locked-CLI alias reopening and scratch two-tab/browser gates pass. Registry/Pi references
+are preserved; incompatible aliases fail explicitly rather than being migrated or merged. Cross-backend
+writer exclusion, durable exit diagnostics and Phases 5–6 remain outside this acceptance.
+
 ### Phase 5 — Reconnect/switch into an ordered, bounded current view
 
 **Claim:** attaching, reconnecting or selecting another session cannot apply old deltas/dialogs over a

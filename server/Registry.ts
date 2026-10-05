@@ -35,12 +35,14 @@ export interface RegistryData {
 
 export const CONFIG_PATH = process.env.PIANO_CONFIG ?? join(homedir(), ".config", "piano", "config.json");
 
+export const RegistryPath = Context.Reference<string>("piano/RegistryPath", { defaultValue: () => CONFIG_PATH });
+
 const empty: RegistryData = { projects: [], worktrees: [], sessions: [] };
 
-function read(): RegistryData {
+function read(path: string): RegistryData {
   try {
-    if (!existsSync(CONFIG_PATH)) return empty;
-    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Partial<RegistryData>;
+    if (!existsSync(path)) return empty;
+    const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<RegistryData>;
     const legacy = raw as { threads?: SessionEntry[] }; // config files written before "thread" became "session"
     return {
       projects: Array.isArray(raw.projects) ? raw.projects.filter((p): p is string => typeof p === "string") : [],
@@ -54,9 +56,9 @@ function read(): RegistryData {
   }
 }
 
-function write(data: RegistryData): void {
-  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
-  writeFileSync(CONFIG_PATH, `${JSON.stringify(data, null, 2)}\n`);
+function write(path: string, data: RegistryData): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
 }
 
 export class Registry extends Context.Service<
@@ -80,11 +82,12 @@ export class Registry extends Context.Service<
 export const RegistryLive = Layer.effect(
   Registry,
   Effect.gen(function* () {
-    const state = yield* Ref.make(read());
+    const path = yield* RegistryPath;
+    const state = yield* Ref.make(read(path));
     const lock = yield* Semaphore.make(1);
     const update = (f: (d: RegistryData) => RegistryData) =>
       Semaphore.withPermits(lock, 1)(
-        Ref.updateAndGet(state, f).pipe(Effect.flatMap((d) => Effect.sync(() => write(d)))),
+        Ref.updateAndGet(state, f).pipe(Effect.flatMap((d) => Effect.sync(() => write(path, d)))),
       );
     const now = () => new Date().toISOString();
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) => t.cwd === cwd && t.sessionId === sessionId;

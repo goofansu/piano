@@ -19,11 +19,16 @@ const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>) => Effect.runPromise
 const snapshot = (session: PiSession) => session.events.pipe(Stream.take(1), Stream.runCollect, Effect.map(es => {
   assert.equal(es[0]._tag, 'snapshot'); return (es[0] as Extract<SessionEvent, { _tag: 'snapshot' }>).snapshot;
 }));
-const observe = (session: PiSession, text: string) => Effect.gen(function* () {
+const observe = (session: PiSession, text: string, projected?: (e: SessionEvent) => boolean) => Effect.gen(function* () {
   const ready = yield* Deferred.make<void>();
+  let sawBarrier = false, sawProjection = !projected;
   const observed = yield* session.events.pipe(
     Stream.tap(e => e._tag === 'snapshot' ? Deferred.succeed(ready, undefined) : Effect.void),
-    Stream.takeUntil(e => e._tag === 'notice' && e.message === 'barrier ' + text),
+    Stream.takeUntil(e => {
+      if (e._tag === 'notice' && e.message === 'barrier ' + text) sawBarrier = true;
+      if (projected?.(e)) sawProjection = true;
+      return sawBarrier && sawProjection;
+    }),
     Stream.runCollect, Effect.forkChild,
   );
   yield* Deferred.await(ready);
@@ -80,10 +85,12 @@ test('safe live/reload output retains tools and extension state without inventin
       yield* observe(session, '/clear');
       assert.deepEqual((yield* snapshot(session)).state.extension?.statuses, []);
       assert.deepEqual((yield* snapshot(session)).state.extension?.widgets, []);
-      yield* observe(session, '/compact');
+      // Readback no longer blocks protocol consumption: a subsequent Pi notify
+      // is not a barrier for the host's asynchronous authoritative projection.
+      yield* observe(session, '/compact', e => e._tag === 'context' && e.messages[0]?.text === 'Authoritative compacted context [REDACTED]');
       const compacted = yield* snapshot(session);
       assert.deepEqual(compacted.messages.map(m => m.text), ['Authoritative compacted context [REDACTED]']);
-      yield* observe(session, '/edit-context');
+      yield* observe(session, '/edit-context', e => e._tag === 'context' && e.messages[0]?.text === 'Authoritative context edit');
       assert.deepEqual((yield* snapshot(session)).messages.map(m => m.text), ['Authoritative context edit']);
       yield* observe(session, '/select-secret');
       const dialog = (yield* snapshot(session)).dialogs[0];

@@ -1,0 +1,210 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, watch, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, test } from 'node:test';
+import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
+import { TestClock } from 'effect/testing';
+import { NodeServices } from '@effect/platform-node';
+import { PiCli } from '../server/PiCli.ts';
+import { PiRequestTimeoutMs, PiSessionsLive, type PiSession } from '../server/PiSessions.ts';
+import { Registry, RegistryLive, RegistryPath } from '../server/Registry.ts';
+import { SessionHosts, SessionHostsLive } from '../server/SessionHosts.ts';
+import type { SessionEvent } from '../shared/wire.ts';
+
+const root = mkdtempSync(join(tmpdir(), 'piano-hosts-'));
+const cwd = join(root, 'checkout'), alias = join(root, 'alias'), audit = join(root, 'audit.jsonl');
+mkdirSync(cwd); symlinkSync(cwd, alias); mkdirSync(join(root, 'sessions')); writeFileSync(audit, '');
+assert.equal(spawnSync('git', ['init', '--quiet', cwd]).status, 0);
+process.env.PI_CODING_AGENT_DIR = join(root, 'agent');
+process.env.PI_CODING_AGENT_SESSION_DIR = join(root, 'sessions');
+after(() => rmSync(root, { recursive: true, force: true }));
+const cli = { node: process.execPath, cli: new URL('./fake-host-pi.mjs', import.meta.url).pathname, extraArgs: ['--audit', audit] };
+type Record = { event: string; pid: number; sessionId: string; command?: string; text?: string };
+const records = (id: string): Record[] => readFileSync(audit, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(r => r.sessionId === id);
+const waitAudit = (id: string, pred: (records: Record[]) => boolean) => Effect.promise(signal => new Promise<void>((resolve, reject) => {
+  const watcher = watch(root, check);
+  const timer = setTimeout(() => { cleanup(); reject(new Error(`audit deadline for ${id}`)); }, 5000);
+  function cleanup() { watcher.close(); clearTimeout(timer); signal.removeEventListener('abort', cleanup); }
+  function check() { if (pred(records(id))) { cleanup(); resolve(); } }
+  signal.addEventListener('abort', cleanup, { once: true }); check();
+}));
+const run = <A, E>(effect: Effect.Effect<A, E, SessionHosts | Registry>, options: { idleMs?: number; holdShutdown?: boolean; holdReadiness?: boolean; clock?: boolean; timeoutMs?: number } = {}) => {
+  const layer = SessionHostsLive({ idleMs: options.idleMs ?? 0 }).pipe(Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
+  const work = effect.pipe(Effect.scoped, Effect.provide(layer),
+    Effect.provideService(PiCli, { ...cli, extraArgs: [...cli.extraArgs, ...(options.holdShutdown ? ['--hold-shutdown'] : []), ...(options.holdReadiness ? ['--hold-readiness'] : [])] }),
+    Effect.provideService(PiRequestTimeoutMs, options.timeoutMs ?? 30000),
+    Effect.provideService(RegistryPath, join(root, 'registry.json')));
+  return Effect.runPromise(options.clock ? work.pipe(Effect.provide(TestClock.layer())) : work);
+};
+const observe = (session: PiSession, until: (e: SessionEvent) => boolean) => Effect.gen(function* () {
+  const ready = yield* Deferred.make<void>();
+  const fiber = yield* session.events.pipe(Stream.tap(e => e._tag === 'snapshot' ? Deferred.succeed(ready, undefined) : Effect.void), Stream.takeUntil(until), Stream.runCollect, Effect.forkChild);
+  yield* Deferred.await(ready); return fiber;
+});
+const prompt = (s: PiSession, text: string) => Effect.gen(function* () {
+  const seen = yield* observe(s, e => e._tag === 'notice' && e.message === `barrier ${text}`);
+  yield* s.act({ _tag: 'prompt', text }); yield* Fiber.join(seen);
+});
+const quiescent = (s: PiSession) => Effect.gen(function* () {
+  while (!(yield* s.state).isQuiescent) yield* Effect.yieldNow;
+});
+const seed = (path: string, id: string, name: string) => {
+  const file = join(root, 'sessions', `${name}.jsonl`);
+  writeFileSync(file, [
+    { type: 'session', version: 3, id, cwd: path, timestamp: '2026-10-05T00:00:00Z' },
+    { type: 'message', id: 'saved', parentId: null, timestamp: '2026-10-05T00:00:01Z', message: { role: 'user', content: name, timestamp: 1 } },
+  ].map(x => JSON.stringify(x)).join('\n') + '\n');
+  return file;
+};
+
+test('INV-02: concurrent public opens through real/symlink paths have one child lifetime', async () => {
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    yield* (yield* Registry).addSession(cwd, 'coalesced');
+    const sessions = yield* Effect.all(Array.from({ length: 8 }, (_, i) => hosts.open({ cwd: i % 2 ? alias : cwd, sessionId: 'coalesced' })), { concurrency: 'unbounded' });
+    assert.equal(records('coalesced').filter(r => r.event === 'spawn').length, 1);
+    assert.ok(sessions.every(s => s === sessions[0]));
+    yield* hosts.release(alias, 'coalesced');
+    assert.equal(records('coalesced').filter(r => r.event === 'exit').length, 1);
+  }));
+});
+
+test('INV-02: a disconnected opener cannot interrupt or duplicate server-owned acquisition', { timeout: 10000 }, async () => {
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    const abandoned = yield* hosts.open({ cwd, sessionId: 'abandoned-open', create: true }).pipe(Effect.forkChild);
+    yield* waitAudit('abandoned-open', rs => rs.some(r => r.command === 'get_state'));
+    yield* Fiber.interrupt(abandoned);
+    const returning = yield* hosts.open({ cwd: alias, sessionId: 'abandoned-open' }).pipe(Effect.forkChild);
+    process.kill(records('abandoned-open')[0].pid, 'SIGCONT');
+    const session = yield* Fiber.join(returning);
+    assert.equal((yield* session.state).sessionId, 'abandoned-open');
+    assert.equal(records('abandoned-open').filter(r => r.event === 'spawn').length, 1);
+    yield* hosts.release(cwd, 'abandoned-open');
+  }), { holdReadiness: true });
+});
+
+test('INV-02: release holds ownership through blocked shutdown; a late close cannot retire the replacement', { timeout: 10000 }, async () => {
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    const first = yield* hosts.open({ cwd, sessionId: 'reopen', create: true });
+    const release = yield* hosts.release(cwd, 'reopen').pipe(Effect.forkChild);
+    yield* waitAudit('reopen', rs => rs.some(r => r.event === 'stdin-end'));
+    const reopening = yield* hosts.open({ cwd: alias, sessionId: 'reopen' }).pipe(Effect.forkChild);
+    // Another checkout/session remains usable while this shutdown is blocked.
+    const independent = yield* hosts.open({ cwd, sessionId: 'independent', create: true });
+    assert.equal(records('reopen').filter(r => r.event === 'spawn').length, 1);
+    assert.equal((yield* first.act({ _tag: 'prompt', text: 'must not send' }).pipe(Effect.result))._tag, 'Failure');
+    process.kill(records('reopen')[0].pid, 'SIGUSR2');
+    yield* Fiber.join(release);
+    const second = yield* Fiber.join(reopening);
+    const log = records('reopen');
+    assert.equal(log.filter(r => r.event === 'spawn').length, 2);
+    assert.ok(log.findIndex(r => r.event === 'exit') < log.findLastIndex(r => r.event === 'spawn'));
+    yield* prompt(second, '/alive');
+    assert.equal(records('reopen').filter(r => r.text === 'must not send').length, 0);
+    process.kill(records('reopen').findLast(r => r.event === 'spawn')!.pid, 'SIGUSR2');
+    process.kill(records('independent')[0].pid, 'SIGUSR2');
+    yield* independent.events.pipe(Stream.takeUntil(e => e._tag === 'closed'), Stream.runDrain);
+  }), { holdShutdown: true });
+});
+
+for (const operation of ['archive', 'delete'] as const) test(`INV-01/02: ${operation} owns shutdown and retention; racing reopen cannot resurrect work`, { timeout: 10000 }, async () => {
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    const s = yield* hosts.open({ cwd, sessionId: operation, create: true });
+    yield* prompt(s, '/hold');
+    const file = (yield* s.state).sessionFile!;
+    const retirement = yield* hosts[operation](cwd, operation).pipe(Effect.forkChild);
+    yield* waitAudit(operation, rs => rs.some(r => r.event === 'stdin-end'));
+    const reopening = yield* hosts.open({ cwd: alias, sessionId: operation }).pipe(Effect.result, Effect.forkChild);
+    process.kill(records(operation)[0].pid, 'SIGUSR2');
+    yield* Fiber.join(retirement);
+    const result = yield* Fiber.join(reopening);
+    assert.equal(result._tag, 'Failure');
+    if (result._tag === 'Failure') assert.match(result.failure.detail, operation === 'archive' ? /archived/ : /no longer registered/);
+    assert.equal(records(operation).filter(r => r.event === 'spawn').length, 1);
+    assert.equal(existsSync(file), operation === 'archive');
+    const entries = (yield* (yield* Registry).get).sessions.filter(s => s.sessionId === operation);
+    assert.equal(entries.length, operation === 'archive' ? 1 : 0);
+    if (entries.length) assert.equal(entries[0].archived, true);
+  }), { holdShutdown: true });
+});
+
+test('INV-01: old alias history remains accessible without migration; conflicting references/files are explicit', async () => {
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts, registry = yield* Registry;
+    const file = seed(alias, 'legacy', 'alias history');
+    yield* registry.addSession(alias, 'legacy');
+    const s = yield* hosts.open({ cwd, sessionId: 'legacy' });
+    assert.equal(s.spec.cwd, alias);
+    assert.equal((yield* s.state).sessionFile, file);
+    yield* hosts.release(cwd, 'legacy');
+    const view = yield* hosts.peek(cwd, 'legacy');
+    assert.equal(view.cwd, alias); assert.equal(view.snapshot.messages[0].text, 'alias history');
+    assert.equal((yield* registry.get).sessions.find(s => s.sessionId === 'legacy')?.cwd, alias);
+    const before = readFileSync(file, 'utf8');
+    const conflict = seed(cwd, 'legacy', 'different history');
+    const error = yield* hosts.open({ cwd, sessionId: 'legacy' }).pipe(Effect.flip);
+    assert.match(error.detail, /Conflicting Pi files/);
+    assert.equal(readFileSync(file, 'utf8'), before); assert.ok(existsSync(conflict));
+    yield* registry.addSession(cwd, 'legacy');
+    assert.match((yield* hosts.open({ cwd, sessionId: 'legacy' }).pipe(Effect.flip)).detail, /Conflicting session references/);
+    assert.equal(records('legacy').filter(r => r.event === 'spawn').length, 1);
+  }));
+});
+
+test('INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and older uncertain commands', { timeout: 15000 }, async () => {
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    for (const mode of ['queue', 'retry', 'compact', 'dialog', 'uncertain']) {
+      const id = `idle-${mode}`;
+      const s = yield* hosts.open({ cwd, sessionId: id, create: true });
+      if (mode === 'uncertain') {
+        const received = yield* observe(s, e => e._tag === 'notice' && e.message.includes('without acknowledgement'));
+        const pending = yield* s.act({ _tag: 'prompt', text: '/uncertain' }).pipe(Effect.result, Effect.forkChild);
+        yield* Fiber.join(received);
+        yield* TestClock.adjust(1000); yield* Fiber.join(pending);
+        yield* prompt(s, '/newer-handled'); // must not erase uncertainty of the older command
+      } else yield* prompt(s, `/${mode}`);
+      yield* TestClock.adjust(2000);
+      assert.equal((yield* hosts.get(alias, id)), s, `${mode} cannot be retired`);
+      assert.equal(records(id).filter(r => r.event === 'exit').length, 0);
+      yield* hosts.release(cwd, id);
+    }
+    const s = yield* hosts.open({ cwd, sessionId: 'actually-idle', create: true });
+    yield* prompt(s, '/settle'); yield* quiescent(s);
+    yield* TestClock.adjust(2000);
+    yield* waitAudit('actually-idle', rs => rs.some(r => r.event === 'exit'));
+    assert.equal(yield* hosts.get(cwd, 'actually-idle'), undefined);
+  }), { idleMs: 1000, clock: true, timeoutMs: 1000 });
+});
+
+test('INV-02/03: hung readbacks time out visibly without blocking a later dialog or exit; crash history never resumes work', { timeout: 15000 }, async () => {
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    const s = yield* hosts.open({ cwd, sessionId: 'hung-inspection', create: true });
+    const silenced = yield* observe(s, e => e._tag === 'notice' && e.message === 'barrier /silence');
+    const command = yield* s.act({ _tag: 'prompt', text: '/silence' }).pipe(Effect.forkChild);
+    yield* Fiber.join(silenced);
+    const dialog = yield* observe(s, e => e._tag === 'dialog');
+    const next = yield* s.act({ _tag: 'prompt', text: '/events' }).pipe(Effect.forkChild);
+    const events = yield* Fiber.join(dialog); // BEFORE advancing the withheld state/stats deadline
+    assert.ok(events.some(e => e._tag === 'message_end' && e.message.text.includes('behind hung readback')));
+    yield* waitAudit('hung-inspection', rs => rs.filter(r => r.command === 'get_state').length >= 3 && rs.filter(r => r.command === 'get_session_stats').length >= 2);
+    yield* TestClock.adjust(1000); yield* Fiber.join(command); yield* Fiber.join(next);
+    assert.match((yield* s.state).stateRefreshError ?? '', /get_state.*1000ms/);
+    assert.match((yield* s.state).statsRefreshError ?? '', /get_session_stats.*1000ms/);
+    const closed = yield* observe(s, e => e._tag === 'closed');
+    process.kill(records('hung-inspection')[0].pid, 'SIGUSR1');
+    yield* Fiber.join(closed);
+    const view = yield* hosts.peek(cwd, 'hung-inspection');
+    assert.match(view.snapshot.state.closedReason ?? '', /code 7/);
+    assert.ok(view.snapshot.messages.some(m => m.text.includes('behind hung readback')));
+    const reopened = yield* hosts.open({ cwd, sessionId: 'hung-inspection' });
+    assert.equal((yield* reopened.state).isStreaming, false);
+    assert.equal(records('hung-inspection').filter(r => r.command === 'prompt').length, 2, 'reopen never replays a prompt');
+  }), { clock: true, timeoutMs: 1000 });
+});

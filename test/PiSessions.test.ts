@@ -69,9 +69,14 @@ test("canonical context updates after a response and compaction while still runn
     const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "live" });
     assert.equal((yield* t.state).context?.tokens, 0, "initial authoritative stats");
     const ready = yield* Deferred.make<void>();
+    let sawDialog = false, sawUsage = false;
     const collector = yield* t.events.pipe(
       Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
-      Stream.takeUntil((e) => e._tag === "dialog" && e.dialog.id === "live1"),
+      Stream.takeUntil((e) => {
+        if (e._tag === "dialog" && e.dialog.id === "live1") sawDialog = true;
+        if (e._tag === "state" && e.state.context?.tokens === 42000) sawUsage = true;
+        return sawDialog && sawUsage;
+      }),
       Stream.runCollect, Effect.forkChild,
     );
     yield* Deferred.await(ready);
@@ -80,9 +85,14 @@ test("canonical context updates after a response and compaction while still runn
     assert.ok(events.some((e) => e._tag === "state" && e.state.isStreaming && e.state.context?.tokens === 42000), "publishes latest canonical context before settlement");
     assert.equal((yield* t.state).context?.percent, 21);
     const compactReady = yield* Deferred.make<void>();
+    let sawCompactedDialog = false, sawCompactedUsage = false;
     const compacted = yield* collectUntil(t.events.pipe(
       Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(compactReady, undefined) : Effect.void),
-    ), (e) => e._tag === "dialog" && e.dialog.id === "live2").pipe(Effect.forkChild);
+    ), (e) => {
+      if (e._tag === "dialog" && e.dialog.id === "live2") sawCompactedDialog = true;
+      if (e._tag === "state" && e.state.context?.tokens === null) sawCompactedUsage = true;
+      return sawCompactedDialog && sawCompactedUsage;
+    }).pipe(Effect.forkChild);
     yield* Deferred.await(compactReady);
     const dialog = events.find((e) => e._tag === "dialog");
     assert.ok(dialog?._tag === "dialog");
