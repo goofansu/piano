@@ -42,6 +42,21 @@ Leave the real registry and running backend alone. Rebuild/deploy only when requ
 preapproved: do not wait for idle or request extra confirmation. Run the restart and health checks
 outside `piano.service`'s process tree so deployment survives the cutoff.
 
+**Shortest deploy path** (changes already verified, dependencies installed):
+
+```bash
+cd /home/exedev/piano
+npm run build && sudo systemd-run --collect /bin/bash -c '
+  exec > /tmp/piano-deploy.log 2>&1
+  systemctl restart piano.service &&
+  curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/projects -o /dev/null &&
+  curl -fsS http://127.0.0.1:8000/ -o /dev/null && echo "DEPLOY OK"
+'
+```
+
+Confirm `DEPLOY OK` in `/tmp/piano-deploy.log`, then reload the browser. No proxy restart needed.
+Keep deploy-only requests to this path; no new documents or repeat verification suite required.
+
 Stop only the process you started, by its pid. Register only scratch directories (a throwaway git
 repo in the scratchpad) in the scratch registry. When a check creates worktrees or pi session files,
 remove them afterwards: `git worktree remove --force` plus `git branch -D` in the scratch repo, and
