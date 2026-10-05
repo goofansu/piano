@@ -66,7 +66,7 @@ Piano's own settings:
 | `PIANO_CONFIG`       | `~/.config/piano/config.json`  | Where the selected projects are stored                         |
 | `PIANO_PI_CLI`       | `node_modules/.../dist/cli.js` | Pi CLI entry to spawn                                          |
 | `PIANO_PI_ARGS`      | empty                          | Extra arguments for every spawned `pi`, e.g. `-e ./ext.ts`     |
-| `PIANO_IDLE_MINUTES` | `5`                            | Retire a session's Pi process this long after its last activity, unless a turn or dialog is pending (`0` disables) |
+| `PIANO_IDLE_MINUTES` | `60`                           | Retire a session's Pi process this long after its last activity, unless a turn, dialog or queued input is pending (`0` disables) |
 
 ## Use
 
@@ -93,7 +93,7 @@ the sidebar, so sessions started from the terminal do not appear here.
    Running selections and effort are read back from Pi, including clamping.
 5. Sending a message starts Pi for the session and registers it; the first prompt becomes the title.
    Like Codex, there is nothing to start or stop by hand: Pi processes outlive browser tabs, a
-   session's process is retired five minutes after its last activity, and the next message starts it
+   session's process is retired one hour after its last activity, and the next message starts it
    again in about half a second from the session file. Re-selecting a session re-attaches with a full
    snapshot, including any dialog Pi is still waiting on.
 6. A session's menu (…) offers **Archive**, which stops Pi for it and hides it, and **Delete**,
