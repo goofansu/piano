@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { GitBranchIcon, ListCollapseIcon, ListIcon, PanelLeftOpenIcon } from "lucide-react";
-import type { ClientMessage, ThinkingLevel } from "@shared/wire";
+import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";

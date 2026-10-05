@@ -1,13 +1,55 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initialState, reduce, sessionKey } from "../web/src/store.ts";
+import { initialState, reduce, sessionKey, sessionDelivery } from "../web/src/store.ts";
+import type { ServerMessage } from "../shared/wire.ts";
+
+const selection = (sessionId: string, selectionId: string, sequence = 10, generation = "child"): Extract<ServerMessage, { _tag: "selected" }> => ({
+  _tag: "selected", cwd: "/scratch", sessionId, selectionId, hosted: true,
+  cursor: { cwd: "/scratch", sessionId, generation, sequence },
+  snapshot: { state: { sessionId, isStreaming: true }, messages: [], dialogs: [], pending: { id: "partial", role: "assistant", text: "current partial" } },
+});
+
+test("INV-05: superseded selection, duplicate, cross-session and gapped frames never overwrite the current view", () => {
+  let state = reduce({ ...initialState, connected: true }, { type: "selecting", cwd: "/scratch", sessionId: "a", selectionId: "a1" });
+  state = reduce(state, { type: "selecting", cwd: "/scratch", sessionId: "b", selectionId: "b1" });
+  const deliver = (message: ServerMessage) => state = reduce(state, { type: "server", message });
+  deliver(selection("a", "a1"));
+  assert.equal(Boolean(state.session), false, "late selection A cannot replace pending B");
+  deliver(selection("b", "b1"));
+  const baseline = state;
+  deliver(selection("a", "a1")); assert.equal(state, baseline);
+  const message: Extract<ServerMessage, { _tag: "session" }> = {
+    _tag: "session", selectionId: "b1", cursor: { cwd: "/scratch", sessionId: "b", generation: "child", sequence: 11 },
+    event: { _tag: "message_end", message: { id: "reply", role: "assistant", text: "final" } },
+  };
+  deliver({ ...message, cursor: { ...message.cursor, sessionId: "a" } }); assert.equal(state, baseline);
+  deliver(message); const final = state;
+  deliver(message); assert.equal(state, final, "duplicate final message cannot be appended twice");
+  deliver(selection("b", "b1")); assert.equal(state, final, "old snapshot cannot roll back newer events");
+  assert.deepEqual(state.session?.messages.map(m => m.text), ["final"]);
+  deliver({ ...message, cursor: { ...message.cursor, sequence: 13 }, event: { _tag: "notice", level: "error", message: "gap" } });
+  assert.equal(state.resync, true);
+  assert.equal(sessionDelivery(state, message), "ignore", "no stale notifications while resynchronizing");
+  state = reduce(state, { type: "selecting", cwd: "/scratch", sessionId: "b", selectionId: "b2" });
+  deliver(selection("b", "b1", 50)); assert.equal(Boolean(state.session), false, "even a newer sequence cannot revive an old attachment");
+  deliver(selection("b", "b2", 20));
+  assert.equal(state.session?.pending?.text, "current partial"); assert.equal(state.resync, false);
+  deliver({ ...message, selectionId: "b2", cursor: { ...message.cursor, generation: "restarted", sequence: 1 } });
+  assert.equal(state.resync, true, "a new generation requires a snapshot, not a delta");
+  state = reduce(state, { type: "selecting", cwd: "/scratch", sessionId: "b", selectionId: "b3" });
+  deliver(selection("b", "b3", 0, "restarted"));
+  assert.equal(state.session?.cursor?.generation, "restarted"); assert.equal(state.resync, false);
+  state = reduce(state, { type: "new" });
+  const newPage = state;
+  deliver(selection("b", "b3", 100, "restarted")); assert.equal(state, newPage, "returning to New invalidates selection responses too");
+});
 
 test("a late queue restore appends to its original session draft without changing the current view", () => {
   const original = { cwd: "/scratch/a", sessionId: "a" };
   const current = { cwd: "/scratch/b", sessionId: "b" };
   let state = reduce(initialState, { type: "draft_changed", key: sessionKey(original), text: "existing edit" });
   state = reduce(state, { type: "draft_changed", key: sessionKey(current), text: "other draft" });
-  state = reduce(state, { type: "selecting", ...current });
+  state = reduce(state, { type: "selecting", selectionId: "select-b", ...current });
   state = reduce(state, { type: "server", message: {
     _tag: "action_result", ...original,
     result: { _tag: "queue_restored", messages: [
@@ -23,11 +65,12 @@ test("a late queue restore appends to its original session draft without changin
 });
 
 test("a late submission outcome cannot replace the explanation for newer input", () => {
-  let state = reduce(initialState, { type: "server", message: {
-    _tag: "selected", cwd: "/scratch/a", sessionId: "a", hosted: true,
+  const cursor = { cwd: "/scratch/a", sessionId: "a", generation: "child", sequence: 5 };
+  let state = reduce({ ...initialState, connected: true, selectionId: "select-a" }, { type: "server", message: {
+    _tag: "selected", selectionId: "select-a", cursor, cwd: "/scratch/a", sessionId: "a", hosted: true,
     snapshot: { state: { sessionId: "a", isStreaming: true, submission: { id: 2, outcome: "queued" } }, messages: [], dialogs: [] },
   } });
-  state = reduce(state, { type: "server", message: { _tag: "session", event: {
+  state = reduce(state, { type: "server", message: { _tag: "session", selectionId: "select-a", cursor: { ...cursor, sequence: 6 }, event: {
     _tag: "submission", submission: { id: 1, outcome: "handled" },
   } } });
   assert.equal(state.session?.state.submission?.outcome, "queued");

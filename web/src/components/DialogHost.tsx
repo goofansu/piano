@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ClientMessage, Dialog as PiDialog } from "@shared/wire";
+import type { ClientCommand as ClientMessage, Dialog as PiDialog } from "@shared/wire";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";

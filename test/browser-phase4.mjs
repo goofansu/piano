@@ -67,14 +67,14 @@ async function send(text) {
 async function connect(path) {
   const ws = new WebSocket('ws://127.0.0.1:7171/ws'); sockets.push(ws);
   const seen = [];
-  ws.addEventListener('message', e => seen.push(JSON.parse(e.data)));
+  ws.addEventListener('message', e => { const m = JSON.parse(e.data); seen.push(m); ws.send(JSON.stringify({ _tag: 'ack', deliveryId: m.deliveryId })); });
   const wait = predicate => new Promise((resolve, reject) => {
     const timer = setTimeout(() => { ws.removeEventListener('message', check); reject(new Error('websocket observation deadline')); }, 10000);
     function check() { const message = seen.find(predicate); if (message) { clearTimeout(timer); ws.removeEventListener('message', check); resolve(message); } }
     ws.addEventListener('message', check); check();
   });
   await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
-  ws.send(JSON.stringify({ _tag: 'select', cwd: path, sessionId: id }));
+  ws.send(JSON.stringify({ _tag: 'select', selectionId: 'public', cwd: path, sessionId: id }));
   await wait(m => m._tag === 'selected' && !m.hosted);
   return { ws, wait };
 }
@@ -86,7 +86,7 @@ try {
   }
   // Public WebSocket opens, not a private hosts-map assertion. No model prompts.
   const clients = await Promise.all([connect(cwd), connect(alias)]);
-  for (const { ws } of clients) ws.send(JSON.stringify({ _tag: 'act', action: { _tag: 'set_thinking_level', level: 'low' }, start: {} }));
+  for (const { ws } of clients) ws.send(JSON.stringify({ _tag: 'act', selectionId: 'public', action: { _tag: 'set_thinking_level', level: 'low' }, start: {} }));
   await Promise.all(clients.map(c => c.wait(m => m._tag === 'selected' && m.hosted)));
   assert.equal(spawns().length, 1, 'simultaneous public opens coalesce aliases');
   for (const { ws } of clients) ws.close();
@@ -127,7 +127,7 @@ try {
   await ab('find', 'role', 'menuitem', 'click', '--name', 'Archive', '--exact');
   await ab('wait', '--fn', `received.some(m=>m._tag==='projects'&&m.projects.every(p=>p.sessions.every(s=>s.sessionId!==${JSON.stringify(id)})))`);
   await ab('tab', 'second');
-  await evaluate(`control.send(JSON.stringify({ _tag:'act', action:{_tag:'prompt',text:'STALE_REOPEN'}, start:{} })); true`);
+  await evaluate(`control.send(JSON.stringify({ _tag:'act', selectionId:received.filter(m=>m._tag==='selected').at(-1).selectionId, action:{_tag:'prompt',text:'STALE_REOPEN'}, start:{} })); true`);
   await ab('wait', '--text', 'This session is archived');
   assert.equal(spawns().length, 2); assert.equal(records().some(r => r.text === 'STALE_REOPEN'), false);
   await capture('archived-stale-tab-rejected');

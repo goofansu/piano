@@ -1,10 +1,11 @@
 /** Client state: one reducer over ServerMessages plus local UI actions. */
-import type { Dialog, HostInfo, ModelCatalog, ProjectView, RenderMsg, ServerMessage, SessionState, ToolExecution } from "@shared/wire";
+import type { Dialog, HostInfo, ModelCatalog, ProjectView, RenderMsg, ServerMessage, SessionCursor, SessionState, ToolExecution } from "@shared/wire";
 
 export interface SessionView {
   cwd: string;
   sessionId: string | null;
   hosted: boolean;
+  cursor: SessionCursor | null;
   state: SessionState;
   messages: RenderMsg[];
   pending: RenderMsg | null;
@@ -15,6 +16,8 @@ export interface SessionView {
 
 export interface AppState {
   connected: boolean;
+  selectionId: string | null;
+  resync: boolean;
   /** What the main pane shows. */
   view: { kind: "session" } | { kind: "new"; cwd?: string } | { kind: "missing-session"; sessionId: string };
   projects: ProjectView[];
@@ -37,6 +40,8 @@ export const sessionKey = (s: { cwd: string; sessionId: string | null }) => `${s
 
 export const initialState: AppState = {
   connected: false,
+  selectionId: null,
+  resync: false,
   view: { kind: "new" },
   projects: [],
   projectsLoaded: false,
@@ -52,7 +57,7 @@ export const initialState: AppState = {
 export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
-  | { type: "selecting"; cwd: string; sessionId: string | null }
+  | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null }
   | { type: "new"; cwd?: string }
   | { type: "missing-session"; sessionId: string }
   | { type: "draft_changed"; key: string; text: string }
@@ -63,11 +68,11 @@ export function reduce(s: AppState, a: Action): AppState {
     case "connected":
       return { ...s, connected: a.connected };
     case "selecting":
-      return { ...s, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId }, session: null, done: s.done.filter((k) => k !== sessionKey(a)) };
+      return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId }, session: null, done: s.done.filter((k) => k !== sessionKey(a)) };
     case "new":
-      return { ...s, view: { kind: "new", cwd: a.cwd }, selecting: null, session: null };
+      return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd }, selecting: null, session: null };
     case "missing-session":
-      return { ...s, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null };
+      return { ...s, selectionId: null, resync: false, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null };
     case "draft_changed":
       return { ...s, drafts: { ...s.drafts, [a.key]: a.text } };
     case "draft_appended":
@@ -75,6 +80,15 @@ export function reduce(s: AppState, a: Action): AppState {
     case "server":
       return applyServer(s, a.message);
   }
+}
+
+/** Shared by projection and notifications: rejected frames cannot toast either. */
+export function sessionDelivery(s: AppState, m: Extract<ServerMessage, { _tag: "session" }>): "apply" | "ignore" | "resync" {
+  const t = s.session;
+  if (!t || !s.connected || s.resync || m.selectionId !== s.selectionId || m.cursor.cwd !== t.cwd || m.cursor.sessionId !== t.sessionId) return "ignore";
+  if (!t.cursor || m.cursor.generation !== t.cursor.generation) return "resync";
+  if (m.cursor.sequence <= t.cursor.sequence) return "ignore";
+  return m.cursor.sequence === t.cursor.sequence + 1 ? "apply" : "resync";
 }
 
 function applyServer(s: AppState, m: ServerMessage): AppState {
@@ -98,6 +112,12 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "worktree_created":
       return { ...s, lastWorktree: { project: m.project, path: m.path, branch: m.branch } };
     case "selected":
+      if (m.selectionId !== s.selectionId || s.resync) return s;
+      if (m.cursor && (m.cursor.cwd !== m.cwd || m.cursor.sessionId !== m.sessionId || m.snapshot.state.sessionId !== m.sessionId)) return { ...s, resync: true };
+      if (s.session?.cursor && m.cursor) {
+        if (m.cursor.generation !== s.session.cursor.generation) return { ...s, resync: true };
+        if (m.cursor.sequence <= s.session.cursor.sequence) return s;
+      }
       // A selection without a session (what the server answers after archiving the one
       // being viewed) has nothing to show; sessions start from the New page.
       if (m.sessionId === null) return { ...s, view: { kind: "new", cwd: m.cwd }, selecting: null, session: null };
@@ -110,6 +130,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           cwd: m.cwd,
           sessionId: m.sessionId,
           hosted: m.hosted,
+          cursor: m.cursor,
           state: m.snapshot.state,
           closedReason: m.snapshot.state.closedReason,
           messages: [...m.snapshot.messages],
@@ -126,8 +147,12 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       return { ...s, drafts: { ...s.drafts, [key]: existing ? `${existing}\n\n${restored}` : restored } };
     }
     case "session": {
-      const t = s.session;
-      if (!t) return s;
+      const disposition = sessionDelivery(s, m);
+      if (disposition === "ignore") return s;
+      if (disposition === "resync") return { ...s, resync: true };
+      const t = { ...s.session!, cursor: m.cursor };
+      // Advance the cursor even for a notice or an intentionally ignored fact.
+      s = { ...s, session: t };
       const e = m.event;
       switch (e._tag) {
         case "snapshot":

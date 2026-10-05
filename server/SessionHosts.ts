@@ -56,7 +56,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   // Runtime diagnostics, not a competing history. Retained across child reopen,
   // not across server restart; no execution records are written into registry.
   const exits = new Map<string, string>();
-  const changed = yield* PubSub.unbounded<ReadonlyArray<HostInfo>>();
+  const changed = yield* PubSub.sliding<ReadonlyArray<HostInfo>>(1);
   let stopping = false;
   const lockFor = (key: string) => Effect.sync(() => {
     let lock = locks.get(key);
@@ -162,12 +162,16 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     yield* session.events.pipe(Stream.runForEach(event => Effect.gen(function* () {
       if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
       host.lastActivity = yield* Clock.currentTimeMillis;
-      if (event._tag === "closed") {
+      const reason = event._tag === "closed" ? event.reason : event._tag === "snapshot" ? event.snapshot.state.closedReason : undefined;
+      if (reason) {
         // Retire only this incarnation. A late event must never close a replacement.
         const lock = yield* lockFor(key);
-        yield* owned(Semaphore.withPermits(lock, 1)(close(key, host, event.reason)));
-      } else if (event._tag === "state") yield* announce;
-    })), Effect.ignore, Effect.forkIn(layerScope));
+        yield* owned(Semaphore.withPermits(lock, 1)(close(key, host, reason)));
+      } else if (event._tag === "state" || event._tag === "snapshot") yield* announce;
+    })),
+      // The host observer also recaptures after overflow; it must never lose exit
+      // ownership just because sidebar observation briefly fell behind.
+      Effect.retry({}), Effect.ignore, Effect.forkIn(layerScope));
     yield* Deferred.await(ready);
     yield* announce;
     return session;

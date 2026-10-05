@@ -316,6 +316,13 @@ bound. **INV-01–05, INV-11.**
   exit/restart. All views agree with the authoritative snapshot, with no duplicate messages or sends.
 - **Stop:** runtime checkpoint is demonstrable with phase 6; no historical replay/cursor database.
 
+**Observed slice:** [Phase 5 implementation evidence](research/2026-10-05-phase5-ordered-delivery.md)
+records atomic session/generation/sequence snapshots, selection correlation, duplicate/gap recovery,
+bounded subscriber queues and acknowledgement-window socket delivery. Module and scratch two-tab
+browser gates pass, including delayed A→B selection and slow-tab recovery after child exit/restart.
+Oversized views fail explicitly; transient notices are not replayed. Phase 6 and the full runtime
+checkpoint remain open.
+
 ### Phase 6 — Discover/create worktrees without false health
 
 **Claim:** observed Git/Worktrunk state, unknowns and failures survive into the UI; creation uses the

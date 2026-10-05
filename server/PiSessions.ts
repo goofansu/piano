@@ -8,12 +8,13 @@
  * orderly shutdown. The only external seam is ChildProcessSpawner.
  */
 import { randomUUID } from "node:crypto";
-import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, PubSub, Queue, Ref, Scope, Semaphore, Stream } from "effect";
+import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Scope, Semaphore, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
-import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionState } from "../shared/wire.ts";
+import { makeDelivery, type DeliveryOverflow } from "./BoundedDelivery.ts";
+import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState } from "../shared/wire.ts";
 import { PiCli } from "./PiCli.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } from "./PiRecords.ts";
@@ -40,8 +41,10 @@ export class PiSessionError extends Data.TaggedError("PiSessionError")<{
 
 export interface PiSession {
   readonly spec: PiSessionSpec;
-  /** A snapshot first, then live events, until `closed` or the subscriber's scope ends. */
-  readonly events: Stream.Stream<SessionEvent>;
+  /** Atomic snapshot/cursor first, then contiguous live frames until closed.
+   * A subscriber exceeding 256 queued frames / 8 MiB fails DeliveryOverflow;
+   * attach again for a current snapshot, never replay commands or old deltas. */
+  readonly events: Stream.Stream<SessionFrame, DeliveryOverflow>;
   /** Apply a browser action; command results belong only to the requesting caller. */
   readonly act: (action: SessionAction) => Effect.Effect<void | SessionActionResult, PiSessionError>;
   /** Current state without subscribing. */
@@ -325,7 +328,15 @@ const openSession = (spec: PiSessionSpec) =>
       serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
     );
     const dialogsRef = yield* Ref.make(new Map<string, Dialog>());
-    const pubsub = yield* PubSub.unbounded<SessionEvent>();
+    const subscribers = new Set<Effect.Success<ReturnType<typeof makeDelivery<SessionFrame>>>>();
+    let sequence = 0;
+    const cursor = () => ({ cwd: spec.cwd, sessionId: spec.sessionId, generation, sequence });
+    // All callers hold the snapshot lock. Never await a consumer here.
+    const publish = (event: SessionEvent) => Effect.gen(function* () {
+      sequence++;
+      const frame: SessionFrame = { ...projectDisplay(event), cursor: cursor() };
+      for (const subscriber of subscribers) yield* subscriber.offer(frame);
+    });
     const lock = yield* Semaphore.make(1);
     const assembler = new StreamAssembler();
     const metadataFields = ["model", "thinkingLevel", "sessionName", "sessionFile"] as const;
@@ -344,10 +355,10 @@ const openSession = (spec: PiSessionSpec) =>
     let aborting: { dispatched: Deferred.Deferred<void>; pendingPrompts: Set<number>; acknowledged: boolean } | undefined;
 
     /** Update local state and publish, atomically with respect to snapshots. */
-    const apply = (events: ReadonlyArray<SessionEvent>) =>
+    const apply = (events: ReadonlyArray<SessionEvent> | (() => ReadonlyArray<SessionEvent>)) =>
       Semaphore.withPermits(lock, 1)(
         Effect.gen(function* () {
-          for (const event of events) {
+          for (const event of typeof events === "function" ? events() : events) {
             switch (event._tag) {
               case "message_end":
                 yield* Ref.update(messagesRef, (ms) => [...ms, event.message]);
@@ -374,7 +385,7 @@ const openSession = (spec: PiSessionSpec) =>
               default:
                 break;
             }
-            yield* PubSub.publish(pubsub, projectDisplay(event));
+            yield* publish(event);
           }
         }),
       );
@@ -386,7 +397,7 @@ const openSession = (spec: PiSessionSpec) =>
         if (JSON.stringify(next) === JSON.stringify(current)) return;
         for (const field of metadataFields) if (next[field] !== current[field]) factVersions[field] += 1;
         yield* Ref.set(stateRef, next);
-        yield* PubSub.publish(pubsub, projectDisplay({ _tag: "state", state: next }));
+        yield* publish({ _tag: "state", state: next });
       }));
 
     /** All terminal paths compete under the snapshot lock, before any transport yield. */
@@ -413,8 +424,8 @@ const openSession = (spec: PiSessionSpec) =>
         dialogClosed.delete(dialog.id);
         const state = { ...yield* Ref.get(stateRef), dialogResolution: resolution };
         yield* Ref.set(stateRef, state);
-        yield* PubSub.publish(pubsub, projectDisplay({ _tag: "dialog_resolved", resolution }));
-        yield* PubSub.publish(pubsub, projectDisplay({ _tag: "state", state }));
+        yield* publish({ _tag: "dialog_resolved", resolution });
+        yield* publish({ _tag: "state", state });
         return resolution;
       }));
       if (!resolution || resolution.delivery === "not-sent") return resolution;
@@ -432,9 +443,9 @@ const openSession = (spec: PiSessionSpec) =>
         if (state.dialogResolution?.id === dialog.id && !announced) {
           const next = { ...state, dialogResolution: final };
           yield* Ref.set(stateRef, next);
-          yield* PubSub.publish(pubsub, projectDisplay({ _tag: "state", state: next }));
+          yield* publish({ _tag: "state", state: next });
         }
-        if (result._tag === "Failure") yield* PubSub.publish(pubsub, projectDisplay({ _tag: "notice", level: "error", message: final.detail }));
+        if (result._tag === "Failure") yield* publish({ _tag: "notice", level: "error", message: final.detail });
       }));
       if (result._tag === "Failure") return yield* result.failure;
       return final;
@@ -496,7 +507,7 @@ const openSession = (spec: PiSessionSpec) =>
           if (version !== contextVersion || outputVersion !== child.observationVersion() || announced) return false;
           const messages = serializeMessages(data.messages);
           yield* Ref.set(messagesRef, messages);
-          yield* PubSub.publish(pubsub, { _tag: "context", messages });
+          yield* publish({ _tag: "context", messages });
           return true;
         }));
         if (applied) return yield* patchState({ projectionError: undefined });
@@ -534,11 +545,11 @@ const openSession = (spec: PiSessionSpec) =>
           case "agent_settled":
             turnRetry = false;
             summaryRetry = false;
-            yield* apply(assembler.handle(record));
+            yield* apply(() => assembler.handle(record));
             yield* patchState({ isStreaming: false, isCompacting: false, isRetrying: false });
             return yield* scheduleRefresh("context", "state", "stats");
           case "message_end":
-            yield* apply(assembler.handle(record));
+            yield* apply(() => assembler.handle(record));
             return yield* scheduleRefresh("stats");
           case "compaction_end":
             yield* patchState({ isCompacting: false });
@@ -619,7 +630,7 @@ const openSession = (spec: PiSessionSpec) =>
           case "extension_error":
             return yield* apply([{ _tag: "notice", level: "error", message: `Extension error: ${record.error}` }]);
           default:
-            return yield* apply(assembler.handle(record));
+            return yield* apply(() => assembler.handle(record));
         }
       });
 
@@ -642,7 +653,7 @@ const openSession = (spec: PiSessionSpec) =>
           for (const dialog of (yield* Ref.get(dialogsRef)).values()) yield* resolveDialog(dialog, "exited").pipe(Effect.ignore);
           const resolution = (yield* Ref.get(stateRef)).dialogResolution;
           if (resolution?.delivery === "pending") yield* patchState({ dialogResolution: { ...resolution, delivery: "uncertain", detail: "Pi stopped during response delivery. Do not resend this dialog response." } });
-          yield* apply([...assembler.handle({ type: "piano_closed" }), { _tag: "closed", reason }]);
+          yield* apply(() => [...assembler.handle({ type: "piano_closed" }), { _tag: "closed", reason }]);
         });
       });
     yield* Effect.addFinalizer(() => announceClosed("released"));
@@ -662,23 +673,21 @@ const openSession = (spec: PiSessionSpec) =>
         state.submission?.outcome !== "submitting" && state.submission?.outcome !== "uncertain" };
     });
 
-    const events: Stream.Stream<SessionEvent> = Stream.unwrap(
+    const events: Stream.Stream<SessionFrame, DeliveryOverflow> = Stream.unwrap(
       Semaphore.withPermits(lock, 1)(
         Effect.gen(function* () {
-          const scope = yield* Scope.make();
-          const sub = yield* PubSub.subscribe(pubsub).pipe(Scope.provide(scope));
+          const sub = yield* makeDelivery<SessionFrame>();
+          subscribers.add(sub);
           const snapshot: Snapshot = {
             state: yield* currentState,
             messages: yield* Ref.get(messagesRef),
             dialogs: [...(yield* Ref.get(dialogsRef)).values()],
             ...assembler.snapshot(),
           };
-          return Stream.make<[SessionEvent]>({ _tag: "snapshot", snapshot: projectDisplay(snapshot) }).pipe(
-            Stream.concat(snapshot.state.closedReason
-              ? Stream.make<[SessionEvent]>({ _tag: "closed", reason: snapshot.state.closedReason })
-              : Stream.fromSubscription(sub)),
+          return Stream.make<[SessionFrame]>({ _tag: "snapshot", snapshot: projectDisplay(snapshot), cursor: cursor() }).pipe(
+            Stream.concat(snapshot.state.closedReason ? Stream.empty : sub.stream),
             Stream.takeUntil((e) => e._tag === "closed"),
-            Stream.ensuring(Scope.close(scope, { _tag: "Success", value: undefined } as never)),
+            Stream.ensuring(Effect.sync(() => { subscribers.delete(sub); })),
           );
         }),
       ),

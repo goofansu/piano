@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ClientMessage, ServerMessage } from "@shared/wire";
+import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { useConnection } from "@/lib/ws";
-import { type AppState, initialState, reduce } from "@/store";
+import { type Action, type AppState, initialState, reduce, sessionDelivery } from "@/store";
 import { parseRoute, routePath, type Route } from "@/lib/routes";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { SessionView } from "@/components/SessionView";
@@ -26,12 +26,17 @@ const WIDTH_KEY = "piano.sidebarWidth";
 const WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
 
 export default function App() {
-  const [state, dispatch] = useReducer(reduce, initialState, (s): AppState =>
+  const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState =>
     parseRoute(location).kind === "session" ? { ...s, view: { kind: "session" } } : s,
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const latest = useRef(state);
   latest.current = state;
+  // Socket frames can arrive before React renders. Keep acceptance/correlation current.
+  const dispatch = useCallback((action: Action) => {
+    latest.current = reduce(latest.current, action);
+    reactDispatch(action);
+  }, []);
 
   // ── sidebar ──
   // Hidden or shown on wide screens, remembered per browser; on narrow screens it is a sheet.
@@ -110,26 +115,35 @@ export default function App() {
   );
 
   const onMessage = useCallback((m: ServerMessage) => {
+    const notifySession = m._tag === "session" && sessionDelivery(latest.current, m) === "apply";
     dispatch({ type: "server", message: m });
     const notify = (message: string, level?: "success" | "info" | "warning" | "error") =>
       level === "success" ? toast.success(message) : level === "info" ? toast.info(message) : level === "warning" ? toast.warning(message) : level === "error" ? toast.error(message) : toast(message);
     if (m._tag === "error") notify(m.message, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
     else if (m._tag === "worktree_created") notify(`Worktree ${m.branch} created`, "success");
-    else if (m._tag === "session" && m.event._tag === "notice") notify(m.event.message, m.event.level);
-    else if (m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) toast.warning(`Pi stopped: ${m.event.reason}`);
+    else if (notifySession && m._tag === "session" && m.event._tag === "notice") notify(m.event.message, m.event.level);
+    else if (notifySession && m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) toast.warning(`Pi stopped: ${m.event.reason}`);
   }, []);
   const onStatus = useCallback((connected: boolean) => dispatch({ type: "connected", connected }), []);
   const conn = useConnection(onMessage, onStatus);
 
-  const send = useCallback((m: ClientMessage) => conn.send(m), [conn]);
+  const send = useCallback((m: ClientCommand) => {
+    if (m._tag === "select" || m._tag === "create_session") {
+      const selectionId = crypto.randomUUID();
+      dispatch({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null });
+      conn.send({ ...m, selectionId });
+    } else if (m._tag === "act") {
+      const s = latest.current;
+      if (s.connected && !s.resync && s.selectionId) conn.send({ ...m, selectionId: s.selectionId });
+    } else conn.send(m);
+  }, [conn, dispatch]);
   const select = useCallback(
     (cwd: string, sessionId: string | null) => {
       setMenuOpen(false);
       // Clicking the session already on screen (or already being fetched) is a no-op.
       const current = latest.current.session ?? latest.current.selecting;
       if (current && current.cwd === cwd && current.sessionId === sessionId && latest.current.view.kind === "session") return;
-      dispatch({ type: "selecting", cwd, sessionId });
       send({ _tag: "select", cwd, sessionId });
     },
     [send],
@@ -137,9 +151,14 @@ export default function App() {
 
   // Re-select the current session after a reconnect so the server re-attaches us.
   useEffect(() => {
-    if (state.connected && state.session) send({ _tag: "select", cwd: state.session.cwd, sessionId: state.session.sessionId });
+    const current = latest.current.session ?? latest.current.selecting;
+    if (state.connected && current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.connected]);
+  useEffect(() => {
+    const current = latest.current.session;
+    if (state.connected && state.resync && current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
+  }, [state.connected, state.resync, send]);
 
   const openNew = useCallback((cwd?: string) => {
     dispatch({ type: "new", cwd });
@@ -256,7 +275,7 @@ export default function App() {
           <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} />
         )}
       </main>
-      <DialogHost dialogs={state.session?.dialogs ?? []} send={send} connected={state.connected} />
+      <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync} />
     </div>
   );
 }

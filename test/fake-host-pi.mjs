@@ -43,7 +43,7 @@ function handle(cmd) {
   audit('command', { command: cmd.type, text: cmd.message });
   if (cmd.type === 'get_state') {
     if (silence || args.includes('--silence-readiness')) return;
-    if (args.includes('--hold-readiness')) { heldState = cmd; return; }
+    if (args.includes('--hold-readiness') || arg('--hold-session') === sessionId) { heldState = cmd; return; }
     return reply(cmd, state());
   }
   if (cmd.type === 'get_messages') return reply(cmd, { messages });
@@ -58,11 +58,29 @@ function handle(cmd) {
       persist({ role: 'user', content: '/hold', timestamp: Date.now() });
       out({ type: 'tool_execution_start', toolCallId: 'held-shell', toolName: 'bash', args: { command: 'fixture waiting; not a real shell' } });
       break;
+    case '/partial':
+      streaming = true; out({ type: 'agent_start' });
+      out({ type: 'message_start', message: { role: 'assistant', content: [] } });
+      out({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: `Partial ${sessionId} ${process.env.PIANO_TEST_SECRET ?? ''}` } });
+      out({ type: 'tool_execution_start', toolCallId: 'partial-tool', toolName: 'read', args: { path: 'fixture' } });
+      out({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'fixture', statusText: `Status ${sessionId}` });
+      break;
+    case '/burst': {
+      let n = 0;
+      const timer = setInterval(() => {
+        out({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'burst', statusText: `burst ${++n}` });
+        if (n === 600) { clearInterval(timer); notify('burst complete'); }
+      }, Number(arg('--burst-delay') ?? 3));
+      break;
+    }
     case '/dialog': out({ type: 'extension_ui_request', method: 'input', id: 'idle-dialog', title: 'Idle dialog' }); break;
     case '/queue': out({ type: 'queue_update', steering: [], followUp: ['pending work'] }); break;
     case '/retry': out({ type: 'summarization_retry_scheduled', attempt: 1, maxAttempts: 3 }); break;
     case '/compact': out({ type: 'compaction_start', reason: 'manual' }); break;
     case '/silence': silence = true; break;
+    case '/final':
+      persist({ role: 'assistant', api: 'openai-completions', provider: 'fake', model: 'alpha', stopReason: 'stop', content: [{ type: 'text', text: `Final ${sessionId}` }], timestamp: Date.now() });
+      streaming = false; out({ type: 'agent_settled' }); break;
     case '/events':
       persist({ role: 'assistant', api: 'openai-completions', provider: 'fake', model: 'alpha', stopReason: 'stop', content: [{ type: 'text', text: 'output behind hung readback' }], usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, timestamp: Date.now() });
       out({ type: 'extension_ui_request', method: 'input', id: 'behind-readback', title: 'Dialog behind readback' });

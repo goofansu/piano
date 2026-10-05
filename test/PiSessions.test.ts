@@ -11,7 +11,7 @@ const TestLayer = PiSessionsLive.pipe(Layer.provide(NodeServices.layer));
 const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>) =>
   Effect.runPromise(effect.pipe(Effect.provide(TestLayer), Effect.provideService(PiCli, fakeCli)));
 
-const collectUntil = (events: Stream.Stream<SessionEvent>, pred: (e: SessionEvent) => boolean) =>
+const collectUntil = <E>(events: Stream.Stream<SessionEvent, E>, pred: (e: SessionEvent) => boolean) =>
   events.pipe(Stream.takeUntil(pred), Stream.runCollect, Effect.map((c) => [...c]));
 
 const step = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[test]", ...a); };

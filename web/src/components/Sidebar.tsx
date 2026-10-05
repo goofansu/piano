@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
-import type { ClientMessage, ProjectView } from "@shared/wire";
+import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";

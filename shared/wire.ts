@@ -171,6 +171,13 @@ export const SessionEvent = Schema.Union([
 ]);
 export type SessionEvent = typeof SessionEvent.Type;
 
+/** Ordered within one child incarnation, never a historical replay cursor. */
+export const SessionCursor = Schema.Struct({
+  cwd: Schema.String, sessionId: Schema.String, generation: Schema.String, sequence: Schema.Number,
+});
+export type SessionCursor = typeof SessionCursor.Type;
+export type SessionFrame = SessionEvent & { readonly cursor: SessionCursor };
+
 export const ThinkingLevel = Schema.Literals(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 export type ThinkingLevel = typeof ThinkingLevel.Type;
 
@@ -302,17 +309,20 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("add_project", { path: Schema.String }),
   Schema.TaggedStruct("remove_project", { path: Schema.String }),
   Schema.TaggedStruct("create_worktree", { project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
-  Schema.TaggedStruct("select", { cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
+  Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
   /** Create and start a session in a directory (registering it as a project when needed) and send its first prompt. */
-  Schema.TaggedStruct("create_session", { cwd: Schema.String, options: StartOptions, text: Schema.optional(Schema.String) }),
+  Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, options: StartOptions, text: Schema.optional(Schema.String) }),
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
-  Schema.TaggedStruct("act", { action: SessionAction, start: Schema.optional(StartOptions) }),
+  Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
+  Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),
   /** Hide a session from the sidebar (and stop Pi for it if running). */
   Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),
   /** Stop Pi for a session, delete its file from Pi's session store, and forget it. */
   Schema.TaggedStruct("delete_session", { cwd: Schema.String, sessionId: Schema.String }),
 ]);
 export type ClientMessage = typeof ClientMessage.Type;
+/** UI intent; the connection's selection controller supplies correlation. */
+export type ClientCommand = ClientMessage extends infer M ? M extends ClientMessage ? Omit<M, "selectionId"> : never : never;
 
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView) }),
@@ -320,12 +330,14 @@ export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
   /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */
   Schema.TaggedStruct("selected", {
+    selectionId: Schema.String,
+    cursor: Schema.NullOr(SessionCursor),
     cwd: Schema.String,
     sessionId: Schema.NullOr(Schema.String),
     hosted: Schema.Boolean,
     snapshot: Snapshot,
   }),
-  Schema.TaggedStruct("session", { event: SessionEvent }),
+  Schema.TaggedStruct("session", { selectionId: Schema.String, cursor: SessionCursor, event: SessionEvent }),
   Schema.TaggedStruct("action_result", { cwd: Schema.String, sessionId: Schema.String, result: SessionActionResult }),
   Schema.TaggedStruct("worktree_created", { project: Schema.String, path: Schema.String, branch: Schema.String }),
   Schema.TaggedStruct("error", { message: Schema.String }),
@@ -337,6 +349,10 @@ export type ServerMessage = typeof ServerMessage.Type;
 export const ClientMessageJson = Schema.fromJsonString(ClientMessage);
 export const ServerMessageJson = Schema.fromJsonString(ServerMessage);
 export const decodeClientMessage = Schema.decodeUnknownSync(ClientMessageJson);
-export const encodeServerMessage = Schema.encodeSync(ServerMessageJson);
-export const decodeServerMessage = Schema.decodeUnknownSync(ServerMessageJson);
+const decodePayload = Schema.decodeUnknownSync(ServerMessageJson);
+const decodeDelivery = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ deliveryId: Schema.Number })));
+export const encodeServerMessage = (message: ServerMessage, deliveryId: number) =>
+  JSON.stringify({ ...JSON.parse(Schema.encodeSync(ServerMessageJson)(message)), deliveryId });
+export const decodeServerMessage = (text: string): ServerMessage & { deliveryId: number } =>
+  ({ ...decodePayload(text), ...decodeDelivery(text) });
 export const encodeClientMessage = Schema.encodeSync(ClientMessageJson);

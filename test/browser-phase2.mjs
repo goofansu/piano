@@ -105,7 +105,7 @@ try {
     await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
     assert.equal(fixture.observe().pi.filter(e=>e.event==='command-dialog-returned'&&e.value==='PHASE2_ANSWER').length, 1);
     // A stale tab's action fails clearly, rather than replaying a second response.
-    await evaluate(`control.send(JSON.stringify(${JSON.stringify({ _tag: 'act', action: { _tag: 'answer', id: original.id, generation: original.generation, value: 'DUPLICATE' } })})); true`);
+    await evaluate(`control.send(JSON.stringify({...${JSON.stringify({ _tag: 'act', action: { _tag: 'answer', id: original.id, generation: original.generation, value: 'DUPLICATE' } })}, selectionId:received.filter(m=>m._tag==='selected').at(-1).selectionId})); true`);
     await ab('wait', '--text', 'Dialog is no longer open');
     await capture('one-resolution-both-tabs');
     await ab('reload'); await ab('wait', '--text', 'Consumption is unconfirmed');
