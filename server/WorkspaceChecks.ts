@@ -5,7 +5,7 @@
 import { spawn, execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { mkdir, mkdtemp, open, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { arch, release } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -72,7 +72,9 @@ async function outside(workspace: Workspace, paths: string[]) {
 
 export const WorkspaceChecksLive = Layer.effect(WorkspaceChecks, Effect.gen(function* () {
   const registry = yield* RegistryPath, revisions = yield* WorkspaceRevisions;
-  const config = resolve((yield* CheckConfigPath) ?? `${registry}.checks.json`);
+  const configuredPath = yield* CheckConfigPath;
+  const config = resolve(configuredPath ?? join(dirname(registry), "checks.json"));
+  const configPaths = configuredPath === undefined ? [config, resolve(`${registry}.checks.json`)] : [config];
   const store = resolve((yield* EvidenceStorePath) ?? `${registry}.evidence`);
   const sandbox = yield* CheckSandboxCommand;
   const lock = yield* Semaphore.make(1);
@@ -100,8 +102,15 @@ export const WorkspaceChecksLive = Layer.effect(WorkspaceChecks, Effect.gen(func
     for (const name of await readdir(store)) if (name.startsWith(".run-")) await rm(join(store, name), { recursive: true, force: true });
   });
   async function definition(workspace: Workspace) {
-    await outside(workspace, [store, config]);
-    const all = Schema.decodeUnknownSync(Config)(JSON.parse((await bytes(config, 64 * 1024)).toString()));
+    let path = config;
+    // Prefer checks.json. Only absence permits the legacy filename; a malformed,
+    // unreadable or project-owned policy must never select a different gate.
+    for (const candidate of configPaths) {
+      try { await lstat(candidate); path = candidate; break; }
+      catch (e) { if ((error(e) as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+    }
+    await outside(workspace, [store, path]);
+    const all = Schema.decodeUnknownSync(Config)(JSON.parse((await bytes(path, 64 * 1024)).toString()));
     if (new Set(all.projects.map(p => p.project)).size !== all.projects.length) throw new Error("Duplicate projects in check configuration.");
     const check = all.projects.find(p => p.project === workspace.project)?.check;
     if (!check) throw new Error(`No check configured for this project. Configure ${config} outside the checkout.`);

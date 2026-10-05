@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase8-evidence/browser'); mkdirSync(evidence, { recursive: true });
+const configOnly = process.argv.includes('--config-only');
 const root = mkdtempSync(join(tmpdir(), 'piano-browser-phase8-')), repo = join(root, 'repo'), checkout = join(root, 'checkout'), registry = join(root, 'registry.json');
 for (const path of [repo, join(root, 'home'), join(root, 'agent'), join(root, 'sessions')]) mkdirSync(path, { recursive: true });
 const env = { ...process.env, HOME: join(root, 'home'), XDG_CONFIG_HOME: join(root, 'config'), XDG_CACHE_HOME: join(root, 'cache'), XDG_STATE_HOME: join(root, 'state'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
@@ -20,8 +21,8 @@ let policy = { id: 'source-check', name: 'Source contract', version: '1', timeou
   task: { id: 'TASK-8', source: 'human:phase8-browser', version: '1', content: 'Preserve a good source file' },
   criterion: { id: 'AC-1', version: '1', content: 'source.txt contains GOOD' },
   script: "import assert from 'node:assert/strict'; import {readFileSync} from 'node:fs'; assert.equal(readFileSync('source.txt','utf8'),'GOOD\\n'); console.log('CHECK_GOOD');" };
-const configure = change => { policy = { ...policy, ...change }; writeFileSync(`${registry}.checks.json`, JSON.stringify({ version: 1, projects: [{ project: repo, check: policy }] })); };
-configure({});
+const configure = change => { policy = { ...policy, ...change }; writeFileSync(join(root, 'checks.json'), JSON.stringify({ version: 1, projects: [{ project: repo, check: policy }] })); };
+if (!configOnly) configure({});
 let processLog = '';
 function logProcess(p) { const log = d => { processLog += d; writeFileSync(join(evidence, 'process.log'), processLog); }; p.stdout.on('data', log); p.stderr.on('data', log); return p; }
 function startBackend() { return logProcess(spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry,
@@ -57,6 +58,19 @@ async function ready() {
 }
 try {
   await ready(); await ab('open', 'http://127.0.0.1:7172/s/check-a'); await ab('wait', '--text', 'Session A'); await openChecks();
+  if (configOnly) {
+    await ab('wait', '--text', 'No check configured.');
+    const empty = await evaluate(`document.querySelector('[role="dialog"]').textContent`);
+    assert.ok(empty.includes(join(root, 'checks.json')));
+    assert.ok(!empty.includes('registry.json.checks.json'));
+    assert.equal(await evaluate(`[...document.querySelectorAll('[role="dialog"] button')].find(button=>button.textContent==='Run check')?.disabled`), true);
+    await capture('missing-config-clean-name');
+    configure({}); await click('Refresh evidence'); await ab('wait', '--text', 'Source contract');
+    await click('Run check'); await waitResult('pass', 'current');
+    await capture('checks-json-configured');
+    writeFileSync(join(evidence, 'result.json'), JSON.stringify({ passed: true, observations, node: process.version }, null, 2));
+    console.log('PASS: clean default configuration path, configuration reread without restart, and a passing configured check');
+  } else {
   if (!process.argv.includes('--restart-only')) {
   await ab('wait', '--text', 'No check executions yet.'); await click('Run check'); await waitResult('pass', 'current');
   const passed = await firstId();
@@ -112,6 +126,7 @@ try {
   await click('Close'); assert.equal(await evaluate(`document.querySelector('main header [role="status"]').textContent`), 'Not running', 'check outcomes never settle/start the Pi session');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ passed: true, observations, executions: records(), node: process.version, root }, null, 2));
   console.log(`PASS: ${observations.join(', ')}`);
+  }
 } catch (error) {
   try { await capture('failure-state'); writeFileSync(join(evidence, 'failure-records.json'), JSON.stringify(records(), null, 2)); } catch {}
   throw error;

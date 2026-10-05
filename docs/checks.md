@@ -7,8 +7,12 @@ Checks do not start Pi, settle a session, complete a task or authorize integrati
 
 ## Configure a bounded claim
 
-Create `<PIANO_CONFIG>.checks.json` beside, **not inside**, the checkout. With the default registry
-this is `~/.config/piano/config.json.checks.json`. `PIANO_CHECK_CONFIG` overrides the path.
+Create `checks.json` in the same directory as the Piano registry, **not inside** the checkout.
+The default is `~/.config/piano/checks.json`. `PIANO_CHECK_CONFIG` overrides the path.
+For existing installations, `<PIANO_CONFIG>.checks.json` remains a fallback only when `checks.json`
+is absent. The new file takes precedence; an invalid file is an error, not a reason to use the old
+policy. An explicit override always uses only the specified file. For separate registries sharing
+a directory, set `PIANO_CHECK_CONFIG` per instance.
 Use a private file (0600); do not put credentials in scripts or requirement descriptions.
 The server rereads configuration on run/refresh; configuration changes need no restart.
 Use the exact registered project path, including for that project's worktrees.

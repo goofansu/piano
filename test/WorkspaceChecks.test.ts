@@ -8,6 +8,7 @@ import { Effect, Layer } from "effect";
 import type { CheckDefinition, CheckEvidence, CheckExecution } from "../shared/wire.ts";
 import { CheckConfigPath, CheckSandboxCommand, EvidenceStorePath, WorkspaceChecks, WorkspaceChecksLive } from "../server/WorkspaceChecks.ts";
 import { RevisionStorePath, WorkspaceRevisionsLive } from "../server/WorkspaceRevisions.ts";
+import { RegistryPath } from "../server/Registry.ts";
 
 function fixture(t: TestContext) {
   const previous = process.env.PIANO_TEST_SECRET;
@@ -34,8 +35,9 @@ console.log('CHECK_OK'); console.log('sk-'+'redaction-canary-123456');`,
   };
   const configure = (update: Partial<CheckDefinition> = {}) => { policy = { ...policy, ...update }; writeFileSync(config, JSON.stringify({ version: 1, projects: [{ project: repo, check: policy }] })); };
   configure();
-  const run = <A, E>(e: Effect.Effect<A, E, WorkspaceChecks>, sandbox = "/usr/bin/bwrap") => Effect.runPromise(e.pipe(
-    Effect.provide(WorkspaceChecksLive.pipe(Layer.provide(WorkspaceRevisionsLive))), Effect.provideService(CheckConfigPath, config),
+  const run = <A, E>(e: Effect.Effect<A, E, WorkspaceChecks>, sandbox = "/usr/bin/bwrap", configPath: string | null = config) => Effect.runPromise(e.pipe(
+    Effect.provide(WorkspaceChecksLive.pipe(Layer.provide(WorkspaceRevisionsLive))), Effect.provideService(CheckConfigPath, configPath ?? undefined),
+    Effect.provideService(RegistryPath, join(root, "config.json")),
     Effect.provideService(EvidenceStorePath, store), Effect.provideService(RevisionStorePath, candidates), Effect.provideService(CheckSandboxCommand, sandbox)));
   return { root, repo, store, config, candidates, workspace, run, configure, policy };
 }
@@ -47,6 +49,32 @@ const finished = (checks: WorkspaceChecks["Service"], workspace: Parameters<Work
     yield* Effect.yieldNow;
   }
   throw new Error("Check completion deadline exceeded");
+});
+
+test("INV-01/09: checks.json is the default; legacy configuration and explicit overrides remain supported without masking errors", async t => {
+  const f = fixture(t), legacy = join(f.root, "config.json.checks.json"), custom = join(f.root, "custom-checks.json");
+  const view = Effect.gen(function* () { return yield* (yield* WorkspaceChecks).view(f.workspace); });
+  const defaults = () => f.run(view, undefined, null);
+  assert.equal((await defaults()).definition?.name, "Source contract", "read checks.json beside the registry");
+  writeFileSync(legacy, readFileSync(f.config)); rmSync(f.config);
+  assert.equal((await defaults()).definition?.name, "Source contract", "retain existing operator policy when the new file is absent");
+  f.configure({ name: "New policy" });
+  assert.equal((await defaults()).definition?.name, "New policy", "the new file takes precedence, never merge policy files");
+  writeFileSync(f.config, "broken");
+  const invalid = await defaults();
+  assert.equal(invalid.definition, null); assert.ok(invalid.configurationError, "invalid preferred policy must not fall back to the legacy gate");
+  const inside = join(f.repo, "policy.json"); writeFileSync(inside, readFileSync(legacy)); rmSync(f.config); symlinkSync(inside, f.config);
+  assert.match((await defaults()).configurationError ?? "", /outside the project and workspace/);
+  rmSync(f.config); f.configure();
+  writeFileSync(custom, readFileSync(legacy));
+  assert.equal((await f.run(view, undefined, custom)).definition?.name, "Source contract", "explicit override wins over checks.json");
+  rmSync(custom);
+  const missingOverride = await f.run(view, undefined, custom);
+  assert.equal(missingOverride.definition, null); assert.match(missingOverride.configurationError ?? "", /custom-checks\.json/);
+  rmSync(f.config); rmSync(legacy);
+  const missing = await defaults();
+  assert.equal(missing.definition, null); assert.ok(missing.configurationError?.includes(f.config));
+  assert.doesNotMatch(missing.configurationError ?? "", /config\.json\.checks\.json/, "setup guidance uses the clean default name");
 });
 
 test("INV-01/07–09/13: isolated check, persisted output, bounded criterion and conservative input/policy currency", { timeout: 60000 }, async t => {
