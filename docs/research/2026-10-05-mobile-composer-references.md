@@ -3,6 +3,10 @@
 October 5, 2026. Research-only response to the user's clarification: **the problem is the mobile
 layout on both the new-session and existing-session pages**, not a lack of animation.
 
+Follow-up: the user approved the layout direction and available-width truncation. The
+[implementation evidence](2026-10-05-mobile-composer-layout.md) records the resulting slice; the
+recommendation and source observations below remain the research baseline.
+
 ## Recommendation
 
 Use one compact mobile composer layout on both pages. Reserve the primary action's space, combine

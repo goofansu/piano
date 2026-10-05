@@ -3,7 +3,7 @@ import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, Gi
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
-import { composerCard, picker } from "@/lib/styles";
+import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { directoryStatus, WorktreesDialog } from "@/components/Worktrees";
 import { Textarea } from "@/components/ui/textarea";
-import { clampEffort, EffortSelect, levelsFor } from "@/components/EffortSelect";
+import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
 import { WorkspaceChanges } from "@/components/WorkspaceChanges";
@@ -91,51 +91,49 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
     <>
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
       <Button variant="ghost" size="icon-sm" className="absolute top-2 left-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-16 md:px-6">
-        <div className="w-full max-w-3xl">
-          <div className="welcome-enter mb-7 flex flex-col items-center text-center">
-            <PianoMark className="mb-5 size-12 rounded-2xl [&>span]:w-1 [&>span]:scale-y-125" />
-            <h1 className="text-2xl font-medium tracking-tight sm:text-[2rem]">What should we work on?</h1>
-            <p className="mt-2 text-sm text-ink-2 sm:text-base">A little progress starts with an idea.</p>
+      <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
+          <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
+            <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex [&>span]:w-1 [&>span]:scale-y-125" />
+            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">What should we work on?</h1>
+            <p className="mt-2 hidden text-base text-ink-2 md:block">A little progress starts with an idea.</p>
           </div>
-          <div className={cn(composerCard, "welcome-enter welcome-composer")}>
-            <Textarea
-              ref={textarea}
-              autoFocus
-              value={text}
-              rows={3}
-              aria-label="First message"
-              placeholder="Ask a question, plan a change, or build something…"
-              className="max-h-72 min-h-28 resize-none border-0 bg-transparent px-5 pt-5 shadow-none focus-visible:ring-0"
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
-                    e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-            />
-            <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2">
-              <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
-              <ModelSelect catalog={catalog} value={model} onChange={setModel} />
-              <EffortSelect value={effectiveEffort} onChange={setEffort} levels={levels} defaultLevel={catalog?.defaultThinkingLevel} />
-              <span className="flex-1" />
-              <Button size="icon" className="rounded-xl" aria-label="Send" disabled={!ready} onClick={submit}>
-                {creating ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
-              </Button>
+          <div className="shrink-0">
+            <div className="mb-2 flex min-w-0 items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
+                {directory && <p className="px-2 text-xs text-ink-3" title={cwd}>{!state.connected && "Last observation · "}{directoryStatus(directory)}</p>}
+              </div>
+              {directory && <WorkspaceChanges key={directory.workspace.id} workspace={directory.workspace} />}
             </div>
+            <div className={cn(composerCard, "welcome-enter welcome-composer")}>
+              <Textarea
+                ref={textarea}
+                autoFocus={!window.matchMedia("(pointer: coarse)").matches}
+                value={text}
+                rows={1}
+                aria-label="First message"
+                placeholder="Ask a question, plan a change, or build something…"
+                className={cn(composerInput, "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5")}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
+                      e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
+              />
+              <div className={composerToolbar}>
+                <ModelSelect catalog={catalog} value={model} onChange={setModel} effort={effectiveEffort} onEffortChange={setEffort} />
+                <Button size="icon" className={composerAction} aria-label="Send" disabled={!ready} onClick={submit}>
+                  {creating ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
+                </Button>
+              </div>
+            </div>
+            {project?.discovery.status === "error" && <p role="alert" className="mt-2 text-sm text-err">Git status unavailable. Open Worktrees to inspect and refresh.</p>}
+            {creating && <p className="sr-only" role="status">Starting Pi</p>}
           </div>
-          {directory && <div className="mt-2 flex items-center justify-between gap-2 text-sm text-ink-3">
-            <p title={cwd}>{!state.connected && "Last observation · "}{directoryStatus(directory)}</p>
-            <WorkspaceChanges key={directory.workspace.id} workspace={directory.workspace} />
-          </div>}
-          {project?.discovery.status === "error" && <p role="alert" className="mt-2 text-sm text-err">Git status unavailable. Open Worktrees to inspect and refresh.</p>}
-          {creating && (
-            <p className="control-enter mt-3 text-center text-sm text-ink-2" role="status">
-              Starting Pi
-            </p>
-          )}
         </div>
       </div>
       <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={(path) => setCwd(path)} initialPath={cwd || undefined} />
@@ -147,12 +145,14 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
 function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: AppState; value: string; onChange: (cwd: string) => void; onBrowse: () => void; send: (m: ClientMessage) => void }) {
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
+  const content = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
   const known = state.projects.flatMap((p) => p.worktrees.map((w) => ({ project: p.name, ...w })));
   const current = known.find((k) => k.path === value);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className={picker} title={value}>
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className={cn(picker, "h-11 w-full min-w-0 max-w-none justify-start md:h-8")} title={value}>
           <FolderIcon className="size-3.5 shrink-0 text-ink-3" />
           {!value ? (
             <span>Choose a directory</span>
@@ -172,10 +172,16 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           <ChevronDownIcon className="size-3.5 text-ink-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[380px] max-w-[calc(100vw-2rem)] p-0">
+      <PopoverContent ref={content} align="start" tabIndex={-1} aria-label="Choose a directory"
+        className="max-h-(--radix-popover-content-available-height) w-[380px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
+        onOpenAutoFocus={event => {
+          event.preventDefault();
+          if (window.matchMedia("(pointer: coarse)").matches) content.current?.focus({ preventScroll: true });
+          else search.current?.focus({ preventScroll: true });
+        }}>
         <Command>
-          <CommandInput placeholder="Search directories" autoFocus />
-          <CommandList className="max-h-72">
+          <CommandInput ref={search} aria-label="Search directories" placeholder="Search directories" />
+          <CommandList className="max-h-[min(18rem,60dvh)]">
             <CommandEmpty>No directory matches.</CommandEmpty>
             {known.length > 0 && (
               <CommandGroup heading="Projects">

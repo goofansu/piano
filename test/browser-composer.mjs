@@ -51,19 +51,34 @@ async function until(js) {
   ab('snapshot');
   throw new Error(`Timed out: ${js}`);
 }
-const views = [[320, 640], [375, 812], [390, 844], [430, 932], [844, 390], [768, 1024], [1024, 768], [1280, 800]];
+const layoutOnly = process.argv.includes('--layout-only');
+const views = layoutOnly ? [[320, 640], [390, 844]] : [[320, 640], [375, 812], [390, 844], [430, 932], [390, 400], [844, 390], [768, 1024], [1024, 768], [1280, 800]];
 const geometry = `(() => {
   const t = document.querySelector('textarea');
   const card = t.parentElement;
   const footer = t.nextElementSibling;
   const rect = el => { const r = el.getBoundingClientRect(); return { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height }; };
   const controls = [...footer.querySelectorAll('button, [data-slot="tooltip-trigger"]')].map(el => ({label:el.getAttribute('aria-label') || el.textContent, ...rect(el)}));
+  const model = footer.querySelector('[aria-label^="Model:"]');
+  const label = model?.querySelector('.truncate');
+  const modelLabel = label ? { text:label.textContent, width:label.clientWidth, scrollWidth:label.scrollWidth,
+    overflow:getComputedStyle(label).textOverflow, accessibleName:model.getAttribute('aria-label') } : null;
   const c = rect(card);
   const problems = controls.filter(r => r.x < c.x || r.right > c.right + 1 || r.right > innerWidth || r.bottom > innerHeight || r.width < 24).map(r => r.label);
+  const action = controls.find(r => ['Send', 'Stop', 'Queue message'].includes(r.label));
+  if (action && controls.some(r => Math.abs(r.y + r.height/2 - action.y - action.height/2) > 2)) problems.push('Composer toolbar wraps instead of reserving the action row');
+  if (innerWidth < 768 && action && (action.width < 44 || action.height < 44)) problems.push('Primary touch target is smaller than 44px');
+  if (!modelLabel) problems.push('Model control is missing');
+  if (modelLabel && modelLabel.width < 24) problems.push('No readable space left for the model label');
+  if (modelLabel && !modelLabel.accessibleName.includes(modelLabel.text)) problems.push('Accessible model name was truncated');
+  if (modelLabel && modelLabel.scrollWidth > modelLabel.width && modelLabel.overflow !== 'ellipsis') problems.push('Long model label does not ellipsize');
+  const sidebar = document.querySelector('main [aria-label="Show sidebar"]');
+  const navigation = sidebar ? rect(sidebar) : null;
+  if (innerWidth < 768 && navigation && (navigation.y < 0 || navigation.bottom > innerHeight)) problems.push('Mobile navigation is outside the viewport');
   const queue = card.querySelector('[aria-label="Queued messages"]');
   if (queue && queue.scrollWidth > queue.clientWidth) problems.push('Queued text overflow');
   const overlaps = controls.flatMap((a,i) => controls.slice(i+1).filter(b => a.x < b.right-1 && b.x < a.right-1 && a.y < b.bottom-1 && b.y < a.bottom-1).map(b => a.label+' overlaps '+b.label));
-  return { viewport:[innerWidth,innerHeight], coarse:matchMedia('(pointer: coarse)').matches, card:c, textarea:rect(t), footer:rect(footer), controls, documentWidth:document.documentElement.scrollWidth, problems:[...problems,...overlaps] };
+  return { viewport:[innerWidth,innerHeight], coarse:matchMedia('(pointer: coarse)').matches, card:c, textarea:rect(t), footer:rect(footer), controls, modelLabel, navigation, documentScrollTop:scrollY, documentWidth:document.documentElement.scrollWidth, problems:[...problems,...overlaps] };
 })()`;
 async function capture(journey) {
   for (const [w,h] of views) {
@@ -75,7 +90,7 @@ async function capture(journey) {
     if (g.problems.length) failures.push(`${journey} ${w}x${h}: ${g.problems.join(', ')}`);
   }
 }
-try {
+async function run() {
   for (let i=0;i<50;i++) {
     try { const r=await fetch(appUrl); if(r.ok) break; } catch {}
     if (i===49) throw new Error('Scratch server did not start');
@@ -85,32 +100,88 @@ try {
   ab('set', 'device', 'iPhone 16');
   ab('wait', '--text', 'Not running');
   ab('screenshot', join(evidence, 'saved-unknown-context.png'));
+  if (layoutOnly) await capture('saved');
   if (evaluate(`document.querySelector('button[aria-label="Context usage"]')?.textContent.trim()`) !== '—') throw new Error('Missing context must remain visible as unknown, not disappear');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', 'Context usage unavailable');
   ab('press', 'Escape');
   ab('open', `${appUrl}/new`);
   if (!evaluate(`matchMedia('(pointer: coarse)').matches`)) throw new Error('Mobile fixture has no coarse pointer');
-  await until(`!!document.querySelector('[aria-label="Model"]')?.title.includes('${longModel}')`);
+  await until(`!!document.querySelector('[aria-label^="Model:"]')?.title.includes('${longModel}')`);
+  if (evaluate(`document.activeElement === document.querySelector('textarea')`)) throw new Error('New session auto-focused the mobile input');
   ab('fill', '[aria-label="First message"]', 'mobile first');
   ab('press', 'Enter');
   if (!evaluate(`document.querySelector('textarea').value === 'mobile first\\n'`)) throw new Error('Mobile Enter did not insert newline');
   await capture('new');
+  if (layoutOnly) {
+    if (failures.length) throw new Error(failures.join('\n'));
+    console.log('PASS: both mobile toolbars stay on one row with a reserved primary touch target and an accessible truncated model label');
+    return;
+  }
   // Pointer actions, not DOM click: Radix pickers must remain reachable.
   ab('set', 'viewport', '320', '640');
   for (const label of ['Directory', 'Model']) {
-    ab('click', `[aria-label="${label}"]`);
+    ab('click', label === 'Model' ? '[aria-label^="Model:"]' : `[aria-label="${label}"]`);
     ab('screenshot', join(evidence, `new-${label}-320.png`));
     const pop = evaluate(`(() => {const e=document.querySelector('[data-slot="popover-content"]');const r=e.getBoundingClientRect();return {x:r.x,right:r.right,width:innerWidth};})()`);
     writeFileSync(join(evidence, `new-${label}-popover.json`), JSON.stringify(pop));
     if (pop.x < 0 || pop.right > pop.width+1) failures.push(`${label} popover extends outside 320px viewport`);
+    if (evaluate(`document.activeElement.tagName`) === 'INPUT') throw new Error(`${label} picker automatically focused search on a phone`);
     ab('press', 'Escape');
   }
+  // Reduced viewport checks exercise geometry, not a claim about the OS keyboard.
+  ab('set', 'viewport', '390', '400');
+  ab('click', '[aria-label^="Model:"]');
+  const shortPopup = evaluate(`(() => { const r=document.querySelector('[aria-label="Model and effort"]').getBoundingClientRect(); return {top:r.top,bottom:r.bottom,height:innerHeight}; })()`);
+  if (shortPopup.top < 0 || shortPopup.bottom > shortPopup.height) throw new Error('Settings popup overflows a short viewport');
+  ab('screenshot', join(evidence, 'model-effort-short-viewport.png'));
+  ab('press', 'Escape');
+  ab('set', 'viewport', '320', '640');
+  // One settings popup, full model names, native effort radios and no automatic prompt.
+  const longAction = evaluate(geometry).controls.find(c => c.label === 'Send');
+  evaluate(`window.draftInput=document.querySelector('textarea');draftInput.focus();draftInput.setSelectionRange(2,5);true`);
+  ab('click', '[aria-label^="Model:"]');
+  const option = `[data-value="fake/${longModel}"]`;
+  const fullName = evaluate(`(() => { const e=document.querySelector('${option}'); return {text:e.innerText,width:e.clientWidth,scrollWidth:e.scrollWidth}; })()`);
+  if (!fullName.text.includes(longModel) || fullName.scrollWidth > fullName.width) throw new Error('Full model name is not readable inside the picker');
+  ab('click', '[data-value="fake/beta"]');
+  await until(`document.querySelector('[aria-label^="Model:"]').title === 'fake/beta' && document.querySelector('input[value="off"]')?.checked`);
+  if (evaluate(`document.querySelectorAll('[aria-label="Effort"] input').length`) !== 1) throw new Error('Non-reasoning model exposed unsupported efforts');
+  const shortAction = evaluate(geometry).controls.find(c => c.label === 'Send');
+  if (longAction.x !== shortAction.x || longAction.y !== shortAction.y) throw new Error('Changing the model label moved Send');
+  ab('click', option);
+  ab('click', 'label:has(input[value="xhigh"])');
+  await until(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: xhigh')`);
+  ab('screenshot', join(evidence, 'new-model-effort-320.png'));
+  ab('click', 'label:has(input[value="medium"])');
+  ab('click', '[aria-label="Close model picker"]');
+  if (!evaluate(`document.activeElement.matches('[aria-label^="Model:"]') && draftInput === document.querySelector('textarea') && draftInput.value === 'mobile first\\n' && draftInput.selectionStart === 2 && draftInput.selectionEnd === 5`)) throw new Error('Settings lost the draft, selection, editor identity or return focus');
+  if (evaluate(`sent.some(m=>m._tag==='create_session'||m.action?._tag==='prompt')`)) throw new Error('Settings sent a prompt');
   ab('click', '[aria-label="Send"]');
   await until(`!!document.querySelector('[aria-label="Message"]') && !document.querySelector('[aria-label="Stop"]')`);
   ab('fill', '[aria-label="Message"]', 'idle draft');
   expectAction('Send');
   await capture('idle');
+  for (const [w,h] of [[390,400],[844,390]]) {
+    ab('set', 'viewport', String(w), String(h));
+    ab('fill', '[aria-label="Message"]', Array.from({length:24},(_,i)=>`Draft line ${i+1}`).join('\n'));
+    const multiline = evaluate(geometry);
+    writeFileSync(join(evidence, `multiline-${w}x${h}.json`), JSON.stringify(multiline,null,2));
+    if (multiline.problems.length || multiline.textarea.height > h * 0.3 + 1) throw new Error('Multiline input displaced the controls in a short viewport');
+    if (!evaluate(`document.querySelector('textarea').scrollHeight > document.querySelector('textarea').clientHeight`)) throw new Error('Long draft did not scroll within the input');
+    ab('screenshot', join(evidence, `multiline-${w}x${h}.png`));
+  }
+  ab('fill', '[aria-label="Message"]', 'idle draft');
+  ab('set', 'viewport', '320', '640');
+  const idleAction = evaluate(geometry).controls.find(c => c.label === 'Send');
+  ab('click', '[aria-label^="Model:"]');
+  ab('click', 'label:has(input[value="xhigh"])');
+  await until(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: xhigh')`);
+  ab('click', '[aria-label="Close model picker"]');
+  const changedAction = evaluate(geometry).controls.find(c => c.label === 'Send');
+  if (idleAction.x !== changedAction.x || idleAction.y !== changedAction.y) throw new Error('Changing effort moved Send');
+  if (evaluate(`document.querySelector('textarea').value`) !== 'idle draft') throw new Error('Changing effort discarded the active session draft');
+  ab('screenshot', join(evidence, 'idle-xhigh-320.png'));
   if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '2k') throw new Error('Settled context must use compact units');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', '2,400 tokens');
@@ -202,6 +273,14 @@ try {
   ab('--init-script', observe, 'open', sessionUrl);
   await until(`!!document.querySelector('[aria-label="Message"]')`);
   if (evaluate(`matchMedia('(pointer: coarse)').matches`)) throw new Error('Desktop fixture has coarse pointer');
+  ab('click', '[aria-label^="Model:"]');
+  if (evaluate(`document.activeElement.getAttribute('aria-label')`) !== 'Search models') throw new Error('Desktop settings did not focus search');
+  ab('focus', 'input[value="xhigh"]');
+  ab('press', 'ArrowLeft');
+  await until(`document.querySelector('input[value="high"]')?.checked && document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: high')`);
+  ab('screenshot', join(evidence, 'desktop-keyboard-effort.png'));
+  ab('press', 'Escape');
+  await until(`document.activeElement.matches('[aria-label^="Model:"]')`);
   ab('fill', '[aria-label="Message"]', 'desktop');
   ab('press', 'Shift+Enter');
   if (!evaluate(`document.querySelector('textarea').value === 'desktop\\n'`)) throw new Error('Shift+Enter did not insert newline');
@@ -209,9 +288,11 @@ try {
   await until(`document.querySelector('textarea').value === ''`);
   ab('errors');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ failures }, null, 2));
-  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: all composer controls fit; pickers, context, queue/reload/pause/native restore, peer-tab isolation, single actions, keyboard and in-place mobile reconnect checks passed');
+  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: single-row toolbars and full accessible model names; model/effort selection, no mobile autofocus, stable actions, context, queue/reload/pause/native restore, peer-tab isolation, keyboard and in-place mobile reconnect');
   process.exitCode = failures.length ? 1 : 0;
-} catch (e) { console.error(e); process.exitCode = 1; }
+}
+try { await run(); }
+catch (e) { console.error(e); process.exitCode = 1; }
 finally {
   try { ab('close'); } catch {}
   for (const proc of [server, frontend]) proc.kill('SIGTERM');

@@ -2,13 +2,12 @@ import { useEffect, useRef } from "react";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import type { ContextUsage, ModelCatalog, QueuedMessage, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { composerCard } from "@/lib/styles";
+import { composerAction, composerCard, composerInput, composerToolbar } from "@/lib/styles";
 import { formatTokenCount } from "@/lib/format";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { ModelSelect } from "@/components/ModelSelect";
 
 interface Props {
@@ -89,7 +88,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
           rows={1}
           aria-label="Message"
           placeholder={compacting ? "Pi is compacting. Ordinary input may be rejected." : streaming ? "Send a follow-up; extension commands run immediately." : "What should Pi do next?"}
-          className="max-h-48 min-h-14 resize-none border-0 bg-transparent px-5 pt-4 shadow-none focus-visible:ring-0"
+          className={composerInput}
           onChange={(e) => onTextChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
@@ -102,9 +101,8 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
             }
           }}
         />
-        <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2">
-          <ModelSelect catalog={catalog} value={model} onChange={onModelChange} disabled={disabled} />
-          <EffortSelect value={effort} onChange={onEffortChange} levels={levelsFor(catalog, model || catalog?.defaultModel)} defaultLevel={catalog?.defaultThinkingLevel} disabled={disabled} />
+        <div className={composerToolbar}>
+          <ModelSelect catalog={catalog} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -112,7 +110,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
                 size="sm"
                 aria-label="Context usage"
                 aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
-                className={cn("h-8 gap-1.5 whitespace-nowrap px-2 tabular-nums", left !== null && left < 15 && "text-warn")}
+                className={cn("h-11 min-w-11 shrink-0 gap-1.5 whitespace-nowrap px-2 tabular-nums md:h-8", left !== null && left < 15 && "text-warn")}
               >
                 <span className="relative inline-block size-3.5 rounded-full border border-current/40" aria-hidden>
                   {percent !== null && (
@@ -134,7 +132,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
           <Button
             size="icon"
             variant={showStop ? "outline" : "default"}
-            className="ml-auto rounded-xl"
+            className={composerAction}
             aria-label={showStop ? "Stop" : streaming && !compacting ? "Queue message" : "Send"}
             title={showStop ? "Abort current operation. Pending queued input is not cleared." : undefined}
             disabled={disabled || (!showStop && !hasText)}

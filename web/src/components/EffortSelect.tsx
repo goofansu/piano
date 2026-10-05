@@ -1,8 +1,5 @@
-import { GaugeIcon } from "lucide-react";
+import { useId } from "react";
 import type { ModelCatalog, ThinkingLevel } from "@shared/wire";
-import { cn } from "cn";
-import { picker } from "@/lib/styles";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ALL: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -28,28 +25,30 @@ interface Props {
   disabled?: boolean;
 }
 
-/** Reasoning effort picker, styled as a quiet control for the composer footer. Shows only what the model accepts. */
+/** Native radios inside the model picker: no second popup, and only Pi-supported levels. */
 export function EffortSelect({ value, onChange, levels, defaultLevel, disabled }: Props) {
-  const single = levels.length <= 1;
+  const name = useId();
   return (
-    <Select value={value} onValueChange={(v) => onChange(v as ThinkingLevel)} disabled={disabled || single}>
-      <SelectTrigger
-        size="sm"
-        className={cn(picker, "border-0 bg-transparent shadow-none focus-visible:ring-2 focus-visible:ring-ring", single && "disabled:opacity-100 [&_svg:last-child]:hidden")}
-        aria-label="Effort"
-        title={single ? "This model does not reason" : undefined}
-      >
-        <GaugeIcon className="size-3.5 text-ink-3" />
-        <SelectValue>{value}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {levels.map((l) => (
-          <SelectItem key={l} value={l}>
-            <span className="flex-1">{l}</span>
-            {l === defaultLevel && <span className="text-ink-3">default</span>}
-          </SelectItem>
+    <fieldset disabled={disabled || levels.length <= 1} className="min-w-0 border-0 p-0" aria-label="Effort">
+      <legend className="mb-2 text-sm font-medium text-ink-2">Reasoning effort</legend>
+      <div className="flex flex-wrap gap-1">
+        {levels.map(level => (
+          <label key={level} className="cursor-pointer" title={level === defaultLevel ? "Default effort" : undefined}>
+            <input
+              type="radio"
+              name={name}
+              value={level}
+              aria-description={level === defaultLevel ? "Default effort" : undefined}
+              checked={value === level}
+              onChange={() => onChange(level)}
+              className="peer sr-only"
+            />
+            <span className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-line px-2 text-sm text-ink-2 transition-colors hover:bg-fill-hover peer-checked:border-brand/30 peer-checked:bg-brand-soft peer-checked:text-brand peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:cursor-default md:min-h-9">
+              {level}
+            </span>
+          </label>
         ))}
-      </SelectContent>
-    </Select>
+      </div>
+    </fieldset>
   );
 }

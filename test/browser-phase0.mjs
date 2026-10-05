@@ -76,11 +76,11 @@ try {
     await delay(100);
   }
   await ab('--init-script', init, 'open', 'http://127.0.0.1:7172/new');
-  await ab('wait', '--fn', `document.querySelector('[aria-label="Model"]')?.title==='piano-phase0/global'`);
-  await ab('click', '[aria-label="Model"]');
+  await ab('wait', '--fn', `document.querySelector('[aria-label^="Model:"]')?.title==='piano-phase0/global'`);
+  await ab('click', '[aria-label^="Model:"]');
   await ab('click', '[data-value="piano-phase0/project"]');
-  await ab('click', '[aria-label="Effort"]');
-  await ab('find', 'role', 'option', 'click', '--name', 'high', '--exact');
+  await ab('click', 'label:has(input[value="high"])');
+  await ab('click', '[aria-label="Close model picker"]');
   await ab('fill', '[aria-label="First message"]', '/phase0-dialog');
   await ab('click', '[aria-label="Send"]');
   await ab('wait', '--text', 'Phase 0 supported dialog');
@@ -95,8 +95,8 @@ try {
   await ab('wait', '--text', 'PHASE0_DIALOG_RESULT BROWSER0');
   await ab('wait', '--text', 'Handled —');
   assert.equal(await header(), 'Ready');
-  assert.equal(await evaluate(`document.querySelector('[aria-label="Model"]').title`), 'piano-phase0/project');
-  assert.equal(await evaluate(`document.querySelector('[aria-label="Effort"]').textContent.trim()`), 'high');
+  assert.equal(await evaluate(`document.querySelector('[aria-label^="Model:"]').title`), 'piano-phase0/project');
+  assert.match(await evaluate(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label')`), /effort: high$/);
   assert.equal(await evaluate(`document.querySelectorAll('article').length`), 0, 'no invented user message for the command');
   await capture('answered-after-reload');
 

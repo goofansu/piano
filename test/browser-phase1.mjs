@@ -110,7 +110,7 @@ try {
   send('/handled');
   ab('wait', '--text', 'Command handled.');
   assert.equal(header(), 'Working', 'handled does not settle independent work');
-  assert.equal(evaluate(`document.querySelector('[aria-label="Model"]').title`), 'fake/beta');
+  assert.equal(evaluate(`document.querySelector('[aria-label^="Model:"]').title`), 'fake/beta');
   capture('busy-command');
   send('/retry');
   ab('wait', '--text', 'Retrying');

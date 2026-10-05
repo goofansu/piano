@@ -309,6 +309,19 @@
 }
 .prose-chat th { font-weight: 600; color: var(--ink-2); }
 
+/* Landscape/short windows must leave space for the composer, not desktop welcome chrome. */
+@media (max-height: 500px) {
+  .new-session-layout {
+    padding-top: 3.5rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .new-session-welcome { margin-bottom: 0.5rem; padding-block: 0.5rem; }
+  .new-session-welcome > [aria-hidden],
+  .new-session-welcome > p { display: none; }
+  .new-session-welcome h1 { font-size: var(--text-xl); }
+  .new-session-input { min-height: 3.5rem; max-height: min(12rem, 30dvh); padding-top: 1rem; }
+}
+
 /* Short, interruptible motion for navigation and controls; never animate transcript
  * updates or remount the conversation to get a transition. */
 :root {

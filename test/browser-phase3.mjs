@@ -84,14 +84,14 @@ try {
   }
   await ab('--init-script', init, 'open', `http://127.0.0.1:7172/s/${saved.getSessionId()}`);
   await ab('wait', '--text', 'Saved answer');
-  await ab('wait', '--fn', `document.querySelector('[aria-label="Model"]')?.title==='router/auto'`);
+  await ab('wait', '--fn', `document.querySelector('[aria-label^="Model:"]')?.title==='router/auto'`);
   assert.equal(await evaluate(`document.querySelector('main header [role="status"]').textContent`), 'Not running');
   await assertQuiet(); await inspectUsage(false); await capture('saved-session-quiet');
   await ab('open', 'http://127.0.0.1:7172/new');
   await ab('wait', '--fn', `received.some(m=>m._tag==='models'&&m.catalog.cwd===${JSON.stringify(cwd)})`);
   await ab('fill', '[aria-label="First message"]', '/partial'); await ab('click', '[aria-label="Send"]');
   await ab('wait', '--text', 'first corrected second corrected');
-  await ab('wait', '--fn', `document.querySelector('[aria-label="Model"]')?.title==='router/auto'`);
+  await ab('wait', '--fn', `document.querySelector('[aria-label^="Model:"]')?.title==='router/auto'`);
   await assertQuiet(); await capture('indexed-endings');
   await send('/secret');
   assert.equal(await evaluate(`JSON.stringify(received).includes(${JSON.stringify(canary.slice(0, 12))})`), false);
@@ -104,7 +104,7 @@ try {
   assert.equal(await evaluate(`!!document.querySelector('main img,main script,main a[href^="javascript:"]')`), false);
   assert.equal(await evaluate(`JSON.stringify(received).includes(${JSON.stringify(canary)})`), false);
   const text = await evaluate('document.querySelector("main").textContent');
-  assert.equal(await evaluate(`document.querySelector('[aria-label="Model"]').title`), 'router/auto');
+  assert.equal(await evaluate(`document.querySelector('[aria-label^="Model:"]').title`), 'router/auto');
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="codemode tool call"] [aria-label="read tool call"]')`), true, 'nest execution details under the parent, without printing protocol IDs');
   assert.match(text, /parent final/); assert.match(text, /nested final \[REDACTED\]/);
   assert.match(text, /Extension title/); assert.match(text, /Projection ready/);
