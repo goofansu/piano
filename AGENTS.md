@@ -90,9 +90,11 @@ for documentation-only changes.
 
 ## Design
 
-Keep correctness in authoritative state handling and regression checks, not permanent protocol
-caveats in the UI. Follow Codex/T3 Code's quiet interaction pattern: normal controls and concise
-status in the main view, optional metadata on demand, persistent warnings for actionable problems.
+Follow Codex/T3 Code's **quiet UI**: show only what helps users decide or act. Keep the main view
+to useful values, essential controls and concise status. Internal state, cache freshness and
+diagnostics belong in on-demand details only when useful; persisting data does not justify adding
+an inline label. Surface persistent warnings only for problems the user can act on.
+Keep correctness in authoritative state handling and regression checks, not permanent UI caveats.
 
 `server/PiSessions.ts` is the deep module: `open`, `probe`, and per session `events`, `act`,
 `state`, all in the browser's wire vocabulary from `shared/wire.ts`. Add capabilities as new
