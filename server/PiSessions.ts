@@ -14,7 +14,7 @@ import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 import { makeDelivery, type DeliveryOverflow } from "./BoundedDelivery.ts";
-import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState } from "../shared/wire.ts";
+import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState, SessionStats } from "../shared/wire.ts";
 import { PiCli } from "./PiCli.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } from "./PiRecords.ts";
@@ -32,6 +32,8 @@ export interface PiSessionSpec {
   readonly thinkingLevel?: string;
   /** Passed as --name; callers pass it only for a brand-new session. */
   readonly name?: string;
+  /** Seed only display statistics while Pi's authoritative readback is pending. */
+  readonly lastKnownStats?: SessionStats;
 }
 
 export class PiSessionError extends Data.TaggedError("PiSessionError")<{
@@ -323,7 +325,7 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
     if ((initial[0] as RawState).sessionId !== spec.sessionId) return yield* new PiSessionError({ reason: "protocol", detail: "Pi opened a different session ID. History was not merged; check the saved reference." });
-    const stateRef = yield* Ref.make<SessionState>(toState(initial[0] as RawState));
+    const stateRef = yield* Ref.make<SessionState>({ ...toState(initial[0] as RawState), ...spec.lastKnownStats, contextIsLastKnown: true });
     const messagesRef = yield* Ref.make(
       serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
     );
@@ -377,7 +379,7 @@ const openSession = (spec: PiSessionSpec) =>
                   ? { ...state, submission: event.submission } : state);
                 break;
               case "closed":
-                yield* Ref.update(stateRef, (state) => ({ ...state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [], closedReason: event.reason }));
+                yield* Ref.update(stateRef, (state) => ({ ...state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [], contextIsLastKnown: true, closedReason: event.reason }));
                 break;
               case "dialog":
                 yield* Ref.update(dialogsRef, (m) => new Map(m).set(event.dialog.id, event.dialog));
@@ -394,6 +396,7 @@ const openSession = (spec: PiSessionSpec) =>
       Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         const current = yield* Ref.get(stateRef);
         const next = { ...current, ...(typeof patch === "function" ? patch() : patch) };
+        if (next.isStreaming || next.isCompacting || next.isRetrying || next.model !== current.model) next.contextIsLastKnown = true;
         if (JSON.stringify(next) === JSON.stringify(current)) return;
         for (const field of metadataFields) if (next[field] !== current[field]) factVersions[field] += 1;
         yield* Ref.set(stateRef, next);
@@ -463,12 +466,16 @@ const openSession = (spec: PiSessionSpec) =>
     const refreshStats = Effect.gen(function* () {
       const version = ++statsVersion;
       const modelVersion = factVersions.model;
+      const outputVersion = child.observationVersion();
+      yield* patchState({ contextIsLastKnown: true });
       yield* Effect.gen(function* () {
         const stats = (yield* child.request({ type: "get_session_stats" })) as RawStats;
+        const statsUpdatedAt = yield* Clock.currentTimeMillis;
         yield* patchState(() => version === statsVersion && modelVersion === factVersions.model && !announced
-          ? { context: stats.contextUsage, cost: stats.cost, tokens: stats.tokens, statsRefreshError: undefined } : {});
+          ? { context: stats.contextUsage, cost: stats.cost, tokens: stats.tokens, statsUpdatedAt,
+              contextIsLastKnown: outputVersion !== child.observationVersion(), statsRefreshError: undefined } : {});
       }).pipe(Effect.catchTag("PiSessionError", error => patchState(() => announced || version !== statsVersion
-        ? {} : { statsRefreshError: `Usage refresh failed: ${error.detail}` })));
+        ? {} : { contextIsLastKnown: true, statsRefreshError: `Usage refresh failed: ${error.detail}` })));
     });
 
     /** Read command-controlled facts back from Pi. Do not replace session-level
@@ -548,7 +555,11 @@ const openSession = (spec: PiSessionSpec) =>
             yield* apply(() => assembler.handle(record));
             yield* patchState({ isStreaming: false, isCompacting: false, isRetrying: false });
             return yield* scheduleRefresh("context", "state", "stats");
+          case "message_start":
+            yield* patchState({ contextIsLastKnown: true });
+            return yield* apply(() => assembler.handle(record));
           case "message_end":
+            yield* patchState({ contextIsLastKnown: true });
             yield* apply(() => assembler.handle(record));
             return yield* scheduleRefresh("stats");
           case "compaction_end":
@@ -726,7 +737,10 @@ const openSession = (spec: PiSessionSpec) =>
               );
               yield* refreshState(operation);
               // Handled commands may edit context without a run/compaction event.
-              if (!(yield* Ref.get(stateRef)).isStreaming) yield* refreshContext;
+              if (!(yield* Ref.get(stateRef)).isStreaming) {
+                yield* refreshContext;
+                yield* scheduleRefresh("stats");
+              }
             });
             return yield* work.pipe(Effect.ensuring(endAbortingPrompt(operation)), Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
           }
@@ -795,7 +809,10 @@ const openSession = (spec: PiSessionSpec) =>
         }
       });
 
-    yield* refreshStats;
+    // Cached values must be available without waiting for a slow/failed readback.
+    // Uncached sessions retain the initial statistics readiness contract.
+    if (spec.lastKnownStats) yield* scheduleRefresh("stats");
+    else yield* refreshStats;
     const session: PiSession = { spec, events,
       act: action => act(action).pipe(Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
       state: Semaphore.withPermits(lock, 1)(currentState).pipe(Effect.map(projectDisplay)),

@@ -30,10 +30,10 @@ const waitAudit = (id: string, pred: (records: Record[]) => boolean) => Effect.p
   function check() { if (pred(records(id))) { cleanup(); resolve(); } }
   signal.addEventListener('abort', cleanup, { once: true }); check();
 }));
-const run = <A, E>(effect: Effect.Effect<A, E, SessionHosts | Registry>, options: { idleMs?: number; holdShutdown?: boolean; holdReadiness?: boolean; clock?: boolean; timeoutMs?: number } = {}) => {
+const run = <A, E>(effect: Effect.Effect<A, E, SessionHosts | Registry>, options: { idleMs?: number; holdShutdown?: boolean; holdReadiness?: boolean; holdStats?: boolean; statsFile?: string; clock?: boolean; timeoutMs?: number } = {}) => {
   const layer = SessionHostsLive({ idleMs: options.idleMs ?? 0 }).pipe(Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   const work = effect.pipe(Effect.scoped, Effect.provide(layer),
-    Effect.provideService(PiCli, { ...cli, extraArgs: [...cli.extraArgs, ...(options.holdShutdown ? ['--hold-shutdown'] : []), ...(options.holdReadiness ? ['--hold-readiness'] : [])] }),
+    Effect.provideService(PiCli, { ...cli, extraArgs: [...cli.extraArgs, ...(options.holdShutdown ? ['--hold-shutdown'] : []), ...(options.holdReadiness ? ['--hold-readiness'] : []), ...(options.holdStats ? ['--hold-stats'] : []), ...(options.statsFile ? ['--stats-file', options.statsFile] : [])] }),
     Effect.provideService(PiRequestTimeoutMs, options.timeoutMs ?? 30000),
     Effect.provideService(RegistryPath, join(root, 'registry.json')));
   return Effect.runPromise(options.clock ? work.pipe(Effect.provide(TestClock.layer())) : work);
@@ -58,6 +58,82 @@ const seed = (path: string, id: string, name: string) => {
   ].map(x => JSON.stringify(x)).join('\n') + '\n');
   return file;
 };
+
+test('INV-01/03: last-known statistics survive host and registry restart without copying history', { timeout: 15000 }, async () => {
+  const id = 'saved-stats', statsFile = join(root, 'stats.json');
+  const stats = { cost: 1.23, tokens: { input: 100, output: 20, cacheRead: 30, cacheWrite: 0, total: 150 }, contextUsage: { tokens: 50, contextWindow: 1000, percent: 5 } };
+  writeFileSync(statsFile, JSON.stringify(stats));
+  const file = seed(alias, id, 'authoritative history'), before = readFileSync(file, 'utf8');
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    yield* (yield* Registry).addSession(alias, id);
+    const s = yield* hosts.open({ cwd, sessionId: id });
+    yield* quiescent(s);
+    assert.equal((yield* s.state).cost, 1.23);
+    assert.equal((yield* s.state).contextIsLastKnown, false);
+    const entry = (yield* (yield* Registry).get).sessions.find(s => s.sessionId === id)!;
+    assert.equal(entry.stats?.cost, 1.23, 'persist while running, not only on graceful release');
+    assert.equal(entry.updatedAt, entry.createdAt, 'statistics do not reorder session activity');
+    assert.deepEqual(Object.keys(entry.stats!).sort(), ['context', 'cost', 'statsUpdatedAt', 'tokens']);
+    yield* hosts.release(cwd, id);
+  }), { statsFile });
+  // A new layer rereads the registry from disk, not the previous host's memory.
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    const view = yield* hosts.peek(cwd, id);
+    assert.equal(view.cwd, alias);
+    assert.equal(view.snapshot.state.cost, 1.23);
+    assert.deepEqual(view.snapshot.state.context, stats.contextUsage);
+    assert.deepEqual(view.snapshot.state.tokens, stats.tokens);
+    assert.equal(view.snapshot.state.contextIsLastKnown, true);
+    assert.equal(typeof view.snapshot.state.statsUpdatedAt, 'number');
+    assert.equal(view.snapshot.messages[0].text, 'authoritative history');
+    assert.equal(readFileSync(file, 'utf8'), before);
+    assert.equal(records(id).filter(r => r.event === 'spawn').length, 1, 'peeking never starts Pi');
+    yield* (yield* Registry).addSession(cwd, 'uncached-stats');
+    const unknown = (yield* hosts.peek(cwd, 'uncached-stats')).snapshot.state;
+    assert.equal(unknown.context, undefined); assert.equal(unknown.cost, undefined, 'no invented zero or another session\'s cache');
+
+    const s = yield* hosts.open({ cwd, sessionId: id });
+    assert.equal((yield* s.state).cost, 1.23, 'cached snapshot available before withheld stats reply');
+    assert.equal((yield* s.state).contextIsLastKnown, true);
+    yield* waitAudit(id, rs => rs.filter(r => r.command === 'get_session_stats').length === 2);
+    const failed = yield* observe(s, e => e._tag === 'state' && !!e.state.statsRefreshError);
+    writeFileSync(statsFile, JSON.stringify({ error: 'fixture unavailable' }));
+    process.kill(records(id).findLast(r => r.event === 'spawn')!.pid, 'SIGCONT');
+    yield* Fiber.join(failed);
+    assert.equal((yield* s.state).cost, 1.23);
+    assert.deepEqual((yield* s.state).context, stats.contextUsage);
+    assert.equal((yield* s.state).contextIsLastKnown, true);
+    assert.equal((yield* s.state).statsUpdatedAt, view.snapshot.state.statsUpdatedAt, 'failed reads never advance observation time');
+
+    writeFileSync(statsFile, JSON.stringify({ cost: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, contextUsage: { tokens: null, contextWindow: 2000, percent: null } }));
+    const fresh = yield* observe(s, e => e._tag === 'state' && e.state.context?.tokens === null && e.state.contextIsLastKnown === false);
+    yield* prompt(s, '/settle'); yield* Fiber.join(fresh);
+    const state = yield* s.state;
+    assert.equal(state.statsRefreshError, undefined);
+    assert.equal(state.cost, 0, 'fresh Pi values replace rather than sum or max the cache');
+    assert.equal(state.tokens?.total, 0);
+    const closed = yield* observe(s, e => e._tag === 'closed');
+    process.kill(records(id).findLast(r => r.event === 'spawn')!.pid, 'SIGUSR1');
+    yield* Fiber.join(closed);
+    const stopped = (yield* hosts.peek(cwd, id)).snapshot.state;
+    assert.equal(stopped.cost, 0);
+    assert.equal(stopped.contextIsLastKnown, true);
+  }), { statsFile, holdStats: true });
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    const cached = (yield* hosts.peek(cwd, id)).snapshot.state;
+    assert.deepEqual(cached.context, { tokens: null, contextWindow: 2000, percent: null });
+    assert.equal(cached.cost, 0);
+    writeFileSync(statsFile, JSON.stringify({ cost: 0 }));
+    const s = yield* hosts.open({ cwd, sessionId: id });
+    yield* quiescent(s);
+    assert.equal((yield* s.state).context, undefined, 'Pi omission clears cached context when no model/window is available');
+    yield* hosts.release(cwd, id);
+    assert.equal((yield* hosts.peek(cwd, id)).snapshot.state.context, undefined);
+  }), { statsFile });
+});
 
 test('INV-02: concurrent public opens through real/symlink paths have one child lifetime', async () => {
   await run(Effect.gen(function* () {

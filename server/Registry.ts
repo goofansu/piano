@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, Semaphore } from "effect";
-import { Workspace } from "../shared/wire.ts";
+import { SessionStats, Workspace } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
 
 export class RegistryError extends Data.TaggedError("RegistryError")<{ readonly detail: string }> {
@@ -29,6 +29,8 @@ export interface SessionEntry {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archived: boolean;
+  /** Replaceable last-known Pi accounting, not session history. */
+  readonly stats?: SessionStats;
 }
 
 export interface RegistryData {
@@ -48,7 +50,7 @@ const legacySchema = Schema.Struct({
   projects: Schema.Array(Schema.String),
   worktrees: Schema.Array(Schema.Struct({ project: Schema.String, path: Schema.String, branch: Schema.String })),
   sessions: Schema.Array(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
-    createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.optional(Schema.Boolean) })),
+    createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.optional(Schema.Boolean), stats: Schema.optional(SessionStats) })),
 });
 const currentSchema = Schema.Struct({ ...legacySchema.fields, version: Schema.Literal(1), workspaces: Schema.Array(Workspace) });
 
@@ -109,6 +111,8 @@ export class Registry extends Context.Service<
     readonly addSession: (cwd: string, sessionId: string, title?: string) => Effect.Effect<void, RegistryError>;
     /** Bump a session's activity time; sets the title from the first prompt when none was given. */
     readonly touchSession: (cwd: string, sessionId: string, text?: string) => Effect.Effect<void, RegistryError>;
+    /** Cache Pi's last statistics without changing session activity/order or creating references. */
+    readonly cacheSessionStats: (cwd: string, sessionId: string, stats: SessionStats) => Effect.Effect<void, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
     readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
   }
@@ -122,7 +126,10 @@ export const RegistryLive = Layer.effect(
     const lock = yield* Semaphore.make(1);
     const update = (f: (d: RegistryData) => RegistryData) =>
       Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
-        const data = withWorkspaces(f(yield* Ref.get(state)));
+        const current = yield* Ref.get(state);
+        const next = f(current);
+        if (next === current) return;
+        const data = withWorkspaces(next);
         yield* Effect.try({ try: () => write(path, data), catch: e => recovery(path, e) });
         yield* Ref.set(state, data);
       }).pipe(Effect.uninterruptible));
@@ -166,6 +173,11 @@ export const RegistryLive = Layer.effect(
               : t,
           ),
         })),
+      cacheSessionStats: (cwd, sessionId, stats) => update((d) => {
+        const entry = d.sessions.find(isSession(cwd, sessionId));
+        if (!entry || JSON.stringify(entry.stats) === JSON.stringify(stats)) return d;
+        return { ...d, sessions: d.sessions.map(t => t === entry ? { ...t, stats } : t) };
+      }),
       archiveSession: (cwd, sessionId) =>
         update((d) => ({ ...d, sessions: d.sessions.map((t) => (isSession(cwd, sessionId)(t) ? { ...t, archived: true } : t)) })),
       removeSession: (cwd, sessionId) => update((d) => ({ ...d, sessions: d.sessions.filter((t) => !isSession(cwd, sessionId)(t)) })),

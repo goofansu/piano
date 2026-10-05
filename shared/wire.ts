@@ -115,6 +115,15 @@ export const PromptSubmission = Schema.Struct({
 });
 export type PromptSubmission = typeof PromptSubmission.Type;
 
+/** Last Pi statistics observation. A bounded cache, never reconstructed from history. */
+export const SessionStats = Schema.Struct({
+  context: Schema.optional(ContextUsage),
+  cost: Schema.optional(Schema.Number),
+  tokens: Schema.optional(Schema.Struct({ input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number, total: Schema.Number })),
+  statsUpdatedAt: Schema.Number,
+});
+export type SessionStats = typeof SessionStats.Type;
+
 export const SessionState = Schema.Struct({
   sessionId: Schema.String,
   sessionFile: Schema.optional(Schema.String),
@@ -131,10 +140,13 @@ export const SessionState = Schema.Struct({
   /** Pi's current pending queue, not submitted prompts inferred by the browser. */
   queuedMessages: Schema.optional(Schema.Array(QueuedMessage)),
   /** Pi's context-window estimate, refreshed at finalized-message and compaction boundaries. */
-  context: Schema.optional(ContextUsage),
+  context: SessionStats.fields.context,
+  /** False only after a successful live observation; cached/uncertain context is last-known. */
+  contextIsLastKnown: Schema.optional(Schema.Boolean),
+  statsUpdatedAt: Schema.optional(Schema.Number),
   /** Full-session totals from Pi, not a sum of displayed current-context messages. */
-  cost: Schema.optional(Schema.Number),
-  tokens: Schema.optional(Schema.Struct({ input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number, total: Schema.Number })),
+  cost: SessionStats.fields.cost,
+  tokens: SessionStats.fields.tokens,
   extension: Schema.optional(ExtensionState),
   projectionError: Schema.optional(Schema.String),
   stateRefreshError: Schema.optional(Schema.String),

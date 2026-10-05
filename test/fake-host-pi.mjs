@@ -16,6 +16,13 @@ const entries = existsSync(sessionFile) ? readFileSync(sessionFile, 'utf8').trim
 const messages = entries.filter(x => x.type === 'message').map(x => x.message);
 let lastId = entries.at(-1)?.id ?? null;
 let streaming = false, silence = false, heldState;
+let holdStats = args.includes('--hold-stats');
+const heldStats = [];
+const stats = cmd => {
+  const data = arg('--stats-file') ? JSON.parse(readFileSync(arg('--stats-file'), 'utf8')) : { cost: 0 };
+  if (data.error) out({ type: 'response', command: cmd.type, id: cmd.id, success: false, error: data.error });
+  else reply(cmd, data);
+};
 const state = () => ({ sessionId, sessionFile, isStreaming: streaming, model: { provider: 'fake', id: 'alpha' }, thinkingLevel: 'medium' });
 const persist = message => {
   if (!existsSync(sessionFile)) writeFileSync(sessionFile, JSON.stringify({ type: 'session', version: 3, id: sessionId, cwd: process.cwd(), timestamp: new Date().toISOString() }) + '\n');
@@ -27,7 +34,11 @@ audit('spawn');
 process.on('exit', code => audit('exit', { code }));
 process.on('SIGUSR1', () => { audit('crash'); process.exit(7); });
 process.on('SIGUSR2', () => process.exit(0));
-process.on('SIGCONT', () => { if (heldState) { reply(heldState, state()); heldState = undefined; } });
+process.on('SIGCONT', () => {
+  if (heldState) { reply(heldState, state()); heldState = undefined; }
+  holdStats = false;
+  for (const cmd of heldStats.splice(0)) stats(cmd);
+});
 if (args.includes('--hold-shutdown')) setInterval(() => {}, 1000);
 let buffer = ''; const decoder = new StringDecoder('utf8');
 process.stdin.on('data', chunk => {
@@ -47,7 +58,7 @@ function handle(cmd) {
     return reply(cmd, state());
   }
   if (cmd.type === 'get_messages') return reply(cmd, { messages });
-  if (cmd.type === 'get_session_stats') { if (!silence) reply(cmd, { cost: 0 }); return; }
+  if (cmd.type === 'get_session_stats') { if (!silence) { if (holdStats) heldStats.push(cmd); else stats(cmd); } return; }
   if (cmd.type === 'get_available_models') return reply(cmd, { models: [{ provider: 'fake', id: 'alpha', reasoning: false, contextWindow: 1000 }] });
   if (cmd.type === 'extension_ui_response') { notify('dialog released'); return; }
   if (cmd.type === 'abort') { streaming = false; out({ type: 'agent_settled' }); return reply(cmd); }

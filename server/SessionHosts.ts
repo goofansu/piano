@@ -93,7 +93,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       }
     }
     if (files.size > 1) return yield* rejected(`Conflicting Pi files for checkout aliases (${owner}, ${physical}). Piano has not merged or moved history. Resolve the conflicting session ID before starting it.`);
-    return { cwd: owner, file: files.values().next().value as string | undefined };
+    return { cwd: owner, file: files.values().next().value as string | undefined, stats: entry?.stats };
   });
 
   const list = Effect.gen(function* () {
@@ -109,6 +109,14 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   });
   const announce = list.pipe(Effect.flatMap(l => PubSub.publish(changed, l)), Effect.asVoid);
 
+  const cacheStats = (session: PiSession) => Effect.gen(function* () {
+    const state = yield* session.state;
+    if (state.statsUpdatedAt === undefined) return;
+    yield* registry.cacheSessionStats(session.spec.cwd, session.spec.sessionId, {
+      context: state.context, cost: state.cost, tokens: state.tokens, statsUpdatedAt: state.statsUpdatedAt,
+    }).pipe(Effect.catchTag("RegistryError", error => Effect.logWarning(`Could not cache session statistics: ${error.detail}`)));
+  });
+
   // Caller holds this key's lock through actual process exit, not just close intent.
   const close = (key: string, host: Host, reason?: string) => Effect.gen(function* () {
     if (hosts.get(key) !== host) return;
@@ -117,6 +125,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     const detail = reason ?? state.closedReason ?? (state.isQuiescent ? "released" : "Pi was released during work. Interrupted operations were not resumed.");
     exits.set(key, detail);
     yield* Scope.close(host.scope, Exit.void);
+    yield* cacheStats(host.session);
     hosts.delete(key);
     yield* announce;
   }).pipe(Effect.uninterruptible);
@@ -132,8 +141,9 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       yield* close(key, existing);
     }
     if (spec.create) yield* registry.addSession(ref.cwd, spec.sessionId, spec.name).pipe(Effect.mapError(e => rejected(e.detail)));
+    const lastKnownStats = (yield* registry.get).sessions.find(s => s.cwd === ref.cwd && s.sessionId === spec.sessionId)?.stats;
     const scope = yield* Scope.make();
-    const raw = yield* sessions.open({ ...spec, cwd: ref.cwd, sessionFile: ref.file, name: ref.file ? undefined : spec.name }).pipe(
+    const raw = yield* sessions.open({ ...spec, cwd: ref.cwd, sessionFile: ref.file, lastKnownStats, name: ref.file ? undefined : spec.name }).pipe(
       Scope.provide(scope), Effect.onExit(exit => Exit.isFailure(exit) ? Scope.close(scope, Exit.void) : Effect.void),
     );
     if (stopping) {
@@ -158,9 +168,19 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     }) };
     host.session = session;
     hosts.set(key, host);
+    yield* cacheStats(session);
     const ready = yield* Deferred.make<void>();
     yield* session.events.pipe(Stream.runForEach(event => Effect.gen(function* () {
+      // Signal attachment before taking ownership's lock: open holds it until ready.
       if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
+      if (event._tag === "state" || event._tag === "snapshot") {
+        const lock = yield* lockFor(key);
+        yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
+          // Serialize against close/replacement and read current state, not an old
+          // queued frame. A retired observer must never overwrite a newer cache.
+          if (hosts.get(key) === host && !host.closing) yield* cacheStats(session);
+        }));
+      }
       host.lastActivity = yield* Clock.currentTimeMillis;
       const reason = event._tag === "closed" ? event.reason : event._tag === "snapshot" ? event.snapshot.state.closedReason : undefined;
       if (reason) {
@@ -223,7 +243,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       if (host && (yield* host.session.state).closedReason) yield* close(key, host);
       const ref = yield* reference(cwd, id, physical);
       const snapshot = ref.file ? yield* peekSession(ref.file, id) : emptySnapshot(id);
-      return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, closedReason: exits.get(key) } } };
+      return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, ...ref.stats, contextIsLastKnown: true, closedReason: exits.get(key) } } };
     })),
     archive: (cwd, id) => retire(cwd, id, false), delete: (cwd, id) => retire(cwd, id, true),
     list, changes: Stream.fromPubSub(changed),

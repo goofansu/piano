@@ -189,6 +189,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           else { setEffort(level); setOverrides(o => ({ ...o, thinkingLevel: level })); }
         }}
         context={t?.state.context}
+        contextIsLastKnown={!state.connected || state.resync || !t?.hosted || t.state.contextIsLastKnown !== false}
         cost={t?.state.cost}
         totalTokens={t?.state.tokens?.total}
         responseModel={lastResponse?.model}
