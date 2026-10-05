@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { FileDiffIcon } from "lucide-react";
 import { Schema } from "effect";
 import { WorkspaceCapture, type Workspace } from "@shared/wire";
@@ -10,16 +10,26 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
  */
 export function WorkspaceChanges({ workspace }: { workspace: Workspace }) {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   return <>
-    <Button variant="ghost" size="sm" onClick={() => setOpen(true)}><FileDiffIcon className="size-4" /> Changes</Button>
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-4xl">
-        <DialogHeader><DialogTitle>Workspace changes</DialogTitle>
-          <DialogDescription className="break-all font-mono">{workspace.path}</DialogDescription></DialogHeader>
-        {open && <Capture key={workspace.id} workspace={workspace} />}
-      </DialogContent>
-    </Dialog>
+    <Button ref={trigger} variant="ghost" size="sm" onClick={() => setOpen(true)}><FileDiffIcon className="size-4" /> Changes</Button>
+    <WorkspaceChangesDialog workspace={workspace} open={open} onOpenChange={setOpen}
+      onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} />
   </>;
+}
+
+/** Controlled so a session menu can close before this separate dialog opens. */
+export function WorkspaceChangesDialog({ workspace, open, onOpenChange, onCloseAutoFocus }: {
+  workspace: Workspace; open: boolean; onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: ComponentProps<typeof DialogContent>["onCloseAutoFocus"];
+}) {
+  return <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-4xl" onCloseAutoFocus={onCloseAutoFocus}>
+      <DialogHeader><DialogTitle>Workspace changes</DialogTitle>
+        <DialogDescription className="break-all font-mono">{workspace.path}</DialogDescription></DialogHeader>
+      {open && <Capture key={workspace.id} workspace={workspace} />}
+    </DialogContent>
+  </Dialog>;
 }
 function Capture({ workspace }: { workspace: Workspace }) {
   const [capture, setCapture] = useState<WorkspaceCapture | null>(null);

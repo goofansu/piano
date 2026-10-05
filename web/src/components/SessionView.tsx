@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitBranchIcon, ListCollapseIcon, ListIcon, PanelLeftOpenIcon } from "lucide-react";
+import { GitBranchIcon, PanelLeftOpenIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Composer } from "@/components/Composer";
-import { WorkspaceChanges } from "@/components/WorkspaceChanges";
+import { SessionMenu } from "@/components/SessionMenu";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList, type TranscriptView } from "@/components/MessageList";
 import { PullRequestStack } from "@/components/PullRequestStack";
@@ -43,6 +43,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   const draftKey = t ? sessionKey(t) : undefined;
   const project = t ? state.projects.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
   const worktree = project?.worktrees.find((w) => w.path === t?.cwd);
+  const title = t?.state.sessionName || project?.sessions.find(s => s.cwd === t?.cwd && s.sessionId === t?.sessionId)?.title || "Untitled session";
   const [model, setModel] = useState<string | undefined>(undefined);
   // Follow the session's own model and effort when known; otherwise Pi's defaults.
   useEffect(() => setModel(t?.state.model), [t?.cwd, t?.sessionId, t?.state.model]);
@@ -121,25 +122,9 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
             {t.state.sessionName ? <span className="min-w-0 truncate text-ink-2">{t.state.sessionName}</span> : null}
           </span>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          {worktree && <WorkspaceChanges key={worktree.workspace.id} workspace={worktree.workspace} />}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="-mr-2"
-                aria-label="End-of-turn messages only"
-                aria-pressed={view === "replies"}
-                onClick={() => setView(view === "all" ? "replies" : "all")}
-              >
-                {view === "all" ? <ListIcon /> : <ListCollapseIcon className="text-brand" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {view === "all" ? "Showing every message, including tool calls. Click to show only the last reply of each turn." : "Showing only the last reply of each turn. Click to show every message."}
-            </TooltipContent>
-          </Tooltip>
+        <div className="ml-auto shrink-0">
+          {t && <SessionMenu key={draftKey} session={t} title={title} projectName={project?.name} worktree={worktree}
+            status={status} connected={state.connected && !state.resync} view={view} onViewChange={setView} send={send} />}
         </div>
       </header>
 

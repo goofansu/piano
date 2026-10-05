@@ -1,5 +1,5 @@
 // Scratch-only Phase 7: real Git/worktrees, fake Pi catalog, no model calls.
-// Focused header regression: node test/browser-phase7.mjs <evidence-dir> --header-only [--long-labels]
+// Focused checks: node test/browser-phase7.mjs <evidence-dir> --header-only|--menu-only [--long-labels]
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase7-evidence/browser'); mkdirSync(evidence, { recursive: true });
 const headerOnly = process.argv.includes('--header-only');
+const menuOnly = process.argv.includes('--menu-only');
 const longLabels = process.argv.includes('--long-labels');
 const projectName = longLabels ? 'project-with-an-extraordinarily-long-name' : 'repo';
 const branchName = longLabels ? 'feature/session-header-with-long-workspace-labels' : 'main';
@@ -40,7 +41,12 @@ async function ab(...args) {
   commands.push({ args, ...result }); assert.equal(result.status, 0, `agent-browser ${args[0]}: ${result.stderr || result.stdout}`); return result.stdout.trim();
 }
 const evaluate = async js => JSON.parse(await ab('eval', js));
-const click = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
+const menuItem = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
+const click = async name => {
+  // Changes is a session-menu action, not a permanent header button.
+  if (name === 'Changes') { await click('Session menu'); return menuItem('Changes'); }
+  return ab('find', 'role', 'button', 'click', '--name', name, '--exact');
+};
 const revision = () => evaluate(`document.querySelector('[data-revision]')?.dataset.revision`);
 const complete = () => ab('wait', '--fn', `document.querySelector('[role="dialog"] [role="status"]')?.textContent !== 'Capturing…' && !!document.querySelector('[role="dialog"] [role="status"]')`);
 async function capture(name) { writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot')); await ab('screenshot', join(evidence, `${name}.png`)); observations.push(name); }
@@ -78,10 +84,57 @@ async function checkHeader() {
   assert.deepEqual(failures, [], 'Session identity, one-line status and controls must remain visible within the header');
   // Actions still work on the narrowest viewport, including pointer-triggered UI.
   await ab('set', 'viewport', '320', '844'); await click('Changes'); await complete(); await ab('wait', '--text', 'WORKSPACE_A'); await click('Close');
-  await click('End-of-turn messages only');
-  assert.equal(await evaluate(`document.querySelector('[aria-label="End-of-turn messages only"]').getAttribute('aria-pressed')`), 'true');
+  await click('Session menu'); await ab('find', 'role', 'menuitemcheckbox', 'click', '--name', 'End-of-turn messages only', '--exact');
+  await click('Session menu');
+  assert.equal(await evaluate(`document.querySelector('[role="menuitemcheckbox"]').getAttribute('aria-checked')`), 'true');
+  await ab('press', 'Escape');
   await click('Show sidebar'); await ab('wait', '--fn', `!!document.querySelector('[role="dialog"] nav[aria-label="Projects"]')`);
   await ab('press', 'Escape');
+}
+async function checkSessionMenu() {
+  const facts = () => evaluate(`(() => {const info=document.querySelector('[aria-label="Session information"]');return {text:info.textContent,values:Object.fromEntries([...info.querySelectorAll('dt')].map(dt=>[dt.textContent,dt.nextElementSibling.textContent]))};})()`);
+  const focusReturned = () => ab('wait', '--fn', `document.activeElement?.getAttribute('aria-label') === 'Session menu'`);
+  await ab('set', 'viewport', '390', '844'); await click('Session menu');
+  let info = await facts(); assert.ok(info.text.includes('Session A') && info.text.includes(repo) && info.text.includes(branchName) && info.text.includes('workspace-a'));
+  assert.equal(info.values['Session model'], 'Not recorded'); assert.equal(info.values['Context'], 'Unavailable'); assert.equal(info.values['Session cost'], 'Unavailable');
+  await capture('session-menu-unknown-not-zero');
+  for (const [width, height] of [[320, 568], [390, 844], [768, 320], [1280, 844]]) {
+    await ab('set', 'viewport', String(width), String(height));
+    await ab('wait', '--fn', `(() => {const r=document.querySelector('[role="menu"]')?.getBoundingClientRect();return r && r.left>=0 && r.right<=innerWidth+1 && r.top>=0 && r.bottom<=innerHeight+1;})()`);
+    await capture(`session-menu-${width}x${height}`);
+    if (height === 320) {
+      await menuItem('Changes'); await complete(); await ab('wait', '--text', 'WORKSPACE_A'); await click('Close'); await focusReturned();
+      await click('Session menu');
+    }
+  }
+  await ab('press', 'Escape'); await focusReturned();
+  await ab('press', 'Enter'); await ab('wait', '--fn', `!!document.querySelector('[role="menu"]')`); await ab('press', 'Escape'); await focusReturned();
+  await click('Changes'); await complete(); await ab('wait', '--text', 'WORKSPACE_A'); await click('Close'); await focusReturned();
+  await click('Session menu'); await menuItem('Delete session…'); await ab('wait', '--text', 'Delete this session?');
+  assert.equal(JSON.parse(readFileSync(registry, 'utf8')).sessions.length, 2);
+  await capture('delete-confirmation'); await click('Cancel'); await focusReturned();
+  // The browser Back action changes selection while the menu is still open.
+  await ab('click', 'button[title="Session B"]'); await click('Session menu');
+  info = await facts(); assert.ok(info.text.includes(checkout) && info.text.includes('workspace-b')); assert.ok(!info.text.includes('workspace-a'));
+  await ab('back'); await ab('wait', '--fn', `location.pathname==='/s/workspace-a' && !!document.querySelector('main header [aria-label="Session menu"]') && !document.querySelector('[role="menu"]')`);
+  await capture('selection-closes-old-menu');
+  await ab('fill', 'textarea[aria-label="Message"]', 'menu facts'); await click('Send'); await ab('wait', '--text', 'echo: menu facts');
+  await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Ready'`);
+  await click('Session menu'); await ab('wait', '--fn', `document.querySelector('[aria-label="Session information"]')?.textContent.includes('$0.02')`);
+  info = await facts(); assert.equal(info.values['Session model'], 'fake/alpha'); assert.equal(info.values['Effort'], 'medium'); assert.equal(info.values['Context'], '2k tokens');
+  assert.equal(info.values['Session cost'], '$0.02'); await capture('live-session-facts');
+  await ab('press', 'Escape');
+  // Retention actions use the existing server contract and affect only their own session.
+  await ab('click', 'button[title="Session B"]'); await click('Session menu'); await menuItem('Archive session'); await ab('wait', '--text', 'What should we work on?');
+  assert.equal(JSON.parse(readFileSync(registry, 'utf8')).sessions.find(s=>s.sessionId==='workspace-b').archived, true);
+  // The new-session page retains its ordinary Changes button and focus return.
+  await ab('find', 'role', 'button', 'click', '--name', 'Changes', '--exact'); await complete(); await ab('wait', '--text', 'WORKSPACE_B'); await click('Close');
+  await ab('wait', '--fn', `document.activeElement?.textContent.trim()==='Changes'`);
+  await ab('click', 'button[title="Session A"]'); await click('Session menu'); await menuItem('Delete session…'); await click('Delete session');
+  await ab('wait', '--text', 'What should we work on?');
+  const remaining = JSON.parse(readFileSync(registry, 'utf8')).sessions;
+  assert.equal(remaining.length, 1); assert.equal(remaining[0].sessionId, 'workspace-b'); assert.equal(remaining[0].archived, true);
+  await capture('retention-actions-complete');
 }
 try {
   for (let n = 0; n < 100; n++) {
@@ -90,7 +143,11 @@ try {
     if (n === 99) throw new Error('scratch startup deadline'); await delay(100);
   }
   await ab('open', 'http://127.0.0.1:7172/s/workspace-a'); await ab('wait', '--text', 'Session A');
-  if (headerOnly) {
+  if (menuOnly) {
+    await checkSessionMenu();
+    writeFileSync(join(evidence, 'result.json'), JSON.stringify({ passed: true, observations, node: process.version }, null, 2));
+    console.log('PASS: session menu information, keyboard/focus, workspace selection and retention actions');
+  } else if (headerOnly) {
     await checkHeader();
     writeFileSync(join(evidence, 'result.json'), JSON.stringify({ passed: true, observations, node: process.version }, null, 2));
     console.log(`PASS: session header visibility and actions at 320–1280px`);
