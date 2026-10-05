@@ -30,6 +30,7 @@ export default function App() {
     parseRoute(location).kind === "session" ? { ...s, view: { kind: "session" } } : s,
   );
   const [menuOpen, setMenuOpen] = useState(false);
+  const sidebarReturnFocus = useRef<HTMLElement | null>(null);
   const latest = useRef(state);
   latest.current = state;
   // Socket frames can arrive before React renders. Keep acceptance/correlation current.
@@ -56,7 +57,11 @@ export default function App() {
     }
   }, []);
   const wide = () => matchMedia("(min-width: 768px)").matches;
-  const showSidebar = useCallback(() => (wide() ? setCollapsed(false) : setMenuOpen(true)), [setCollapsed]);
+  const showSidebar = useCallback(() => {
+    if (wide()) { setCollapsed(false); return; }
+    sidebarReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setMenuOpen(true);
+  }, [setCollapsed]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
@@ -258,7 +263,11 @@ export default function App() {
         )}
       </aside>
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-72 p-0" showCloseButton={false}>
+        <SheetContent side="left" className="w-72 p-0" showCloseButton={false} onCloseAutoFocus={event => {
+          const target = sidebarReturnFocus.current;
+          sidebarReturnFocus.current = null;
+          if (target?.isConnected) { event.preventDefault(); target.focus(); }
+        }}>
           <Sidebar {...sidebarProps} onHide={() => setMenuOpen(false)} />
         </SheetContent>
       </Sheet>

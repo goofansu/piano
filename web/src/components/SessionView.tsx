@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitBranchIcon, PanelLeftOpenIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Composer } from "@/components/Composer";
 import { SessionMenu } from "@/components/SessionMenu";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
@@ -100,32 +98,11 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
 
   return (
     <>
-      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-4 py-2 text-sm md:h-12 md:flex-nowrap md:gap-3 md:py-0">
-        <Button variant="ghost" size="icon-sm" className="-ml-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="flex min-w-0 flex-1 items-center gap-2 text-ink-2 md:max-w-[40%] md:flex-none">
-              <span className={cn("size-2 shrink-0 rounded-full", status.dot)} aria-hidden />
-              <span role="status" className="truncate">{status.word}</span>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{status.why}</TooltipContent>
-        </Tooltip>
-        {t && (
-          <span className="order-last flex min-w-0 basis-full items-center gap-2 md:order-none md:flex-1 md:basis-auto" title={t.cwd}>
-            <span className="hidden h-4 w-px shrink-0 bg-line-strong md:block" aria-hidden />
-            {project && <span className="max-w-[45%] shrink-0 truncate font-medium">{project.name}</span>}
-            <span className="inline-flex min-w-0 items-center gap-1 rounded-md bg-fill px-1.5 font-mono text-ink-2">
-              <GitBranchIcon className="size-3.5 shrink-0" />
-              <span className="truncate">{worktree?.branch ?? (worktree?.facts?.detached ? "Detached" : worktree?.status === "non-git" ? "Non-Git" : "Unknown branch")}</span>
-            </span>
-            {t.state.sessionName ? <span className="min-w-0 truncate text-ink-2">{t.state.sessionName}</span> : null}
-          </span>
-        )}
-        <div className="ml-auto shrink-0">
-          {t && <SessionMenu key={draftKey} session={t} title={title} projectName={project?.name} worktree={worktree}
-            status={status} connected={state.connected && !state.resync} view={view} onViewChange={setView} send={send} />}
-        </div>
+      <header className="flex h-12 shrink-0 items-center justify-end border-b border-line px-4">
+        {/* Preserve live status announcements; visible session facts live in the menu. */}
+        <span role="status" className="sr-only">{status.word}</span>
+        {t && <SessionMenu key={draftKey} session={t} title={title} projectName={project?.name} worktree={worktree}
+          status={status} connected={state.connected && !state.resync} view={view} onViewChange={setView} onShowSidebar={onMenu} send={send} />}
       </header>
 
       {project?.discovery.status === "error" && <div role="alert" className="border-b border-line px-4 py-2 text-sm text-err">

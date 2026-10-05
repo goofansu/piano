@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ArchiveIcon, FileDiffIcon, MenuIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, FileDiffIcon, MenuIcon, PanelLeftOpenIcon, Trash2Icon } from "lucide-react";
 import type { ClientCommand, WorktreeView } from "@shared/wire";
 import type { SessionView } from "@/store";
 import { cn } from "cn";
@@ -13,14 +13,15 @@ import type { TranscriptView } from "@/components/MessageList";
 /** Keyed by session at the caller: a selection change closes old menus/confirmations.
  * Facts come from the selected session, never catalog defaults or another cwd.
  */
-export function SessionMenu({ session, title, projectName, worktree, status, connected, view, onViewChange, send }: {
+export function SessionMenu({ session, title, projectName, worktree, status, connected, view, onViewChange, onShowSidebar, send }: {
   session: SessionView; title: string; projectName?: string; worktree?: WorktreeView;
-  status: { word: string; dot: string }; connected: boolean;
-  view: TranscriptView; onViewChange: (view: TranscriptView) => void; send: (message: ClientCommand) => void;
+  status: { word: string; dot: string; why: string }; connected: boolean;
+  view: TranscriptView; onViewChange: (view: TranscriptView) => void; onShowSidebar: () => void; send: (message: ClientCommand) => void;
 }) {
   const [dialog, setDialog] = useState<"changes" | "delete" | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const pendingDialog = useRef(false);
+  const pendingSidebar = useRef(false);
   const openDialog = (next: "changes" | "delete") => { pendingDialog.current = true; setDialog(next); };
   const returnFocus = (event: Event) => { event.preventDefault(); pendingDialog.current = false; trigger.current?.focus(); };
   const canAct = connected && session.sessionId !== null;
@@ -34,11 +35,17 @@ export function SessionMenu({ session, title, projectName, worktree, status, con
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" collisionPadding={8} aria-label="Session actions and information"
         className="w-80 max-w-[calc(100vw-1rem)]"
-        onCloseAutoFocus={event => { if (pendingDialog.current) event.preventDefault(); }}>
+        onCloseAutoFocus={event => {
+          if (pendingSidebar.current) {
+            // Close the menu before transferring focus to the sidebar sheet.
+            event.preventDefault(); pendingSidebar.current = false;
+            trigger.current?.focus(); onShowSidebar();
+          } else if (pendingDialog.current) event.preventDefault();
+        }}>
         <section aria-label="Session information" className="space-y-3 px-2.5 py-3 text-sm select-text">
           <div className="space-y-1">
             <h2 className="break-words font-medium">{title}</h2>
-            <p className="flex items-center gap-2 text-xs text-ink-2"><span className={cn("size-2 shrink-0 rounded-full", status.dot)} aria-hidden />{status.word}</p>
+            <p title={status.why} className="flex items-center gap-2 text-xs text-ink-2"><span className={cn("size-2 shrink-0 rounded-full", status.dot)} aria-hidden />{status.word}</p>
           </div>
           <div className="space-y-1">
             <p className="break-words text-xs text-ink-2">{projectName && <>{projectName} · </>}<span className="font-mono">{branch}</span></p>
@@ -54,6 +61,7 @@ export function SessionMenu({ session, title, projectName, worktree, status, con
           <p className="break-all text-xs text-ink-3">Session ID <span className="font-mono">{session.sessionId}</span></p>
         </section>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => { pendingSidebar.current = true; }}><PanelLeftOpenIcon /> Show sidebar</DropdownMenuItem>
         <DropdownMenuItem disabled={!worktree} onSelect={() => openDialog("changes")}><FileDiffIcon /> Changes</DropdownMenuItem>
         <DropdownMenuCheckboxItem checked={view === "replies"} onCheckedChange={checked => onViewChange(checked ? "replies" : "all")}>
           End-of-turn messages only
