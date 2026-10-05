@@ -21,10 +21,7 @@ function fixture(t: TestContext) {
   const workspace = { id: "test-workspace", project: repo, path: repo };
   const capture = (cli = "git") => Effect.runPromise(Effect.gen(function* () { return yield* (yield* WorkspaceRevisions).capture(workspace); }).pipe(
     Effect.provide(WorkspaceRevisionsLive), Effect.provideService(RevisionStorePath, store), Effect.provideService(RevisionGitCommand, cli)));
-  const materialize = (revision: string, directory: string) => Effect.runPromise(Effect.gen(function* () {
-    yield* (yield* WorkspaceRevisions).materialize(revision, directory);
-  }).pipe(Effect.provide(WorkspaceRevisionsLive), Effect.provideService(RevisionStorePath, store)));
-  return { root, repo, store, workspace, capture, materialize };
+  return { root, repo, store, workspace, capture };
 }
 function ready(capture: WorkspaceCapture) {
   assert.equal(capture.result.status, "captured", JSON.stringify(capture.result));
@@ -69,7 +66,7 @@ test("INV-01/07: migration backs up exact bytes, preserves references and worksp
 });
 
 test("INV-07/08: raw content, stage, untracked, deletion, modes, symlinks and rebased HEAD bind an immutable manifest and diff", async t => {
-  const { root, repo, store, workspace, capture, materialize } = fixture(t);
+  const { repo, store, workspace, capture } = fixture(t);
   const first = ready(await capture());
   assert.equal(first.stagedDiff, ""); assert.equal(first.unstagedDiff, "");
   assert.equal(ready(await capture()).revision, first.revision);
@@ -80,12 +77,7 @@ test("INV-07/08: raw content, stage, untracked, deletion, modes, symlinks and re
   const candidateFile = edited.manifest.files.find(f => f.path === "source.txt")!;
   assert.equal(readFileSync(join(store, edited.revision, "blobs", candidateFile.sha256), "utf8"), "changed\n");
   const stored = join(store, edited.revision, "blobs", candidateFile.sha256);
-  const copy = join(root, "execution"); await materialize(edited.revision, copy);
-  assert.equal(readFileSync(join(copy, "source.txt"), "utf8"), "changed\n");
-  chmodSync(join(copy, "source.txt"), 0o600); writeFileSync(join(copy, "source.txt"), "private copy");
-  assert.equal(readFileSync(stored, "utf8"), "changed\n", "execution never shares candidate blobs");
   chmodSync(stored, 0o600); writeFileSync(stored, "damaged");
-  await assert.rejects(materialize(edited.revision, join(root, "damaged-execution")), /damaged/);
   assert.equal((await capture()).result.status, "error");
   writeFileSync(stored, "changed\n"); chmodSync(stored, 0o400);
   git(repo, "add", "source.txt");

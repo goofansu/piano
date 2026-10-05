@@ -25,9 +25,6 @@ The [2026-10-02 research note](research/2026-10-02-harness-direction.md) retains
 Pi 1.0.0 findings and citations. Its implementation audit is dated, and its phase ordering and
 registry-based evidence proposal and broad Worktrunk ownership wording are superseded by the documents above.
 
-For the shipped Phase 8 check type, see [configured checks](checks.md) for operator configuration,
-supported immutable inputs, evidence retention and execution limits.
-
 Changes to these decisions belong in a new or superseding ADR, with the affected invariant IDs
 and verification consequences made explicit. Routine implementation choices remain within the
 accepted direction.

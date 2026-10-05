@@ -108,9 +108,9 @@ to expose the control plane. See [the development handoff](development-on-exe-de
 | 5 | Reconnect or switch sessions into an ordered current view | 3–4 | 1 |
 | 6 | Discover/create a worktree without invented healthy state | 0 | 1 |
 | 7 | Identify the workspace and exact changed content | 5–6 | 2 |
-| 8 | Run one configured check and inspect current/stale evidence | 7 | 2 |
-| 9 | Run the intended workspace's app and inspect its logs/preview | 7–8 | 2 |
-| 10 | Repeat a browser check and assess bounded task readiness | 8–9 | 3 |
+| 8 | Dropped: Piano-specific Checks runner and configuration | — | — |
+| 9 | Run the intended workspace's app and inspect its logs/preview | 7 | 2 |
+| 10 | Repeat a browser check and assess bounded task readiness | 9; verification design review | 3 |
 | 11 | Prepare a candidate without integrating it | 6, 10 | 3 |
 | 12 | Approve and locally integrate exactly that candidate | 11 | 3 |
 | 13 | Clean up separately and recover truthful lifecycle outcomes | 9, 12 | 3 |
@@ -122,8 +122,10 @@ handoffs. No unsupported time estimates: size PRs around claims, not a speculati
 **Runtime checkpoint (0–6):** remaining Pi compatibility observations, fake-Pi failure/race gates and
 Worktrunk discovery/create compatibility are recorded. No automatic prompt resubmission.
 
-**First evidence loop (7–9):** prompt → changes/diff → configured check → intended running app → inspect
-current/stale evidence → follow up. This is useful before advanced Pi controls or reviewers.
+**Workspace loop (7, 9):** prompt → changes/diff → intended running app → inspect → follow up.
+Phase 8 was dropped at the user's request. Phases 10–13 require a revised verification design based
+on existing project tools before implementation; they do not authorize restoring the custom runner
+or defining a replacement check schema.
 
 **Controlled integration checkpoint (10–13):** a real feature meets versioned criteria; edits block old
 approval; integrate and cleanup have independent, recoverable outcomes. Measure the returning
@@ -373,7 +375,7 @@ cannot share a falsely current revision. **INV-01, INV-07–08.**
   mutation and assert consistent content or an explicit inconclusive result.
 - **Browser gate:** two workspaces show their own paths/revisions/diffs; an external edit/checkout
   change refreshes the intended workspace and capture failure is visible, not an empty clean diff.
-- **Stop:** supported capture scope is explicit and usable by the next check slice. No whole new Git
+- **Stop:** supported capture scope is explicit and usable for workspace inspection. No whole new Git
   backend, universal filesystem snapshot promise or HEAD-only evidence shortcut.
 
 **Observed slice:** [Phase 7 implementation evidence](research/2026-10-05-phase7-workspace-revisions.md)
@@ -384,39 +386,15 @@ unsupported inputs fail explicitly; ignored/external inputs, execution provision
 and universal filesystem isolation remain outside this acceptance. No checks or previews are shipped
 by this capture slice.
 
-### Phase 8 — Run one configured check and retain bounded evidence
+### Phase 8 — Dropped
 
-**Claim:** one check's pass/fail is historical evidence for an identified workspace/revision/criterion,
-not universal task completion; changing its inputs makes it visibly non-current. **INV-01, INV-07–09,
-INV-13.**
+Dropped at the user's request on October 5, 2026: the Piano-specific Checks feature, Node-script
+runner, check-definition schema and configuration are out of scope. The implementation and its
+feature-specific tests have been removed, rather than retained as unused scaffolding.
 
-- Add one human/project-configured check action and lightweight task/criterion reference with captured
-  requirement content/version and original source. Record command/config digest, environment/tool
-  versions, start/end, exit, outcome and artifact references in a separate evidence store.
-- Execute against phase 7's immutable captured content with explicitly provisioned dependencies and
-  relevant ignored/config inputs. If stable execution/provenance cannot be established, keep the
-  observation advisory/unknown, not current verification. Matching before/after hashes alone cannot
-  exclude transient edits. A running mutable app is not automatically evidence for this snapshot.
-- Keep execution outcome separate from evidence validity and criterion evaluation. Cancellation,
-  spawn error, nonzero exit, missing artifact, stale and unknown cannot become green. Version check
-  definitions/policy; an agent cannot edit a required gate and self-award acceptance.
-- **Smallest check:** a tiny scratch command with deterministic pass/fail/error/cancel behavior.
-  Persist/restart/read the record and artifact; edit candidate or check configuration afterward and
-  observe retained historical outcome with invalidated currency. A transient live edit cannot alter
-  the immutable execution inputs; unsupported shared/generated inputs block a current claim.
-- **Browser gate:** run → inspect output/result/revision → edit → see stale → rerun. Reload preserves
-  history and does not duplicate a running check. Session settled and check passed remain separate.
-- **Stop:** one real useful check completes the evidence slice. No generic workflow engine, mandatory
-  PRD/issue tracker, skill-name parsing or evidence bundles in registry JSON.
-
-**Observed slice:** [Phase 8 implementation evidence](research/2026-10-05-phase8-check-evidence.md)
-records operator-owned Node checks against revalidated read-only captured inputs, separate atomic
-execution/output storage, requirement/policy/environment provenance and current/stale/unknown criterion
-evaluation. Module and two-workspace browser gates pass, including cancellation, missing artifacts,
-reload without duplicate execution and actual backend-loss recovery. [Configuration](checks.md)
-documents the Linux/bubblewrap 0.9.0 prerequisite and supported dependency-free scope. Shared/ignored
-inputs, general shell/npm checks, managed apps, task-wide readiness and integration remain outside this
-acceptance; a passing check never implies a completed task or settled Pi session.
+Existing check configuration and evidence files are left untouched on disk and are no longer read
+by Piano. Workspace capture/diffs and the broader evidence ownership invariants remain. Future
+verification work needs a concrete project workflow, not another bespoke check-definition format.
 
 ### Phase 9 — Run and inspect the intended workspace's application
 
@@ -439,7 +417,7 @@ not whichever application currently answers a remembered port. **INV-02, INV-07,
 - **Browser gate:** switch between both workspaces and read their markers/logs; stopping A cannot
   stop/relabel B. Failed readiness does not open a green preview. Preview content cannot operate the
   control plane, and no credential values appear in logs or evidence.
-- **Stop:** the first evidence loop is usable across two workspaces. No general remote routing,
+- **Stop:** the workspace loop is usable across two workspaces. No general remote routing,
   container sandbox claim, credential-containment claim or production process manager.
 
 ### Phase 10 — Repeat a browser journey and explain task readiness
@@ -547,7 +525,7 @@ successful integration or erase evidence. **INV-01–02, INV-06–07, INV-09–1
 
 ## 5. Later milestones: pull only after demonstrated need
 
-These are not dependencies of the first evidence loop. Turn each requested control/workflow into its
+These are not dependencies of the workspace loop. Turn each requested control/workflow into its
 own vertical slice; do not bundle the following into a new platform rewrite.
 
 | Later slice | Trigger and bounded scope | Tight exit gate |
@@ -570,8 +548,6 @@ These are bounded design questions, not reasons to build a generic framework fir
   move/merge Pi history to make a host-key normalization look successful.
 - **Phase 7:** revision format/version, capture scope, stable materialization, submodule/ignored input
   support and explicit unsupported states. Capture/diff must agree on the content shown.
-- **Phase 8:** separate evidence-store location/atomic persistence and artifact retention; immutable
-  check dependencies/environment provisioning; authorized ownership/versioning of required policy.
 - **Phase 9:** managed process lifetime/recovery and allowlisted environment; private preview origin
   and control-origin checks compatible with local Vite and the private hosted proxy.
 - **Phases 11–12:** exact supported Worktrunk preparation/finalization options, hook execution boundary,

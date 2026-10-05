@@ -7,8 +7,8 @@ import { spawn } from "node:child_process";
 import { constants, watch, type FSWatcher } from "node:fs";
 import { lstat, mkdir, mkdtemp, open, readFile, readlink, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { Context, Effect, Layer, Schema, Semaphore } from "effect";
-import { RevisionManifest, type RevisionFile, type Workspace, type WorkspaceCapture } from "../shared/wire.ts";
+import { Context, Effect, Layer, Semaphore } from "effect";
+import type { RevisionFile, RevisionManifest, Workspace, WorkspaceCapture } from "../shared/wire.ts";
 import { RegistryPath } from "./Registry.ts";
 
 export const RevisionGitCommand = Context.Reference<string>("piano/RevisionGitCommand", { defaultValue: () => "git" });
@@ -18,10 +18,6 @@ export class WorkspaceRevisions extends Context.Service<WorkspaceRevisions, {
    * Cancellation discards incomplete candidates; repeated unchanged input has the same ID.
    */
   readonly capture: (workspace: Workspace) => Effect.Effect<WorkspaceCapture>;
-  /** Revalidate stored bytes and copy working inputs into a NEW private directory.
-   * No shared blobs, source reads or external symlink referents during execution.
-   */
-  readonly materialize: (revision: string, directory: string) => Effect.Effect<void, Error>;
 }>()("piano/WorkspaceRevisions") {}
 
 const MAX_BYTES = 64 * 1024 * 1024, MAX_FILE = 8 * 1024 * 1024, MAX_PATHS = 10_000, MAX_DIFF = 2 * 1024 * 1024;
@@ -215,8 +211,8 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
       for (const watcher of watchers) watcher.close();
       await mkdir(join(temporary, "blobs"));
       for (const [hash, bytes] of content) await writeFile(join(temporary, "blobs", hash), bytes, { mode: 0o400 });
-      const limitations = ["Ignored/generated dependencies and external configuration are excluded. Checks must provision and identify those inputs before verification."];
-      if (files.some(e => e.mode === "120000")) limitations.push("Symlinks are captured as link bytes, not referent contents. Check execution must reject or explicitly provision links outside the candidate.");
+      const limitations = ["Ignored/generated dependencies and external configuration are excluded from this capture."];
+      if (files.some(e => e.mode === "120000")) limitations.push("Symlinks are captured as link bytes, not referent contents.");
       const result: Extract<WorkspaceCapture["result"], { status: "captured" }> = { status: "captured", revision, physicalPath: cwd, branch, manifest, stagedDiff, unstagedDiff, limitations };
       // Revision records are content-only. Workspace/observation identity stays on the caller's receipt.
       await writeFile(join(temporary, "manifest.json"), JSON.stringify(manifest, null, 2), { mode: 0o400 });
@@ -234,42 +230,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
       if (temporary) await rm(temporary, { recursive: true, force: true });
     }
   }
-  async function materialize(revision: string, directory: string) {
-    if (!/^v1-[a-f0-9]{64}$/.test(revision)) throw new Error("Invalid revision identity.");
-    async function readBounded(path: string, maximum: number) {
-      const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-      try {
-        const before = await file.stat({ bigint: true });
-        if (!before.isFile() || before.size > BigInt(maximum)) throw new Error("Invalid stored candidate file.");
-        const bytes = Buffer.alloc(Number(before.size) + 1);
-        let offset = 0;
-        while (offset < bytes.length) { const read = await file.read(bytes, offset, bytes.length - offset, offset); if (!read.bytesRead) break; offset += read.bytesRead; }
-        const after = await file.stat({ bigint: true });
-        if (offset !== Number(before.size) || before.ctimeNs !== after.ctimeNs) throw new Error("Stored candidate changed during materialization.");
-        return bytes.subarray(0, offset);
-      } finally { await file.close(); }
-    }
-    const raw = JSON.parse((await readBounded(join(store, revision, "manifest.json"), MAX_FILE)).toString("utf8"));
-    if (`v1-${digest(JSON.stringify(raw))}` !== revision) throw new Error("Stored revision manifest is damaged.");
-    const manifest = Schema.decodeUnknownSync(RevisionManifest)(raw);
-    if (manifest.files.length > MAX_PATHS) throw new Error("Candidate exceeds supported path limit.");
-    await mkdir(directory, { mode: 0o700 });
-    let total = 0;
-    for (const entry of manifest.files) {
-      safePath(entry.path);
-      if (entry.mode === "120000") throw new Error("Check execution does not support symlinks. Vendor regular files into the candidate instead of sharing external inputs.");
-      if (!/^[a-f0-9]{64}$/.test(entry.sha256)) throw new Error("Invalid stored blob identity.");
-      const bytes = await readBounded(join(store, revision, "blobs", entry.sha256), MAX_FILE);
-      total += bytes.length;
-      if (total > MAX_BYTES || bytes.length !== entry.bytes || digest(bytes) !== entry.sha256) throw new Error("Stored candidate blob is damaged or exceeds supported size.");
-      const path = join(directory, entry.path);
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, bytes, { flag: "wx", mode: entry.mode === "100755" ? 0o500 : 0o400 });
-    }
-  }
-  return WorkspaceRevisions.of({
-    materialize: (revision, directory) => Effect.tryPromise({ try: () => materialize(revision, directory), catch: e => e instanceof Error ? e : new Error(String(e)) }),
-    capture: workspace => Semaphore.withPermits(lock, 1)(Effect.tryPromise({
+  return WorkspaceRevisions.of({ capture: workspace => Semaphore.withPermits(lock, 1)(Effect.tryPromise({
     try: signal => capture(workspace, AbortSignal.any([signal, AbortSignal.timeout(30_000)])),
     catch: e => e,
   }).pipe(Effect.catch(e => Effect.succeed<WorkspaceCapture["result"]>({ status: e instanceof CaptureProblem ? e.status : "error", detail: e instanceof Error ? e.message : String(e) })),

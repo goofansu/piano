@@ -25,6 +25,11 @@ const original = { projects: [repo], worktrees: [{ project: repo, path: checkout
   { cwd: checkout, sessionId: 'workspace-b', title: 'Session B', createdAt: '2026-10-05T00:00:00Z', updatedAt: '2026-10-05T00:00:00Z', archived: false },
 ] };
 writeFileSync(registry, JSON.stringify(original));
+// Retired Checks data must neither block startup nor be migrated/deleted.
+const retiredFiles = [join(root, 'checks.json'), `${registry}.checks.json`, join(`${registry}.evidence`, '00000000-0000-0000-0000-000000000001.json')];
+const retiredContent = 'Retired check data, deliberately not valid JSON.\n';
+mkdirSync(`${registry}.evidence`);
+for (const path of retiredFiles) writeFileSync(path, retiredContent);
 const server = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry,
   PIANO_PI_CLI: resolve('test/fake-pi.mjs'), PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(root, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], {
@@ -92,6 +97,7 @@ async function checkSessionMenu() {
   const facts = () => evaluate(`(() => {const info=document.querySelector('[aria-label="Session information"]');return {text:info.textContent,values:Object.fromEntries([...info.querySelectorAll('dt')].map(dt=>[dt.textContent,dt.nextElementSibling.textContent]))};})()`);
   const focusReturned = () => ab('wait', '--fn', `document.activeElement?.getAttribute('aria-label') === 'Session menu'`);
   await ab('set', 'viewport', '390', '844'); await click('Session menu');
+  assert.equal(await evaluate(`[...document.querySelectorAll('[role="menuitem"]')].some(item=>item.textContent.trim()==='Checks')`), false);
   let info = await facts(); assert.ok(info.text.includes('Session A') && info.text.includes(repo) && info.text.includes(branchName) && info.text.includes('workspace-a'));
   assert.equal(info.values['Session model'], 'Not recorded'); assert.equal(info.values['Context'], 'Unavailable'); assert.equal(info.values['Session cost'], 'Unavailable');
   await capture('session-menu-unknown-not-zero');
@@ -124,7 +130,8 @@ async function checkSessionMenu() {
   // Retention actions use the existing server contract and affect only their own session.
   await ab('click', 'button[title="Session B"]'); await click('Session menu'); await menuItem('Archive session'); await ab('wait', '--text', 'What should we work on?');
   assert.equal(JSON.parse(readFileSync(registry, 'utf8')).sessions.find(s=>s.sessionId==='workspace-b').archived, true);
-  // The new-session page retains its ordinary Changes button and focus return.
+  // The new-session page retains Changes, but no custom check runner.
+  assert.equal(await evaluate(`[...document.querySelectorAll('main button')].some(button=>button.textContent.trim()==='Checks')`), false);
   await ab('find', 'role', 'button', 'click', '--name', 'Changes', '--exact'); await complete(); await ab('wait', '--text', 'WORKSPACE_B'); await click('Close');
   await ab('wait', '--fn', `document.activeElement?.textContent.trim()==='Changes'`);
   await ab('click', 'button[title="Session A"]'); await click('Session menu'); await menuItem('Delete session…'); await click('Delete session');
@@ -139,6 +146,14 @@ try {
     try { if ((await fetch('http://127.0.0.1:7172')).ok && (await fetch('http://127.0.0.1:7171/api/projects')).ok) break; } catch {}
     if (n === 99) throw new Error('scratch startup deadline'); await delay(100);
   }
+  const workspaceId = JSON.parse(readFileSync(registry, 'utf8')).workspaces.find(w => w.path === repo).id;
+  const removedRoutes = [];
+  for (const [method, path] of [['GET', '/api/workspace/checks'], ['POST', '/api/workspace/checks/run'], ['POST', '/api/workspace/checks/cancel']]) {
+    const response = await fetch(`http://127.0.0.1:7171${path}?workspaceId=${workspaceId}`, { method, headers: { Accept: 'application/json' } });
+    removedRoutes.push({ method, path, status: response.status });
+    assert.equal(response.status, 404, 'the retired check runner must not remain callable');
+  }
+  writeFileSync(join(evidence, 'removed-checks-api.json'), JSON.stringify(removedRoutes, null, 2));
   await ab('open', 'http://127.0.0.1:7172/s/workspace-a'); await ab('wait', '--text', 'Session A');
   if (menuOnly) {
     await checkSessionMenu();
@@ -178,6 +193,7 @@ try {
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ passed: true, observations, root, node: process.version, git: git(repo, '--version'), registry: data, revisions: { a, b, edited } }, null, 2));
   console.log(`PASS: ${observations.join(', ')}`);
   }
+  for (const path of retiredFiles) assert.equal(readFileSync(path, 'utf8'), retiredContent, 'saved Checks files remain untouched');
 } finally {
   try { await ab('close'); } catch {}
   for (const p of [server, frontend]) if (p.exitCode === null) { const ended = new Promise(resolve => p.once('exit', resolve)); p.kill('SIGTERM'); await ended; }

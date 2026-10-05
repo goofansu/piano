@@ -16,7 +16,6 @@ import { CONFIG_PATH, RegistryLive } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { WorkspaceRevisionsLive } from "./WorkspaceRevisions.ts";
-import { WorkspaceChecksLive } from "./WorkspaceChecks.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -42,8 +41,7 @@ process.once("SIGTERM", drain);
 const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds" });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), CatalogLive, BroadcastLive,
-  WorkspaceChecksLive.pipe(Layer.provideMerge(WorkspaceRevisionsLive))).pipe(
+const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), CatalogLive, BroadcastLive, WorkspaceRevisionsLive).pipe(
   Layer.provideMerge(RegistryLive),
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),

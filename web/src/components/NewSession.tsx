@@ -15,7 +15,6 @@ import { clampEffort, EffortSelect, levelsFor } from "@/components/EffortSelect"
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
 import { WorkspaceChanges } from "@/components/WorkspaceChanges";
-import { WorkspaceChecks } from "@/components/WorkspaceChecks";
 
 interface Props {
   state: AppState;
@@ -125,7 +124,6 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
           {directory && <div className="mt-2 flex items-center justify-between gap-2 text-sm text-ink-3">
             <p title={cwd}>{!state.connected && "Last observation · "}{directoryStatus(directory)}</p>
             <WorkspaceChanges key={directory.workspace.id} workspace={directory.workspace} />
-            <WorkspaceChecks key={`checks-${directory.workspace.id}`} workspace={directory.workspace} />
           </div>}
           {project?.discovery.status === "error" && <p role="alert" className="mt-2 text-sm text-err">Git status unavailable. Open Worktrees to inspect and refresh.</p>}
           {creating && (

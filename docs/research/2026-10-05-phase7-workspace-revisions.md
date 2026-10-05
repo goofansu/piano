@@ -67,8 +67,8 @@ across bounded no-follow reads, repeats the content scan and Git inventory, and 
 changes (including transient ABA edits) before publication. Subsequent live edits cannot change the
 saved candidate. This was tested on this Linux local filesystem: it is not a kernel-wide atomic
 snapshot, a remote-filesystem guarantee, or protection against adversarial same-user writers.
-Read-only modes are not a sandbox; Phase 8 must validate content again when materializing execution
-inputs and must not execute directly against mutable shared artifacts.
+Read-only modes are not a sandbox; any future execution must validate content again when preparing
+its inputs and must not execute directly against mutable shared artifacts.
 
 Supported bounds: 10,000 paths/tree, 8 MiB/file, 64 MiB unique base/index plus working content,
 2 MiB/diff output, 30-second active-capture deadline, one capture at a time. Exceeding a bound is an
@@ -82,8 +82,8 @@ for chat. No passing verification or approval can be inferred from a successful 
 
 Ignored **contents**, external configuration/dependencies, empty directories, timestamps and other
 permission bits are excluded explicitly. Ignored-path names are recorded, not their contents. Checks
-that need ignored/generated/external inputs must identify/provision them in Phase 8's environment or
-extend the versioned scope. Symlink referents outside the candidate require the same treatment.
+that need ignored/generated/external inputs must explicitly identify/provision them before execution
+or extend the versioned scope. Symlink referents outside the candidate require the same treatment.
 Registry aliases keep separate identities/references rather than silently merging Pi history;
 physical checkout identity is exposed in capture details. Multiple independent registry writers are
 not coordinated by this phase.
