@@ -40,13 +40,20 @@ HMR; its reconnect reload is a development-only behavior.
 
 ## Deliberate updates
 
+Follow the user's [deploy preference](../AGENTS.md#running-against-the-users-instance): an explicit
+deploy includes a prompt backend restart, with active-session interruption preapproved. Ordinary
+development or pushing a commit still does not authorize deployment.
+
 - Frontend changes: verify in the separate development process, then run
-  `npm run build` when deploying. The backend serves the new files without a process
-  restart; browsers pick up the new release on their next deliberate reload.
-- Backend or server-imported shared changes: finish active work, then restart
-  `piano.service` from a separate terminal. This terminates live Pi children; do not
-  restart it from inside an active Piano session.
-- Dependency updates: finish active work before reinstalling and restarting services.
+  `npm run build` when deploying. Include the requested backend restart even for a frontend-only
+  deployment; browsers pick up the new release on their next deliberate reload.
+- Backend or server-imported shared changes: restart `piano.service` after the build/install steps.
+  Use an external terminal or an independent systemd job outside its process tree, so the restart
+  and health checks survive termination of live Pi children, including the deploying session.
+  Execute promptly rather than waiting for idle sessions or the assistant's final reply. Retain
+  check output and report deployment as verified only after the health checks actually pass.
+- Dependency updates: perform installation and the service restart through the same external
+  deployment process; active Pi work need not finish first.
 - Unit changes: install the changed units, daemon-reload, and restart only the affected
   service. The socket owns port 8000, so a proxy-service restart retains the listener.
 
@@ -75,7 +82,7 @@ The existing backend unit remains enabled. On a fresh machine, install and enabl
 sudo systemctl status piano piano-web.service piano-web.socket
 sudo journalctl -u piano -u piano-web -n 100 --no-pager
 sudo systemctl restart piano-web.service  # proxy only; no Pi child restart
-sudo systemctl restart piano.service      # only after active work finishes
+sudo systemctl restart piano.service      # explicit deploy: cuts off active Pi sessions
 ```
 
 ## Private access

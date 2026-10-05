@@ -37,6 +37,11 @@ Use `npx agent-browser` against the scratch development UI on 7172, not the user
 Leave the real registry and running backend alone. Rebuild/deploy only when requested; see
 [the hosted workflow](docs/hosted-development.md).
 
+**Deploy preference:** When explicitly asked to deploy, complete the build/install steps and restart
+`piano.service` promptly, even if it cuts off this session and other active Pi work. Interruption is
+preapproved: do not wait for idle or request extra confirmation. Run the restart and health checks
+outside `piano.service`'s process tree so deployment survives the cutoff.
+
 Stop only the process you started, by its pid. Register only scratch directories (a throwaway git
 repo in the scratchpad) in the scratch registry. When a check creates worktrees or pi session files,
 remove them afterwards: `git worktree remove --force` plus `git branch -D` in the scratch repo, and
