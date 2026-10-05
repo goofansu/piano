@@ -131,7 +131,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       if (!(yield* existing.session.state).closedReason) return existing.session;
       yield* close(key, existing);
     }
-    if (spec.create) yield* registry.addSession(ref.cwd, spec.sessionId, spec.name);
+    if (spec.create) yield* registry.addSession(ref.cwd, spec.sessionId, spec.name).pipe(Effect.mapError(e => rejected(e.detail)));
     const scope = yield* Scope.make();
     const raw = yield* sessions.open({ ...spec, cwd: ref.cwd, sessionFile: ref.file, name: ref.file ? undefined : spec.name }).pipe(
       Scope.provide(scope), Effect.onExit(exit => Exit.isFailure(exit) ? Scope.close(scope, Exit.void) : Effect.void),
@@ -187,8 +187,8 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     // Discover the final file AFTER shutdown; a last response may have persisted it.
     const final = yield* reference(ref.cwd, id, physical);
     if (remove && final.file) yield* Effect.tryPromise({ try: () => rm(final.file!, { force: true }), catch: error => rejected(`Could not delete Pi history: ${String(error)}`) });
-    if (remove) yield* registry.removeSession(ref.cwd, id);
-    else yield* registry.archiveSession(ref.cwd, id);
+    if (remove) yield* registry.removeSession(ref.cwd, id).pipe(Effect.mapError(e => rejected(e.detail)));
+    else yield* registry.archiveSession(ref.cwd, id).pipe(Effect.mapError(e => rejected(e.detail)));
   }));
 
   if (options.idleMs > 0) yield* Effect.gen(function* () {

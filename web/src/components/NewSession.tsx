@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { clampEffort, EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
+import { WorkspaceChanges } from "@/components/WorkspaceChanges";
 
 interface Props {
   state: AppState;
@@ -120,7 +121,10 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               </Button>
             </div>
           </div>
-          {directory && <p className="mt-2 text-sm text-ink-3" title={cwd}>{!state.connected && "Last observation · "}{directoryStatus(directory)}</p>}
+          {directory && <div className="mt-2 flex items-center justify-between gap-2 text-sm text-ink-3">
+            <p title={cwd}>{!state.connected && "Last observation · "}{directoryStatus(directory)}</p>
+            <WorkspaceChanges key={directory.workspace.id} workspace={directory.workspace} />
+          </div>}
           {project?.discovery.status === "error" && <p role="alert" className="mt-2 text-sm text-err">Git status unavailable. Open Worktrees to inspect and refresh.</p>}
           {creating && (
             <p className="mt-3 text-sm text-ink-3" role="status">

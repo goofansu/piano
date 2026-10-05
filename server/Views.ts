@@ -17,7 +17,7 @@ export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | R
     const paths = new Set([path, ...data.worktrees.filter(w => w.project === path).map(w => w.path)]);
     const worktrees: WorktreeView[] = [...paths].map(cwd => {
       const facts = discovery.status === "ready" ? discovery.worktrees.find(w => w.path === (cwd === path ? discovery.currentPath : cwd)) : undefined;
-      return { path: cwd, branch: facts?.branch ?? null, root: cwd === path, facts,
+      return { workspace: data.workspaces.find(w => w.path === cwd)!, path: cwd, branch: facts?.branch ?? null, root: cwd === path, facts,
         status: facts ? "current" : discovery.status === "ready" ? "missing" : discovery.status === "non-git" && cwd === path ? "non-git" : "unknown" };
     });
     const branchOf = new Map(worktrees.map((w) => [w.path, w.branch]));
@@ -27,6 +27,7 @@ export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | R
         const h = hostOf(t.cwd, t.sessionId);
         return {
           sessionId: t.sessionId,
+          workspaceId: data.workspaces.find(w => w.path === t.cwd)!.id,
           cwd: t.cwd,
           branch: branchOf.get(t.cwd) ?? "",
           title: t.title,

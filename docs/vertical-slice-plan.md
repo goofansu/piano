@@ -376,6 +376,14 @@ cannot share a falsely current revision. **INV-01, INV-07–08.**
 - **Stop:** supported capture scope is explicit and usable by the next check slice. No whole new Git
   backend, universal filesystem snapshot promise or HEAD-only evidence shortcut.
 
+**Observed slice:** [Phase 7 implementation evidence](research/2026-10-05-phase7-workspace-revisions.md)
+records backed-up registry versioning, stable workspace references, content-addressed base/index/working
+manifests and diffs from captured bytes. Real scratch Git, module and two-workspace browser gates pass,
+including external edits/checkout changes and failure recovery. Conflicts/submodules and other
+unsupported inputs fail explicitly; ignored/external inputs, execution provisioning, evidence currency
+and universal filesystem isolation remain outside this acceptance. No checks or previews are shipped
+by this capture slice.
+
 ### Phase 8 — Run one configured check and retain bounded evidence
 
 **Claim:** one check's pass/fail is historical evidence for an identified workspace/revision/criterion,

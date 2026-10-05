@@ -6,6 +6,7 @@ import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Composer } from "@/components/Composer";
+import { WorkspaceChanges } from "@/components/WorkspaceChanges";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList, type TranscriptView } from "@/components/MessageList";
 import { PullRequestStack } from "@/components/PullRequestStack";
@@ -120,6 +121,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           </span>
         )}
         <span className="flex-1" />
+        {worktree && <WorkspaceChanges key={worktree.workspace.id} workspace={worktree.workspace} />}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

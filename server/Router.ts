@@ -6,6 +6,8 @@ import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { DirListing } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
+import { Registry } from "./Registry.ts";
+import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { expandHome } from "./PiEnv.ts";
 import { buildProjects } from "./Views.ts";
@@ -122,6 +124,14 @@ export const AppRouter = HttpRouter.use((router) =>
         return json({ prs: yield* lookupPullRequests(urls.slice(0, 10)) });
       }),
     );
+
+    yield* router.add("POST", "/api/workspace/capture", Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId");
+      const workspace = (yield* (yield* Registry).get).workspaces.find(w => w.id === id);
+      if (!workspace) return json({ error: "Workspace is not registered. Refresh the project list." }, 404);
+      return json(yield* (yield* WorkspaceRevisions).capture(workspace));
+    }));
 
     yield* router.add("GET", "/api/projects", buildProjects.pipe(Effect.map((projects) => json({ projects }))));
     yield* router.add(
