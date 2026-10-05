@@ -8,6 +8,7 @@ import type { DirListing } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
 import { Registry } from "./Registry.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
+import { WorkspaceChecks } from "./WorkspaceChecks.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { expandHome } from "./PiEnv.ts";
 import { buildProjects } from "./Views.ts";
@@ -132,6 +133,19 @@ export const AppRouter = HttpRouter.use((router) =>
       if (!workspace) return json({ error: "Workspace is not registered. Refresh the project list." }, 404);
       return json(yield* (yield* WorkspaceRevisions).capture(workspace));
     }));
+
+    for (const [method, path, action] of [["GET", "/api/workspace/checks", "view"], ["POST", "/api/workspace/checks/run", "start"], ["POST", "/api/workspace/checks/cancel", "cancel"]] as const) {
+      yield* router.add(method, path, Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const params = new URL(request.url, "http://localhost").searchParams;
+        const workspace = (yield* (yield* Registry).get).workspaces.find(w => w.id === params.get("workspaceId"));
+        if (!workspace) return json({ error: "Workspace is not registered. Refresh the project list." }, 404);
+        const checks = yield* WorkspaceChecks;
+        if (action === "cancel") { yield* checks.cancel(workspace, params.get("id") ?? ""); return json({ cancelled: true }); }
+        if (action === "start") return json(yield* checks.start(workspace));
+        return json(yield* checks.view(workspace));
+      }).pipe(Effect.catchCause(cause => Effect.succeed(json({ error: String(Cause.squash(cause)) }, 400)))));
+    }
 
     yield* router.add("GET", "/api/projects", buildProjects.pipe(Effect.map((projects) => json({ projects }))));
     yield* router.add(

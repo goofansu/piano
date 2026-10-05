@@ -242,6 +242,46 @@ export const WorkspaceCapture = Schema.Struct({
 });
 export type WorkspaceCapture = typeof WorkspaceCapture.Type;
 
+// ── Bounded check evidence (not session or task completion) ──────────────────
+
+export const CheckDefinition = Schema.Struct({
+  id: Schema.String, name: Schema.String, version: Schema.String,
+  task: Schema.Struct({ id: Schema.String, source: Schema.String, version: Schema.String, content: Schema.String }),
+  criterion: Schema.Struct({ id: Schema.String, version: Schema.String, content: Schema.String }),
+  /** Operator-owned Node ES module, stored outside the workspace. No shell. */
+  script: Schema.String, timeoutMs: Schema.Number,
+});
+export type CheckDefinition = typeof CheckDefinition.Type;
+export const CheckEnvironment = Schema.Struct({
+  policy: Schema.Literal("node-snapshot-v1"), node: Schema.String, platform: Schema.String, arch: Schema.String,
+  kernel: Schema.String, runtimeDigest: Schema.String, isolation: Schema.String,
+  variables: Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.String })),
+});
+export type CheckEnvironment = typeof CheckEnvironment.Type;
+export const CheckExecution = Schema.Struct({
+  version: Schema.Literal(1), id: Schema.String, workspace: Workspace, revision: Schema.String,
+  definition: CheckDefinition, definitionDigest: Schema.String,
+  environment: Schema.NullOr(CheckEnvironment), command: Schema.Array(Schema.String), cwd: Schema.String,
+  startedAt: Schema.String, endedAt: Schema.NullOr(Schema.String), exitCode: Schema.NullOr(Schema.Number),
+  signal: Schema.NullOr(Schema.String), outcome: Schema.Literals(["running", "pass", "fail", "cancelled", "error", "unknown"]),
+  detail: Schema.String,
+  artifact: Schema.NullOr(Schema.Struct({ name: Schema.Literal("output.txt"), sha256: Schema.String, bytes: Schema.Number })),
+});
+export type CheckExecution = typeof CheckExecution.Type;
+export const CheckEvidence = Schema.Struct({
+  execution: CheckExecution,
+  validity: Schema.Literals(["current", "stale", "unknown"]), reason: Schema.String,
+  evaluation: Schema.Literals(["satisfied", "not-satisfied", "unknown"]),
+  output: Schema.NullOr(Schema.String),
+});
+export type CheckEvidence = typeof CheckEvidence.Type;
+export const WorkspaceChecksView = Schema.Struct({
+  workspace: Workspace, observedAt: Schema.String, revision: Schema.NullOr(Schema.String),
+  definition: Schema.NullOr(CheckDefinition), configurationError: Schema.NullOr(Schema.String),
+  observationError: Schema.NullOr(Schema.String), executions: Schema.Array(CheckEvidence),
+});
+export type WorkspaceChecksView = typeof WorkspaceChecksView.Type;
+
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
 export const SessionInfo = Schema.Struct({

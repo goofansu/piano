@@ -409,6 +409,15 @@ INV-13.**
 - **Stop:** one real useful check completes the evidence slice. No generic workflow engine, mandatory
   PRD/issue tracker, skill-name parsing or evidence bundles in registry JSON.
 
+**Observed slice:** [Phase 8 implementation evidence](research/2026-10-05-phase8-check-evidence.md)
+records operator-owned Node checks against revalidated read-only captured inputs, separate atomic
+execution/output storage, requirement/policy/environment provenance and current/stale/unknown criterion
+evaluation. Module and two-workspace browser gates pass, including cancellation, missing artifacts,
+reload without duplicate execution and actual backend-loss recovery. [Configuration](checks.md)
+documents the Linux/bubblewrap 0.9.0 prerequisite and supported dependency-free scope. Shared/ignored
+inputs, general shell/npm checks, managed apps, task-wide readiness and integration remain outside this
+acceptance; a passing check never implies a completed task or settled Pi session.
+
 ### Phase 9 — Run and inspect the intended workspace's application
 
 **Claim:** a preview and its logs identify a managed process, cwd, revision/environment and lifecycle,

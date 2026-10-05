@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ArchiveIcon, FileDiffIcon, MenuIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, FileDiffIcon, ListChecksIcon, MenuIcon, Trash2Icon } from "lucide-react";
 import type { ClientCommand, WorktreeView } from "@shared/wire";
 import type { SessionView } from "@/store";
 import { cn } from "cn";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { WorkspaceChangesDialog } from "@/components/WorkspaceChanges";
+import { WorkspaceChecksDialog } from "@/components/WorkspaceChecks";
 import type { TranscriptView } from "@/components/MessageList";
 
 /** Keyed by session at the caller: a selection change closes old menus/confirmations.
@@ -18,10 +19,10 @@ export function SessionMenu({ session, title, projectName, worktree, status, con
   status: { word: string; dot: string; why: string }; connected: boolean;
   view: TranscriptView; onViewChange: (view: TranscriptView) => void; send: (message: ClientCommand) => void;
 }) {
-  const [dialog, setDialog] = useState<"changes" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"changes" | "checks" | "delete" | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const pendingDialog = useRef(false);
-  const openDialog = (next: "changes" | "delete") => { pendingDialog.current = true; setDialog(next); };
+  const openDialog = (next: "changes" | "checks" | "delete") => { pendingDialog.current = true; setDialog(next); };
   const returnFocus = (event: Event) => { event.preventDefault(); pendingDialog.current = false; trigger.current?.focus(); };
   const canAct = connected && session.sessionId !== null;
   const branch = worktree?.branch ?? (worktree?.facts?.detached ? "Detached HEAD" : worktree?.status === "non-git" ? "Non-Git" : "Unknown branch");
@@ -56,6 +57,7 @@ export function SessionMenu({ session, title, projectName, worktree, status, con
         </section>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={!worktree} onSelect={() => openDialog("changes")}><FileDiffIcon /> Changes</DropdownMenuItem>
+        <DropdownMenuItem disabled={!worktree} onSelect={() => openDialog("checks")}><ListChecksIcon /> Checks</DropdownMenuItem>
         <DropdownMenuCheckboxItem checked={view === "replies"} onCheckedChange={checked => onViewChange(checked ? "replies" : "all")}>
           End-of-turn messages only
         </DropdownMenuCheckboxItem>
@@ -67,6 +69,8 @@ export function SessionMenu({ session, title, projectName, worktree, status, con
       </DropdownMenuContent>
     </DropdownMenu>
     {worktree && <WorkspaceChangesDialog workspace={worktree.workspace} open={dialog === "changes"}
+      onOpenChange={open => { if (!open) setDialog(null); }} onCloseAutoFocus={returnFocus} />}
+    {worktree && <WorkspaceChecksDialog workspace={worktree.workspace} open={dialog === "checks"}
       onOpenChange={open => { if (!open) setDialog(null); }} onCloseAutoFocus={returnFocus} />}
     <Dialog open={dialog === "delete"} onOpenChange={open => { if (!open) setDialog(null); }}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onCloseAutoFocus={returnFocus}>
