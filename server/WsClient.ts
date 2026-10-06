@@ -236,7 +236,12 @@ export const handleSocket = (socket: Socket.Socket) =>
             return yield* publishProjects;
           }
           case "rename_session": {
-            yield* registry.renameSession(msg.cwd, msg.sessionId, msg.title);
+            // The name belongs to Pi's history, so a stopped session is started for it; the host
+            // releases it again when idle. The registry title follows what Pi recorded.
+            const session = (yield* hosts.get(msg.cwd, msg.sessionId)) ?? (yield* hosts.open({ cwd: msg.cwd, sessionId: msg.sessionId }));
+            yield* session.act({ _tag: "set_name", name: msg.title });
+            const state = yield* session.state;
+            yield* registry.renameSession(session.spec.cwd, session.spec.sessionId, state.sessionName ?? msg.title);
             return yield* publishProjects;
           }
           case "archive_session": {

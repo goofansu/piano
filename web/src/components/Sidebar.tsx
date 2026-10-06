@@ -262,7 +262,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           <form onSubmit={(e) => { e.preventDefault(); commitRename(); }} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>Rename session</DialogTitle>
-              <DialogDescription>The new name shows in the sidebar; Pi's history is unchanged.</DialogDescription>
+              <DialogDescription>Pi records the name with the session, so it also appears in Pi's own session list.</DialogDescription>
             </DialogHeader>
             <Input aria-label="Session name" value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} autoFocus onFocus={(e) => e.target.select()} maxLength={200} />
             <DialogFooter>

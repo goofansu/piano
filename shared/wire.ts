@@ -217,6 +217,8 @@ export const SessionAction = Schema.Union([
   Schema.TaggedStruct("restore_queue", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
   Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
+  /** Name the session in Pi's own history, as `/name` does. */
+  Schema.TaggedStruct("set_name", { name: Schema.String }),
   Schema.TaggedStruct("answer", {
     id: Schema.String,
     generation: Schema.String,
@@ -390,7 +392,7 @@ export const ClientMessage = Schema.Union([
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
   Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),
-  /** Change the registry title shown for a session; Pi's history is untouched. */
+  /** Name a session through Pi (starting it when not running); the registry title follows Pi's name. */
   Schema.TaggedStruct("rename_session", { cwd: Schema.String, sessionId: Schema.String, title: Schema.String }),
   /** Hide a session from the sidebar (and stop Pi for it if running). */
   Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),

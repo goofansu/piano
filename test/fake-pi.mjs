@@ -7,7 +7,8 @@ const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";
 const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "fake/alpha";
 let model = { provider: modelArg.split("/")[0], id: modelArg.split("/")[1] };
 let thinkingLevel = "medium";
-const state = () => ({ model, thinkingLevel, isStreaming: streaming, isCompacting: compacting, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName: "fake" });
+let sessionName = "fake";
+const state = () => ({ model, thinkingLevel, isStreaming: streaming, isCompacting: compacting, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 let streaming = false;
 let compacting = false;
@@ -190,6 +191,7 @@ function handle(cmd) {
       settle(asst);
       return;
     }
+    case "set_session_name": sessionName = cmd.name; return respond(cmd, {});
     default: return respond(cmd, undefined, `unknown ${cmd.type}`);
   }
 }

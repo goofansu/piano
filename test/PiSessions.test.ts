@@ -182,6 +182,21 @@ test("late subscriber sees transcript and a retained dialog; answering resolves 
   assert.equal(result.state.isStreaming, false);
 });
 
+test("naming a session goes through Pi and reads back in state", async () => {
+  const result = await run(Effect.gen(function* () {
+    const sessions = yield* PiSessions;
+    const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s-name" });
+    const before = (yield* t.state).sessionName;
+    yield* t.act({ _tag: "set_name", name: "  Renamed\nthrough piano  " });
+    const after = (yield* t.state).sessionName;
+    const empty = yield* t.act({ _tag: "set_name", name: "  " }).pipe(Effect.flip);
+    return { before, after, empty };
+  }).pipe(Effect.scoped));
+  assert.equal(result.before, "fake");
+  assert.equal(result.after, "Renamed through piano");
+  assert.equal(result.empty.reason, "rejected");
+});
+
 test("model switch and child crash", async () => {
   const result = await run(Effect.gen(function* () {
     const sessions = yield* PiSessions;

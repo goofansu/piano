@@ -711,7 +711,7 @@ const openSession = (spec: PiSessionSpec) =>
         if (announced) return yield* new PiSessionError({ reason: "exited", detail: "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume." });
         // Answer/abort/queue restoration do not supersede the command whose
         // dialog they unblock. Keep its subsequent model/effort readback valid.
-        const operation = action._tag === "prompt" || action._tag === "steer" || action._tag === "set_model" || action._tag === "set_thinking_level"
+        const operation = action._tag === "prompt" || action._tag === "steer" || action._tag === "set_model" || action._tag === "set_thinking_level" || action._tag === "set_name"
           ? ++operationVersion : operationVersion;
         switch (action._tag) {
           case "prompt":
@@ -800,6 +800,13 @@ const openSession = (spec: PiSessionSpec) =>
             yield* child.request({ type: "set_thinking_level", level: action.level });
             yield* refreshState(operation);
             return;
+          case "set_name": {
+            const name = action.name.replace(/[\r\n]+/g, " ").trim();
+            if (!name) return yield* new PiSessionError({ reason: "rejected", detail: "A session name cannot be empty." });
+            yield* child.request({ type: "set_session_name", name });
+            yield* refreshState(operation);
+            return;
+          }
           case "answer": {
             const work = Effect.gen(function* () {
               const dialog = (yield* Ref.get(dialogsRef)).get(action.id);

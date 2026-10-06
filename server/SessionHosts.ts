@@ -109,8 +109,15 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   });
   const announce = list.pipe(Effect.flatMap(l => PubSub.publish(changed, l)), Effect.asVoid);
 
+  // Pi owns the session name; the registry title only mirrors it for the sidebar.
+  const mirrorName = (cwd: string, id: string, name: string | undefined) => Effect.gen(function* () {
+    if (!name) return;
+    yield* registry.renameSession(cwd, id, name).pipe(Effect.catchTag("RegistryError", error => Effect.logWarning(`Could not mirror the session name: ${error.detail}`)));
+  });
+
   const cacheStats = (session: PiSession) => Effect.gen(function* () {
     const state = yield* session.state;
+    yield* mirrorName(session.spec.cwd, session.spec.sessionId, state.sessionName);
     if (state.statsUpdatedAt === undefined) return;
     yield* registry.cacheSessionStats(session.spec.cwd, session.spec.sessionId, {
       context: state.context, cost: state.cost, tokens: state.tokens, statsUpdatedAt: state.statsUpdatedAt,
@@ -243,6 +250,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       if (host && (yield* host.session.state).closedReason) yield* close(key, host);
       const ref = yield* reference(cwd, id, physical);
       const snapshot = ref.file ? yield* peekSession(ref.file, id) : emptySnapshot(id);
+      yield* mirrorName(ref.cwd, id, snapshot.state.sessionName);
       return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, ...ref.stats, contextIsLastKnown: true, closedReason: exits.get(key) } } };
     })),
     archive: (cwd, id) => retire(cwd, id, false), delete: (cwd, id) => retire(cwd, id, true),

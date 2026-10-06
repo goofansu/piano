@@ -113,7 +113,7 @@ export class Registry extends Context.Service<
     readonly touchSession: (cwd: string, sessionId: string, text?: string) => Effect.Effect<void, RegistryError>;
     /** Cache Pi's last statistics without changing session activity/order or creating references. */
     readonly cacheSessionStats: (cwd: string, sessionId: string, stats: SessionStats) => Effect.Effect<void, RegistryError>;
-    /** Replace a session's title; an empty title clears it so the next prompt may name it again. */
+    /** Set the title shown for a session; it mirrors Pi's session name whenever one is known. */
     readonly renameSession: (cwd: string, sessionId: string, title: string) => Effect.Effect<void, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
     readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
@@ -181,7 +181,12 @@ export const RegistryLive = Layer.effect(
         return { ...d, sessions: d.sessions.map(t => t === entry ? { ...t, stats } : t) };
       }),
       renameSession: (cwd, sessionId, title) =>
-        update((d) => ({ ...d, sessions: d.sessions.map((t) => (isSession(cwd, sessionId)(t) ? { ...t, title: title.trim().slice(0, 200) || undefined } : t)) })),
+        update((d) => {
+          const next = title.trim().slice(0, 200) || undefined;
+          const entry = d.sessions.find(isSession(cwd, sessionId));
+          if (!entry || entry.title === next) return d;
+          return { ...d, sessions: d.sessions.map((t) => (t === entry ? { ...t, title: next } : t)) };
+        }),
       archiveSession: (cwd, sessionId) =>
         update((d) => ({ ...d, sessions: d.sessions.map((t) => (isSession(cwd, sessionId)(t) ? { ...t, archived: true } : t)) })),
       removeSession: (cwd, sessionId) => update((d) => ({ ...d, sessions: d.sessions.filter((t) => !isSession(cwd, sessionId)(t)) })),
