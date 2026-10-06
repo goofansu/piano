@@ -161,6 +161,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         cost={t?.state.cost}
         totals={t?.state.tokens}
         messages={t?.messages}
+        pending={t?.pending ?? undefined}
         queuedMessages={t?.state.queuedMessages}
       />
     </>

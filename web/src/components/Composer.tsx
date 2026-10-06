@@ -38,6 +38,7 @@ interface Props {
   cost?: number;
   totals?: SessionStats["tokens"];
   messages?: ReadonlyArray<RenderMsg>;
+  pending?: RenderMsg;
   queuedMessages?: ReadonlyArray<QueuedMessage>;
 }
 
@@ -59,7 +60,7 @@ const loadQueueMode = (): QueueMode => {
 };
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
+export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], pending, queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
@@ -202,7 +203,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
         </div>
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
-        <JumpTo messages={messages} />
+        <JumpTo messages={messages} pending={pending} />
         <Popover>
           <PopoverTrigger asChild>
             <Button
