@@ -23,6 +23,13 @@ test("links come from prose you or Pi wrote, newest mention first, without dupli
   assert.equal(links[3].detail, "hey.com");
 });
 
+test("prose punctuation glued to a URL is not part of it", () => {
+  const links = sessionLinks([
+    msg("m1", "user", "I added https://yejun.dev—review it, then https://yejun.dev/。看看 https://example.com/路径/页面，谢谢 and (https://example.org/x)."),
+  ]);
+  assert.deepEqual(links.map((l) => l.url), ["https://example.org/x", "https://example.com/路径/页面", "https://yejun.dev/"]);
+});
+
 test("GitHub URLs describe themselves", () => {
   const cases: Array<[string, string, string, string]> = [
     ["https://github.com/o/r/issues/7", "issue", "o/r #7", "Issue"],

@@ -26,7 +26,9 @@ export interface SessionLink {
 export const MAX_LINKS = 8;
 
 const MD_LINK = /\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g;
-const BARE = /https?:\/\/[^\s<>()[\]"'`]+/g;
+// A URL runs over letters of any script and the ASCII punctuation URLs use; prose punctuation
+// glued to it, such as an em dash or a full-width comma, ends it.
+const BARE = /https?:\/\/(?:[^\s<>()[\]"'`\p{P}]|[-._~:/?#@!$&*+,;=%])+/gu;
 const TRAILING = /[.,;:!?*_]+$/;
 
 /** Text outside fenced code blocks; an unterminated fence runs to the end. */
