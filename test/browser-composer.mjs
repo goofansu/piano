@@ -164,6 +164,16 @@ async function run() {
   if (pickerLayout.fonts.some(font=>!font.includes('JetBrains Mono'))) throw new Error('Settings popup is not monospace');
   if (pickerLayout.rows.some(row=>Math.abs(row.left-pickerLayout.rows[0].left)>1 || row.checkLeft<row.right)) throw new Error('Model labels are not left aligned with checks on the right');
   if (pickerLayout.rows.filter(row=>row.checked).map(row=>row.text).join() !== `fake/${longModel}`) throw new Error('Model selection check marks the wrong option');
+  const visibleModels = () => evaluate(`[...document.querySelectorAll('[cmdk-item]')].filter(e=>e.getBoundingClientRect().height>0).map(e=>e.getAttribute('data-value'))`);
+  const originalOrder = visibleModels();
+  for (const [query, expected] of [['ta', originalOrder], ['beta', ['fake/beta']], ['ta', originalOrder], ['no-such-model', []], ['', originalOrder]]) {
+    if (query) ab('fill', '[aria-label="Search models"]', query);
+    else { ab('focus', '[aria-label="Search models"]'); ab('press', 'Control+a'); ab('press', 'Backspace'); }
+    const actual = visibleModels();
+    writeFileSync(join(evidence, `model-order-${query || 'cleared'}.json`), JSON.stringify({query,expected,actual}, null, 2));
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Search ${JSON.stringify(query)} changed model order: ${JSON.stringify(actual)}; expected ${JSON.stringify(expected)}`);
+    if (!expected.length && !evaluate(`document.querySelector('[cmdk-empty]')?.textContent.includes('No model matches.')`)) throw new Error('Empty model search has no feedback');
+  }
   ab('click', '[data-value="fake/beta"]');
   await until(`document.querySelector('[aria-label^="Model:"]').title === 'fake/beta' && document.querySelector('input[value="off"]')?.checked`);
   if (evaluate(`document.querySelectorAll('[aria-label="Effort"] input').length`) !== 1) throw new Error('Non-reasoning model exposed unsupported efforts');

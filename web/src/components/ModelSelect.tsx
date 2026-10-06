@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { defaultFilter } from "cmdk";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { picker } from "@/lib/styles";
@@ -20,6 +21,7 @@ interface Props {
 /** One settings trigger: the model label yields space before the effort or primary action does. */
 export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled }: Props) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   useEffect(() => {
     if (!open) return;
     const dismiss = () => setOpen(false);
@@ -30,13 +32,14 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
   const search = useRef<HTMLInputElement>(null);
   const want = value || catalog?.defaultModel || "";
   const models = catalog?.models ?? [];
+  // Keep cmdk's matching semantics, but never rank the catalog by match score.
+  const visibleModels = query ? models.filter(m => defaultFilter(m.ref, query, [m.id, m.provider, m.name ?? ""]) > 0) : models;
   const label = !catalog ? "Loading models" : catalog.error ? "No models" : want ? want.split("/").pop() : "Model";
 
   const item = (m: ModelChoice) => (
     <CommandItem
       key={m.ref}
       value={m.ref}
-      keywords={[m.id, m.provider, m.name ?? ""]}
       onSelect={() => onChange(m.ref)}
       className="min-h-11 md:min-h-9"
     >
@@ -49,7 +52,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={next => { setOpen(next); setQuery(""); }}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost" size="sm" aria-haspopup="dialog" aria-expanded={open}
@@ -73,11 +76,11 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           else search.current?.focus({ preventScroll: true });
         }}
       >
-        <Command>
-          <CommandInput ref={search} aria-label="Search models" placeholder="Search models" />
+        <Command shouldFilter={false}>
+          <CommandInput ref={search} value={query} onValueChange={setQuery} aria-label="Search models" placeholder="Search models" />
           <CommandList className="max-h-[min(16rem,40dvh)]">
             <CommandEmpty>No model matches.</CommandEmpty>
-            <CommandGroup>{models.map(item)}</CommandGroup>
+            <CommandGroup>{visibleModels.map(item)}</CommandGroup>
           </CommandList>
         </Command>
         <div className="border-t border-line p-3">
