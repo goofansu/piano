@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
-import { defaultFilter } from "cmdk";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { picker } from "@/lib/styles";
@@ -32,8 +31,9 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
   const search = useRef<HTMLInputElement>(null);
   const want = value || catalog?.defaultModel || "";
   const models = catalog?.models ?? [];
-  // Keep cmdk's matching semantics, but never rank the catalog by match score.
-  const visibleModels = query ? models.filter(m => defaultFilter(m.ref, query, [m.id, m.provider, m.name ?? ""]) > 0) : models;
+  // Literal matching avoids unrelated fuzzy hits and preserves catalog order.
+  const needle = query.trim().toLowerCase();
+  const visibleModels = needle ? models.filter(m => [m.ref, m.id, m.provider, m.name ?? ""].some(text => text.toLowerCase().includes(needle))) : models;
   const label = !catalog ? "Loading models" : catalog.error ? "No models" : want ? want.split("/").pop() : "Model";
 
   const item = (m: ModelChoice) => (

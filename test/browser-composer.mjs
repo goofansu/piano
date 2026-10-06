@@ -15,7 +15,7 @@ mkdirSync(cwd);
 spawnSync('git', ['init', cwd]);
 const longModel = 'alpha-with-a-very-long-model-name-for-responsive-verification';
 // Keep the existing fake untouched. Adapt only its external protocol labels.
-writeFileSync(join(scratch, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replaceAll('"alpha"', JSON.stringify(longModel)).replaceAll('fake/alpha', `fake/${longModel}`).replace('out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });', '// Browser fixture: pause without a modal covering the composer.'));
+writeFileSync(join(scratch, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replaceAll('"alpha"', JSON.stringify(longModel)).replaceAll('fake/alpha', `fake/${longModel}`).replace('contextWindow: 2000 } ]', 'contextWindow: 2000 }, { provider: "fake", id: "claude-sonnet", name: "Claude Sonnet", reasoning: true, contextWindow: 2000 }, { provider: "fake", id: "sol", name: "Sol Online Network", reasoning: false, contextWindow: 2000 } ]').replace('out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });', '// Browser fixture: pause without a modal covering the composer.'));
 writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: 'saved-without-context', title: 'Saved session', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z', archived: false }] }));
 const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: join(scratch, 'registry.json'), PIANO_PI_CLI: join(scratch, 'fake.mjs'), PI_CODING_AGENT_DIR: join(scratch, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(scratch, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -166,12 +166,12 @@ async function run() {
   if (pickerLayout.rows.filter(row=>row.checked).map(row=>row.text).join() !== `fake/${longModel}`) throw new Error('Model selection check marks the wrong option');
   const visibleModels = () => evaluate(`[...document.querySelectorAll('[cmdk-item]')].filter(e=>e.getBoundingClientRect().height>0).map(e=>e.getAttribute('data-value'))`);
   const originalOrder = visibleModels();
-  for (const [query, expected] of [['ta', originalOrder], ['beta', ['fake/beta']], ['ta', originalOrder], ['no-such-model', []], ['', originalOrder]]) {
+  for (const [query, expected] of [['fake', originalOrder], ['beta', ['fake/beta']], ['fake', originalOrder], ['sonnet', ['fake/claude-sonnet']], ['  SoNnEt  ', ['fake/claude-sonnet']], ['sol', ['fake/sol']], ['Online', ['fake/sol']], ['ta', ['fake/beta']], ['no-such-model', []], ['', originalOrder]]) {
     if (query) ab('fill', '[aria-label="Search models"]', query);
     else { ab('focus', '[aria-label="Search models"]'); ab('press', 'Control+a'); ab('press', 'Backspace'); }
     const actual = visibleModels();
     writeFileSync(join(evidence, `model-order-${query || 'cleared'}.json`), JSON.stringify({query,expected,actual}, null, 2));
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Search ${JSON.stringify(query)} changed model order: ${JSON.stringify(actual)}; expected ${JSON.stringify(expected)}`);
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Search ${JSON.stringify(query)} returned incorrect models/order: ${JSON.stringify(actual)}; expected ${JSON.stringify(expected)}`);
     if (!expected.length && !evaluate(`document.querySelector('[cmdk-empty]')?.textContent.includes('No model matches.')`)) throw new Error('Empty model search has no feedback');
   }
   ab('click', '[data-value="fake/beta"]');
