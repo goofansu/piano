@@ -154,7 +154,7 @@ export const handleSocket = (socket: Socket.Socket) =>
       Effect.gen(function* () {
         switch (msg._tag) {
           case "projects":
-            return yield* send({ _tag: "projects", projects: yield* buildProjects });
+            return yield* publishProjects;
           case "models": {
             const cwd = resolve(expandHome(msg.cwd ?? selected?.cwd ?? homedir()));
             return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });
@@ -249,11 +249,16 @@ export const handleSocket = (socket: Socket.Socket) =>
       });
 
     // ── initial state and global updates ──
-    yield* send({ _tag: "projects", projects: yield* buildProjects });
+    // Worktree discovery can take seconds in a large repository. Show the last observation at
+    // once and let a fresh one follow, so it never holds up the page or this socket's requests.
+    const updates = yield* broadcast.subscribe;
+    const last = yield* broadcast.latest;
+    if (last) yield* send(last);
     yield* send({ _tag: "hosts", hosts: yield* hosts.list });
     // The browser requests models for its selected cwd; home cannot establish
     // project-local providers/resources and must not stand in for that catalog.
-    yield* broadcast.stream.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
+    yield* updates.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
+    yield* publishProjects.pipe(Effect.forkScoped);
     yield* hosts.changes.pipe(
       Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),
       Effect.ignore,
