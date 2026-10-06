@@ -390,6 +390,8 @@ export const ClientMessage = Schema.Union([
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
   Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),
+  /** Change the registry title shown for a session; Pi's history is untouched. */
+  Schema.TaggedStruct("rename_session", { cwd: Schema.String, sessionId: Schema.String, title: Schema.String }),
   /** Hide a session from the sidebar (and stop Pi for it if running). */
   Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),
   /** Stop Pi for a session, delete its file from Pi's session store, and forget it. */

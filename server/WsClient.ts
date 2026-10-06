@@ -235,6 +235,10 @@ export const handleSocket = (socket: Socket.Socket) =>
             yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
             return yield* publishProjects;
           }
+          case "rename_session": {
+            yield* registry.renameSession(msg.cwd, msg.sessionId, msg.title);
+            return yield* publishProjects;
+          }
           case "archive_session": {
             yield* detachSession(msg.cwd, msg.sessionId);
             yield* hosts.archive(msg.cwd, msg.sessionId);
