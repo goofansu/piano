@@ -67,7 +67,7 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
               <PanelLeftCloseIcon />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Hide sidebar (⌘B)</TooltipContent>
+          <TooltipContent>Hide sidebar</TooltipContent>
         </Tooltip>
       </div>
       <div className="px-3 pb-3">
@@ -109,7 +109,7 @@ export function SidebarRail({ onShow, onNew }: { onShow: () => void; onNew: () =
             <PanelLeftOpenIcon />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right">Show sidebar (⌘B)</TooltipContent>
+        <TooltipContent side="right">Show sidebar</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>

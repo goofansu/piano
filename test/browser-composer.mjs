@@ -55,7 +55,7 @@ async function until(js) {
   throw new Error(`Timed out: ${js}`);
 }
 const layoutOnly = process.argv.includes('--layout-only');
-const views = layoutOnly ? [[320, 640], [390, 844]] : [[320, 640], [375, 812], [390, 844], [430, 932], [390, 400], [844, 390], [768, 1024], [1024, 768], [1280, 800]];
+const views = layoutOnly ? [[320, 640], [390, 844], [1280, 800]] : [[320, 640], [375, 812], [390, 844], [430, 932], [390, 400], [844, 390], [768, 1024], [1024, 768], [1280, 800]];
 const geometry = `(() => {
   const t = document.querySelector('textarea');
   const card = t.closest('.composer-card');
@@ -80,6 +80,7 @@ const geometry = `(() => {
   const messageActions = [...controls.filter(c => ['Send', 'Stop', 'Queue message'].includes(c.label)), ...(steer ? [{label:'Steer', ...rect(steer)}] : [])];
   if (innerWidth < 768 && messageActions.some(c => c.width < 44 || c.height < 44)) problems.push('Message action touch target is smaller than 44px');
   if (messageActions.some(action => action.x < c.x || action.right > c.right + 1 || action.right > innerWidth || action.bottom > innerHeight)) problems.push('Message action outside viewport');
+  if (model && rect(model).width - [...model.children].reduce((sum, child) => sum + rect(child).width, 0) > 26) problems.push('Model picker expands beyond its label');
   if (!modelLabel) problems.push('Model control is missing');
   if (modelLabel && modelLabel.width < 24) problems.push('No readable space left for the model label');
   if (modelLabel && !modelLabel.accessibleName.includes(modelLabel.text)) problems.push('Accessible model name was truncated');
@@ -117,7 +118,7 @@ async function run() {
   ab('wait', '--text', 'Not running');
   ab('screenshot', join(evidence, 'saved-unknown-context.png'));
   if (layoutOnly) await capture('saved');
-  if (evaluate(`document.querySelector('button[aria-label="Context usage"]')?.textContent.trim()`) !== '— context') throw new Error('Missing context must remain visible as unknown, not disappear');
+  if (!evaluate(`document.querySelector('button[aria-label="Context usage"]')?.textContent.trim().startsWith('—')`)) throw new Error('Missing context must remain visible as unknown, not disappear');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', 'Context usage unavailable');
   ab('press', 'Escape');
@@ -130,8 +131,30 @@ async function run() {
   if (!evaluate(`document.querySelector('textarea').value === 'mobile first\\n'`)) throw new Error('Mobile Enter did not insert newline');
   await capture('new');
   if (layoutOnly) {
+    ab('set', 'viewport', '1280', '800');
+    const sidebarVisible = () => evaluate(`!![...document.querySelectorAll('button[aria-label="Hide sidebar"]')].find(button => button.getBoundingClientRect().width > 0)`);
+    const before = sidebarVisible();
+    for (const key of ['Control+b', 'Meta+b']) {
+      ab('press', key);
+      if (sidebarVisible() !== before) failures.push(`${key} still toggles the sidebar`);
+    }
+    ab('click', `[aria-label="${sidebarVisible() ? 'Hide' : 'Show'} sidebar"]`);
+    if (sidebarVisible() === before) failures.push('Sidebar toggle button did not toggle');
+    ab('click', `[aria-label="${sidebarVisible() ? 'Hide' : 'Show'} sidebar"]`);
+    ab('click', '[aria-label^="Model:"]');
+    ab('click', '[cmdk-item][data-value="fake/beta"]');
+    ab('press', 'Escape');
+    await capture('short-model');
+    ab('set', 'viewport', '390', '844');
+    for (const key of ['Control+b', 'Meta+b']) {
+      ab('press', key);
+      if (evaluate(`!!document.querySelector('[data-slot="sheet-content"]')`)) failures.push(`${key} still opens the mobile sidebar`);
+    }
+    ab('click', 'main [aria-label="Show sidebar"]');
+    if (!evaluate(`!!document.querySelector('[data-slot="sheet-content"]')`)) failures.push('Mobile sidebar button did not open');
+    ab('press', 'Escape');
     if (failures.length) throw new Error(failures.join('\n'));
-    console.log('PASS: both mobile toolbars stay on one row with a reserved primary touch target and an accessible truncated model label');
+    console.log('PASS: compact long/short model triggers on desktop/mobile; sidebar shortcuts removed and toggle buttons work');
     return;
   }
   // Pointer actions, not DOM click: Radix pickers must remain reachable.

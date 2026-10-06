@@ -62,20 +62,6 @@ export default function App() {
     sidebarReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setMenuOpen(true);
   }, [setCollapsed]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
-        e.preventDefault();
-        if (wide()) setCollapsed(!latestCollapsed.current);
-        else setMenuOpen((o) => !o);
-      }
-    };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [setCollapsed]);
-  const latestCollapsed = useRef(collapsed);
-  latestCollapsed.current = collapsed;
-
   // Resizable by dragging its edge; the width is remembered, and a drag past the minimum collapses it.
   const [width, setWidthState] = useState(() => {
     try {

@@ -58,7 +58,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           variant="ghost" size="sm" aria-haspopup="dialog" aria-expanded={open}
           aria-label={`Model: ${want || label}; effort: ${effort}`}
           disabled={disabled || !models.length}
-          className={cn(picker, "h-11 min-w-0 max-w-none flex-1 justify-end md:h-8")}
+          className={cn(picker, "h-11 min-w-0 max-w-none shrink justify-end md:h-8")}
           title={want}
         >
           <span className="min-w-0 truncate">{label}</span>
