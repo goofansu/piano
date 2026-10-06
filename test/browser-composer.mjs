@@ -64,9 +64,9 @@ const geometry = `(() => {
   const modelLabel = label ? { text:label.textContent, width:label.clientWidth, scrollWidth:label.scrollWidth,
     overflow:getComputedStyle(label).textOverflow, accessibleName:model.getAttribute('aria-label') } : null;
   const c = rect(card);
-  const fonts = [...card.querySelectorAll('textarea, button, span, label, input')].map(el=>getComputedStyle(el).fontFamily);
+  const fonts = [...card.querySelectorAll('textarea, button, span, label, input')].map(el=>({tag:el.tagName,family:getComputedStyle(el).fontFamily}));
   const problems = controls.filter(r => r.x < c.x || r.right > c.right + 1 || r.right > innerWidth || r.bottom > innerHeight || r.width < 24).map(r => r.label);
-  if (fonts.some(font=>!font.includes('JetBrains Mono'))) problems.push('Composer text is not consistently monospace');
+  if (fonts.some(font=>!font.family.includes(font.tag === 'TEXTAREA' ? 'Instrument Sans' : 'JetBrains Mono'))) problems.push('Message input must use sans-serif while composer controls stay monospace');
   const action = controls.find(r => ['Send', 'Stop', 'Queue message'].includes(r.label));
   if (action && controls.some(r => Math.abs(r.y + r.height/2 - action.y - action.height/2) > 2)) problems.push('Composer toolbar wraps instead of reserving the action row');
   if (innerWidth < 768 && action && (action.width < 44 || action.height < 44)) problems.push('Primary touch target is smaller than 44px');
