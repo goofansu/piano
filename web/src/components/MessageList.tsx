@@ -10,9 +10,6 @@ import { abbrevHome, clamp } from "@/lib/format";
 import { renderMarkdown } from "@/lib/markdown";
 import { cn } from "cn";
 
-/** "all" shows every row; "replies" shows your prompts and the final reply of each turn only. */
-export type TranscriptView = "all" | "replies";
-
 interface Props {
   messages: RenderMsg[];
   pending: RenderMsg | null;
@@ -20,21 +17,6 @@ interface Props {
   placeholder: string;
   /** When Pi started the current turn, or null while it rests. */
   workingSince: number | null;
-  view: TranscriptView;
-}
-
-/** The last reply with text before each prompt (and at the end): what a turn amounted to. */
-function endOfTurnIds(messages: RenderMsg[]): Set<string> {
-  const keep = new Set<string>();
-  let last: RenderMsg | null = null;
-  for (const m of messages) {
-    if (m.role === "user") {
-      if (last) keep.add(last.id);
-      last = null;
-    } else if (m.role === "assistant" && m.text.trim()) last = m;
-  }
-  if (last) keep.add(last.id);
-  return keep;
 }
 
 /**
@@ -42,7 +24,7 @@ function endOfTurnIds(messages: RenderMsg[]): Set<string> {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, tools, placeholder, workingSince, view }: Props) {
+export function MessageList({ messages, pending, tools, placeholder, workingSince }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -74,8 +56,6 @@ export function MessageList({ messages, pending, tools, placeholder, workingSinc
   const results = new Map<string, RenderMsg>();
   for (const m of messages) if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
   const active = new Set(Object.values(tools).filter(t => t.status === "running").map(t => t.id));
-  const repliesOnly = view === "replies";
-  const keep = repliesOnly ? endOfTurnIds(messages) : null;
 
   return (
     <div className="relative min-h-0 flex-1">
@@ -93,15 +73,13 @@ export function MessageList({ messages, pending, tools, placeholder, workingSinc
         {messages.length === 0 && !pending && <p className="py-16 text-center text-base text-ink-2">{placeholder}</p>}
         <div className="flex flex-col gap-6">
           {messages.map((m) => {
-            if (keep) {
-              if (m.role === "tool_result" || (m.role === "assistant" && !keep.has(m.id))) return null;
-            } else if (m.role === "tool_result" && m.toolCallId && messages.some((x) => x.toolCalls?.some((c) => c.id === m.toolCallId))) {
+            if (m.role === "tool_result" && m.toolCallId && messages.some((x) => x.toolCalls?.some((c) => c.id === m.toolCallId))) {
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} hideTools={repliesOnly} />;
+            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} />;
           })}
-          {pending && <Message msg={pending} results={results} tools={tools} active={active} hideTools={repliesOnly} streaming />}
+          {pending && <Message msg={pending} results={results} tools={tools} active={active} streaming />}
           {workingSince !== null && <Working since={workingSince} />}
         </div>
       </div>
@@ -134,7 +112,7 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, results, tools, active, hideTools, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; hideTools: boolean; streaming?: boolean }) {
+function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; streaming?: boolean }) {
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
   if (msg.role === "user") return <UserMessage text={msg.text} />;
   if (msg.role === "assistant") {
@@ -155,7 +133,7 @@ function Message({ msg, results, tools, active, hideTools, streaming }: { msg: R
           </Row>
         )}
         {msg.errorMessage && <p className="pl-7 text-sm text-err">{msg.stopReason}: {msg.errorMessage}</p>}
-        {!hideTools && msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
+        {msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
       </article>
     );
   }

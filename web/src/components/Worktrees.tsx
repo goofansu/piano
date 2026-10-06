@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ClientCommand, WorktreeFacts, WorktreeView } from "@shared/wire";
+import type { ClientCommand, WorktreeFacts } from "@shared/wire";
 import type { AppState } from "@/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,10 +13,6 @@ export function worktreeStatus(w: WorktreeFacts): string {
     w.operation === null ? "Operation unknown" : w.operation && `${w.operation.replaceAll("_", " ")} in progress`,
     w.locked === null ? "Lock unknown" : w.locked && "Locked", w.prunable === null ? "Availability unknown" : w.prunable && "Prunable",
   ].filter(Boolean).join(" · ");
-}
-export function directoryStatus(w: WorktreeView): string {
-  if (w.facts) return worktreeStatus(w.facts);
-  return { current: "Status unknown", missing: "Checkout missing", unknown: "Git status unavailable", "non-git": "Non-Git directory" }[w.status];
 }
 
 /** One deliberate discovery/selection or new-branch operation; never automatic retries. */

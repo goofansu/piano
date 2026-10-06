@@ -96,6 +96,14 @@ try {
   await ab('set', 'viewport', '1440', '1000');
   await ab('open', 'http://127.0.0.1:7172/s/daily-ui');
   await ab('wait', '--text', 'A quieter place to work');
+  // INV-01: the retired transcript filter must not hide authoritative history,
+  // even for browsers that saved the old replies-only preference.
+  await evaluate(`localStorage.setItem('piano.transcriptView', 'replies'); true`);
+  await ab('reload'); await ab('wait', '--text', 'A quieter place to work');
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label="read tool call"]')`), true);
+  assert.ok(await evaluate(`document.querySelector('main').textContent.includes('I’ll start with the parts you touch every day')`));
+  assert.equal(await evaluate(`!!document.querySelector('main [aria-label="Session menu"], main [aria-label="Session information"]')`), false);
+  assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().height`), 0, 'no empty desktop header');
   await appearance('Light'); await capture('session-light');
   assert.equal(await evaluate(`document.querySelector('aside [aria-current="page"]')?.title`), 'A calmer workspace');
   // Native clipboard success: paste back into the composer, preserving raw Markdown.
@@ -174,6 +182,8 @@ try {
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('[aria-label="Copy response"]')).opacity`), '1');
   for (const [w,h] of [[320,640],[390,844],[844,390]]) {
     await ab('set', 'viewport', String(w), String(h)); await checkGeometry(`session-${w}x${h}`); await capture(`mobile-session-${w}`);
+    assert.equal(await evaluate(`!!document.querySelector('main [aria-label="Session menu"], main [aria-label="Session information"]')`), false);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('main header button')].filter(e=>e.getBoundingClientRect().width>0).map(e=>e.getAttribute('aria-label'))`), w < 768 ? ['Show sidebar'] : []);
   }
   assert.equal(await ab('errors'), '');
   console.log('PASS: native copy/paste and denied copy; keyboard disclosures; session draft retention; light/dark layouts; reduced-motion entrance/disclosures/streaming; mobile controls, copy visibility and sidebar focus');

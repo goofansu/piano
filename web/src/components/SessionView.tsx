@@ -5,9 +5,8 @@ import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Composer } from "@/components/Composer";
-import { SessionMenu } from "@/components/SessionMenu";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
-import { MessageList, type TranscriptView } from "@/components/MessageList";
+import { MessageList } from "@/components/MessageList";
 import { PullRequestStack } from "@/components/PullRequestStack";
 import { pullRequestUrls, usePullRequests } from "@/lib/pullRequests";
 
@@ -19,31 +18,11 @@ interface Props {
   onDraftAppend: (key: string, text: string) => void;
 }
 
-const VIEW_KEY = "piano.transcriptView";
-const loadView = (): TranscriptView => {
-  try {
-    return localStorage.getItem(VIEW_KEY) === "replies" ? "replies" : "all";
-  } catch {
-    return "all";
-  }
-};
-
 export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend }: Props) {
-  const [view, setViewState] = useState<TranscriptView>(loadView);
-  const setView = (v: TranscriptView) => {
-    setViewState(v);
-    try {
-      localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      /* ignore */
-    }
-  };
   const t = state.session;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const draftKey = t ? sessionKey(t) : undefined;
   const project = t ? state.projects.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
-  const worktree = project?.worktrees.find((w) => w.path === t?.cwd);
-  const title = t?.state.sessionName || project?.sessions.find(s => s.cwd === t?.cwd && s.sessionId === t?.sessionId)?.title || "Untitled session";
   const [model, setModel] = useState<string | undefined>(undefined);
   // Follow the session's own model and effort when known; otherwise Pi's defaults.
   useEffect(() => setModel(t?.state.model), [t?.cwd, t?.sessionId, t?.state.model]);
@@ -80,32 +59,19 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   const [workingSince, setWorkingSince] = useState<number | null>(null);
   useEffect(() => setWorkingSince(streaming ? Date.now() : null), [streaming, t?.sessionId]);
 
-  // Herdr's colours: yellow is working, hollow green is idle, hollow grey is no process, red is attention.
   const prUrls = useMemo(() => (t ? pullRequestUrls(t.messages) : []), [t?.messages]);
   const prs = usePullRequests(prUrls, !streaming);
 
-  const status = !state.connected || (t !== null && !ready)
-    ? { word: "Reconnecting", dot: "border border-err", why: "Refreshing this session's connection." }
-    : !t
-      ? { word: "Loading", dot: "bg-ink-3", why: "Fetching this session." }
-      : t.closedReason
-        ? { word: "Exited", dot: "border border-ink-3", why: `Pi stopped: ${t.closedReason}. A new message restarts Pi, not the interrupted operation.` }
-      : activity
-        ? { word: activity, dot: "animate-live bg-busy", why: "Pi's reported activity and retained dialogs. Waiting, compaction and retry are separate from input acceptance." }
-      : streaming
-        ? { word: "Working", dot: "animate-live bg-busy", why: "Pi has not settled; it can still continue automatically." }
-        : t.hosted
-          ? { word: "Ready", dot: "border border-ok", why: "Pi is running for this session and waiting for your message." }
-          : { word: "Not running", dot: "border border-ink-3", why: "Pi is not running. Your next message starts it and continues this session." };
+  const status = !state.connected || (t !== null && !ready) ? "Reconnecting"
+    : !t ? "Loading"
+    : t.closedReason ? "Exited"
+    : activity || (streaming ? "Working" : t.hosted ? "Ready" : "Not running");
 
   return (
     <>
-      <header className="flex h-12 shrink-0 items-center justify-end border-b border-line px-4">
-        <Button variant="ghost" size="icon-sm" className="-ml-2 mr-auto md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-        {/* Preserve live status announcements; visible session facts live in the menu. */}
-        <span role="status" className="sr-only">{status.word}</span>
-        {t && <SessionMenu key={draftKey} session={t} title={title} projectName={project?.name} worktree={worktree}
-          status={status} connected={ready} view={view} onViewChange={setView} send={send} />}
+      <header className="flex h-12 shrink-0 items-center border-b border-line px-4 md:h-0 md:border-0">
+        <Button variant="ghost" size="icon-sm" className="-ml-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
+        <span role="status" className="sr-only">{status}</span>
       </header>
 
       {project?.discovery.status === "error" && <div role="alert" className="border-b border-line px-4 py-2 text-sm text-err">
@@ -137,7 +103,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           tools={t.tools}
           placeholder="Nothing here yet. Send the first message."
           workingSince={workingSince}
-          view={view}
         />
       ) : (
         <div className="flex flex-1 items-center justify-center text-base text-ink-2">Loading</div>
