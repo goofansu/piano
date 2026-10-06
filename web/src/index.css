@@ -486,8 +486,9 @@
   .keys[data-playing="true"] > span { transform: translateY(2px); opacity: 0.6; }
 }
 
-/* Toasts carry a thin line that drains while they wait to leave; hovering the stack pauses it. */
-[data-sonner-toast]::after {
+/* Toasts carry a thin line that drains while they wait to leave; hovering the stack pauses it.
+ * It lives on ::before because sonner uses ::after as the hover bridge between stacked toasts. */
+[data-sonner-toast]::before {
   content: "";
   position: absolute;
   left: 0.75rem;
@@ -499,11 +500,11 @@
   transform-origin: left;
   animation: toast-drain var(--toast-life, 4s) linear both;
 }
-[data-sonner-toast][data-type="error"]::after { background: color-mix(in oklab, var(--err) 55%, transparent); }
-[data-sonner-toast][data-type="success"]::after { background: color-mix(in oklab, var(--brand) 55%, transparent); }
-[data-sonner-toast][data-type="warning"]::after { background: color-mix(in oklab, var(--warn) 65%, transparent); }
-[data-sonner-toaster]:hover [data-sonner-toast]::after,
-[data-sonner-toast][data-expanded="true"]::after { animation-play-state: paused; }
+[data-sonner-toast][data-type="error"]::before { background: color-mix(in oklab, var(--err) 55%, transparent); }
+[data-sonner-toast][data-type="success"]::before { background: color-mix(in oklab, var(--brand) 55%, transparent); }
+[data-sonner-toast][data-type="warning"]::before { background: color-mix(in oklab, var(--warn) 65%, transparent); }
+[data-sonner-toaster]:hover [data-sonner-toast]::before,
+[data-sonner-toast][data-expanded="true"]::before { animation-play-state: paused; }
 @keyframes toast-drain {
   from { transform: scaleX(1); }
   to { transform: scaleX(0); }
