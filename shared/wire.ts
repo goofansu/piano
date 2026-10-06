@@ -291,8 +291,16 @@ export const WorktreeDiscovery = Schema.Union([
   Schema.Struct({ status: Schema.Literal("error"), observedAt: Schema.String, detail: Schema.String }),
 ]);
 export type WorktreeDiscovery = typeof WorktreeDiscovery.Type;
+/** Pi's project-trust outcome for a directory. `required` is false when it holds no protected resources. */
+export const ProjectTrust = Schema.Struct({
+  required: Schema.Boolean,
+  /** Whether a Pi started here loads the directory's `.pi` settings, extensions and skills. */
+  trusted: Schema.Boolean,
+});
+export type ProjectTrust = typeof ProjectTrust.Type;
 export const WorktreeView = Schema.Struct({
   workspace: Workspace,
+  trust: ProjectTrust,
   branch: Schema.NullOr(Schema.String), path: Schema.String,
   /** Registry project root, not necessarily Git's primary worktree. */
   root: Schema.Boolean,
@@ -402,6 +410,8 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String), refresh: Schema.optional(Schema.Boolean) }),
   Schema.TaggedStruct("add_project", { path: Schema.String }),
   Schema.TaggedStruct("remove_project", { path: Schema.String }),
+  /** Save Pi's project-trust decision for a directory; Pi applies it when a session starts there. */
+  Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),
   Schema.TaggedStruct("create_worktree", { requestId: Schema.String, project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
   Schema.TaggedStruct("add_worktree", { requestId: Schema.String, project: Schema.String, path: Schema.String }),
   Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),

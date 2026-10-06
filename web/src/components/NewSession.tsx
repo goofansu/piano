@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
@@ -68,6 +68,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   }, [creating]);
 
   const project = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
+  const directory = project?.worktrees.find(w => w.path === cwd);
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
     setModel(undefined); setEffort(undefined);
@@ -102,8 +103,13 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
             <p className="mt-2 hidden text-base text-ink-2 md:block">A little progress starts with an idea.</p>
           </div>
           <div className="shrink-0">
-            <div className="mb-2 min-w-0">
-              <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
+            <div className="mb-2 flex min-w-0 items-center gap-1">
+              <div className="min-w-0 flex-1">
+                <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
+              </div>
+              {directory?.trust.required && (
+                <TrustToggle trusted={directory.trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: directory.path, trusted })} />
+              )}
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>
               <AttachmentDraftView draft={attachments} disabled={creating || !state.connected} />
@@ -142,6 +148,21 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
       </div>
       <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={(path) => setCwd(path)} initialPath={cwd || undefined} />
     </>
+  );
+}
+
+/** Shown only for directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted. */
+function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trusted: boolean) => void }) {
+  return (
+    <Button
+      variant="ghost" size="sm" aria-pressed={trusted} aria-label="Project trust"
+      className={cn(picker, "h-11 shrink-0 md:h-8", trusted ? "text-ink-3" : "text-ink-2")}
+      title={trusted ? "Pi loads this folder's .pi settings, extensions and skills. Click to untrust." : "Pi skips this folder's .pi settings, extensions and skills. Click to trust."}
+      onClick={() => onChange(!trusted)}
+    >
+      {trusted ? <ShieldCheckIcon /> : <ShieldOffIcon />}
+      <span className="max-[360px]:hidden">{trusted ? "Trusted" : "Untrusted"}</span>
+    </Button>
   );
 }
 

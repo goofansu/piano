@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -147,6 +147,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
   const [deleting, setDeleting] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
   const [renaming, setRenaming] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+  const root = project.worktrees.find(w => w.root);
   const startRename = (t: { cwd: string; sessionId: string; title?: string }) => {
     setDraftTitle(t.title ?? "");
     setRenaming({ cwd: t.cwd, sessionId: t.sessionId, title: t.title || "Untitled" });
@@ -192,6 +193,11 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {root?.trust.required && (
+              <DropdownMenuItem onClick={() => send({ _tag: "set_trust", path: root.path, trusted: !root.trust.trusted })}>
+                {root.trust.trusted ? <><ShieldOffIcon /> Untrust project</> : <><ShieldCheckIcon /> Trust project</>}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => send({ _tag: "remove_project", path: project.path })}>
               <XIcon /> Close project
             </DropdownMenuItem>

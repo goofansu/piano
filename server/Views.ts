@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { ProjectView, SessionInfo, WorktreeView } from "../shared/wire.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
+import { projectTrust } from "./ProjectTrust.ts";
 import { listWorktrees } from "./Worktrees.ts";
 
 export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | Registry> = Effect.gen(function* () {
@@ -15,11 +16,11 @@ export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | R
   return yield* Effect.forEach(data.projects, (path) => Effect.gen(function* () {
     const discovery = yield* listWorktrees(path);
     const paths = new Set([path, ...data.worktrees.filter(w => w.project === path).map(w => w.path)]);
-    const worktrees: WorktreeView[] = [...paths].map(cwd => {
+    const worktrees: WorktreeView[] = yield* Effect.forEach([...paths], cwd => Effect.map(projectTrust(cwd), trust => {
       const facts = discovery.status === "ready" ? discovery.worktrees.find(w => w.path === (cwd === path ? discovery.currentPath : cwd)) : undefined;
-      return { workspace: data.workspaces.find(w => w.path === cwd)!, path: cwd, branch: facts?.branch ?? null, root: cwd === path, facts,
-        status: facts ? "current" : discovery.status === "ready" ? "missing" : discovery.status === "non-git" && cwd === path ? "non-git" : "unknown" };
-    });
+      return { workspace: data.workspaces.find(w => w.path === cwd)!, trust, path: cwd, branch: facts?.branch ?? null, root: cwd === path, facts,
+        status: facts ? "current" : discovery.status === "ready" ? "missing" : discovery.status === "non-git" && cwd === path ? "non-git" : "unknown" } satisfies WorktreeView;
+    }));
     const branchOf = new Map(worktrees.map((w) => [w.path, w.branch]));
     const sessions: SessionInfo[] = data.sessions
       .filter((t) => !t.archived && branchOf.has(t.cwd))
