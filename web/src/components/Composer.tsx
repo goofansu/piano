@@ -3,12 +3,11 @@ import { ArrowUpIcon, ChevronDownIcon, SquareIcon } from "lucide-react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { composerAction, composerCard, composerInput, composerToolbar } from "@/lib/styles";
+import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { formatTokenCount } from "@/lib/format";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Separator } from "@/components/ui/separator";
@@ -152,6 +151,29 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
         <div className={composerToolbar}>
           <AttachButton draft={attachments} disabled={disabled} />
           <ModelSelect catalog={catalog} onRefresh={onRefreshModels} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
+          {showDelivery && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className={cn(picker, "control-enter h-11 shrink-0 md:h-8")} aria-label={`Delivery: ${DELIVERY[queueMode].label}`} disabled={disabled}>
+                  {DELIVERY[queueMode].label}
+                  <ChevronDownIcon className="text-ink-3" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuRadioGroup value={queueMode} onValueChange={(mode) => setQueueMode(mode as QueueMode)}>
+                  {MODES.map((mode) => (
+                    <DropdownMenuRadioItem key={mode} value={mode} className="flex-col items-start gap-0.5">
+                      <span className="flex w-full items-center gap-2">
+                        {DELIVERY[mode].label}
+                        <KbdGroup className="ml-auto">{mode !== queueMode && <Kbd>Alt</Kbd>}<Kbd>Enter</Kbd></KbdGroup>
+                      </span>
+                      <span className="text-xs text-muted-foreground">{DELIVERY[mode].detail}</span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {showStop ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -161,53 +183,22 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
               </TooltipTrigger>
               <TooltipContent>Abort current operation. Pending queued input is not cleared. <Kbd>Esc</Kbd></TooltipContent>
             </Tooltip>
-          ) : showDelivery ? (
-            // While Pi works, the primary half sends in the chosen mode and the menu swaps it.
-            <ButtonGroup className="control-enter ml-auto h-11 shrink-0 items-center font-sans" aria-label="Send while Pi works">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" className="rounded-lg" disabled={disabled || !hasText || attachments.busy || imagesWaiting} onClick={() => send()}>
-                    {DELIVERY[queueMode].label}<ArrowUpIcon aria-hidden />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{DELIVERY[queueMode].detail} <Kbd>Enter</Kbd></TooltipContent>
-              </Tooltip>
-              <ButtonGroupSeparator />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon-sm" className="rounded-lg" aria-label="Delivery mode" disabled={disabled}>
-                    <ChevronDownIcon aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
-                  <DropdownMenuRadioGroup value={queueMode} onValueChange={(mode) => setQueueMode(mode as QueueMode)}>
-                    {MODES.map((mode) => (
-                      <DropdownMenuRadioItem key={mode} value={mode} className="flex-col items-start gap-0.5">
-                        <span className="flex w-full items-center gap-2">
-                          {DELIVERY[mode].label}
-                          <KbdGroup className="ml-auto">{mode !== queueMode && <Kbd>Alt</Kbd>}<Kbd>Enter</Kbd></KbdGroup>
-                        </span>
-                        <span className="text-xs text-muted-foreground">{DELIVERY[mode].detail}</span>
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ButtonGroup>
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   size="icon"
                   className={composerAction}
-                  aria-label={streaming ? "Queue message" : "Send"}
+                  aria-label={showDelivery ? DELIVERY[queueMode].label : streaming ? "Queue message" : "Send"}
                   disabled={disabled || !hasText || attachments.busy || imagesWaiting}
                   onClick={() => send()}
                 >
                   <span key="send" className="control-enter inline-flex" aria-hidden><ArrowUpIcon /></span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd></TooltipContent>
+              <TooltipContent>
+                {showDelivery ? `${DELIVERY[queueMode].label}: ${DELIVERY[queueMode].detail}` : streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd>
+              </TooltipContent>
             </Tooltip>
           )}
         </div>
