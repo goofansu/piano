@@ -8,15 +8,13 @@ interface Props {
   cost?: number;
   totals?: SessionStats["tokens"];
   messages: ReadonlyArray<RenderMsg>;
-  responseModel?: string;
-  responseEffort?: string;
 }
 
 const number = (value: number) => value.toLocaleString();
 const dollars = (value: number) => `$${value.toFixed(4)}`;
 
 /** History usage is per response, not a reconstruction of Pi's current context. */
-export function ContextDetails({ context, contextWindow, cost, totals, messages, responseModel, responseEffort }: Props) {
+export function ContextDetails({ context, contextWindow, cost, totals, messages }: Props) {
   const responses = messages.filter(message => message.role === "assistant" && message.usage);
   const [selectedId, setSelectedId] = useState<string>();
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
@@ -67,7 +65,6 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages,
         </tr>)}</tbody>
       </table>
       {totals && <p className="sr-only">Session total: {number(totals.total)} tokens</p>}
-      {responseModel && <p className="mt-3 break-words text-xs text-ink-2">Last response: {responseModel}{responseEffort ? ` · ${responseEffort}` : ""}</p>}
     </section>
   </div>;
 }

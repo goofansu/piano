@@ -30,13 +30,11 @@ interface Props {
   cost?: number;
   totals?: SessionStats["tokens"];
   messages?: ReadonlyArray<RenderMsg>;
-  responseModel?: string;
-  responseEffort?: string;
   queuedMessages?: ReadonlyArray<QueuedMessage>;
 }
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], responseModel, responseEffort, queuedMessages = [] }: Props) {
+export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // The box grows with its text up to a cap, whichever way the text got there.
   useEffect(() => {
@@ -138,7 +136,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
               </Button>
             </PopoverTrigger>
             <PopoverContent side="top" align="start" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
-              <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} responseModel={responseModel} responseEffort={responseEffort} />
+              <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} />
             </PopoverContent>
           </Popover>
           <Button

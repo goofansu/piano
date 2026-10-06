@@ -34,7 +34,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   const effectiveEffort = (t?.hosted ? t.state.thinkingLevel as ThinkingLevel | undefined : undefined)
     ?? clampEffort(levelsFor(catalog, effectiveModel), effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
   const extension = t?.state.extension;
-  const lastResponse = t?.messages.findLast(message => message.role === "assistant");
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
   const [overrides, setOverrides] = useState<{ model?: string; thinkingLevel?: ThinkingLevel }>({});
   useEffect(() => setOverrides({}), [t?.cwd, t?.sessionId]);
@@ -155,8 +154,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         cost={t?.state.cost}
         totals={t?.state.tokens}
         messages={t?.messages}
-        responseModel={lastResponse?.model}
-        responseEffort={lastResponse?.thinkingLevel}
         queuedMessages={t?.state.queuedMessages}
       />
     </>
