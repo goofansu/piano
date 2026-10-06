@@ -101,7 +101,7 @@ try {
   const f = observations.fanned;
   assert.equal(f.fanned, true);
   for (let i = 1; i < f.count; i++) assert.ok(f.cards[i].bottom <= f.cards[i - 1].top, `card ${i} clear of card ${i - 1}: ${JSON.stringify([f.cards[i], f.cards[i - 1]])}`);
-  assert.deepEqual(f.cards[0].actions, ['Show in conversation', 'Copy link', 'Done']);
+  assert.deepEqual(f.cards[0].actions, ['Show in conversation', 'Copy link']);
   observations.prBadges = await evaluate(`[...${PILE}.querySelectorAll('li')].find(li => li.querySelector('a').href.includes('/pull/')).textContent`);
 
   // "Show in conversation" on the oldest card scrolls to and highlights the first message.
@@ -115,29 +115,6 @@ try {
   await shot('03-jumped');
   assert.ok(observations.jump.before > observations.jump.after, JSON.stringify(observations.jump));
   assert.ok(observations.jump.visible && observations.jump.highlighted);
-
-  // Done removes the card and offers Undo in a toast; Undo brings it back.
-  await ab('hover', '[data-slot="link-stack"] li a');
-  await evaluate(`(() => { const li = [...${PILE}.children].find(li => li.textContent.includes('Set aside')); li.querySelector('button[aria-label="Done"]').click(); return true; })()`);
-  await ab('wait', '--fn', `${PILE}.children.length === 5`);
-  await ab('wait', '--text', 'Set aside as done.');
-  await shot('04-done-toast');
-  observations.afterDone = await evaluate(cards);
-  assert.ok(!observations.afterDone.cards.some(x => x.title === 'Set aside'));
-  await ab('find', 'role', 'button', 'click', '--name', 'Undo', '--exact');
-  await ab('wait', '--fn', `${PILE}.children.length === 6`);
-  observations.afterUndo = await evaluate(cards);
-  assert.ok(observations.afterUndo.cards.some(x => x.title === 'Set aside'));
-
-  // A dismissal without undo survives a reload.
-  await ab('hover', '[data-slot="link-stack"] li a');
-  await evaluate(`(() => { const li = [...${PILE}.children].find(li => li.textContent.includes('the glossary')); li.querySelector('button[aria-label="Done"]').click(); return true; })()`);
-  await ab('wait', '--fn', `${PILE}.children.length === 5`);
-  await ab('reload');
-  await ab('wait', '--text', 'Filler answer 9');
-  await ab('wait', '--fn', `${PILE} && ${PILE}.children.length === 5`);
-  observations.afterReload = await evaluate(cards);
-  assert.ok(!observations.afterReload.cards.some(x => x.title === 'the glossary'));
 
   // Keyboard: focusing a card fans the pile too.
   await ab('mouse', 'move', '10', '10').catch(() => {});

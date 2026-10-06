@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  CheckIcon, CircleDotIcon, CopyIcon, FileCodeIcon, FolderGitIcon, GitCommitHorizontalIcon, GitCompareIcon, GitMergeIcon,
-  GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareTextIcon, MonitorIcon, PlayIcon, XIcon,
+  ArrowUpRightIcon, CheckIcon, CircleDotIcon, CopyIcon, FileCodeIcon, FolderGitIcon, GitCommitHorizontalIcon, GitCompareIcon,
+  GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareTextIcon, MonitorIcon, PlayIcon,
 } from "lucide-react";
 import type { PullRequest } from "@shared/wire";
 import { cn } from "cn";
@@ -12,13 +12,14 @@ import type { SessionLink } from "@/lib/links";
 import { jumpTo } from "@/lib/transcript";
 
 /**
- * The session's links as a set-aside pile above the composer: at hand, out of the way.
- * The newest card sits in front with the others peeking out behind it. Pointer hover or
+ * The links a session mentions, as a set-aside pile above the composer: at hand, out of the
+ * way. The newest card sits in front with the others peeking out behind it. Pointer hover or
  * keyboard focus fans the pile open; on a touch screen the first tap does. Each fanned card
- * opens its link, can show where the conversation mentioned it, copy it, or be marked done.
+ * opens its link, can show where the conversation mentioned it, or copy it. The pile is a
+ * view of the transcript and keeps no state of its own.
  */
-export function LinkStack({ links, onDone }: { links: SessionLink[]; onDone: (link: SessionLink) => void }) {
-  const [tapped, setOpen] = useState(false);
+export function LinkStack({ links }: { links: SessionLink[] }) {
+  const [tapped, setTapped] = useState(false);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -27,8 +28,8 @@ export function LinkStack({ links, onDone }: { links: SessionLink[]; onDone: (li
   // A tapped-open pile closes on Escape or a tap elsewhere, the way a menu would.
   useEffect(() => {
     if (!open) return;
-    const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setTapped(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setTapped(false); };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", key);
     return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
@@ -52,15 +53,21 @@ export function LinkStack({ links, onDone }: { links: SessionLink[]; onDone: (li
         {links.map((link, i) => (
           <li
             key={link.url}
-            // Each card behind the front one tucks under by all but a sliver until the pile fans.
+            // Behind the front card each one tucks under by all but a sliver, a little narrower and
+            // darker with depth; cards stay opaque so nothing shows through. Fanning opens them in a
+            // short cascade from the front.
             className={cn(
-              "group/card relative flex h-14 items-center rounded-xl border border-line bg-surface-1 shadow-1",
-              // A new card slides up without fading: a translucent front card would show the pile through it.
-              "animate-in transition-[margin,transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] slide-in-from-bottom-2",
-              "hover:border-line-strong hover:shadow-2 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
-              i > 0 && (fanned ? "mb-1.5" : "-mb-12 scale-x-(--tuck)"),
+              "link-card group/card relative flex h-14 items-center rounded-2xl border border-line",
+              "animate-in slide-in-from-bottom-2 hover:-translate-y-px hover:border-line-strong",
+              "has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring has-[a:focus-visible]:ring-offset-2 has-[a:focus-visible]:ring-offset-surface-0",
+              i > 0 && (fanned ? "mb-2" : "-mb-12 scale-x-(--tuck) brightness-(--depth)"),
             )}
-            style={{ zIndex: links.length - i, "--tuck": String(1 - Math.min(i, 4) * 0.03) } as React.CSSProperties}
+            style={{
+              zIndex: links.length - i,
+              transitionDelay: fanned ? `${Math.min(i, 6) * 25}ms` : "0ms",
+              "--tuck": String(1 - Math.min(i, 4) * 0.035),
+              "--depth": String(1 - Math.min(i, 4) * 0.04),
+            } as React.CSSProperties}
           >
             <a
               href={link.url}
@@ -68,22 +75,25 @@ export function LinkStack({ links, onDone }: { links: SessionLink[]; onDone: (li
               rel="noreferrer"
               aria-label={`${link.title}, ${link.detail}`}
               tabIndex={fanned || i === 0 ? 0 : -1}
-              className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-xl px-3 text-sm outline-none"
+              className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-2xl pl-2.5 pr-3 text-sm outline-none"
               onClick={(e) => {
                 // Without hover there is no fan on the way to a click: the first tap opens the pile.
-                if (!fanned && links.length > 1 && !window.matchMedia("(hover: hover)").matches) { e.preventDefault(); setOpen(true); }
+                if (!fanned && links.length > 1 && !window.matchMedia("(hover: hover)").matches) { e.preventDefault(); setTapped(true); }
               }}
             >
               <Mark link={link} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-ink">{link.title}</span>
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="flex items-center gap-1 text-ink">
+                  <span className="truncate font-medium">{link.title}</span>
+                  <ArrowUpRightIcon className="size-3.5 shrink-0 text-ink-3 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100" aria-hidden />
+                </span>
                 <Detail link={link} />
               </span>
             </a>
             {fanned ? (
-              <Actions link={link} onDone={() => onDone(link)} />
+              <Actions link={link} />
             ) : (
-              i === 0 && links.length > 1 && <span className="mr-3 text-xs tabular-nums text-ink-3" aria-hidden>{links.length}</span>
+              i === 0 && links.length > 1 && <span className="mr-3.5 text-xs tabular-nums text-ink-3" aria-hidden>{links.length}</span>
             )}
           </li>
         ))}
@@ -92,12 +102,12 @@ export function LinkStack({ links, onDone }: { links: SessionLink[]; onDone: (li
   );
 }
 
-/** Show where it was said, copy it, or set it aside as done. Visible while the card is hovered or focused. */
-function Actions({ link, onDone }: { link: SessionLink; onDone: () => void }) {
+/** Show where it was said, or copy it. Visible while the card is hovered or focused. */
+function Actions({ link }: { link: SessionLink }) {
   const [copied, setCopied] = useState(false);
-  const action = "size-8 text-ink-3 hover:text-ink";
+  const action = "size-8 rounded-lg text-ink-3 hover:bg-fill-hover hover:text-ink";
   return (
-    <span className="flex shrink-0 items-center gap-0.5 pr-1.5 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100 has-[:focus-visible]:opacity-100">
+    <span className="flex shrink-0 items-center gap-0.5 pr-2 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="ghost" size="icon-sm" className={action} aria-label="Show in conversation" onClick={() => jumpTo({ kind: "assistant", id: link.messageId, label: link.title, messageId: link.messageId })}>
@@ -119,12 +129,6 @@ function Actions({ link, onDone }: { link: SessionLink; onDone: () => void }) {
           </Button>
         </TooltipTrigger>
         <TooltipContent>{copied ? "Copied" : "Copy link"}</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" className={action} aria-label="Done" onClick={onDone}><XIcon /></Button>
-        </TooltipTrigger>
-        <TooltipContent>Done</TooltipContent>
       </Tooltip>
     </span>
   );
@@ -173,7 +177,7 @@ function hue(host: string): number {
 
 /** The card's left mark: a forge icon tinted by state, a monitor for a local server, or the site's monogram. */
 function Mark({ link }: { link: SessionLink }) {
-  const circle = "flex size-9 shrink-0 items-center justify-center rounded-full";
+  const circle = "flex size-9 shrink-0 items-center justify-center rounded-xl";
   const s = link.status;
   if (s?._tag === "pull_request") {
     const Icon = PR_STATE[s.state].icon;
@@ -198,7 +202,7 @@ function Detail({ link }: { link: SessionLink }) {
   const checks = pr && (pr.state === "open" || pr.state === "draft") ? CHECKS[pr.checks] : null;
   const review = pr?.state === "open" ? REVIEW[pr.review] : null;
   return (
-    <span className="flex items-center gap-2 truncate text-ink-2">
+    <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-ink-3">
       <span className="truncate">{link.detail}</span>
       {pr && <Badge variant={PR_STATE[pr.state].variant}>{PR_STATE[pr.state].word}</Badge>}
       {checks && (

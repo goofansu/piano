@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { PanelLeftOpenIcon } from "lucide-react";
-import { toast } from "sonner";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -62,7 +61,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
     uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
   }[submission.outcome] : undefined;
 
-  const { links, markDone, restore } = useSessionLinks(t, !streaming);
+  const links = useSessionLinks(t?.messages, !streaming);
 
   const status = !state.connected || (t !== null && !ready) ? "Reconnecting"
     : !t ? "Loading"
@@ -107,7 +106,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
       ) : (
         <div className="flex flex-1 items-center justify-center"><Spinner className="text-muted-foreground" /></div>
       )}
-      {t && <LinkStack links={links} onDone={(link) => { markDone(link.url); toast(link.title, { description: "Set aside as done.", action: { label: "Undo", onClick: () => restore(link.url) } }); }} />}
+      {t && <LinkStack links={links} />}
       {t?.state.dialogResolution && (
         <section aria-label="Last dialog" role="status" className="animate-in px-4 pt-2 text-sm text-ink-2 fade-in-0 slide-in-from-bottom-1 md:px-6">
           <p className="mx-auto max-w-3xl break-words">Dialog {t.state.dialogResolution.reason}: {t.state.dialogResolution.detail}</p>
