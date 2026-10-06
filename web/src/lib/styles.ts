@@ -12,4 +12,4 @@ export const composerInput = "max-h-[min(12rem,30dvh)] min-h-14 resize-none bord
 
 /** Compact settings yield space to the primary action without wrapping to another row. */
 export const composerToolbar = "flex min-w-0 flex-nowrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2";
-export const composerAction = "ml-auto size-9 shrink-0 rounded-xl";
+export const composerAction = "ml-auto size-11 shrink-0 rounded-xl md:size-9";
