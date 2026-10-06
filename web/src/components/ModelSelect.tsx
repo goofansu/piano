@@ -62,7 +62,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           title={want}
         >
           <span className="min-w-0 truncate">{label}</span>
-          <span className="shrink-0 text-ink-3" aria-hidden>· {effort}</span>
+          <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>· {effort}</span>
           <ChevronDownIcon className="size-3.5 shrink-0 text-ink-3" />
         </Button>
       </PopoverTrigger>

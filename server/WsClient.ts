@@ -201,11 +201,11 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "create_session": {
             const cwd = yield* registry.ensureProject(msg.cwd);
             const session = yield* Semaphore.withPermits(navigation, 1)(start({ cwd, sessionId: null, selectionId: msg.selectionId }, msg.options));
-            const text = msg.text?.trim();
-            if (!text) return;
+            const text = msg.text?.trim() ?? "";
+            if (!text && !msg.attachments?.length) return;
             yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, text);
             yield* publishProjects;
-            return yield* session.act({ _tag: "prompt", text });
+            return yield* session.act({ _tag: "prompt", text, attachments: msg.attachments });
           }
           case "act": {
             const session = yield* Semaphore.withPermits(navigation, 1)(Effect.gen(function* () {

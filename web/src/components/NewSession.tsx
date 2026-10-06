@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
+import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { PianoMark } from "@/components/PianoMark";
 
 interface Props {
@@ -36,6 +37,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
     }
   });
   const [text, setText] = useState("");
+  const attachments = useAttachments("new-session");
   const [model, setModel] = useState<string | undefined>(undefined);
   const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -72,7 +74,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   const effectiveModel = model || catalog?.defaultModel;
   const levels = levelsFor(catalog, effectiveModel);
   const effectiveEffort = clampEffort(levels, effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
-  const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && text.trim().length > 0 && !creating;
+  const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy;
 
   const submit = () => {
     if (!ready) return;
@@ -82,7 +84,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
       /* ignore */
     }
     setCreating(true);
-    send({ _tag: "create_session", cwd: cwd.trim(), options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim() });
+    send({ _tag: "create_session", cwd: cwd.trim(), options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
+    attachments.clear();
   };
 
   return (
@@ -100,7 +103,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
             <div className="mb-2 min-w-0">
               <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
             </div>
-            <div className={cn(composerCard, "welcome-enter welcome-composer")}>
+            <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>
+              <AttachmentDraftView draft={attachments} disabled={creating || !state.connected} />
               <Textarea
                 ref={textarea}
                 autoFocus={!window.matchMedia("(pointer: coarse)").matches}
@@ -118,6 +122,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
                 }}
               />
               <div className={composerToolbar}>
+                <AttachButton draft={attachments} disabled={creating || !state.connected} />
                 <ModelSelect catalog={catalog} value={model} onChange={setModel} effort={effectiveEffort} onEffortChange={setEffort} />
                 <Button size="icon" className={composerAction} aria-label="Send" disabled={!ready} onClick={submit}>
                   {creating ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}

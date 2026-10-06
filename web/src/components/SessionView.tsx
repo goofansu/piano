@@ -130,6 +130,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         </div>}
       </section>}
       <Composer
+        key={draftKey}
+        draftKey={draftKey ?? "loading"}
         text={draftKey ? state.drafts[draftKey] ?? "" : ""}
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
         onTextAppend={(text) => { if (draftKey) onDraftAppend(draftKey, text); }}
@@ -137,7 +139,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         disabled={!ready || !t}
         streaming={streaming}
         compacting={t?.state.isCompacting}
-        onSend={(text, kind) => send({ _tag: "act", action: { _tag: kind === "steering" ? "steer" : "prompt", text }, start: startOptions() })}
+        onSend={(text, kind, attachments) => send({ _tag: "act", action: { _tag: kind === "steering" ? "steer" : "prompt", text, attachments }, start: startOptions() })}
         onStop={() => send({ _tag: "act", action: { _tag: "abort" } })}
         catalog={catalog}
         model={model}

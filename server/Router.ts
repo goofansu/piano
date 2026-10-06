@@ -5,6 +5,7 @@ import { Cause, Effect } from "effect";
 import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { DirListing } from "../shared/wire.ts";
+import { getImagePreview } from "./ImagePreviews.ts";
 import { Catalog } from "./Catalog.ts";
 import { Registry } from "./Registry.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
@@ -131,6 +132,15 @@ export const AppRouter = HttpRouter.use((router) =>
       const workspace = (yield* (yield* Registry).get).workspaces.find(w => w.id === id);
       if (!workspace) return json({ error: "Workspace is not registered. Refresh the project list." }, 404);
       return json(yield* (yield* WorkspaceRevisions).capture(workspace));
+    }));
+
+    yield* router.add("GET", "/api/image-previews/:id", Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const id = new URL(request.url, "http://localhost").pathname.split("/").pop() ?? "";
+      const image = /^[a-f0-9]{64}$/.test(id) ? getImagePreview(id) : undefined;
+      return image ? HttpServerResponse.uint8Array(image.bytes, { contentType: image.mimeType,
+        headers: { "cache-control": "private, no-store", "x-content-type-options": "nosniff" } })
+        : HttpServerResponse.empty({ status: 404 });
     }));
 
     yield* router.add("GET", "/api/projects", buildProjects.pipe(Effect.map((projects) => json({ projects }))));

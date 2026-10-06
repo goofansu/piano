@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowDownIcon, CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { RenderMsg, ToolExecution } from "@shared/wire";
+import { MessageAttachments } from "@/components/Attachments";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -111,7 +112,7 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
 
 function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; streaming?: boolean }) {
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
-  if (msg.role === "user") return <UserMessage text={msg.text} />;
+  if (msg.role === "user") return <UserMessage text={msg.text} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
     return (
       <article className="group/reply flex flex-col gap-3">
@@ -170,7 +171,7 @@ function CopyResponse({ text }: { text: string }) {
   );
 }
 
-function UserMessage({ text }: { text: string }) {
+function UserMessage({ text, attachments }: { text: string; attachments: RenderMsg["attachments"] }) {
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -210,6 +211,7 @@ function UserMessage({ text }: { text: string }) {
         >
           {text}
         </div>
+        <MessageAttachments items={attachments} />
       </Row>
     </article>
   );

@@ -7,6 +7,21 @@
  * sides decode with the same definitions.
  */
 import { Schema } from "effect";
+import { IMAGE_TYPES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES, base64Bytes } from "./attachments.ts";
+
+/** Browser input, not a Pi protocol block. Future files get a distinct kind. */
+export const Attachment = Schema.Struct({
+  kind: Schema.Literal("image"),
+  name: Schema.String.check(Schema.isMaxLength(255)),
+  mimeType: Schema.Literals(IMAGE_TYPES),
+  data: Schema.String.check(Schema.isMaxLength(4 * Math.ceil(MAX_IMAGE_BYTES / 3)), Schema.isPattern(/^[A-Za-z0-9+/]*={0,2}$/)),
+}).check(Schema.makeFilter(a => a.data.length % 4 === 0 && base64Bytes(a.data) > 0 && base64Bytes(a.data) <= MAX_IMAGE_BYTES));
+export type Attachment = typeof Attachment.Type;
+export const Attachments = Schema.Array(Attachment).check(
+  Schema.isMaxLength(MAX_ATTACHMENTS),
+  Schema.makeFilter(items => items.reduce((sum, a) => sum + base64Bytes(a.data), 0) <= MAX_ATTACHMENT_BYTES),
+);
+const attachmentInput = Schema.optional(Attachments);
 
 // ── Session rendering ────────────────────────────────────────────────────────
 
@@ -47,6 +62,7 @@ export const RenderMsg = Schema.Struct({
   id: Schema.String,
   role: Schema.Literals(["user", "assistant", "tool_result", "context"]),
   text: Schema.String,
+  attachments: Schema.optional(Schema.Array(Schema.Struct({ kind: Schema.Literal("image"), url: Schema.String }))),
   toolCalls: Schema.optional(Schema.Array(ToolCall)),
   toolName: Schema.optional(Schema.String),
   toolCallId: Schema.optional(Schema.String),
@@ -195,8 +211,8 @@ export type ThinkingLevel = typeof ThinkingLevel.Type;
 
 /** Everything a browser client may do to a running session. */
 export const SessionAction = Schema.Union([
-  Schema.TaggedStruct("prompt", { text: Schema.String }),
-  Schema.TaggedStruct("steer", { text: Schema.String }),
+  Schema.TaggedStruct("prompt", { text: Schema.String, attachments: attachmentInput }),
+  Schema.TaggedStruct("steer", { text: Schema.String, attachments: attachmentInput }),
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("restore_queue", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
@@ -376,7 +392,7 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("add_worktree", { requestId: Schema.String, project: Schema.String, path: Schema.String }),
   Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
   /** Create and start a session in a directory (registering it as a project when needed) and send its first prompt. */
-  Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, options: StartOptions, text: Schema.optional(Schema.String) }),
+  Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, options: StartOptions, text: Schema.optional(Schema.String), attachments: attachmentInput }),
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
   Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),

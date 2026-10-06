@@ -165,7 +165,7 @@ function handle(cmd) {
       }
       respond(cmd, { disposition: "started" });
       streaming = true;
-      const user = { role: "user", content: cmd.message, timestamp: Date.now() };
+      const user = { role: "user", content: cmd.images?.length ? [{ type: "text", text: cmd.message }, ...cmd.images] : cmd.message, timestamp: Date.now() };
       messages.push(user);
       out({ type: "agent_start" }); out({ type: "turn_start" });
       out({ type: "message_start", message: user }); out({ type: "message_end", message: user });

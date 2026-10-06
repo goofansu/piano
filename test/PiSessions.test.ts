@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Deferred, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import type { SessionEvent } from "../shared/wire.ts";
+import { decodeClientMessage, type Attachment, type SessionEvent } from "../shared/wire.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 
@@ -43,6 +43,37 @@ test("snapshot first, then a streamed turn", async () => {
   const reply = seen.find((e) => e._tag === "message_end" && e.message.role === "assistant");
   assert.ok(reply && reply._tag === "message_end");
   assert.equal(reply.message.text, "echo: hello");
+});
+
+const image: Attachment = { kind: "image", name: "pixel.png", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGZkAAAAASUVORK5CYII=" };
+
+test("image-only prompts reach Pi and survive authoritative refresh and late snapshots without embedding bytes", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "images" });
+    yield* t.act({ _tag: "prompt", text: "", attachments: [image] });
+    const events = yield* collectUntil(t.events, e => e._tag === "snapshot");
+    const event = events[0];
+    assert.ok(event._tag === "snapshot");
+    const user = event.snapshot.messages.find(m => m.role === "user");
+    assert.equal(user?.text, "");
+    assert.match(user?.attachments?.[0].url ?? "", /^\/api\/image-previews\/[a-f0-9]{64}$/);
+    assert.equal(JSON.stringify(event).includes(image.data), false, "image history cannot exhaust WS snapshot limits");
+    const invalid = yield* t.act({ _tag: "prompt", text: "bad image", attachments: [{ ...image, mimeType: "image/jpeg" }] }).pipe(Effect.flip);
+    assert.equal(invalid.reason, "rejected");
+    yield* t.act({ _tag: "prompt", text: "ask me" });
+    const busy = yield* t.act({ _tag: "steer", text: "image", attachments: [image] }).pipe(Effect.flip);
+    assert.match(busy.detail, /Wait for Pi/);
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+});
+
+test("upload wire rejects unsupported kinds, oversized payloads and malformed base64", () => {
+  const command = (attachments: unknown) => JSON.stringify({ _tag: "create_session", selectionId: "s", cwd: "/tmp", options: {}, text: "", attachments });
+  assert.deepEqual(decodeClientMessage(command([image]))._tag, "create_session");
+  for (const attachments of [
+    [{ ...image, kind: "file" }], [{ ...image, mimeType: "image/svg+xml" }],
+    [{ ...image, data: "not base64" }], [{ ...image, data: "" }],
+    Array(5).fill(image), [{ ...image, data: "A".repeat(4 * Math.ceil(5 * 1024 * 1024 / 3) + 4) }],
+  ]) assert.throws(() => decodeClientMessage(command(attachments)));
 });
 
 test("handled input acknowledges consumption without starting work or inventing history", async () => {

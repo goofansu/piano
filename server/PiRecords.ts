@@ -1,10 +1,13 @@
 /** Pi-only translation and content-indexed reconstruction. Originals stay in Pi. */
 import type { RenderMsg, SessionEvent, ToolExecution, Usage } from '../shared/wire.ts';
+import { imagePreview } from './ImagePreviews.ts';
 import { projectDisplay, redactDisplay } from './DisplayProjection.ts';
 
 interface RawContent {
   type: string;
   text?: string;
+  data?: string;
+  mimeType?: string;
   id?: string;
   name?: string;
   arguments?: unknown;
@@ -45,7 +48,13 @@ const usageOf = (usage?: RawUsage): Usage | undefined => usage ? {
 
 export function serializeMessage(id: string, msg: RawMessage): RenderMsg | null {
   let result: RenderMsg;
-  if (msg.role === 'user') result = { id, role: 'user', text: textOf(msg.content) };
+  if (msg.role === 'user') result = { id, role: 'user', text: textOf(msg.content),
+    attachments: Array.isArray(msg.content) ? msg.content.flatMap(block => {
+      if (block.type !== 'image') return [];
+      const url = block.data && block.mimeType ? imagePreview(block.data, block.mimeType) : undefined;
+      return [{ kind: 'image' as const, url: url ?? '' }];
+    }) : undefined,
+  };
   else if (msg.role === 'assistant') {
     const blocks = Array.isArray(msg.content) ? msg.content : [];
     const toolCalls = blocks.filter(c => c.type === 'toolCall').map(c => ({ id: c.id ?? '', name: c.name ?? '', args: argsOf(c.arguments) }));
@@ -64,7 +73,7 @@ export function serializeMessage(id: string, msg: RawMessage): RenderMsg | null 
   else if (msg.role === 'compactionSummary' || msg.role === 'branchSummary') result = { id, role: 'context', label: msg.role === 'compactionSummary' ? 'Compaction summary' : 'Branch summary', text: msg.summary ?? '' };
   else if (msg.role === 'custom') result = { id, role: 'context', label: msg.customType ?? 'Extension context', text: textOf(msg.content) };
   else if (msg.role === 'bashExecution') result = { id, role: 'context', label: `Shell: ${msg.command ?? ''}`, text: msg.output ?? '' };
-  else return null; // System declarations, thinking and images are outside this text display scope.
+  else return null; // System declarations and thinking are outside this display scope.
   return projectDisplay(result);
 }
 export function serializeMessages(msgs: ReadonlyArray<RawMessage>, prefix = 'm'): RenderMsg[] {

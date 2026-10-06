@@ -8,13 +8,15 @@
  * orderly shutdown. The only external seam is ChildProcessSpawner.
  */
 import { randomUUID } from "node:crypto";
-import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Scope, Semaphore, Stream } from "effect";
+import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Schema, Scope, Semaphore, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 import { makeDelivery, type DeliveryOverflow } from "./BoundedDelivery.ts";
 import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState, SessionStats } from "../shared/wire.ts";
+import { Attachments } from "../shared/wire.ts";
+import { imageType } from "../shared/attachments.ts";
 import { PiCli } from "./PiCli.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } from "./PiRecords.ts";
@@ -714,6 +716,15 @@ const openSession = (spec: PiSessionSpec) =>
         switch (action._tag) {
           case "prompt":
           case "steer": {
+            if (action.attachments?.length) {
+              if (!Schema.is(Attachments)(action.attachments) || action.attachments.some(a => {
+                const bytes = Buffer.from(a.data, "base64");
+                return bytes.toString("base64") !== a.data || imageType(bytes) !== a.mimeType;
+              })) return yield* new PiSessionError({ reason: "rejected", detail: "Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to 5 MiB each and 10 MiB total (4 images)." });
+              const state = yield* Ref.get(stateRef);
+              // Pi's clear_queue only returns text. Do not offer a lossy image queue.
+              if (state.isStreaming || state.isCompacting || state.isRetrying) return yield* new PiSessionError({ reason: "rejected", detail: "Wait for Pi to finish before sending images." });
+            }
             // Explicit new input starts a new operation boundary. An older abort's
             // acknowledgement must never cancel its dialogs or clear its activity.
             aborting = undefined;
@@ -724,7 +735,7 @@ const openSession = (spec: PiSessionSpec) =>
             // not the browser/caller that may disconnect while Pi handles input.
             const work = Effect.gen(function* () {
               yield* submit("submitting");
-              yield* child.request({ type: "prompt", message: action.text, streamingBehavior: action._tag === "steer" ? "steer" : "followUp" }).pipe(
+              yield* child.request({ type: "prompt", message: action.text, images: action.attachments?.map(a => ({ type: "image", data: a.data, mimeType: a.mimeType })), streamingBehavior: action.attachments?.length ? undefined : action._tag === "steer" ? "steer" : "followUp" }).pipe(
                 Effect.flatMap((data) => {
                   const disposition = (data as { disposition?: unknown } | undefined)?.disposition;
                   if (disposition !== "started" && disposition !== "queued" && disposition !== "handled") {
