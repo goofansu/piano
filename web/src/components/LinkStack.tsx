@@ -56,10 +56,10 @@ export function LinkStack({ links }: { links: SessionLink[] }) {
             // darker with depth; cards stay opaque so nothing shows through. Fanning opens them in a
             // short cascade from the front.
             className={cn(
-              "link-card group/card relative flex h-14 items-center rounded-2xl border border-line",
+              "link-card group/card relative flex h-16 items-center rounded-2xl border border-line",
               "animate-in slide-in-from-bottom-2 hover:-translate-y-px hover:border-line-strong",
               "has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring has-[a:focus-visible]:ring-offset-2 has-[a:focus-visible]:ring-offset-surface-0",
-              i > 0 && (fanned ? "mb-2" : "-mb-12 scale-x-(--tuck) brightness-(--depth)"),
+              i > 0 && (fanned ? "mb-2" : "-mb-14 scale-x-(--tuck) brightness-(--depth)"),
             )}
             style={{
               zIndex: links.length - i,
@@ -74,7 +74,7 @@ export function LinkStack({ links }: { links: SessionLink[] }) {
               rel="noreferrer"
               aria-label={`${link.title}, ${link.detail}`}
               tabIndex={fanned || i === 0 ? 0 : -1}
-              className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-2xl pl-2.5 pr-3 text-sm outline-none"
+              className="flex h-full min-w-0 flex-1 items-center gap-3.5 rounded-2xl pl-3 pr-3.5 text-sm outline-none"
               onClick={(e) => {
                 // Without hover there is no fan on the way to a click: the first tap opens the pile.
                 if (!fanned && links.length > 1 && !window.matchMedia("(hover: hover)").matches) { e.preventDefault(); setTapped(true); }
@@ -92,7 +92,7 @@ export function LinkStack({ links }: { links: SessionLink[] }) {
             {fanned ? (
               <Actions link={link} />
             ) : (
-              i === 0 && links.length > 1 && <span className="mr-3.5 text-xs tabular-nums text-ink-3" aria-hidden>{links.length}</span>
+              i === 0 && links.length > 1 && <span className="mr-4 text-xs tabular-nums text-ink-3" aria-hidden>{links.length}</span>
             )}
           </li>
         ))}
@@ -106,7 +106,7 @@ function Actions({ link }: { link: SessionLink }) {
   const [copied, setCopied] = useState(false);
   const action = "size-8 rounded-lg text-ink-3 hover:bg-fill-hover hover:text-ink";
   return (
-    <span className="flex shrink-0 items-center gap-0.5 pr-2 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100">
+    <span className="flex shrink-0 items-center gap-1 pr-2.5 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="ghost" size="icon-sm" className={action} aria-label="Show in conversation" onClick={() => jumpTo({ kind: "assistant", id: link.messageId, label: link.title, messageId: link.messageId })}>
@@ -176,7 +176,7 @@ function hue(host: string): number {
 
 /** The card's left mark: a forge icon tinted by state, a monitor for a local server, or the site's monogram. */
 function Mark({ link }: { link: SessionLink }) {
-  const circle = "flex size-9 shrink-0 items-center justify-center rounded-xl";
+  const circle = "flex size-10 shrink-0 items-center justify-center rounded-xl";
   const s = link.status;
   if (s?._tag === "pull_request") {
     const Icon = PR_STATE[s.state].icon;
@@ -201,7 +201,7 @@ function Detail({ link }: { link: SessionLink }) {
   const checks = pr && (pr.state === "open" || pr.state === "draft") ? CHECKS[pr.checks] : null;
   const review = pr?.state === "open" ? REVIEW[pr.review] : null;
   return (
-    <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-ink-3">
+    <span className="mt-1 flex items-center gap-2 truncate text-xs text-ink-3">
       <span className="truncate">{link.detail}</span>
       {pr && <Badge variant={PR_STATE[pr.state].variant}>{PR_STATE[pr.state].word}</Badge>}
       {checks && (
