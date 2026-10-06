@@ -172,33 +172,27 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          {showStop ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="icon" variant="outline" className={composerAction} aria-label="Stop" disabled={disabled} onClick={onStop}>
-                  <SquareIcon className="fill-current" aria-hidden />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Abort current operation. Pending queued input is not cleared. <Kbd>Esc</Kbd></TooltipContent>
-            </Tooltip>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  className={composerAction}
-                  aria-label={showDelivery ? DELIVERY[queueMode].label : streaming ? "Queue message" : "Send"}
-                  disabled={disabled || !hasText || attachments.busy || imagesWaiting}
-                  onClick={() => send()}
-                >
-                  <span key="send" className="control-enter inline-flex" aria-hidden><ArrowUpIcon /></span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {showDelivery ? `${DELIVERY[queueMode].label}: ${DELIVERY[queueMode].detail}` : streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd>
-              </TooltipContent>
-            </Tooltip>
-          )}
+          {/* Send and Stop are one control; its face cross-fades so the key never jumps. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant={showStop ? "outline" : "default"}
+                className={cn(composerAction, "relative")}
+                aria-label={showStop ? "Stop" : showDelivery ? DELIVERY[queueMode].label : streaming ? "Queue message" : "Send"}
+                disabled={showStop ? disabled : disabled || !hasText || attachments.busy || imagesWaiting}
+                onClick={showStop ? onStop : () => send()}
+              >
+                <span aria-hidden className={cn("absolute inset-0 grid place-items-center transition-[opacity,transform] duration-(--dur-enter) ease-(--ease-enter)", showStop ? "scale-75 opacity-0" : "scale-100 opacity-100")}><ArrowUpIcon /></span>
+                <span aria-hidden className={cn("absolute inset-0 grid place-items-center transition-[opacity,transform] duration-(--dur-enter) ease-(--ease-enter)", showStop ? "scale-100 opacity-100" : "scale-75 opacity-0")}><SquareIcon className="fill-current" /></span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {showStop
+                ? <>Stop. Queued input is kept. <Kbd>Esc</Kbd></>
+                : <>{showDelivery ? `${DELIVERY[queueMode].label}: ${DELIVERY[queueMode].detail}` : streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd></>}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">

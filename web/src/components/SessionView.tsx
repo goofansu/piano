@@ -6,6 +6,7 @@ import { cn } from "cn";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Composer } from "@/components/Composer";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
@@ -96,16 +97,26 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           <p className="break-words">{t.state.statsRefreshError}</p>
         </Banner>
       )}
-      {t ? (
-        <MessageList
-          messages={t.messages}
-          pending={t.pending}
-          tools={t.tools}
-          placeholder="Nothing here yet. Send the first message."
-        />
-      ) : (
-        <div className="flex flex-1 items-center justify-center"><Spinner className="text-muted-foreground" /></div>
-      )}
+      {/* The transcript fades in over a skeleton of itself; the skeleton is on screen within a frame of a switch. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {t && (
+          <MessageList
+            key={sessionKey(t)}
+            className="transcript-enter"
+            messages={t.messages}
+            pending={t.pending}
+            tools={t.tools}
+            working={streaming && !t.pending?.text}
+            placeholder="Nothing here yet. Send the first message."
+          />
+        )}
+        <TranscriptSkeleton hidden={!!t} />
+        {!state.connected && (
+          <div role="status" className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center">
+            <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2"><Spinner className="size-3.5" /> Reconnecting…</span>
+          </div>
+        )}
+      </div>
       {t && <LinkStack links={links} />}
       {t?.state.dialogResolution && (
         <section aria-label="Last dialog" role="status" className="animate-in px-4 pt-2 text-sm text-ink-2 fade-in-0 slide-in-from-bottom-1 md:px-6">
@@ -133,7 +144,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         </div>}
       </section>}
       <Composer
-        key={draftKey}
         draftKey={draftKey ?? "loading"}
         text={draftKey ? state.drafts[draftKey] ?? "" : ""}
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
@@ -163,6 +173,47 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         queuedMessages={t?.state.queuedMessages}
       />
     </>
+  );
+}
+
+/**
+ * A skeleton in the transcript's own geometry: a prompt card, a reply with three lines and a
+ * tool row. It is visible while a session is being fetched and fades out as the real transcript
+ * fades in; it stays mounted just long enough to finish leaving.
+ */
+function TranscriptSkeleton({ hidden }: { hidden: boolean }) {
+  const [lingering, setLingering] = useState(false);
+  useEffect(() => {
+    if (!hidden) { setLingering(false); return; }
+    setLingering(true);
+    const timer = setTimeout(() => setLingering(false), 200);
+    return () => clearTimeout(timer);
+  }, [hidden]);
+  if (hidden && !lingering) return null;
+  return (
+    <div aria-hidden data-hidden={hidden} className="skeleton-layer absolute inset-0 overflow-hidden bg-conversation px-4 md:px-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 py-6 md:py-8">
+        <div className="rounded-2xl border border-line bg-fill px-4 py-3.5">
+          <div className="flex gap-3">
+            <span className="flex h-[1lh] w-4 items-center justify-center"><Skeleton className="h-3 w-1.5 rounded-sm" /></span>
+            <Skeleton className="h-4 w-[52%]" />
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <span className="flex h-[1lh] w-4 items-center justify-center"><Skeleton className="size-1.5 rounded-full" /></span>
+          <div className="flex min-w-0 flex-1 flex-col gap-2.5 pt-0.5">
+            <Skeleton className="h-4 w-[88%]" />
+            <Skeleton className="h-4 w-[72%]" />
+            <Skeleton className="h-4 w-[44%]" />
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="flex h-[1lh] w-4 items-center justify-center"><Skeleton className="size-2 rounded-full" /></span>
+          <Skeleton className="h-3.5 w-10" />
+          <Skeleton className="h-3.5 w-36" />
+        </div>
+      </div>
+    </div>
   );
 }
 

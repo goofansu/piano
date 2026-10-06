@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, XIcon } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -7,12 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { PianoMark } from "@/components/PianoMark";
+import { Keys, PianoMark } from "@/components/PianoMark";
+import { Hint, Shortcut } from "@/components/Shortcut";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface Props {
@@ -22,6 +24,8 @@ interface Props {
   openNew: (cwd?: string) => void;
   /** Hide the sidebar (or close the sheet it is shown in). */
   onHide: () => void;
+  /** Open the command palette. */
+  onPalette: () => void;
 }
 
 const OPEN_KEY = "piano.openProjects";
@@ -33,7 +37,10 @@ const loadOpen = (): Set<string> => {
   }
 };
 
-export function Sidebar({ state, send, select, openNew, onHide }: Props) {
+/** Row heights: 36px with a pointer, 44px on a touch screen. */
+const row = "h-9 pointer-coarse:h-11";
+
+export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Props) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
   const current = state.session ?? state.selecting;
 
@@ -58,12 +65,62 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.cwd, state.projects]);
 
+  // First load is one orchestrated sequence: skeleton rows at once, then the real rows a beat
+  // apart. The stagger applies only to that first reveal, not to every later list change.
+  const [revealing, setRevealing] = useState(true);
+  useEffect(() => {
+    if (!state.projectsLoaded) return;
+    const timer = setTimeout(() => setRevealing(false), 700);
+    return () => clearTimeout(timer);
+  }, [state.projectsLoaded]);
+  const order = { i: 0 };
+  const reveal = () => (revealing ? ({ "--i": String(order.i++) } as React.CSSProperties) : undefined);
+
+  // One felt-green bar marks the selected session and slides between rows; the rows stay put.
+  const nav = useRef<HTMLElement>(null);
+  const bar = useRef<HTMLSpanElement>(null);
+  const placed = useRef(false);
+  useLayoutEffect(() => {
+    const el = nav.current;
+    const mark = bar.current;
+    if (!el || !mark) return;
+    const place = () => {
+      const target = el.querySelector<HTMLElement>('[aria-current="page"]')?.closest("li");
+      if (!target) { mark.style.opacity = "0"; return; }
+      const a = target.getBoundingClientRect();
+      const b = el.getBoundingClientRect();
+      if (!placed.current) {
+        // The first placement lands at once; only later moves slide.
+        mark.style.transition = "none";
+        placed.current = true;
+        requestAnimationFrame(() => { mark.style.transition = ""; });
+      }
+      mark.style.opacity = "1";
+      mark.style.transform = `translateY(${a.top - b.top + 10}px)`;
+      mark.style.height = `${Math.max(0, a.height - 20)}px`;
+    };
+    place();
+    // Rows move while a project folds or unfolds; follow them to the final layout.
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    for (const child of el.querySelectorAll("ul")) ro.observe(child);
+    return () => ro.disconnect();
+  }, [current?.cwd, current?.sessionId, state.projects, openProjects, state.view]);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-4">
         <PianoMark />
         <span className="text-lg font-semibold tracking-tight">piano</span>
         <span className="flex-1" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Search sessions" onClick={onPalette}>
+              <SearchIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent><Hint of={["mod", "K"]}>Search and commands</Hint></TooltipContent>
+        </Tooltip>
         <ThemeToggle />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -71,23 +128,32 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
               <PanelLeftCloseIcon />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Hide sidebar</TooltipContent>
+          <TooltipContent><Hint of={["mod", "B"]}>Hide sidebar</Hint></TooltipContent>
         </Tooltip>
       </div>
       <div className="px-3 pb-3">
-        <Button variant="outline" className={cn("h-10 w-full justify-start rounded-xl border-line bg-conversation shadow-none", state.view.kind === "new" && !state.view.cwd && "border-brand/25 bg-brand-soft text-brand hover:bg-brand-soft")} onClick={() => openNew()}>
+        <Button
+          variant="outline"
+          className={cn("h-10 w-full justify-start rounded-xl border-line bg-conversation shadow-none transition-[background-color,border-color,color] duration-(--dur-hover)", state.view.kind === "new" && !state.view.cwd && "border-brand/25 bg-brand-soft text-brand hover:bg-brand-soft")}
+          onClick={() => openNew()}
+        >
           <PlusIcon /> New session
+          {/* The hint is for eyes only; the button's name stays "New session". */}
+          <Shortcut aria-hidden of={["mod", "shift", "N"]} className="ml-auto hidden bg-transparent text-ink-3 md:inline-flex" />
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-      <nav className="px-3 pb-4" aria-label="Projects">
-        {state.projects.length === 0 && (
-          <Empty className="py-8">
+      <nav ref={nav} className="relative px-3 pb-4" aria-label="Projects">
+        <span ref={bar} aria-hidden className="selection-bar absolute left-3 top-0 w-0.5 rounded-full bg-brand opacity-0" />
+        {!state.projectsLoaded ? (
+          <SidebarSkeleton />
+        ) : state.projects.length === 0 ? (
+          <Empty className="view-enter py-8">
             <EmptyHeader>
               <EmptyDescription>No projects yet. Start a session in any directory and it becomes a project here.</EmptyDescription>
             </EmptyHeader>
           </Empty>
-        )}
+        ) : null}
         <div className="flex flex-col gap-3">
           {state.projects.map((p) => (
             <Project
@@ -100,6 +166,7 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
               send={send}
               select={select}
               openNew={openNew}
+              reveal={reveal}
             />
           ))}
         </div>
@@ -109,8 +176,34 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
   );
 }
 
-/** The collapsed sidebar: a vertical rail with the two things you still reach for. */
-export function SidebarRail({ onShow, onNew }: { onShow: () => void; onNew: () => void }) {
+/** Skeleton rows in the real row geometry: a project line, two session lines, another project. */
+function SidebarSkeleton() {
+  return (
+    <div aria-hidden className="flex flex-col gap-3">
+      {[0, 1].map((group) => (
+        <div key={group} className="flex flex-col">
+          <div className={cn(row, "flex items-center gap-1.5 pl-1.5")}>
+            <Skeleton className="size-4 rounded-sm" />
+            <Skeleton className={cn("h-3.5", group ? "w-16" : "w-24")} />
+          </div>
+          {group === 0 && (
+            <ul className="flex flex-col gap-1 py-1">
+              {[36, 44].map((w) => (
+                <li key={w} className={cn(row, "flex items-center gap-2 pl-2")}>
+                  <span className="flex size-4 items-center justify-center"><Skeleton className="size-2 rounded-full" /></span>
+                  <Skeleton className="h-3.5" style={{ width: `${w}%` }} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The collapsed sidebar: a vertical rail with the mark and the two things you still reach for. */
+export function SidebarRail({ onShow, onNew, working }: { onShow: () => void; onNew: () => void; working: boolean }) {
   return (
     <div className="flex h-full flex-col items-center gap-1 pt-2">
       <Tooltip>
@@ -119,7 +212,7 @@ export function SidebarRail({ onShow, onNew }: { onShow: () => void; onNew: () =
             <PanelLeftOpenIcon />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right">Show sidebar</TooltipContent>
+        <TooltipContent side="right"><Hint of={["mod", "B"]}>Show sidebar</Hint></TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -127,8 +220,12 @@ export function SidebarRail({ onShow, onNew }: { onShow: () => void; onNew: () =
             <PlusIcon />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right">New session</TooltipContent>
+        <TooltipContent side="right"><Hint of={["mod", "shift", "N"]}>New session</Hint></TooltipContent>
       </Tooltip>
+      {/* With no rows in view, the mark itself says whether Pi is working somewhere. */}
+      <div className="mt-auto pb-3">
+        <PianoMark playing={working} className="size-6 rounded-md shadow-none" />
+      </div>
     </div>
   );
 }
@@ -138,12 +235,13 @@ interface ProjectProps extends Pick<Props, "send" | "select" | "state" | "openNe
   current: { cwd: string; sessionId: string | null } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  reveal: () => React.CSSProperties | undefined;
 }
 
 /** Row actions live in a fixed slot on the right and appear on hover, so nothing shifts. */
-const hoverSlot = "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
+const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
 
-function Project({ project, current, open, onOpenChange, state, send, select, openNew }: ProjectProps) {
+function Project({ project, current, open, onOpenChange, state, send, select, openNew, reveal }: ProjectProps) {
   const [deleting, setDeleting] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
   const [renaming, setRenaming] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -161,14 +259,14 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className="group flex h-9 items-center gap-1 rounded-lg pr-1 transition-colors hover:bg-fill-hover">
+      <div className={cn(row, "reveal-row group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover")} style={reveal()}>
         <CollapsibleTrigger asChild>
           <button
             type="button"
             className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             title={project.path}
           >
-            <ChevronRightIcon className={cn("size-4 shrink-0 text-ink-3 transition-transform motion-reduce:transition-none", open && "rotate-90")} />
+            <ChevronRightIcon className={cn("size-4 shrink-0 text-ink-3 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none", open && "rotate-90")} />
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{project.name}</span>
           </button>
         </CollapsibleTrigger>
@@ -214,12 +312,16 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             // Live host state comes from the `hosts` broadcast, which changes more often than the project list.
             const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
             const done = state.done.includes(sessionKey(t));
-            // Herdr's dots: yellow working, teal done, hollow green idle, nothing when no process.
-            const dot = host?.streaming ? "animate-live bg-busy" : done ? "bg-done" : host ? "border border-ok" : null;
+            // The keys play while the session works; afterwards Herdr's dots: teal done, hollow green idle, nothing when no process.
+            const dot = done ? "bg-done" : host ? "border border-ok" : null;
             // The branch is only news when the session runs somewhere other than the project root.
             const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
             return (
-              <li key={t.sessionId} className={cn("group relative flex h-9 animate-in items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-150 fade-in-0 slide-in-from-left-1 after:absolute after:inset-y-2.5 after:left-0 after:w-0.5 after:rounded-full after:bg-brand after:opacity-0 after:transition-opacity after:duration-150 hover:bg-fill-hover", selected && "bg-conversation shadow-1 after:opacity-100")}>
+              <li
+                key={t.sessionId}
+                style={reveal()}
+                className={cn(row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-conversation shadow-1")}
+              >
                 <button
                   type="button"
                   title={t.title || t.sessionId}
@@ -228,7 +330,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
                   className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 >
                   <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-                    {dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
+                    {host?.streaming ? <Keys playing className="text-brand" /> : dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
                   </span>
                   <span className={cn("min-w-0 flex-1 truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
                   {t.branch && inWorktree && (

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Keys } from "@/components/PianoMark";
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 import { abbrevHome, clamp } from "@/lib/format";
@@ -19,7 +20,10 @@ interface Props {
   messages: RenderMsg[];
   pending: RenderMsg | null;
   tools: Record<string, ToolExecution>;
+  /** Pi is working and no reply text has arrived yet: the keys play in a pending row. */
+  working?: boolean;
   placeholder: string;
+  className?: string;
 }
 
 /**
@@ -27,7 +31,7 @@ interface Props {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, tools, placeholder }: Props) {
+export function MessageList({ messages, pending, tools, working = false, placeholder, className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -36,7 +40,7 @@ export function MessageList({ messages, pending, tools, placeholder }: Props) {
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [messages, pending, tools]);
+  }, [messages, pending, tools, working]);
   // Content can grow without a scroll event (a prompt opens, output expands). That only
   // changes whether the bottom is in view; it never moves the reader. The container itself
   // shrinking (a PR stack or banner appears below, the composer grows) is not the reader's
@@ -69,7 +73,7 @@ export function MessageList({ messages, pending, tools, placeholder }: Props) {
   const active = new Set(Object.values(tools).filter(t => t.status === "running").map(t => t.id));
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className={cn("relative min-h-0 flex-1", className)}>
       <div
         ref={ref}
         onScroll={(e) => {
@@ -82,7 +86,7 @@ export function MessageList({ messages, pending, tools, placeholder }: Props) {
         className="h-full overflow-y-auto px-4 md:px-6"
       >
       <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
-        {messages.length === 0 && !pending && (
+        {messages.length === 0 && !pending && !working && (
           <Empty className="py-16">
             <EmptyHeader>
               <EmptyDescription className="text-base">{placeholder}</EmptyDescription>
@@ -98,6 +102,12 @@ export function MessageList({ messages, pending, tools, placeholder }: Props) {
             return <Message key={m.id} msg={m} results={results} tools={tools} active={active} />;
           })}
           {pending && <Message msg={pending} results={results} tools={tools} active={active} streaming />}
+          {working && (
+            <Row glyph={<Keys playing className="text-brand" />}>
+              <span className="sr-only">Pi is working</span>
+              <span aria-hidden className="inline-block h-[1em] w-0.5 animate-caret bg-brand align-[-0.15em]" />
+            </Row>
+          )}
         </div>
       </div>
       </div>
@@ -136,12 +146,12 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
     return (
       <article id={streaming ? undefined : messageAnchorId(msg.id)} className="group/reply flex flex-col gap-3 rounded-2xl">
         {msg.text && (
-          <Row glyph={<span className="text-ink-3">•</span>}>
+          <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
             <div
               className={cn(
                 "prose-chat",
-                streaming && "after:ml-0.5 after:inline-block after:h-[1em] after:w-0.5 after:animate-caret after:bg-brand after:align-[-0.15em]",
+                streaming && "streaming-caret",
               )}
               // renderMarkdown escapes all HTML before adding its own tags
               dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}

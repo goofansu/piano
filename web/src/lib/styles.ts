@@ -2,7 +2,7 @@
 
 /** A quiet picker: reads as text until hovered, sits on the composer's footer row. */
 export const picker =
-  "inline-flex h-8 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 hover:bg-fill-hover hover:text-ink data-[state=open]:bg-fill-hover data-[state=open]:text-ink";
+  "inline-flex h-8 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 transition-colors duration-(--dur-hover) hover:bg-fill-hover hover:text-ink data-[state=open]:bg-fill-hover data-[state=open]:text-ink";
 
 /** Shared surface and focus treatment for the first-message and session composers. */
 export const composerCard = "composer-card font-mono";
@@ -12,4 +12,4 @@ export const composerInput = "max-h-[min(12rem,30dvh)] min-h-14 resize-none bord
 
 /** Compact settings yield space to the primary action without wrapping to another row. */
 export const composerToolbar = "flex min-w-0 flex-nowrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2";
-export const composerAction = "ml-auto size-11 shrink-0 rounded-xl md:size-9";
+export const composerAction = "ml-auto size-11 shrink-0 rounded-xl transition-[background-color,color,border-color,transform,opacity] duration-(--dur-hover) active:scale-95 md:size-9";

@@ -8,6 +8,8 @@ import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { SessionView } from "@/components/SessionView";
 import { NewSession } from "@/components/NewSession";
 import { DialogHost } from "@/components/DialogHost";
+import { CommandPalette } from "@/components/CommandPalette";
+import { hasMod } from "@/lib/keys";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
@@ -175,6 +177,38 @@ export default function App() {
     setMenuOpen(false);
   }, []);
 
+  // ── keyboard flow ──
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const toggleSidebar = useCallback(() => {
+    if (wide()) setCollapsed(!collapsed);
+    else setMenuOpen((open) => !open);
+  }, [collapsed, setCollapsed]);
+  // Sessions in sidebar order, for stepping between them.
+  const step = useCallback((delta: 1 | -1) => {
+    const s = latest.current;
+    const all = s.projects.flatMap((p) => p.sessions);
+    if (all.length === 0) return;
+    const current = s.session ?? s.selecting;
+    const index = s.view.kind === "session" && current ? all.findIndex((t) => t.cwd === current.cwd && t.sessionId === current.sessionId) : -1;
+    const next = index === -1 ? (delta === 1 ? 0 : all.length - 1) : Math.min(all.length - 1, Math.max(0, index + delta));
+    const target = all[next];
+    if (target) select(target.cwd, target.sessionId);
+  }, [select]);
+  useEffect(() => {
+    const editable = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      const key = e.key.toLowerCase();
+      if (hasMod(e) && !e.altKey && !e.shiftKey && key === "k") { e.preventDefault(); setPaletteOpen((open) => !open); return; }
+      if (hasMod(e) && !e.altKey && !e.shiftKey && key === "b") { e.preventDefault(); toggleSidebar(); return; }
+      if (hasMod(e) && !e.altKey && e.shiftKey && key === "n") { e.preventDefault(); openNew(currentProjectPath(latest.current)); return; }
+      if (hasMod(e) && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]")) { e.preventDefault(); step(e.key === "]" ? 1 : -1); return; }
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && !editable(e.target)) { e.preventDefault(); step(e.key === "ArrowDown" ? 1 : -1); }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [toggleSidebar, openNew, step]);
+
   // ── routing ──
   // A route read from the address bar (on load, or on back/forward) that has not been applied yet.
   const wanted = useRef<Route | null>(parseRoute(location));
@@ -227,7 +261,14 @@ export default function App() {
 
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
-  const sidebarProps = { state, send, select, openNew };
+  const sidebarProps = { state, send, select, openNew, onPalette: () => setPaletteOpen(true) };
+  const working = !!(state.session?.state.isStreaming || state.session?.state.isCompacting || state.session?.state.isRetrying);
+  const anyWorking = state.hosts.some((h) => h.streaming);
+  // The tab icon presses the keys while the session on screen works.
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (link) link.href = working ? "/favicon-working.svg" : "/favicon.svg";
+  }, [working]);
 
   // An inset conversation sheet separates the work from the navigation without extra chrome.
   return (
@@ -240,7 +281,7 @@ export default function App() {
         style={{ width: collapsed ? RAIL_WIDTH : width }}
       >
         {collapsed ? (
-          <SidebarRail onShow={() => setCollapsed(false)} onNew={() => openNew(currentProjectPath(latest.current))} />
+          <SidebarRail onShow={() => setCollapsed(false)} onNew={() => openNew(currentProjectPath(latest.current))} working={anyWorking} />
         ) : (
           <div className="h-full overflow-hidden">
             <div className="h-full shrink-0" style={{ width }}>
@@ -268,7 +309,11 @@ export default function App() {
         )}
       </aside>
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-72 bg-surface-0 p-0" showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={event => {
+        <SheetContent side="left" className="w-72 border-line bg-surface-0 p-0" showCloseButton={false} aria-describedby={undefined} onOpenAutoFocus={event => {
+          // Focus the sheet itself, not its first button, so no tooltip opens with it.
+          event.preventDefault();
+          (event.currentTarget as HTMLElement | null)?.focus?.();
+        }} onCloseAutoFocus={event => {
           const target = sidebarReturnFocus.current;
           sidebarReturnFocus.current = null;
           if (target?.isConnected) { event.preventDefault(); target.focus(); }
@@ -277,19 +322,23 @@ export default function App() {
           <Sidebar {...sidebarProps} onHide={() => setMenuOpen(false)} />
         </SheetContent>
       </Sheet>
-      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
-        {state.view.kind === "new" ? (
-          <NewSession state={state} send={send} initialCwd={state.view.cwd} onMenu={showSidebar} />
-        ) : state.view.kind === "missing-session" ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center" role="alert">
-            <h1 className="text-xl font-medium">Session not found</h1>
-            <p className="text-sm text-ink-2">This session is not in the registry.</p>
-            <Button variant="outline" onClick={() => openNew()}>New session</Button>
-          </div>
-        ) : (
-          <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} />
-        )}
+      <main className="sheet-enter relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
+        {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
+        <div key={state.view.kind} className="view-enter flex min-h-0 flex-1 flex-col">
+          {state.view.kind === "new" ? (
+            <NewSession state={state} send={send} initialCwd={state.view.cwd} onMenu={showSidebar} />
+          ) : state.view.kind === "missing-session" ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center" role="alert">
+              <h1 className="text-xl font-medium">Session not found</h1>
+              <p className="text-sm text-ink-2">This session is not in the registry. It may have been archived or deleted.</p>
+              <Button variant="outline" onClick={() => openNew()}>New session</Button>
+            </div>
+          ) : (
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} />
+          )}
+        </div>
       </main>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </div>
   );
