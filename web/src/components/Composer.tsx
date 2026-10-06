@@ -60,6 +60,9 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
   const contextWindow = context?.contextWindow ?? selectedModel?.contextWindow;
   const percent = tokens === null ? null : context?.percent ?? null;
   const left = percent === null ? null : Math.max(0, 100 - percent);
+  const inputTokens = totals ? totals.input + totals.cacheRead + totals.cacheWrite : 0;
+  const cachePercent = totals && inputTokens > 0 ? Math.round(100 * totals.cacheRead / inputTokens) : null;
+  const contextLabel = percent !== null ? `${Math.round(percent)}%` : tokens !== null ? formatTokenCount(tokens) : "—";
   const hasText = text.trim().length > 0 || attachments.items.length > 0;
   const showStop = streaming && !hasText;
   const showSteer = streaming && !compacting && hasText;
@@ -141,16 +144,20 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
           </Button>
         </div>
       </div>
-      <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-1 font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
+      <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
+        {cachePercent !== null && <>
+          <span className="text-brand" title="Session cache hit rate: cached input / total input" aria-label={`Session cache hit rate: ${cachePercent}%`}>cache {cachePercent}%</span>
+          <span aria-hidden="true">·</span>
+        </>}
         <Popover>
           <PopoverTrigger asChild>
             <button
               type="button"
               aria-label="Context usage"
               aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
-              className={cn("min-h-8 rounded px-1 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30", left !== null && left < 15 && "text-warn hover:text-warn")}
+              className={cn("min-h-8 rounded hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30", left !== null && left < 15 && "text-warn hover:text-warn")}
             >
-              {percent !== null ? `${Math.round(percent)}% context` : tokens !== null ? `${formatTokenCount(tokens)} context` : "— context"}
+              {contextLabel}{contextWindow !== undefined && contextWindow > 0 ? `/${formatTokenCount(contextWindow)}` : ""}
             </button>
           </PopoverTrigger>
           <PopoverContent side="top" align="end" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">

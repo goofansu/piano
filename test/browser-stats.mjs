@@ -42,7 +42,11 @@ const click = name => ab('find', 'role', 'button', 'click', '--name', name, '--e
 const info = () => evaluate(`(() => {
   const text = document.querySelector('[aria-label="Context usage details"]').textContent;
   return {Context: text.match(/Context: ([\\d,]+ tokens)/)?.[1] ?? 'Unavailable',
-    'Session cost': text.match(/(\\$[\\d.]+) so far/)?.[1] ?? 'Unavailable',
+    'Session cost': (() => {
+      const row = [...document.querySelectorAll('[aria-label="Token and cost breakdown"] tbody tr')].find(row => row.querySelector('th')?.textContent === 'Cost');
+      const value = row?.lastElementChild?.textContent;
+      return value?.startsWith('$') ? '$' + Number(value.slice(1)).toFixed(2) : 'Unavailable';
+    })(),
     'Session tokens': text.match(/Session total: ([\\d,]+) tokens/)?.[1]};
 })()`);
 async function capture(name) {
@@ -70,10 +74,19 @@ try {
   await click('Context usage'); await ab('wait', '--fn', `document.querySelector('[aria-label="Context usage details"]')?.textContent.includes('$1.23')`);
   facts = await info(); assert.equal(facts.Context, '50 tokens'); assert.equal(facts['Session cost'], '$1.23'); assert.equal(facts['Session tokens'], '150');
   await capture('live-observation'); await ab('press', 'Escape');
+  assert.equal(await evaluate(`document.querySelector('[aria-label="Session cache hit rate: 23%"]')?.textContent`), 'cache 23%');
+  assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '5%/1k');
+  const gaps = await evaluate(`(() => {
+    const footer = document.querySelector('[aria-label="Session usage"]');
+    const rects = [...footer.children].map(el => el.getBoundingClientRect());
+    return rects.slice(1).map((rect, i) => rect.left - rects[i].right);
+  })()`);
+  assert.equal(gaps.length, 4);
+  assert.ok(gaps.every(gap => Math.abs(gap - 8) < 0.1), `equal dot spacing: ${gaps}`);
 
   await stop(server);
   await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Reconnecting'`);
-  assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '50', 'keep the composer count uncluttered');
+  assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '5%/1k', 'keep the composer context compact');
   assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').getAttribute('aria-description')`), '50 tokens');
   await capture('disconnected-cached-values');
   server = startServer('--hold-stats'); await ready();
@@ -104,7 +117,7 @@ try {
   await ab('set', 'viewport', '320', '844'); await capture('failed-refresh-cached-values-mobile');
   await ab('press', 'Escape');
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
-  assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '400');
+  assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '40%/1k');
   await click('Context usage'); await ab('wait', '--text', 'Context: 400 tokens'); await capture('mobile-context-details'); await ab('press', 'Escape');
   writeFileSync(statsFile, JSON.stringify({ cost: 0, contextUsage: { tokens: null, contextWindow: 1000, percent: null } }));
   await send('/settle'); await click('Context usage');
