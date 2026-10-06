@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { ArrowUpIcon, SquareIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowUpIcon, ChevronDownIcon, SquareIcon } from "lucide-react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
@@ -8,7 +8,9 @@ import { formatTokenCount } from "@/lib/format";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
+import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,10 +42,37 @@ interface Props {
   queuedMessages?: ReadonlyArray<QueuedMessage>;
 }
 
+type QueueMode = QueuedMessage["kind"];
+const QUEUE_MODE_KEY = "piano.queueMode";
+/** How a message sent while Pi works is delivered. Pi's own editor steers on Enter, so steering is the default. */
+const DELIVERY: Record<QueueMode, { label: string; detail: string }> = {
+  steering: { label: "Steer", detail: "After the current tool calls, before the next model call." },
+  "follow-up": { label: "Follow-up", detail: "After Pi finishes the current task." },
+};
+const MODES: readonly QueueMode[] = ["steering", "follow-up"];
+const otherMode = (mode: QueueMode): QueueMode => (mode === "steering" ? "follow-up" : "steering");
+const loadQueueMode = (): QueueMode => {
+  try {
+    return localStorage.getItem(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering";
+  } catch {
+    return "steering";
+  }
+};
+
 /** The composer: a layer-1 card that lines up with the transcript column. */
 export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
+  // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
+  const [queueMode, setQueueModeState] = useState<QueueMode>(loadQueueMode);
+  const setQueueMode = (mode: QueueMode) => {
+    setQueueModeState(mode);
+    try {
+      localStorage.setItem(QUEUE_MODE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  };
   const imagesWaiting = streaming && attachments.items.length > 0;
   // The box grows with its text up to a cap, whichever way the text got there.
   useEffect(() => {
@@ -53,10 +82,11 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
     el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
   }, [text]);
   useTypeToFocus(ref, onTextAppend, !disabled);
-  const send = (kind: QueuedMessage["kind"] = "follow-up") => {
+  const send = (kind: QueueMode = queueMode) => {
     const t = text.trim();
     if (disabled || attachments.busy || imagesWaiting || (!t && !attachments.items.length)) return;
-    onSend(t, kind, attachments.items);
+    // Nothing can steer a compaction; whatever is sent then waits for it to finish.
+    onSend(t, compacting ? "follow-up" : kind, attachments.items);
     onTextChange("");
     attachments.clear();
   };
@@ -70,7 +100,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
   const contextLabel = percent !== null ? `${Math.round(percent)}%` : tokens !== null ? formatTokenCount(tokens) : "—";
   const hasText = text.trim().length > 0 || attachments.items.length > 0;
   const showStop = streaming && !hasText;
-  const showSteer = streaming && !compacting && hasText;
+  const showDelivery = streaming && !compacting;
   const showQueueKinds = queuedMessages.some(message => message.kind === "steering");
 
   return (
@@ -111,52 +141,75 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
                   e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
                 e.preventDefault();
-                send(e.altKey ? "steering" : "follow-up");
+                send(e.altKey ? otherMode(queueMode) : queueMode);
               } else if (e.key === "Escape" && streaming) {
                 e.preventDefault();
                 onStop();
               }
             }}
           />
-          {showSteer && !attachments.items.length && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="control-enter mr-2.5 mb-2.5 h-11 shrink-0 rounded-xl px-2"
-                  aria-label="Steer"
-                  disabled={disabled}
-                  onClick={() => send("steering")}
-                >
-                  Steer
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Send before the next model call, after current tools finish <Kbd>Alt</Kbd><Kbd>Enter</Kbd></TooltipContent>
-            </Tooltip>
-          )}
         </div>
         <div className={composerToolbar}>
           <AttachButton draft={attachments} disabled={disabled} />
           <ModelSelect catalog={catalog} onRefresh={onRefreshModels} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="icon"
-                variant={showStop ? "outline" : "default"}
-                className={composerAction}
-                aria-label={showStop ? "Stop" : streaming && !compacting ? "Queue message" : "Send"}
-                disabled={disabled || (!showStop && (!hasText || attachments.busy || imagesWaiting))}
-                onClick={showStop ? onStop : () => send()}
-              >
-                <span key={showStop ? "stop" : "send"} className="control-enter inline-flex" aria-hidden>
-                  {showStop ? <SquareIcon className="fill-current" /> : <ArrowUpIcon />}
-                </span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {showStop ? "Abort current operation. Pending queued input is not cleared." : <>{streaming && !compacting ? "Send after the agent finishes" : "Send"} <Kbd>Enter</Kbd></>}
-            </TooltipContent>
-          </Tooltip>
+          {showStop ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="icon" variant="outline" className={composerAction} aria-label="Stop" disabled={disabled} onClick={onStop}>
+                  <SquareIcon className="fill-current" aria-hidden />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Abort current operation. Pending queued input is not cleared. <Kbd>Esc</Kbd></TooltipContent>
+            </Tooltip>
+          ) : showDelivery ? (
+            // While Pi works, the primary half sends in the chosen mode and the menu swaps it.
+            <ButtonGroup className="control-enter ml-auto shrink-0" aria-label="Send while Pi works">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button className="h-11 rounded-xl px-3" disabled={disabled || !hasText || attachments.busy || imagesWaiting} onClick={() => send()}>
+                    {DELIVERY[queueMode].label}<ArrowUpIcon aria-hidden />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{DELIVERY[queueMode].detail} <Kbd>Enter</Kbd></TooltipContent>
+              </Tooltip>
+              <ButtonGroupSeparator />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" className="size-11 rounded-xl" aria-label="Delivery mode" disabled={disabled}>
+                    <ChevronDownIcon aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuRadioGroup value={queueMode} onValueChange={(mode) => setQueueMode(mode as QueueMode)}>
+                    {MODES.map((mode) => (
+                      <DropdownMenuRadioItem key={mode} value={mode} className="flex-col items-start gap-0.5">
+                        <span className="flex w-full items-center gap-2">
+                          {DELIVERY[mode].label}
+                          <KbdGroup className="ml-auto">{mode !== queueMode && <Kbd>Alt</Kbd>}<Kbd>Enter</Kbd></KbdGroup>
+                        </span>
+                        <span className="text-xs text-muted-foreground">{DELIVERY[mode].detail}</span>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ButtonGroup>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  className={composerAction}
+                  aria-label={streaming ? "Queue message" : "Send"}
+                  disabled={disabled || !hasText || attachments.busy || imagesWaiting}
+                  onClick={() => send()}
+                >
+                  <span key="send" className="control-enter inline-flex" aria-hidden><ArrowUpIcon /></span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd></TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
