@@ -38,7 +38,7 @@ export function EffortSelect({ value, onChange, levels, defaultLevel, disabled }
         spacing={1}
         value={value}
         onValueChange={(next) => { if (next) onChange(next as ThinkingLevel); }}
-        className="flex-wrap"
+        className="w-full flex-wrap"
       >
         {levels.map((level) => (
           <ToggleGroupItem
@@ -46,6 +46,7 @@ export function EffortSelect({ value, onChange, levels, defaultLevel, disabled }
             value={level}
             title={level === defaultLevel ? "Default effort" : undefined}
             aria-description={level === defaultLevel ? "Default effort" : undefined}
+            className="flex-auto px-1 text-xs"
           >
             {level}
           </ToggleGroupItem>
