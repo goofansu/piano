@@ -22,7 +22,7 @@ export function LinkStack({ links }: { links: SessionLink[] }) {
   const [tapped, setTapped] = useState(false);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLUListElement>(null);
   const open = tapped && links.length > 1;
   const fanned = open || hover || focus;
   // A tapped-open pile closes on Escape or a tap elsewhere, the way a menu would.
@@ -36,19 +36,18 @@ export function LinkStack({ links }: { links: SessionLink[] }) {
   }, [open]);
   if (links.length === 0) return null;
   return (
-    <div
-      ref={root}
-      className="px-4 md:px-6"
-      onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }}
-      onPointerLeave={() => setHover(false)}
-      onFocus={() => setFocus(true)}
-      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocus(false); }}
-    >
+    <div className="px-4 md:px-6">
+      {/* Only the cards themselves react to the pointer, not the empty space beside them. */}
       <ul
+        ref={root}
         className="mx-auto flex w-full max-w-2xl animate-in flex-col-reverse fade-in-0 slide-in-from-bottom-2"
         aria-label="Links"
         data-fanned={fanned || undefined}
         data-slot="link-stack"
+        onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }}
+        onPointerLeave={() => setHover(false)}
+        onFocus={() => setFocus(true)}
+        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocus(false); }}
       >
         {links.map((link, i) => (
           <li

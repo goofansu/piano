@@ -92,6 +92,13 @@ try {
   assert.ok(c.cards[1].bottom - c.cards[0].top > 40, JSON.stringify(c.cards.slice(0, 2)));
   assert.equal(c.cards[0].actions.length, 0, 'no actions while collapsed');
 
+  // The empty space beside the pile is not the pile: pointing there leaves it collapsed.
+  const beside = await evaluate(`(() => { const r = ${PILE}.getBoundingClientRect(); const m = document.querySelector('main').getBoundingClientRect(); return { x: Math.round((m.left + r.left) / 2), y: Math.round((r.top + r.bottom) / 2) }; })()`);
+  await ab('mouse', 'move', String(beside.x), String(beside.y));
+  await delay(250);
+  observations.beside = { ...beside, fanned: await evaluate(`${PILE}.dataset.fanned === 'true'`) };
+  assert.equal(observations.beside.fanned, false, JSON.stringify(observations.beside));
+
   // Hover fans the pile and reveals the actions.
   await ab('find', 'role', 'link', 'hover', '--name', 'index.ts L10', '--exact=false').catch(async () => { await ab('hover', '[data-slot="link-stack"] li a'); });
   await ab('wait', '--fn', `${PILE}.dataset.fanned === 'true'`);
