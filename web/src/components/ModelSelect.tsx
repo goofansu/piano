@@ -73,7 +73,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        ref={content} align="end" aria-label="Model and effort" tabIndex={-1}
+        ref={content} align="start" aria-label="Model and effort" tabIndex={-1}
         className="max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0 font-mono"
         onOpenAutoFocus={event => {
           // Opening settings on a phone should not summon the software keyboard.
