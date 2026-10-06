@@ -153,7 +153,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         }}
         context={t?.state.context}
         cost={t?.state.cost}
-        totalTokens={t?.state.tokens?.total}
+        totals={t?.state.tokens}
+        messages={t?.messages}
         responseModel={lastResponse?.model}
         responseEffort={lastResponse?.thinkingLevel}
         queuedMessages={t?.state.queuedMessages}

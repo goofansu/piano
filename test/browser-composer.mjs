@@ -15,7 +15,7 @@ mkdirSync(cwd);
 spawnSync('git', ['init', cwd]);
 const longModel = 'alpha-with-a-very-long-model-name-for-responsive-verification';
 // Keep the existing fake untouched. Adapt only its external protocol labels.
-writeFileSync(join(scratch, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replaceAll('"alpha"', JSON.stringify(longModel)).replaceAll('fake/alpha', `fake/${longModel}`).replace('contextWindow: 2000 } ]', 'contextWindow: 2000 }, { provider: "fake", id: "claude-sonnet", name: "Claude Sonnet", reasoning: true, contextWindow: 2000 }, { provider: "fake", id: "sol", name: "Sol Online Network", reasoning: false, contextWindow: 2000 } ]').replace('out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });', '// Browser fixture: pause without a modal covering the composer.'));
+writeFileSync(join(scratch, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replaceAll('"alpha"', JSON.stringify(longModel)).replaceAll('fake/alpha', `fake/${longModel}`).replaceAll('timestamp: Date.now()', 'usage: { input: 120, output: 30, cacheRead: 50, cacheWrite: 10, totalTokens: 210, cost: { input: 0.001, output: 0.002, cacheRead: 0.0001, cacheWrite: 0.0002, total: 0.0033 } }, timestamp: Date.now()').replace('contextWindow: 2000 } ]', 'contextWindow: 2000 }, { provider: "fake", id: "claude-sonnet", name: "Claude Sonnet", reasoning: true, contextWindow: 2000 }, { provider: "fake", id: "sol", name: "Sol Online Network", reasoning: false, contextWindow: 2000 } ]').replace('out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });', '// Browser fixture: pause without a modal covering the composer.'));
 writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: 'saved-without-context', title: 'Saved session', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z', archived: false }] }));
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171';
 const frontendPort = process.env.PIANO_TEST_FRONTEND_PORT ?? '7172';
@@ -305,6 +305,15 @@ async function run() {
   if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '42k') throw new Error('Context count disappeared after settlement');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', '42,000 tokens');
+  ab('wait', '--text', 'Cache read');
+  ab('wait', '--text', 'Cache write');
+  ab('wait', '--text', '$0.0033');
+  ab('click', '[aria-label="Show cost history"]');
+  if (!evaluate(`document.querySelector('svg[aria-label^="Cost history"]') !== null`)) throw new Error('Cost history did not switch');
+  ab('focus', '[aria-label="Inspect response"]');
+  ab('press', 'Home');
+  if (evaluate(`document.querySelector('[aria-label="Inspect response"]').value`) !== '1') throw new Error('Response history is not keyboard inspectable');
+  if (!evaluate(`(() => { const r = document.querySelector('[aria-label="Context usage details"]').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()`)) throw new Error('Context popup escapes mobile viewport');
   ab('screenshot', join(evidence, 'settled-context-details.png'));
   ab('press', 'Escape');
   // A dropped Piano connection should reconnect in place, preserving a mobile draft.

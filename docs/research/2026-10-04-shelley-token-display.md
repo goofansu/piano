@@ -35,3 +35,25 @@ Queue/Stop, keyboard input and in-place reconnect checks also passed. Screenshot
 and command output are under `/tmp/piano-token-evidence/`; no hosted UI was driven
 or rebuilt. Real-provider context availability and saved-history reconstruction
 are outside this presentation change.
+
+## Follow-up: inspectable context popup
+
+Adapted Shelley's `ContextUsageBar.vue` and `TokenCostGraph.vue` at
+`fd22408935a790404ff511a895a1eaf069b43fe9`: a context meter, per-response token/cost
+history, keyboard/touch response selection, and exact input/output/cache/cost
+breakdowns beside Pi's session totals. The compact toolbar remains unchanged.
+Under INV-01/03, historical usage is explicitly separate from current context;
+missing measurements remain unavailable rather than zero. No content-based context
+estimation, subagent aggregation, pricing lookup or new compaction action is added.
+
+Verification on the implementation's dirty revision: `npm test` (54 passed),
+`npm run typecheck`, and `node test/browser-composer.mjs
+/tmp/piano-context-popup/browser` passed. The scratch fake-Pi browser fixture now
+supplies known response usage; checks cover exact response cost, graph switching,
+keyboard inspection and mobile popup bounds alongside existing composer journeys.
+The mobile screenshot was inspected. Logs/screenshots are retained under
+`/tmp/piano-context-popup/`. An initial browser run exceeded its command deadline;
+subsequent checks exposed and corrected an unsupported test selector and missing
+fixture usage before the final passing run. No real model calls or hosted rebuild,
+restart or deployment were performed. Serving this UI requires the usual build,
+`piano.service` restart and browser reload.

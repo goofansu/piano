@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
-import type { ContextUsage, ModelCatalog, QueuedMessage, ThinkingLevel } from "@shared/wire";
+import type { ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { composerAction, composerCard, composerInput, composerToolbar } from "@/lib/styles";
 import { formatTokenCount } from "@/lib/format";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelSelect } from "@/components/ModelSelect";
+import { ContextDetails } from "@/components/ContextDetails";
 
 interface Props {
   text: string;
@@ -27,14 +28,15 @@ interface Props {
   onEffortChange: (level: ThinkingLevel) => void;
   context?: ContextUsage;
   cost?: number;
-  totalTokens?: number;
+  totals?: SessionStats["tokens"];
+  messages?: ReadonlyArray<RenderMsg>;
   responseModel?: string;
   responseEffort?: string;
   queuedMessages?: ReadonlyArray<QueuedMessage>;
 }
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, totalTokens, responseModel, responseEffort, queuedMessages = [] }: Props) {
+export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], responseModel, responseEffort, queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // The box grows with its text up to a cap, whichever way the text got there.
   useEffect(() => {
@@ -135,13 +137,8 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
                 {tokens === null ? "—" : formatTokenCount(tokens)}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" aria-label="Context usage details" className="w-64 max-w-[calc(100vw-2rem)] space-y-1 font-mono text-sm">
-              <p>{tokens === null ? "Context usage unavailable" : `Context: ${tokens.toLocaleString()} tokens`}</p>
-              {contextWindow !== undefined && contextWindow > 0 && <p className="text-ink-2">Context window: {contextWindow.toLocaleString()} tokens</p>}
-              {left !== null && <p className="text-ink-2">{left < 1 ? left.toFixed(1) : Math.round(left)}% left</p>}
-              {totalTokens !== undefined && <p className="text-ink-2">Session total: {totalTokens.toLocaleString()} tokens</p>}
-              {cost !== undefined && <p className="text-ink-2">${cost.toFixed(2)} so far</p>}
-              {responseModel && <p className="break-words text-ink-2">Last response: {responseModel}{responseEffort ? ` · ${responseEffort}` : ""}</p>}
+            <PopoverContent side="top" align="start" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
+              <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} responseModel={responseModel} responseEffort={responseEffort} />
             </PopoverContent>
           </Popover>
           <Button
