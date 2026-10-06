@@ -20,7 +20,8 @@ limits and signatures; Pi/provider still owns actual image processing and model 
 - **INV-05:** Transcript snapshots contain preview URLs, not base64 payloads. A disposable 64 MiB
   server cache is rebuilt from Pi message projections. Evicted previews show an unavailable state;
   reopening history repopulates the cache, subject to its bound. Very large image-heavy histories
-  may not have every preview cached simultaneously. Original images remain in Pi history.
+  may not have every preview cached simultaneously. Pi retains its processed image content, not
+  necessarily the original upload bytes; see the [Pi image restrictions research](2026-10-06-pi-image-restrictions.md).
 - **INV-11:** Preview routes stay under the existing private loopback control origin, use only
   content hashes, raster MIME types, `nosniff` and private/no-store responses. They are not a new
   public/authenticated file service. Images are binary, not subject to textual secret redaction.
