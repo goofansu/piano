@@ -163,10 +163,10 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
             </Tooltip>
           ) : showDelivery ? (
             // While Pi works, the primary half sends in the chosen mode and the menu swaps it.
-            <ButtonGroup className="control-enter ml-auto shrink-0" aria-label="Send while Pi works">
+            <ButtonGroup className="control-enter ml-auto h-11 shrink-0 items-center font-sans" aria-label="Send while Pi works">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button className="h-11 rounded-xl px-3" disabled={disabled || !hasText || attachments.busy || imagesWaiting} onClick={() => send()}>
+                  <Button size="sm" className="rounded-lg" disabled={disabled || !hasText || attachments.busy || imagesWaiting} onClick={() => send()}>
                     {DELIVERY[queueMode].label}<ArrowUpIcon aria-hidden />
                   </Button>
                 </TooltipTrigger>
@@ -175,7 +175,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
               <ButtonGroupSeparator />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon" className="size-11 rounded-xl" aria-label="Delivery mode" disabled={disabled}>
+                  <Button size="icon-sm" className="rounded-lg" aria-label="Delivery mode" disabled={disabled}>
                     <ChevronDownIcon aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>
