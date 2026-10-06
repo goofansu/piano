@@ -9,12 +9,11 @@ import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { directoryStatus, WorktreesDialog } from "@/components/Worktrees";
+import { WorktreesDialog } from "@/components/Worktrees";
 import { Textarea } from "@/components/ui/textarea";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
-import { WorkspaceChanges } from "@/components/WorkspaceChanges";
 import { PianoMark } from "@/components/PianoMark";
 
 interface Props {
@@ -65,7 +64,6 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   }, [creating]);
 
   const project = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
-  const directory = project?.worktrees.find(w => w.path === cwd);
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
     setModel(undefined); setEffort(undefined);
@@ -99,12 +97,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
             <p className="mt-2 hidden text-base text-ink-2 md:block">A little progress starts with an idea.</p>
           </div>
           <div className="shrink-0">
-            <div className="mb-2 flex min-w-0 items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
-                {directory && <p className="px-2 text-xs text-ink-3" title={cwd}>{!state.connected && "Last observation · "}{directoryStatus(directory)}</p>}
-              </div>
-              {directory && <WorkspaceChanges key={directory.workspace.id} workspace={directory.workspace} />}
+            <div className="mb-2 min-w-0">
+              <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")}>
               <Textarea
