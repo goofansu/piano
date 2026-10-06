@@ -52,7 +52,7 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
   return <>
     <Input ref={input} id={id} type="file" multiple accept={IMAGE_TYPES.join(",")} className="hidden" aria-label="Image files" disabled={disabled || draft.busy}
       onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void draft.add(files); }} />
-    <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 md:size-8" aria-label="Attach images" title="Attach images (PNG, JPEG, GIF, WebP)" aria-controls={id} disabled={disabled || draft.busy} onClick={() => input.current?.click()}><PaperclipIcon /></Button>
+    <Button type="button" variant="ghost" size="icon" className="h-11 w-8 shrink-0 md:h-8" aria-label="Attach images" title="Attach images (PNG, JPEG, GIF, WebP)" aria-controls={id} disabled={disabled || draft.busy} onClick={() => input.current?.click()}><PaperclipIcon /></Button>
   </>;
 }
 export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
