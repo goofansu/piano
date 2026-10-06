@@ -16,13 +16,14 @@ let heldState;
 let holdNextState = false;
 let liveContext;
 let liveStage = 0;
+const steering = [];
 const followUp = [];
 const messages = [];
-const queueUpdate = () => out({ type: "queue_update", steering: [], followUp: [...followUp] });
+const queueUpdate = () => out({ type: "queue_update", steering: [...steering], followUp: [...followUp] });
 const settle = (last) => {
   out({ type: "agent_end", messages: last ? [last] : [], willRetry: false });
-  while (followUp.length) {
-    const text = followUp.shift();
+  while (steering.length || followUp.length) {
+    const text = steering.length ? steering.shift() : followUp.shift();
     queueUpdate(); // Pi removes a pending message before it starts appearing in history.
     const user = { role: "user", content: text, timestamp: Date.now() };
     const assistant = { role: "assistant", content: [{ type: "text", text: `echo: ${text}` }], model: model.id, provider: model.provider, timestamp: Date.now() };
@@ -75,10 +76,11 @@ function handle(cmd) {
       out({ type: "agent_settled" });
       return respond(cmd, undefined);
     case "clear_queue": {
-      const restored = [...followUp];
+      const restored = { steering: [...steering], followUp: [...followUp] };
+      steering.length = 0;
       followUp.length = 0;
       queueUpdate();
-      return respond(cmd, { steering: [], followUp: restored });
+      return respond(cmd, restored);
     }
     case "follow_up": {
       if (cmd.message === "reject queue") return respond(cmd, undefined, "queue rejected");
@@ -155,8 +157,9 @@ function handle(cmd) {
       }
       if (cmd.message === "reject queue" || cmd.message === "reject input" || compacting) return respond(cmd, undefined, compacting ? "Cannot prompt during compaction" : "input rejected");
       if (streaming) {
-        if (cmd.streamingBehavior !== "followUp") return respond(cmd, undefined, "Agent is streaming; specify streamingBehavior");
-        followUp.push(cmd.message === "expand queue" ? "expanded follow-up" : cmd.message);
+        if (!["followUp", "steer"].includes(cmd.streamingBehavior)) return respond(cmd, undefined, "Agent is streaming; specify streamingBehavior");
+        const queue = cmd.streamingBehavior === "steer" ? steering : followUp;
+        queue.push(cmd.message === "expand queue" ? (cmd.streamingBehavior === "steer" ? "expanded steering" : "expanded follow-up") : cmd.message);
         queueUpdate();
         return respond(cmd, { disposition: "queued" });
       }

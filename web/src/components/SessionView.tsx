@@ -138,7 +138,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         disabled={!ready || !t}
         streaming={streaming}
         compacting={t?.state.isCompacting}
-        onSend={(text) => send({ _tag: "act", action: { _tag: "prompt", text }, start: startOptions() })}
+        onSend={(text, kind) => send({ _tag: "act", action: { _tag: kind === "steering" ? "steer" : "prompt", text }, start: startOptions() })}
         onStop={() => send({ _tag: "act", action: { _tag: "abort" } })}
         catalog={catalog}
         model={model}

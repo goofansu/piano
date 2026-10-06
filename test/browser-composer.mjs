@@ -17,14 +17,17 @@ const longModel = 'alpha-with-a-very-long-model-name-for-responsive-verification
 // Keep the existing fake untouched. Adapt only its external protocol labels.
 writeFileSync(join(scratch, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replaceAll('"alpha"', JSON.stringify(longModel)).replaceAll('fake/alpha', `fake/${longModel}`).replace('contextWindow: 2000 } ]', 'contextWindow: 2000 }, { provider: "fake", id: "claude-sonnet", name: "Claude Sonnet", reasoning: true, contextWindow: 2000 }, { provider: "fake", id: "sol", name: "Sol Online Network", reasoning: false, contextWindow: 2000 } ]').replace('out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });', '// Browser fixture: pause without a modal covering the composer.'));
 writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: 'saved-without-context', title: 'Saved session', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z', archived: false }] }));
-const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: join(scratch, 'registry.json'), PIANO_PI_CLI: join(scratch, 'fake.mjs'), PI_CODING_AGENT_DIR: join(scratch, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(scratch, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
-const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171';
+const frontendPort = process.env.PIANO_TEST_FRONTEND_PORT ?? '7172';
+const backendUrl = `http://127.0.0.1:${backendPort}`;
+const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: backendPort, PIANO_CONFIG: join(scratch, 'registry.json'), PIANO_PI_CLI: join(scratch, 'fake.mjs'), PI_CODING_AGENT_DIR: join(scratch, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(scratch, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
+const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', frontendPort, '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: backendUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
 let serverLog = '';
 for (const proc of [server, frontend]) {
   proc.stdout.on('data', d => serverLog += d);
   proc.stderr.on('data', d => serverLog += d);
 }
-const appUrl = 'http://127.0.0.1:7172';
+const appUrl = `http://127.0.0.1:${frontendPort}`;
 const observe = join(scratch, 'observe.js');
 writeFileSync(observe, `window.pageToken=crypto.randomUUID(); window.observedSockets=[]; window.sent=[];
 const NativeWebSocket=WebSocket;
@@ -55,8 +58,8 @@ const layoutOnly = process.argv.includes('--layout-only');
 const views = layoutOnly ? [[320, 640], [390, 844]] : [[320, 640], [375, 812], [390, 844], [430, 932], [390, 400], [844, 390], [768, 1024], [1024, 768], [1280, 800]];
 const geometry = `(() => {
   const t = document.querySelector('textarea');
-  const card = t.parentElement;
-  const footer = t.nextElementSibling;
+  const card = t.closest('.composer-card');
+  const footer = card.lastElementChild;
   const rect = el => { const r = el.getBoundingClientRect(); return { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height }; };
   const controls = [...footer.querySelectorAll('button, [data-slot="tooltip-trigger"]')].map(el => ({label:el.getAttribute('aria-label') || el.textContent, ...rect(el)}));
   const model = footer.querySelector('[aria-label^="Model:"]');
@@ -69,7 +72,10 @@ const geometry = `(() => {
   if (fonts.some(font=>!font.family.includes(font.tag === 'TEXTAREA' ? 'Instrument Sans' : 'JetBrains Mono'))) problems.push('Message input must use sans-serif while composer controls stay monospace');
   const action = controls.find(r => ['Send', 'Stop', 'Queue message'].includes(r.label));
   if (action && controls.some(r => Math.abs(r.y + r.height/2 - action.y - action.height/2) > 2)) problems.push('Composer toolbar wraps instead of reserving the action row');
-  if (innerWidth < 768 && action && (action.width < 44 || action.height < 44)) problems.push('Primary touch target is smaller than 44px');
+  const steer = card.querySelector('[aria-label="Steer"]');
+  const messageActions = [...controls.filter(c => ['Send', 'Stop', 'Queue message'].includes(c.label)), ...(steer ? [{label:'Steer', ...rect(steer)}] : [])];
+  if (innerWidth < 768 && messageActions.some(c => c.width < 44 || c.height < 44)) problems.push('Message action touch target is smaller than 44px');
+  if (messageActions.some(action => action.x < c.x || action.right > c.right + 1 || action.right > innerWidth || action.bottom > innerHeight)) problems.push('Message action outside viewport');
   if (!modelLabel) problems.push('Model control is missing');
   if (modelLabel && modelLabel.width < 24) problems.push('No readable space left for the model label');
   if (modelLabel && !modelLabel.accessibleName.includes(modelLabel.text)) problems.push('Accessible model name was truncated');
@@ -94,7 +100,11 @@ async function capture(journey) {
 }
 async function run() {
   for (let i=0;i<50;i++) {
-    try { const r=await fetch(appUrl); if(r.ok) break; } catch {}
+    if (server.exitCode !== null || frontend.exitCode !== null) throw new Error(`Scratch process exited during startup: ${serverLog}`);
+    try {
+      const [backend, ui] = await Promise.all([fetch(`${backendUrl}/api/projects`), fetch(appUrl)]);
+      if (backend.ok && ui.ok) break;
+    } catch {}
     if (i===49) throw new Error('Scratch server did not start');
     await delay(100);
   }
@@ -236,13 +246,24 @@ async function run() {
   ab('click', '[aria-label="Queue message"]');
   ab('wait', '--text', 'Queued messages (2)');
   const queueText = () => evaluate(`[...document.querySelectorAll('[aria-label="Queued messages"] li')].map(li=>li.lastElementChild.textContent)`);
-  if (JSON.stringify(queueText()) !== JSON.stringify(['queued draft', `queued second ${'x'.repeat(80)}`])) throw new Error('Accepted queued messages are missing or reordered');
+  const followUps = ['queued draft', `queued second ${'x'.repeat(80)}`];
+  if (JSON.stringify(queueText()) !== JSON.stringify(followUps)) throw new Error('Accepted queued messages are missing or reordered');
+  if (evaluate(`document.querySelector('[aria-label="Queued messages"]').textContent.includes('Follow-up')`)) throw new Error('All-follow-up queue has redundant labels');
+  ab('fill', '[aria-label="Message"]', 'mobile steering');
+  ab('press', 'Enter');
+  if (!evaluate(`document.querySelector('textarea').value === 'mobile steering\\n'`)) throw new Error('Mobile Enter submitted instead of inserting a newline');
+  ab('click', '[aria-label="Steer"]');
+  ab('wait', '--text', 'Queued messages (3)');
+  const mixedQueue = ['mobile steering', ...followUps];
+  if (JSON.stringify(queueText()) !== JSON.stringify(mixedQueue)) throw new Error('Mobile Steer did not enter the authoritative steering queue');
+  if (evaluate(`[...document.querySelectorAll('[aria-label="Queued messages"] li')].map(li=>li.firstElementChild.textContent).join(',')`) !== 'Steering,Follow-up,Follow-up') throw new Error('Mixed queue does not distinguish message kinds');
+  if (evaluate(`sent.filter(m=>m.action?._tag==='steer').length`) !== 1) throw new Error('Mobile Steer did not submit exactly once');
   if (evaluate(`[...document.querySelectorAll('article')].some(article=>article.textContent.includes('queued draft'))`)) throw new Error('Pending input was incorrectly added to completed history');
   await capture('queued');
   if (!evaluate(`(() => { const q=document.querySelector('[aria-label="Queued messages"]'); return q.scrollWidth<=q.clientWidth; })()`)) throw new Error('Queue text overflows');
   ab('reload');
-  ab('wait', '--text', 'Queued messages (2)');
-  if (JSON.stringify(queueText()) !== JSON.stringify(['queued draft', `queued second ${'x'.repeat(80)}`])) throw new Error('Reload lost the authoritative queue snapshot');
+  ab('wait', '--text', 'Queued messages (3)');
+  if (JSON.stringify(queueText()) !== JSON.stringify(mixedQueue)) throw new Error('Reload lost the authoritative queue snapshot');
   ab('set', 'viewport', '320', '640');
   ab('screenshot', join(evidence, 'queued-after-reload.png'));
   expectAction('Stop');
@@ -255,19 +276,19 @@ async function run() {
   ab('click', '[aria-label="Stop"]');
   await until(`!document.querySelector('[aria-label="Stop"]')`);
   expectAction('Send');
-  ab('wait', '--text', 'Paused queue (2)');
-  if (JSON.stringify(queueText()) !== JSON.stringify(['queued draft', `queued second ${'x'.repeat(80)}`])) throw new Error('Stop consumed the queue instead of pausing it');
+  ab('wait', '--text', 'Paused queue (3)');
+  if (JSON.stringify(queueText()) !== JSON.stringify(mixedQueue)) throw new Error('Stop consumed the queue instead of pausing it');
   if (evaluate(`[...document.querySelectorAll('article')].some(article=>article.textContent.includes('queued draft'))`)) throw new Error('Stop automatically resent a pending message');
   ab('screenshot', join(evidence, 'paused-queue.png'));
   const originalTab = JSON.parse(ab('tab', 'list', '--json')).data.tabs.find(tab => tab.active).tabId;
   ab('tab', 'new', '--label', 'peer', ab('get', 'url'));
-  ab('wait', '--text', 'Paused queue (2)');
+  ab('wait', '--text', 'Paused queue (3)');
   ab('fill', '[aria-label="Message"]', 'other tab draft');
   ab('tab', originalTab);
   ab('fill', '[aria-label="Message"]', 'my unsent draft');
   const promptsBeforeRestore = evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`);
   ab('click', '[aria-label="Restore queued messages to draft"]');
-  const restoredText = `my unsent draft\n\nqueued draft\n\nqueued second ${'x'.repeat(80)}`;
+  const restoredText = `my unsent draft\n\nmobile steering\n\nqueued draft\n\nqueued second ${'x'.repeat(80)}`;
   await until(`document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(restoredText)} && !document.querySelector('[aria-label="Queued messages"]')`);
   expectAction('Send');
   if (evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`) !== promptsBeforeRestore) throw new Error('Restore automatically sent a prompt');
@@ -328,8 +349,23 @@ async function run() {
   ab('fill', '[aria-label="Message"]', 'desktop');
   ab('press', 'Shift+Enter');
   if (!evaluate(`document.querySelector('textarea').value === 'desktop\\n'`)) throw new Error('Shift+Enter did not insert newline');
-  ab('press', 'Enter');
+  ab('press', 'Alt+Enter');
   await until(`document.querySelector('textarea').value === ''`);
+  ab('fill', '[aria-label="Message"]', 'live context');
+  ab('press', 'Enter');
+  await until(`!!document.querySelector('[aria-label="Stop"]')`);
+  ab('fill', '[aria-label="Message"]', 'desktop follow-up');
+  ab('press', 'Enter');
+  ab('wait', '--text', 'Queued messages (1)');
+  if (evaluate(`document.querySelector('[aria-label="Queued messages"]').textContent.includes('Follow-up')`)) throw new Error('Desktop all-follow-up queue has redundant labels');
+  ab('fill', '[aria-label="Message"]', 'desktop steering');
+  ab('press', 'Alt+Enter');
+  ab('wait', '--text', 'Queued messages (2)');
+  if (JSON.stringify(queueText()) !== JSON.stringify(['desktop steering', 'desktop follow-up'])) throw new Error('Alt+Enter did not steer or Enter did not follow up');
+  if (evaluate(`sent.filter(m=>m.action?._tag==='steer').length`) !== 2) throw new Error('Alt+Enter did not submit exactly once per use (idle and busy)');
+  ab('screenshot', join(evidence, 'desktop-steering.png'));
+  ab('click', '[aria-label="Stop"]');
+  ab('wait', '--text', 'Paused queue (2)');
   ab('errors');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ failures }, null, 2));
   console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: single-row toolbars and full accessible model names; model/effort selection, no mobile autofocus, stable actions, context, queue/reload/pause/native restore, peer-tab isolation, keyboard and in-place mobile reconnect');

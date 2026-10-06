@@ -67,14 +67,14 @@ await import(${JSON.stringify(cli)});`);
       yield* session.act({ _tag: "prompt", text: "hold" });
       assert.equal((yield* session.state).submission?.outcome, "started");
       yield* Deferred.await(working);
-      yield* session.act({ _tag: "prompt", text: "/phase1-handled" });
+      yield* session.act({ _tag: "steer", text: "/phase1-handled" });
       assert.equal((yield* session.state).submission?.outcome, "handled", "real extension commands work even while streaming");
       assert.equal((yield* session.state).isStreaming, true, "handled input must not settle independent work");
       yield* session.act({ _tag: "prompt", text: "queued one" });
-      yield* session.act({ _tag: "prompt", text: "queued two" });
+      yield* session.act({ _tag: "steer", text: "change direction" });
       assert.equal((yield* session.state).submission?.outcome, "queued");
       yield* Fiber.join(queued);
-      const expected = [{ kind: "follow-up", text: "queued one" }, { kind: "follow-up", text: "queued two" }];
+      const expected = [{ kind: "steering", text: "change direction" }, { kind: "follow-up", text: "queued one" }];
       const idleReady = yield* Deferred.make<void>();
       const idle = yield* session.events.pipe(
         Stream.tap((event) => event._tag === "snapshot" ? Deferred.succeed(idleReady, undefined) : Effect.void),
