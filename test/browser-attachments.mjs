@@ -6,6 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { crc32, deflateSync } from 'node:zlib';
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-attachments-evidence');
 mkdirSync(evidence, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), 'piano-attachments-'));
@@ -14,7 +15,21 @@ writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], 
 const data = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGZkAAAAASUVORK5CYII=';
 const image = join(scratch, 'pixel.png'); writeFileSync(image, Buffer.from(data, 'base64'));
 const invalid = join(scratch, 'notes.txt'); writeFileSync(invalid, 'Not an image');
-const oversized = join(scratch, 'large.png'); writeFileSync(oversized, Buffer.alloc(5 * 1024 * 1024 + 1));
+const oversized = join(scratch, 'large.png'); writeFileSync(oversized, Buffer.alloc(10 * 1024 * 1024 + 1));
+// Valid PNGs with uncompressed ancillary metadata exercise original upload bytes,
+// not model quality. Different metadata prevents preview-cache deduplication.
+function chunk(type, bytes) {
+  const out = Buffer.alloc(bytes.length + 12); out.writeUInt32BE(bytes.length);
+  out.write(type, 4); bytes.copy(out, 8); out.writeUInt32BE(crc32(out.subarray(4, -4)), out.length - 4); return out;
+}
+function boundaryImage(name, fill) {
+  const header = Buffer.alloc(13); header.writeUInt32BE(1); header.writeUInt32BE(1, 4); header[8] = 8; header[9] = 6;
+  const start = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.from([0, 255, 0, 0, 255])))]);
+  const end = chunk('IEND', Buffer.alloc(0));
+  const metadata = Buffer.alloc(10 * 1024 * 1024 - start.length - end.length - 12, fill); metadata[1] = 0;
+  const path = join(scratch, name); writeFileSync(path, Buffer.concat([start, chunk('tEXt', metadata), end])); return path;
+}
+const maximumImages = [boundaryImage('maximum-a.png', 97), boundaryImage('maximum-b.png', 98)];
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171';
 const frontendPort = process.env.PIANO_TEST_FRONTEND_PORT ?? '7172';
 const backendUrl = `http://127.0.0.1:${backendPort}`, appUrl = `http://127.0.0.1:${frontendPort}`;
@@ -46,7 +61,7 @@ try {
   ab('upload', 'input[type="file"]', invalid);
   ab('wait', '--text', "Other files aren't supported yet");
   ab('upload', 'input[type="file"]', oversized);
-  ab('wait', '--text', 'up to 5 MiB');
+  ab('wait', '--text', 'up to 10 MiB');
   ab('upload', 'input[type="file"]', image);
   await until(`${attached} === 1`);
   ab('click', '[aria-label="Remove pixel.png"]'); assert.equal(evaluate(attached), 0);
@@ -93,7 +108,17 @@ try {
   assert.equal(evaluate(`document.documentElement.scrollWidth <= innerWidth`), true);
   ab('set', 'viewport', '1280', '800'); ab('screenshot', join(evidence, 'session-desktop.png'));
   ab('snapshot', '-i');
-  console.log('PASS: validation, picker/remove/reselect, image-only creation, paste/drop follow-up, image bytes, reload, scoped drafts, mobile and desktop. Fake Pi; no real model claim.');
+  ab('upload', 'input[type="file"]', image, image, image, image, image);
+  ab('wait', '--text', 'Attach up to 4 images per message.');
+  assert.equal(evaluate(attached), 0);
+  ab('upload', 'input[type="file"]', ...maximumImages); await until(`${attached} === 2`);
+  ab('upload', 'input[type="file"]', image); ab('wait', '--text', 'Images must total 20 MiB or less.');
+  assert.equal(evaluate(attached), 2, 'over-limit batch does not discard valid attachments');
+  ab('click', '[aria-label="Send"]'); await until(`${transcriptImages} === 4`);
+  const lengths = evaluate(`(async () => Promise.all([...document.querySelectorAll('img[alt="Attached image"]')].slice(-2).map(async img => {const r=await fetch(img.src);return {status:r.status,bytes:(await r.arrayBuffer()).byteLength};})))()`);
+  assert.deepEqual(lengths, [{status:200,bytes:10485760}, {status:200,bytes:10485760}], 'full 20 MiB survives browser → WS → Pi → preview route');
+  ab('reload'); await until(`${transcriptImages} === 4`);
+  console.log('PASS: validation, picker/remove/reselect, image-only creation, paste/drop follow-up, image bytes, reload, scoped drafts, mobile/desktop, four-image cap and full 20 MiB upload/readback. Fake Pi; no real model claim.');
 } finally {
   try { ab('close'); } catch {}
   server.kill('SIGTERM'); frontend.kill('SIGTERM');

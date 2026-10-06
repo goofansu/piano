@@ -720,7 +720,7 @@ const openSession = (spec: PiSessionSpec) =>
               if (!Schema.is(Attachments)(action.attachments) || action.attachments.some(a => {
                 const bytes = Buffer.from(a.data, "base64");
                 return bytes.toString("base64") !== a.data || imageType(bytes) !== a.mimeType;
-              })) return yield* new PiSessionError({ reason: "rejected", detail: "Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to 5 MiB each and 10 MiB total (4 images)." });
+              })) return yield* new PiSessionError({ reason: "rejected", detail: "Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to 10 MiB each and 20 MiB total (4 images)." });
               const state = yield* Ref.get(stateRef);
               // Pi's clear_queue only returns text. Do not offer a lossy image queue.
               if (state.isStreaming || state.isCompacting || state.isRetrying) return yield* new PiSessionError({ reason: "rejected", detail: "Wait for Pi to finish before sending images." });

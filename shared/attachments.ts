@@ -1,8 +1,9 @@
 /** Upload policy shared by the browser and server. Add future file kinds explicitly. */
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
 export const MAX_ATTACHMENTS = 4;
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+// Original upload bytes, not Pi's resized/base64 model input. See docs/image-attachments.md.
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const base64Bytes = (data: string) => data.length * 3 / 4 - (data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0);
 
 export function imageType(bytes: Uint8Array): typeof IMAGE_TYPES[number] | undefined {

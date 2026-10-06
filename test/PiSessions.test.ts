@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Deferred, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { decodeClientMessage, type Attachment, type SessionEvent } from "../shared/wire.ts";
+import { Attachments, decodeClientMessage, type Attachment, type SessionEvent } from "../shared/wire.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 
@@ -72,8 +72,19 @@ test("upload wire rejects unsupported kinds, oversized payloads and malformed ba
   for (const attachments of [
     [{ ...image, kind: "file" }], [{ ...image, mimeType: "image/svg+xml" }],
     [{ ...image, data: "not base64" }], [{ ...image, data: "" }],
-    Array(5).fill(image), [{ ...image, data: "A".repeat(4 * Math.ceil(5 * 1024 * 1024 / 3) + 4) }],
+    Array(5).fill(image), [{ ...image, data: "A".repeat(4 * Math.ceil(10 * 1024 * 1024 / 3) + 4) }],
   ]) assert.throws(() => decodeClientMessage(command(attachments)));
+});
+
+test("upload limits accept 10 MiB per image and 20 MiB total, but not one byte more", () => {
+  const sized = (bytes: number): Attachment => ({ ...image, data: Buffer.alloc(bytes).toString("base64") });
+  const accepts = Schema.is(Attachments);
+  const ten = sized(10 * 1024 * 1024);
+  assert.equal(accepts([ten, ten]), true, "exact per-image and aggregate boundaries");
+  assert.equal(accepts(Array(4).fill(sized(5 * 1024 * 1024))), true, "four images at the total boundary");
+  assert.equal(accepts([sized(10 * 1024 * 1024 + 1)]), false, "per-image overflow even when base64 length is unchanged");
+  assert.equal(accepts([ten, ten, sized(1)]), false, "aggregate overflow with individually valid images");
+  assert.equal(accepts(Array(5).fill(image)), false, "count policy stays at four");
 });
 
 test("handled input acknowledges consumption without starting work or inventing history", async () => {

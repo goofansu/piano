@@ -100,13 +100,19 @@ the sidebar, so sessions started from the terminal do not appear here.
    which stops Pi, deletes the session file from Pi's session store and forgets the session. An Archived page to
    find and restore archived sessions is planned but not built yet.
 
+## Image attachments
+
+Upload, paste or drop PNG, JPEG, WebP or GIF images into either composer: **10 MiB per image,
+4 images per message, 20 MiB combined**. Images send when Pi is idle. These are Piano's original-file
+upload limits; Pi handles model-specific resizing. See the [policy and rationale](docs/image-attachments.md).
+
 ## Session display and limits
 
 The transcript is **Current Pi context**, not all raw history. Live output is corrected by Pi's
 content/message endings; settled work, handled commands and compaction reload the authoritative
 context. File peeks use Pi's own active-branch, compaction and context-edit projection. System
-messages, thinking blocks and images are omitted. Raw history stays in Pi, unchanged by display
-redaction. A failed or repeatedly racing refresh is labeled rather than silently called current.
+messages and thinking blocks are omitted; user images have previews from Pi's processed content.
+Raw history stays in Pi, unchanged by display redaction. A failed or repeatedly racing refresh is labeled rather than silently called current.
 
 The composer model picker shows the selection. Its value from a stopped file is a recorded hint;
 Pi confirms or restores it on start. The existing **Context usage** popover provides session totals,

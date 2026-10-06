@@ -1,5 +1,8 @@
 # Image attachments
 
+Initial implementation report. Its upload size limits are superseded by the
+[accepted attachment policy](../image-attachments.md); the count and formats are unchanged.
+
 Implemented against `6029dc9` plus this change, Node 24.21.0 and the locked dependencies.
 
 ## Claim and boundaries

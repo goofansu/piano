@@ -23,10 +23,10 @@ export function useAttachments(key: string) {
     try {
       const current = before.items;
       if (current.length + files.length > MAX_ATTACHMENTS) throw new Error("Attach up to 4 images per message.");
-      if (current.reduce((n, a) => n + base64Bytes(a.data), 0) + files.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENT_BYTES) throw new Error("Images must total 10 MiB or less.");
+      if (current.reduce((n, a) => n + base64Bytes(a.data), 0) + files.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENT_BYTES) throw new Error("Images must total 20 MiB or less.");
       const added: Attachment[] = [];
       for (const file of files) {
-        if (!file.size || file.size > MAX_IMAGE_BYTES) throw new Error(`${file.name}: choose an image up to 5 MiB.`);
+        if (!file.size || file.size > MAX_IMAGE_BYTES) throw new Error(`${file.name}: choose an image up to 10 MiB.`);
         const bytes = new Uint8Array(await file.arrayBuffer());
         const mimeType = imageType(bytes);
         if (!mimeType || (file.type && file.type !== mimeType)) throw new Error(`${file.name}: use PNG, JPEG, GIF or WebP. Other files aren't supported yet.`);

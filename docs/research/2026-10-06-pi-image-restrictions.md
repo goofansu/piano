@@ -1,5 +1,9 @@
 # Pi image restrictions: upload policy versus image processing
 
+Historical research: the Piano limits quoted below describe the initial implementation. The
+subsequent [accepted upload policy](../image-attachments.md) raises them to 10 MiB per image,
+four images, and 20 MiB combined; the Pi findings remain unchanged.
+
 ## Scope and conclusion
 
 Inspected Piano's pinned and installed `@earendil-works/pi-coding-agent` **1.0.2**, its shipped
