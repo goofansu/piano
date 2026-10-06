@@ -68,7 +68,6 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages,
       </table>
       {totals && <p className="sr-only">Session total: {number(totals.total)} tokens</p>}
       {responseModel && <p className="mt-3 break-words text-xs text-ink-2">Last response: {responseModel}{responseEffort ? ` · ${responseEffort}` : ""}</p>}
-      <p className="mt-2 text-xs text-ink-3">Pi-reported usage. History shows responses with usage in the current transcript, not current context size. — means unavailable.</p>
     </section>
   </div>;
 }
