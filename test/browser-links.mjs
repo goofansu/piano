@@ -1,4 +1,5 @@
-// The link pile: every link you or Pi wrote in prose, set aside above the composer. Fake Pi,
+// The link pile: the pull requests, issues and local servers a session mentions, set aside above
+// the composer. Fake Pi,
 // scratch registry, and read-only `gh` lookups when a login is available (status checks are
 // skipped without one). No paid model calls.
 // node test/browser-links.mjs <evidence-directory>
@@ -31,7 +32,7 @@ const messages = [
   assistant('I read the page. Set Aside keeps mail "at hand, but out of your face": a pile at the bottom that fans open.'),
 ];
 for (let i = 0; i < 10; i++) { messages.push(user(`Filler question ${i}: keep the transcript long enough to scroll.`), assistant(`Filler answer ${i}.\n\nSome more lines to add height.\n\n- one\n- two\n- three`)); }
-messages.push(assistant('Opened ' + PR_URL + ' and tracked https://github.com/vitejs/vite/issues/1. The dev server is at http://127.0.0.1:7172/s/links. Relevant code: https://github.com/vitejs/vite/blob/main/packages/vite/src/node/server/index.ts#L10-L20\n\n```bash\ncurl https://example.invalid/not-a-reference\n```\n'));
+messages.push(assistant('Opened ' + PR_URL + ' and tracked https://github.com/vitejs/vite/issues/1. The dev server is at http://127.0.0.1:7172/s/links. Relevant code: https://github.com/vitejs/vite/blob/main/packages/vite/src/node/server/index.ts#L10-L20\n\n```bash\ncurl http://localhost:9999/not-a-reference\n```\n'));
 const entries = [{ type: 'session', version: 3, id: 'links', cwd: repo, timestamp }, ...messages.map((message, n) => ({ type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp, message: { ...message, timestamp: n } }))];
 writeFileSync(join(sessions, 'links.jsonl'), entries.map(JSON.stringify).join('\n') + '\n');
 writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId: 'links', title: 'Link pile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
@@ -73,7 +74,7 @@ try {
   await ab('set', 'viewport', '1280', '900');
   await ab('open', 'http://127.0.0.1:7172/s/links');
   await ab('wait', '--text', 'Filler answer 9');
-  await ab('wait', '--fn', `${PILE} && ${PILE}.children.length === 6`);
+  await ab('wait', '--fn', `${PILE} && ${PILE}.children.length === 3`);
   // Live status arrives after the first fetch; wait for the PR's real title.
   if (live) await ab('wait', '--fn', `!${PILE}.textContent.includes('Pull request')`);
   await ab('wait', '--fn', `${PILE}.textContent.includes('vitejs/vite #${PR.number}')`);
@@ -82,12 +83,10 @@ try {
   await shot('01-collapsed');
   const c = observations.collapsed;
   assert.equal(c.fanned, false);
-  assert.equal(c.count, 6);
-  // Newest mention in front: the code link was last in the final message.
-  assert.equal(c.cards[0].title, 'index.ts L10–20');
-  assert.deepEqual(c.cards.map(x => x.title).slice(1, 4), ['127.0.0.1:7172', issueTitle, prTitle]);
-  assert.equal(c.cards[4].title, 'the glossary');
-  assert.equal(c.cards[5].title, 'Set aside');
+  assert.equal(c.count, 3, 'web pages, code links and fenced URLs are not kept');
+  // Newest mention in front: the dev server was the last kept link in the final message.
+  assert.deepEqual(c.cards.map(x => x.title), ['127.0.0.1:7172', issueTitle, prTitle]);
+  assert.equal(c.cards[0].detail, '/s/links');
   // Collapsed: cards behind overlap the front one (only a sliver shows).
   assert.ok(c.cards[1].bottom - c.cards[0].top > 40, JSON.stringify(c.cards.slice(0, 2)));
   assert.equal(c.cards[0].actions.length, 0, 'no actions while collapsed');
@@ -108,20 +107,21 @@ try {
   const f = observations.fanned;
   assert.equal(f.fanned, true);
   for (let i = 1; i < f.count; i++) assert.ok(f.cards[i].bottom <= f.cards[i - 1].top, `card ${i} clear of card ${i - 1}: ${JSON.stringify([f.cards[i], f.cards[i - 1]])}`);
-  assert.deepEqual(f.cards[0].actions, ['Show in conversation', 'Copy link']);
+  assert.deepEqual(f.cards[0].actions, ['Copy link']);
   observations.prBadges = await evaluate(`[...${PILE}.querySelectorAll('li')].find(li => li.querySelector('a').href.includes('/pull/')).textContent`);
 
-  // "Show in conversation" on the oldest card scrolls to and highlights the first message.
-  const before = await evaluate(`document.querySelector('[data-slot="transcript"]').scrollTop`);
-  await evaluate(`(() => { const li = [...${PILE}.children].find(li => li.textContent.includes('Set aside')); li.querySelector('button[aria-label="Show in conversation"]').click(); return true; })()`);
-  await ab('wait', '--fn', `document.getElementById('msg-m0')?.classList.contains('message-highlight')`);
-  // The smooth scroll takes about a second for a long transcript; wait until it settles.
-  await ab('wait', '--fn', `(() => { const c = document.querySelector('[data-slot="transcript"]'); const same = window.__last === c.scrollTop; window.__last = c.scrollTop; return same; })()`);
-  await delay(300);
-  observations.jump = { before, after: await evaluate(`document.querySelector('[data-slot="transcript"]').scrollTop`), highlighted: await evaluate(`document.getElementById('msg-m0').classList.contains('message-highlight')`), visible: await evaluate(`(() => { const r = document.getElementById('msg-m0').getBoundingClientRect(); const t = document.querySelector('[data-slot="transcript"]').getBoundingClientRect(); return r.top >= t.top && r.top < t.bottom; })()`) };
-  await shot('03-jumped');
-  assert.ok(observations.jump.before > observations.jump.after, JSON.stringify(observations.jump));
-  assert.ok(observations.jump.visible && observations.jump.highlighted);
+  // Copy: a real click carries the user activation the clipboard needs, and the button says so.
+  // (The headless clipboard cannot be read back or pasted from here; the write resolving is the evidence.)
+  await ab('click', '[data-slot="link-stack"] li:first-child button[aria-label="Copy link"]');
+  await ab('wait', '--fn', `!!document.querySelector('[data-slot="link-stack"] button[aria-label="Copied"]')`);
+  await shot('03-copied');
+  // A denied clipboard write says so instead of claiming success.
+  await evaluate(`window.nativeWrite = navigator.clipboard.writeText; navigator.clipboard.writeText = async () => { throw new DOMException('Denied', 'NotAllowedError'); }; true`);
+  await ab('hover', '[data-slot="link-stack"] li a');
+  await ab('wait', '--fn', `!!document.querySelector('[data-slot="link-stack"] li:first-child button[aria-label="Copy link"]')`);
+  await ab('click', '[data-slot="link-stack"] li:first-child button[aria-label="Copy link"]');
+  await ab('wait', '--fn', `!!document.querySelector('[data-slot="link-stack"] button[aria-label="Couldn’t copy"]')`);
+  await evaluate('navigator.clipboard.writeText = window.nativeWrite; true');
 
   // Keyboard: focusing a card fans the pile too.
   await ab('mouse', 'move', '10', '10').catch(() => {});

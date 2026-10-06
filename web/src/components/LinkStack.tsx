@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowUpRightIcon, CheckIcon, CircleDotIcon, CopyIcon, FileCodeIcon, FolderGitIcon, GitCommitHorizontalIcon, GitCompareIcon,
-  GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareTextIcon, MonitorIcon, PlayIcon,
+  ArrowUpRightIcon, CheckIcon, CircleDotIcon, CopyIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MonitorIcon,
 } from "lucide-react";
 import type { PullRequest } from "@shared/wire";
 import { cn } from "cn";
@@ -9,14 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { SessionLink } from "@/lib/links";
-import { jumpTo } from "@/lib/transcript";
 
 /**
- * The links a session mentions, as a set-aside pile above the composer: at hand, out of the
- * way. The newest card sits in front with the others peeking out behind it. Pointer hover or
- * keyboard focus fans the pile open; on a touch screen the first tap does. Each fanned card
- * opens its link, can show where the conversation mentioned it, or copy it. The pile is a
- * view of the transcript and keeps no state of its own.
+ * The session's pull requests, issues and local servers as a set-aside pile above the
+ * composer: at hand, out of the way. Usually one card. With more, the newest sits in front
+ * and the others peek out behind it; pointer hover or keyboard focus fans the pile, and on a
+ * touch screen the first tap does. The pile is a view of the transcript and keeps no state.
  */
 export function LinkStack({ links }: { links: SessionLink[] }) {
   const [tapped, setTapped] = useState(false);
@@ -52,21 +49,14 @@ export function LinkStack({ links }: { links: SessionLink[] }) {
         {links.map((link, i) => (
           <li
             key={link.url}
-            // Behind the front card each one tucks under by all but a sliver, a little narrower and
-            // darker with depth; cards stay opaque so nothing shows through. Fanning opens them in a
-            // short cascade from the front.
+            // Behind the front card each one tucks under by all but a sliver, a little narrower with depth.
             className={cn(
               "link-card group/card relative flex h-16 items-center rounded-2xl border border-line",
               "animate-in slide-in-from-bottom-2 hover:-translate-y-px hover:border-line-strong",
               "has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring has-[a:focus-visible]:ring-offset-2 has-[a:focus-visible]:ring-offset-surface-0",
-              i > 0 && (fanned ? "mb-2" : "-mb-14 scale-x-(--tuck) brightness-(--depth)"),
+              i > 0 && (fanned ? "mb-2" : "-mb-14 scale-x-(--tuck)"),
             )}
-            style={{
-              zIndex: links.length - i,
-              transitionDelay: fanned ? `${Math.min(i, 6) * 25}ms` : "0ms",
-              "--tuck": String(1 - Math.min(i, 4) * 0.035),
-              "--depth": String(1 - Math.min(i, 4) * 0.04),
-            } as React.CSSProperties}
+            style={{ zIndex: links.length - i, "--tuck": String(1 - Math.min(i, 4) * 0.035) } as React.CSSProperties}
           >
             <a
               href={link.url}
@@ -90,7 +80,7 @@ export function LinkStack({ links }: { links: SessionLink[] }) {
               </span>
             </a>
             {fanned ? (
-              <Actions link={link} />
+              <CopyAction url={link.url} />
             ) : (
               i === 0 && links.length > 1 && <span className="mr-4 text-xs tabular-nums text-ink-3" aria-hidden>{links.length}</span>
             )}
@@ -101,33 +91,23 @@ export function LinkStack({ links }: { links: SessionLink[] }) {
   );
 }
 
-/** Show where it was said, or copy it. Visible while the card is hovered or focused. */
-function Actions({ link }: { link: SessionLink }) {
-  const [copied, setCopied] = useState(false);
-  const action = "size-8 rounded-lg text-ink-3 hover:bg-fill-hover hover:text-ink";
+/** Copy the URL. Visible while the card is hovered or focused; says so briefly when it worked, or when it could not. */
+function CopyAction({ url }: { url: string }) {
+  const [outcome, setOutcome] = useState<"copied" | "failed">();
+  const label = outcome === "copied" ? "Copied" : outcome === "failed" ? "Couldn’t copy" : "Copy link";
+  const copy = () => {
+    const write = navigator.clipboard?.writeText(url) ?? Promise.reject(new Error("No clipboard"));
+    void write.then(() => setOutcome("copied"), () => setOutcome("failed")).then(() => window.setTimeout(() => setOutcome(undefined), 1500));
+  };
   return (
-    <span className="flex shrink-0 items-center gap-1 pr-2.5 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100">
+    <span className="flex shrink-0 items-center pr-2.5 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100">
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" className={action} aria-label="Show in conversation" onClick={() => jumpTo({ kind: "assistant", id: link.messageId, label: link.title, messageId: link.messageId })}>
-            <MessageSquareTextIcon />
+          <Button variant="ghost" size="icon-sm" className="size-8 rounded-lg text-ink-3 hover:bg-fill-hover hover:text-ink" aria-label={label} onClick={copy}>
+            {outcome === "copied" ? <CheckIcon className="text-ok" /> : <CopyIcon className={cn(outcome === "failed" && "text-err")} />}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Show in conversation</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={action}
-            aria-label={copied ? "Copied" : "Copy link"}
-            onClick={() => { void navigator.clipboard?.writeText(link.url).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }); }}
-          >
-            {copied ? <CheckIcon className="text-ok" /> : <CopyIcon />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{copied ? "Copied" : "Copy link"}</TooltipContent>
+        <TooltipContent>{label}</TooltipContent>
       </Tooltip>
     </span>
   );
@@ -156,42 +136,18 @@ const REVIEW: Record<PullRequest["review"], { word: string; variant: BadgeVarian
   review_required: { word: "Review required", variant: "outline" },
 };
 
-const KIND_ICON: Partial<Record<SessionLink["kind"], typeof GitPullRequestIcon>> = {
-  pull_request: GitPullRequestIcon,
-  issue: CircleDotIcon,
-  commit: GitCommitHorizontalIcon,
-  compare: GitCompareIcon,
-  run: PlayIcon,
-  code: FileCodeIcon,
-  repo: FolderGitIcon,
-  local: MonitorIcon,
-};
-
-/** A stable hue per host, so the same site always wears the same colour. */
-function hue(host: string): number {
-  let h = 0;
-  for (const ch of host) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return h % 360;
-}
-
-/** The card's left mark: a forge icon tinted by state, a monitor for a local server, or the site's monogram. */
+/** The card's left mark: a pull request or issue icon tinted by state, or a monitor for a local server. */
 function Mark({ link }: { link: SessionLink }) {
   const circle = "flex size-10 shrink-0 items-center justify-center rounded-xl";
   const s = link.status;
-  if (s?._tag === "pull_request") {
-    const Icon = PR_STATE[s.state].icon;
-    return <span className={cn(circle, PR_STATE[s.state].tint)} aria-hidden><Icon className="size-4" /></span>;
+  if (link.kind === "local") return <span className={cn(circle, "bg-fill text-ink-2")} aria-hidden><MonitorIcon className="size-4" /></span>;
+  if (link.kind === "pull_request") {
+    const state = s?._tag === "pull_request" ? PR_STATE[s.state] : undefined;
+    const Icon = state?.icon ?? GitPullRequestIcon;
+    return <span className={cn(circle, state?.tint ?? "bg-fill text-ink-2")} aria-hidden><Icon className="size-4" /></span>;
   }
-  if (link.kind === "web") {
-    return (
-      <span className={cn(circle, "link-monogram text-sm font-semibold uppercase")} style={{ "--hue": hue(link.host) } as React.CSSProperties} aria-hidden>
-        {link.host.charAt(0)}
-      </span>
-    );
-  }
-  const Icon = KIND_ICON[link.kind] ?? CircleDotIcon;
   const tint = s?._tag === "issue" ? (s.state === "open" ? "bg-ok/15 text-ok" : "bg-merged/15 text-merged") : "bg-fill text-ink-2";
-  return <span className={cn(circle, tint)} aria-hidden><Icon className="size-4" /></span>;
+  return <span className={cn(circle, tint)} aria-hidden><CircleDotIcon className="size-4" /></span>;
 }
 
 /** The second line: where the link points, with live state for a pull request or issue. */
