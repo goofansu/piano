@@ -43,7 +43,7 @@ export function JumpTo({ messages }: Props) {
           {total} {total === 1 ? "message" : "messages"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" collisionPadding={16} aria-label="Jump to message" className="w-[28rem] max-w-[calc(100vw-2rem)] p-0 font-sans">
+      <PopoverContent side="top" align="end" collisionPadding={16} aria-label="Jump to message" className="w-[28rem] max-w-[calc(100vw-2rem)] p-0 font-sans">
         <p className="border-b border-line px-4 py-2.5 text-sm font-medium">Jump to…</p>
         <div ref={list} className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1" role="list">
           {entries.map(entry => (
