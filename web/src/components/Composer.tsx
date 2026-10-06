@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelSelect } from "@/components/ModelSelect";
 import { ContextDetails } from "@/components/ContextDetails";
+import { JumpTo } from "@/components/JumpTo";
 
 interface Props {
   draftKey: string;
@@ -204,6 +205,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
         </div>
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
+        <JumpTo messages={messages} />
         {cachePercent !== null && <>
           <span className="text-brand" title="Session cache hit rate: cached input / total input" aria-label={`Session cache hit rate: ${cachePercent}%`}>cache {cachePercent}%</span>
           <Separator orientation="vertical" className="h-3!" />

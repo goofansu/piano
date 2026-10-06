@@ -12,6 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 import { abbrevHome, clamp } from "@/lib/format";
 import { renderMarkdown } from "@/lib/markdown";
+import { messageAnchorId } from "@/lib/transcript";
 import { cn } from "cn";
 
 interface Props {
@@ -69,6 +70,7 @@ export function MessageList({ messages, pending, tools, placeholder }: Props) {
           stick.current = near;
           setAtBottom(near);
         }}
+        data-slot="transcript"
         className="h-full overflow-y-auto px-4 md:px-6"
       >
       <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
@@ -121,10 +123,10 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
 
 function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; streaming?: boolean }) {
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
-  if (msg.role === "user") return <UserMessage text={msg.text} attachments={msg.attachments} />;
+  if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
     return (
-      <article className="group/reply flex flex-col gap-3">
+      <article id={streaming ? undefined : messageAnchorId(msg.id)} className="group/reply flex scroll-mt-4 flex-col gap-3 rounded-2xl">
         {msg.text && (
           <Row glyph={<span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
@@ -180,7 +182,7 @@ function CopyResponse({ text }: { text: string }) {
   );
 }
 
-function UserMessage({ text, attachments }: { text: string; attachments: RenderMsg["attachments"] }) {
+function UserMessage({ id, text, attachments }: { id: string; text: string; attachments: RenderMsg["attachments"] }) {
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -200,7 +202,8 @@ function UserMessage({ text, attachments }: { text: string; attachments: RenderM
   // A long prompt is its own control: click or press Enter to open and close it.
   return (
     <article
-      className={cn("rounded-2xl border border-line bg-fill px-4 py-3.5 outline-none transition-colors", long && "cursor-pointer select-text hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring")}
+      id={messageAnchorId(id)}
+      className={cn("scroll-mt-4 rounded-2xl border border-line bg-fill px-4 py-3.5 outline-none transition-colors", long && "cursor-pointer select-text hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring")}
       tabIndex={long ? 0 : undefined}
       aria-expanded={long ? open : undefined}
       onClick={() => long && !window.getSelection()?.toString() && toggle()}

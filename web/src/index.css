@@ -389,12 +389,18 @@
 }
 .welcome-composer { animation-delay: 65ms; }
 .control-enter { animation: control-enter 180ms var(--ease-out); }
+/* A jumped-to message announces itself, then settles. */
+.message-highlight { animation: message-highlight 2.2s var(--ease-out) both; }
 .disclosure-content { overflow: hidden; }
 .disclosure-content[data-state="open"] { animation: disclosure-open 220ms var(--ease-out); }
 .disclosure-content[data-state="closed"] { animation: disclosure-close 160ms ease-out; }
 @keyframes welcome-enter {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes message-highlight {
+  0%, 30% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 35%, transparent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
 }
 @keyframes control-enter {
   from { opacity: 0; transform: scale(0.85); }
