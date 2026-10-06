@@ -64,7 +64,9 @@ const geometry = `(() => {
   const modelLabel = label ? { text:label.textContent, width:label.clientWidth, scrollWidth:label.scrollWidth,
     overflow:getComputedStyle(label).textOverflow, accessibleName:model.getAttribute('aria-label') } : null;
   const c = rect(card);
+  const fonts = [...card.querySelectorAll('textarea, button, span, label, input')].map(el=>getComputedStyle(el).fontFamily);
   const problems = controls.filter(r => r.x < c.x || r.right > c.right + 1 || r.right > innerWidth || r.bottom > innerHeight || r.width < 24).map(r => r.label);
+  if (fonts.some(font=>!font.includes('JetBrains Mono'))) problems.push('Composer text is not consistently monospace');
   const action = controls.find(r => ['Send', 'Stop', 'Queue message'].includes(r.label));
   if (action && controls.some(r => Math.abs(r.y + r.height/2 - action.y - action.height/2) > 2)) problems.push('Composer toolbar wraps instead of reserving the action row');
   if (innerWidth < 768 && action && (action.width < 44 || action.height < 44)) problems.push('Primary touch target is smaller than 44px');
@@ -78,7 +80,7 @@ const geometry = `(() => {
   const queue = card.querySelector('[aria-label="Queued messages"]');
   if (queue && queue.scrollWidth > queue.clientWidth) problems.push('Queued text overflow');
   const overlaps = controls.flatMap((a,i) => controls.slice(i+1).filter(b => a.x < b.right-1 && b.x < a.right-1 && a.y < b.bottom-1 && b.y < a.bottom-1).map(b => a.label+' overlaps '+b.label));
-  return { viewport:[innerWidth,innerHeight], coarse:matchMedia('(pointer: coarse)').matches, card:c, textarea:rect(t), footer:rect(footer), controls, modelLabel, navigation, documentScrollTop:scrollY, documentWidth:document.documentElement.scrollWidth, problems:[...problems,...overlaps] };
+  return { viewport:[innerWidth,innerHeight], coarse:matchMedia('(pointer: coarse)').matches, card:c, textarea:rect(t), footer:rect(footer), controls, fonts, modelLabel, navigation, documentScrollTop:scrollY, documentWidth:document.documentElement.scrollWidth, problems:[...problems,...overlaps] };
 })()`;
 async function capture(journey) {
   for (const [w,h] of views) {
@@ -127,7 +129,11 @@ async function run() {
     writeFileSync(join(evidence, `new-${label}-popover.json`), JSON.stringify(pop));
     if (pop.x < 0 || pop.right > pop.width+1) failures.push(`${label} popover extends outside 320px viewport`);
     if (evaluate(`document.activeElement.tagName`) === 'INPUT') throw new Error(`${label} picker automatically focused search on a phone`);
-    ab('press', 'Escape');
+    if (label === 'Model') {
+      ab('focus', '[aria-label="First message"]');
+      await until(`!document.querySelector('[aria-label="Model and effort"]')`);
+      if (!evaluate(`document.activeElement.matches('[aria-label="First message"]')`)) throw new Error('Dismissal stole focus from the composer');
+    } else ab('press', 'Escape');
   }
   // Reduced viewport checks exercise geometry, not a claim about the OS keyboard.
   ab('set', 'viewport', '390', '400');
@@ -144,6 +150,20 @@ async function run() {
   const option = `[data-value="fake/${longModel}"]`;
   const fullName = evaluate(`(() => { const e=document.querySelector('${option}'); return {text:e.innerText,width:e.clientWidth,scrollWidth:e.scrollWidth}; })()`);
   if (!fullName.text.includes(longModel) || fullName.scrollWidth > fullName.width) throw new Error('Full model name is not readable inside the picker');
+  const pickerLayout = evaluate(`(() => {
+    const pop=document.querySelector('[aria-label="Model and effort"]');
+    const rows=[...pop.querySelectorAll('[cmdk-item]')];
+    return {text:pop.textContent,close:!!pop.querySelector('[aria-label="Close model picker"]'),
+      fonts:[...pop.querySelectorAll('input,span,label,legend')].map(e=>getComputedStyle(e).fontFamily),
+      rows:rows.map(row=>{const label=row.querySelector('span'),check=row.querySelector('svg');return {
+        text:label.textContent,left:label.getBoundingClientRect().left,right:label.getBoundingClientRect().right,
+        checkLeft:check.getBoundingClientRect().left,checked:getComputedStyle(check).opacity==='1'};})};
+  })()`);
+  writeFileSync(join(evidence, 'model-picker-layout.json'), JSON.stringify(pickerLayout,null,2));
+  if (pickerLayout.text.includes('Model and effort') || pickerLayout.close || pickerLayout.text.includes('default')) throw new Error('Retired model picker heading or default badge remains');
+  if (pickerLayout.fonts.some(font=>!font.includes('JetBrains Mono'))) throw new Error('Settings popup is not monospace');
+  if (pickerLayout.rows.some(row=>Math.abs(row.left-pickerLayout.rows[0].left)>1 || row.checkLeft<row.right)) throw new Error('Model labels are not left aligned with checks on the right');
+  if (pickerLayout.rows.filter(row=>row.checked).map(row=>row.text).join() !== `fake/${longModel}`) throw new Error('Model selection check marks the wrong option');
   ab('click', '[data-value="fake/beta"]');
   await until(`document.querySelector('[aria-label^="Model:"]').title === 'fake/beta' && document.querySelector('input[value="off"]')?.checked`);
   if (evaluate(`document.querySelectorAll('[aria-label="Effort"] input').length`) !== 1) throw new Error('Non-reasoning model exposed unsupported efforts');
@@ -154,7 +174,7 @@ async function run() {
   await until(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: xhigh')`);
   ab('screenshot', join(evidence, 'new-model-effort-320.png'));
   ab('click', 'label:has(input[value="medium"])');
-  ab('click', '[aria-label="Close model picker"]');
+  ab('press', 'Escape');
   if (!evaluate(`document.activeElement.matches('[aria-label^="Model:"]') && draftInput === document.querySelector('textarea') && draftInput.value === 'mobile first\\n' && draftInput.selectionStart === 2 && draftInput.selectionEnd === 5`)) throw new Error('Settings lost the draft, selection, editor identity or return focus');
   if (evaluate(`sent.some(m=>m._tag==='create_session'||m.action?._tag==='prompt')`)) throw new Error('Settings sent a prompt');
   ab('click', '[aria-label="Send"]');
@@ -177,7 +197,7 @@ async function run() {
   ab('click', '[aria-label^="Model:"]');
   ab('click', 'label:has(input[value="xhigh"])');
   await until(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: xhigh')`);
-  ab('click', '[aria-label="Close model picker"]');
+  ab('press', 'Escape');
   const changedAction = evaluate(geometry).controls.find(c => c.label === 'Send');
   if (idleAction.x !== changedAction.x || idleAction.y !== changedAction.y) throw new Error('Changing effort moved Send');
   if (evaluate(`document.querySelector('textarea').value`) !== 'idle draft') throw new Error('Changing effort discarded the active session draft');
@@ -281,6 +301,20 @@ async function run() {
   ab('screenshot', join(evidence, 'desktop-keyboard-effort.png'));
   ab('press', 'Escape');
   await until(`document.activeElement.matches('[aria-label^="Model:"]')`);
+  // Moving keyboard focus or clicking outside dismisses without stealing it back.
+  ab('click', '[aria-label^="Model:"]');
+  ab('focus', '[aria-label="Message"]');
+  await until(`!document.querySelector('[aria-label="Model and effort"]')`);
+  if (!evaluate(`document.activeElement.matches('[aria-label="Message"]')`)) throw new Error('Focus-out dismissal stole editor focus');
+  ab('click', '[aria-label^="Model:"]');
+  ab('click', '[aria-label="Message"]');
+  await until(`!document.querySelector('[aria-label="Model and effort"]')`);
+  ab('click', '[aria-label^="Model:"]');
+  const focusedTab = JSON.parse(ab('tab', 'list', '--json')).data.tabs.find(tab => tab.active).tabId;
+  ab('tab', 'new', '--label', 'focus-away', 'about:blank');
+  ab('tab', focusedTab);
+  await until(`!document.querySelector('[aria-label="Model and effort"]')`);
+  ab('tab', 'close', 'focus-away'); ab('tab', focusedTab);
   ab('fill', '[aria-label="Message"]', 'desktop');
   ab('press', 'Shift+Enter');
   if (!evaluate(`document.querySelector('textarea').value === 'desktop\\n'`)) throw new Error('Shift+Enter did not insert newline');

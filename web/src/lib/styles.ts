@@ -5,7 +5,7 @@ export const picker =
   "inline-flex h-8 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 hover:bg-fill-hover hover:text-ink data-[state=open]:bg-fill-hover data-[state=open]:text-ink";
 
 /** Shared surface and focus treatment for the first-message and session composers. */
-export const composerCard = "composer-card";
+export const composerCard = "composer-card font-mono";
 
 /** The input grows with content; on phones it leaves room for the keyboard and toolbar. */
 export const composerInput = "max-h-[min(12rem,30dvh)] min-h-14 resize-none border-0 bg-transparent px-4 pt-4 shadow-none focus-visible:ring-0 md:px-5";

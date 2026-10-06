@@ -80,7 +80,7 @@ try {
   await ab('click', '[aria-label^="Model:"]');
   await ab('click', '[data-value="piano-phase0/project"]');
   await ab('click', 'label:has(input[value="high"])');
-  await ab('click', '[aria-label="Close model picker"]');
+  await ab('press', 'Escape');
   await ab('fill', '[aria-label="First message"]', '/phase0-dialog');
   await ab('click', '[aria-label="Send"]');
   await ab('wait', '--text', 'Phase 0 supported dialog');

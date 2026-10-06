@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { picker } from "@/lib/styles";
@@ -20,6 +20,12 @@ interface Props {
 /** One settings trigger: the model label yields space before the effort or primary action does. */
 export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled }: Props) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = () => setOpen(false);
+    window.addEventListener("blur", dismiss);
+    return () => window.removeEventListener("blur", dismiss);
+  }, [open]);
   const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const want = value || catalog?.defaultModel || "";
@@ -34,12 +40,11 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
       onSelect={() => onChange(m.ref)}
       className="min-h-11 md:min-h-9"
     >
-      <CheckIcon className={cn("size-4 shrink-0", m.ref === want ? "opacity-100" : "opacity-0")} />
       <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">
         <span className="text-ink-3">{m.provider}/</span>
         {m.id}
       </span>
-      {m.ref === catalog?.defaultModel && <span className="text-ink-3">default</span>}
+      <CheckIcon aria-hidden className={cn("size-4 shrink-0", m.ref === want ? "opacity-100" : "opacity-0")} />
     </CommandItem>
   );
 
@@ -60,7 +65,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
       </PopoverTrigger>
       <PopoverContent
         ref={content} align="start" aria-label="Model and effort" tabIndex={-1}
-        className="max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
+        className="max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0 font-mono"
         onOpenAutoFocus={event => {
           // Opening settings on a phone should not summon the software keyboard.
           event.preventDefault();
@@ -68,10 +73,6 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           else search.current?.focus({ preventScroll: true });
         }}
       >
-        <div className="flex items-center justify-between px-3 pt-1">
-          <p className="text-sm font-medium">Model and effort</p>
-          <Button variant="ghost" size="icon" className="size-11 md:size-9" aria-label="Close model picker" onClick={() => setOpen(false)}><XIcon /></Button>
-        </div>
         <Command>
           <CommandInput ref={search} aria-label="Search models" placeholder="Search models" />
           <CommandList className="max-h-[min(16rem,40dvh)]">

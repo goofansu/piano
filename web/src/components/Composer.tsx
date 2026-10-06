@@ -119,7 +119,7 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
                 {tokens === null ? "—" : formatTokenCount(tokens)}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" aria-label="Context usage details" className="w-64 max-w-[calc(100vw-2rem)] space-y-1 text-sm">
+            <PopoverContent align="start" aria-label="Context usage details" className="w-64 max-w-[calc(100vw-2rem)] space-y-1 font-mono text-sm">
               <p>{tokens === null ? "Context usage unavailable" : `Context: ${tokens.toLocaleString()} tokens`}</p>
               {contextWindow !== undefined && contextWindow > 0 && <p className="text-ink-2">Context window: {contextWindow.toLocaleString()} tokens</p>}
               {left !== null && <p className="text-ink-2">{left < 1 ? left.toFixed(1) : Math.round(left)}% left</p>}
