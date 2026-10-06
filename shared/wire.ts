@@ -276,22 +276,15 @@ export const SessionInfo = Schema.Struct({
 });
 export type SessionInfo = typeof SessionInfo.Type;
 
-/** Point-in-time observations, not exact revisions or verification evidence. */
+/** What picking a worktree needs, from Git; not exact revisions or verification evidence. */
 export const WorktreeFacts = Schema.Struct({
-  path: Schema.String, branch: Schema.NullOr(Schema.String), main: Schema.Boolean,
-  head: Schema.NullOr(Schema.String), detached: Schema.Boolean,
-  changes: Schema.optional(Schema.NullOr(Schema.Struct({
-    staged: Schema.Boolean, modified: Schema.Boolean, untracked: Schema.Boolean,
-    renamed: Schema.Boolean, deleted: Schema.Boolean, conflicted: Schema.NullOr(Schema.Boolean),
-  }))),
-  operation: Schema.optional(Schema.NullOr(Schema.Literals(["merge", "rebase", "cherry_pick", "revert", "bisect"]))),
-  locked: Schema.optional(Schema.NullOr(Schema.Struct({ reason: Schema.NullOr(Schema.String) }))),
-  prunable: Schema.optional(Schema.NullOr(Schema.Struct({ reason: Schema.NullOr(Schema.String) }))),
+  path: Schema.String, branch: Schema.NullOr(Schema.String), detached: Schema.Boolean,
+  /** Git can prune it: the checkout directory is gone. */
+  prunable: Schema.Boolean,
 });
 export type WorktreeFacts = typeof WorktreeFacts.Type;
 export const WorktreeDiscovery = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("ready"), observedAt: Schema.String, currentPath: Schema.String,
-    defaultBranch: Schema.optional(Schema.NullOr(Schema.String)), worktrees: Schema.Array(WorktreeFacts) }),
+  Schema.Struct({ status: Schema.Literal("ready"), observedAt: Schema.String, currentPath: Schema.String, worktrees: Schema.Array(WorktreeFacts) }),
   Schema.Struct({ status: Schema.Literal("non-git"), observedAt: Schema.String }),
   Schema.Struct({ status: Schema.Literal("error"), observedAt: Schema.String, detail: Schema.String }),
 ]);

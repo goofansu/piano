@@ -1,4 +1,4 @@
-/** Worktrunk 0.80.0 / list schema 2. Git and CLI details stay behind this module. */
+/** Discovery reads Git; creation goes through Worktrunk 0.80.0 for its paths and hooks. Git and CLI details stay behind this module. */
 import { execFile } from "node:child_process";
 import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
@@ -45,29 +45,6 @@ export const gitTopLevel = (path: string): Effect.Effect<string> =>
     Effect.map((out) => out.trim()), Effect.orElseSucceed(() => ""),
   );
 
-// Validate every field we consume. Extra Worktrunk facts are deliberately not domain state.
-// Absent means not applicable/not collected; null means requested but undetermined.
-const Changes = Schema.Struct({
-  staged: Schema.Boolean, modified: Schema.Boolean, untracked: Schema.Boolean,
-  renamed: Schema.Boolean, deleted: Schema.Boolean, conflicted: Schema.NullOr(Schema.Boolean),
-});
-const Reason = Schema.NullOr(Schema.Struct({ reason: Schema.NullOr(Schema.String) }));
-const Item = Schema.Struct({
-  branch: Schema.NullOr(Schema.String),
-  head: Schema.NullOr(Schema.Struct({ sha: Schema.String })),
-  worktree: Schema.optional(Schema.Struct({
-    path: Schema.String, main: Schema.Boolean, current: Schema.Boolean, detached: Schema.Boolean,
-    changes: Schema.optional(Schema.NullOr(Changes)),
-    operation: Schema.optional(Schema.NullOr(Schema.Literals(["merge", "rebase", "cherry_pick", "revert", "bisect"]))),
-    locked: Schema.optional(Reason), prunable: Schema.optional(Reason),
-  })),
-});
-const List = Schema.Struct({
-  schema: Schema.Literal(2),
-  repo: Schema.Struct({ default_branch: Schema.optional(Schema.NullOr(Schema.String)) }),
-  collected: Schema.Struct({ ci: Schema.Boolean, summary: Schema.Boolean }),
-  items: Schema.Array(Item),
-});
 const Created = Schema.Struct({
   action: Schema.Literal("created"), branch: Schema.String, path: Schema.String,
   created_branch: Schema.Literal(true), base_branch: Schema.String,
@@ -100,31 +77,47 @@ const isGit = (path: string) => Effect.gen(function* () {
   );
 });
 
+/** One `git worktree list --porcelain -z` record. Unknown attributes are ignored. */
+function parseWorktrees(out: string): WorktreeFacts[] | undefined {
+  const worktrees: WorktreeFacts[] = [];
+  let current: { path?: string; branch: string | null; detached: boolean; bare: boolean; prunable: boolean } | undefined;
+  const finish = () => {
+    if (!current) return true;
+    const w = current; current = undefined;
+    if (w.bare) return true;
+    if (!w.path || !isAbsolute(w.path) || worktrees.some(other => other.path === w.path) || (w.branch === null) !== w.detached) return false;
+    worktrees.push({ path: w.path, branch: w.branch, detached: w.detached, prunable: w.prunable });
+    return true;
+  };
+  for (const field of out.split("\0")) {
+    if (field === "") { if (!finish()) return undefined; continue; }
+    const [key, ...rest] = field.split(" "), value = rest.join(" ");
+    if (key === "worktree") { if (!finish()) return undefined; current = { path: value, branch: null, detached: false, bare: false, prunable: false }; continue; }
+    if (!current) return undefined;
+    if (key === "branch") current.branch = value.replace(/^refs\/heads\//, "");
+    else if (key === "detached") current.detached = true;
+    else if (key === "bare") current.bare = true;
+    else if (key === "prunable") current.prunable = true;
+  }
+  return finish() ? worktrees : undefined;
+}
+
 /** No healthy fallback and no registry writes. Each call is a fresh point-in-time observation. */
 export const listWorktrees = (project: string): Effect.Effect<WorktreeDiscovery> => Effect.gen(function* () {
   const observedAt = new Date().toISOString();
   return yield* Effect.gen(function* () {
     if (!(yield* isGit(project))) return { status: "non-git" as const, observedAt };
-    yield* compatible;
-    // Override display defaults that could opt into network/LLM collection or schema 1.
-    const result = yield* json(List, yield* wt(project, ["--config-set", "list.json-schema=2", "--config-set", "list.full=false", "list", "--format=json", "--no-progressive"]));
-    const worktrees: WorktreeFacts[] = [];
-    let currentPath: string | undefined;
-    for (const item of result.items) {
-      const w = item.worktree;
-      if (!w) continue;
-      if (!isAbsolute(w.path) || worktrees.some(other => other.path === w.path) || (item.branch === null) !== w.detached ||
-          (item.head && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(item.head.sha)) || (w.current && currentPath)) {
-        return yield* new WorktreeError({ detail: "Invalid Worktrunk checkout identity. Refresh after checking the repository with wt list." });
-      }
-      if (w.current) currentPath = w.path;
-      worktrees.push({ path: w.path, branch: item.branch, main: w.main, detached: w.detached, head: item.head?.sha ?? null,
-        changes: w.changes, operation: w.operation, locked: w.locked, prunable: w.prunable });
-    }
-    if (!currentPath) return yield* new WorktreeError({ detail: "Worktrunk returned no current checkout for a Git working directory. Refresh after checking wt list." });
-    return { status: "ready" as const, observedAt, currentPath, defaultBranch: result.repo.default_branch, worktrees };
+    const [top, out] = yield* Effect.all([
+      run("git", ["-C", project, "rev-parse", "--show-toplevel"]),
+      run("git", ["-C", project, "worktree", "list", "--porcelain", "-z"]),
+    ], { concurrency: 2 });
+    const worktrees = parseWorktrees(out);
+    if (!worktrees) return yield* new WorktreeError({ detail: "Invalid git worktree list output. Refresh after checking the repository with git worktree list." });
+    const currentPath = top.trim();
+    if (!worktrees.some(w => w.path === currentPath)) return yield* new WorktreeError({ detail: "Git listed no worktree for this checkout. Refresh after checking git worktree list." });
+    return { status: "ready" as const, observedAt, currentPath, worktrees };
   }).pipe(Effect.catchTag("WorktreeError", (e) => Effect.succeed({ status: "error" as const, observedAt,
-    detail: `${e.detail}\nCheck the checkout and Worktrunk installation/configuration, then refresh. No current Git status is available.` })));
+    detail: `${e.detail}\nCheck the checkout and Git, then refresh. No current Git status is available.` })));
 });
 
 /** New branches only. No prose-based retry of a possibly partially completed operation. */

@@ -178,7 +178,7 @@ export const handleSocket = (socket: Socket.Socket) =>
                     const discovery = yield* listWorktrees(msg.project);
                     if (discovery.status !== "ready") return yield* new WorktreeError({ detail: discovery.status === "error" ? discovery.detail : "This project is non-Git." });
                     const w = discovery.worktrees.find(w => w.path === msg.path);
-                    if (!w || w.prunable !== undefined) return yield* new WorktreeError({ detail: "This checkout is absent or unavailable. Refresh discovery and inspect it before selecting." });
+                    if (!w || w.prunable) return yield* new WorktreeError({ detail: "This checkout is absent or unavailable. Refresh discovery and inspect it before selecting." });
                     return { status: "ready" as const, project: msg.project, path: w.path, branch: w.branch };
                   });
               if (result.path !== msg.project) yield* registry.addWorktree({ project: msg.project, path: result.path, branch: result.branch ?? "" });

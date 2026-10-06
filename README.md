@@ -167,7 +167,7 @@ server/Catalog.ts      model catalog from PiSessions.probe plus the enabledModel
 server/WsClient.ts    one browser client: ClientMessage in, ServerMessage out
 server/Router.ts       /ws upgrade, /api/ls, /api/projects, /api/models; static web/dist
 server/SessionFiles.ts     read-only session peeking via Pi's SessionManager
-server/Worktrees.ts    wt list / wt switch
+server/Worktrees.ts    git worktree list / wt switch
 server/Registry.ts     piano's registry: projects, worktrees and sessions (the config file)
 server/PiRecords.ts    Pi record → wire translation, indexed partial assembly and execution previews
 server/DisplayProjection.ts  consistent outbound display redaction (not credential containment)

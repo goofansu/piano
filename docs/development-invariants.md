@@ -80,17 +80,21 @@ messages or dialogs.
 measurement. Bound/coalesce delivery where appropriate; a slow browser must not create unbounded
 memory growth or stall Pi stdout draining.
 
-## INV-06 — Worktrunk failures remain unknown or failed
+## INV-06 — Worktree discovery and lifecycle failures remain unknown or failed
 
-Assert the supported `wt list` schema and consume complete structured output (currently schema 2
-with `--no-progressive`). Preserve null, unavailable, absent, detached, clean and failed states.
-Use Worktrunk's returned identity and lifecycle results instead of synthesizing paths or duplicating
-its available Git/PR summaries. Keep the adapter narrow and translate into Piano's domain types.
+Discover worktrees with Git (`git worktree list --porcelain -z` and `git rev-parse --show-toplevel`):
+picking a worktree needs only its path, branch, detached state and whether Git can prune it. Do not
+collect per-worktree status such as dirty or in-progress operations in discovery; it costs a
+`git status` per worktree on every refresh. A feature that needs it reads it for the one workspace it
+concerns. Create worktrees through Worktrunk so its configured paths and hooks apply: assert its
+version, consume complete structured output and use its returned identity and lifecycle results
+instead of synthesizing paths. Keep the adapter narrow and translate into Piano's domain types.
 Direct Git reads/snapshots for exact revision capture and validation are allowed; summary observations
 are not authoritative proof that a particular candidate passed checks.
 
-**Verify:** valid output, unsupported schema, malformed output, unavailable PR/check data and a failed
-command. None of the failure cases becomes a healthy project-root-only list or a passing check.
+**Verify:** linked, detached and prunable worktrees, a subdirectory and a linked checkout as the
+current path, malformed or failed Git output and failed creation. None of the failure cases becomes
+a healthy project-root-only list or a passing check.
 
 **Guardrail:** hooks, interactive approval and foreground completion follow the pinned Worktrunk
 contract. Worktree removal coordinates running sessions/processes before destroying their checkout.

@@ -63,7 +63,7 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
       {discovery?.status === "ready" && <>
         <ul aria-label="Discovered worktrees">
           {discovery.worktrees.map(w => <li key={w.path}>
-            <Button variant="ghost" aria-pressed={w.path === currentCwd} className="w-full justify-start font-normal" disabled={pending || !state.connected || refreshing || w.prunable !== undefined} onClick={() => {
+            <Button variant="ghost" aria-pressed={w.path === currentCwd} className="w-full justify-start font-normal" disabled={pending || !state.connected || refreshing || w.prunable} onClick={() => {
               const requestId = crypto.randomUUID(); setRequest(requestId); setError(null);
               send({ _tag: "add_worktree", requestId, project, path: w.path });
             }}>

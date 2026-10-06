@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
@@ -14,7 +14,7 @@ import { createWorktree, listWorktrees, WorktrunkCommand } from "../server/Workt
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } }).trim();
 function fixture(t: TestContext) {
-  const root = mkdtempSync(join(tmpdir(), "piano-worktrees-")), repo = join(root, "repo");
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "piano-worktrees-")), repo = join(root, "repo");
   mkdirSync(repo); git(repo, "init", "--quiet", "-b", "main");
   git(repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "baseline");
   t.after(() => {
@@ -28,48 +28,34 @@ function fixture(t: TestContext) {
   });
   return { root, repo };
 }
-const changes = { staged: false, modified: false, untracked: false, renamed: false, deleted: false, conflicted: false };
-const envelope = (path: string) => ({ schema: 2, repo: { default_branch: "main" }, collected: { ci: false, summary: false }, items: [
-  { branch: "main", head: { sha: "a".repeat(40) }, worktree: { path, main: true, current: true, detached: false, changes } },
-] });
-
-test("INV-06: discovery validates schema/output and preserves null/absent/dirty/detached facts without healthy fallbacks", async t => {
-  const { root, repo } = fixture(t), config = join(root, "result.json"), cli = join(root, "wt"), audit = join(root, "calls.jsonl");
-  writeFileSync(cli, `#!${process.execPath}\nimport {readFileSync,appendFileSync} from 'node:fs';
-const args=process.argv.slice(2), f=JSON.parse(readFileSync(${JSON.stringify(config)},'utf8'));
-appendFileSync(${JSON.stringify(audit)},JSON.stringify(args)+'\\n');
-if(args.includes('--version')) console.log(f.version??'wt v0.80.0');
-else if(f.error){console.error(f.error);process.exit(1);}
-else console.log(f.raw??JSON.stringify(f.output));\n`, { mode: 0o755 });
-  const observe = (f: object) => { writeFileSync(config, JSON.stringify(f)); return Effect.runPromise(listWorktrees(repo).pipe(Effect.provideService(WorktrunkCommand, cli))); };
-  const base = envelope(repo);
-  const result = await observe({ output: { ...base, items: [base.items[0],
-    { branch: null, head: null, worktree: { path: join(root, "detached"), main: false, current: false, detached: true, changes: null, operation: null, locked: null } },
-    { branch: "dirty", head: { sha: "b".repeat(40) }, worktree: { path: join(root, "dirty"), main: false, current: false, detached: false, changes: { ...changes, modified: true, conflicted: null }, operation: "rebase", prunable: { reason: "gone" } } },
-    { branch: "branch-only", head: null },
-  ] } });
+test("INV-06: discovery reads Git worktrees without Worktrunk and reports failures without healthy fallbacks", async t => {
+  const { root, repo } = fixture(t);
+  git(repo, "worktree", "add", "--quiet", "-b", "feature", join(root, "feature"));
+  git(repo, "worktree", "add", "--quiet", "--detach", join(root, "detached"));
+  git(repo, "worktree", "add", "--quiet", "-b", "gone", join(root, "gone"));
+  rmSync(join(root, "gone"), { recursive: true, force: true });
+  // Discovery must not need Worktrunk at all.
+  const observe = (path: string) => Effect.runPromise(listWorktrees(path).pipe(Effect.provideService(WorktrunkCommand, join(root, "unavailable"))));
+  const result = await observe(repo);
   assert.equal(result.status, "ready");
   if (result.status !== "ready") return;
-  assert.equal(result.worktrees.length, 3);
   assert.equal(result.currentPath, repo);
-  assert.deepEqual(result.worktrees[0].changes, changes);
-  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(result.worktrees[0])), "operation"), false);
-  assert.equal(result.worktrees[1].branch, null); assert.equal(result.worktrees[1].head, null);
-  assert.equal(result.worktrees[1].changes, null); assert.equal(result.worktrees[1].operation, null); assert.equal(result.worktrees[1].locked, null);
-  assert.equal(result.worktrees[2].changes?.conflicted, null); assert.equal(result.worktrees[2].operation, "rebase");
-  assert.deepEqual(result.worktrees[2].prunable, { reason: "gone" });
-  const calls = readFileSync(audit, "utf8").trim().split("\n").map(s => JSON.parse(s));
-  assert.ok(calls[1].includes("--no-progressive")); assert.ok(calls[1].includes("list.full=false"));
-  for (const f of [{ output: { ...base, schema: 1 } }, { output: [] }, { raw: "not json" }, { output: { ...base, items: [] } },
-    { output: { ...base, items: [{ ...base.items[0], worktree: { ...base.items[0].worktree, changes: { modified: false } } }] } },
-    { version: "wt v0.81.0", output: base }, { error: "backend failed" }]) {
-    const failed = await observe(f); assert.equal(failed.status, "error"); assert.equal("worktrees" in failed, false);
-  }
-  assert.equal((await Effect.runPromise(listWorktrees(repo).pipe(Effect.provideService(WorktrunkCommand, join(root, "unavailable"))))).status, "error");
+  assert.deepEqual(result.worktrees, [
+    { path: repo, branch: "main", detached: false, prunable: false },
+    { path: join(root, "detached"), branch: null, detached: true, prunable: false },
+    { path: join(root, "feature"), branch: "feature", detached: false, prunable: false },
+    { path: join(root, "gone"), branch: "gone", detached: false, prunable: true },
+  ].sort((x, y) => x.path === repo ? -1 : y.path === repo ? 1 : x.path.localeCompare(y.path)));
+  mkdirSync(join(repo, "subdirectory"));
+  const subdir = await observe(join(repo, "subdirectory"));
+  assert.ok(subdir.status === "ready" && subdir.currentPath === repo);
+  const linked = await observe(join(root, "feature"));
+  assert.ok(linked.status === "ready" && linked.currentPath === join(root, "feature"));
   const nonGit = join(root, "notes"); mkdirSync(nonGit);
-  assert.equal((await Effect.runPromise(listWorktrees(nonGit).pipe(Effect.provideService(WorktrunkCommand, cli)))).status, "non-git");
+  assert.equal((await observe(nonGit)).status, "non-git");
   writeFileSync(join(nonGit, ".git"), "gitdir: /not/a/repository\n");
-  assert.equal((await Effect.runPromise(listWorktrees(nonGit).pipe(Effect.provideService(WorktrunkCommand, cli)))).status, "error");
+  const broken = await observe(nonGit);
+  assert.equal(broken.status, "error"); assert.equal("worktrees" in broken, false);
 });
 
 test("INV-06: creation requires a complete structured new-branch result and never retries prose or bypasses approval", async t => {
@@ -97,9 +83,6 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
   writeFileSync(cli, `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';const r=spawnSync(${JSON.stringify(wtPath)},process.argv.slice(2),{stdio:'inherit',env:{...process.env,...${JSON.stringify({ HOME: home, XDG_CONFIG_HOME: config, XDG_CACHE_HOME: env.XDG_CACHE_HOME, XDG_STATE_HOME: env.XDG_STATE_HOME, WORKTRUNK_CONFIG_PATH: env.WORKTRUNK_CONFIG_PATH })}}});process.exit(r.status??1);\n`, { mode: 0o755 });
   const run = <A, E>(e: Effect.Effect<A, E>) => Effect.runPromise(e.pipe(Effect.provideService(WorktrunkCommand, cli)));
   assert.equal(execFileSync(wtPath, ["--version"], { encoding: "utf8", env }).trim(), "wt v0.80.0");
-  mkdirSync(join(repo, "subdirectory"));
-  const subdir = await run(listWorktrees(join(repo, "subdirectory")));
-  assert.ok(subdir.status === "ready" && subdir.currentPath === repo);
   const created = await run(createWorktree(repo, "feature"));
   assert.equal(created.path, join(root, "custom", "feature")); assert.equal(created.baseBranch, "main");
   writeFileSync(join(created.path, "new-source.ts"), "export const x = 1;\n");
@@ -107,7 +90,7 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
   let observed = await run(listWorktrees(repo)); assert.equal(observed.status, "ready");
   if (observed.status === "ready") {
     const w = observed.worktrees.find(w => w.path === created.path)!;
-    assert.equal(w.branch, null); assert.equal(w.detached, true); assert.equal(w.changes?.untracked, true);
+    assert.equal(w.branch, null); assert.equal(w.detached, true);
   }
   mkdirSync(join(repo, ".config")); writeFileSync(join(repo, ".config", "wt.toml"), 'pre-start = "echo ran > hook-ran; exit 3"\n');
   git(repo, "add", ".config"); git(repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "hook");
@@ -138,7 +121,9 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
     git(repo, "worktree", "remove", "--force", created.path);
     view = (yield* buildProjects)[0];
     assert.equal(view.worktrees[1].status, "missing"); assert.equal(view.sessions[0].sessionId, "saved-history");
-    view = (yield* buildProjects.pipe(Effect.provideService(WorktrunkCommand, join(root, "missing-wt"))))[0];
+    // Unreadable repository metadata: Git fails, and nothing pretends the project is healthy.
+    chmodSync(join(repo, ".git"), 0o000);
+    try { view = (yield* buildProjects)[0]; } finally { chmodSync(join(repo, ".git"), 0o755); }
     assert.equal(view.discovery.status, "error"); assert.equal(view.worktrees[0].status, "unknown");
     assert.equal(view.worktrees[0].branch, null); assert.equal(view.sessions.length, 1);
     const data = yield* registry.get;
