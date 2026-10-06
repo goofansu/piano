@@ -38,13 +38,18 @@ export function MessageList({ messages, pending, tools, placeholder }: Props) {
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [messages, pending, tools]);
   // Content can grow without a scroll event (a prompt opens, output expands). That only
-  // changes whether the bottom is in view; it never moves the reader.
+  // changes whether the bottom is in view; it never moves the reader. The container itself
+  // shrinking (a PR stack or banner appears below, the composer grows) is not the reader's
+  // doing, so a pinned view follows the bottom.
   useEffect(() => {
     const el = ref.current;
     const inner = content.current;
     if (!el || !inner) return;
     const measure = () => setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
-    const ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver((entries) => {
+      if (stick.current && entries.some((entry) => entry.target === el)) el.scrollTop = el.scrollHeight;
+      measure();
+    });
     ro.observe(inner);
     ro.observe(el);
     // A jump to the end pins the view there even if content grows while the scroll is in flight.
