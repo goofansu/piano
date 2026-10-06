@@ -84,9 +84,6 @@ covered and required gates pass; explain when existing tests or inspection suffi
 After a phase passes its required verification and review, commit its changes and push the current
 branch to its upstream. Report the commit and push outcome; a blocked push is not completion.
 Pushing changes does not authorize rebuilding or deploying the user's instance.
-Every work summary must state whether a restart is needed, which services are affected, any separate
-build/browser-reload requirement, and whether those steps were performed. State "no restart needed"
-for documentation-only changes.
 
 ## Design
 
