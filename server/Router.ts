@@ -13,7 +13,7 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { expandHome } from "./PiEnv.ts";
 import { buildProjects } from "./Views.ts";
 import { handleSocket } from "./WsClient.ts";
-import { lookupPullRequests } from "./PullRequests.ts";
+import { lookupGitHubLinks } from "./GitHubLinks.ts";
 
 /** Subdirectories for the folder picker, with git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
 const listDirectory = (raw: string) =>
@@ -114,15 +114,15 @@ export const AppRouter = HttpRouter.use((router) =>
       }),
     );
 
-    // Pull requests for a session: the GitHub PR URLs seen in its transcript.
+    // Live status for the GitHub pull requests and issues a session mentions.
     yield* router.add(
       "GET",
-      "/api/prs",
+      "/api/links",
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const params = HttpServerRequest.searchParamsFromURL(new URL(request.url, "http://localhost"));
-        const urls = typeof params.urls === "string" && params.urls ? params.urls.split(" ").filter((u) => /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(u)) : [];
-        return json({ prs: yield* lookupPullRequests(urls.slice(0, 10)) });
+        const urls = typeof params.urls === "string" && params.urls ? params.urls.split(" ").filter((u) => /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/(pull|issues)\/\d+$/.test(u)) : [];
+        return json({ links: yield* lookupGitHubLinks(urls.slice(0, 12)) });
       }),
     );
 

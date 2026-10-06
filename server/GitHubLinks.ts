@@ -1,13 +1,14 @@
 /**
- * Pull requests for a session, through the `gh` CLI: every GitHub PR URL that
- * appeared in the transcript. Lookups are cached briefly; a machine without `gh`
- * simply yields nothing.
+ * Live status for the GitHub links a session mentions, through the `gh` CLI: pull
+ * requests and issues by URL. Lookups are cached briefly; a machine without `gh`, or a
+ * URL `gh` cannot resolve, simply yields nothing for that link.
  */
 import { execFile } from "node:child_process";
 import { Effect } from "effect";
-import type { PullRequest } from "../shared/wire.ts";
+import type { LinkStatus, PullRequest } from "../shared/wire.ts";
 
-const FIELDS = "url,number,title,state,isDraft,reviewDecision,statusCheckRollup,headRepositoryOwner,updatedAt";
+const PR_FIELDS = "url,number,title,state,isDraft,reviewDecision,statusCheckRollup";
+const ISSUE_FIELDS = "url,number,title,state";
 
 interface RawPr {
   url: string;
@@ -17,8 +18,13 @@ interface RawPr {
   isDraft: boolean;
   reviewDecision: string;
   statusCheckRollup?: Array<{ __typename?: string; status?: string; conclusion?: string; state?: string }>;
-  headRepositoryOwner?: { login?: string };
-  updatedAt?: string;
+}
+
+interface RawIssue {
+  url: string;
+  number: number;
+  title: string;
+  state: "OPEN" | "CLOSED";
 }
 
 const gh = (args: string[]): Effect.Effect<string, Error> =>
@@ -48,12 +54,14 @@ function checksOf(rollup: RawPr["statusCheckRollup"]): PullRequest["checks"] {
   return pending ? "pending" : "success";
 }
 
-function toPullRequest(raw: RawPr): PullRequest {
-  const m = raw.url.match(/github\.com\/([^/]+\/[^/]+)\/pull\/\d+/);
+const repoOf = (url: string) => url.match(/github\.com\/([^/]+\/[^/]+)\//)?.[1] ?? "";
+
+function toPullRequest(raw: RawPr): LinkStatus {
   const review = raw.reviewDecision === "APPROVED" ? "approved" : raw.reviewDecision === "CHANGES_REQUESTED" ? "changes_requested" : raw.reviewDecision === "REVIEW_REQUIRED" ? "review_required" : "none";
   return {
+    _tag: "pull_request",
     url: raw.url,
-    repo: m?.[1] ?? "",
+    repo: repoOf(raw.url),
     number: raw.number,
     title: raw.title,
     state: raw.state === "MERGED" ? "merged" : raw.state === "CLOSED" ? "closed" : raw.isDraft ? "draft" : "open",
@@ -62,33 +70,42 @@ function toPullRequest(raw: RawPr): PullRequest {
   };
 }
 
-const parse = (json: string): RawPr[] => {
-  const v = JSON.parse(json) as RawPr | RawPr[];
-  return Array.isArray(v) ? v : [v];
+const toIssue = (raw: RawIssue): LinkStatus => ({
+  _tag: "issue",
+  url: raw.url,
+  repo: repoOf(raw.url),
+  number: raw.number,
+  title: raw.title,
+  state: raw.state === "CLOSED" ? "closed" : "open",
+});
+
+const first = <T>(json: string): T => {
+  const v = JSON.parse(json) as T | T[];
+  return Array.isArray(v) ? v[0] : v;
 };
 
-const byUrl = (url: string): Effect.Effect<PullRequest | undefined> =>
-  gh(["pr", "view", url, "--json", FIELDS]).pipe(
-    Effect.map((out) => toPullRequest(parse(out)[0])),
-    Effect.orElseSucceed(() => undefined),
-  );
+const byUrl = (url: string): Effect.Effect<LinkStatus | undefined> =>
+  (/\/pull\/\d+$/.test(url)
+    ? gh(["pr", "view", url, "--json", PR_FIELDS]).pipe(Effect.map((out) => toPullRequest(first<RawPr>(out))))
+    : gh(["issue", "view", url, "--json", ISSUE_FIELDS]).pipe(Effect.map((out) => toIssue(first<RawIssue>(out))))
+  ).pipe(Effect.orElseSucceed(() => undefined));
 
-const cache = new Map<string, { at: number; prs: PullRequest[] }>();
+const cache = new Map<string, { at: number; links: LinkStatus[] }>();
 const TTL = 30_000;
 
-export const lookupPullRequests = (urls: ReadonlyArray<string>): Effect.Effect<PullRequest[]> =>
+export const lookupGitHubLinks = (urls: ReadonlyArray<string>): Effect.Effect<LinkStatus[]> =>
   Effect.gen(function* () {
     const key = urls.join(" ");
     const hit = cache.get(key);
-    if (hit && Date.now() - hit.at < TTL) return hit.prs;
-    const mentioned = yield* Effect.forEach(urls, byUrl, { concurrency: 4 });
+    if (hit && Date.now() - hit.at < TTL) return hit.links;
+    const found = yield* Effect.forEach(urls, byUrl, { concurrency: 4 });
     const seen = new Set<string>();
-    const prs: PullRequest[] = [];
-    for (const pr of mentioned) {
-      if (!pr || seen.has(pr.url)) continue;
-      seen.add(pr.url);
-      prs.push(pr);
+    const links: LinkStatus[] = [];
+    for (const link of found) {
+      if (!link || seen.has(link.url)) continue;
+      seen.add(link.url);
+      links.push(link);
     }
-    cache.set(key, { at: Date.now(), prs });
-    return prs;
+    cache.set(key, { at: Date.now(), links });
+    return links;
   });

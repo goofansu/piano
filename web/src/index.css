@@ -384,6 +384,15 @@
   border-color: color-mix(in oklab, var(--brand) 45%, var(--line-strong));
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 7%, transparent), var(--shadow-1);
 }
+/* A site's monogram in the link pile: one hue per host, legible in both themes. */
+.link-monogram {
+  background: oklch(0.92 0.05 var(--hue));
+  color: oklch(0.42 0.12 var(--hue));
+}
+.dark .link-monogram {
+  background: oklch(0.34 0.06 var(--hue));
+  color: oklch(0.86 0.1 var(--hue));
+}
 .welcome-enter {
   animation: welcome-enter 420ms var(--ease-out) both;
 }

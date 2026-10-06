@@ -366,6 +366,24 @@ export const PullRequest = Schema.Struct({
 });
 export type PullRequest = typeof PullRequest.Type;
 
+/** A GitHub issue whose URL appeared in the transcript. */
+export const Issue = Schema.Struct({
+  url: Schema.String,
+  /** "owner/name" */
+  repo: Schema.String,
+  number: Schema.Number,
+  title: Schema.String,
+  state: Schema.Literals(["open", "closed"]),
+});
+export type Issue = typeof Issue.Type;
+
+/** Live status for a link the server can look up; other links carry only what their URL says. */
+export const LinkStatus = Schema.Union([
+  Schema.TaggedStruct("pull_request", PullRequest.fields),
+  Schema.TaggedStruct("issue", Issue.fields),
+]);
+export type LinkStatus = typeof LinkStatus.Type;
+
 export const HostInfo = Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, streaming: Schema.Boolean });
 export type HostInfo = typeof HostInfo.Type;
 
