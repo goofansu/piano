@@ -6,7 +6,6 @@ import { cn } from "cn";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Composer } from "@/components/Composer";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
@@ -38,6 +37,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
   const effectiveEffort = (t?.hosted ? t.state.thinkingLevel as ThinkingLevel | undefined : undefined)
     ?? clampEffort(levelsFor(catalog, effectiveModel), effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
   const extension = t?.state.extension;
+  // Pi reports an extension block for every session; only one that says something is shown.
+  const extensionContent = !!extension && !!(extension.title || extension.statuses.length || extension.widgets.length || extension.editorRequest);
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
   const [overrides, setOverrides] = useState<{ model?: string; thinkingLevel?: ThinkingLevel }>({});
   useEffect(() => setOverrides({}), [t?.cwd, t?.sessionId]);
@@ -120,7 +121,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           </div>
         </section>
       )}
-      {extension && <><Separator /><section aria-label="Extension state" className="max-h-40 overflow-auto px-4 py-2 text-xs text-ink-2">
+      {extension && extensionContent && <section aria-label="Extension state" className="mx-auto w-full max-w-3xl max-h-40 overflow-auto px-4 pt-2 text-xs text-ink-2 md:px-6">
         {extension.title && <p>Extension title: {extension.title}</p>}
         {extension.statuses.map(status => <p key={status.key}>{status.key}: {status.text}</p>)}
         {extension.widgets.map(widget => <div key={widget.key}><p>{widget.key} · {widget.placement === "aboveEditor" ? "above editor" : "below editor"}</p><pre className="whitespace-pre-wrap break-words">{widget.lines.join("\n")}</pre></div>)}
@@ -131,7 +132,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
             if (draftKey && extension.editorRequest) { onDraftAppend(draftKey, `${state.drafts[draftKey] ? "\n\n" : ""}${extension.editorRequest.text}`); setUsedEditorRequest(extension.editorRequest.id); }
           }}>Append to draft</Button>
         </div>}
-      </section></>}
+      </section>}
       <Composer
         key={draftKey}
         draftKey={draftKey ?? "loading"}
