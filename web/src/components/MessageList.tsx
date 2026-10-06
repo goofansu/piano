@@ -15,8 +15,6 @@ interface Props {
   pending: RenderMsg | null;
   tools: Record<string, ToolExecution>;
   placeholder: string;
-  /** When Pi started the current turn, or null while it rests. */
-  workingSince: number | null;
 }
 
 /**
@@ -24,7 +22,7 @@ interface Props {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, tools, placeholder, workingSince }: Props) {
+export function MessageList({ messages, pending, tools, placeholder }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -80,7 +78,6 @@ export function MessageList({ messages, pending, tools, placeholder, workingSinc
             return <Message key={m.id} msg={m} results={results} tools={tools} active={active} />;
           })}
           {pending && <Message msg={pending} results={results} tools={tools} active={active} streaming />}
-          {workingSince !== null && <Working since={workingSince} />}
         </div>
       </div>
       </div>
@@ -313,24 +310,5 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
       </div>)}
       {result?.nestedCallsComplete === false && <p className="pl-7 text-xs text-warn">Some tool details are unavailable.</p>}
     </Collapsible>
-  );
-}
-
-function Working({ since }: { since: number }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const s = Math.max(0, Math.floor((now - since) / 1000));
-  const elapsed = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
-  return (
-    <Row glyph={<span className="block size-2 rounded-full animate-live bg-busy" />} className="text-sm">
-      <div className="flex items-baseline gap-3" role="status">
-        <span className="font-medium">Working</span>
-        <span className="text-ink-3 tabular-nums">{elapsed}</span>
-        <span className="text-ink-3">Esc to stop</span>
-      </div>
-    </Row>
   );
 }

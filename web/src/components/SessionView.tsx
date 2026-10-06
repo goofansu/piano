@@ -56,8 +56,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
     rejected: "Message rejected.",
     uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
   }[submission.outcome] : undefined;
-  const [workingSince, setWorkingSince] = useState<number | null>(null);
-  useEffect(() => setWorkingSince(streaming ? Date.now() : null), [streaming, t?.sessionId]);
 
   const prUrls = useMemo(() => (t ? pullRequestUrls(t.messages) : []), [t?.messages]);
   const prs = usePullRequests(prUrls, !streaming);
@@ -102,7 +100,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           pending={t.pending}
           tools={t.tools}
           placeholder="Nothing here yet. Send the first message."
-          workingSince={workingSince}
         />
       ) : (
         <div className="flex flex-1 items-center justify-center text-base text-ink-2">Loading</div>

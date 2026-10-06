@@ -175,6 +175,7 @@ try {
   assert.equal(await evaluate(`getComputedStyle(document.getElementById(document.querySelector('${tool}').getAttribute('aria-controls'))).animationName`), 'none');
   await ab('press', 'Enter'); await ab('wait', '--fn', `!(${argVisible})`);
   await ab('fill', '[aria-label="Message"]', '/partial'); await click('Send'); await ab('wait', '--text', 'Partial daily-ui');
+  assert.equal(await evaluate(`document.querySelector('main').innerText.includes('Esc to stop')`), false, 'no redundant working/timer row');
   const motion = await evaluate(`(() => {
     const button=document.querySelector('[aria-label="Stop"]'), r=button.getBoundingClientRect();
     return {animations:document.getAnimations().length,caret:getComputedStyle([...document.querySelectorAll('.prose-chat')].at(-1),'::after').animationName,
