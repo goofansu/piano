@@ -9,16 +9,15 @@ import { Separator } from "@/components/ui/separator";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
-  pending?: RenderMsg;
 }
 
 /** A table of contents for the transcript: prompts and replies, opened from the usage row. */
-export function JumpTo({ messages, pending }: Props) {
+export function JumpTo({ messages }: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string>("bottom");
   const list = useRef<HTMLDivElement>(null);
   const entries = useMemo(() => jumpEntries(messages), [messages]);
-  const total = messages.filter(message => message.role === "assistant").length + (pending?.role === "assistant" ? 1 : 0);
+  const total = entries.filter(entry => entry.kind === "user" || entry.kind === "assistant").length;
   // Opening reads where the reader is and centres that entry in the list.
   useEffect(() => {
     if (!open) return;
@@ -40,8 +39,8 @@ export function JumpTo({ messages, pending }: Props) {
   return <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Jump to message" aria-description={`${total} total Pi ${total === 1 ? "turn" : "turns"}`} aria-haspopup="dialog" aria-expanded={open} title="Jump to…" className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
-          {total} {total === 1 ? "turn" : "turns"}
+        <Button variant="ghost" size="sm" aria-label="Jump to message" aria-description={`${total} ${total === 1 ? "message" : "messages"} in the jump list`} aria-haspopup="dialog" aria-expanded={open} title="Jump to…" className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
+          {total} {total === 1 ? "message" : "messages"}
         </Button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" collisionPadding={16} aria-label="Jump to message" className="w-[28rem] max-w-[calc(100vw-2rem)] p-0 font-sans">
