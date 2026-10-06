@@ -142,6 +142,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
         onSend={(text, kind, attachments) => send({ _tag: "act", action: { _tag: kind === "steering" ? "steer" : "prompt", text, attachments }, start: startOptions() })}
         onStop={() => send({ _tag: "act", action: { _tag: "abort" } })}
         catalog={catalog}
+        onRefreshModels={t ? () => send({ _tag: "models", cwd: t.cwd, refresh: true }) : undefined}
         model={model}
         onModelChange={(ref) => {
           if (t?.hosted) send({ _tag: "act", action: { _tag: "set_model", model: ref } });

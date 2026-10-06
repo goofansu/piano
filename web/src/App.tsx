@@ -25,10 +25,28 @@ const WIDTH_KEY = "piano.sidebarWidth";
 /** Sidebar width bounds in px; dragging under the minimum by a margin collapses it. */
 const WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
 
+/** Model catalogs outlive reloads so the picker opens at once; its refresh button re-probes Pi. */
+const CATALOGS_KEY = "piano.catalogs";
+
+function storedCatalogs(): AppState["catalogs"] {
+  try {
+    return JSON.parse(localStorage.getItem(CATALOGS_KEY) ?? "{}") as AppState["catalogs"];
+  } catch {
+    return {};
+  }
+}
+
 export default function App() {
-  const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState =>
-    parseRoute(location).kind === "session" ? { ...s, view: { kind: "session" } } : s,
-  );
+  const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState => {
+    const seeded = { ...s, catalogs: storedCatalogs() };
+    return parseRoute(location).kind === "session" ? { ...seeded, view: { kind: "session" } } : seeded;
+  });
+  useEffect(() => {
+    try {
+      const usable = Object.fromEntries(Object.entries(state.catalogs).filter(([, c]) => !c.error));
+      localStorage.setItem(CATALOGS_KEY, JSON.stringify(usable));
+    } catch { /* storage unavailable: the server cache still answers */ }
+  }, [state.catalogs]);
   const [menuOpen, setMenuOpen] = useState(false);
   const sidebarReturnFocus = useRef<HTMLElement | null>(null);
   const latest = useRef(state);

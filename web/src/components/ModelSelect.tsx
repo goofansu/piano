@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, RefreshCwIcon } from "lucide-react";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { picker } from "@/lib/styles";
@@ -15,11 +15,16 @@ interface Props {
   effort: ThinkingLevel;
   onEffortChange: (level: ThinkingLevel) => void;
   disabled?: boolean;
+  /** Re-probe Pi for models, e.g. after adding a provider or logging in. */
+  onRefresh?: () => void;
 }
 
 /** One settings trigger: the model label yields space before the effort or primary action does. */
-export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled }: Props) {
+export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled, onRefresh }: Props) {
   const [open, setOpen] = useState(false);
+  // A refresh ends when a newer catalog arrives for this directory.
+  const [refreshing, setRefreshing] = useState<string | null>(null);
+  useEffect(() => { if (refreshing !== null && catalog?.fetchedAt !== refreshing) setRefreshing(null); }, [catalog?.fetchedAt, refreshing]);
   const [query, setQuery] = useState("");
   useEffect(() => {
     if (!open) return;
@@ -57,7 +62,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
         <Button
           variant="ghost" size="sm" aria-haspopup="dialog" aria-expanded={open}
           aria-label={`Model: ${want || label}; effort: ${effort}`}
-          disabled={disabled || !models.length}
+          disabled={disabled || (!models.length && !onRefresh) || !catalog}
           className={cn(picker, "h-11 min-w-0 max-w-none shrink justify-end md:h-8")}
           title={want}
         >
@@ -77,9 +82,21 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
         }}
       >
         <Command shouldFilter={false}>
-          <CommandInput ref={search} value={query} onValueChange={setQuery} aria-label="Search models" placeholder="Search models" />
+          <div className="flex items-center border-b border-line [&>[data-slot=command-input-wrapper]]:flex-1 [&>[data-slot=command-input-wrapper]]:border-b-0">
+            <CommandInput ref={search} value={query} onValueChange={setQuery} aria-label="Search models" placeholder="Search models" />
+            {onRefresh && (
+              <Button
+                variant="ghost" size="icon" aria-label="Refresh models" title="Refresh models"
+                disabled={refreshing !== null}
+                onClick={() => { setRefreshing(catalog?.fetchedAt ?? ""); onRefresh(); }}
+                className="mr-1 size-11 shrink-0 text-ink-3 md:size-8"
+              >
+                <RefreshCwIcon aria-hidden className={cn("size-4", refreshing !== null && "animate-spin")} />
+              </Button>
+            )}
+          </div>
           <CommandList className="max-h-[min(16rem,40dvh)]">
-            <CommandEmpty>No model matches.</CommandEmpty>
+            <CommandEmpty>{catalog?.error ? "No models available." : "No model matches."}</CommandEmpty>
             <CommandGroup>{visibleModels.map(item)}</CommandGroup>
           </CommandList>
         </Command>

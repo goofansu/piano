@@ -1,6 +1,7 @@
 /**
  * Model catalog for the picker: Pi's own list of usable models and its
- * default, from a one-shot probe. `enabledModels` marks the preferred subset.
+ * default, from a one-shot probe cached per cwd until refreshed. `enabledModels`
+ * marks the preferred subset.
  */
 import { Context, Effect, Layer } from "effect";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "../shared/wire.ts";
@@ -76,7 +77,8 @@ export const CatalogLive = Layer.effect(
         const failed: ModelCatalog = { cwd, models: [], fetchedAt: new Date().toISOString(), error: e.detail };
         return Effect.succeed(failed);
       }),
-      Effect.tap((c) => Effect.sync(() => { cache.set(cwd, c); })),
+      // A failed probe is not cached, so the next request retries it.
+      Effect.tap((c) => Effect.sync(() => { if (c.error) cache.delete(cwd); else cache.set(cwd, c); })),
       Effect.tap((c) =>
         c.error
           ? Effect.logWarning(`model catalog: ${c.error}`)

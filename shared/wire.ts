@@ -385,7 +385,8 @@ export type StartOptions = typeof StartOptions.Type;
 
 export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("projects", {}),
-  Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String) }),
+  /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
+  Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String), refresh: Schema.optional(Schema.Boolean) }),
   Schema.TaggedStruct("add_project", { path: Schema.String }),
   Schema.TaggedStruct("remove_project", { path: Schema.String }),
   Schema.TaggedStruct("create_worktree", { requestId: Schema.String, project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),

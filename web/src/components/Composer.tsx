@@ -24,6 +24,7 @@ interface Props {
   onSend: (text: string, kind: QueuedMessage["kind"], attachments: readonly Attachment[]) => void;
   onStop: () => void;
   catalog: ModelCatalog | null;
+  onRefreshModels?: () => void;
   model: string | undefined;
   onModelChange: (ref: string) => void;
   effort: ThinkingLevel;
@@ -36,7 +37,7 @@ interface Props {
 }
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
+export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   const imagesWaiting = streaming && attachments.items.length > 0;
@@ -128,7 +129,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
         </div>
         <div className={composerToolbar}>
           <AttachButton draft={attachments} disabled={disabled} />
-          <ModelSelect catalog={catalog} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
+          <ModelSelect catalog={catalog} onRefresh={onRefreshModels} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
           <Button
             size="icon"
             variant={showStop ? "outline" : "default"}

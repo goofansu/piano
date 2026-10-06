@@ -155,8 +155,10 @@ export const handleSocket = (socket: Socket.Socket) =>
         switch (msg._tag) {
           case "projects":
             return yield* send({ _tag: "projects", projects: yield* buildProjects });
-          case "models":
-            return yield* send({ _tag: "models", catalog: yield* catalog.refresh(resolve(expandHome(msg.cwd ?? selected?.cwd ?? homedir()))) });
+          case "models": {
+            const cwd = resolve(expandHome(msg.cwd ?? selected?.cwd ?? homedir()));
+            return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });
+          }
           case "add_project":
             yield* registry.addProject(msg.path);
             return yield* publishProjects;

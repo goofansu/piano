@@ -123,7 +123,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               />
               <div className={composerToolbar}>
                 <AttachButton draft={attachments} disabled={creating || !state.connected} />
-                <ModelSelect catalog={catalog} value={model} onChange={setModel} effort={effectiveEffort} onEffortChange={setEffort} />
+                <ModelSelect catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={model} onChange={setModel} effort={effectiveEffort} onEffortChange={setEffort} />
                 <Button size="icon" className={composerAction} aria-label="Send" disabled={!ready} onClick={submit}>
                   {creating ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
                 </Button>
