@@ -9,6 +9,8 @@ import { resolve, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-ui-polish-evidence/browser');
+// Scratch ports; override when another instance already holds the defaults.
+const BACKEND_PORT = process.env.PIANO_TEST_BACKEND_PORT ?? '7171', WEB_PORT = process.env.PIANO_TEST_WEB_PORT ?? '7172';
 mkdirSync(evidence, { recursive: true });
 const root = mkdtempSync(join(tmpdir(), 'piano-ui-polish-'));
 const repo = join(root, 'piano-studio'), sessions = join(root, 'sessions');
@@ -40,11 +42,11 @@ for (const [id, , messages] of stories) {
 writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: stories.map(([sessionId, title]) => ({
   cwd: repo, sessionId, title, createdAt: timestamp, updatedAt: timestamp, archived: false,
 })) }));
-const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: '7171',
+const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: BACKEND_PORT,
   PIANO_CONFIG: join(root, 'registry.json'), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '',
   PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
-const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], {
-  cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'],
+const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', WEB_PORT, '--strictPort'], {
+  cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: `http://127.0.0.1:${BACKEND_PORT}` }, stdio: ['ignore', 'pipe', 'pipe'],
 });
 let processLog = '';
 for (const proc of [backend, frontend]) { proc.stdout.on('data', d => processLog += d); proc.stderr.on('data', d => processLog += d); }
@@ -90,11 +92,11 @@ async function checkGeometry(name) {
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch('http://127.0.0.1:7171/api/projects')).ok && (await fetch('http://127.0.0.1:7172')).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${BACKEND_PORT}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${WEB_PORT}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   await ab('set', 'viewport', '1440', '1000');
-  await ab('open', 'http://127.0.0.1:7172/s/daily-ui');
+  await ab('open', `http://127.0.0.1:${WEB_PORT}/s/daily-ui`);
   await ab('wait', '--text', 'A quieter place to work');
   // INV-01: the retired transcript filter must not hide authoritative history,
   // even for browsers that saved the old replies-only preference.
@@ -167,10 +169,10 @@ try {
   // Motion preference covers entrance, disclosures, overlays, buttons and the
   // pseudo-element streaming caret, not just the original activity dot.
   await ab('set', 'media', 'light', 'reduced-motion');
-  await ab('open', 'http://127.0.0.1:7172/new'); await ab('wait', '--text', 'What should we work on?');
+  await ab('open', `http://127.0.0.1:${WEB_PORT}/new`); await ab('wait', '--text', 'What should we work on?');
   assert.ok(await evaluate(`matchMedia('(prefers-reduced-motion: reduce)').matches`));
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('.welcome-enter')].map(e=>getComputedStyle(e).animationName)`), ['none', 'none']);
-  await ab('open', 'http://127.0.0.1:7172/s/daily-ui'); await ab('wait', '--text', 'A quieter place to work');
+  await ab('open', `http://127.0.0.1:${WEB_PORT}/s/daily-ui`); await ab('wait', '--text', 'A quieter place to work');
   await ab('focus', tool); await ab('press', 'Enter'); await ab('wait', '--fn', argVisible);
   assert.equal(await evaluate(`getComputedStyle(document.getElementById(document.querySelector('${tool}').getAttribute('aria-controls'))).animationName`), 'none');
   await ab('press', 'Enter'); await ab('wait', '--fn', `!(${argVisible})`);
@@ -178,7 +180,7 @@ try {
   assert.equal(await evaluate(`document.querySelector('main').innerText.includes('Esc to stop')`), false, 'no redundant working/timer row');
   const motion = await evaluate(`(() => {
     const button=document.querySelector('[aria-label="Stop"]'), r=button.getBoundingClientRect();
-    return {animations:document.getAnimations().length,caret:getComputedStyle([...document.querySelectorAll('.prose-chat')].at(-1),'::after').animationName,
+    return {animations:document.getAnimations().length,caret:getComputedStyle([...document.querySelectorAll('.prose-chat')].at(-1).lastElementChild,'::after').animationName,
       button:getComputedStyle(button).transitionDuration,notices:document.querySelectorAll('[data-sonner-toast]').length,
       stopReachable:button.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))};
   })()`);
@@ -191,7 +193,7 @@ try {
   // Launch a genuinely coarse-pointer browser, then apply the phone viewport.
   assert.equal(await ab('errors'), '');
   await ab('close');
-  await ab('--args', '--blink-settings=primaryPointerType=2', 'open', 'http://127.0.0.1:7172/s/daily-ui');
+  await ab('--args', '--blink-settings=primaryPointerType=2', 'open', `http://127.0.0.1:${WEB_PORT}/s/daily-ui`);
   await ab('wait', '--text', 'A quieter place to work');
   await ab('set', 'media', 'light', 'reduced-motion');
   // No hover dependency for copy; the named sidebar restores focus to its opener.
