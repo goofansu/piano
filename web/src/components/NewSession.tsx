@@ -9,7 +9,7 @@ import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { WorktreesDialog } from "@/components/Worktrees";
+import { WorktreesPopover } from "@/components/Worktrees";
 import { Textarea } from "@/components/ui/textarea";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
@@ -138,12 +138,17 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
 function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: AppState; value: string; onChange: (cwd: string) => void; onBrowse: () => void; send: (m: ClientMessage) => void }) {
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
+  const [wtPending, setWtPending] = useState(false);
   const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const known = state.projects.flatMap((p) => p.worktrees.map((w) => ({ project: p.name, ...w })));
   const current = known.find((k) => k.path === value);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={next => {
+      if (wtPending) return;
+      setOpen(next);
+      if (!next) setWtOpen(false);
+    }}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className={cn(picker, "h-11 w-full min-w-0 max-w-none justify-start md:h-8")} title={value}>
           <FolderIcon className="size-3.5 shrink-0 text-ink-3" />
@@ -165,7 +170,13 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           <ChevronDownIcon className="size-3.5 text-ink-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent ref={content} align="start" tabIndex={-1} aria-label="Choose a directory"
+      {wtOpen ? <WorktreesPopover
+        onOpenChange={next => {
+          setOpen(next);
+          if (!next) { setWtOpen(false); setWtPending(false); }
+        }}
+        onPendingChange={setWtPending} state={state} currentCwd={value} send={send} onSelect={onChange}
+      /> : <PopoverContent ref={content} align="start" tabIndex={-1} aria-label="Choose a directory"
         className="max-h-(--radix-popover-content-available-height) w-[380px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
         onOpenAutoFocus={event => {
           event.preventDefault();
@@ -191,12 +202,8 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                   >
                     <CheckIcon className={cn("size-4 shrink-0", k.path === value ? "opacity-100" : "opacity-0")} />
                     <span className="min-w-0 flex-1 truncate">
-                      {k.project}
-                      {!k.root && (
-                        <span className="ml-2 inline-flex items-center gap-1 font-mono text-ink-2"><GitBranchIcon className="size-3" />{k.branch ?? (k.facts?.detached ? "Detached" : "Unknown branch")}</span>
-                      )}
+                      {k.root ? k.project : k.branch ?? k.path.split("/").filter(Boolean).at(-1)}
                     </span>
-                    <span className="max-w-[150px] truncate font-mono text-ink-3">{abbrevHome(k.path)}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -216,7 +223,6 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                 <CommandItem
                   value="__worktree"
                   onSelect={() => {
-                    setOpen(false);
                     setWtOpen(true);
                   }}
                 >
@@ -226,8 +232,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
             </CommandGroup>
           </CommandList>
         </Command>
-      </PopoverContent>
-      <WorktreesDialog open={wtOpen} onOpenChange={setWtOpen} state={state} currentCwd={value} send={send} onSelect={onChange} />
+      </PopoverContent>}
     </Popover>
   );
 }
