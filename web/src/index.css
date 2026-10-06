@@ -44,7 +44,7 @@
   /* ink */
   --ink: oklch(0.22 0.01 85);
   --ink-2: oklch(0.5 0.012 85);
-  --ink-3: oklch(0.55 0.012 85);
+  --ink-3: oklch(0.6 0.012 85);
 
   /* the one colour */
   --brand: oklch(0.52 0.1 160);
@@ -116,7 +116,7 @@
 
   --ink: oklch(0.93 0.005 85);
   --ink-2: oklch(0.7 0.008 85);
-  --ink-3: oklch(0.64 0.008 85);
+  --ink-3: oklch(0.62 0.008 85);
 
   --brand: oklch(0.74 0.1 160);
   --brand-ink: oklch(0.15 0.02 160);
@@ -364,10 +364,19 @@
   .new-session-input { min-height: 3.5rem; max-height: min(12rem, 30dvh); padding-top: 1rem; }
 }
 
-/* Short, interruptible motion for navigation and controls; never animate transcript
- * updates or remount the conversation to get a transition. */
+/* Motion. Every state change is answered by motion that explains what changed, at a tempo
+ * that never makes you wait. Hover 120ms, enter 200ms, exit 150ms, layout 320ms; one easing for
+ * entrances and a plain ease-out for exits. CSS transitions and animate-in/out only, so a change
+ * of mind interrupts cleanly. Never animate transcript updates or remount the conversation to
+ * get a transition. */
 :root {
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-hover: 120ms;
+  --dur-enter: 200ms;
+  --dur-exit: 150ms;
+  --dur-layout: 320ms;
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: ease-out;
+  --ease-out: var(--ease-enter);
 }
 .composer-card {
   border-radius: 1.25rem;
@@ -393,18 +402,56 @@
 .link-card:hover { box-shadow: var(--shadow-2); }
 .dark .link-card { background: color-mix(in oklab, var(--surface-2) 92%, white 8%); }
 .welcome-enter {
-  animation: welcome-enter 420ms var(--ease-out) both;
+  animation: welcome-enter 420ms var(--ease-enter) both;
 }
 .welcome-composer { animation-delay: 65ms; }
-.control-enter { animation: control-enter 180ms var(--ease-out); }
+.control-enter { animation: control-enter 180ms var(--ease-enter); }
 /* A jumped-to message announces itself, then settles. */
-.message-highlight { animation: message-highlight 2.2s var(--ease-out) both; }
+.message-highlight { animation: message-highlight 2.2s var(--ease-enter) both; }
 .disclosure-content { overflow: hidden; }
-.disclosure-content[data-state="open"] { animation: disclosure-open 220ms var(--ease-out); }
-.disclosure-content[data-state="closed"] { animation: disclosure-close 160ms ease-out; }
+.disclosure-content[data-state="open"] { animation: disclosure-open 220ms var(--ease-enter); }
+.disclosure-content[data-state="closed"] { animation: disclosure-close 160ms var(--ease-exit); }
+
+/* The main sheet's content fades and rises when the view changes (New ↔ Session, first load). */
+.view-enter { animation: view-enter var(--dur-enter) var(--ease-enter) both; }
+.sheet-enter { animation: sheet-enter 360ms var(--ease-enter) both; }
+/* Sidebar rows on first load: each one a beat after the last, capped so a long list never waits. */
+.reveal-row {
+  animation: row-enter var(--dur-enter) var(--ease-enter) both;
+  animation-delay: calc(min(var(--i, 0), 8) * 20ms);
+}
+/* A reconnecting notice waits a moment before showing, so a blink of the socket never flashes it. */
+.late-enter { animation: fade-enter var(--dur-enter) var(--ease-enter) 600ms both; }
+/* A transcript fades in over its skeleton as the skeleton fades out. */
+.transcript-enter { animation: fade-enter var(--dur-enter) var(--ease-enter) both; }
+.skeleton-layer {
+  transition: opacity var(--dur-exit) var(--ease-exit);
+}
+.skeleton-layer[data-hidden="true"] { opacity: 0; pointer-events: none; }
+/* One bar marks the selected session; it slides between rows instead of the rows moving. */
+.selection-bar {
+  transition: transform var(--dur-layout) var(--ease-enter), height var(--dur-layout) var(--ease-enter), opacity var(--dur-hover) ease;
+}
+
 @keyframes welcome-enter {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes view-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sheet-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes row-enter {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes fade-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes message-highlight {
   0%, 30% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 35%, transparent); }
@@ -423,7 +470,59 @@
   to { height: 0; opacity: 0; }
 }
 
-/* Live signals: a streaming caret and a gently breathing activity dot. */
+/* The keys. The three-key mark is the instrument's live signal: while Pi works each key dips
+ * 2px and dims in turn, a 1.2s cycle, and comes to a clean rest when Pi finishes. In reduced
+ * motion the keys hold a pressed state instead. */
+.keys[data-playing="true"] > span {
+  animation: key-press 1.2s var(--ease-enter) infinite;
+}
+.keys[data-playing="true"] > span:nth-child(2) { animation-delay: 0.16s; }
+.keys[data-playing="true"] > span:nth-child(3) { animation-delay: 0.32s; }
+@keyframes key-press {
+  0%, 55%, 100% { transform: translateY(0); opacity: 1; }
+  22% { transform: translateY(2px); opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .keys[data-playing="true"] > span { transform: translateY(2px); opacity: 0.6; }
+}
+
+/* Toasts carry a thin line that drains while they wait to leave; hovering the stack pauses it. */
+[data-sonner-toast]::after {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--ink) 18%, transparent);
+  transform-origin: left;
+  animation: toast-drain var(--toast-life, 4s) linear both;
+}
+[data-sonner-toast][data-type="error"]::after { background: color-mix(in oklab, var(--err) 55%, transparent); }
+[data-sonner-toast][data-type="success"]::after { background: color-mix(in oklab, var(--brand) 55%, transparent); }
+[data-sonner-toast][data-type="warning"]::after { background: color-mix(in oklab, var(--warn) 65%, transparent); }
+[data-sonner-toaster]:hover [data-sonner-toast]::after,
+[data-sonner-toast][data-expanded="true"]::after { animation-play-state: paused; }
+@keyframes toast-drain {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* Live signals: a streaming caret and a gently breathing activity dot. The caret sits at the end
+ * of the last block of a streaming reply, where the next word will land. */
+.streaming-caret > :last-child::after,
+.streaming-caret:empty::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--brand);
+  animation: caret 1s steps(2) infinite;
+}
+.streaming-caret > pre:last-child::after { display: none; }
 @keyframes caret {
   50% { opacity: 0; }
 }
