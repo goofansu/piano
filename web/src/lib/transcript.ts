@@ -9,7 +9,7 @@ export const messageAnchorId = (id: string) => `msg-${id.replace(/[^a-zA-Z0-9_-]
 export type JumpEntry =
   | { kind: "top"; id: string; label: string }
   | { kind: "bottom"; id: string; label: string }
-  | { kind: "user" | "assistant"; id: string; label: string; messageId: string; turn?: number };
+  | { kind: "user" | "assistant"; id: string; label: string; messageId: string };
 
 /** One line of a message, with markdown prefixes and extra whitespace folded away. */
 export function messageLabel(text: string, max = 80): string {
@@ -20,16 +20,11 @@ export function messageLabel(text: string, max = 80): string {
 /** Every prompt and Pi assistant turn, including tool-only turns, in transcript order. */
 export function jumpEntries(messages: ReadonlyArray<RenderMsg>): JumpEntry[] {
   const entries: JumpEntry[] = [{ kind: "top", id: "top", label: "Top of conversation" }];
-  const total = messages.filter(message => message.role === "assistant").length;
-  let turn = 0;
   for (const message of messages) {
     if (message.role !== "user" && message.role !== "assistant") continue;
-    if (message.role === "assistant") turn++;
     const label = messageLabel(message.text) || (message.attachments?.length ? "Image" : message.toolCalls?.map(call => call.name).join(", ")) || (message.role === "assistant" ? "Assistant response" : "");
     if (!label) continue;
-    entries.push({ kind: message.role, id: message.id, label, messageId: message.id,
-      turn: total === 0 ? undefined : message.role === "assistant" ? turn : Math.min(turn + 1, total),
-    });
+    entries.push({ kind: message.role, id: message.id, label, messageId: message.id });
   }
   entries.push({ kind: "bottom", id: "bottom", label: "End of conversation" });
   return entries;

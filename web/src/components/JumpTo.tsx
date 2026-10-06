@@ -19,27 +19,6 @@ export function JumpTo({ messages, pending }: Props) {
   const list = useRef<HTMLDivElement>(null);
   const entries = useMemo(() => jumpEntries(messages), [messages]);
   const total = messages.filter(message => message.role === "assistant").length + (pending?.role === "assistant" ? 1 : 0);
-  const entry = entries.find(entry => entry.id === active);
-  const turn = active === "top" ? Math.min(1, total) : entry && "turn" in entry ? entry.turn : total;
-  // Keep the footer's turn in sync with the reader, even while the popup is closed.
-  useEffect(() => {
-    const container = document.querySelector<HTMLElement>(TRANSCRIPT_SELECTOR);
-    if (!container) return;
-    let frame = 0;
-    const update = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => setActive(currentEntry(container, entries)));
-    };
-    container.addEventListener("scroll", update, { passive: true });
-    const observer = new ResizeObserver(update);
-    observer.observe(container);
-    update();
-    return () => {
-      cancelAnimationFrame(frame);
-      container.removeEventListener("scroll", update);
-      observer.disconnect();
-    };
-  }, [entries]);
   // Opening reads where the reader is and centres that entry in the list.
   useEffect(() => {
     if (!open) return;
@@ -61,8 +40,8 @@ export function JumpTo({ messages, pending }: Props) {
   return <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Jump to message" aria-description={turn ? `Turn ${turn} of ${total}` : "No assistant turns yet"} aria-haspopup="dialog" aria-expanded={open} title="Jump to…" className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
-          Turn {turn || "—"}
+        <Button variant="ghost" size="sm" aria-label="Jump to message" aria-description={`${total} total Pi ${total === 1 ? "turn" : "turns"}`} aria-haspopup="dialog" aria-expanded={open} title="Jump to…" className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
+          {total} {total === 1 ? "turn" : "turns"}
         </Button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" collisionPadding={16} aria-label="Jump to message" className="w-[28rem] max-w-[calc(100vw-2rem)] p-0 font-sans">
@@ -85,7 +64,6 @@ export function JumpTo({ messages, pending }: Props) {
               <span className="flex w-4 shrink-0 items-center justify-center text-ink-3 [&_svg]:size-3.5" aria-hidden>
                 {entry.kind === "top" ? <ArrowUpIcon /> : entry.kind === "bottom" ? <ArrowDownIcon /> : entry.kind === "user" ? <span className="font-semibold text-brand not-italic">›</span> : "•"}
               </span>
-              {entry.kind === "assistant" && <span className="shrink-0 font-mono text-xs text-ink-3">Turn {entry.turn}</span>}
               <span className="sr-only">{entry.kind === "user" ? "You said" : entry.kind === "assistant" ? "Pi said" : ""}</span>
               <span className={cn("min-w-0 flex-1 truncate", entry.kind === "user" && "text-ink")}>{entry.label}</span>
             </button>
