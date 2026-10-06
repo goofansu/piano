@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { currentEntry, type JumpEntry, jumpEntries, jumpTo, TRANSCRIPT_SELECTOR } from "@/lib/transcript";
@@ -62,7 +62,7 @@ export function JumpTo({ messages, pending }: Props) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" aria-label="Jump to message" aria-description={turn ? `Turn ${turn} of ${total}` : "No assistant turns yet"} aria-haspopup="dialog" aria-expanded={open} title="Jump to…" className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
-          Turn {turn || "—"}<ChevronDownIcon className="size-3" aria-hidden />
+          Turn {turn || "—"}
         </Button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" collisionPadding={16} aria-label="Jump to message" className="w-[28rem] max-w-[calc(100vw-2rem)] p-0 font-sans">
