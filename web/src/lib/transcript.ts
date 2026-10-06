@@ -17,15 +17,20 @@ export function messageLabel(text: string, max = 80): string {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
-/** Every prompt and Pi assistant turn, including tool-only turns, in transcript order. */
+/**
+ * What a reader can jump to: every prompt, and every reply that ended a turn, with
+ * "Top" and "End of conversation" around them. Tool-only replies and intermediate
+ * reasoning text are not destinations.
+ */
 export function jumpEntries(messages: ReadonlyArray<RenderMsg>): JumpEntry[] {
   const entries: JumpEntry[] = [{ kind: "top", id: "top", label: "Top of conversation" }];
-  for (const message of messages) {
-    if (message.role !== "user" && message.role !== "assistant") continue;
-    const label = messageLabel(message.text) || (message.attachments?.length ? "Image" : message.toolCalls?.map(call => call.name).join(", ")) || (message.role === "assistant" ? "Assistant response" : "");
-    if (!label) continue;
-    entries.push({ kind: message.role, id: message.id, label, messageId: message.id });
-  }
+  const turns = messages.filter(m => m.role === "user" || m.role === "assistant");
+  turns.forEach((m, index) => {
+    const label = messageLabel(m.text) || (m.attachments?.length ? "Image" : "");
+    if (!label) return;
+    if (m.role === "user") entries.push({ kind: "user", id: m.id, label, messageId: m.id });
+    else if (turns[index + 1]?.role !== "assistant") entries.push({ kind: "assistant", id: m.id, label, messageId: m.id });
+  });
   entries.push({ kind: "bottom", id: "bottom", label: "End of conversation" });
   return entries;
 }
