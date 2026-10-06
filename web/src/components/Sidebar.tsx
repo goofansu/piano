@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -213,59 +212,47 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             const dot = host?.streaming ? "animate-live bg-busy" : done ? "bg-done" : host ? "border border-ok" : null;
             // The branch is only news when the session runs somewhere other than the project root.
             const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
-            // The same three actions sit behind a right-click (or long press) and the row's "…" button.
-            const actions = <>
-              <ContextMenuItem onClick={() => startRename(t)}><PencilIcon /> Rename</ContextMenuItem>
-              <ContextMenuItem onClick={() => send({ _tag: "archive_session", cwd: t.cwd, sessionId: t.sessionId })}><ArchiveIcon /> Archive</ContextMenuItem>
-              <ContextMenuSeparator />
-              <ContextMenuItem variant="destructive" onClick={() => setDeleting({ cwd: t.cwd, sessionId: t.sessionId, title: t.title || "Untitled" })}><Trash2Icon /> Delete</ContextMenuItem>
-            </>;
             return (
-              <ContextMenu key={t.sessionId}>
-                <ContextMenuTrigger asChild>
-                  <li className={cn("group relative flex h-9 animate-in items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-150 fade-in-0 slide-in-from-left-1 after:absolute after:inset-y-2.5 after:left-0 after:w-0.5 after:rounded-full after:bg-brand after:opacity-0 after:transition-opacity after:duration-150 hover:bg-fill-hover", selected && "bg-conversation shadow-1 after:opacity-100")}>
-                    <button
-                      type="button"
-                      title={t.title || t.sessionId}
-                      aria-current={selected ? "page" : undefined}
-                      onClick={() => select(t.cwd, t.sessionId)}
-                      className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                    >
-                      <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-                        {dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
-                      </span>
-                      <span className={cn("min-w-0 flex-1 truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
-                      {t.branch && inWorktree && (
-                        <span className="flex max-w-[38%] shrink-0 items-center gap-1 truncate font-mono text-sm text-ink-3">
-                          <GitBranchIcon className="size-3 shrink-0" aria-hidden />
-                          <span className="truncate">{t.branch}</span>
-                        </span>
-                      )}
-                      {host?.streaming ? <span className="sr-only">working</span> : done ? <span className="sr-only">done</span> : null}
-                    </button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Session menu for ${t.title || t.sessionId}`}>
-                          <MoreHorizontalIcon />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => startRename(t)}>
-                          <PencilIcon /> Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => send({ _tag: "archive_session", cwd: t.cwd, sessionId: t.sessionId })}>
-                          <ArchiveIcon /> Archive
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive" onClick={() => setDeleting({ cwd: t.cwd, sessionId: t.sessionId, title: t.title || "Untitled" })}>
-                          <Trash2Icon /> Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </li>
-                </ContextMenuTrigger>
-                <ContextMenuContent aria-label={`Session actions for ${t.title || t.sessionId}`}>{actions}</ContextMenuContent>
-              </ContextMenu>
+              <li key={t.sessionId} className={cn("group relative flex h-9 animate-in items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-150 fade-in-0 slide-in-from-left-1 after:absolute after:inset-y-2.5 after:left-0 after:w-0.5 after:rounded-full after:bg-brand after:opacity-0 after:transition-opacity after:duration-150 hover:bg-fill-hover", selected && "bg-conversation shadow-1 after:opacity-100")}>
+                <button
+                  type="button"
+                  title={t.title || t.sessionId}
+                  aria-current={selected ? "page" : undefined}
+                  onClick={() => select(t.cwd, t.sessionId)}
+                  className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                >
+                  <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
+                    {dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
+                  </span>
+                  <span className={cn("min-w-0 flex-1 truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
+                  {t.branch && inWorktree && (
+                    <span className="flex max-w-[38%] shrink-0 items-center gap-1 truncate font-mono text-sm text-ink-3">
+                      <GitBranchIcon className="size-3 shrink-0" aria-hidden />
+                      <span className="truncate">{t.branch}</span>
+                    </span>
+                  )}
+                  {host?.streaming ? <span className="sr-only">working</span> : done ? <span className="sr-only">done</span> : null}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Session menu for ${t.title || t.sessionId}`}>
+                      <MoreHorizontalIcon />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => startRename(t)}>
+                      <PencilIcon /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => send({ _tag: "archive_session", cwd: t.cwd, sessionId: t.sessionId })}>
+                      <ArchiveIcon /> Archive
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem variant="destructive" onClick={() => setDeleting({ cwd: t.cwd, sessionId: t.sessionId, title: t.title || "Untitled" })}>
+                      <Trash2Icon /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </li>
             );
           })}
         </ul>
