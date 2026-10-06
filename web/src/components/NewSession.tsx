@@ -145,7 +145,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   );
 }
 
-/** Known directories (project roots and their worktrees) plus a Browse escape hatch. */
+/** Project roots plus Browse and Worktrees escape hatches; a selected worktree is still named by project and branch. */
 function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: AppState; value: string; onChange: (cwd: string) => void; onBrowse: () => void; send: (m: ClientMessage) => void }) {
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
@@ -154,6 +154,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
   const search = useRef<HTMLInputElement>(null);
   const known = state.projects.flatMap((p) => p.worktrees.map((w) => ({ project: p.name, ...w })));
   const current = known.find((k) => k.path === value);
+  const roots = known.filter((k) => k.root);
   return (
     <Popover open={open} onOpenChange={next => {
       if (wtPending) return;
@@ -198,22 +199,20 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           <CommandInput ref={search} aria-label="Search directories" placeholder="Search directories" />
           <CommandList className="max-h-[min(18rem,60dvh)]">
             <CommandEmpty>No directory matches.</CommandEmpty>
-            {known.length > 0 && (
+            {roots.length > 0 && (
               <CommandGroup heading="Projects">
-                {known.map((k) => (
+                {roots.map((k) => (
                   <CommandItem
                     key={k.path}
                     value={k.path}
-                    keywords={[k.project, k.branch ?? ""]}
+                    keywords={[k.project]}
                     disabled={k.status === "missing"}
                     onSelect={() => {
                       onChange(k.path);
                       setOpen(false);
                     }}
                   >
-                    <span className="min-w-0 flex-1 truncate">
-                      {k.root ? k.project : k.branch ?? k.path.split("/").filter(Boolean).at(-1)}
-                    </span>
+                    <span className="min-w-0 flex-1 truncate">{k.project}</span>
                     <CheckIcon className={cn("ml-auto", k.path === value ? "opacity-100" : "opacity-0")} />
                   </CommandItem>
                 ))}
