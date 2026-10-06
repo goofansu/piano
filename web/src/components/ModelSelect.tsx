@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { picker } from "@/lib/styles";
@@ -58,16 +58,16 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           variant="ghost" size="sm" aria-haspopup="dialog" aria-expanded={open}
           aria-label={`Model: ${want || label}; effort: ${effort}`}
           disabled={disabled || !models.length}
-          className={cn(picker, "h-11 min-w-0 max-w-none flex-1 justify-start md:h-8 md:max-w-md")}
+          className={cn(picker, "h-11 min-w-0 max-w-none flex-1 justify-end md:h-8")}
           title={want}
         >
           <span className="min-w-0 truncate">{label}</span>
-          <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>· {effort}</span>
-          <ChevronDownIcon className="size-3.5 shrink-0 text-ink-3" />
+          <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>·</span>
+          <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>{effort}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        ref={content} align="start" aria-label="Model and effort" tabIndex={-1}
+        ref={content} align="end" aria-label="Model and effort" tabIndex={-1}
         className="max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0 font-mono"
         onOpenAutoFocus={event => {
           // Opening settings on a phone should not summon the software keyboard.
