@@ -9,7 +9,7 @@ import "./index.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <TooltipProvider>
+      <TooltipProvider delayDuration={300}>
         <App />
         {/* Keep notices below the header and away from Send/Stop, including on phones. */}
         <Toaster position="top-right" offset={{ top: 64, right: 24 }} mobileOffset={{ top: 64, left: 16, right: 16 }} visibleToasts={4} closeButton />

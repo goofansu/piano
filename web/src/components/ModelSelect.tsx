@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { RefreshCwIcon } from "lucide-react";
+import { CheckIcon, RefreshCwIcon } from "lucide-react";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { picker } from "@/lib/styles";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { MenuCheck } from "@/components/ui/menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import { EffortSelect, levelsFor } from "@/components/EffortSelect";
 
 interface Props {
@@ -52,7 +53,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
         <span className="text-ink-3">{m.provider}/</span>
         {m.id}
       </span>
-      <MenuCheck checked={m.ref === want} />
+      <CheckIcon className={cn("ml-auto", m.ref === want ? "opacity-100" : "opacity-0")} />
     </CommandItem>
   );
 
@@ -66,7 +67,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           className={cn(picker, "h-11 min-w-0 max-w-none shrink justify-end md:h-8")}
           title={want}
         >
-          <span className="min-w-0 truncate">{label}</span>
+          <span className={cn("min-w-0 truncate", !catalog && "shimmer")}>{label}</span>
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>·</span>
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>{effort}</span>
         </Button>
@@ -86,12 +87,12 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
             <CommandInput ref={search} value={query} onValueChange={setQuery} aria-label="Search models" placeholder="Search models" />
             {onRefresh && (
               <Button
-                variant="ghost" size="icon" aria-label="Refresh models" title="Refresh models"
+                variant="ghost" size="icon-sm" aria-label="Refresh models" title="Refresh models"
                 disabled={refreshing !== null}
                 onClick={() => { setRefreshing(catalog?.fetchedAt ?? ""); onRefresh(); }}
-                className="mr-1 size-11 shrink-0 text-ink-3 md:size-8"
+                className="mr-1 shrink-0 text-ink-3"
               >
-                <RefreshCwIcon aria-hidden className={cn("size-4", refreshing !== null && "animate-spin")} />
+                {refreshing !== null ? <Spinner /> : <RefreshCwIcon aria-hidden />}
               </Button>
             )}
           </div>
@@ -100,7 +101,8 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
             <CommandGroup>{visibleModels.map(item)}</CommandGroup>
           </CommandList>
         </Command>
-        <div className="border-t border-line p-3">
+        <Separator />
+        <div className="p-3">
           <EffortSelect value={effort} onChange={onEffortChange} levels={levelsFor(catalog, want)} defaultLevel={catalog?.defaultThinkingLevel} disabled={disabled} />
         </div>
       </PopoverContent>

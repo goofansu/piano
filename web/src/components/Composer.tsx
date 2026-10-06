@@ -6,7 +6,11 @@ import { cn } from "cn";
 import { composerAction, composerCard, composerInput, composerToolbar } from "@/lib/styles";
 import { formatTokenCount } from "@/lib/format";
 import { useTypeToFocus } from "@/lib/typeToFocus";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelSelect } from "@/components/ModelSelect";
@@ -73,7 +77,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
     <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-5">
       <div className={cn("mx-auto w-full max-w-3xl", composerCard)} {...attachmentEvents(attachments, disabled)}>
         <AttachmentDraftView draft={attachments} disabled={disabled} />
-        {imagesWaiting && <p role="status" className="px-4 pt-2 text-sm text-ink-2">Images are ready. Wait for Pi to finish before sending.</p>}
+        {imagesWaiting && <p role="status" className="animate-in px-4 pt-2 text-sm text-ink-2 fade-in-0 slide-in-from-top-1">Images are ready. Wait for Pi to finish before sending.</p>}
         {queuedMessages.length > 0 && (
           <section className="control-enter border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
@@ -84,10 +88,10 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
                 </Button>
               )}
             </div>
-            <ol className="max-h-[min(9rem,20dvh)] space-y-2 overflow-y-auto">
+            <ol className="flex max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
               {queuedMessages.map((message, index) => (
-                <li key={`${message.kind}-${index}`} className="flex min-w-0 gap-2">
-                  {showQueueKinds && <span className="shrink-0 text-ink-3">{message.kind === "steering" ? "Steering" : "Follow-up"}</span>}
+                <li key={`${message.kind}-${index}`} className="flex min-w-0 animate-in gap-2 fade-in-0">
+                  {showQueueKinds && <Badge variant={message.kind === "steering" ? "outline" : "secondary"} className="shrink-0">{message.kind === "steering" ? "Steering" : "Follow-up"}</Badge>}
                   <span className="min-w-0 whitespace-pre-wrap break-words">{message.text}</span>
                 </li>
               ))}
@@ -115,58 +119,69 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
             }}
           />
           {showSteer && !attachments.items.length && (
-            <Button
-              variant="outline"
-              className="mb-2.5 mr-2.5 h-11 shrink-0 rounded-xl px-2"
-              aria-label="Steer"
-              title="Send before the next model call, after current tools finish (Alt+Enter)"
-              disabled={disabled}
-              onClick={() => send("steering")}
-            >
-              Steer
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="control-enter mr-2.5 mb-2.5 h-11 shrink-0 rounded-xl px-2"
+                  aria-label="Steer"
+                  disabled={disabled}
+                  onClick={() => send("steering")}
+                >
+                  Steer
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Send before the next model call, after current tools finish <Kbd>Alt</Kbd><Kbd>Enter</Kbd></TooltipContent>
+            </Tooltip>
           )}
         </div>
         <div className={composerToolbar}>
           <AttachButton draft={attachments} disabled={disabled} />
           <ModelSelect catalog={catalog} onRefresh={onRefreshModels} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
-          <Button
-            size="icon"
-            variant={showStop ? "outline" : "default"}
-            className={composerAction}
-            aria-label={showStop ? "Stop" : streaming && !compacting ? "Queue message" : "Send"}
-            title={showStop ? "Abort current operation. Pending queued input is not cleared." : streaming && !compacting ? "Send after the agent finishes (Enter)" : "Send (Enter)"}
-            disabled={disabled || (!showStop && (!hasText || attachments.busy || imagesWaiting))}
-            onClick={showStop ? onStop : () => send()}
-          >
-            <span key={showStop ? "stop" : "send"} className="control-enter inline-flex" aria-hidden>
-              {showStop ? <SquareIcon className="size-3.5 fill-current" /> : <ArrowUpIcon />}
-            </span>
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant={showStop ? "outline" : "default"}
+                className={composerAction}
+                aria-label={showStop ? "Stop" : streaming && !compacting ? "Queue message" : "Send"}
+                disabled={disabled || (!showStop && (!hasText || attachments.busy || imagesWaiting))}
+                onClick={showStop ? onStop : () => send()}
+              >
+                <span key={showStop ? "stop" : "send"} className="control-enter inline-flex" aria-hidden>
+                  {showStop ? <SquareIcon className="fill-current" /> : <ArrowUpIcon />}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {showStop ? "Abort current operation. Pending queued input is not cleared." : <>{streaming && !compacting ? "Send after the agent finishes" : "Send"} <Kbd>Enter</Kbd></>}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
         {cachePercent !== null && <>
           <span className="text-brand" title="Session cache hit rate: cached input / total input" aria-label={`Session cache hit rate: ${cachePercent}%`}>cache {cachePercent}%</span>
-          <span aria-hidden="true">·</span>
+          <Separator orientation="vertical" className="h-3!" />
         </>}
         <Popover>
           <PopoverTrigger asChild>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               aria-label="Context usage"
               aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
-              className={cn("min-h-8 rounded hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30", left !== null && left < 15 && "text-warn hover:text-warn")}
+              className={cn("px-1.5 font-mono text-xs font-normal", left !== null && left < 15 && "text-warning hover:text-warning")}
             >
               {contextLabel}{contextWindow !== undefined && contextWindow > 0 ? `/${formatTokenCount(contextWindow)}` : ""}
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent side="top" align="end" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
             <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} />
           </PopoverContent>
         </Popover>
         {cost !== undefined && Number.isFinite(cost) && <>
-          <span aria-hidden="true">·</span>
+          <Separator orientation="vertical" className="h-3!" />
           <span aria-label={`Session cost: $${cost.toFixed(2)}`} title="Session cost">${cost.toFixed(2)}</span>
         </>}
       </div>

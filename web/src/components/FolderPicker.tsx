@@ -4,7 +4,11 @@ import { toast } from "sonner";
 import type { DirListing } from "@shared/wire";
 import { abbrevHome } from "@/lib/format";
 import { cn } from "cn";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
@@ -164,20 +168,26 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
         <div className="flex flex-wrap gap-1">
           {dir && dir.path !== dir.home && (
             <Button type="button" variant="outline" size="sm" onClick={() => goTo(dir.home)}>
-              <HomeIcon className="size-3.5" /> Home
+              <HomeIcon /> Home
             </Button>
           )}
           {dir?.gitRoot && dir.gitRoot !== dir.path && (
             <Button type="button" variant="outline" size="sm" onClick={() => goTo(dir.gitRoot as string)}>
-              <GitBranchIcon className="size-3.5" /> Git root <span className="font-mono text-ink-2">{abbrevHome(dir.gitRoot, dir.home)}</span>
+              <GitBranchIcon /> Git root <span className="font-mono text-ink-2">{abbrevHome(dir.gitRoot, dir.home)}</span>
             </Button>
           )}
         </div>
 
-        {error && <div className="text-sm text-err">{error}</div>}
+        {error && <Alert variant="destructive" className="animate-in fade-in-0 slide-in-from-top-1"><AlertDescription className="break-words">{error}</AlertDescription></Alert>}
 
-        <div className="h-56 shrink-0 overflow-y-auto rounded-md border border-line bg-surface-1">
-          {loading && !dir && <p className="p-4 text-sm text-ink-2">Loading</p>}
+        <ScrollArea className="h-56 shrink-0 rounded-md border border-line bg-surface-1">
+          {/* Each listing fades in, so stepping through directories reads as one surface changing. */}
+          <div key={dir?.path ?? "loading"} className="animate-in fade-in-0 duration-200">
+          {loading && !dir && (
+            <div className="flex flex-col gap-2 p-3" aria-busy>
+              {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-5 w-full" />)}
+            </div>
+          )}
           {dir?.parent && (
             <button type="button" onClick={() => goTo(dir.parent as string)} className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm outline-none hover:bg-fill-hover focus-visible:bg-fill-hover">
               <ArrowLeftIcon className="size-4 text-ink-2" /> <span className="font-mono">..</span>
@@ -201,7 +211,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           ))}
           {creating && dir && (
             <form
-              className="flex items-center gap-2 px-3 py-1"
+              className="flex animate-in items-center gap-2 px-3 py-1 fade-in-0 slide-in-from-top-1"
               onSubmit={(e) => {
                 e.preventDefault();
                 void createFolder();
@@ -215,9 +225,14 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           )}
           {hidden > 0 && <p className="px-3 py-2 text-sm text-ink-3">{hidden.toLocaleString()} more. Type to filter.</p>}
           {dir && entries.length === 0 && !creating && (
-            <p className="p-4 text-center text-sm text-ink-2">{prefix ? "No matching directories" : "No subdirectories"}</p>
+            <Empty className="p-6 md:p-6">
+              <EmptyHeader>
+                <EmptyDescription>{prefix ? "No matching directories" : "No subdirectories"}</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
-        </div>
+          </div>
+        </ScrollArea>
 
         <DialogFooter className="items-center sm:justify-between">
           <Button type="button" variant="ghost" size="sm" disabled={!dir || creating} onClick={() => setCreating(true)}>

@@ -1,5 +1,6 @@
-import { useId } from "react";
 import type { ModelCatalog, ThinkingLevel } from "@shared/wire";
+import { FieldLegend, FieldSet } from "@/components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 const ALL: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -25,30 +26,31 @@ interface Props {
   disabled?: boolean;
 }
 
-/** Native radios inside the model picker: no second popup, and only Pi-supported levels. */
+/** A toggle group inside the model picker: no second popup, and only Pi-supported levels. */
 export function EffortSelect({ value, onChange, levels, defaultLevel, disabled }: Props) {
-  const name = useId();
   return (
-    <fieldset disabled={disabled || levels.length <= 1} className="min-w-0 border-0 p-0" aria-label="Effort">
-      <legend className="mb-2 text-sm font-medium text-ink-2">Reasoning effort</legend>
-      <div className="flex flex-wrap gap-1">
-        {levels.map(level => (
-          <label key={level} className="cursor-pointer" title={level === defaultLevel ? "Default effort" : undefined}>
-            <input
-              type="radio"
-              name={name}
-              value={level}
-              aria-description={level === defaultLevel ? "Default effort" : undefined}
-              checked={value === level}
-              onChange={() => onChange(level)}
-              className="peer sr-only"
-            />
-            <span className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-line px-2 text-sm text-ink-2 transition-colors hover:bg-fill-hover peer-checked:border-brand/30 peer-checked:bg-brand-soft peer-checked:text-brand peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:cursor-default md:min-h-9">
-              {level}
-            </span>
-          </label>
+    <FieldSet disabled={disabled || levels.length <= 1} aria-label="Effort" className="min-w-0 gap-2">
+      <FieldLegend variant="label">Reasoning effort</FieldLegend>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        spacing={1}
+        value={value}
+        onValueChange={(next) => { if (next) onChange(next as ThinkingLevel); }}
+        className="flex-wrap"
+      >
+        {levels.map((level) => (
+          <ToggleGroupItem
+            key={level}
+            value={level}
+            title={level === defaultLevel ? "Default effort" : undefined}
+            aria-description={level === defaultLevel ? "Default effort" : undefined}
+          >
+            {level}
+          </ToggleGroupItem>
         ))}
-      </div>
-    </fieldset>
+      </ToggleGroup>
+    </FieldSet>
   );
 }

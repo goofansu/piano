@@ -19,6 +19,7 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -57,6 +58,7 @@
   --warn: oklch(0.7 0.14 70);
   --err: oklch(0.58 0.2 27);
   --err-soft: oklch(0.58 0.2 27 / 10%);
+  --merged: oklch(0.55 0.18 300);
 
   /* shadcn vocabulary, mapped onto the layers */
   --background: var(--surface-0);
@@ -74,6 +76,11 @@
   --accent: var(--fill-hover);
   --accent-foreground: var(--ink);
   --destructive: var(--err);
+  --destructive-foreground: var(--brand-ink);
+  --success: var(--ok);
+  --success-foreground: var(--brand-ink);
+  --warning: var(--warn);
+  --warning-foreground: var(--ink);
   --border: var(--line);
   --input: var(--line-strong);
   --ring: var(--brand);
@@ -85,6 +92,11 @@
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: var(--line);
   --sidebar-ring: var(--brand);
+  --chart-1: var(--brand);
+  --chart-2: var(--done);
+  --chart-3: var(--busy);
+  --chart-4: var(--err);
+  --chart-5: var(--ink-2);
 }
 
 .dark {
@@ -116,6 +128,7 @@
   --warn: oklch(0.8 0.13 75);
   --err: oklch(0.72 0.17 25);
   --err-soft: oklch(0.72 0.17 25 / 14%);
+  --merged: oklch(0.78 0.14 300);
 }
 
 @theme inline {
@@ -161,6 +174,7 @@
   --color-warn: var(--warn);
   --color-err: var(--err);
   --color-err-soft: var(--err-soft);
+  --color-merged: var(--merged);
   --shadow-1: var(--shadow-1);
   --shadow-2: var(--shadow-2);
   --shadow-3: var(--shadow-3);
@@ -180,6 +194,11 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -191,6 +210,18 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --shadow-2xs: var(--shadow-1);
+  --shadow-xs: var(--shadow-1);
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-3);
+  --shadow-xl: var(--shadow-3);
 
   --animate-caret: caret 1s steps(2) infinite;
   --animate-live: live 1.8s ease-in-out infinite;
@@ -221,6 +252,17 @@
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
+  }
+  /* Rows in menus, selects and command lists are touch-sized on phones. */
+  @media (pointer: coarse) {
+    [data-slot="dropdown-menu-item"],
+    [data-slot="dropdown-menu-checkbox-item"],
+    [data-slot="dropdown-menu-radio-item"],
+    [data-slot="select-item"],
+    [data-slot="command-item"],
+    [data-slot="toggle-group-item"] {
+      min-height: 2.75rem;
+    }
   }
 }
 
@@ -333,6 +375,10 @@
   background: var(--surface-1);
   box-shadow: var(--shadow-1);
   transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.composer-card[data-dragging="true"] {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft), var(--shadow-1);
 }
 .composer-card:focus-within {
   border-color: color-mix(in oklab, var(--brand) 45%, var(--line-strong));

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, LoaderCircleIcon, PanelLeftOpenIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { cn } from "cn";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
-import { MenuCheck } from "@/components/ui/menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorktreesPopover } from "@/components/Worktrees";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
@@ -126,11 +127,15 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
                 <AttachButton draft={attachments} disabled={creating || !state.connected} />
                 <ModelSelect catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={model} onChange={setModel} effort={effectiveEffort} onEffortChange={setEffort} />
                 <Button size="icon" className={composerAction} aria-label="Send" disabled={!ready} onClick={submit}>
-                  {creating ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
+                  <span key={creating ? "busy" : "send"} className="control-enter inline-flex">{creating ? <Spinner /> : <ArrowUpIcon />}</span>
                 </Button>
               </div>
             </div>
-            {project?.discovery.status === "error" && <p role="alert" className="mt-2 text-sm text-err">Git status unavailable. Open Worktrees to inspect and refresh.</p>}
+            {project?.discovery.status === "error" && (
+              <Alert variant="destructive" className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
+                <AlertDescription>Git status unavailable. Open Worktrees to inspect and refresh.</AlertDescription>
+              </Alert>
+            )}
             {creating && <p className="sr-only" role="status">Starting Pi</p>}
           </div>
         </div>
@@ -157,7 +162,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
     }}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className={cn(picker, "h-11 w-full min-w-0 max-w-none justify-start md:h-8")} title={value}>
-          <FolderIcon className="size-3.5 shrink-0 text-ink-3" />
+          <FolderIcon className="text-ink-3" />
           {!value ? (
             <span>Choose a directory</span>
           ) : current ? (
@@ -165,7 +170,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
               <span className="truncate">{current.project}</span>
               {!current.root && (
                 <span className="inline-flex min-w-0 items-center gap-1 font-mono text-ink-3">
-                  <GitBranchIcon className="size-3 shrink-0" />
+                  <GitBranchIcon />
                   <span className="truncate">{current.branch ?? (current.facts?.detached ? "Detached" : "Unknown branch")}</span>
                 </span>
               )}
@@ -173,7 +178,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           ) : (
             <span className="truncate font-mono">{abbrevHome(value)}</span>
           )}
-          <ChevronDownIcon className="size-3.5 text-ink-3" />
+          <ChevronDownIcon className="text-ink-3" />
         </Button>
       </PopoverTrigger>
       {wtOpen ? <WorktreesPopover
@@ -209,7 +214,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                     <span className="min-w-0 flex-1 truncate">
                       {k.root ? k.project : k.branch ?? k.path.split("/").filter(Boolean).at(-1)}
                     </span>
-                    <MenuCheck checked={k.path === value} />
+                    <CheckIcon className={cn("ml-auto", k.path === value ? "opacity-100" : "opacity-0")} />
                   </CommandItem>
                 ))}
               </CommandGroup>

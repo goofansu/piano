@@ -3,7 +3,10 @@ import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, Panel
 import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -75,11 +78,16 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
           <PlusIcon /> New session
         </Button>
       </div>
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" aria-label="Projects">
+      <ScrollArea className="min-h-0 flex-1">
+      <nav className="px-3 pb-4" aria-label="Projects">
         {state.projects.length === 0 && (
-          <p className="px-2 py-8 text-center text-sm text-ink-2">No projects yet. Start a session in any directory and it becomes a project here.</p>
+          <Empty className="py-8">
+            <EmptyHeader>
+              <EmptyDescription>No projects yet. Start a session in any directory and it becomes a project here.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           {state.projects.map((p) => (
             <Project
               key={p.path}
@@ -95,6 +103,7 @@ export function Sidebar({ state, send, select, openNew, onHide }: Props) {
           ))}
         </div>
       </nav>
+      </ScrollArea>
     </div>
   );
 }
@@ -176,11 +185,11 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {project.discovery.status === "error" && <p className="pl-7 text-xs text-err" title={project.discovery.detail}>Git status unavailable</p>}
-      {project.discovery.status === "non-git" && <p className="pl-7 text-xs text-ink-3">Non-Git</p>}
+      {project.discovery.status === "error" && <Badge variant="destructive" className="ml-7 animate-in fade-in-0" title={project.discovery.detail}>Git status unavailable</Badge>}
+      {project.discovery.status === "non-git" && <Badge variant="secondary" className="ml-7">Non-Git</Badge>}
       <CollapsibleContent className="disclosure-content">
-        {project.sessions.length === 0 && <p className="py-2 pl-7 text-sm text-ink-3">No sessions yet</p>}
-        <ul className="space-y-1 py-1">
+        {project.sessions.length === 0 && <p className="py-2 pl-7 text-sm text-muted-foreground">No sessions yet</p>}
+        <ul className="flex flex-col gap-1 py-1">
           {project.sessions.map((t) => {
             const selected = current?.cwd === t.cwd && current.sessionId === t.sessionId;
             // Live host state comes from the `hosts` broadcast, which changes more often than the project list.
@@ -191,7 +200,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             // The branch is only news when the session runs somewhere other than the project root.
             const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
             return (
-              <li key={t.sessionId} className={cn("group relative flex h-9 items-center rounded-lg pr-1 transition-colors duration-150 hover:bg-fill-hover", selected && "bg-conversation shadow-1 after:absolute after:inset-y-2.5 after:left-0 after:w-0.5 after:rounded-full after:bg-brand")}>
+              <li key={t.sessionId} className={cn("group relative flex h-9 animate-in items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-150 fade-in-0 slide-in-from-left-1 after:absolute after:inset-y-2.5 after:left-0 after:w-0.5 after:rounded-full after:bg-brand after:opacity-0 after:transition-opacity after:duration-150 hover:bg-fill-hover", selected && "bg-conversation shadow-1 after:opacity-100")}>
                 <button
                   type="button"
                   title={t.title || t.sessionId}
@@ -200,12 +209,12 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
                   className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 >
                   <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-                    {dot && <span className={cn("size-2 rounded-full", dot)} />}
+                    {dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
                   </span>
                   <span className={cn("min-w-0 flex-1 truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
                   {t.branch && inWorktree && (
                     <span className="flex max-w-[38%] shrink-0 items-center gap-1 truncate font-mono text-sm text-ink-3">
-                      <GitBranchIcon className="size-3 shrink-0" />
+                      <GitBranchIcon className="size-3 shrink-0" aria-hidden />
                       <span className="truncate">{t.branch}</span>
                     </span>
                   )}

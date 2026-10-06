@@ -2,8 +2,10 @@ import { useId, useRef, useState, useSyncExternalStore } from "react";
 import { PaperclipIcon, XIcon } from "lucide-react";
 import type { Attachment, RenderMsg } from "@shared/wire";
 import { IMAGE_TYPES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES, base64Bytes, imageType } from "@shared/attachments";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 // Memory-only drafts: do not put private image bytes in localStorage or the registry.
 const empty: { items: readonly Attachment[]; busy: boolean; error: string } = { items: [], busy: false, error: "" };
@@ -52,26 +54,34 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
   return <>
     <Input ref={input} id={id} type="file" multiple accept={IMAGE_TYPES.join(",")} className="hidden" aria-label="Image files" disabled={disabled || draft.busy}
       onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void draft.add(files); }} />
-    <Button type="button" variant="ghost" size="icon" className="h-11 w-8 shrink-0 md:h-8" aria-label="Attach images" title="Attach images (PNG, JPEG, GIF, WebP)" aria-controls={id} disabled={disabled || draft.busy} onClick={() => input.current?.click()}><PaperclipIcon /></Button>
+    <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" aria-label="Attach images" title="Attach images (PNG, JPEG, GIF, WebP)" aria-controls={id} disabled={disabled || draft.busy} onClick={() => input.current?.click()}><PaperclipIcon /></Button>
   </>;
 }
 export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
   return <>
     {!!draft.items.length && <ul aria-label="Attachments" className="flex max-h-36 gap-2 overflow-auto px-3 pt-3">
-      {draft.items.map((a, i) => <li key={i} className="relative w-24 shrink-0 rounded-lg border border-line p-1">
+      {draft.items.map((a, i) => <li key={`${a.name}-${i}`} className="relative w-24 shrink-0 animate-in rounded-lg border border-line p-1 fade-in-0 zoom-in-95">
         <img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} className="h-16 w-full rounded object-cover" />
         <p className="truncate text-xs text-ink-2" title={a.name}>{a.name}</p>
-        <Button type="button" size="icon-sm" variant="outline" className="absolute right-0 top-0 size-8 bg-fill" aria-label={`Remove ${a.name}`} disabled={disabled || draft.busy} onClick={() => draft.remove(i)}><XIcon /></Button>
+        <Button type="button" size="icon-xs" variant="outline" className="absolute top-0 right-0" aria-label={`Remove ${a.name}`} disabled={disabled || draft.busy} onClick={() => draft.remove(i)}><XIcon /></Button>
       </li>)}
     </ul>}
-    {draft.busy && <p role="status" className="px-4 pt-2 text-sm text-ink-2">Reading images…</p>}
-    {draft.error && <p role="alert" className="px-4 pt-2 text-sm text-err">{draft.error}</p>}
+    {draft.busy && <p role="status" className="flex animate-in items-center gap-2 px-4 pt-2 text-sm text-ink-2 fade-in-0"><Spinner /> Reading images…</p>}
+    {draft.error && <Alert variant="destructive" className="mx-3 mt-3 w-auto animate-in fade-in-0 slide-in-from-top-1"><AlertDescription className="break-words">{draft.error}</AlertDescription></Alert>}
   </>;
 }
+/** The drop target lights up while files hover over it (styled by `.composer-card[data-dragging]`). */
 export function attachmentEvents(draft: AttachmentDraft, disabled: boolean) {
+  const settle = (e: React.DragEvent<HTMLElement>) => { delete e.currentTarget.dataset.dragging; };
   return {
-    onDragOver: (e: React.DragEvent) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = disabled ? "none" : "copy"; } },
-    onDrop: (e: React.DragEvent) => { if (e.dataTransfer.files.length) { e.preventDefault(); if (!disabled) void draft.add(Array.from(e.dataTransfer.files)); } },
+    onDragOver: (e: React.DragEvent<HTMLElement>) => {
+      if (!e.dataTransfer.types.includes("Files")) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = disabled ? "none" : "copy";
+      if (!disabled) e.currentTarget.dataset.dragging = "true";
+    },
+    onDragLeave: (e: React.DragEvent<HTMLElement>) => { if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) settle(e); },
+    onDrop: (e: React.DragEvent<HTMLElement>) => { settle(e); if (e.dataTransfer.files.length) { e.preventDefault(); if (!disabled) void draft.add(Array.from(e.dataTransfer.files)); } },
     onPaste: (e: React.ClipboardEvent) => { if (e.clipboardData.files.length) { e.preventDefault(); if (!disabled) void draft.add(Array.from(e.clipboardData.files)); } },
   };
 }

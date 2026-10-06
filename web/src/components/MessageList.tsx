@@ -3,7 +3,10 @@ import { ArrowDownIcon, CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-rea
 import { toast } from "sonner";
 import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { MessageAttachments } from "@/components/Attachments";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
@@ -69,7 +72,13 @@ export function MessageList({ messages, pending, tools, placeholder }: Props) {
         className="h-full overflow-y-auto px-4 md:px-6"
       >
       <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
-        {messages.length === 0 && !pending && <p className="py-16 text-center text-base text-ink-2">{placeholder}</p>}
+        {messages.length === 0 && !pending && (
+          <Empty className="py-16">
+            <EmptyHeader>
+              <EmptyDescription className="text-base">{placeholder}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
         <div className="flex flex-col gap-6">
           {messages.map((m) => {
             if (m.role === "tool_result" && m.toolCallId && messages.some((x) => x.toolCalls?.some((c) => c.id === m.toolCallId))) {
@@ -130,7 +139,7 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
             {!streaming && !msg.toolCalls?.length && <CopyResponse text={msg.text} />}
           </Row>
         )}
-        {msg.errorMessage && <p className="pl-7 text-sm text-err">{msg.stopReason}: {msg.errorMessage}</p>}
+        {msg.errorMessage && <Alert variant="destructive" className="ml-7 w-auto"><AlertDescription className="break-words">{msg.stopReason}: {msg.errorMessage}</AlertDescription></Alert>}
         {msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
       </article>
     );
@@ -152,9 +161,9 @@ function CopyResponse({ text }: { text: string }) {
   return (
     <Button
       variant="ghost"
-      size="sm"
+      size="xs"
       aria-label={copied ? "Response copied" : "Copy response"}
-      className={cn("mt-2 -ml-2 h-7 gap-1.5 px-2 text-xs text-ink-3 opacity-0 group-hover/reply:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100", copied && "text-brand opacity-100")}
+      className={cn("mt-2 -ml-2 text-ink-3 opacity-0 transition-opacity group-hover/reply:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100", copied && "text-brand opacity-100")}
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
@@ -165,7 +174,7 @@ function CopyResponse({ text }: { text: string }) {
         }
       }}
     >
-      {copied ? <CheckIcon className="control-enter size-3.5" /> : <CopyIcon className="size-3.5" />}
+      {copied ? <CheckIcon className="control-enter" /> : <CopyIcon />}
       <span role="status">{copied ? "Copied" : "Copy"}</span>
     </Button>
   );
@@ -263,7 +272,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
         className="items-center"
         glyph={
           <span
-            className={cn("block size-2 rounded-full", running ? "animate-live bg-busy" : failed ? "bg-err" : result ? "bg-ok" : "bg-ink-3")}
+            className={cn("block size-2 rounded-full transition-colors duration-300", running ? "animate-live bg-busy" : failed ? "bg-err" : result ? "bg-ok" : "bg-ink-3")}
           />
         }
       >
@@ -293,24 +302,24 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
         <Row glyph={null} className="mt-1">
           <pre className={cn("border-l-2 border-line py-1 pl-3 whitespace-pre-wrap break-all", failed ? "text-err" : "text-ink-2")}>{clamp(shown.join("\n"), all ? 20000 : 2000)}</pre>
           {hidden > 0 && (
-            <button type="button" onClick={() => setAll(true)} className="mt-0.5 rounded text-ink-3 hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
+            <Button variant="link" size="xs" onClick={() => setAll(true)} className="mt-0.5 h-auto px-0 text-ink-3">
               … {hidden} more {hidden === 1 ? "line" : "lines"}
-            </button>
+            </Button>
           )}
           {all && lines.length > PREVIEW_LINES && (
-            <button type="button" onClick={() => setAll(false)} className="mt-0.5 rounded text-ink-3 hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
+            <Button variant="link" size="xs" onClick={() => setAll(false)} className="mt-0.5 h-auto px-0 text-ink-3">
               Show less
-            </button>
+            </Button>
           )}
         </Row>
       )}
       {[...nested.values()].map(child => <div key={child.id} role="group" aria-label={`${child.name} tool call`} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
-        <p>{child.name} · {{ running: "Running", success: "Done", error: "Failed", incomplete: "Incomplete" }[child.status]}</p>
+        <p className="flex items-center gap-2">{child.name} <Badge variant={child.status === "error" ? "destructive" : child.status === "success" ? "success" : child.status === "running" ? "warning" : "secondary"}>{{ running: "Running", success: "Done", error: "Failed", incomplete: "Incomplete" }[child.status]}</Badge></p>
         <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
         {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}
         {child.text && <pre className="whitespace-pre-wrap break-words">{clamp(child.text, 4000)}</pre>}
       </div>)}
-      {result?.nestedCallsComplete === false && <p className="pl-7 text-xs text-warn">Some tool details are unavailable.</p>}
+      {result?.nestedCallsComplete === false && <p className="pl-7 text-xs text-warning">Some tool details are unavailable.</p>}
     </Collapsible>
   );
 }

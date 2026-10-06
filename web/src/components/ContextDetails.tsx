@@ -1,6 +1,13 @@
 import { useState } from "react";
 import type { ContextUsage, RenderMsg, SessionStats } from "@shared/wire";
+import { cn } from "cn";
 import { formatTokenCount } from "@/lib/format";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 interface Props {
   context?: ContextUsage;
@@ -25,45 +32,65 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
   const percent = tokens === null ? null : context?.percent ?? null;
   const left = percent === null ? null : Math.max(0, 100 - percent);
   const usage = selected?.usage;
-  return <div className="space-y-4 text-sm">
-    <section className="space-y-2">
+  const position = selected ? responses.indexOf(selected) + 1 : 0;
+  return <div className="flex flex-col gap-4 text-sm">
+    <section className="flex flex-col gap-2">
       <h2 className="font-medium">{tokens === null ? "Context usage unavailable" : `Context: ${number(tokens)} tokens`}</h2>
       {contextWindow !== undefined && contextWindow > 0 && <p className="text-ink-2">Context window: {number(contextWindow)} tokens</p>}
-      {percent !== null && <div role="meter" aria-label="Context window used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.max(0, Math.min(100, percent))} aria-valuetext={`${percent.toFixed(1)}% used`} className="h-1.5 overflow-hidden rounded-full bg-current/10">
-        <div className={left !== null && left < 15 ? "h-full bg-warn" : "h-full bg-ink-2"} style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
-      </div>}
+      {percent !== null && (
+        <Progress
+          value={Math.max(0, Math.min(100, percent))}
+          aria-label="Context window used"
+          aria-valuetext={`${percent.toFixed(1)}% used`}
+          className={cn("h-1.5", left !== null && left < 15 && "*:data-[slot=progress-indicator]:bg-warning")}
+        />
+      )}
       {left !== null && <p className="text-ink-2">{left < 1 ? left.toFixed(1) : Math.round(left)}% left</p>}
     </section>
-    <section className="space-y-2 border-t border-line pt-3" aria-label="Response usage history">
+    <Separator />
+    <section className="flex flex-col gap-2" aria-label="Response usage history">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-medium">Response history</h3>
-        <div className="flex gap-1" aria-label="Graph metric">
-          {(["tokens", "cost"] as const).map(value => <button key={value} type="button" aria-label={`Show ${value} history`} aria-pressed={metric === value} onClick={() => setMetric(value)} className="rounded px-2 py-1 text-xs hover:bg-current/10 aria-pressed:bg-current/10">{value === "tokens" ? "Tokens" : "Cost"}</button>)}
-        </div>
+        <ToggleGroup type="single" size="sm" variant="outline" value={metric} onValueChange={value => { if (value) setMetric(value as "tokens" | "cost"); }} aria-label="Graph metric">
+          <ToggleGroupItem value="tokens" aria-label="Show tokens history" className="text-xs">Tokens</ToggleGroupItem>
+          <ToggleGroupItem value="cost" aria-label="Show cost history" className="text-xs">Cost</ToggleGroupItem>
+        </ToggleGroup>
       </div>
-      {responses.length === 0 ? <p className="text-ink-2">No response usage available yet.</p> : <>
+      {responses.length === 0 ? (
+        <Empty className="p-4 md:p-4">
+          <EmptyHeader><EmptyDescription>No response usage available yet.</EmptyDescription></EmptyHeader>
+        </Empty>
+      ) : <>
         <p className="text-xs text-ink-2">{metric === "tokens" ? "Tokens" : "Cost"} per response · peak {metric === "tokens" ? formatTokenCount(max) : dollars(max)}</p>
         <svg viewBox="0 0 400 80" className="h-20 w-full text-ink-2" role="img" aria-label={`${metric === "tokens" ? "Token" : "Cost"} history across ${responses.length} responses. Use the response slider for exact values.`}>
-          {values.map((value, index) => <rect key={responses[index].id} x={index * 400 / values.length} y={80 - (max > 0 ? value / max * 76 : 0)} width={Math.max(0.5, 400 / values.length - 1)} height={max > 0 ? value / max * 76 : 0} fill="currentColor" opacity={responses[index].id === selected?.id ? 1 : 0.35} />)}
+          {values.map((value, index) => <rect key={responses[index].id} className="transition-[opacity,height,y] duration-300" x={index * 400 / values.length} y={80 - (max > 0 ? value / max * 76 : 0)} width={Math.max(0.5, 400 / values.length - 1)} height={max > 0 ? value / max * 76 : 0} fill="currentColor" opacity={responses[index].id === selected?.id ? 1 : 0.35} />)}
         </svg>
-        <label className="flex items-center gap-3 text-xs">Response {responses.indexOf(selected!) + 1} / {responses.length}
-          <input className="min-w-0 flex-1" type="range" aria-label="Inspect response" min={1} max={responses.length} value={responses.indexOf(selected!) + 1} onChange={event => setSelectedId(responses[Number(event.target.value) - 1].id)} />
-        </label>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="shrink-0 tabular-nums">Response {position} / {responses.length}</span>
+          <Slider aria-label="Inspect response" min={1} max={responses.length} step={1} value={[position]} onValueChange={([value]) => setSelectedId(responses[value - 1]?.id)} className="min-w-0 flex-1" />
+        </div>
         <p className="break-words text-xs text-ink-2">{selected?.model ?? "Model unavailable"}{selected?.thinkingLevel ? ` · ${selected.thinkingLevel}` : ""}</p>
       </>}
     </section>
-    <section className="border-t border-line pt-3">
-      <table className="w-full table-fixed text-right text-xs tabular-nums" aria-label="Token and cost breakdown">
-        <thead><tr className="text-ink-2"><th scope="col" className="w-2/5 pb-2 text-left font-normal">Usage</th><th scope="col" className="pb-2 font-normal">Response</th><th scope="col" className="pb-2 font-normal">Session</th></tr></thead>
-        <tbody>{([
+    <Separator />
+    <section>
+      <Table className="table-fixed text-right text-xs tabular-nums" aria-label="Token and cost breakdown">
+        <TableHeader>
+          <TableRow className="text-ink-2">
+            <TableHead className="w-2/5 text-left font-normal">Usage</TableHead>
+            <TableHead className="text-right font-normal">Response</TableHead>
+            <TableHead className="text-right font-normal">Session</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>{([
           ["Input", usage?.input, totals?.input], ["Output", usage?.output, totals?.output],
           ["Cache read", usage?.cacheRead, totals?.cacheRead], ["Cache write", usage?.cacheWrite, totals?.cacheWrite],
           ["Total tokens", usage?.totalTokens, totals?.total], ["Cost", usage?.cost, cost],
-        ] as const).map(([label, response, session]) => <tr key={label}>
-          <th scope="row" className="py-1 text-left font-normal text-ink-2">{label}</th>
-          {[response, session].map((value, index) => <td key={index} className="break-all py-1">{value === undefined ? "—" : label === "Cost" ? dollars(value) : number(value)}</td>)}
-        </tr>)}</tbody>
-      </table>
+        ] as const).map(([label, response, session]) => <TableRow key={label}>
+          <TableHead scope="row" className="text-left font-normal text-ink-2">{label}</TableHead>
+          {[response, session].map((value, index) => <TableCell key={index} className="break-all">{value === undefined ? "—" : label === "Cost" ? dollars(value) : number(value)}</TableCell>)}
+        </TableRow>)}</TableBody>
+      </Table>
       {totals && <p className="sr-only">Session total: {number(totals.total)} tokens</p>}
     </section>
   </div>;
