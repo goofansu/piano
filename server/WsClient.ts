@@ -214,7 +214,7 @@ export const handleSocket = (socket: Socket.Socket) =>
               if (!msg.start) return yield* Effect.fail(new Error("Session is not running; start it first"));
               return yield* start(selected, msg.start);
             }));
-            if (msg.action._tag === "prompt") {
+            if (msg.action._tag === "prompt" || msg.action._tag === "steer") {
               yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, msg.action.text);
               yield* publishProjects;
             }

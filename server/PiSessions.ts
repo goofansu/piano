@@ -709,10 +709,11 @@ const openSession = (spec: PiSessionSpec) =>
         if (announced) return yield* new PiSessionError({ reason: "exited", detail: "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume." });
         // Answer/abort/queue restoration do not supersede the command whose
         // dialog they unblock. Keep its subsequent model/effort readback valid.
-        const operation = action._tag === "prompt" || action._tag === "set_model" || action._tag === "set_thinking_level"
+        const operation = action._tag === "prompt" || action._tag === "steer" || action._tag === "set_model" || action._tag === "set_thinking_level"
           ? ++operationVersion : operationVersion;
         switch (action._tag) {
-          case "prompt": {
+          case "prompt":
+          case "steer": {
             // Explicit new input starts a new operation boundary. An older abort's
             // acknowledgement must never cancel its dialogs or clear its activity.
             aborting = undefined;
@@ -723,7 +724,7 @@ const openSession = (spec: PiSessionSpec) =>
             // not the browser/caller that may disconnect while Pi handles input.
             const work = Effect.gen(function* () {
               yield* submit("submitting");
-              yield* child.request({ type: "prompt", message: action.text, streamingBehavior: "followUp" }).pipe(
+              yield* child.request({ type: "prompt", message: action.text, streamingBehavior: action._tag === "steer" ? "steer" : "followUp" }).pipe(
                 Effect.flatMap((data) => {
                   const disposition = (data as { disposition?: unknown } | undefined)?.disposition;
                   if (disposition !== "started" && disposition !== "queued" && disposition !== "handled") {

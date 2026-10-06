@@ -162,21 +162,23 @@ test("model switch and child crash", async () => {
   assert.equal(result.failed.reason, "exited");
 });
 
-test("Pi's queue remains paused after abort and can be restored without starting work", async () => {
+test("Pi's steering and follow-up queues remain paused after abort and can be restored without starting work", async () => {
   await run(Effect.gen(function* () {
     const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "queue" });
     const ready = yield* Deferred.make<void>();
     const queued = yield* collectUntil(t.events.pipe(
       Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
-    ), (e) => e._tag === "queue_update" && e.messages.length === 3).pipe(Effect.forkChild);
+    ), (e) => e._tag === "queue_update" && e.messages.length === 4).pipe(Effect.forkChild);
     yield* Deferred.await(ready);
     yield* t.act({ _tag: "prompt", text: "ask queue" });
     yield* t.act({ _tag: "prompt", text: "expand queue" });
     yield* t.act({ _tag: "prompt", text: "duplicate" });
     yield* t.act({ _tag: "prompt", text: "duplicate" });
+    yield* t.act({ _tag: "steer", text: "expand queue" });
     const observed = yield* Fiber.join(queued).pipe(Effect.timeoutOption("2 seconds"));
     assert.equal(observed._tag, "Some", "Pi's queue_update must reach session subscribers");
     const expected = [
+      { kind: "steering", text: "expanded steering" },
       { kind: "follow-up", text: "expanded follow-up" },
       { kind: "follow-up", text: "duplicate" },
       { kind: "follow-up", text: "duplicate" },
@@ -185,8 +187,10 @@ test("Pi's queue remains paused after abort and can be restored without starting
     const late = yield* t.events.pipe(Stream.take(1), Stream.runCollect);
     assert.equal(late[0]._tag, "snapshot");
     if (late[0]._tag === "snapshot") assert.deepEqual(late[0].snapshot.state.queuedMessages, expected);
-    yield* t.act({ _tag: "prompt", text: "handled queue" });
-    yield* t.act({ _tag: "prompt", text: "reject queue" }).pipe(Effect.flip);
+    yield* t.act({ _tag: "steer", text: "handled queue" });
+    assert.equal((yield* t.state).submission?.outcome, "handled");
+    yield* t.act({ _tag: "steer", text: "reject queue" }).pipe(Effect.flip);
+    assert.equal((yield* t.state).submission?.outcome, "rejected");
     assert.deepEqual((yield* t.state).queuedMessages, expected, "handled/rejected input does not create phantom queue entries");
     const drainReady = yield* Deferred.make<void>();
     const drained = yield* collectUntil(t.events.pipe(

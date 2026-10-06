@@ -196,6 +196,7 @@ export type ThinkingLevel = typeof ThinkingLevel.Type;
 /** Everything a browser client may do to a running session. */
 export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", { text: Schema.String }),
+  Schema.TaggedStruct("steer", { text: Schema.String }),
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("restore_queue", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),

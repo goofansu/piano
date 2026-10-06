@@ -18,7 +18,7 @@ interface Props {
   disabled: boolean;
   streaming: boolean;
   compacting?: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, kind: QueuedMessage["kind"]) => void;
   onStop: () => void;
   catalog: ModelCatalog | null;
   model: string | undefined;
@@ -44,10 +44,10 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
     el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
   }, [text]);
   useTypeToFocus(ref, onTextAppend, !disabled);
-  const send = () => {
+  const send = (kind: QueuedMessage["kind"] = "follow-up") => {
     const t = text.trim();
     if (disabled || !t) return;
-    onSend(t);
+    onSend(t, kind);
     onTextChange("");
   };
   const tokens = context?.tokens ?? null;
@@ -57,6 +57,8 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
   const left = percent === null ? null : Math.max(0, 100 - percent);
   const hasText = text.trim().length > 0;
   const showStop = streaming && !hasText;
+  const showSteer = streaming && !compacting && hasText;
+  const showQueueKinds = queuedMessages.some(message => message.kind === "steering");
 
   return (
     <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-5">
@@ -74,32 +76,46 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
             <ol className="max-h-[min(9rem,20dvh)] space-y-2 overflow-y-auto">
               {queuedMessages.map((message, index) => (
                 <li key={`${message.kind}-${index}`} className="flex min-w-0 gap-2">
-                  <span className="shrink-0 text-ink-3">{message.kind === "steering" ? "Steering" : "Follow-up"}</span>
+                  {showQueueKinds && <span className="shrink-0 text-ink-3">{message.kind === "steering" ? "Steering" : "Follow-up"}</span>}
                   <span className="min-w-0 whitespace-pre-wrap break-words">{message.text}</span>
                 </li>
               ))}
             </ol>
           </section>
         )}
-        <Textarea
-          ref={ref}
-          value={text}
-          disabled={disabled}
-          rows={1}
-          aria-label="Message"
-          className={composerInput}
-          onChange={(e) => onTextChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
-                e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
-              e.preventDefault();
-              send();
-            } else if (e.key === "Escape" && streaming) {
-              e.preventDefault();
-              onStop();
-            }
-          }}
-        />
+        <div className="flex items-end">
+          <Textarea
+            ref={ref}
+            value={text}
+            disabled={disabled}
+            rows={1}
+            aria-label="Message"
+            className={cn(composerInput, "min-w-0 flex-1")}
+            onChange={(e) => onTextChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
+                  e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
+                e.preventDefault();
+                send(e.altKey ? "steering" : "follow-up");
+              } else if (e.key === "Escape" && streaming) {
+                e.preventDefault();
+                onStop();
+              }
+            }}
+          />
+          {showSteer && (
+            <Button
+              variant="outline"
+              className="mb-2.5 mr-2.5 h-11 shrink-0 rounded-xl px-2"
+              aria-label="Steer"
+              title="Send before the next model call, after current tools finish (Alt+Enter)"
+              disabled={disabled}
+              onClick={() => send("steering")}
+            >
+              Steer
+            </Button>
+          )}
+        </div>
         <div className={composerToolbar}>
           <ModelSelect catalog={catalog} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
           <Popover>
@@ -133,9 +149,9 @@ export function Composer({ text, onTextChange, onTextAppend, onRestoreQueue, dis
             variant={showStop ? "outline" : "default"}
             className={composerAction}
             aria-label={showStop ? "Stop" : streaming && !compacting ? "Queue message" : "Send"}
-            title={showStop ? "Abort current operation. Pending queued input is not cleared." : undefined}
+            title={showStop ? "Abort current operation. Pending queued input is not cleared." : streaming && !compacting ? "Send after the agent finishes (Enter)" : "Send (Enter)"}
             disabled={disabled || (!showStop && !hasText)}
-            onClick={showStop ? onStop : send}
+            onClick={showStop ? onStop : () => send()}
           >
             <span key={showStop ? "stop" : "send"} className="control-enter inline-flex" aria-hidden>
               {showStop ? <SquareIcon className="size-3.5 fill-current" /> : <ArrowUpIcon />}
