@@ -44,7 +44,7 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages,
         </div>
       </div>
       {responses.length === 0 ? <p className="text-ink-2">No response usage available yet.</p> : <>
-        <p className="text-xs text-ink-2">{metric === "tokens" ? "Total tokens" : "Cost"} per response · peak {metric === "tokens" ? formatTokenCount(max) : dollars(max)}</p>
+        <p className="text-xs text-ink-2">{metric === "tokens" ? "Tokens" : "Cost"} per response · peak {metric === "tokens" ? formatTokenCount(max) : dollars(max)}</p>
         <svg viewBox="0 0 400 80" className="h-20 w-full text-ink-2" role="img" aria-label={`${metric === "tokens" ? "Token" : "Cost"} history across ${responses.length} responses. Use the response slider for exact values.`}>
           {values.map((value, index) => <rect key={responses[index].id} x={index * 400 / values.length} y={80 - (max > 0 ? value / max * 76 : 0)} width={Math.max(0.5, 400 / values.length - 1)} height={max > 0 ? value / max * 76 : 0} fill="currentColor" opacity={responses[index].id === selected?.id ? 1 : 0.35} />)}
         </svg>
