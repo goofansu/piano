@@ -67,8 +67,12 @@ const geometry = `(() => {
   const modelLabel = label ? { text:label.textContent, width:label.clientWidth, scrollWidth:label.scrollWidth,
     overflow:getComputedStyle(label).textOverflow, accessibleName:model.getAttribute('aria-label') } : null;
   const c = rect(card);
+  const usage = document.querySelector('[aria-label="Session usage"]');
+  const usageRect = usage ? rect(usage) : null;
   const fonts = [...card.querySelectorAll('textarea, button, span, label, input')].map(el=>({tag:el.tagName,family:getComputedStyle(el).fontFamily}));
   const problems = controls.filter(r => r.x < c.x || r.right > c.right + 1 || r.right > innerWidth || r.bottom > innerHeight || r.width < 24).map(r => r.label);
+  if (usageRect && (usageRect.y < c.bottom || Math.abs(usageRect.right - c.right) > 1 || usageRect.bottom > innerHeight)) problems.push('Usage footer is not below and aligned with the composer inside the viewport');
+  if (card.querySelector('[aria-label="Context usage"]')) problems.push('Context usage still occupies the action toolbar');
   if (fonts.some(font=>!font.family.includes(font.tag === 'TEXTAREA' ? 'Instrument Sans' : 'JetBrains Mono'))) problems.push('Message input must use sans-serif while composer controls stay monospace');
   const action = controls.find(r => ['Send', 'Stop', 'Queue message'].includes(r.label));
   if (action && controls.some(r => Math.abs(r.y + r.height/2 - action.y - action.height/2) > 2)) problems.push('Composer toolbar wraps instead of reserving the action row');
@@ -86,7 +90,7 @@ const geometry = `(() => {
   const queue = card.querySelector('[aria-label="Queued messages"]');
   if (queue && queue.scrollWidth > queue.clientWidth) problems.push('Queued text overflow');
   const overlaps = controls.flatMap((a,i) => controls.slice(i+1).filter(b => a.x < b.right-1 && b.x < a.right-1 && a.y < b.bottom-1 && b.y < a.bottom-1).map(b => a.label+' overlaps '+b.label));
-  return { viewport:[innerWidth,innerHeight], coarse:matchMedia('(pointer: coarse)').matches, card:c, textarea:rect(t), footer:rect(footer), controls, fonts, modelLabel, navigation, documentScrollTop:scrollY, documentWidth:document.documentElement.scrollWidth, problems:[...problems,...overlaps] };
+  return { viewport:[innerWidth,innerHeight], coarse:matchMedia('(pointer: coarse)').matches, card:c, textarea:rect(t), footer:rect(footer), usage:usageRect, controls, fonts, modelLabel, navigation, documentScrollTop:scrollY, documentWidth:document.documentElement.scrollWidth, problems:[...problems,...overlaps] };
 })()`;
 async function capture(journey) {
   for (const [w,h] of views) {
@@ -113,7 +117,7 @@ async function run() {
   ab('wait', '--text', 'Not running');
   ab('screenshot', join(evidence, 'saved-unknown-context.png'));
   if (layoutOnly) await capture('saved');
-  if (evaluate(`document.querySelector('button[aria-label="Context usage"]')?.textContent.trim()`) !== '—') throw new Error('Missing context must remain visible as unknown, not disappear');
+  if (evaluate(`document.querySelector('button[aria-label="Context usage"]')?.textContent.trim()`) !== '— context') throw new Error('Missing context must remain visible as unknown, not disappear');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', 'Context usage unavailable');
   ab('press', 'Escape');
@@ -222,13 +226,14 @@ async function run() {
   if (idleAction.x !== changedAction.x || idleAction.y !== changedAction.y) throw new Error('Changing effort moved Send');
   if (evaluate(`document.querySelector('textarea').value`) !== 'idle draft') throw new Error('Changing effort discarded the active session draft');
   ab('screenshot', join(evidence, 'idle-xhigh-320.png'));
-  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '2k') throw new Error('Settled context must use compact units');
+  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '1% context') throw new Error('Settled context must show percentage used');
+  if (evaluate(`document.querySelector('[aria-label="Session usage"]').textContent.trim().replace(/\\s+/g, ' ')`) !== '1% context·$0.02') throw new Error('Usage footer must show session cost alongside context');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', '2,400 tokens');
   ab('press', 'Escape');
   ab('fill', '[aria-label="Message"]', 'live context');
   ab('click', '[aria-label="Send"]');
-  await until(`!!document.querySelector('[aria-label="Stop"]') && document.querySelector('[aria-label="Context usage"]')?.textContent.trim() === '42k'`);
+  await until(`!!document.querySelector('[aria-label="Stop"]') && document.querySelector('[aria-label="Context usage"]')?.textContent.trim() === '21% context'`);
   expectAction('Stop');
   ab('fill', '[aria-label="Message"]', ' \n  ');
   expectAction('Stop');
@@ -302,7 +307,7 @@ async function run() {
   ab('click', '[aria-label="Send"]');
   ab('wait', '--text', 'echo: my unsent draft');
   if (evaluate(`sent.filter(m=>m.action?._tag==='prompt').at(-1).action.text`) !== restoredText) throw new Error('Manual Send did not submit the recovered draft');
-  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '42k') throw new Error('Context count disappeared after settlement');
+  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '21% context') throw new Error('Context percentage disappeared after settlement');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', '42,000 tokens');
   ab('wait', '--text', 'Cache read');
@@ -347,7 +352,10 @@ async function run() {
   await until(`!document.querySelector('[aria-label="Model and effort"]')`);
   if (!evaluate(`document.activeElement.matches('[aria-label="Message"]')`)) throw new Error('Focus-out dismissal stole editor focus');
   ab('click', '[aria-label^="Model:"]');
-  ab('click', '[aria-label="Message"]');
+  // The settings popup can cover the editor's centre; click its exposed left edge.
+  const editorPoint = evaluate(`(() => { const r = document.querySelector('[aria-label="Message"]').getBoundingClientRect(); return {x:r.left+8,y:r.top+8}; })()`);
+  ab('mouse', 'move', String(editorPoint.x), String(editorPoint.y));
+  ab('mouse', 'down'); ab('mouse', 'up');
   await until(`!document.querySelector('[aria-label="Model and effort"]')`);
   ab('click', '[aria-label^="Model:"]');
   const focusedTab = JSON.parse(ab('tab', 'list', '--json')).data.tabs.find(tab => tab.active).tabId;

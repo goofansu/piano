@@ -58,7 +58,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
   const tokens = context?.tokens ?? null;
   const selectedModel = catalog?.models.find((m) => m.ref === (model || catalog.defaultModel));
   const contextWindow = context?.contextWindow ?? selectedModel?.contextWindow;
-  const percent = context?.percent ?? null;
+  const percent = tokens === null ? null : context?.percent ?? null;
   const left = percent === null ? null : Math.max(0, 100 - percent);
   const hasText = text.trim().length > 0 || attachments.items.length > 0;
   const showStop = streaming && !hasText;
@@ -126,27 +126,6 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
         <div className={composerToolbar}>
           <AttachButton draft={attachments} disabled={disabled} />
           <ModelSelect catalog={catalog} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Context usage"
-                aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
-                className={cn("h-11 min-w-11 shrink-0 gap-1.5 whitespace-nowrap px-2 tabular-nums md:h-8", left !== null && left < 15 && "text-warn")}
-              >
-                <span className="relative inline-block size-3.5 rounded-full border border-current/40" aria-hidden>
-                  {percent !== null && (
-                    <span className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(currentColor ${Math.min(100, percent)}%, transparent 0)` }} />
-                  )}
-                </span>
-                <span className="max-[360px]:hidden">{tokens === null ? "—" : formatTokenCount(tokens)}</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent side="top" align="start" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
-              <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} />
-            </PopoverContent>
-          </Popover>
           <Button
             size="icon"
             variant={showStop ? "outline" : "default"}
@@ -161,6 +140,27 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
             </span>
           </Button>
         </div>
+      </div>
+      <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-1 font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Context usage"
+              aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
+              className={cn("min-h-8 rounded px-1 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30", left !== null && left < 15 && "text-warn hover:text-warn")}
+            >
+              {percent !== null ? `${Math.round(percent)}% context` : tokens !== null ? `${formatTokenCount(tokens)} context` : "— context"}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="end" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
+            <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} />
+          </PopoverContent>
+        </Popover>
+        {cost !== undefined && Number.isFinite(cost) && <>
+          <span aria-hidden="true">·</span>
+          <span aria-label={`Session cost: $${cost.toFixed(2)}`} title="Session cost">${cost.toFixed(2)}</span>
+        </>}
       </div>
     </div>
   );
