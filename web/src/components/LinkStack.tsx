@@ -4,7 +4,6 @@ import {
 } from "lucide-react";
 import type { PullRequest } from "@shared/wire";
 import { cn } from "cn";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { SessionLink } from "@/lib/links";
@@ -113,27 +112,25 @@ function CopyAction({ url }: { url: string }) {
   );
 }
 
-type BadgeVariant = React.ComponentProps<typeof Badge>["variant"];
-
-const PR_STATE: Record<PullRequest["state"], { icon: typeof GitPullRequestIcon; tint: string; word: string; variant: BadgeVariant }> = {
-  open: { icon: GitPullRequestIcon, tint: "bg-ok/15 text-ok", word: "Open", variant: "success" },
-  draft: { icon: GitPullRequestDraftIcon, tint: "bg-fill text-ink-2", word: "Draft", variant: "secondary" },
-  merged: { icon: GitMergeIcon, tint: "bg-merged/15 text-merged", word: "Merged", variant: "secondary" },
-  closed: { icon: GitPullRequestClosedIcon, tint: "bg-err-soft text-err", word: "Closed", variant: "destructive" },
+const PR_STATE: Record<PullRequest["state"], { icon: typeof GitPullRequestIcon; tint: string }> = {
+  open: { icon: GitPullRequestIcon, tint: "bg-ok/15 text-ok" },
+  draft: { icon: GitPullRequestDraftIcon, tint: "bg-fill text-ink-2" },
+  merged: { icon: GitMergeIcon, tint: "bg-merged/15 text-merged" },
+  closed: { icon: GitPullRequestClosedIcon, tint: "bg-err-soft text-err" },
 };
 
-const CHECKS: Record<PullRequest["checks"], { word: string; dot: string; variant: BadgeVariant } | null> = {
+const CHECKS: Record<PullRequest["checks"], { word: string; dot: string } | null> = {
   none: null,
-  pending: { word: "Checks running", dot: "animate-live bg-busy", variant: "warning" },
-  success: { word: "Checks passed", dot: "bg-ok", variant: "success" },
-  failure: { word: "Checks failed", dot: "bg-err", variant: "destructive" },
+  pending: { word: "Checks running", dot: "animate-live bg-busy" },
+  success: { word: "Checks passed", dot: "bg-ok" },
+  failure: { word: "Checks failed", dot: "bg-err" },
 };
 
-const REVIEW: Record<PullRequest["review"], { word: string; variant: BadgeVariant } | null> = {
+const REVIEW: Record<PullRequest["review"], string | null> = {
   none: null,
-  approved: { word: "Approved", variant: "success" },
-  changes_requested: { word: "Changes requested", variant: "warning" },
-  review_required: { word: "Review required", variant: "outline" },
+  approved: "Approved",
+  changes_requested: "Changes requested",
+  review_required: "Review required",
 };
 
 /** The card's left mark: a pull request or issue icon tinted by state, or a monitor for a local server. */
@@ -150,24 +147,21 @@ function Mark({ link }: { link: SessionLink }) {
   return <span className={cn(circle, tint)} aria-hidden><CircleDotIcon className="size-4" /></span>;
 }
 
-/** The second line: where the link points, with live state for a pull request or issue. */
+/** The second line: where the link points, then what the icon cannot say about a pull request: checks and review. */
 function Detail({ link }: { link: SessionLink }) {
-  const s = link.status;
-  const pr = s?._tag === "pull_request" ? s : undefined;
+  const pr = link.status?._tag === "pull_request" ? link.status : undefined;
   const checks = pr && (pr.state === "open" || pr.state === "draft") ? CHECKS[pr.checks] : null;
   const review = pr?.state === "open" ? REVIEW[pr.review] : null;
   return (
     <span className="mt-1 flex items-center gap-2 truncate text-xs text-ink-3">
       <span className="truncate">{link.detail}</span>
-      {pr && <Badge variant={PR_STATE[pr.state].variant}>{PR_STATE[pr.state].word}</Badge>}
       {checks && (
-        <Badge variant={checks.variant}>
+        <span className="flex shrink-0 items-center gap-1.5">
           <span className={cn("size-1.5 rounded-full transition-colors duration-300", checks.dot)} aria-hidden />
           {checks.word}
-        </Badge>
+        </span>
       )}
-      {review && <Badge variant={review.variant}>{review.word}</Badge>}
-      {s?._tag === "issue" && <Badge variant={s.state === "open" ? "success" : "secondary"}>{s.state === "open" ? "Open" : "Closed"}</Badge>}
+      {review && <span className="shrink-0">· {review}</span>}
     </span>
   );
 }
