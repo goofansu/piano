@@ -261,6 +261,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
   return (
     <Collapsible open={open} onOpenChange={setOpen} role="group" aria-label={`${call.name} tool call`} className="text-sm">
       <Row
+        className="items-center"
         glyph={
           <span
             className={cn("block size-2 rounded-full", running ? "animate-live bg-busy" : failed ? "bg-err" : result ? "bg-ok" : "bg-ink-3")}

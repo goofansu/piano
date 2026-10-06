@@ -24,7 +24,7 @@ const stories = [
     { role: 'user', content: 'Let’s make this workspace feel a little more welcoming. Keep it simple, but give the details some care.' },
     { ...assistant('I’ll start with the parts you touch every day: the sidebar, the conversation, and the composer.'), content: [
       { type: 'text', text: 'I’ll start with the parts you touch every day: the sidebar, the conversation, and the composer.' },
-      { type: 'toolCall', id: 'read-app', name: 'read', arguments: { path: 'web/src/App.tsx' } },
+      { type: 'toolCall', id: 'read-app', name: 'read', arguments: { path: 'web/src/components/session transcript with long directory names/MessageList.tsx' } },
     ] },
     { role: 'toolResult', toolCallId: 'read-app', toolName: 'read', content: [{ type: 'text', text: 'export default function App() {\n  return <Workspace />;\n}' }], isError: false },
     assistant(reply),
@@ -104,6 +104,28 @@ try {
   assert.ok(await evaluate(`document.querySelector('main').textContent.includes('I’ll start with the parts you touch every day')`));
   assert.equal(await evaluate(`!!document.querySelector('main [aria-label="Session menu"], main [aria-label="Session information"]')`), false);
   assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().height`), 0, 'no empty desktop header');
+  // The tool outcome dot and its label share a visual centre, including wrapped
+  // summaries after opening details. Observe layout, not Tailwind class names.
+  for (const width of [1440, 320]) {
+    await ab('set', 'viewport', String(width), '1000');
+    for (const expanded of [false, true]) {
+      if (expanded) await ab('click', tool);
+      const alignment = await evaluate(`(() => {
+        const group=document.querySelector('[aria-label="read tool call"]');
+        const dot=group.querySelector('[aria-hidden] > span');
+        const label=group.querySelector('button[aria-expanded] > span');
+        const centre=e=>{const r=e.getBoundingClientRect();return r.top+r.height/2;};
+        const summary=label.nextElementSibling;
+        return {dot:centre(dot),label:centre(label),summaryLines:summary.getBoundingClientRect().height/parseFloat(getComputedStyle(summary).lineHeight)};
+      })()`);
+      observations.push({name:'tool-alignment',width,expanded,...alignment});
+      writeFileSync(join(evidence, 'tool-alignment.json'), JSON.stringify(observations, null, 2));
+      assert.ok(Math.abs(alignment.dot-alignment.label) <= 1, `${width}px expanded=${expanded}: dot and label differ by ${Math.abs(alignment.dot-alignment.label)}px`);
+      if (width === 320 && expanded) assert.ok(alignment.summaryLines >= 2, 'exercise a wrapped tool summary');
+      if (expanded) await ab('click', tool);
+    }
+  }
+  await ab('set', 'viewport', '1440', '1000');
   await appearance('Light'); await capture('session-light');
   assert.equal(await evaluate(`document.querySelector('aside [aria-current="page"]')?.title`), 'A calmer workspace');
   // Native clipboard success: paste back into the composer, preserving raw Markdown.
