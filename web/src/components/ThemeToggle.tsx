@@ -20,7 +20,7 @@ export function ThemeToggle() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {/* The chosen mode carries the radio mark; the icons say what each one does. */}
+        {/* The chosen mode carries the check; the icons say what each one does. */}
         <DropdownMenuRadioGroup value={theme ?? "system"} onValueChange={setTheme}>
           {MODES.map(({ value, label, icon: Icon }) => (
             <DropdownMenuRadioItem key={value} value={value}>

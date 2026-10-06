@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckIcon, LoaderCircleIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { LoaderCircleIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import type { ClientCommand } from "@shared/wire";
 import type { AppState } from "@/store";
 import { Button } from "@/components/ui/button";
 import { PopoverContent } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { MenuCheck, menuItem } from "@/components/ui/menu";
+import { cn } from "cn";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** One deliberate discovery/selection or new-branch operation; never automatic retries. */
@@ -63,13 +65,13 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
       {discovery?.status === "ready" && <>
         <ul aria-label="Discovered worktrees">
           {discovery.worktrees.map(w => <li key={w.path}>
-            <Button variant="ghost" aria-pressed={w.path === currentCwd} className="w-full justify-start font-normal" disabled={pending || !state.connected || refreshing || w.prunable} onClick={() => {
+            <button type="button" aria-pressed={w.path === currentCwd} className={cn(menuItem, "hover:bg-fill-hover focus-visible:bg-fill-hover disabled:pointer-events-none disabled:opacity-50")} disabled={pending || !state.connected || refreshing || w.prunable} onClick={() => {
               const requestId = crypto.randomUUID(); setRequest(requestId); setError(null);
               send({ _tag: "add_worktree", requestId, project, path: w.path });
             }}>
-              <CheckIcon className={w.path === currentCwd ? "shrink-0" : "shrink-0 opacity-0"} />
-              <span className="truncate">{w.branch ?? w.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD"}</span>
-            </Button>
+              <span className="min-w-0 flex-1 truncate">{w.branch ?? w.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD"}</span>
+              <MenuCheck checked={w.path === currentCwd} />
+            </button>
           </li>)}
         </ul>
         <form className="space-y-2 border-t border-line pt-2" onSubmit={e => { e.preventDefault(); submit(); }}>

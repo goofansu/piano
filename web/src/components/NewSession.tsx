@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, LoaderCircleIcon, PanelLeftOpenIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, LoaderCircleIcon, PanelLeftOpenIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
@@ -8,6 +8,7 @@ import { useTypeToFocus } from "@/lib/typeToFocus";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { MenuCheck } from "@/components/ui/menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { Textarea } from "@/components/ui/textarea";
@@ -205,10 +206,10 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                       setOpen(false);
                     }}
                   >
-                    <CheckIcon className={cn("size-4 shrink-0", k.path === value ? "opacity-100" : "opacity-0")} />
                     <span className="min-w-0 flex-1 truncate">
                       {k.root ? k.project : k.branch ?? k.path.split("/").filter(Boolean).at(-1)}
                     </span>
+                    <MenuCheck checked={k.path === value} />
                   </CommandItem>
                 ))}
               </CommandGroup>

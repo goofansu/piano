@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckIcon, RefreshCwIcon } from "lucide-react";
+import { RefreshCwIcon } from "lucide-react";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { picker } from "@/lib/styles";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { MenuCheck } from "@/components/ui/menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { EffortSelect, levelsFor } from "@/components/EffortSelect";
 
@@ -46,13 +47,12 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
       key={m.ref}
       value={m.ref}
       onSelect={() => onChange(m.ref)}
-      className="min-h-11 md:min-h-9"
     >
       <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">
         <span className="text-ink-3">{m.provider}/</span>
         {m.id}
       </span>
-      <CheckIcon aria-hidden className={cn("size-4 shrink-0", m.ref === want ? "opacity-100" : "opacity-0")} />
+      <MenuCheck checked={m.ref === want} />
     </CommandItem>
   );
 
