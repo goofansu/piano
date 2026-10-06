@@ -412,6 +412,8 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("remove_project", { path: Schema.String }),
   /** Save Pi's project-trust decision for a directory; Pi applies it when a session starts there. */
   Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),
+  /** Pi's trust outcome for any directory, registered or not. */
+  Schema.TaggedStruct("trust", { cwd: Schema.String }),
   Schema.TaggedStruct("create_worktree", { requestId: Schema.String, project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
   Schema.TaggedStruct("add_worktree", { requestId: Schema.String, project: Schema.String, path: Schema.String }),
   Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
@@ -441,6 +443,7 @@ export type WorktreeResult = typeof WorktreeResult.Type;
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView) }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
+  Schema.TaggedStruct("trust", { cwd: Schema.String, trust: ProjectTrust }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
   /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */
   Schema.TaggedStruct("selected", {

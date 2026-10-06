@@ -22,7 +22,7 @@ import {
 import { Broadcast } from "./Broadcast.ts";
 import { Catalog } from "./Catalog.ts";
 import type { PiSession } from "./PiSessions.ts";
-import { setProjectTrust } from "./ProjectTrust.ts";
+import { projectTrust, setProjectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
 import { emptySnapshot } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
@@ -166,11 +166,18 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "remove_project":
             yield* registry.removeProject(msg.path);
             return yield* publishProjects;
-          case "set_trust":
-            yield* setProjectTrust(msg.path, msg.trusted).pipe(
+          case "trust": {
+            const cwd = resolve(expandHome(msg.cwd));
+            return yield* send({ _tag: "trust", cwd, trust: yield* projectTrust(cwd) });
+          }
+          case "set_trust": {
+            const path = resolve(expandHome(msg.path));
+            yield* setProjectTrust(path, msg.trusted).pipe(
               Effect.andThen(send({ _tag: "toast", level: "success", message: msg.trusted ? "Trusted. Sessions started from now load this folder's Pi settings and skills." : "Untrusted. Sessions started from now skip this folder's Pi settings and skills." })),
               Effect.catchTag("ProjectTrustError", e => sendError(e.detail)));
+            yield* send({ _tag: "trust", cwd: path, trust: yield* projectTrust(path) });
             return yield* publishProjects;
+          }
           case "create_worktree":
           case "add_worktree": {
             yield* Effect.gen(function* () {

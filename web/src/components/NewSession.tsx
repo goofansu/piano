@@ -68,11 +68,11 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   }, [creating]);
 
   const project = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
-  const directory = project?.worktrees.find(w => w.path === cwd);
+  const trust = state.trusts[cwd] ?? project?.worktrees.find(w => w.path === cwd)?.trust;
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
     setModel(undefined); setEffort(undefined);
-    if (state.connected && cwd) send({ _tag: "models", cwd });
+    if (state.connected && cwd) { send({ _tag: "models", cwd }); send({ _tag: "trust", cwd }); }
   }, [cwd, state.connected, send]);
   const effectiveModel = model || catalog?.defaultModel;
   const levels = levelsFor(catalog, effectiveModel);
@@ -107,8 +107,8 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
               <div className="min-w-0 flex-1">
                 <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
               </div>
-              {directory?.trust.required && (
-                <TrustToggle trusted={directory.trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: directory.path, trusted })} />
+              {trust?.required && (
+                <TrustToggle trusted={trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: cwd, trusted })} />
               )}
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>

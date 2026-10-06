@@ -1,5 +1,5 @@
 /** Client state: one reducer over ServerMessages plus local UI actions. */
-import type { Dialog, HostInfo, ModelCatalog, ProjectView, RenderMsg, ServerMessage, SessionCursor, SessionState, ToolExecution } from "@shared/wire";
+import type { Dialog, HostInfo, ModelCatalog, ProjectTrust, ProjectView, RenderMsg, ServerMessage, SessionCursor, SessionState, ToolExecution } from "@shared/wire";
 
 export interface SessionView {
   cwd: string;
@@ -25,6 +25,8 @@ export interface AppState {
   projectsLoaded: boolean;
   hosts: HostInfo[];
   catalogs: Record<string, ModelCatalog>;
+  /** Pi's trust outcome per directory asked about, including directories that are not registered yet. */
+  trusts: Record<string, ProjectTrust>;
   session: SessionView | null;
   /** Correlated result; only the requesting directory picker may change its selection. */
   worktreeResult: Extract<ServerMessage, { _tag: "worktree_result" }> | null;
@@ -47,6 +49,7 @@ export const initialState: AppState = {
   projectsLoaded: false,
   hosts: [],
   catalogs: {},
+  trusts: {},
   session: null,
   worktreeResult: null,
   selecting: null,
@@ -112,6 +115,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     }
     case "models":
       return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
+    case "trust":
+      return { ...s, trusts: { ...s.trusts, [m.cwd]: m.trust } };
     case "worktree_result":
       return { ...s, worktreeResult: m };
     case "selected":
