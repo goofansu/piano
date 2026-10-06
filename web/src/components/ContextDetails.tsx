@@ -31,6 +31,8 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
   const tokens = context?.tokens ?? null;
   const percent = tokens === null ? null : context?.percent ?? null;
   const left = percent === null ? null : Math.max(0, 100 - percent);
+  const inputTokens = totals ? totals.input + totals.cacheRead + totals.cacheWrite : 0;
+  const cachePercent = totals && inputTokens > 0 ? Math.round(100 * totals.cacheRead / inputTokens) : null;
   const usage = selected?.usage;
   const position = selected ? responses.indexOf(selected) + 1 : 0;
   return <div className="flex flex-col gap-4 text-sm">
@@ -46,6 +48,7 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
         />
       )}
       {left !== null && <p className="text-ink-2">{left < 1 ? left.toFixed(1) : Math.round(left)}% left</p>}
+      {cachePercent !== null && <p className="text-ink-2" title="Cached input / total input">Session cache hit rate: {cachePercent}%</p>}
     </section>
     <Separator />
     <section className="flex flex-col gap-2" aria-label="Response usage history">

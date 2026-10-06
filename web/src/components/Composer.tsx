@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -95,8 +94,6 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
   const contextWindow = context?.contextWindow ?? selectedModel?.contextWindow;
   const percent = tokens === null ? null : context?.percent ?? null;
   const left = percent === null ? null : Math.max(0, 100 - percent);
-  const inputTokens = totals ? totals.input + totals.cacheRead + totals.cacheWrite : 0;
-  const cachePercent = totals && inputTokens > 0 ? Math.round(100 * totals.cacheRead / inputTokens) : null;
   const contextLabel = percent !== null ? `${Math.round(percent)}%` : tokens !== null ? formatTokenCount(tokens) : "—";
   const hasText = text.trim().length > 0 || attachments.items.length > 0;
   const showStop = streaming && !hasText;
@@ -206,10 +203,6 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
         <JumpTo messages={messages} />
-        {cachePercent !== null && <>
-          <span title="Session cache hit rate: cached input / total input" aria-label={`Session cache hit rate: ${cachePercent}%`}>cache {cachePercent}%</span>
-          <Separator orientation="vertical" className="h-3!" />
-        </>}
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -226,10 +219,6 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
             <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} />
           </PopoverContent>
         </Popover>
-        {cost !== undefined && Number.isFinite(cost) && <>
-          <Separator orientation="vertical" className="h-3!" />
-          <span aria-label={`Session cost: $${cost.toFixed(2)}`} title="Session cost">${cost.toFixed(2)}</span>
-        </>}
       </div>
     </div>
   );
