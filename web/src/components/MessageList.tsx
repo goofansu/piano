@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 import { abbrevHome, clamp } from "@/lib/format";
 import { renderMarkdown } from "@/lib/markdown";
-import { messageAnchorId } from "@/lib/transcript";
+import { messageAnchorId, STICK_EVENT } from "@/lib/transcript";
 import { cn } from "cn";
 
 interface Props {
@@ -47,7 +47,10 @@ export function MessageList({ messages, pending, tools, placeholder }: Props) {
     const ro = new ResizeObserver(measure);
     ro.observe(inner);
     ro.observe(el);
-    return () => ro.disconnect();
+    // A jump to the end pins the view there even if content grows while the scroll is in flight.
+    const stickToBottom = () => { stick.current = true; };
+    el.addEventListener(STICK_EVENT, stickToBottom);
+    return () => { ro.disconnect(); el.removeEventListener(STICK_EVENT, stickToBottom); };
   }, []);
   const scrollToBottom = () => {
     const el = ref.current;
@@ -126,7 +129,7 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
   if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
     return (
-      <article id={streaming ? undefined : messageAnchorId(msg.id)} className="group/reply flex scroll-mt-4 flex-col gap-3 rounded-2xl">
+      <article id={streaming ? undefined : messageAnchorId(msg.id)} className="group/reply flex flex-col gap-3 rounded-2xl">
         {msg.text && (
           <Row glyph={<span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
@@ -203,7 +206,7 @@ function UserMessage({ id, text, attachments }: { id: string; text: string; atta
   return (
     <article
       id={messageAnchorId(id)}
-      className={cn("scroll-mt-4 rounded-2xl border border-line bg-fill px-4 py-3.5 outline-none transition-colors", long && "cursor-pointer select-text hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring")}
+      className={cn("rounded-2xl border border-line bg-fill px-4 py-3.5 outline-none transition-colors", long && "cursor-pointer select-text hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring")}
       tabIndex={long ? 0 : undefined}
       aria-expanded={long ? open : undefined}
       onClick={() => long && !window.getSelection()?.toString() && toggle()}

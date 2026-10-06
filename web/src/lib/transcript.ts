@@ -51,18 +51,28 @@ export function currentEntry(container: HTMLElement, entries: ReadonlyArray<Jump
 
 const motion = () => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth") as ScrollBehavior;
 
-/** Scroll the transcript to an entry and flash the message it landed on. */
+/** Fired on the transcript container when a jump should leave the reader pinned to the bottom. */
+export const STICK_EVENT = "piano:stick";
+
+/** The scroll offset that puts an element just under the container's top edge. */
+const offsetWithin = (container: HTMLElement, el: HTMLElement, margin: number) =>
+  el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - margin;
+
+/**
+ * Scroll the transcript to an entry and flash the message it landed on. Only the transcript
+ * moves: `scrollIntoView` would also scroll `main` on phones and leave the composer sitting high.
+ */
 export function jumpTo(entry: JumpEntry): boolean {
   const container = document.querySelector<HTMLElement>(TRANSCRIPT_SELECTOR);
   if (!container) return false;
   if (entry.kind === "top" || entry.kind === "bottom") {
+    if (entry.kind === "bottom") container.dispatchEvent(new CustomEvent(STICK_EVENT));
     container.scrollTo({ top: entry.kind === "top" ? 0 : container.scrollHeight, behavior: motion() });
     return true;
   }
-  // The highlight ring sits on the article box; the tool-call rows below a reply fall outside it.
   const el = document.getElementById(messageAnchorId(entry.messageId));
   if (!el) return false;
-  el.scrollIntoView({ block: "start", behavior: motion() });
+  container.scrollTo({ top: offsetWithin(container, el, 16), behavior: motion() });
   el.classList.remove("message-highlight");
   void el.offsetWidth;
   el.classList.add("message-highlight");
