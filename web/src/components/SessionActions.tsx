@@ -70,7 +70,7 @@ export function useSessionActions(send: (command: ClientCommand) => void, enable
           <Button variant="destructive" disabled={!enabled} onClick={() => {
             if (deleting && enabled) send({ _tag: "delete_session", cwd: deleting.cwd, sessionId: deleting.sessionId });
             setDeleting(null);
-          }}>Delete session</Button>
+          }}>Delete</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
