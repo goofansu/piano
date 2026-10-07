@@ -1,9 +1,10 @@
-import { ArchiveIcon, CopyIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PencilIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import type { ClientCommand } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevPath } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
 
@@ -31,6 +32,12 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
         </> : <><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-28" /></>}
       </div>
       <span role="status" className="sr-only">{status}</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="New session here" disabled={!session} onClick={() => { if (session) openNew(session.cwd); }}><SquarePenIcon /></Button>
+        </TooltipTrigger>
+        <TooltipContent>New session here</TooltipContent>
+      </Tooltip>
       <DropdownMenu>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-80 max-w-[calc(100vw-2rem)]">
@@ -45,7 +52,6 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={() => openNew(session?.cwd)}><PlusIcon /> New session here</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.rename(target)}><PencilIcon /> Rename</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.archive(target)}><ArchiveIcon /> Archive</DropdownMenuItem>
           </DropdownMenuGroup>

@@ -114,6 +114,17 @@ try {
     await ab('set', 'viewport', String(width), String(height));
     assert.equal(await evaluate(`document.querySelector('[aria-label="Working directory"]').tagName`), 'P');
     assert.equal(await evaluate(`document.querySelectorAll('[aria-label="Working directory"]').length`), 1);
+    assert.ok(await evaluate(`(() => {
+      const create = document.querySelector('main header [aria-label="New session here"]').getBoundingClientRect();
+      const menu = document.querySelector('[aria-label="Session information and actions"]').getBoundingClientRect();
+      return create.width > 0 && create.right <= menu.left && menu.right <= innerWidth;
+    })()`), 'Quick action is visible to the left of the session menu');
+    await ab('screenshot', join(evidence, `quick-action-${width}.png`));
+    await ab('click', 'main header [aria-label="New session here"]');
+    await ab('wait', '--fn', `location.pathname === '/new' && !!document.querySelector('[aria-label="First message"]')`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Directory"]').title`), repo);
+    await ab('back');
+    await ab('wait', '--text', 'Message 39');
     const top = await evaluate(`document.querySelector('main header').getBoundingClientRect().top`);
     await ab('scroll', 'up', '2000', '--selector', '[data-slot="transcript"]');
     assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().top`), top);
@@ -121,6 +132,7 @@ try {
     await ab('snapshot');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes('Session ID')`), false);
+    assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes('New session here')`), false);
     const bounds = await evaluate(`(() => { const r = document.querySelector('[role="menu"]').getBoundingClientRect(); return {left:r.left,right:r.right,width:innerWidth}; })()`);
     assert.ok(bounds.left >= 0 && bounds.right <= bounds.width);
     await ab('screenshot', join(evidence, `menu-${width}.png`));

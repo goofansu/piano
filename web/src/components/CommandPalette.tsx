@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SquarePenIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
 import type { ClientCommand } from "@shared/wire";
@@ -95,7 +95,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           </CommandItem>
           {state.view.kind === "session" && current && (
             <CommandItem value="new session here" keywords={["new", "here", "directory"]} onSelect={() => run(() => openNew(current.cwd))}>
-              <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(current.cwd)}</span>
+              <SquarePenIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(current.cwd)}</span>
             </CommandItem>
           )}
           {state.projects.map((p) => (
