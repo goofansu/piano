@@ -102,6 +102,7 @@ function ImagePreview({ url }: { url: string }) {
     <AttachmentTrigger asChild><a href={url} target="_blank" rel="noreferrer" aria-label="Open attached image" onClick={e => e.stopPropagation()} /></AttachmentTrigger>
   </Attachment>;
 }
+/** Inline padding keeps the first tile's edge and focus ring inside the group's scroll-fade mask. */
 export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
-  return items?.length ? <AttachmentGroup className="mt-2">{items.map((a, i) => <ImagePreview key={`${a.url}-${i}`} url={a.url} />)}</AttachmentGroup> : null;
+  return items?.length ? <AttachmentGroup className="-mx-1 mt-2 px-1">{items.map((a, i) => <ImagePreview key={`${a.url}-${i}`} url={a.url} />)}</AttachmentGroup> : null;
 }
