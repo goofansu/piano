@@ -19,6 +19,11 @@ interface Props {
 
 const number = (value: number) => value.toLocaleString();
 const dollars = (value: number) => `$${value.toFixed(4)}`;
+const cacheHit = (usage?: Pick<NonNullable<SessionStats["tokens"]>, "input" | "cacheRead" | "cacheWrite">) => {
+  if (!usage) return undefined;
+  const input = usage.input + usage.cacheRead + usage.cacheWrite;
+  return input > 0 ? Math.round(100 * usage.cacheRead / input) : undefined;
+};
 
 /** History usage is per response, not a reconstruction of Pi's current context. */
 export function ContextDetails({ context, contextWindow, cost, totals, messages }: Props) {
@@ -31,8 +36,6 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
   const tokens = context?.tokens ?? null;
   const percent = tokens === null ? null : context?.percent ?? null;
   const left = percent === null ? null : Math.max(0, 100 - percent);
-  const inputTokens = totals ? totals.input + totals.cacheRead + totals.cacheWrite : 0;
-  const cachePercent = totals && inputTokens > 0 ? Math.round(100 * totals.cacheRead / inputTokens) : null;
   const usage = selected?.usage;
   const position = selected ? responses.indexOf(selected) + 1 : 0;
   const chartRef = useRef<HTMLDivElement>(null);
@@ -50,10 +53,7 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
 
   return <div className="flex flex-col gap-4 text-sm">
     <section className="flex flex-col gap-2">
-      <h2 className="font-medium">
-        {tokens === null ? "Context usage unavailable" : `Context: ${number(tokens)} tokens`}
-        {cachePercent !== null && <span className="text-ink-2" title="Session cached input / total input"> ({cachePercent}% cached)</span>}
-      </h2>
+      <h2 className="font-medium">{tokens === null ? "Context usage unavailable" : `Context: ${number(tokens)} tokens`}</h2>
       {contextWindow !== undefined && contextWindow > 0 && <p className="text-ink-2">Context window: {number(contextWindow)} tokens</p>}
       {percent !== null && (
         <Progress
@@ -105,10 +105,11 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
         <TableBody>{([
           ["Input", usage?.input, totals?.input], ["Output", usage?.output, totals?.output],
           ["Cache read", usage?.cacheRead, totals?.cacheRead], ["Cache write", usage?.cacheWrite, totals?.cacheWrite],
+          ["Cache hit", cacheHit(usage), cacheHit(totals)],
           ["Total tokens", usage?.totalTokens, totals?.total], ["Cost", usage?.cost, cost],
         ] as const).map(([label, response, session]) => <TableRow key={label}>
           <TableHead scope="row" className="text-left font-normal text-ink-2">{label}</TableHead>
-          {[response, session].map((value, index) => <TableCell key={index} className="break-all">{value === undefined ? "—" : label === "Cost" ? dollars(value) : number(value)}</TableCell>)}
+          {[response, session].map((value, index) => <TableCell key={index} className="break-all">{value === undefined ? "—" : label === "Cost" ? dollars(value) : label === "Cache hit" ? `${value}%` : number(value)}</TableCell>)}
         </TableRow>)}</TableBody>
       </Table>
       {totals && <p className="sr-only">Session total: {number(totals.total)} tokens</p>}

@@ -16,7 +16,7 @@ mkdirSync(cwd); mkdirSync(sessionDir);
 assert.equal(spawnSync('git', ['init', '--quiet', cwd]).status, 0);
 const sessions = [3, 98].map(count => {
   const saved = SessionManager.create(cwd, sessionDir);
-  for (let i = 1; i <= count; i++) saved.appendMessage({ role: 'assistant', api: 'openai-completions', provider: 'fake', model: 'chart', content: [{ type: 'text', text: `Response ${i}` }], usage: { input: i * 100, output: i, cacheRead: 0, cacheWrite: 0, totalTokens: i * 101, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: i / 100 } }, stopReason: 'stop', timestamp: i });
+  for (let i = 1; i <= count; i++) saved.appendMessage({ role: 'assistant', api: 'openai-completions', provider: 'fake', model: 'chart', content: [{ type: 'text', text: `Response ${i}` }], usage: { input: i === 1 ? 0 : i * 100, output: i, cacheRead: i === 1 ? 0 : i * 100, cacheWrite: i === 1 ? 0 : i * 200, totalTokens: i === 1 ? 1 : i * 401, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: i / 100 } }, stopReason: 'stop', timestamp: i });
   return { cwd, sessionId: saved.getSessionId(), title: `${count} responses`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false };
 });
 const registry = join(root, 'registry.json');
@@ -38,6 +38,13 @@ async function ab(...args) {
   return result.stdout.trim();
 }
 const evaluate = async js => JSON.parse(await ab('eval', js));
+const cacheRow = () => evaluate(`(() => {
+  const rows = [...document.querySelectorAll('[aria-label="Token and cost breakdown"] tbody tr')];
+  const row = rows.find(row => row.querySelector('th')?.textContent === 'Cache hit');
+  return { values: [...row.querySelectorAll('td')].map(cell => cell.textContent),
+    previous: row.previousElementSibling.querySelector('th').textContent,
+    next: row.nextElementSibling.querySelector('th').textContent };
+})()`);
 const facts = () => evaluate(`(() => {
   const c = document.querySelector('[aria-label="Scrollable response chart"]');
   const bars = c.querySelectorAll('rect');
@@ -57,6 +64,7 @@ try {
     await ab('set', 'viewport', String(width), String(height));
     await ab('click', '[aria-label="Context usage"]');
     await ab('wait', '--text', 'Response 98 / 98');
+    assert.deepEqual(await cacheRow(), { values: ['25%', '—'], previous: 'Cache write', next: 'Total tokens' });
     let observed = await facts();
     assert.equal(observed.count, 98); assert.ok(observed.width >= 11); assert.ok(observed.overflow && observed.scroll > 0 && observed.selectedVisible); assert.equal(observed.pageOverflow, false);
     await ab('screenshot', join(evidence, `chart-${width}.png`));
@@ -64,6 +72,7 @@ try {
     await ab('press', 'Home');
     await ab('wait', '--text', 'Response 1 / 98');
     observed = await facts(); assert.equal(observed.scroll, 0); assert.ok(observed.selectedVisible);
+    assert.deepEqual((await cacheRow()).values, ['—', '—'], 'Zero input has no cache hit rate, not NaN or 0%');
     await ab('click', '[aria-label="Show cost history"]');
     assert.ok((await facts()).selectedVisible);
     await ab('click', '[aria-label="Inspect response"]'); await ab('press', 'End');

@@ -73,6 +73,13 @@ try {
   await send('/final'); await ab('wait', '--text', 'Final cached');
   await click('Context usage'); await ab('wait', '--fn', `document.querySelector('[aria-label="Context usage details"]')?.textContent.includes('$1.23')`);
   facts = await info(); assert.equal(facts.Context, '50 tokens'); assert.equal(facts['Session cost'], '$1.23'); assert.equal(facts['Session tokens'], '150');
+  const cache = await evaluate(`(() => {
+    const row = [...document.querySelectorAll('[aria-label="Token and cost breakdown"] tbody tr')].find(row => row.querySelector('th')?.textContent === 'Cache hit');
+    return { values: [...row.querySelectorAll('td')].map(cell => cell.textContent),
+      heading: [...document.querySelectorAll('[aria-label="Context usage details"] h2')].find(heading => heading.textContent.startsWith('Context:')).textContent };
+  })()`);
+  assert.deepEqual(cache.values, ['—', '23%']);
+  assert.equal(cache.heading, 'Context: 50 tokens');
   await capture('live-observation'); await ab('press', 'Escape');
   assert.equal(await evaluate(`document.querySelector('[aria-label="Session cache hit rate: 23%"]')?.textContent`), 'cache 23%');
   assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '5%/1k');
