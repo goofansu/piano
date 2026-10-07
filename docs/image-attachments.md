@@ -53,6 +53,14 @@ preview URLs keep image bytes out of WebSocket snapshots (INV-05). Validation re
 browser and server; the service stays behind private access (INV-11). Protocol translation and
 processing remain at the PiSessions seam (INV-12).
 
+**Development environment only.** `npm run dev` runs the backend under `node --watch`, which sets
+`WATCH_REPORT_DEPENDENCIES=1` in the process environment. Pi 1.0.2's image-resize worker treats
+Node's dependency-watch message as its result, so every attached image was reported as
+"could not be resized below the inline image size limit" regardless of size. PiSessions strips
+that variable when spawning Pi; `npm start` and the hosted service never set it, so built and
+deployed instances were unaffected. A regression test spawns a child with the variable set in the
+parent and checks the installed Pi accepts an image.
+
 ## Verification and future changes
 
 - A boundary regression failed under the former limits, then passed with 10 MiB each / 20 MiB total.

@@ -3,11 +3,24 @@
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
+const verifyChildEnvironment = args.includes("--verify-child-environment");
+let verifiedImage = false;
+if (verifyChildEnvironment) {
+  if ("WATCH_REPORT_DEPENDENCIES" in process.env) throw new Error("Pi child inherited WATCH_REPORT_DEPENDENCIES");
+  if (process.env.PIANO_TEST_PRESERVED_ENV !== "preserved") throw new Error("Pi child lost an unrelated environment variable");
+  const { processImage } = await import(new URL("../node_modules/@earendil-works/pi-coding-agent/dist/utils/image-process.js", import.meta.url).href);
+  // Valid 1×1 RGBA PNG, including chunk CRCs, for the installed Pi decoder.
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==", "base64");
+  const image = await processImage(png, "image/png");
+  if (!image.ok) throw new Error(image.message);
+  verifiedImage = true;
+}
+const environmentFixture = verifyChildEnvironment ? `env:${process.env.PIANO_TEST_PRESERVED_ENV};image:${verifiedImage ? "accepted" : "omitted"}` : undefined;
 const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";
 const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "fake/alpha";
 let model = { provider: modelArg.split("/")[0], id: modelArg.split("/")[1] };
 let thinkingLevel = "medium";
-let sessionName = "fake";
+let sessionName = environmentFixture ?? "fake";
 const state = () => ({ model, thinkingLevel, isStreaming: streaming, isCompacting: compacting, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName });
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 let streaming = false;
@@ -82,7 +95,7 @@ function handle(cmd) {
     case "get_messages": return respond(cmd, { messages });
     case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: liveContext ?? { tokens: 1200 * messages.length, contextWindow: model.id === "beta" ? 400000 : 200000, percent: (model.id === "beta" ? 0.3 : 0.6) * messages.length } });
     case "get_available_models": return respond(cmd, { models: [
-      { provider: "fake", id: "alpha", reasoning: true, contextWindow: 1000, thinkingLevelMap: { minimal: null, xhigh: "xhigh" } },
+      { provider: "fake", id: "alpha", name: environmentFixture, reasoning: true, contextWindow: 1000, thinkingLevelMap: { minimal: null, xhigh: "xhigh" } },
       { provider: "fake", id: "beta", reasoning: false, contextWindow: 2000 } ] });
     case "set_model": model = { provider: cmd.provider, id: cmd.modelId }; return respond(cmd, model);
     case "set_thinking_level": thinkingLevel = cmd.level; out({ type: "thinking_level_changed", level: cmd.level }); return respond(cmd, undefined);

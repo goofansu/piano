@@ -35,6 +35,31 @@ test("command discovery is read-only, distinguishes probe/live resources and kee
   }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
 });
 
+test("Pi children omit Node watch reporting while preserving the rest of the environment", async () => {
+  const previousWatch = process.env.WATCH_REPORT_DEPENDENCIES;
+  const previousPreserved = process.env.PIANO_TEST_PRESERVED_ENV;
+  process.env.WATCH_REPORT_DEPENDENCIES = "1";
+  process.env.PIANO_TEST_PRESERVED_ENV = "preserved";
+  try {
+    await run(Effect.gen(function* () {
+      const sessions = yield* PiSessions;
+      const session = yield* sessions.open({ cwd: process.cwd(), sessionId: "child-environment" });
+      assert.equal((yield* session.state).sessionName, "env:preserved;image:accepted");
+      const probe = yield* sessions.probe(process.cwd());
+      assert.equal(probe.models.find((model) => model.id === "alpha")?.name, "env:preserved;image:accepted");
+    }).pipe(
+      Effect.provideService(PiCli, { ...fakeCli, extraArgs: ["--verify-child-environment"] }),
+      Effect.timeout("5 seconds"),
+      Effect.scoped,
+    ));
+  } finally {
+    if (previousWatch === undefined) delete process.env.WATCH_REPORT_DEPENDENCIES;
+    else process.env.WATCH_REPORT_DEPENDENCIES = previousWatch;
+    if (previousPreserved === undefined) delete process.env.PIANO_TEST_PRESERVED_ENV;
+    else process.env.PIANO_TEST_PRESERVED_ENV = previousPreserved;
+  }
+});
+
 test("snapshot first, then a streamed turn", async () => {
   const seen = await run(Effect.gen(function* () {
     const sessions = yield* PiSessions;
