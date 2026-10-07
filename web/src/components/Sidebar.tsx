@@ -5,6 +5,7 @@ import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -209,6 +210,7 @@ const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hov
 
 function Project({ project, current, open, onOpenChange, state, send, select, openNew, reveal }: ProjectProps) {
   const actions = useSessionActions(send, state.connected);
+  const [closing, setClosing] = useState(false);
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -244,9 +246,11 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => send({ _tag: "remove_project", path: project.path })}>
-              <XIcon /> Close project
-            </DropdownMenuItem>
+            <DropdownMenuGroup>
+              <DropdownMenuItem disabled={!state.connected} onSelect={() => setClosing(true)}>
+                <XIcon /> Close
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -313,6 +317,22 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
         </ul>
       </CollapsibleContent>
       {actions.dialogs}
+      <Dialog open={closing} onOpenChange={setClosing}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Close this project?</DialogTitle>
+            <DialogDescription>"{project.name}" will be removed from the sidebar. Files and session history will not be deleted.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClosing(false)}>Cancel</Button>
+            <Button disabled={!state.connected} onClick={() => {
+              if (!state.connected) return;
+              send({ _tag: "remove_project", path: project.path });
+              setClosing(false);
+            }}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Collapsible>
   );
 }
