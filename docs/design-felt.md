@@ -38,8 +38,11 @@ Motion tokens, also in `index.css`:
 ## Type
 
 Instrument Sans Variable for the interface, JetBrains Mono for anything verbatim (commands,
-paths, branches, usage figures). Two running sizes: 16px for anything you read, 14px for anything
-that labels; 12px only in the usage row and keyboard hints. Weights 400/500/600.
+paths, branches, usage figures). Body text stays 16px, as does the mobile composer.
+Shared UI labels (`text-sm`) are 16px below the shell's 48rem desktop breakpoint and 14px
+at or above it; captions (`text-xs`)
+are 14px / 12px respectively. This keeps mobile navigation, menus and controls as readable as
+the composer without enlarging desktop chrome. Weights 400/500/600.
 
 Considered and rejected: 15px transcript body. The brief allows it only if the measure stays
 under 75ch; at the 48rem column the brief also asks for, 15px Instrument Sans runs to roughly

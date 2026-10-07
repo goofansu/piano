@@ -2,8 +2,8 @@
  * piano design system.
  *
  * Type: one family for the interface (Instrument Sans) and one for anything the
- * machine produced verbatim (JetBrains Mono). Two running sizes only: 16px for
- * anything you read, 14px for anything that merely labels. Weights 400/500/600.
+ * machine produced verbatim (JetBrains Mono). Body stays 16px; labels are 16px on
+ * phones / 14px on desktop, captions 14px / 12px. Weights 400/500/600.
  *
  * Layers: every surface belongs to one of four layers, and a layer decides its
  * background, its edge and its shadow. Nothing borrows an edge from another layer.
@@ -25,6 +25,10 @@
 
 :root {
   --radius: 0.625rem;
+
+  /* Compact UI must be as readable as the composer on phones. */
+  --type-label: 1rem;
+  --type-caption: 0.875rem;
 
   /* layers */
   --surface-0: oklch(0.967 0.006 85);
@@ -131,12 +135,21 @@
   --merged: oklch(0.78 0.14 300);
 }
 
+/* Match the shell's md breakpoint; preserve desktop information density. */
+@media (min-width: 48rem) {
+  :root {
+    --type-label: 0.875rem;
+    --type-caption: 0.75rem;
+  }
+}
+
 @theme inline {
   --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* the type scale: two running sizes, then display */
-  --text-sm: 0.875rem;
+  /* Shared responsive UI layers; body and display sizes stay stable. */
+  --text-xs: var(--type-caption);
+  --text-sm: var(--type-label);
   --text-sm--line-height: 1.45;
   --text-base: 1rem;
   --text-base--line-height: 1.55;
