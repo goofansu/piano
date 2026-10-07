@@ -1,4 +1,4 @@
-import { ArchiveIcon, CopyIcon, MoreHorizontalIcon, PanelLeftOpenIcon, TextCursorInputIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, MoreHorizontalIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { ClientCommand } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevPath } from "@/lib/format";
@@ -34,7 +34,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
       <span role="status" className="sr-only">{status}</span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><SquarePenIcon /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><PlusIcon /></Button>
         </TooltipTrigger>
         <TooltipContent>New session here</TooltipContent>
       </Tooltip>

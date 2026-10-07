@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SquarePenIcon, SunIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
 import type { ClientCommand } from "@shared/wire";
@@ -98,14 +98,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           </CommandItem>
           {state.view.kind === "session" && current && (
             <CommandItem value="new session here" disabled={state.session?.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => openNew(current.cwd))}>
-              <SquarePenIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(current.cwd)}</span>
+              <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(current.cwd)}</span>
             </CommandItem>
           )}
-          {state.projects.map((p) => (
-            <CommandItem key={p.path} value={`new session in ${p.name}`} keywords={["new", p.name]} onSelect={() => run(() => openNew(p.path))}>
-              <PlusIcon /> <span className="min-w-0 truncate">New session in {p.name}</span>
-            </CommandItem>
-          ))}
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="View">

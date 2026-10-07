@@ -99,21 +99,28 @@ try {
   await ab('find', 'role', 'button', 'click', '--name', 'Search sessions', '--exact');
   await ab('wait', input);
   assert.deepEqual(await titles(), recent, 'mobile opens the same recent list');
-  await ab('fill', input, 'new session in piano');
-  await capture('mobile-project-action');
-  const label = await evaluate(`(() => {
-    const row = [...document.querySelectorAll('[cmdk-item]')].find(e => e.textContent.trim() === 'New session in piano');
-    const range = document.createRange(); range.selectNodeContents(row.lastElementChild);
-    return { text: row.lastElementChild.textContent, fits: row.scrollWidth <= row.clientWidth,
-      lines: new Set([...range.getClientRects()].map(r => r.top)).size, weight: getComputedStyle(row.lastElementChild).fontWeight, rowWeight: getComputedStyle(row).fontWeight };
+  await ab('fill', input, 'new session');
+  await capture('mobile-new-session-actions');
+  const newActions = await evaluate(`(() => {
+    const group = [...document.querySelectorAll('[cmdk-group]')].find(e => e.querySelector('[cmdk-group-heading]')?.textContent === 'New session');
+    return [...group.querySelectorAll('[cmdk-item]')].map(e => ({ value: e.getAttribute('data-value'), icon: e.querySelector('svg')?.outerHTML, fits: e.scrollWidth <= e.clientWidth }));
   })()`);
-  assert.equal(label.text, 'New session in piano'); assert.ok(label.fits); assert.equal(label.lines, 1); assert.equal(label.weight, label.rowWeight);
-  await ab('find', 'role', 'option', 'click', '--name', 'New session in piano', '--exact');
+  assert.deepEqual(newActions.map(a => a.value), ['new session', 'new session here'], 'no directory-specific actions');
+  assert.ok(newActions.every(a => a.fits), 'new session actions fit mobile width');
+  assert.ok(newActions[0].icon.includes('lucide-plus'));
+  assert.equal(newActions[0].icon, newActions[1].icon, 'new session actions use the same icon');
+  assert.equal(await evaluate(`document.querySelector('main header [aria-label="New session here"] svg').classList.contains('lucide-plus')`), true, 'header uses the same plus icon');
+  await ab('click', '[cmdk-item][data-value="new session here"]');
   await ab('wait', '--text', 'What should we work on?');
-  assert.equal(await evaluate(`!!document.querySelector('${input}')`), false, 'project action closes palette');
+  assert.equal(await evaluate(`!!document.querySelector('${input}')`), false, 'here action closes palette');
+  assert.equal(await evaluate(`document.querySelector('[role="combobox"][aria-label="Directory"]').getAttribute('title') === ${JSON.stringify(repos[0])}`), true, 'here action selects current project');
+  await ab('press', 'Control+k'); await ab('wait', input);
+  await ab('fill', input, 'new session');
+  await ab('press', 'Enter');
+  assert.equal(await evaluate(`!!document.querySelector('${input}')`), false, 'generic action closes palette');
   assert.equal(await ab('errors'), '');
-  console.log('PASS: eight newest across projects; full active-session search; archive exclusion; clear/reopen reset; keyboard selection; mobile project action');
-  writeFileSync(join(evidence, 'result.json'), JSON.stringify({ revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), dirty: true, node: process.version, cli: 'test/fake-host-pi.mjs', modelCalls: 0, label }, null, 2));
+  console.log('PASS: eight newest across projects; full active-session search; archive exclusion; clear/reopen reset; keyboard selection; mobile new session actions and consistent icons');
+  writeFileSync(join(evidence, 'result.json'), JSON.stringify({ revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), dirty: true, node: process.version, cli: 'test/fake-host-pi.mjs', modelCalls: 0, newActions }, null, 2));
 } finally {
   try { await ab('close'); } catch {}
   for (const proc of [backend, frontend]) if (proc.exitCode === null) { const stopped = new Promise(resolve => proc.once('exit', resolve)); proc.kill('SIGTERM'); await stopped; }
