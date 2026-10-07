@@ -5,8 +5,6 @@ import type { AppState } from "@/store";
 import type { ClientCommand } from "@shared/wire";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
 import { cn } from "cn";
-import { MatchText } from "@/components/MatchText";
-import { commandMatch } from "@/lib/commandMatch";
 import { abbrevPath } from "@/lib/format";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 
@@ -51,33 +49,23 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           <CommandGroup heading={search.trim() ? "Sessions" : "Recent sessions"}>
             {visibleSessions.map((t) => {
               const selected = current?.cwd === t.cwd && current.sessionId === t.sessionId && state.view.kind === "session";
-              const title = t.title || "Untitled";
-              const fields = [title, t.project, t.branch ?? "", t.sessionId];
-              const value = fields.join(" ");
-              const match = commandMatch(value, search);
-              let offset = 0;
-              const hits = fields.map(field => {
-                const indices = match.indices.filter(i => i >= offset && i < offset + field.length).map(i => i - offset);
-                offset += field.length + 1;
-                return indices;
-              });
               return (
                 <CommandItem
                   key={`${t.cwd}\n${t.sessionId}`}
-                  value={value}
+                  value={`${t.title || "Untitled"} ${t.project} ${t.branch ?? ""} ${t.sessionId}`}
+                  keywords={[t.project, t.branch ?? ""]}
                   onSelect={() => run(() => select(t.cwd, t.sessionId))}
                   className="gap-3"
                 >
-                  <span className={cn("min-w-0 flex-1 truncate", !t.title && "text-ink-3", selected && "font-medium")}><MatchText text={title} indices={hits[0]} /></span>
+                  <span className={cn("min-w-0 flex-1 truncate", !t.title && "text-ink-3", selected && "font-medium")}>{t.title || "Untitled"}</span>
                   <span className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 text-xs text-ink-3">
-                    <span className="truncate"><MatchText text={t.project} indices={hits[1]} /></span>
-                    {t.branch && (t.inWorktree || hits[2].length > 0) && (
+                    <span className="truncate">{t.project}</span>
+                    {t.branch && t.inWorktree && (
                       <span className="flex min-w-0 items-center gap-1 truncate font-mono">
                         <GitBranchIcon className="size-3 shrink-0" aria-hidden />
-                        <span className="truncate"><MatchText text={t.branch} indices={hits[2]} /></span>
+                        <span className="truncate">{t.branch}</span>
                       </span>
                     )}
-                    {hits[3].length > 0 && <span className="truncate font-mono"><MatchText text={t.sessionId} indices={hits[3]} /></span>}
                   </span>
                 </CommandItem>
               );
@@ -87,27 +75,27 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
         <CommandSeparator />
         <CommandGroup heading="Global commands">
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
-            <PlusIcon /> <MatchText text="New session" search={search} />
+            <PlusIcon /> New session
           </CommandItem>
           <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
-            <PanelLeftIcon /> <MatchText text="Toggle sidebar" search={search} />
+            <PanelLeftIcon /> Toggle sidebar
           </CommandItem>
-          <CommandItem value="appearance light" keywords={["theme"]} onSelect={() => run(() => setTheme("light"))}><SunIcon /> <MatchText text="Light appearance" search={search} /></CommandItem>
-          <CommandItem value="appearance dark" keywords={["theme"]} onSelect={() => run(() => setTheme("dark"))}><MoonIcon /> <MatchText text="Dark appearance" search={search} /></CommandItem>
-          <CommandItem value="appearance system" keywords={["theme"]} onSelect={() => run(() => setTheme("system"))}><MonitorIcon /> <MatchText text="System appearance" search={search} /></CommandItem>
+          <CommandItem value="appearance light" keywords={["theme"]} onSelect={() => run(() => setTheme("light"))}><SunIcon /> Light appearance</CommandItem>
+          <CommandItem value="appearance dark" keywords={["theme"]} onSelect={() => run(() => setTheme("dark"))}><MoonIcon /> Dark appearance</CommandItem>
+          <CommandItem value="appearance system" keywords={["theme"]} onSelect={() => run(() => setTheme("system"))}><MonitorIcon /> System appearance</CommandItem>
         </CommandGroup>
         {state.view.kind === "session" && state.session && <>
           <CommandSeparator />
           <CommandGroup heading="Session commands">
-            <CommandItem value="Copy working directory" onSelect={() => run(() => { if (state.session) void copySessionValue(state.session.cwd, "Working directory"); })}><CopyIcon /> <MatchText text="Copy working directory" search={search} /></CommandItem>
-            {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> <MatchText text="Copy git branch" search={search} /></CommandItem>}
-            <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> <MatchText text="Copy session ID" search={search} /></CommandItem>
-            <CommandItem value="Copy all" onSelect={() => run(() => { void copyAllSessionDetails(state); })}><CopyIcon /> <MatchText text="Copy all" search={search} /></CommandItem>
-            <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> <MatchText text="Rename" search={search} /></CommandItem>
-            <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> <MatchText text="Archive" search={search} /></CommandItem>
-            <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> <MatchText text="Delete" search={search} /></CommandItem>
+            <CommandItem value="Copy working directory" onSelect={() => run(() => { if (state.session) void copySessionValue(state.session.cwd, "Working directory"); })}><CopyIcon /> Copy working directory</CommandItem>
+            {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
+            <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
+            <CommandItem value="Copy all" onSelect={() => run(() => { void copyAllSessionDetails(state); })}><CopyIcon /> Copy all</CommandItem>
+            <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
+            <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
+            <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
             <CommandItem value="new session here" disabled={state.session.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => { if (state.session) openNew(state.session.cwd); })}>
-              <PlusIcon /> <span className="shrink-0"><MatchText text="New session here" search={search} /></span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(state.session.cwd)}</span>
+              <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(state.session.cwd)}</span>
             </CommandItem>
           </CommandGroup>
         </>}
