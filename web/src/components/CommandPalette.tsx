@@ -5,8 +5,9 @@ import type { AppState } from "@/store";
 import type { ClientCommand } from "@shared/wire";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
 import { cn } from "cn";
+import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { abbrevPath } from "@/lib/format";
-import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 interface Props {
   open: boolean;
@@ -45,8 +46,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
       <CommandInput value={search} onValueChange={setSearch} placeholder="Search sessions and commands…" aria-label="Search sessions and commands" />
       <CommandList className="max-h-[min(24rem,60dvh)]">
         <CommandEmpty>No sessions or commands match.</CommandEmpty>
+        <RankedCommandGroups search={search}>
         {sessions.length > 0 && (
-          <CommandGroup heading={search.trim() ? "Sessions" : "Recent sessions"}>
+          <CommandGroup key="sessions" heading={search.trim() ? "Sessions" : "Recent sessions"}>
             {visibleSessions.map((t) => {
               const selected = current?.cwd === t.cwd && current.sessionId === t.sessionId && state.view.kind === "session";
               return (
@@ -72,8 +74,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
             })}
           </CommandGroup>
         )}
-        <CommandSeparator />
-        <CommandGroup heading="Global commands">
+        <CommandGroup key="global" heading="Global commands">
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
           </CommandItem>
@@ -84,9 +85,8 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           <CommandItem value="appearance dark" keywords={["theme"]} onSelect={() => run(() => setTheme("dark"))}><MoonIcon /> Dark appearance</CommandItem>
           <CommandItem value="appearance system" keywords={["theme"]} onSelect={() => run(() => setTheme("system"))}><MonitorIcon /> System appearance</CommandItem>
         </CommandGroup>
-        {state.view.kind === "session" && state.session && <>
-          <CommandSeparator />
-          <CommandGroup heading="Session commands">
+        {state.view.kind === "session" && state.session && (
+          <CommandGroup key="session" heading="Session commands">
             <CommandItem value="Copy working directory" onSelect={() => run(() => { if (state.session) void copySessionValue(state.session.cwd, "Working directory"); })}><CopyIcon /> Copy working directory</CommandItem>
             {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
             <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
@@ -98,7 +98,8 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
               <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(state.session.cwd)}</span>
             </CommandItem>
           </CommandGroup>
-        </>}
+        )}
+        </RankedCommandGroups>
       </CommandList>
     </CommandDialog>
     {actions.dialogs}

@@ -33,7 +33,7 @@ const sessionFile = join(sessions, 'header.jsonl');
 const entries = [{ type: 'session', version: 3, id: 'header', cwd: repo, timestamp }];
 for (let n = 0; n < 40; n++) entries.push({ type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp, message: { role: 'user', content: `Message ${n}\n\nTranscript scrolling check.`, timestamp: n } });
 writeFileSync(sessionFile, entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId: 'header', title: 'Header verification with a long session title to truncate on mobile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId: 'header', title: 'Header verification: copy all details with a long session title to truncate on mobile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
 // The generic fake only understands --session-id; this fixture also resumes this saved file.
 const fake = join(root, 'fake.mjs');
 writeFileSync(fake, readFileSync('test/fake-pi.mjs', 'utf8').replace('const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";', 'const sessionId = args.includes("--session") ? "header" : args[args.indexOf("--session-id") + 1] || "nosession";'));
@@ -229,11 +229,21 @@ try {
     { heading: 'Session commands', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all', 'Rename', 'Archive', 'Delete', 'new session here'] },
   ]);
   await ab('screenshot', join(evidence, 'palette-groups.png'));
+  // A session also contains "copy all": the exact command must outrank that group.
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'header verification');
+  await ab('wait', '--fn', `document.querySelector('[cmdk-item]')?.textContent.includes('Header verification')`);
   await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
   await ab('wait', '--fn', `document.querySelector('[cmdk-item]')?.getAttribute('data-value') === 'Copy all'`);
+  assert.ok(await evaluate(`[...document.querySelectorAll('[cmdk-item]')].some(node => node.textContent.includes('Header verification'))`), 'competing session is still in the results');
   assert.equal(await evaluate(`document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value')`), 'Copy all');
   assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item] mark').length`), 0, 'search results have no match highlighting');
   await ab('screenshot', join(evidence, 'copy-all-ranked.png'));
+  await evaluate(`document.querySelector('[aria-label="Search sessions and commands"]').select(); true`);
+  await ab('press', 'Backspace');
+  await ab('wait', '--fn', `document.querySelector('[aria-label="Search sessions and commands"]').value === ''`);
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
+  await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy all'`);
   await ab('press', 'Enter');
   await waitForCopies(9);
   assert.equal(await evaluate('window.copies.at(-1)'), allDetails, 'palette copies the same labeled details');
