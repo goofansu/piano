@@ -131,7 +131,8 @@ try {
     await menu();
     await ab('snapshot');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
-    assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes('Session ID')`), false);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Copy session ID"]').textContent`), 'Session IDheader');
+    assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes('Copy session file path')`), false);
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes('New session here')`), false);
     const bounds = await evaluate(`(() => { const r = document.querySelector('[role="menu"]').getBoundingClientRect(); return {left:r.left,right:r.right,width:innerWidth}; })()`);
     assert.ok(bounds.left >= 0 && bounds.right <= bounds.width);
@@ -139,8 +140,8 @@ try {
     await item('Copy working directory');
     await ab('wait', '--text', 'Working directory copied');
     await menu(); await item('Copy git branch');
-    await menu(); await item('Copy session file path');
-    assert.deepEqual(await evaluate('window.copies.slice(-3)'), [repo, 'header-test', sessionFile]);
+    await menu(); await item('Copy session ID');
+    assert.deepEqual(await evaluate('window.copies.slice(-3)'), [repo, 'header-test', 'header']);
     await menu(); await item('Rename');
     await ab('wait', '--text', 'Rename session');
     await ab('fill', '[aria-label="Session name"]', 'Do not save');

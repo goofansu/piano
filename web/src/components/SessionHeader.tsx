@@ -12,7 +12,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
   state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; status: string;
 }) {
   const session = state.session;
-  const { title, branch, sessionFile } = currentSessionDetails(state);
+  const { title, branch, sessionId } = currentSessionDetails(state);
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const actions = useSessionActions(send, ready);
   const target = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title } : undefined;
@@ -48,7 +48,9 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
             {branch && <DropdownMenuItem aria-label="Copy git branch" onSelect={() => void copySessionValue(branch, "Git branch")}>
               <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Git branch</span><span className="break-all font-mono text-xs text-muted-foreground">{branch}</span></span><CopyIcon />
             </DropdownMenuItem>}
-            <DropdownMenuItem disabled={!sessionFile} onSelect={() => { if (sessionFile) void copySessionValue(sessionFile, "Session file path"); }}><CopyIcon /> Copy session file path</DropdownMenuItem>
+            <DropdownMenuItem aria-label="Copy session ID" disabled={!sessionId} onSelect={() => { if (sessionId) void copySessionValue(sessionId, "Session ID"); }}>
+              <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Session ID</span><span className="break-all font-mono text-xs text-muted-foreground">{sessionId ?? "Not available"}</span></span><CopyIcon />
+            </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

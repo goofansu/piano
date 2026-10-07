@@ -9,7 +9,7 @@ import { Field, FieldGroup } from "@/components/ui/field";
 
 type Target = { cwd: string; sessionId: string; title?: string };
 
-/** Use the selected Pi projection and Git discovery, never construct a session file path. */
+/** Use the selected Pi projection and Git discovery for session identity and details. */
 export function currentSessionDetails(state: AppState) {
   const session = state.session;
   const project = state.projects.find(p => p.worktrees.some(w => w.path === session?.cwd));
@@ -17,7 +17,7 @@ export function currentSessionDetails(state: AppState) {
   return {
     title: session?.state.sessionName || info?.title || "Untitled",
     branch: project?.discovery.status === "ready" ? project.worktrees.find(w => w.path === session?.cwd)?.branch : undefined,
-    sessionFile: session?.state.sessionFile,
+    sessionId: session?.sessionId,
   };
 }
 
