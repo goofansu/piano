@@ -63,7 +63,7 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
 }
 export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
   return <>
-    {(!!draft.items.length || draft.busy) && <AttachmentGroup aria-label="Attachments" className="px-3 pt-3 font-sans">
+    {(!!draft.items.length || draft.busy) && <AttachmentGroup aria-label="Attachments" className="scroll-fade-none px-3 pt-3 font-sans">
       {draft.items.map((a, i) => <Attachment key={`${a.name}-${i}`} orientation="vertical" className="animate-in fade-in-0 zoom-in-95">
         <AttachmentMedia variant="image"><img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} /></AttachmentMedia>
         <AttachmentContent>
@@ -108,7 +108,6 @@ function ImagePreview({ url }: { url: string }) {
     <AttachmentTrigger asChild><a href={url} target="_blank" rel="noreferrer" aria-label="Open attached image" onClick={e => e.stopPropagation()} /></AttachmentTrigger>
   </Attachment>;
 }
-/** Inline padding keeps the first tile's edge and focus ring inside the group's scroll-fade mask. */
 export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
-  return items?.length ? <AttachmentGroup className="-mx-1 mt-2 px-1">{items.map((a, i) => <ImagePreview key={`${a.url}-${i}`} url={a.url} />)}</AttachmentGroup> : null;
+  return items?.length ? <AttachmentGroup className="scroll-fade-none mt-2">{items.map((a, i) => <ImagePreview key={`${a.url}-${i}`} url={a.url} />)}</AttachmentGroup> : null;
 }
