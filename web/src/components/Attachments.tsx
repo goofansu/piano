@@ -71,7 +71,7 @@ export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraf
           <AttachmentDescription>{TYPE_LABEL[a.mimeType]} · {formatBytes(base64Bytes(a.data))}</AttachmentDescription>
         </AttachmentContent>
         <AttachmentActions>
-          <AttachmentAction variant="outline" aria-label={`Remove ${a.name}`} disabled={disabled || draft.busy} onClick={() => draft.remove(i)}><XIcon /></AttachmentAction>
+          <AttachmentAction aria-label={`Remove ${a.name}`} disabled={disabled || draft.busy} onClick={() => draft.remove(i)}><XIcon /></AttachmentAction>
         </AttachmentActions>
       </Attachment>)}
       {draft.busy && <Attachment role="status" orientation="vertical" state="uploading" className="animate-in fade-in-0">
