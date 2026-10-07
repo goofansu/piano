@@ -41,7 +41,7 @@ const stories = [
     ] },
     { role: 'toolResult', toolCallId: 'read-app', toolName: 'read', content: [{ type: 'text', text: 'export default function App() {\n  return <Workspace />;\n}' }], isError: false },
     { ...assistant(''), content: [{ type: 'toolCall', id: 'failed-command', name: 'bash', arguments: { command: 'node test/browser-session-header.mjs /tmp/piano-header-evidence/browser-3 > /tmp/piano-header-evidence/browser-3.log 2>&1; echo "browser: $?"', timeout: 240 } }] },
-    { role: 'toolResult', toolCallId: 'failed-command', toolName: 'bash', content: [{ type: 'text', text: 'Command failed: fixture error remains visible.' }], isError: true },
+    { role: 'toolResult', toolCallId: 'failed-command', toolName: 'bash', content: [{ type: 'text', text: 'Command failed: fixture error details.' }], isError: true, nestedCalls: { complete: true, calls: [{ id: 'failed-command/child', name: 'bash', arguments: { command: 'exit 1' }, status: 'error' }] } },
     assistant(reply),
   ]],
   ['navigation', 'Simplify project navigation', [{ role: 'user', content: 'Make the project navigation easier to scan.' }]],
@@ -159,12 +159,15 @@ try {
   assert.ok(await evaluate(`document.querySelector('main').textContent.includes('I’ll start with the parts you touch every day')`));
   assert.equal(await evaluate(`!!document.querySelector('main [aria-label="Session menu"], main [aria-label="Session information"]')`), false);
   if (!toolsOnly) assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().height`), 0, 'no empty desktop header');
-  // Tool headers stay on one line; successful output is opt-in, errors stay visible.
+  // INV-01: details remain available, but every tool uses the same opt-in disclosure.
   // Observe layout and disclosure behavior, not Tailwind class names.
   for (const width of [1440, 320]) {
     await ab('set', 'viewport', String(width), '1000');
     for (const expanded of [false, true]) {
-      if (expanded) await ab('click', tool);
+      if (expanded) {
+        await ab('click', tool);
+        await ab('click', '[aria-label="bash tool call"] > div button[aria-expanded]');
+      }
       const alignment = await evaluate(`(() => {
         const group=document.querySelector('[aria-label="read tool call"]');
         const dot=group.querySelector('[aria-hidden] > span');
@@ -178,8 +181,14 @@ try {
       assert.ok(Math.abs(alignment.dot-alignment.label) <= 1, `${width}px expanded=${expanded}: dot and label differ by ${Math.abs(alignment.dot-alignment.label)}px`);
       assert.ok(Math.abs(alignment.summaryLines - 1) < 0.01, `${width}px expanded=${expanded}: single-line summary`);
       assert.equal(await evaluate(`document.querySelector('[aria-label="read tool call"]').textContent.includes('return <Workspace />')`), expanded, 'successful output follows disclosure');
-      assert.equal(await evaluate(`document.querySelector('[aria-label="bash tool call"]').textContent.includes('fixture error remains visible')`), true, 'collapsed errors remain visible');
-      if (expanded) await ab('click', tool);
+      assert.equal(await evaluate(`document.querySelector('[aria-label="bash tool call"]').textContent.includes('fixture error details')`), expanded, 'failed output follows disclosure');
+      assert.equal(await evaluate(`!!document.querySelector('[aria-label="bash tool call"] [aria-label="bash tool call"]')`), expanded, 'nested errors follow parent disclosure');
+      await capture(`tool-disclosure-${width}-${expanded ? 'expanded' : 'collapsed'}`);
+      if (expanded) {
+        await ab('click', tool);
+        await ab('click', '[aria-label="bash tool call"] > div button[aria-expanded]');
+        assert.equal(await evaluate(`document.querySelector('[aria-label="bash tool call"]').textContent.includes('fixture error details')`), false, 'failed output folds away again');
+      }
     }
   }
   await ab('set', 'viewport', '1440', '1000');
@@ -277,11 +286,11 @@ try {
       const bash = '[aria-label="bash tool call"] button[aria-expanded]';
       await ab('click', bash);
       assert.equal(await evaluate(`(() => { const s=document.querySelector('${bash}').children[1]; return Math.round(s.getBoundingClientRect().height/parseFloat(getComputedStyle(s).lineHeight)); })()`), 1);
-      assert.equal(await evaluate(`document.querySelector('[aria-label="bash tool call"]').querySelectorAll('pre').length`), 2, 'one arguments block and one error output');
+      assert.equal(await evaluate(`(() => { const group=document.querySelector('[aria-label="bash tool call"]'); return [...group.querySelectorAll('pre')].filter(e=>e.closest('[role="group"]')===group).length; })()`), 2, 'one arguments block and one error output');
       await capture(`command-expanded-${width}`);
       await ab('click', bash);
     }
-    console.log('PASS: single-line tool headers on desktop/mobile, successful output disclosed, collapsed errors visible');
+    console.log('PASS: single-line tool headers on desktop/mobile, successful/failed output and nested errors follow disclosure');
   }
   assert.equal(await ab('errors'), '');
   if (!toolsOnly) console.log('PASS: native copy/paste and denied copy; keyboard disclosures; session draft retention; light/dark layouts; reduced-motion entrance/disclosures/streaming; mobile controls, copy visibility and sidebar focus');
