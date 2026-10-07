@@ -60,3 +60,17 @@ its protocol fixture was updated, without weakening assertions. Browser harness 
 fixed simulated caret movement and coarse-pointer setup before the final passing run.
 Actual OS keyboard/IME and screen-reader behavior were not exercised; mobile uses browser
 emulation. No model requests, deployment, service restart or real-registry edits were made.
+
+## Follow-up: skills-only suggestions
+
+At the user's request, `/` now offers only catalog entries whose Pi source is `skill`,
+for both composers. Selecting one still inserts `/skill:name`. Extensions and prompt
+templates remain executable when typed manually; discovery and Pi execution are unchanged
+(INV-01, INV-12–13).
+
+Verified on `dfd0340` plus the follow-up changes, Node 24.21.0 / Pi 1.0.4:
+`npm test` (70 passed), `npm run typecheck`, and the same scratch browser script on
+7181/7182. The browser regression first failed on unwanted extension/template rows,
+then passed with exactly the probe/live skills in each composer. It also verifies
+manually typed `/handled` commands while idle and busy. Output and screenshots:
+`/tmp/piano-skills-only-evidence/`. No deployment performed for this follow-up.

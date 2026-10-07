@@ -67,6 +67,7 @@ function handle(cmd) {
       { name: "handled", description: "Handle without a model call", source: "extension" },
       { name: "handled", description: "Shadowed template", source: "prompt" },
       { name: "skill:research", description: "Investigate a question", source: "skill" },
+      { name: args.includes("--no-session") ? "skill:probe-only" : "skill:live-only", source: "skill" },
       { name: "review", description: "Review changes", source: "prompt" },
       { name: args.includes("--no-session") ? "probe-only" : "live-only", source: "extension" },
     ] });

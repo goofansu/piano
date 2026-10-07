@@ -65,7 +65,7 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
   }, [open, cwd, sessionId, key]);
   const current = catalog?.key === key ? catalog : undefined;
   const query = range?.query ?? "";
-  const commands = (current?.commands ?? []).filter(command => command.name.toLowerCase().includes(query))
+  const commands = (current?.commands ?? []).filter(command => command.source === "skill" && command.name.toLowerCase().includes(query))
     .sort((a, b) => {
       const rank = (command: SlashCommand) => command.name.replace(/^skill:/, "").toLowerCase().startsWith(query) ? 0 : 1;
       return rank(a) - rank(b) || a.name.localeCompare(b.name);
