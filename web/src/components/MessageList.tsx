@@ -144,6 +144,9 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
   if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
+    // Pi starts a message before its first visible text or tool block arrives.
+    // An empty article would still consume the transcript's flex gap.
+    if (!msg.text && !msg.errorMessage && !msg.toolCalls?.length) return null;
     return (
       <article
         id={streaming ? undefined : messageAnchorId(msg.id)}

@@ -69,6 +69,13 @@ function handle(cmd) {
       persist({ role: 'user', content: '/hold', timestamp: Date.now() });
       out({ type: 'tool_execution_start', toolCallId: 'held-shell', toolName: 'bash', args: { command: 'fixture waiting; not a real shell' } });
       break;
+    case '/pending-tool':
+      streaming = true; out({ type: 'agent_start' });
+      out({ type: 'message_start', message: { role: 'assistant', content: [] } });
+      break;
+    case '/render-tool':
+      out({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_start', contentIndex: 0, id: 'pending-read', toolName: 'read' } });
+      break;
     case '/partial':
       streaming = true; out({ type: 'agent_start' });
       out({ type: 'message_start', message: { role: 'assistant', content: [] } });

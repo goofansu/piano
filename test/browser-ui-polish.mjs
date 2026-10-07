@@ -27,6 +27,7 @@ const stories = [
   ['tool-spacing', 'Tool spacing', [
     { ...assistant(''), content: [spacingCall('one'), spacingCall('two')] },
     spacingResult('one'), spacingResult('two'),
+    assistant(''),
     { ...assistant(''), content: [spacingCall('three')] }, spacingResult('three'),
     assistant('Text separates tool runs.'),
     { ...assistant(''), content: [{ type: 'text', text: 'Checking the browser next.' }, spacingCall('four', 'write')] }, spacingResult('four', 'write'),
@@ -123,6 +124,26 @@ try {
     assert.ok(Math.abs(spacing.within - spacing.afterWrite) <= 1, `${width}px: unequal gap after text + write ${JSON.stringify(spacing)}`);
     assert.ok(spacing.textBreak > spacing.between, 'text still separates tool runs');
   }
+  // An assistant message exists before its first text/tool block arrives. It must
+  // not reserve an extra transcript gap (INV-01: presentation only, history retained).
+  await ab('fill', '[aria-label="Message"]', '/pending-tool'); await click('Send');
+  await ab('wait', '--text', 'barrier /pending-tool');
+  for (const width of [390, 1440]) {
+    await ab('set', 'viewport', String(width), '1000');
+    const gap = await evaluate(`(() => {
+      const transcript = document.querySelector('[data-slot="transcript"]');
+      const working = [...transcript.querySelectorAll('span')].find(e => e.textContent === 'Pi is working').parentElement.parentElement;
+      const lastTool = [...transcript.querySelectorAll('[role="group"]')].at(-1);
+      return working.getBoundingClientRect().top - lastTool.getBoundingClientRect().bottom;
+    })()`);
+    observations.push({name:'pending-tool-gap',width,gap});
+    await capture(`pending-tool-${width}`);
+    assert.ok(gap <= 24, `${width}px: empty pending message adds space (${gap}px)`);
+  }
+  await ab('fill', '[aria-label="Message"]', '/render-tool'); await ab('press', 'Enter');
+  await ab('wait', '--fn', `!!document.querySelector('[aria-label="read tool call"] button') && document.querySelector('[data-slot="transcript"]').textContent.includes('Reading')`);
+  assert.ok(await evaluate(`document.querySelector('[data-slot="transcript"]').textContent.includes('Reading')`), 'tool appears when its block arrives');
+  await click('Stop');
   await ab('set', 'viewport', '1440', '1000');
   await ab('open', `http://127.0.0.1:${WEB_PORT}/s/daily-ui`);
   await ab('wait', '--text', 'A quieter place to work');
