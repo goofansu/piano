@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, SearchIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -209,7 +209,6 @@ const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hov
 
 function Project({ project, current, open, onOpenChange, state, send, select, openNew, reveal }: ProjectProps) {
   const actions = useSessionActions(send, state.connected);
-  const root = project.worktrees.find(w => w.root);
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -245,11 +244,6 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {root?.trust.required && (
-              <DropdownMenuItem onClick={() => send({ _tag: "set_trust", path: root.path, trusted: !root.trust.trusted })}>
-                {root.trust.trusted ? <><ShieldOffIcon /> Untrust project</> : <><ShieldCheckIcon /> Trust project</>}
-              </DropdownMenuItem>
-            )}
             <DropdownMenuItem onClick={() => send({ _tag: "remove_project", path: project.path })}>
               <XIcon /> Close project
             </DropdownMenuItem>
