@@ -21,6 +21,13 @@ export function currentSessionDetails(state: AppState) {
   };
 }
 
+/** The registered workspace behind the selected session; undefined when its directory is not registered or not a Git checkout. */
+export function sessionWorkspace(state: AppState) {
+  const session = state.session;
+  const worktree = state.projects.flatMap(p => p.worktrees).find(w => w.path === session?.cwd);
+  return worktree && worktree.status !== "non-git" ? worktree.workspace : undefined;
+}
+
 export async function copySessionValue(value: string, label: string) {
   try {
     await navigator.clipboard.writeText(value);

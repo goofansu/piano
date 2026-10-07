@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
 import type { ClientCommand } from "@shared/wire";
-import { copyAllSessionDetails, copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
+import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { cn } from "cn";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { abbrevPath } from "@/lib/format";
@@ -17,13 +17,14 @@ interface Props {
   openNew: (cwd?: string) => void;
   toggleSidebar: () => void;
   send: (command: ClientCommand) => void;
+  openChanges: () => void;
 }
 
 /**
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its project and its branch.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send }: Props) {
+export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges }: Props) {
   const { setTheme } = useTheme();
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
@@ -98,6 +99,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
             {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
             <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
             <CommandItem value="Copy all" onSelect={() => run(() => { void copyAllSessionDetails(state); })}><CopyIcon /> Copy all</CommandItem>
+            <CommandItem value="Changes" keywords={["diff", "review", "working tree"]} disabled={!sessionWorkspace(state) || state.session?.state.checkoutMissing} onSelect={() => run(openChanges)}><FileDiffIcon /> Changes</CommandItem>
             <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
             <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
             <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>

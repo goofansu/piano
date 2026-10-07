@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { SessionHeader } from "@/components/SessionHeader";
+import { toast } from "sonner";
+import { ChangesSheet } from "@/components/Changes";
+import { sessionWorkspace } from "@/components/SessionActions";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -21,9 +24,11 @@ interface Props {
   onDraftChange: (key: string, text: string) => void;
   onDraftAppend: (key: string, text: string) => void;
   openNew: (cwd?: string) => void;
+  changesOpen: boolean;
+  onChangesOpenChange: (open: boolean) => void;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, changesOpen, onChangesOpenChange }: Props) {
   const t = state.session;
   const checkoutMissing = !!t?.state.checkoutMissing;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
@@ -74,7 +79,14 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   return (
     <>
-      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} status={status} />
+      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} status={status} openChanges={() => onChangesOpenChange(true)} />
+      {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={sessionWorkspace(state)} session={t}
+        onAsk={text => {
+          if (!draftKey) return;
+          onDraftAppend(draftKey, `${state.drafts[draftKey]?.trim() ? "\n\n" : ""}${text}`);
+          onChangesOpenChange(false);
+          toast.success("Added to your message");
+        }} />}
 
       {project?.discovery.status === "error" && (
         <Banner variant="destructive" title="Git status unavailable." action={<Button variant="ghost" size="sm" onClick={() => send({ _tag: "projects" })}>Refresh</Button>}>

@@ -175,6 +175,9 @@ export default function App() {
 
   // ── keyboard flow ──
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // One Changes sheet per selected session; the header menu and the palette both open it.
+  const [changesOpen, setChangesOpen] = useState(false);
+  useEffect(() => setChangesOpen(false), [state.session?.cwd, state.session?.sessionId]);
   const toggleSidebar = useCallback(() => {
     if (wide()) setCollapsed(!collapsed);
     else setMenuOpen((open) => !open);
@@ -313,7 +316,7 @@ export default function App() {
               <Button variant="outline" onClick={() => openNew()}>New session</Button>
             </div>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} changesOpen={changesOpen} onChangesOpenChange={setChangesOpen} />
           )}
         </div>
         <Toaster
@@ -327,7 +330,7 @@ export default function App() {
           toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
         />
       </main>
-      <CommandPalette send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} />
+      <CommandPalette send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </div>
   );

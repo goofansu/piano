@@ -268,6 +268,8 @@ export const WorkspaceCapture = Schema.Struct({
   result: Schema.Union([
     Schema.Struct({ status: Schema.Literal("captured"), revision: Schema.String, physicalPath: Schema.String,
       branch: Schema.NullOr(Schema.String), manifest: RevisionManifest,
+      /** Base HEAD to captured working files, untracked included: what a reviewer reads as one list. */
+      diff: Schema.String,
       stagedDiff: Schema.String, unstagedDiff: Schema.String, limitations: Schema.Array(Schema.String) }),
     Schema.Struct({ status: Schema.Literals(["error", "unsupported", "inconclusive"]), detail: Schema.String }),
   ]),

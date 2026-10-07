@@ -68,7 +68,7 @@ test("INV-01/07: migration backs up exact bytes, preserves references and worksp
 test("INV-07/08: raw content, stage, untracked, deletion, modes, symlinks and rebased HEAD bind an immutable manifest and diff", async t => {
   const { repo, store, workspace, capture } = fixture(t);
   const first = ready(await capture());
-  assert.equal(first.stagedDiff, ""); assert.equal(first.unstagedDiff, "");
+  assert.equal(first.diff, ""); assert.equal(first.stagedDiff, ""); assert.equal(first.unstagedDiff, "");
   assert.equal(ready(await capture()).revision, first.revision);
   writeFileSync(join(repo, "source.txt"), "changed\n");
   const editedReceipt = await capture(), edited = ready(editedReceipt);
@@ -82,12 +82,13 @@ test("INV-07/08: raw content, stage, untracked, deletion, modes, symlinks and re
   writeFileSync(stored, "changed\n"); chmodSync(stored, 0o400);
   git(repo, "add", "source.txt");
   const staged = ready(await capture()); assert.notEqual(staged.revision, edited.revision);
-  assert.match(staged.stagedDiff, /\+changed/); assert.equal(staged.unstagedDiff, "");
+  assert.match(staged.stagedDiff, /\+changed/); assert.equal(staged.unstagedDiff, ""); assert.equal(staged.diff, edited.diff);
   git(repo, "reset", "-q", "HEAD", "--", "source.txt");
   assert.equal(ready(await capture()).revision, edited.revision);
   writeFileSync(join(repo, "new\nsource.ts"), "untracked source\n");
   const untracked = ready(await capture()); assert.notEqual(untracked.revision, edited.revision);
   assert.ok(untracked.manifest.files.some(f => f.path === "new\nsource.ts")); assert.match(untracked.unstagedDiff, /untracked source/);
+  assert.match(untracked.diff, /^diff --git a\/new\nsource.ts b\/new\nsource.ts$/m); assert.match(untracked.diff, /new file mode 100644[\s\S]*\+untracked source/);
   unlinkSync(join(repo, "source.txt"));
   const deleted = ready(await capture()); assert.notEqual(deleted.revision, untracked.revision); assert.match(deleted.unstagedDiff, /deleted file mode/);
   assert.equal(deleted.manifest.files.some(f => f.path === "source.txt"), false);

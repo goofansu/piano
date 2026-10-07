@@ -198,7 +198,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
           return (await command(cli, dir, ["diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-renames", "--src-prefix=", "--dst-prefix=", "--", "a", "b"], signal, undefined, true)).toString("utf8");
         } finally { await rm(dir, { recursive: true, force: true }); }
       }
-      const stagedDiff = await diff(manifest.base, manifest.index), unstagedDiff = await diff(manifest.index, files);
+      const workingDiff = await diff(manifest.base, files), stagedDiff = await diff(manifest.base, manifest.index), unstagedDiff = await diff(manifest.index, files);
       // A second content scan and inventory catch missed/coalesced metadata changes;
       // the watch also rejects ABA/transient edits. Not an adversarial FS snapshot.
       if (JSON.stringify(files) !== JSON.stringify(await readWorking())) raced();
@@ -213,16 +213,18 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
       for (const [hash, bytes] of content) await writeFile(join(temporary, "blobs", hash), bytes, { mode: 0o400 });
       const limitations = ["Ignored/generated dependencies and external configuration are excluded from this capture."];
       if (files.some(e => e.mode === "120000")) limitations.push("Symlinks are captured as link bytes, not referent contents.");
-      const result: Extract<WorkspaceCapture["result"], { status: "captured" }> = { status: "captured", revision, physicalPath: cwd, branch, manifest, stagedDiff, unstagedDiff, limitations };
+      const result: Extract<WorkspaceCapture["result"], { status: "captured" }> = { status: "captured", revision, physicalPath: cwd, branch, manifest, diff: workingDiff, stagedDiff, unstagedDiff, limitations };
       // Revision records are content-only. Workspace/observation identity stays on the caller's receipt.
       await writeFile(join(temporary, "manifest.json"), JSON.stringify(manifest, null, 2), { mode: 0o400 });
-      await writeFile(join(temporary, "diff.json"), JSON.stringify({ stagedDiff, unstagedDiff }), { mode: 0o400 });
+      await writeFile(join(temporary, "diff.json"), JSON.stringify({ diff: workingDiff, stagedDiff, unstagedDiff }), { mode: 0o400 });
       try { await rename(temporary, join(store, revision)); }
       catch (e) { if (!["ENOTEMPTY", "EEXIST"].includes((e as NodeJS.ErrnoException).code ?? "")) throw e;
         // Never trust an existing record after external alteration.
         if (!Buffer.from(JSON.stringify(manifest, null, 2)).equals(await readFile(join(store, revision, "manifest.json")))) throw new Error("Stored revision is damaged; restore or remove that candidate before recapturing.");
         for (const [hash, bytes] of content) if (!bytes.equals(await readFile(join(store, revision, "blobs", hash)))) throw new Error("Stored candidate blob is damaged.");
-        if (await readFile(join(store, revision, "diff.json"), "utf8") !== JSON.stringify({ stagedDiff, unstagedDiff })) throw new Error("Stored candidate diff is damaged.");
+        // Records written before the combined diff existed lack `diff`; their other diffs must still match.
+        const stored = JSON.parse(await readFile(join(store, revision, "diff.json"), "utf8")) as Partial<Record<"diff" | "stagedDiff" | "unstagedDiff", string>>;
+        if (stored.stagedDiff !== stagedDiff || stored.unstagedDiff !== unstagedDiff || (stored.diff !== undefined && stored.diff !== workingDiff)) throw new Error("Stored candidate diff is damaged.");
       }
       return result;
     } finally {

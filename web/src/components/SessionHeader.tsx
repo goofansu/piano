@@ -1,4 +1,4 @@
-import { ArchiveIcon, CopyIcon, MoreHorizontalIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, MoreHorizontalIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { ClientCommand } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevPath } from "@/lib/format";
@@ -6,16 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { copyAllSessionDetails, copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
+import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 
-export function SessionHeader({ state, send, onMenu, openNew, status }: {
-  state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; status: string;
+export function SessionHeader({ state, send, onMenu, openNew, status, openChanges }: {
+  state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; status: string; openChanges: () => void;
 }) {
   const session = state.session;
   const { title, branch, sessionId } = currentSessionDetails(state);
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const actions = useSessionActions(send, ready);
   const target = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title } : undefined;
+  const workspace = sessionWorkspace(state);
   const short = session ? abbrevPath(session.cwd) : "";
   const slash = short.lastIndexOf("/");
   return <>
@@ -55,6 +56,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
+            <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target || session?.state.checkoutMissing} onSelect={() => target && actions.rename(target)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.archive(target)}><ArchiveIcon /> Archive</DropdownMenuItem>
           </DropdownMenuGroup>
