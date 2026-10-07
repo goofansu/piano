@@ -67,7 +67,7 @@ export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraf
       {draft.items.map((a, i) => <Attachment key={`${a.name}-${i}`} orientation="vertical" className="animate-in fade-in-0 zoom-in-95">
         <AttachmentMedia variant="image"><img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} /></AttachmentMedia>
         <AttachmentContent>
-          <AttachmentTitle title={a.name}>{a.name}</AttachmentTitle>
+          <AttachmentTitle className="text-xs" title={a.name}>{a.name}</AttachmentTitle>
           <AttachmentDescription>{TYPE_LABEL[a.mimeType]} · {formatBytes(base64Bytes(a.data))}</AttachmentDescription>
         </AttachmentContent>
         <AttachmentActions>
