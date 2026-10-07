@@ -93,6 +93,10 @@ diagnostics belong in on-demand details only when useful; persisting data does n
 an inline label. Surface persistent warnings only for problems the user can act on.
 Keep correctness in authoritative state handling and regression checks, not permanent UI caveats.
 
+Build UI from shadcn/ui components: search the registry first, add with `npx shadcn@latest add`,
+and compose as the `shadcn` skill describes. Hand-written markup is for the case where no
+standard component exists, and says so in a comment.
+
 The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands,
 and Session commands (only with a selected session). A feature that adds an action the sidebar or

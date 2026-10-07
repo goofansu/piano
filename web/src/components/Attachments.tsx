@@ -1,14 +1,15 @@
 import { useId, useRef, useState, useSyncExternalStore } from "react";
-import { PaperclipIcon, XIcon } from "lucide-react";
-import type { Attachment, RenderMsg } from "@shared/wire";
+import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
+import type { Attachment as AttachmentData, RenderMsg } from "@shared/wire";
 import { IMAGE_TYPES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES, base64Bytes, imageType } from "@shared/attachments";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Attachment, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup, AttachmentMedia, AttachmentTitle, AttachmentTrigger } from "@/components/ui/attachment";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
 // Memory-only drafts: do not put private image bytes in localStorage or the registry.
-const empty: { items: readonly Attachment[]; busy: boolean; error: string } = { items: [], busy: false, error: "" };
+const empty: { items: readonly AttachmentData[]; busy: boolean; error: string } = { items: [], busy: false, error: "" };
 const drafts = new Map<string, typeof empty>();
 const listeners = new Set<() => void>();
 const subscribe = (notify: () => void) => { listeners.add(notify); return () => { listeners.delete(notify); }; };
@@ -26,7 +27,7 @@ export function useAttachments(key: string) {
       const current = before.items;
       if (current.length + files.length > MAX_ATTACHMENTS) throw new Error("Attach up to 4 images per message.");
       if (current.reduce((n, a) => n + base64Bytes(a.data), 0) + files.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENT_BYTES) throw new Error("Images must total 20 MiB or less.");
-      const added: Attachment[] = [];
+      const added: AttachmentData[] = [];
       for (const file of files) {
         if (!file.size || file.size > MAX_IMAGE_BYTES) throw new Error(`${file.name}: choose an image up to 10 MiB.`);
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -59,14 +60,19 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
 }
 export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
   return <>
-    {!!draft.items.length && <ul aria-label="Attachments" className="flex max-h-36 gap-2 overflow-auto px-3 pt-3">
-      {draft.items.map((a, i) => <li key={`${a.name}-${i}`} className="relative w-24 shrink-0 animate-in rounded-lg border border-line p-1 fade-in-0 zoom-in-95">
-        <img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} className="h-16 w-full rounded object-cover" />
-        <p className="truncate text-xs text-ink-2" title={a.name}>{a.name}</p>
-        <Button type="button" size="icon-xs" variant="outline" className="absolute top-0 right-0" aria-label={`Remove ${a.name}`} disabled={disabled || draft.busy} onClick={() => draft.remove(i)}><XIcon /></Button>
-      </li>)}
-    </ul>}
-    {draft.busy && <p role="status" className="flex animate-in items-center gap-2 px-4 pt-2 text-sm text-ink-2 fade-in-0"><Spinner /> Reading images…</p>}
+    {(!!draft.items.length || draft.busy) && <AttachmentGroup aria-label="Attachments" className="px-3 pt-3">
+      {draft.items.map((a, i) => <Attachment key={`${a.name}-${i}`} orientation="vertical" className="animate-in fade-in-0 zoom-in-95">
+        <AttachmentMedia variant="image"><img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} /></AttachmentMedia>
+        <AttachmentContent><AttachmentTitle title={a.name}>{a.name}</AttachmentTitle></AttachmentContent>
+        <AttachmentActions>
+          <AttachmentAction variant="outline" aria-label={`Remove ${a.name}`} disabled={disabled || draft.busy} onClick={() => draft.remove(i)}><XIcon /></AttachmentAction>
+        </AttachmentActions>
+      </Attachment>)}
+      {draft.busy && <Attachment role="status" orientation="vertical" state="uploading" className="animate-in fade-in-0">
+        <AttachmentMedia><Spinner /></AttachmentMedia>
+        <AttachmentContent><AttachmentTitle>Reading images…</AttachmentTitle></AttachmentContent>
+      </Attachment>}
+    </AttachmentGroup>}
     {draft.error && <Alert variant="destructive" className="mx-3 mt-3 w-auto animate-in fade-in-0 slide-in-from-top-1"><AlertDescription className="break-words">{draft.error}</AlertDescription></Alert>}
   </>;
 }
@@ -87,9 +93,15 @@ export function attachmentEvents(draft: AttachmentDraft, disabled: boolean) {
 }
 function ImagePreview({ url }: { url: string }) {
   const [failed, setFailed] = useState(false);
-  if (!url || failed) return <span className="text-sm text-ink-2">Image preview unavailable. Reopen the session to reload it.</span>;
-  return <a href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} aria-label="Open attached image"><img src={url} alt="Attached image" loading="lazy" className="max-h-48 max-w-full rounded-lg border border-line object-contain" onError={() => setFailed(true)} /></a>;
+  if (!url || failed) return <Attachment state="error">
+    <AttachmentMedia><ImageOffIcon /></AttachmentMedia>
+    <AttachmentContent><AttachmentTitle>Attached image</AttachmentTitle><AttachmentDescription>Preview unavailable. Reopen the session to reload it.</AttachmentDescription></AttachmentContent>
+  </Attachment>;
+  return <Attachment orientation="vertical">
+    <AttachmentMedia variant="image"><img src={url} alt="Attached image" loading="lazy" onError={() => setFailed(true)} /></AttachmentMedia>
+    <AttachmentTrigger asChild><a href={url} target="_blank" rel="noreferrer" aria-label="Open attached image" onClick={e => e.stopPropagation()} /></AttachmentTrigger>
+  </Attachment>;
 }
 export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
-  return items?.length ? <div className="mt-2 flex flex-wrap gap-2">{items.map((a, i) => <ImagePreview key={`${a.url}-${i}`} url={a.url} />)}</div> : null;
+  return items?.length ? <AttachmentGroup className="mt-2">{items.map((a, i) => <ImagePreview key={`${a.url}-${i}`} url={a.url} />)}</AttachmentGroup> : null;
 }

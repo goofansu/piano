@@ -48,7 +48,7 @@ async function until(js) {
   for (let i = 0; i < 30; i++) { if (evaluate(js)) return; await delay(100); }
   throw new Error(`Timed out: ${js}`);
 }
-const attached = `document.querySelectorAll('[aria-label="Attachments"] li').length`;
+const attached = `document.querySelectorAll('[aria-label="Attachments"] [data-slot="attachment"][data-state="done"]').length`;
 const transcriptImages = `document.querySelectorAll('img[alt="Attached image"]').length`;
 try {
   for (let i = 0; i < 60; i++) {

@@ -20,6 +20,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* shadcn's attachment component expects `scrollbar-none`; shadcn/tailwind.css 4.21 only ships `no-scrollbar`. */
+@utility scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 @custom-variant dark (&:is(.dark *));
 
