@@ -211,12 +211,20 @@ export type SessionFrame = SessionEvent & { readonly cursor: SessionCursor };
 export const ThinkingLevel = Schema.Literals(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 export type ThinkingLevel = typeof ThinkingLevel.Type;
 
+export const SlashCommand = Schema.Struct({
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  source: Schema.Literals(["extension", "prompt", "skill"]),
+});
+export type SlashCommand = typeof SlashCommand.Type;
+
 /** Everything a browser client may do to a running session. */
 export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", { text: Schema.String, attachments: attachmentInput }),
   Schema.TaggedStruct("steer", { text: Schema.String, attachments: attachmentInput }),
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("restore_queue", {}),
+  Schema.TaggedStruct("commands", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
   Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
   /** Name the session in Pi's own history, as `/name` does. */
@@ -232,9 +240,10 @@ export const SessionAction = Schema.Union([
 export type SessionAction = typeof SessionAction.Type;
 
 /** A command result for its caller, not a broadcast session event. */
-export const SessionActionResult = Schema.TaggedStruct("queue_restored", {
-  messages: Schema.Array(QueuedMessage),
-});
+export const SessionActionResult = Schema.Union([
+  Schema.TaggedStruct("queue_restored", { messages: Schema.Array(QueuedMessage) }),
+  Schema.TaggedStruct("commands", { commands: Schema.Array(SlashCommand) }),
+]);
 export type SessionActionResult = typeof SessionActionResult.Type;
 
 // ── Workspace captures ──────────────────────────────────────────────────────
@@ -338,6 +347,8 @@ export type ModelChoice = typeof ModelChoice.Type;
 export const ModelCatalog = Schema.Struct({
   cwd: Schema.String,
   models: Schema.Array(ModelChoice),
+  /** Preliminary cwd resources; a live session's commands take precedence. */
+  commands: Schema.optional(Schema.Array(SlashCommand)),
   defaultModel: Schema.optional(Schema.String),
   defaultThinkingLevel: Schema.optional(Schema.String),
   fetchedAt: Schema.String,

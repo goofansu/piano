@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Textarea } from "@/components/ui/textarea";
+import { SlashTextarea, type CompletionContext } from "@/components/SlashTextarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelSelect } from "@/components/ModelSelect";
 import { ContextDetails } from "@/components/ContextDetails";
@@ -18,6 +18,7 @@ import { JumpTo } from "@/components/JumpTo";
 
 interface Props {
   draftKey: string;
+  completion?: CompletionContext;
   text: string;
   onTextChange: (text: string) => void;
   onTextAppend: (text: string) => void;
@@ -58,7 +59,7 @@ const loadQueueMode = (): QueueMode => {
 };
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
+export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
@@ -124,14 +125,15 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
           </section>
         )}
         <div className="flex items-end">
-          <Textarea
+          <SlashTextarea
             ref={ref}
+            completion={completion}
             value={text}
             disabled={disabled}
             rows={1}
             aria-label="Message"
             className={cn(composerInput, "min-w-0 flex-1")}
-            onChange={(e) => onTextChange(e.target.value)}
+            onValueChange={onTextChange}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
                   e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {

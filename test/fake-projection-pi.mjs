@@ -25,6 +25,7 @@ function handle(c) {
       }
       return reply(c, { messages });
     }
+    case 'get_commands': return reply(c, { commands: [{ name: 'project-command', description: process.cwd(), source: 'extension' }] });
     case 'get_available_models': return reply(c, { models: [{ provider: 'router', id: 'auto', name: process.cwd(), reasoning: true, contextWindow: 1000 }] });
     case 'get_session_stats': return reply(c, { cost: 1.23, tokens: { input: 100, output: 20, cacheRead: 30, cacheWrite: 0, total: 150 }, contextUsage: { tokens: 50, contextWindow: 1000, percent: 5 } });
     case 'set_thinking_level': thinkingLevel = 'low'; return reply(c);

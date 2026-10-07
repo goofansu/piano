@@ -150,6 +150,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         },
       };
     case "action_result": {
+      if (m.result._tag !== "queue_restored") return s;
       const restored = m.result.messages.map((message) => message.text).join("\n\n");
       if (!restored) return s;
       const key = sessionKey(m);

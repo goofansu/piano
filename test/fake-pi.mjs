@@ -63,6 +63,13 @@ function handle(cmd) {
         return;
       }
       return respond(cmd, state());
+    case "get_commands": return respond(cmd, { commands: [
+      { name: "handled", description: "Handle without a model call", source: "extension" },
+      { name: "handled", description: "Shadowed template", source: "prompt" },
+      { name: "skill:research", description: "Investigate a question", source: "skill" },
+      { name: "review", description: "Review changes", source: "prompt" },
+      { name: args.includes("--no-session") ? "probe-only" : "live-only", source: "extension" },
+    ] });
     case "get_messages": return respond(cmd, { messages });
     case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: liveContext ?? { tokens: 1200 * messages.length, contextWindow: model.id === "beta" ? 400000 : 200000, percent: (model.id === "beta" ? 0.3 : 0.6) * messages.length } });
     case "get_available_models": return respond(cmd, { models: [

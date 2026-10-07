@@ -175,6 +175,7 @@ export const handleSocket = (socket: Socket.Socket) =>
             yield* setProjectTrust(path, msg.trusted).pipe(
               Effect.andThen(send({ _tag: "toast", level: "success", message: msg.trusted ? "Trusted. Sessions started from now load this folder's Pi settings and skills." : "Untrusted. Sessions started from now skip this folder's Pi settings and skills." })),
               Effect.catchTag("ProjectTrustError", e => sendError(e.detail)));
+            yield* send({ _tag: "models", catalog: yield* catalog.refresh(path) });
             yield* send({ _tag: "trust", cwd: path, trust: yield* projectTrust(path) });
             return yield* publishProjects;
           }

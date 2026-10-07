@@ -7,6 +7,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { DirListing } from "../shared/wire.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { Catalog } from "./Catalog.ts";
+import { SessionHosts } from "./SessionHosts.ts";
 import { Registry } from "./Registry.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
@@ -142,6 +143,26 @@ export const AppRouter = HttpRouter.use((router) =>
         headers: { "cache-control": "private, no-store", "x-content-type-options": "nosniff" } })
         : HttpServerResponse.empty({ status: 404 });
     }));
+
+    // Discovery never opens a saved session or creates a second writer. A live
+    // session is resolved by server-owned identity; otherwise use the cwd probe.
+    yield* router.add("GET", "/api/commands", Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const params = new URL(request.url, "http://localhost").searchParams;
+      const raw = params.get("cwd");
+      if (!raw) return json({ error: "Directory is required." }, 400);
+      const cwd = resolve(expandHome(raw));
+      const sessionId = params.get("sessionId");
+      if (sessionId) {
+        const session = yield* (yield* SessionHosts).get(cwd, sessionId);
+        if (!session) return json({ error: "Session is no longer running. Reopen the suggestions." }, 409);
+        const result = yield* session.act({ _tag: "commands" });
+        if (result?._tag === "commands") return json({ commands: result.commands });
+        return json({ error: "Command catalog unavailable." }, 502);
+      }
+      const catalog = yield* (yield* Catalog).get(cwd);
+      return catalog.error ? json({ error: catalog.error }, 502) : json({ commands: catalog.commands ?? [] });
+    }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load commands. Reopen the suggestions to retry." }, 502)))));
 
     yield* router.add("GET", "/api/projects", buildProjects.pipe(Effect.map((projects) => json({ projects }))));
     yield* router.add(

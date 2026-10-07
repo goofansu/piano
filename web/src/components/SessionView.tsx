@@ -150,6 +150,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         </Alert>
       ) : <Composer
         draftKey={draftKey ?? "loading"}
+        completion={ready && t ? { cwd: t.cwd, sessionId: t.hosted ? t.sessionId ?? undefined : undefined, revision: `${state.selectionId}:${t.cursor?.generation}:${t.hosted}:${catalog?.fetchedAt}` } : undefined}
         text={draftKey ? state.drafts[draftKey] ?? "" : ""}
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
         onTextAppend={(text) => { if (draftKey) onDraftAppend(draftKey, text); }}

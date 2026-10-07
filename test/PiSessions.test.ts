@@ -16,6 +16,25 @@ const collectUntil = <E>(events: Stream.Stream<SessionEvent, E>, pred: (e: Sessi
 
 const step = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[test]", ...a); };
 
+test("command discovery is read-only, distinguishes probe/live resources and keeps invocation precedence", async () => {
+  await run(Effect.gen(function* () {
+    const sessions = yield* PiSessions;
+    const preliminary = yield* sessions.probe(process.cwd());
+    assert.ok(preliminary.commands.some(c => c.name === "probe-only"));
+    const session = yield* sessions.open({ cwd: process.cwd(), sessionId: "commands" });
+    const before = yield* session.state;
+    const result = yield* session.act({ _tag: "commands" });
+    assert.equal(result?._tag, "commands");
+    if (result?._tag !== "commands") return;
+    assert.ok(result.commands.some(c => c.name === "live-only"));
+    assert.equal(result.commands.some(c => c.name === "probe-only"), false);
+    assert.deepEqual(result.commands.filter(c => c.name === "handled"), [
+      { name: "handled", description: "Handle without a model call", source: "extension" },
+    ]);
+    assert.deepEqual(yield* session.state, before, "discovery cannot submit work or alter run state");
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+});
+
 test("snapshot first, then a streamed turn", async () => {
   const seen = await run(Effect.gen(function* () {
     const sessions = yield* PiSessions;

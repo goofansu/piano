@@ -15,7 +15,7 @@ const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 import { makeDelivery, type DeliveryOverflow } from "./BoundedDelivery.ts";
 import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState, SessionStats } from "../shared/wire.ts";
-import { Attachments } from "../shared/wire.ts";
+import { Attachments, SlashCommand } from "../shared/wire.ts";
 import { imageType } from "../shared/attachments.ts";
 import { PiCli } from "./PiCli.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
@@ -56,6 +56,7 @@ export interface PiSession {
 }
 
 export interface ProbeResult {
+  readonly commands: ReadonlyArray<SlashCommand>;
   readonly models: ReadonlyArray<{
     provider: string;
     id: string;
@@ -80,6 +81,20 @@ export class PiSessions extends Context.Service<
 >()("piano/PiSessions") {}
 
 // ── Implementation ───────────────────────────────────────────────────────────
+
+/** Keep Pi's execution precedence, exposing only browser-useful catalog fields. */
+const commandsOf = (data: unknown): Effect.Effect<ReadonlyArray<SlashCommand>, PiSessionError> => {
+  const commands = (data as { commands?: unknown } | undefined)?.commands;
+  if (!Schema.is(Schema.Array(SlashCommand))(commands)) return Effect.fail(new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid command catalog." }));
+  const unique = new Map<string, SlashCommand>();
+  // Extensions execute before skills and templates; skills expand before templates.
+  for (const source of ["extension", "skill", "prompt"] as const) for (const command of commands) {
+    if (command.source === source && !unique.has(command.name)) unique.set(command.name, {
+      name: command.name, description: command.description, source,
+    });
+  }
+  return Effect.succeed([...unique.values()]);
+};
 
 /** Host acknowledgement deadline, not a deadline for model work or extension execution. */
 export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTimeoutMs", { defaultValue: () => 30_000 });
@@ -714,6 +729,8 @@ const openSession = (spec: PiSessionSpec) =>
         const operation = action._tag === "prompt" || action._tag === "steer" || action._tag === "set_model" || action._tag === "set_thinking_level" || action._tag === "set_name"
           ? ++operationVersion : operationVersion;
         switch (action._tag) {
+          case "commands":
+            return { _tag: "commands", commands: yield* child.request({ type: "get_commands" }).pipe(Effect.flatMap(commandsOf)) };
           case "prompt":
           case "steer": {
             if (action.attachments?.length) {
@@ -842,9 +859,10 @@ const openSession = (spec: PiSessionSpec) =>
 const probe = (cwd: string): Effect.Effect<ProbeResult, PiSessionError, ChildProcessSpawner> =>
   Effect.gen(function* () {
     const child = yield* spawnChild(["--no-session"], cwd);
-    const [models, state] = yield* Effect.all([
+    const [models, state, commands] = yield* Effect.all([
       child.request({ type: "get_available_models" }),
       child.request({ type: "get_state" }),
+      child.request({ type: "get_commands" }).pipe(Effect.flatMap(commandsOf)),
     ]).pipe(
       Effect.raceFirst(
         Deferred.await(child.exited).pipe(
@@ -854,6 +872,7 @@ const probe = (cwd: string): Effect.Effect<ProbeResult, PiSessionError, ChildPro
     );
     const raw = state as RawState;
     return {
+      commands,
       models: ((models as { models?: ProbeResult["models"] }).models ?? []),
       defaultModel: raw.model ? `${raw.model.provider}/${raw.model.id}` : undefined,
       defaultThinkingLevel: raw.thinkingLevel,

@@ -34,7 +34,11 @@ test('real Pi loads project-only virtual models and retained supported UI from t
       const project = yield* sessions.probe(cwd);
       assert.equal(global.models.some(model => model.provider === 'phase3'), false);
       assert.equal(project.models.some(model => model.provider === 'phase3' && model.id === 'auto'), true);
+      assert.equal(global.commands.some(command => command.name === 'phase3-state'), false);
+      assert.ok(project.commands.some(command => command.name === 'phase3-state' && command.source === 'extension'));
       const session = yield* sessions.open({ cwd, sessionId: 'real-projection' });
+      const commands = yield* session.act({ _tag: 'commands' });
+      assert.ok(commands?._tag === 'commands' && commands.commands.some(command => command.name === 'phase3-state'));
       const ready = yield* Deferred.make<void>();
       const observed = yield* session.events.pipe(
         Stream.tap(event => event._tag === 'snapshot' ? Deferred.succeed(ready, undefined) : Effect.void),

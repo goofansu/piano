@@ -3,7 +3,7 @@
  * default, from a one-shot probe cached per cwd until refreshed. `enabledModels`
  * marks the preferred subset.
  */
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Semaphore } from "effect";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "../shared/wire.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import { PiSessions } from "./PiSessions.ts";
@@ -48,6 +48,13 @@ export const CatalogLive = Layer.effect(
   Effect.gen(function* () {
     const sessions = yield* PiSessions;
     const cache = new Map<string, ModelCatalog>();
+    const locks = new Map<string, Semaphore.Semaphore>();
+    const locked = (cwd: string, refresh = false) => Effect.gen(function* () {
+      let lock = locks.get(cwd);
+      if (!lock) { lock = yield* Semaphore.make(1); locks.set(cwd, lock); }
+      return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() =>
+        !refresh && cache.has(cwd) ? Effect.succeed(cache.get(cwd)!) : load(cwd)));
+    });
 
     const load = (cwd: string): Effect.Effect<ModelCatalog> => Effect.gen(function* () {
       const probe = yield* sessions.probe(cwd);
@@ -66,7 +73,7 @@ export const CatalogLive = Layer.effect(
         };
       });
       const catalog: ModelCatalog = {
-        cwd, models,
+        cwd, models, commands: probe.commands,
         defaultModel: probe.defaultModel,
         defaultThinkingLevel: probe.defaultThinkingLevel,
         fetchedAt: new Date().toISOString(),
@@ -87,8 +94,8 @@ export const CatalogLive = Layer.effect(
     );
 
     return Catalog.of({
-      get: cwd => Effect.suspend(() => cache.has(cwd) ? Effect.succeed(cache.get(cwd)!) : load(cwd)),
-      refresh: load,
+      get: cwd => locked(cwd),
+      refresh: cwd => locked(cwd, true),
     });
   }),
 );

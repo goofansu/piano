@@ -12,7 +12,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+import { SlashTextarea } from "@/components/SlashTextarea";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
@@ -113,14 +113,15 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>
               <AttachmentDraftView draft={attachments} disabled={creating || !state.connected} />
-              <Textarea
+              <SlashTextarea
                 ref={textarea}
+                completion={state.connected && !creating ? { cwd, revision: `${trust?.trusted}:${catalog?.fetchedAt}` } : undefined}
                 autoFocus={!window.matchMedia("(pointer: coarse)").matches}
                 value={text}
                 rows={1}
                 aria-label="First message"
                 className={cn(composerInput, "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5")}
-                onChange={(e) => setText(e.target.value)}
+                onValueChange={setText}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
                       e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
