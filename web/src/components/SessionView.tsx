@@ -20,9 +20,10 @@ interface Props {
   onMenu: () => void;
   onDraftChange: (key: string, text: string) => void;
   onDraftAppend: (key: string, text: string) => void;
+  openNew: (cwd?: string) => void;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew }: Props) {
   const t = state.session;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const draftKey = t ? sessionKey(t) : undefined;
@@ -167,6 +168,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           else { setEffort(level); setOverrides(o => ({ ...o, thinkingLevel: level })); }
         }}
         cwd={t?.cwd}
+        branch={project?.worktrees.find((w) => w.path === t?.cwd)?.branch ?? undefined}
+        onNewSession={t ? () => openNew(t.cwd) : undefined}
         context={t?.state.context}
         cost={t?.state.cost}
         totals={t?.state.tokens}

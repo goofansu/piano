@@ -317,7 +317,7 @@ export default function App() {
               <Button variant="outline" onClick={() => openNew()}>New session</Button>
             </div>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} />
           )}
         </div>
       </main>

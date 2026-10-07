@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, ChevronDownIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, CopyIcon, GitBranchIcon, PlusIcon, SquareIcon } from "lucide-react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
@@ -41,6 +41,10 @@ interface Props {
   queuedMessages?: ReadonlyArray<QueuedMessage>;
   /** Directory the session runs in; shown abbreviated at the left of the usage row. */
   cwd?: string;
+  /** Branch checked out there, when the directory is a git worktree. */
+  branch?: string;
+  /** Starts a new session in `cwd`; offered from the directory popover. */
+  onNewSession?: () => void;
 }
 
 type QueueMode = QueuedMessage["kind"];
@@ -61,7 +65,7 @@ const loadQueueMode = (): QueueMode => {
 };
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [], cwd }: Props) {
+export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [], cwd, branch, onNewSession }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
@@ -198,7 +202,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
         </div>
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">
-        {cwd && <PathLabel cwd={cwd} />}
+        {cwd && <Directory cwd={cwd} branch={branch} onNewSession={onNewSession} />}
         <div className="ml-auto flex shrink-0 items-center gap-2" aria-label="Session usage">
           <JumpTo messages={messages} />
           <Popover>
@@ -223,14 +227,44 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
   );
 }
 
-/** The session directory the way hydro prints it: parents as initials, the basename whole, the full path on hover. */
-function PathLabel({ cwd }: { cwd: string }) {
+/**
+ * The session directory the way hydro prints it: parents as initials, the basename whole. The parents give way
+ * first when space is short. Opens a popover with the full path, the branch, Copy path and New session here.
+ */
+function Directory({ cwd, branch, onNewSession }: { cwd: string; branch?: string; onNewSession?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [copy, setCopy] = useState<"copied" | "failed">();
   const short = abbrevPath(cwd);
   const slash = short.lastIndexOf("/");
+  const copyPath = () => {
+    const write = navigator.clipboard?.writeText(cwd) ?? Promise.reject(new Error("No clipboard"));
+    void write.then(() => setCopy("copied"), () => setCopy("failed")).then(() => window.setTimeout(() => setCopy(undefined), 1500));
+  };
   return (
-    <span className="min-w-0 truncate pl-1.5" aria-label="Working directory" title={cwd}>
-      {slash >= 0 && <span className="text-ink-3">{short.slice(0, slash + 1)}</span>}
-      <span className="text-ink">{short.slice(slash + 1)}</span>
-    </span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" aria-label="Working directory" aria-description={cwd} aria-haspopup="dialog" aria-expanded={open} title={cwd} className="flex min-w-0 shrink justify-start gap-0 px-1.5 font-mono text-xs font-normal data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
+          {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate text-ink-3"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
+          <span className="min-w-0 truncate text-ink">{short.slice(slash + 1)}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" collisionPadding={16} aria-label="Working directory details" className="w-80 max-w-[calc(100vw-2rem)] p-0 font-sans">
+        <div className="flex flex-col gap-1 border-b border-line px-4 py-3 text-sm">
+          <p className="break-all font-mono text-xs text-ink">{cwd}</p>
+          {branch && <p className="flex items-center gap-1.5 font-mono text-xs text-ink-2"><GitBranchIcon className="size-3 shrink-0" aria-hidden /><span className="truncate">{branch}</span></p>}
+        </div>
+        <div className="flex flex-col p-1">
+          <Button variant="ghost" size="sm" className="justify-start font-normal" onClick={copyPath}>
+            {copy === "copied" ? <CheckIcon className="text-ok" /> : <CopyIcon className={cn(copy === "failed" && "text-err")} />}
+            {copy === "copied" ? "Copied" : copy === "failed" ? "Couldn’t copy" : "Copy path"}
+          </Button>
+          {onNewSession && (
+            <Button variant="ghost" size="sm" className="justify-start font-normal" onClick={() => { setOpen(false); onNewSession(); }}>
+              <PlusIcon /> New session here
+            </Button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

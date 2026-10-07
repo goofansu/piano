@@ -4,6 +4,7 @@ import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
 import { sessionKey } from "@/store";
 import { cn } from "cn";
+import { abbrevPath } from "@/lib/format";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Keys } from "@/components/PianoMark";
 
@@ -73,6 +74,11 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
           </CommandItem>
+          {state.view.kind === "session" && current && (
+            <CommandItem value="new session here" keywords={["new", "here", "directory"]} onSelect={() => run(() => openNew(current.cwd))}>
+              <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(current.cwd)}</span>
+            </CommandItem>
+          )}
           {state.projects.map((p) => (
             <CommandItem key={p.path} value={`new session in ${p.name}`} keywords={["new", p.name]} onSelect={() => run(() => openNew(p.path))}>
               <PlusIcon /> New session in <span className="font-medium">{p.name}</span>
