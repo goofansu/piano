@@ -4,11 +4,9 @@ import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
 import type { ClientCommand } from "@shared/wire";
 import { copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
-import { sessionKey } from "@/store";
 import { cn } from "cn";
 import { abbrevPath } from "@/lib/format";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
-import { Keys } from "@/components/PianoMark";
 
 interface Props {
   open: boolean;
@@ -37,9 +35,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
     ...t,
     project: p.name,
     inWorktree: !p.worktrees.some((w) => w.root && w.path === t.cwd),
-    host: state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId),
-    done: state.done.includes(sessionKey(t)),
-  }))).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)), [state.projects, state.hosts, state.done]);
+  }))).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)), [state.projects]);
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
@@ -61,9 +57,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
                   onSelect={() => run(() => select(t.cwd, t.sessionId))}
                   className="gap-3"
                 >
-                  <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-                    {t.host?.streaming ? <Keys playing className="text-brand" /> : t.done ? <span className="size-2 rounded-full bg-done" /> : t.host ? <span className="size-2 rounded-full border border-ok" /> : null}
-                  </span>
                   <span className={cn("min-w-0 flex-1 truncate", !t.title && "text-ink-3", selected && "font-medium")}>{t.title || "Untitled"}</span>
                   <span className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 text-xs text-ink-3">
                     <span className="truncate">{t.project}</span>
@@ -74,7 +67,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
                       </span>
                     )}
                   </span>
-                  {t.host?.streaming && <span className="sr-only">working</span>}
                 </CommandItem>
               );
             })}
