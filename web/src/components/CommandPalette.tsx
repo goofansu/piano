@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
@@ -26,7 +26,14 @@ interface Props {
 export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send }: Props) {
   const { setTheme } = useTheme();
   const [search, setSearch] = useState("");
+  const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!open) setSearch(""); }, [open]);
+  useEffect(() => {
+    if (!open || search) return;
+    // Wait for cmdk's selection and restored group layout before resetting the viewport.
+    const frame = requestAnimationFrame(() => list.current?.scrollTo({ top: 0, behavior: "instant" }));
+    return () => cancelAnimationFrame(frame);
+  }, [open, search]);
   const current = state.session ?? state.selecting;
   const details = currentSessionDetails(state);
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
@@ -44,7 +51,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
     <>
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Search and commands" description="Switch sessions, start a new one, or change the view." showCloseButton={false} className="top-[18%] translate-y-0 sm:max-w-xl">
       <CommandInput value={search} onValueChange={setSearch} placeholder="Search sessions and commands…" aria-label="Search sessions and commands" />
-      <CommandList className="max-h-[min(24rem,60dvh)]">
+      <CommandList ref={list} className="max-h-[min(24rem,60dvh)]">
         <CommandEmpty>No sessions or commands match.</CommandEmpty>
         <RankedCommandGroups search={search}>
         {sessions.length > 0 && (

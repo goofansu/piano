@@ -58,6 +58,7 @@ async function ab(...args) {
 }
 const evaluate = async code => JSON.parse(await ab('eval', code));
 const menu = async () => {
+  await ab('wait', '--fn', `!document.querySelector('[data-slot="dialog-overlay"]')`);
   await ab('click', '[aria-label="Session information and actions"]');
   await ab('wait', '--fn', `!!document.querySelector('[role="menu"][data-state="open"]')`);
 };
@@ -202,6 +203,7 @@ try {
   await evaluate(`navigator.clipboard.writeText = async value => { window.copies.push(value); await window.nativeWrite(value); }; true`);
 
   // Mobile notices use the same main-relative horizontal center.
+  await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast]')`);
   await ab('set', 'viewport', '390', '844');
   await menu(); await item('Copy session ID');
   await waitForCopies(6);
@@ -242,6 +244,8 @@ try {
   await ab('press', 'Backspace');
   await ab('wait', '--fn', `document.querySelector('[aria-label="Search sessions and commands"]').value === ''`);
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
+  await ab('wait', '--fn', `document.querySelector('[cmdk-list]').scrollTop === 0`);
+  await ab('screenshot', join(evidence, 'cleared-search-top.png'));
   await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
   await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy all'`);
   await ab('press', 'Enter');
