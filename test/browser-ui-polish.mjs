@@ -116,13 +116,17 @@ try {
     await ab('set', 'viewport', String(width), '1000');
     const spacing = await evaluate(`(() => {
       const rows = [...document.querySelectorAll('[aria-label="read tool call"], [aria-label="write tool call"]')].map(e => e.getBoundingClientRect());
-      return {within: rows[1].top - rows[0].bottom, between: rows[2].top - rows[1].bottom, textBreak: rows[3].top - rows[2].bottom, afterWrite: rows[4].top - rows[3].bottom};
+      const textRows = [...document.querySelectorAll('.prose-chat')].map(e => e.parentElement.parentElement.getBoundingClientRect());
+      return {within: rows[1].top - rows[0].bottom, between: rows[2].top - rows[1].bottom, textBreak: rows[3].top - rows[2].bottom, afterWrite: rows[4].top - rows[3].bottom,
+        beforeText: textRows[0].top - rows[2].bottom, afterText: rows[3].top - textRows[1].bottom};
     })()`);
     observations.push({name:'tool-spacing',width,...spacing});
     await capture(`tool-spacing-${width}`);
     assert.ok(Math.abs(spacing.within - spacing.between) <= 1, `${width}px: unequal tool gaps ${JSON.stringify(spacing)}`);
     assert.ok(Math.abs(spacing.within - spacing.afterWrite) <= 1, `${width}px: unequal gap after text + write ${JSON.stringify(spacing)}`);
     assert.ok(spacing.textBreak > spacing.between, 'text still separates tool runs');
+    assert.ok(Math.abs(spacing.beforeText - 24) <= 1, `${width}px: 24px before assistant text ${JSON.stringify(spacing)}`);
+    assert.ok(Math.abs(spacing.afterText - spacing.beforeText) <= 1, `${width}px: unequal spacing around assistant text ${JSON.stringify(spacing)}`);
   }
   // An assistant message exists before its first text/tool block arrives. It must
   // not reserve an extra transcript gap (INV-01: presentation only, history retained).

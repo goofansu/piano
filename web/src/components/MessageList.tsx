@@ -152,7 +152,7 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
         id={streaming ? undefined : messageAnchorId(msg.id)}
         data-tools-only={!msg.text && !msg.errorMessage && !!msg.toolCalls?.length ? "" : undefined}
         data-ends-with-tools={msg.toolCalls?.length ? "" : undefined}
-        className="group/reply flex flex-col gap-3 rounded-2xl"
+        className="group/reply flex flex-col gap-6 rounded-2xl"
       >
         {msg.text && (
           <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
@@ -169,7 +169,11 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
           </Row>
         )}
         {msg.errorMessage && <Alert variant="destructive" className="ml-7 w-auto"><AlertDescription className="break-words">{msg.stopReason}: {msg.errorMessage}</AlertDescription></Alert>}
-        {msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
+        {!!msg.toolCalls?.length && (
+          <div className="flex flex-col gap-3">
+            {msg.toolCalls.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
+          </div>
+        )}
       </article>
     );
   }
