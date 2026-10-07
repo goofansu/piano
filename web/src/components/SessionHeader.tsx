@@ -38,17 +38,17 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
         </TooltipTrigger>
         <TooltipContent>New session here</TooltipContent>
       </Tooltip>
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-80 max-w-[calc(100vw-2rem)]">
           <DropdownMenuGroup>
-            <DropdownMenuItem aria-label="Copy working directory" onSelect={() => { if (session) void copySessionValue(session.cwd, "Working directory"); }}>
+            <DropdownMenuItem aria-label="Copy working directory" onSelect={event => { event.preventDefault(); if (session) void copySessionValue(session.cwd, "Working directory"); }}>
               <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Working directory</span><span className="break-all font-mono text-xs text-muted-foreground">{session?.cwd}</span></span><CopyIcon />
             </DropdownMenuItem>
-            {branch && <DropdownMenuItem aria-label="Copy git branch" onSelect={() => void copySessionValue(branch, "Git branch")}>
+            {branch && <DropdownMenuItem aria-label="Copy git branch" onSelect={event => { event.preventDefault(); void copySessionValue(branch, "Git branch"); }}>
               <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Git branch</span><span className="break-all font-mono text-xs text-muted-foreground">{branch}</span></span><CopyIcon />
             </DropdownMenuItem>}
-            <DropdownMenuItem aria-label="Copy session ID" disabled={!sessionId} onSelect={() => { if (sessionId) void copySessionValue(sessionId, "Session ID"); }}>
+            <DropdownMenuItem aria-label="Copy session ID" disabled={!sessionId} onSelect={event => { event.preventDefault(); if (sessionId) void copySessionValue(sessionId, "Session ID"); }}>
               <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Session ID</span><span className="break-all font-mono text-xs text-muted-foreground">{sessionId ?? "Not available"}</span></span><CopyIcon />
             </DropdownMenuItem>
           </DropdownMenuGroup>

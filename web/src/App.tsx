@@ -12,6 +12,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { hasMod } from "@/lib/keys";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
 import { cn } from "cn";
 
 const SIDEBAR_KEY = "piano.sidebar";
@@ -320,6 +321,16 @@ export default function App() {
             <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} />
           )}
         </div>
+        <Toaster
+          position="top-center"
+          className="toaster group !absolute"
+          offset={{ top: 16 }}
+          mobileOffset={{ top: 12, left: 16, right: 16 }}
+          visibleToasts={4}
+          duration={4000}
+          closeButton
+          toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
+        />
       </main>
       <CommandPalette send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
