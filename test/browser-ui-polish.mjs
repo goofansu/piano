@@ -42,7 +42,7 @@ const stories = [
     { role: 'toolResult', toolCallId: 'read-app', toolName: 'read', content: [{ type: 'text', text: 'export default function App() {\n  return <Workspace />;\n}' }], isError: false },
     { ...assistant(''), content: [{ type: 'toolCall', id: 'failed-command', name: 'bash', arguments: { command: 'node test/browser-session-header.mjs /tmp/piano-header-evidence/browser-3 > /tmp/piano-header-evidence/browser-3.log 2>&1; echo "browser: $?"', timeout: 240 } }] },
     { role: 'toolResult', toolCallId: 'failed-command', toolName: 'bash', content: [{ type: 'text', text: 'Command failed: fixture error details.' }], isError: true, nestedCalls: { complete: true, calls: [{ id: 'failed-command/child', name: 'bash', arguments: { command: 'exit 1' }, status: 'error' }] } },
-    assistant(reply),
+    assistant(reply + '\n\n| Feature | Composer behavior | Priority |\n| --- | --- | --- |\n| **Slash commands** | Typing `/` at the beginning shows loaded extensions, templates and skills, with descriptions. | First |\n| **Path completion** | Complete `./`, `../`, `~/`, absolute paths and `src/` relative to the selected project/worktree. | Second |'),
   ]],
   ['navigation', 'Simplify project navigation', [{ role: 'user', content: 'Make the project navigation easier to scan.' }]],
 ];
@@ -151,6 +151,26 @@ try {
   await ab('set', 'viewport', '1440', '1000');
   await ab('open', `http://127.0.0.1:${WEB_PORT}/s/daily-ui`);
   await ab('wait', '--text', 'A quieter place to work');
+  // Wide Markdown stays readable and scrolls locally rather than widening the transcript.
+  for (const width of [320, 390, 1440]) {
+    await ab('set', 'viewport', String(width), '1000');
+    const table = await evaluate(`(() => {
+      const table = document.querySelector('.prose-chat table'), scroller = table.parentElement;
+      scroller.scrollLeft = 100;
+      const heading = table.querySelector('th');
+      return { client: scroller.clientWidth, scroll: scroller.scrollWidth, left: scroller.scrollLeft,
+        headingHeight: heading.clientHeight, lineHeight: parseFloat(getComputedStyle(heading).lineHeight),
+        documentWidth: document.documentElement.scrollWidth, viewport: innerWidth };
+    })()`);
+    observations.push({ name: 'markdown-table', width, ...table });
+    assert.ok(table.documentWidth <= table.viewport, 'table must not widen the page');
+    assert.ok(table.headingHeight < table.lineHeight * 2, 'column heading must not split across lines');
+    if (width < 400) {
+      assert.ok(table.scroll > table.client, 'wide table overflows locally on mobile');
+      assert.ok(table.left > 0, 'wide table can scroll horizontally');
+    }
+    await capture(`markdown-table-${width}`);
+  }
   // INV-01: the retired transcript filter must not hide authoritative history,
   // even for browsers that saved the old replies-only preference.
   await evaluate(`localStorage.setItem('piano.transcriptView', 'replies'); true`);
@@ -198,7 +218,7 @@ try {
   // Native clipboard success: paste back into the composer, preserving raw Markdown.
   await click('Copy response'); await ab('wait', '--fn', `!!document.querySelector('[aria-label="Response copied"]')`);
   await ab('focus', '[aria-label="Message"]'); await ab('press', 'Control+v');
-  assert.equal(await evaluate(`document.querySelector('textarea').value`), reply);
+  assert.equal(await evaluate(`document.querySelector('textarea').value`), stories[1][2].at(-1).content[0].text);
   await ab('fill', '[aria-label="Message"]', 'Keep my draft');
   // Denied clipboard writes must not claim success or discard selectable reply text.
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Copy response"]')`);

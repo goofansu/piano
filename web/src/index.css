@@ -349,8 +349,13 @@
   border-top: 1px solid var(--line);
   margin: 1em 0;
 }
+.prose-chat .markdown-table-scroll {
+  overflow-x: auto;
+}
 .prose-chat table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
+  overflow-wrap: normal;
   border-collapse: collapse;
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
@@ -358,6 +363,7 @@
 .prose-chat th,
 .prose-chat td {
   text-align: left;
+  max-width: 28rem;
   padding: 0.4em 0.6em;
   border-bottom: 1px solid var(--line);
   vertical-align: top;

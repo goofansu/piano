@@ -46,7 +46,7 @@ export function renderMarkdown(src: string): string {
       return;
     }
     const cells = (r: string) => r.replace(/^\|/, "").replace(/\|$/, "").split("|");
-    out += "<table><thead><tr>";
+    out += '<div class="markdown-table-scroll" role="region" aria-label="Table" tabindex="0"><table><thead><tr>';
     cells(tbl[0]).forEach((c) => {
       out += `<th>${inline(c.trim())}</th>`;
     });
@@ -58,7 +58,7 @@ export function renderMarkdown(src: string): string {
       });
       out += "</tr>";
     }
-    out += "</tbody></table>";
+    out += "</tbody></table></div>";
     tbl = [];
   };
   for (const ln of lines) {
