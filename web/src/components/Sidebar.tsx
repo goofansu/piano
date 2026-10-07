@@ -169,8 +169,8 @@ function SidebarSkeleton() {
   );
 }
 
-/** The collapsed sidebar: a vertical rail with the mark and the two things you still reach for. */
-export function SidebarRail({ onShow, onNew, working }: { onShow: () => void; onNew: () => void; working: boolean }) {
+/** The collapsed sidebar: a vertical rail with the expand control and activity mark. */
+export function SidebarRail({ onShow, working }: { onShow: () => void; working: boolean }) {
   return (
     <div className="flex h-full flex-col items-center gap-1 pt-2">
       <Tooltip>
@@ -180,14 +180,6 @@ export function SidebarRail({ onShow, onNew, working }: { onShow: () => void; on
           </Button>
         </TooltipTrigger>
         <TooltipContent side="right">Show sidebar</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="New session" onClick={onNew}>
-            <PlusIcon />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="right">New session</TooltipContent>
       </Tooltip>
       {/* With no rows in view, the mark itself says whether Pi is working somewhere. */}
       <div className="mt-auto pb-3">

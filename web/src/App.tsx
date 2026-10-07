@@ -19,11 +19,6 @@ const SIDEBAR_KEY = "piano.sidebar";
 /** Collapsed, the sidebar is a rail just wide enough for its icons. */
 const RAIL_WIDTH = 48;
 
-/** The project of the session on screen, so a new session from the rail starts in the same place. */
-function currentProjectPath(s: AppState): string | undefined {
-  const cwd = (s.session ?? s.selecting)?.cwd ?? (s.view.kind === "new" ? s.view.cwd : undefined);
-  return cwd ? s.projects.find((p) => p.worktrees.some((w) => w.path === cwd))?.path : undefined;
-}
 const WIDTH_KEY = "piano.sidebarWidth";
 /** Sidebar width bounds in px; dragging under the minimum by a margin collapses it. */
 const WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
@@ -265,7 +260,7 @@ export default function App() {
         style={{ width: collapsed ? RAIL_WIDTH : width }}
       >
         {collapsed ? (
-          <SidebarRail onShow={() => setCollapsed(false)} onNew={() => openNew(currentProjectPath(latest.current))} working={anyWorking} />
+          <SidebarRail onShow={() => setCollapsed(false)} working={anyWorking} />
         ) : (
           <div className="h-full overflow-hidden">
             <div className="h-full shrink-0" style={{ width }}>
