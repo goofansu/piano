@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SquarePenIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
@@ -26,6 +26,8 @@ interface Props {
  */
 export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send }: Props) {
   const { setTheme } = useTheme();
+  const [search, setSearch] = useState("");
+  useEffect(() => { if (!open) setSearch(""); }, [open]);
   const current = state.session ?? state.selecting;
   const details = currentSessionDetails(state);
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
@@ -37,18 +39,19 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
     inWorktree: !p.worktrees.some((w) => w.root && w.path === t.cwd),
     host: state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId),
     done: state.done.includes(sessionKey(t)),
-  }))), [state.projects, state.hosts, state.done]);
+  }))).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)), [state.projects, state.hosts, state.done]);
+  const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
   return (
     <>
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Search and commands" description="Switch sessions, start a new one, or change the view." showCloseButton={false} className="top-[18%] translate-y-0 sm:max-w-xl">
-      <CommandInput placeholder="Search sessions, projects, branches…" aria-label="Search sessions and commands" />
+      <CommandInput value={search} onValueChange={setSearch} placeholder="Search sessions, projects, branches…" aria-label="Search sessions and commands" />
       <CommandList className="max-h-[min(24rem,60dvh)]">
         <CommandEmpty>Nothing matches. Try a session title, a project or a branch.</CommandEmpty>
         {sessions.length > 0 && (
           <CommandGroup heading="Sessions">
-            {sessions.map((t) => {
+            {visibleSessions.map((t) => {
               const selected = current?.cwd === t.cwd && current.sessionId === t.sessionId && state.view.kind === "session";
               return (
                 <CommandItem
@@ -100,7 +103,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           )}
           {state.projects.map((p) => (
             <CommandItem key={p.path} value={`new session in ${p.name}`} keywords={["new", p.name]} onSelect={() => run(() => openNew(p.path))}>
-              <PlusIcon /> New session in <span className="font-medium">{p.name}</span>
+              <PlusIcon /> <span className="min-w-0 truncate">New session in {p.name}</span>
             </CommandItem>
           ))}
         </CommandGroup>
