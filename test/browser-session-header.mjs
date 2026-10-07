@@ -229,8 +229,23 @@ try {
     { heading: 'Session commands', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all', 'Rename', 'Archive', 'Delete', 'new session here'] },
   ]);
   await ab('screenshot', join(evidence, 'palette-groups.png'));
-  await ab('fill', '[aria-label="Search sessions and commands"]', 'Copy all');
-  await ab('find', 'role', 'option', 'click', '--name', 'Copy all', '--exact');
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
+  await ab('wait', '--fn', `document.querySelector('[cmdk-item]')?.getAttribute('data-value') === 'Copy all'`);
+  assert.equal(await evaluate(`document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value')`), 'Copy all');
+  assert.equal(await evaluate(`[...document.querySelectorAll('[cmdk-item][data-value="Copy all"] mark')].map(node => node.textContent).join('')`), 'Copy all');
+  await ab('screenshot', join(evidence, 'copy-all-ranked-highlight.png'));
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'cpa');
+  await ab('wait', '--fn', `document.querySelector('[cmdk-item][data-value="Copy all"]')?.querySelectorAll('mark').length === 3`);
+  assert.equal(await evaluate(`[...document.querySelectorAll('[cmdk-item][data-value="Copy all"] mark')].map(node => node.textContent).join('')`), 'Cpa');
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'verification');
+  await ab('wait', '--fn', `!!document.querySelector('[cmdk-item] mark')`);
+  assert.equal(await evaluate(`[...document.querySelectorAll('[cmdk-item] mark')].map(node => node.textContent).join('')`), 'verification');
+  await ab('focus', '[aria-label="Search sessions and commands"]');
+  await evaluate(`document.querySelector('[aria-label="Search sessions and commands"]').select(); true`);
+  await ab('press', 'Backspace');
+  await ab('wait', '--fn', `document.querySelector('[aria-label="Search sessions and commands"]').value === '' && !document.querySelector('[cmdk-item] mark')`);
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
+  await ab('press', 'Enter');
   await waitForCopies(9);
   assert.equal(await evaluate('window.copies.at(-1)'), allDetails, 'palette copies the same labeled details');
   await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
