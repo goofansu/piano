@@ -247,7 +247,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                   onBrowse();
                 }}
               >
-                <FolderOpenIcon /> Browse for a directory
+                <FolderOpenIcon /> Browse…
               </CommandItem>
               {state.projects.length > 0 && (
                 <CommandItem
