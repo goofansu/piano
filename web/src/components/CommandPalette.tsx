@@ -6,7 +6,6 @@ import { sessionKey } from "@/store";
 import { cn } from "cn";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Keys } from "@/components/PianoMark";
-import { Shortcut } from "@/components/Shortcut";
 
 interface Props {
   open: boolean;
@@ -73,7 +72,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
         <CommandGroup heading="New session">
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
-            <Shortcut aria-hidden of={["mod", "shift", "N"]} className="ml-auto" />
           </CommandItem>
           {state.projects.map((p) => (
             <CommandItem key={p.path} value={`new session in ${p.name}`} keywords={["new", p.name]} onSelect={() => run(() => openNew(p.path))}>
@@ -85,7 +83,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
         <CommandGroup heading="View">
           <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
             <PanelLeftIcon /> Toggle sidebar
-            <Shortcut aria-hidden of={["mod", "B"]} className="ml-auto" />
           </CommandItem>
           <CommandItem value="appearance light" keywords={["theme"]} onSelect={() => run(() => setTheme("light"))}><SunIcon /> Light appearance</CommandItem>
           <CommandItem value="appearance dark" keywords={["theme"]} onSelect={() => run(() => setTheme("dark"))}><MoonIcon /> Dark appearance</CommandItem>

@@ -51,7 +51,7 @@ feel cramped. The 16px body stays.
 ```
 ┌──────────┬──────────────────────────────────────────────┐
 │ ▮▮▮ piano│  ┌──────────────────────────────────────────┐ │
-│ + New  ⌘⇧N  │   › prompt card                          │ │
+│ + New    │   › prompt card                          │ │
 │          │  │   • reply …                              │ │
 │ ▾ project│  │   ● Ran npm test                         │ │
 │   ▌sess  │  │   ▮▮▮ ▏                 ← pending reply   │ │
@@ -118,12 +118,10 @@ expanded. The row already says so; two instruments playing at once is noise.
 | Keys | Action |
 | --- | --- |
 | `⌘K` / `Ctrl+K` | Command palette: switch to any session (search title, project, branch), start a new session in a project, toggle the sidebar, change appearance |
-| `⌘[` `⌘]` or `Alt+↑` `Alt+↓` | Previous or next session in sidebar order |
-| `⌘B` / `Ctrl+B` | Toggle the sidebar |
-| `⌘⇧N` / `Ctrl+Shift+N` | New session |
 
-Shortcuts appear as `Kbd` hints in tooltips and palette rows. Chrome reserves `⌘⇧N` for an
-incognito window and cannot be overridden there; the palette offers New session as well.
+The palette shortcut appears as a `Kbd` hint on the sidebar search button. The palette also
+offers New session, per project, and the sidebar toggle without shortcuts of their own. `⌘B`,
+`⌘⇧N`, `⌘[` / `⌘]` and `Alt+↑/↓` were tried and removed as too easy to hit by accident.
 
 ## What changed and why
 
@@ -146,8 +144,7 @@ incognito window and cannot be overridden there; the palette offers New session 
   control whose face cross-fades; the key scales down on press.
 - **Toasts.** Positioned by viewport width; a thin line drains over the toast's life and pauses
   while the stack is hovered.
-- **Keyboard flow.** A command palette (`CommandPalette`) on `⌘K`, `⌘B`, `⌘⇧N`, `⌘[` / `⌘]` and
-  `Alt+↑/↓`, with a small `Shortcut` helper that writes keys the way the platform does.
+- **Keyboard flow.** A command palette (`CommandPalette`) on `⌘K`, with a small `Shortcut` helper that writes keys the way the platform does.
 - **Reconnecting** shows as a quiet pill after a 600ms grace period, so a blink of the socket
   never flashes it. Session not found says what probably happened.
 - **Tab icon** is now the keys, with a pressed variant while the session on screen works.

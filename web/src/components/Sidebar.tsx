@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Keys, PianoMark } from "@/components/PianoMark";
-import { Hint, Shortcut } from "@/components/Shortcut";
+import { Hint } from "@/components/Shortcut";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface Props {
@@ -128,7 +128,7 @@ export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Pro
               <PanelLeftCloseIcon />
             </Button>
           </TooltipTrigger>
-          <TooltipContent><Hint of={["mod", "B"]}>Hide sidebar</Hint></TooltipContent>
+          <TooltipContent>Hide sidebar</TooltipContent>
         </Tooltip>
       </div>
       <div className="px-3 pb-3">
@@ -138,8 +138,6 @@ export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Pro
           onClick={() => openNew()}
         >
           <PlusIcon /> New session
-          {/* The hint is for eyes only; the button's name stays "New session". */}
-          <Shortcut aria-hidden of={["mod", "shift", "N"]} className="ml-auto hidden bg-transparent text-ink-3 md:inline-flex" />
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
@@ -212,7 +210,7 @@ export function SidebarRail({ onShow, onNew, working }: { onShow: () => void; on
             <PanelLeftOpenIcon />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right"><Hint of={["mod", "B"]}>Show sidebar</Hint></TooltipContent>
+        <TooltipContent side="right">Show sidebar</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -220,7 +218,7 @@ export function SidebarRail({ onShow, onNew, working }: { onShow: () => void; on
             <PlusIcon />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right"><Hint of={["mod", "shift", "N"]}>New session</Hint></TooltipContent>
+        <TooltipContent side="right">New session</TooltipContent>
       </Tooltip>
       {/* With no rows in view, the mark itself says whether Pi is working somewhere. */}
       <div className="mt-auto pb-3">

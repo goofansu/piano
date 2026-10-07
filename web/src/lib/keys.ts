@@ -1,4 +1,4 @@
-/** Keyboard helpers shared by the shortcuts, the palette and the hints that advertise them. */
+/** Keyboard helpers shared by the palette shortcut and the hint that advertises it. */
 
 export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -9,4 +9,4 @@ export const mod = isMac ? "⌘" : "Ctrl";
 export const hasMod = (e: KeyboardEvent | React.KeyboardEvent) => (isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
 
 /** A shortcut as a list of key labels, for a `KbdGroup`. */
-export const keys = (...parts: string[]) => parts.map((p) => (p === "mod" ? mod : p === "shift" ? (isMac ? "⇧" : "Shift") : p === "alt" ? (isMac ? "⌥" : "Alt") : p));
+export const keys = (...parts: string[]) => parts.map((p) => (p === "mod" ? mod : p));

@@ -183,31 +183,14 @@ export default function App() {
     if (wide()) setCollapsed(!collapsed);
     else setMenuOpen((open) => !open);
   }, [collapsed, setCollapsed]);
-  // Sessions in sidebar order, for stepping between them.
-  const step = useCallback((delta: 1 | -1) => {
-    const s = latest.current;
-    const all = s.projects.flatMap((p) => p.sessions);
-    if (all.length === 0) return;
-    const current = s.session ?? s.selecting;
-    const index = s.view.kind === "session" && current ? all.findIndex((t) => t.cwd === current.cwd && t.sessionId === current.sessionId) : -1;
-    const next = index === -1 ? (delta === 1 ? 0 : all.length - 1) : Math.min(all.length - 1, Math.max(0, index + delta));
-    const target = all[next];
-    if (target) select(target.cwd, target.sessionId);
-  }, [select]);
   useEffect(() => {
-    const editable = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
-      const key = e.key.toLowerCase();
-      if (hasMod(e) && !e.altKey && !e.shiftKey && key === "k") { e.preventDefault(); setPaletteOpen((open) => !open); return; }
-      if (hasMod(e) && !e.altKey && !e.shiftKey && key === "b") { e.preventDefault(); toggleSidebar(); return; }
-      if (hasMod(e) && !e.altKey && e.shiftKey && key === "n") { e.preventDefault(); openNew(currentProjectPath(latest.current)); return; }
-      if (hasMod(e) && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]")) { e.preventDefault(); step(e.key === "]" ? 1 : -1); return; }
-      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && !editable(e.target)) { e.preventDefault(); step(e.key === "ArrowDown" ? 1 : -1); }
+      if (hasMod(e) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") { e.preventDefault(); setPaletteOpen((open) => !open); }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [toggleSidebar, openNew, step]);
+  }, []);
 
   // ── routing ──
   // A route read from the address bar (on load, or on back/forward) that has not been applied yet.
