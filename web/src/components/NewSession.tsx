@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevHome } from "@/lib/format";
@@ -189,7 +189,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
             <span>Choose a directory</span>
           ) : current ? (
             <>
-              <span className="truncate">{current.project}</span>
+              <span className="truncate font-mono">{current.project}</span>
               {!current.root && (
                 <span className="inline-flex min-w-0 items-center gap-1 font-mono text-ink-3">
                   <GitBranchIcon />
@@ -200,7 +200,6 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           ) : (
             <span className="truncate font-mono">{abbrevHome(value)}</span>
           )}
-          <ChevronDownIcon className="text-ink-3" />
         </Button>
       </PopoverTrigger>
       {wtOpen ? <WorktreesPopover
