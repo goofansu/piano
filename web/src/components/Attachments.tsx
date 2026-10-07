@@ -48,6 +48,9 @@ export function useAttachments(key: string) {
 }
 export type AttachmentDraft = ReturnType<typeof useAttachments>;
 
+const TYPE_LABEL: Record<AttachmentData["mimeType"], string> = { "image/png": "PNG", "image/jpeg": "JPG", "image/gif": "GIF", "image/webp": "WEBP" };
+const formatBytes = (n: number) => n >= 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`;
+
 /** Native file input + shadcn controls; same validation for picker, drop and paste. */
 export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
   const input = useRef<HTMLInputElement>(null);
@@ -63,7 +66,10 @@ export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraf
     {(!!draft.items.length || draft.busy) && <AttachmentGroup aria-label="Attachments" className="px-3 pt-3">
       {draft.items.map((a, i) => <Attachment key={`${a.name}-${i}`} orientation="vertical" className="animate-in fade-in-0 zoom-in-95">
         <AttachmentMedia variant="image"><img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} /></AttachmentMedia>
-        <AttachmentContent><AttachmentTitle title={a.name}>{a.name}</AttachmentTitle></AttachmentContent>
+        <AttachmentContent>
+          <AttachmentTitle title={a.name}>{a.name}</AttachmentTitle>
+          <AttachmentDescription>{TYPE_LABEL[a.mimeType]} · {formatBytes(base64Bytes(a.data))}</AttachmentDescription>
+        </AttachmentContent>
         <AttachmentActions>
           <AttachmentAction variant="outline" aria-label={`Remove ${a.name}`} disabled={disabled || draft.busy} onClick={() => draft.remove(i)}><XIcon /></AttachmentAction>
         </AttachmentActions>
