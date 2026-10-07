@@ -93,7 +93,8 @@ export function MessageList({ messages, pending, tools, working = false, placeho
             </EmptyHeader>
           </Empty>
         )}
-        <div className="flex flex-col gap-6">
+        {/* Consecutive tool-only messages use the same gap as calls within one message. */}
+        <div className="flex flex-col gap-6 [&>[data-tools-only]+[data-tools-only]]:-mt-3">
           {messages.map((m) => {
             if (m.role === "tool_result" && m.toolCallId && messages.some((x) => x.toolCalls?.some((c) => c.id === m.toolCallId))) {
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
@@ -144,7 +145,7 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
   if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
     return (
-      <article id={streaming ? undefined : messageAnchorId(msg.id)} className="group/reply flex flex-col gap-3 rounded-2xl">
+      <article id={streaming ? undefined : messageAnchorId(msg.id)} data-tools-only={!msg.text && !msg.errorMessage && !!msg.toolCalls?.length ? "" : undefined} className="group/reply flex flex-col gap-3 rounded-2xl">
         {msg.text && (
           <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
