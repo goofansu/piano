@@ -3,7 +3,7 @@ import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftI
 import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
 import type { ClientCommand } from "@shared/wire";
-import { copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
+import { copyAllSessionDetails, copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
 import { cn } from "cn";
 import { abbrevPath } from "@/lib/format";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
@@ -73,24 +73,10 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           </CommandGroup>
         )}
         <CommandSeparator />
-        <CommandGroup heading="Commands">
-          {state.view.kind === "session" && state.session && <>
-            <CommandItem value="Copy working directory" onSelect={() => run(() => { if (state.session) void copySessionValue(state.session.cwd, "Working directory"); })}><CopyIcon /> Copy working directory</CommandItem>
-            {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
-            <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
-            <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
-            <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
-            <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
-          </>}
+        <CommandGroup heading="Global commands">
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
           </CommandItem>
-          {state.view.kind === "session" && current && (
-            <CommandItem value="new session here" disabled={state.session?.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => openNew(current.cwd))}>
-              <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(current.cwd)}</span>
-            </CommandItem>
-          )}
-
           <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
             <PanelLeftIcon /> Toggle sidebar
           </CommandItem>
@@ -98,6 +84,21 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           <CommandItem value="appearance dark" keywords={["theme"]} onSelect={() => run(() => setTheme("dark"))}><MoonIcon /> Dark appearance</CommandItem>
           <CommandItem value="appearance system" keywords={["theme"]} onSelect={() => run(() => setTheme("system"))}><MonitorIcon /> System appearance</CommandItem>
         </CommandGroup>
+        {state.view.kind === "session" && state.session && <>
+          <CommandSeparator />
+          <CommandGroup heading="Session commands">
+            <CommandItem value="Copy working directory" onSelect={() => run(() => { if (state.session) void copySessionValue(state.session.cwd, "Working directory"); })}><CopyIcon /> Copy working directory</CommandItem>
+            {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
+            <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
+            <CommandItem value="Copy all" onSelect={() => run(() => { void copyAllSessionDetails(state); })}><CopyIcon /> Copy all</CommandItem>
+            <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
+            <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
+            <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
+            <CommandItem value="new session here" disabled={state.session.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => { if (state.session) openNew(state.session.cwd); })}>
+              <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(state.session.cwd)}</span>
+            </CommandItem>
+          </CommandGroup>
+        </>}
       </CommandList>
     </CommandDialog>
     {actions.dialogs}

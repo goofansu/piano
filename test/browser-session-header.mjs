@@ -99,6 +99,15 @@ try {
     await ab('click', 'main header [aria-label="New session here"]');
     await ab('wait', '--fn', `location.pathname === '/new' && !!document.querySelector('[aria-label="First message"]')`);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Directory"]').title`), repo);
+    if (width === 1280) {
+      await ab('click', '[aria-label="Search sessions"]');
+      await ab('wait', '--fn', `!!document.querySelector('[role="dialog"]')`);
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands']);
+      assert.equal(await evaluate(`!!document.querySelector('[cmdk-item][data-value="Copy all"]')`), false);
+      await ab('screenshot', join(evidence, 'palette-global.png'));
+      await ab('press', 'Escape');
+      await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
+    }
     await ab('back');
     await ab('wait', '--text', 'Message 39');
     const top = await evaluate(`document.querySelector('main header').getBoundingClientRect().top`);
@@ -198,9 +207,33 @@ try {
   await waitForCopies(6);
   assert.equal(await menuIsOpen(), true);
   await assertToastCentered('Session ID copied', 'mobile');
+  const allDetails = `Working directory: ${repo}\nGit branch: header-test\nSession ID: header`;
+  await item('Copy all');
+  await waitForCopies(7);
+  assert.equal(await evaluate('window.copies.at(-1)'), allDetails);
+  assert.equal(await menuIsOpen(), true, 'Copy all keeps the mobile menu open');
   await ab('click', '[aria-label="Message"]');
   await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
   await ab('set', 'viewport', '1280', '900');
+  await menu(); await item('Copy all');
+  await waitForCopies(8);
+  assert.equal(await evaluate('window.copies.at(-1)'), allDetails);
+  assert.equal(await menuIsOpen(), true, 'Copy all keeps the desktop menu open');
+  await ab('click', '[aria-label="Session information and actions"]');
+  await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
+  await ab('click', '[aria-label="Search sessions"]');
+  await ab('wait', '--fn', `!!document.querySelector('[role="dialog"]')`);
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group]')].slice(1).map(group => ({ heading: group.querySelector('[cmdk-group-heading]')?.textContent, items: [...group.querySelectorAll('[cmdk-item]')].map(item => item.getAttribute('data-value')) }))`), [
+    { heading: 'Global commands', items: ['new session', 'toggle sidebar', 'appearance light', 'appearance dark', 'appearance system'] },
+    { heading: 'Session commands', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all', 'Rename', 'Archive', 'Delete', 'new session here'] },
+  ]);
+  await ab('screenshot', join(evidence, 'palette-groups.png'));
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'Copy all');
+  await ab('find', 'role', 'option', 'click', '--name', 'Copy all', '--exact');
+  await waitForCopies(9);
+  assert.equal(await evaluate('window.copies.at(-1)'), allDetails, 'palette copies the same labeled details');
+  await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
   await ab('click', '[aria-label="Search sessions"]');
   await ab('fill', '[aria-label="Search sessions and commands"]', 'Rename');
   await ab('find', 'role', 'option', 'click', '--name', 'Rename', '--exact');

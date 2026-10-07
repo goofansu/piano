@@ -30,6 +30,18 @@ export async function copySessionValue(value: string, label: string) {
   }
 }
 
+/** Copy only available identity fields; never invent a branch for a detached checkout. */
+export function copyAllSessionDetails(state: AppState) {
+  if (!state.session) return;
+  const { branch, sessionId } = currentSessionDetails(state);
+  const lines = [
+    `Working directory: ${state.session.cwd}`,
+    ...(branch ? [`Git branch: ${branch}`] : []),
+    ...(sessionId ? [`Session ID: ${sessionId}`] : []),
+  ];
+  return copySessionValue(lines.join("\n"), "Session details");
+}
+
 /** Shared confirmations keep sidebar, header and palette actions identical. */
 export function useSessionActions(send: (command: ClientCommand) => void, enabled: boolean) {
   const [renaming, setRenaming] = useState<Target | null>(null);

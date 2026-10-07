@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
+import { copyAllSessionDetails, copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
 
 export function SessionHeader({ state, send, onMenu, openNew, status }: {
   state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; status: string;
@@ -51,6 +51,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
             <DropdownMenuItem aria-label="Copy session ID" disabled={!sessionId} onSelect={event => { event.preventDefault(); if (sessionId) void copySessionValue(sessionId, "Session ID"); }}>
               <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Session ID</span><span className="break-all font-mono text-xs text-muted-foreground">{sessionId ?? "Not available"}</span></span><CopyIcon />
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={event => { event.preventDefault(); void copyAllSessionDetails(state); }}><CopyIcon /> Copy all</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

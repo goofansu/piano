@@ -94,10 +94,10 @@ an inline label. Surface persistent warnings only for problems the user can act 
 Keep correctness in authoritative state handling and regression checks, not permanent UI caveats.
 
 The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
-navigation and view commands, in two groups: Sessions (Recent sessions before searching) and Commands.
-A feature that adds an action the sidebar or header offers also adds a row in Commands, named as
-its button is. Mod+K stays the only global shortcut; other actions are
-reached through the palette or their control.
+navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands,
+and Session commands (only with a selected session). A feature that adds an action the sidebar or
+header offers also adds a row in the appropriate command group, named as its button is.
+Mod+K stays the only global shortcut; other actions are reached through the palette or their control.
 
 `server/PiSessions.ts` is the deep module: `open`, `probe`, and per session `events`, `act`,
 `state`, all in the browser's wire vocabulary from `shared/wire.ts`. Add capabilities as new
