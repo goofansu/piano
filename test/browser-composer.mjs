@@ -121,6 +121,28 @@ async function run() {
   ab('set', 'device', 'iPhone 16');
   ab('wait', '--text', 'Not running');
   ab('screenshot', join(evidence, 'saved-unknown-context.png'));
+  if (process.argv.includes('--directory-only')) {
+    for (const [width, height] of [[390, 844], [1280, 800]]) {
+      ab('set', 'viewport', String(width), String(height));
+      ab('click', '[aria-label="Working directory"]');
+      ab('wait', '--text', 'Copy path');
+      const focusedCopy = evaluate(`document.activeElement?.textContent.trim() === 'Copy path'`);
+      ab('screenshot', join(evidence, `directory-pointer-${width}.png`));
+      if (focusedCopy) throw new Error('Opening working directory with a pointer auto-focused Copy path');
+      ab('press', 'Escape');
+      await until(`!document.querySelector('[aria-label="Working directory details"]')`);
+      ab('focus', '[aria-label="Working directory"]');
+      ab('press', 'Enter');
+      await until(`document.activeElement?.textContent.trim() === 'Copy path'`);
+      ab('press', 'Tab');
+      if (!evaluate(`document.activeElement?.textContent.trim() === 'New session here'`)) throw new Error('Directory keyboard actions are not reachable');
+      ab('press', 'Escape');
+      await until(`!document.querySelector('[aria-label="Working directory details"]')`);
+      if (!evaluate(`document.activeElement.matches('[aria-label="Working directory"]')`)) throw new Error('Directory dismissal did not return focus');
+    }
+    console.log('PASS: directory pointer opening avoids action autofocus; keyboard opening, Tab and Escape retain focus navigation');
+    return;
+  }
   if (layoutOnly) await capture('saved');
   if (!evaluate(`document.querySelector('button[aria-label="Context usage"]')?.textContent.trim().startsWith('—')`)) throw new Error('Missing context must remain visible as unknown, not disappear');
   ab('click', '[aria-label="Context usage"]');

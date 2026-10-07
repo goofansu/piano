@@ -234,6 +234,7 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
 function Directory({ cwd, branch, onNewSession }: { cwd: string; branch?: string; onNewSession?: () => void }) {
   const [open, setOpen] = useState(false);
   const [copy, setCopy] = useState<"copied" | "failed">();
+  const openedWithPointer = useRef(false);
   const short = abbrevPath(cwd);
   const slash = short.lastIndexOf("/");
   const copyPath = () => {
@@ -243,12 +244,12 @@ function Directory({ cwd, branch, onNewSession }: { cwd: string; branch?: string
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Working directory" aria-description={cwd} aria-haspopup="dialog" aria-expanded={open} title={cwd} className="flex min-w-0 shrink justify-start gap-0 px-1.5 font-mono text-xs font-normal data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
+        <Button variant="ghost" size="sm" aria-label="Working directory" onClick={event => { openedWithPointer.current = event.detail > 0; }} aria-description={cwd} aria-haspopup="dialog" aria-expanded={open} title={cwd} className="flex min-w-0 shrink justify-start gap-0 px-1.5 font-mono text-xs font-normal data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
           {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate text-ink-3"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
           <span className="min-w-0 truncate text-ink">{short.slice(slash + 1)}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" collisionPadding={16} aria-label="Working directory details" className="w-80 max-w-[calc(100vw-2rem)] p-0 font-sans">
+      <PopoverContent onOpenAutoFocus={event => { if (openedWithPointer.current) event.preventDefault(); }} side="top" align="start" collisionPadding={16} aria-label="Working directory details" className="w-80 max-w-[calc(100vw-2rem)] p-0 font-sans">
         <div className="flex flex-col gap-1 border-b border-line px-4 py-3 text-sm">
           <p className="break-all font-mono text-xs text-ink">{cwd}</p>
           {branch && <p className="flex items-center gap-1.5 font-mono text-xs text-ink-2"><GitBranchIcon className="size-3 shrink-0" aria-hidden /><span className="truncate">{branch}</span></p>}
