@@ -46,9 +46,20 @@ const usageOf = (usage?: RawUsage): Usage | undefined => usage ? {
   cacheWrite: usage.cacheWrite ?? 0, totalTokens: usage.totalTokens ?? 0, cost: usage.cost?.total ?? 0,
 } : undefined;
 
+/**
+ * Pi expands `/skill:name args` into `<skill name location>\nReferences are relative to dir.\n\nbody\n</skill>\n\nargs`
+ * before the prompt reaches history. The browser shows the skill as the command it was, not as the markup.
+ */
+const SKILL_BLOCK = /^<skill name="([^"\n]+)" location="([^"\n]+)">\n(?:References are relative to [^\n]*\n\n)?([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]*))?$/;
+function splitSkill(text: string): Pick<RenderMsg, 'text' | 'skill'> {
+  const match = SKILL_BLOCK.exec(text);
+  if (!match) return { text };
+  return { text: match[4] ?? '', skill: { name: match[1], location: match[2], body: match[3] } };
+}
+
 export function serializeMessage(id: string, msg: RawMessage): RenderMsg | null {
   let result: RenderMsg;
-  if (msg.role === 'user') result = { id, role: 'user', text: textOf(msg.content),
+  if (msg.role === 'user') result = { id, role: 'user', ...splitSkill(textOf(msg.content)),
     attachments: Array.isArray(msg.content) ? msg.content.flatMap(block => {
       if (block.type !== 'image') return [];
       const url = block.data && block.mimeType ? imagePreview(block.data, block.mimeType) : undefined;

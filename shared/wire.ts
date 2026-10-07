@@ -63,6 +63,8 @@ export const RenderMsg = Schema.Struct({
   role: Schema.Literals(["user", "assistant", "tool_result", "context"]),
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(Schema.Struct({ kind: Schema.Literal("image"), url: Schema.String }))),
+  /** A `/skill:name` prompt as Pi expanded it. `text` is then only what the user typed after the command. */
+  skill: Schema.optional(Schema.Struct({ name: Schema.String, location: Schema.String, body: Schema.String })),
   toolCalls: Schema.optional(Schema.Array(ToolCall)),
   toolName: Schema.optional(Schema.String),
   toolCallId: Schema.optional(Schema.String),

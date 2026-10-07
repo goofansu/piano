@@ -22,3 +22,12 @@ test("a prompt is reachable before the first assistant response", () => {
   const entries = jumpEntries([{ id: "u1", role: "user", text: "Hello" }]);
   assert.deepEqual(entries.map(entry => entry.kind), ["top", "user", "bottom"]);
 });
+
+test("a skill prompt is listed as the command that was typed, never as Pi's expansion markup", () => {
+  const skill = { name: "research", location: "/home/me/.pi/agent/skills/research/SKILL.md", body: "# Research\n\nLook things up." };
+  const entries = jumpEntries([
+    { id: "u1", role: "user", text: "the changelog", skill },
+    { id: "u2", role: "user", text: "", skill },
+  ]);
+  assert.deepEqual(entries.filter(entry => entry.kind === "user").map(entry => entry.label), ["/skill:research the changelog", "/skill:research"]);
+});

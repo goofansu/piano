@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDownIcon, CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react";
+import { ArrowDownIcon, CheckIcon, ChevronRightIcon, CopyIcon, SparklesIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { MessageAttachments } from "@/components/Attachments";
@@ -142,7 +142,7 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
 
 function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; streaming?: boolean }) {
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
-  if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} attachments={msg.attachments} />;
+  if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
     // Pi starts a message before its first visible text or tool block arrives.
     // An empty article would still consume the transcript's flex gap.
@@ -213,7 +213,7 @@ function CopyResponse({ text }: { text: string }) {
   );
 }
 
-function UserMessage({ id, text, attachments }: { id: string; text: string; attachments: RenderMsg["attachments"] }) {
+function UserMessage({ id, text, skill, attachments }: { id: string; text: string; skill: RenderMsg["skill"]; attachments: RenderMsg["attachments"] }) {
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -247,16 +247,49 @@ function UserMessage({ id, text, attachments }: { id: string; text: string; atta
     >
       <Row glyph={<span className="font-semibold text-brand">›</span>}>
         <span className="sr-only">You said</span>
-        <div
-          ref={ref}
-          className={cn("whitespace-pre-wrap break-words", !open && "overflow-hidden", clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}
-          style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
-        >
-          {text}
-        </div>
+        {skill && <SkillExpansion skill={skill} />}
+        {(text || !skill) && (
+          <div
+            ref={ref}
+            className={cn("whitespace-pre-wrap break-words", skill && "mt-2", !open && "overflow-hidden", clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}
+            style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
+          >
+            {text}
+          </div>
+        )}
         <MessageAttachments items={attachments} />
       </Row>
     </article>
+  );
+}
+
+/**
+ * A `/skill:name` prompt. The row names the command the way it was typed; the skill file Pi
+ * put in its place is reference material, so it stays folded until the reader asks for it.
+ */
+function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    // Clicks here open the skill, never the prompt's own long-text disclosure around it.
+    <Collapsible open={open} onOpenChange={setOpen} role="group" aria-label={`${skill.name} skill`} className="text-sm" onClick={(e) => e.stopPropagation()}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="-ml-2 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <SparklesIcon className="size-3.5 shrink-0 text-brand" aria-hidden />
+          <span className="min-w-0 flex-1 truncate font-mono text-ink">/skill:{skill.name}</span>
+          <ChevronRightIcon className={cn("ml-auto size-3.5 shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="disclosure-content">
+        <div className="mt-2 border-l-2 border-line pl-3">
+          <p className="mb-2 truncate font-mono text-xs text-ink-3" title={skill.location}>{abbrevHome(skill.location)}</p>
+          {/* renderMarkdown escapes all HTML before adding its own tags */}
+          <div className="prose-chat text-ink-2" dangerouslySetInnerHTML={{ __html: renderMarkdown(skill.body) }} />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

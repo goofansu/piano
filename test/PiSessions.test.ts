@@ -64,6 +64,31 @@ test("snapshot first, then a streamed turn", async () => {
   assert.equal(reply.message.text, "echo: hello");
 });
 
+test("a skill prompt arrives as the command plus the user's own words, with the skill file folded beside them", async () => {
+  const seen = await run(Effect.gen(function* () {
+    const sessions = yield* PiSessions;
+    const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "skill" });
+    const ready = yield* Deferred.make<void>();
+    const collector = yield* collectUntil(t.events.pipe(
+      Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+    ), (e) => e._tag === "state" && !e.state.isStreaming).pipe(Effect.forkChild);
+    yield* Deferred.await(ready);
+    yield* t.act({ _tag: "prompt", text: "/skill:research the Effect 4 RC changelog" });
+    const events = yield* Fiber.join(collector);
+    // A fresh subscriber reads the same split from Pi's retained history, not from the live event.
+    const snapshot = yield* collectUntil(t.events, (e) => e._tag === "snapshot");
+    return { events, snapshot };
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+  const prompt = seen.events.find((e) => e._tag === "message_end" && e.message.role === "user");
+  assert.ok(prompt && prompt._tag === "message_end");
+  assert.deepEqual({ text: prompt.message.text, skill: prompt.message.skill }, {
+    text: "the Effect 4 RC changelog",
+    skill: { name: "research", location: "/fake/skills/research/SKILL.md", body: "# research\n\nFake skill body for **research**." },
+  });
+  const replayed = (seen.snapshot[0] as Extract<SessionEvent, { _tag: "snapshot" }>).snapshot.messages.find((m) => m.role === "user");
+  assert.deepEqual({ text: replayed?.text, skill: replayed?.skill }, { text: prompt.message.text, skill: prompt.message.skill });
+});
+
 const image: Attachment = { kind: "image", name: "pixel.png", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGZkAAAAASUVORK5CYII=" };
 
 test("image-only prompts reach Pi and survive authoritative refresh and late snapshots without embedding bytes", async () => {

@@ -26,7 +26,7 @@ export function jumpEntries(messages: ReadonlyArray<RenderMsg>): JumpEntry[] {
   const entries: JumpEntry[] = [{ kind: "top", id: "top", label: "Top of conversation" }];
   const turns = messages.filter(m => m.role === "user" || m.role === "assistant");
   turns.forEach((m, index) => {
-    const label = messageLabel(m.text) || (m.attachments?.length ? "Image" : "");
+    const label = messageLabel(m.skill ? `/skill:${m.skill.name} ${m.text}` : m.text) || (m.attachments?.length ? "Image" : "");
     if (!label) return;
     if (m.role === "user") entries.push({ kind: "user", id: m.id, label, messageId: m.id });
     else if (turns[index + 1]?.role !== "assistant") entries.push({ kind: "assistant", id: m.id, label, messageId: m.id });

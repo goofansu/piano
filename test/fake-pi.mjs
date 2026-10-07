@@ -38,6 +38,14 @@ const settle = (last) => {
   streaming = false;
   out({ type: "agent_settled" });
 };
+/** Pi rewrites a `/skill:name args` prompt into the skill file before it enters history. */
+const expandSkill = (text) => {
+  const match = /^\/skill:(\S+)\s*([\s\S]*)$/.exec(text);
+  if (!match) return text;
+  const [, name, args] = match;
+  const block = `<skill name="${name}" location="/fake/skills/${name}/SKILL.md">\nReferences are relative to /fake/skills/${name}.\n\n# ${name}\n\nFake skill body for **${name}**.\n</skill>`;
+  return args ? `${block}\n\n${args}` : block;
+};
 const dec = new StringDecoder("utf8");
 let buf = "";
 
@@ -174,7 +182,8 @@ function handle(cmd) {
       }
       respond(cmd, { disposition: "started" });
       streaming = true;
-      const user = { role: "user", content: cmd.images?.length ? [{ type: "text", text: cmd.message }, ...cmd.images] : cmd.message, timestamp: Date.now() };
+      const expanded = expandSkill(cmd.message);
+      const user = { role: "user", content: cmd.images?.length ? [{ type: "text", text: expanded }, ...cmd.images] : expanded, timestamp: Date.now() };
       messages.push(user);
       out({ type: "agent_start" }); out({ type: "turn_start" });
       out({ type: "message_start", message: user }); out({ type: "message_end", message: user });
