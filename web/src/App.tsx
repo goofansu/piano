@@ -292,7 +292,7 @@ export default function App() {
         )}
       </aside>
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-72 border-line bg-surface-0 p-0" showCloseButton={false} aria-describedby={undefined} onOpenAutoFocus={event => {
+        <SheetContent side="left" className="h-dvh w-full border-0 bg-surface-0 p-0 sm:max-w-none" showCloseButton={false} aria-describedby={undefined} onOpenAutoFocus={event => {
           // Focus the sheet itself, not its first button, so no tooltip opens with it.
           event.preventDefault();
           (event.currentTarget as HTMLElement | null)?.focus?.();

@@ -124,7 +124,8 @@ export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Pro
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label="Hide sidebar" onClick={onHide}>
-              <PanelLeftCloseIcon />
+              <XIcon className="md:hidden" />
+              <PanelLeftCloseIcon className="hidden md:block" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Hide sidebar</TooltipContent>
