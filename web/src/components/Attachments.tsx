@@ -63,11 +63,11 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
 }
 export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
   return <>
-    {(!!draft.items.length || draft.busy) && <AttachmentGroup aria-label="Attachments" className="px-3 pt-3">
+    {(!!draft.items.length || draft.busy) && <AttachmentGroup aria-label="Attachments" className="px-3 pt-3 font-sans">
       {draft.items.map((a, i) => <Attachment key={`${a.name}-${i}`} orientation="vertical" className="animate-in fade-in-0 zoom-in-95">
         <AttachmentMedia variant="image"><img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} /></AttachmentMedia>
         <AttachmentContent>
-          <AttachmentTitle className="text-xs" title={a.name}>{a.name}</AttachmentTitle>
+          <AttachmentTitle title={a.name}>{a.name}</AttachmentTitle>
           <AttachmentDescription>{TYPE_LABEL[a.mimeType]} · {formatBytes(base64Bytes(a.data))}</AttachmentDescription>
         </AttachmentContent>
         <AttachmentActions>
