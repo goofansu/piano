@@ -53,8 +53,8 @@ const evaluate = async js => JSON.parse(await ab('eval', js));
 const input = '[aria-label="Search sessions and commands"]';
 const recent = ['Session 11', 'Session 10', 'Session 09', 'Session 08', 'Session 07', 'Session 06', 'Session 05', 'Session 04'];
 const titles = () => evaluate(`(() => {
-  const group = [...document.querySelectorAll('[cmdk-group]')].find(e => e.querySelector('[cmdk-group-heading]')?.textContent === 'Sessions');
-  return [...(group?.querySelectorAll('[cmdk-item]') ?? [])].filter(e => e.getBoundingClientRect().height > 0).map(e => e.children[1].textContent);
+  const group = [...document.querySelectorAll('[cmdk-group]')].find(e => ['Sessions', 'Recent sessions'].includes(e.querySelector('[cmdk-group-heading]')?.textContent));
+  return [...(group?.querySelectorAll('[cmdk-item]') ?? [])].filter(e => e.getBoundingClientRect().height > 0).map(e => e.children[0].textContent);
 })()`);
 async function capture(name) {
   await ab('screenshot', join(evidence, `${name}.png`));
@@ -72,6 +72,14 @@ try {
   await ab('press', 'Control+k'); await ab('wait', input);
   assert.deepEqual(await titles(), recent, 'eight newest by creation across both projects');
   await capture('desktop-recent');
+  await ab('fill', input, 'Session');
+  await capture('desktop-search-top');
+  assert.equal(await evaluate(`document.querySelector('[cmdk-list]').scrollTop`), 0, 'new search starts at the top, including its group heading');
+  await evaluate(`document.querySelector('[cmdk-list]').scrollTop = 200`);
+  await ab('fill', input, 'Sess');
+  assert.equal(await evaluate(`document.querySelector('[cmdk-list]').scrollTop`), 0, 'changing a scrolled search resets the viewport');
+  for (let i = 0; i < 9; i++) await ab('press', 'ArrowDown');
+  assert.ok(await evaluate(`document.querySelector('[cmdk-list]').scrollTop > 0`), 'keyboard navigation still scrolls down through results');
   await ab('fill', input, 'Historical lighthouse');
   assert.deepEqual(await titles(), ['Historical lighthouse'], 'search includes older, non-hosted sessions');
   await ab('press', 'Enter'); await ab('wait', '--text', 'History for Historical lighthouse');
@@ -89,7 +97,7 @@ try {
   assert.deepEqual(await titles(), recent, 'clearing a ranked search restores creation order');
   await ab('fill', input, 'Archived needle');
   assert.deepEqual(await titles(), [], 'archived sessions remain excluded');
-  await ab('wait', '--text', 'Nothing matches.');
+  await ab('wait', '--text', 'No sessions or commands match.');
   await ab('press', 'Control+a'); await ab('press', 'Backspace');
   await capture('cleared-search');
   assert.deepEqual(await titles(), recent, 'clearing restores creation order and the limit');
@@ -102,8 +110,7 @@ try {
   await ab('fill', input, 'new session');
   await capture('mobile-new-session-actions');
   const newActions = await evaluate(`(() => {
-    const group = [...document.querySelectorAll('[cmdk-group]')].find(e => e.querySelector('[cmdk-group-heading]')?.textContent === 'New session');
-    return [...group.querySelectorAll('[cmdk-item]')].map(e => ({ value: e.getAttribute('data-value'), icon: e.querySelector('svg')?.outerHTML, fits: e.scrollWidth <= e.clientWidth }));
+    return [...document.querySelectorAll('[cmdk-item]')].filter(e => e.getBoundingClientRect().height > 0).map(e => ({ value: e.getAttribute('data-value'), icon: e.querySelector('svg')?.outerHTML, fits: e.scrollWidth <= e.clientWidth }));
   })()`);
   assert.deepEqual(newActions.map(a => a.value), ['new session', 'new session here'], 'no directory-specific actions');
   assert.ok(newActions.every(a => a.fits), 'new session actions fit mobile width');
@@ -119,7 +126,7 @@ try {
   await ab('press', 'Enter');
   assert.equal(await evaluate(`!!document.querySelector('${input}')`), false, 'generic action closes palette');
   assert.equal(await ab('errors'), '');
-  console.log('PASS: eight newest across projects; full active-session search; archive exclusion; clear/reopen reset; keyboard selection; mobile new session actions and consistent icons');
+  console.log('PASS: search viewport resets; keyboard scrolling; eight newest across projects; full active-session search; archive exclusion; clear/reopen reset; keyboard selection; mobile new session actions and consistent icons');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), dirty: true, node: process.version, cli: 'test/fake-host-pi.mjs', modelCalls: 0, newActions }, null, 2));
 } finally {
   try { await ab('close'); } catch {}

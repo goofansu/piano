@@ -29,8 +29,8 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!open) setSearch(""); }, [open]);
   useEffect(() => {
-    if (!open || search) return;
-    // Wait for cmdk's selection and restored group layout before resetting the viewport.
+    if (!open) return;
+    // Wait for cmdk's selection and ranked group layout before resetting each search.
     const frame = requestAnimationFrame(() => list.current?.scrollTo({ top: 0, behavior: "instant" }));
     return () => cancelAnimationFrame(frame);
   }, [open, search]);
