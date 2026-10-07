@@ -45,8 +45,8 @@ type QueueMode = QueuedMessage["kind"];
 const QUEUE_MODE_KEY = "piano.queueMode";
 /** How a message sent while Pi works is delivered. Pi's own editor steers on Enter, so steering is the default. */
 const DELIVERY: Record<QueueMode, { label: string; detail: string }> = {
-  steering: { label: "Steer", detail: "After the current tool calls, before the next model call." },
-  "follow-up": { label: "Follow-up", detail: "After Pi finishes the current task." },
+  steering: { label: "steer", detail: "After the current tool calls, before the next model call." },
+  "follow-up": { label: "follow-up", detail: "After Pi finishes the current task." },
 };
 const MODES: readonly QueueMode[] = ["steering", "follow-up"];
 const otherMode = (mode: QueueMode): QueueMode => (mode === "steering" ? "follow-up" : "steering");
