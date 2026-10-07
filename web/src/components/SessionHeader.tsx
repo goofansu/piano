@@ -34,7 +34,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
       <span role="status" className="sr-only">{status}</span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="New session here" disabled={!session} onClick={() => { if (session) openNew(session.cwd); }}><SquarePenIcon /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><SquarePenIcon /></Button>
         </TooltipTrigger>
         <TooltipContent>New session here</TooltipContent>
       </Tooltip>
@@ -54,7 +54,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.rename(target)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
+            <DropdownMenuItem disabled={!ready || !target || session?.state.checkoutMissing} onSelect={() => target && actions.rename(target)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.archive(target)}><ArchiveIcon /> Archive</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />

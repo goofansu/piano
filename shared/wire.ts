@@ -170,6 +170,8 @@ export const SessionState = Schema.Struct({
   /** Host observation used for retirement; no pending/unobserved work, not task success. */
   isQuiescent: Schema.optional(Schema.Boolean),
   closedReason: Schema.optional(Schema.String),
+  /** Piano filesystem observation: history is readable, but execution needs the checkout. */
+  checkoutMissing: Schema.optional(Schema.Boolean),
 });
 export type SessionState = typeof SessionState.Type;
 

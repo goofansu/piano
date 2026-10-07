@@ -63,9 +63,30 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     if (!lock) { lock = Semaphore.makeUnsafe(1); locks.set(key, lock); }
     return lock;
   });
+  // Remember observed aliases for this server lifetime so removing a checkout
+  // cannot give an existing child a second ownership key. After restart, missing
+  // paths use only their exact registry identity; never guess an alias relationship.
+  const identities = new Map<string, string>();
+  const checkout = (cwd: string) => Effect.tryPromise({
+    try: async () => {
+      const path = resolve(expandHome(cwd));
+      try {
+        const physical = await realpath(path);
+        identities.set(path, physical);
+        return { physical, missing: false };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        return { physical: identities.get(path) ?? path, missing: true };
+      }
+    },
+    catch: error => rejected(`Cannot resolve checkout ${cwd}: ${String(error)}`),
+  });
+  const requireCheckout = (cwd: string) => checkout(cwd).pipe(Effect.flatMap(({ missing }) => missing
+    ? Effect.fail(rejected("This checkout no longer exists. You can read, archive or delete this session. Restore the checkout at its original path before continuing."))
+    : Effect.void));
   const owned = <A, E>(work: Effect.Effect<A, E>) => work.pipe(Effect.forkIn(layerScope), Effect.flatMap(Fiber.join));
   const keyed = <A, E>(cwd: string, sessionId: string, work: (key: string, physical: string) => Effect.Effect<A, E>) => owned(Effect.gen(function* () {
-    const physical = yield* canonical(cwd);
+    const { physical } = yield* checkout(cwd);
     const key = hostKey(physical, sessionId);
     const lock = yield* lockFor(key);
     return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() => work(key, physical)));
@@ -76,7 +97,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     const candidates = (yield* registry.get).sessions.filter(s => s.sessionId === sessionId);
     const matching = [];
     for (const entry of candidates) {
-      const path = yield* canonical(entry.cwd).pipe(Effect.orElseSucceed(() => undefined));
+      const path = yield* checkout(entry.cwd).pipe(Effect.map(c => c.physical), Effect.orElseSucceed(() => undefined));
       if (path === physical) matching.push(entry);
     }
     if (matching.length > 1) return yield* rejected(`Conflicting session references for ${sessionId}: ${matching.map(s => s.cwd).join(", ")}. Keep the original references and resolve the duplicate explicitly; Piano has not merged or moved history.`);
@@ -142,6 +163,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     // Coalesced create calls can share an existing host; registration checks still
     // run for ordinary reopen so archive/delete cannot be undone by a stale tab.
     const ref = yield* reference(spec.cwd, spec.sessionId, physical, spec.create && !hosts.has(key));
+    yield* requireCheckout(ref.cwd);
     const existing = hosts.get(key);
     if (existing) {
       if (!(yield* existing.session.state).closedReason) return existing.session;
@@ -165,6 +187,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       // while awaiting a command whose dialog another action must answer.
       const fiber = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         if (hosts.get(key) !== host || host.closing) return yield* rejected("Pi is closing or has stopped. Refresh before sending new input.");
+        if (action._tag !== "abort") yield* requireCheckout(raw.spec.cwd);
         host.actions++;
         host.lastActivity = yield* Clock.currentTimeMillis;
         return yield* raw.act(action).pipe(Effect.ensuring(Effect.gen(function* () {
@@ -235,23 +258,28 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   }));
   return SessionHosts.of({ open, release,
     get: (cwd, id) => keyed(cwd, id, (key, physical) => Effect.gen(function* () {
-      yield* reference(cwd, id, physical);
+      const ref = yield* reference(cwd, id, physical);
+      const { missing } = yield* checkout(ref.cwd);
       const host = hosts.get(key);
-      if (host && (yield* host.session.state).closedReason) {
+      if (host && (missing || (yield* host.session.state).closedReason)) {
         yield* close(key, host);
         return undefined;
       }
       return host?.session;
     })),
     peek: (cwd, id) => keyed(cwd, id, (key, physical) => Effect.gen(function* () {
-      // A caller can beat the event watcher to this lock after Pi exits. Retain
-      // the authoritative cause here too, before returning file-only history.
+      let ref = yield* reference(cwd, id, physical);
+      const { missing } = yield* checkout(ref.cwd);
+      // A caller can beat the event watcher to this lock after Pi exits or the
+      // checkout disappears. Stop the writer before returning file-only history.
       const host = hosts.get(key);
-      if (host && (yield* host.session.state).closedReason) yield* close(key, host);
-      const ref = yield* reference(cwd, id, physical);
+      if (host && (missing || (yield* host.session.state).closedReason)) {
+        yield* close(key, host);
+        ref = yield* reference(cwd, id, physical);
+      }
       const snapshot = ref.file ? yield* peekSession(ref.file, id) : emptySnapshot(id);
       yield* mirrorName(ref.cwd, id, snapshot.state.sessionName);
-      return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, ...ref.stats, contextIsLastKnown: true, closedReason: exits.get(key) } } };
+      return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, ...ref.stats, contextIsLastKnown: true, checkoutMissing: missing, closedReason: exits.get(key) } } };
     })),
     archive: (cwd, id) => retire(cwd, id, false), delete: (cwd, id) => retire(cwd, id, true),
     list, changes: Stream.fromPubSub(changed),

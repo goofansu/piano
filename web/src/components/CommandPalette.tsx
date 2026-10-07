@@ -83,7 +83,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
             <CommandItem value="Copy working directory" onSelect={() => run(() => { if (state.session) void copySessionValue(state.session.cwd, "Working directory"); })}><CopyIcon /> Copy working directory</CommandItem>
             {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
             <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
-            <CommandItem value="Rename" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
+            <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
             <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
             <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
           </CommandGroup>
@@ -94,7 +94,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
             <PlusIcon /> New session
           </CommandItem>
           {state.view.kind === "session" && current && (
-            <CommandItem value="new session here" keywords={["new", "here", "directory"]} onSelect={() => run(() => openNew(current.cwd))}>
+            <CommandItem value="new session here" disabled={state.session?.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => openNew(current.cwd))}>
               <SquarePenIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(current.cwd)}</span>
             </CommandItem>
           )}

@@ -25,6 +25,7 @@ interface Props {
 
 export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew }: Props) {
   const t = state.session;
+  const checkoutMissing = !!t?.state.checkoutMissing;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const draftKey = t ? sessionKey(t) : undefined;
   const project = t ? state.projects.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
@@ -34,7 +35,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
   useEffect(() => setEffort(t?.state.thinkingLevel as ThinkingLevel | undefined), [t?.cwd, t?.sessionId, t?.state.thinkingLevel]);
   const catalog = t ? state.catalogs[t.cwd] ?? null : null;
-  useEffect(() => { if (state.connected && t?.cwd) send({ _tag: "models", cwd: t.cwd }); }, [t?.cwd, state.connected, send]);
+  useEffect(() => { if (state.connected && t?.cwd && !checkoutMissing) send({ _tag: "models", cwd: t.cwd }); }, [t?.cwd, checkoutMissing, state.connected, send]);
   const effectiveModel = model || catalog?.defaultModel;
   const effectiveEffort = (t?.hosted ? t.state.thinkingLevel as ThinkingLevel | undefined : undefined)
     ?? clampEffort(levelsFor(catalog, effectiveModel), effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
@@ -67,6 +68,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   const status = !state.connected || (t !== null && !ready) ? "Reconnecting"
     : !t ? "Loading"
+    : checkoutMissing ? "Read-only"
     : t.closedReason ? "Exited"
     : activity || (streaming ? "Working" : t.hosted ? "Ready" : "Not running");
 
@@ -141,7 +143,12 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           }}>Append to draft</Button>
         </div>}
       </section>}
-      <Composer
+      {checkoutMissing ? (
+        <Alert className="mx-4 my-3 w-auto md:mx-6">
+          <AlertTitle>Checkout removed · Read-only session</AlertTitle>
+          <AlertDescription>History is still available. You can archive or delete this session, or restore the checkout at its original path and reload to continue.</AlertDescription>
+        </Alert>
+      ) : <Composer
         draftKey={draftKey ?? "loading"}
         text={draftKey ? state.drafts[draftKey] ?? "" : ""}
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
@@ -169,7 +176,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         totals={t?.state.tokens}
         messages={t?.messages}
         queuedMessages={t?.state.queuedMessages}
-      />
+      />}
     </>
   );
 }

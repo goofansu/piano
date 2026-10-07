@@ -294,6 +294,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
         <ul className="flex flex-col gap-1 py-1">
           {project.sessions.map((t) => {
             const selected = current?.cwd === t.cwd && current.sessionId === t.sessionId;
+            const checkoutMissing = state.session?.cwd === t.cwd && state.session.state.checkoutMissing;
             // Live host state comes from the `hosts` broadcast, which changes more often than the project list.
             const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
             const done = state.done.includes(sessionKey(t));
@@ -334,7 +335,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuGroup>
-                      <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.rename(t)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
+                      <DropdownMenuItem disabled={!state.connected || checkoutMissing} onSelect={() => actions.rename(t)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
                       <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.archive(t)}><ArchiveIcon /> Archive</DropdownMenuItem>
                     </DropdownMenuGroup>
                     <DropdownMenuSeparator />

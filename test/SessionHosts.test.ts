@@ -135,6 +135,57 @@ test('INV-01/03: last-known statistics survive host and registry restart without
   }), { statsFile });
 });
 
+test('INV-01/02/06: deleted checkout history remains readable and can be archived or deleted without starting Pi', async () => {
+  const path = join(root, 'deleted-checkout');
+  mkdirSync(path);
+  const archived = seed(path, 'missing-archive', 'preserved conversation');
+  const deleted = seed(path, 'missing-delete', 'discarded conversation');
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts, registry = yield* Registry;
+    yield* registry.addSession(path, 'missing-archive');
+    yield* registry.addSession(path, 'missing-delete');
+    rmSync(path, { recursive: true });
+    assert.equal(yield* hosts.get(path, 'missing-archive'), undefined);
+    const view = yield* hosts.peek(path, 'missing-archive');
+    assert.equal(view.snapshot.messages[0].text, 'preserved conversation');
+    assert.equal(view.cwd, path);
+    assert.equal(view.snapshot.state.checkoutMissing, true);
+    assert.match((yield* hosts.open({ cwd: path, sessionId: 'missing-archive' }).pipe(Effect.flip)).detail, /checkout no longer exists/);
+    mkdirSync(path);
+    assert.equal((yield* hosts.peek(path, 'missing-archive')).snapshot.state.checkoutMissing, false);
+    rmSync(path, { recursive: true });
+    yield* hosts.archive(path, 'missing-archive');
+    yield* hosts.delete(path, 'missing-delete');
+    assert.ok(existsSync(archived));
+    assert.equal(existsSync(deleted), false);
+    assert.equal((yield* registry.get).sessions.find(s => s.sessionId === 'missing-archive')?.archived, true);
+    assert.equal((yield* registry.get).sessions.some(s => s.sessionId === 'missing-delete'), false);
+    assert.equal(records('missing-archive').length + records('missing-delete').length, 0);
+  }));
+});
+
+for (const removed of ['checkout', 'alias']) test(`INV-02/06: ${removed} removal preserves live ownership and blocks further work before retirement`, async () => {
+  const id = `live-deleted-${removed}`, path = join(root, id), link = join(root, `${id}-alias`);
+  mkdirSync(path); symlinkSync(path, link);
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts, registry = yield* Registry;
+    yield* registry.addSession(link, id);
+    const session = yield* hosts.open({ cwd: path, sessionId: id });
+    yield* prompt(session, '/settle'); yield* quiescent(session);
+    rmSync(removed === 'checkout' ? path : link, { recursive: true });
+    assert.match((yield* session.act({ _tag: 'prompt', text: 'must not send' }).pipe(Effect.flip)).detail, /checkout no longer exists/);
+    assert.equal(yield* hosts.get(path, id), undefined);
+    const view = yield* hosts.peek(path, id);
+    assert.equal(view.cwd, link);
+    assert.equal(view.snapshot.state.checkoutMissing, true);
+    assert.equal(records(id).filter(r => r.event === 'exit').length, 1);
+    assert.equal(records(id).filter(r => r.text === 'must not send').length, 0);
+    yield* hosts.delete(link, id);
+    assert.equal((yield* registry.get).sessions.some(s => s.sessionId === id), false);
+    assert.equal(records(id).filter(r => r.event === 'spawn').length, 1);
+  }));
+});
+
 test('INV-02: concurrent public opens through real/symlink paths have one child lifetime', async () => {
   await run(Effect.gen(function* () {
     const hosts = yield* SessionHosts;
