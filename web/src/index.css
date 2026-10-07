@@ -441,10 +441,6 @@
   transition: opacity var(--dur-exit) var(--ease-exit);
 }
 .skeleton-layer[data-hidden="true"] { opacity: 0; pointer-events: none; }
-/* One bar marks the selected session; it slides between rows instead of the rows moving. */
-.selection-bar {
-  transition: transform var(--dur-layout) var(--ease-enter), height var(--dur-layout) var(--ease-enter), opacity var(--dur-hover) ease;
-}
 
 @keyframes welcome-enter {
   from { opacity: 0; transform: translateY(10px); }

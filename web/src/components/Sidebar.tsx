@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, SearchIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
@@ -75,37 +75,6 @@ export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Pro
   const order = { i: 0 };
   const reveal = () => (revealing ? ({ "--i": String(order.i++) } as React.CSSProperties) : undefined);
 
-  // One felt-green bar marks the selected session and slides between rows; the rows stay put.
-  const nav = useRef<HTMLElement>(null);
-  const bar = useRef<HTMLSpanElement>(null);
-  const placed = useRef(false);
-  useLayoutEffect(() => {
-    const el = nav.current;
-    const mark = bar.current;
-    if (!el || !mark) return;
-    const place = () => {
-      const target = el.querySelector<HTMLElement>('[aria-current="page"]')?.closest("li");
-      if (!target) { mark.style.opacity = "0"; return; }
-      const a = target.getBoundingClientRect();
-      const b = el.getBoundingClientRect();
-      if (!placed.current) {
-        // The first placement lands at once; only later moves slide.
-        mark.style.transition = "none";
-        placed.current = true;
-        requestAnimationFrame(() => { mark.style.transition = ""; });
-      }
-      mark.style.opacity = "1";
-      mark.style.transform = `translateY(${a.top - b.top + 10}px)`;
-      mark.style.height = `${Math.max(0, a.height - 20)}px`;
-    };
-    place();
-    // Rows move while a project folds or unfolds; follow them to the final layout.
-    const ro = new ResizeObserver(place);
-    ro.observe(el);
-    for (const child of el.querySelectorAll("ul")) ro.observe(child);
-    return () => ro.disconnect();
-  }, [current?.cwd, current?.sessionId, state.projects, openProjects, state.view]);
-
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-4">
@@ -141,8 +110,7 @@ export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Pro
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-      <nav ref={nav} className="relative px-3 pb-4" aria-label="Projects">
-        <span ref={bar} aria-hidden className="selection-bar absolute left-3 top-0 w-0.5 rounded-full bg-brand opacity-0" />
+      <nav className="relative px-3 pb-4" aria-label="Projects">
         {!state.projectsLoaded ? (
           <SidebarSkeleton />
         ) : state.projects.length === 0 ? (
