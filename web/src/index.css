@@ -39,8 +39,7 @@
   --type-caption: 0.875rem;
 
   /* layers */
-  /* Use sRGB hex for the canvas: Safari's theme-color does not support OKLCH. */
-  --surface-0: #f6f4f0;
+  --surface-0: oklch(0.967 0.006 85);
   --conversation: oklch(0.995 0.002 85);
   --surface-1: oklch(1 0 0);
   --surface-2: oklch(1 0 0);
@@ -113,7 +112,7 @@
 }
 
 .dark {
-  --surface-0: #0b0c0f;
+  --surface-0: oklch(0.155 0.006 270);
   --conversation: oklch(0.185 0.006 270);
   --surface-1: oklch(0.215 0.007 270);
   --surface-2: oklch(0.22 0.007 270);
@@ -254,7 +253,6 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply bg-background;
     font-size: 16px;
     -webkit-text-size-adjust: 100%;
   }
