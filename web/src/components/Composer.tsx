@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, ChevronDownIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { formatTokenCount } from "@/lib/format";
 import { useTypeToFocus } from "@/lib/typeToFocus";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -109,16 +108,15 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
           <section className="control-enter border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
               <h2 className="font-medium text-ink-2">{streaming ? "Queued messages" : "Paused queue"} ({queuedMessages.length})</h2>
-              {!streaming && (
-                <Button variant="ghost" size="sm" aria-label="Restore queued messages to draft" disabled={disabled} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
-                  Restore to draft
-                </Button>
-              )}
+              <Button variant="ghost" size="sm" className="h-11 shrink-0 md:h-8" aria-label={queuedMessages.length === 1 ? "Edit queued message" : "Edit all queued messages"} title="Move queued messages back to the draft without stopping Pi" disabled={disabled} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
+                <PencilIcon data-icon="inline-start" aria-hidden />
+                {queuedMessages.length === 1 ? "Edit" : "Edit all"}
+              </Button>
             </div>
             <ol className="flex max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
               {queuedMessages.map((message, index) => (
-                <li key={`${message.kind}-${index}`} className="flex min-w-0 animate-in gap-2 fade-in-0">
-                  {showQueueKinds && <Badge variant={message.kind === "steering" ? "outline" : "secondary"} className="shrink-0">{message.kind === "steering" ? "Steering" : "Follow-up"}</Badge>}
+                <li key={`${message.kind}-${index}`} className="flex min-w-0 animate-in flex-col gap-1 fade-in-0">
+                  {showQueueKinds && <span className="text-xs text-ink-3">{message.kind === "steering" ? "Steering" : "Follow-up"}</span>}
                   <span className="min-w-0 whitespace-pre-wrap break-words">{message.text}</span>
                 </li>
               ))}

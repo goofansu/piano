@@ -318,7 +318,7 @@ async function run() {
   ab('tab', originalTab);
   ab('fill', '[aria-label="Message"]', 'my unsent draft');
   const promptsBeforeRestore = evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`);
-  ab('click', '[aria-label="Restore queued messages to draft"]');
+  ab('click', '[aria-label="Edit all queued messages"]');
   const restoredText = `my unsent draft\n\nmobile steering\n\nqueued draft\n\nqueued second ${'x'.repeat(80)}`;
   await until(`document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(restoredText)} && !document.querySelector('[aria-label="Queued messages"]')`);
   expectAction('Send');
