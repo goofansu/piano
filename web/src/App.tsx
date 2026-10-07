@@ -239,7 +239,7 @@ export default function App() {
       else history.pushState(null, "", path);
     }
     const title = state.view.kind === "missing-session" ? "Session not found" : route.kind === "new" ? "New session" : state.projects.flatMap((p) => p.sessions).find((t) => t.sessionId === route.sessionId)?.title || "Session";
-    document.title = `${title} - piano`;
+    document.title = `${title} - Piano`;
   }, [state.view, state.session, state.selecting, state.projects]);
 
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);

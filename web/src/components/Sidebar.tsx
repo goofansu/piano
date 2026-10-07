@@ -110,7 +110,7 @@ export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Pro
     <div className="flex h-full flex-col">
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-4">
         <PianoMark />
-        <span className="text-lg font-semibold tracking-tight">piano</span>
+        <span className="text-lg font-semibold tracking-tight">Piano</span>
         <span className="flex-1" />
         <Tooltip>
           <TooltipTrigger asChild>
