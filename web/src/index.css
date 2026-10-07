@@ -20,6 +20,19 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Browsers without scroll-driven animations (Firefox-based, including Zen) take shadcn's
+   scroll-fade fallback, which fades both ends of a row permanently and hides the first
+   item's edge. Give them no fade instead, which is what supporting browsers show unscrolled. */
+@supports not (animation-timeline: scroll()) {
+  .scroll-fade,
+  .scroll-fade-x,
+  .scroll-fade-y {
+    --scroll-fade-s: 0px;
+    --scroll-fade-e: 0px;
+    --scroll-fade-t: 0px;
+    --scroll-fade-b: 0px;
+  }
+}
 /* shadcn's attachment component expects `scrollbar-none`; shadcn/tailwind.css 4.21 only ships `no-scrollbar`. */
 @utility scrollbar-none {
   -ms-overflow-style: none;
