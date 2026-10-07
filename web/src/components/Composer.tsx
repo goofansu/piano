@@ -4,7 +4,7 @@ import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } f
 import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
-import { formatTokenCount } from "@/lib/format";
+import { abbrevPath, formatTokenCount } from "@/lib/format";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,8 @@ interface Props {
   totals?: SessionStats["tokens"];
   messages?: ReadonlyArray<RenderMsg>;
   queuedMessages?: ReadonlyArray<QueuedMessage>;
+  /** Directory the session runs in; shown abbreviated at the left of the usage row. */
+  cwd?: string;
 }
 
 type QueueMode = QueuedMessage["kind"];
@@ -59,7 +61,7 @@ const loadQueueMode = (): QueueMode => {
 };
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
+export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [], cwd }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
@@ -195,25 +197,40 @@ export function Composer({ draftKey, text, onTextChange, onTextAppend, onRestore
           </Tooltip>
         </div>
       </div>
-      <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-end gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums" aria-label="Session usage">
-        <JumpTo messages={messages} />
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="Context usage"
-              aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
-              className={cn("px-1.5 font-mono text-xs font-normal", left !== null && left < 15 && "text-warning hover:text-warning")}
-            >
-              {contextLabel}{contextWindow !== undefined && contextWindow > 0 ? `/${formatTokenCount(contextWindow)}` : ""}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent side="top" align="end" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
-            <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} />
-          </PopoverContent>
-        </Popover>
+      <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">
+        {cwd && <PathLabel cwd={cwd} />}
+        <div className="ml-auto flex shrink-0 items-center gap-2" aria-label="Session usage">
+          <JumpTo messages={messages} />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Context usage"
+                aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
+                className={cn("px-1.5 font-mono text-xs font-normal", left !== null && left < 15 && "text-warning hover:text-warning")}
+              >
+                {contextLabel}{contextWindow !== undefined && contextWindow > 0 ? `/${formatTokenCount(contextWindow)}` : ""}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="end" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
+              <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
     </div>
+  );
+}
+
+/** The session directory the way hydro prints it: parents as initials, the basename whole, the full path on hover. */
+function PathLabel({ cwd }: { cwd: string }) {
+  const short = abbrevPath(cwd);
+  const slash = short.lastIndexOf("/");
+  return (
+    <span className="min-w-0 truncate pl-1.5" aria-label="Working directory" title={cwd}>
+      {slash >= 0 && <span className="text-ink-3">{short.slice(0, slash + 1)}</span>}
+      <span className="text-ink">{short.slice(slash + 1)}</span>
+    </span>
   );
 }

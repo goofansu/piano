@@ -166,6 +166,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend 
           if (t?.hosted) send({ _tag: "act", action: { _tag: "set_thinking_level", level } });
           else { setEffort(level); setOverrides(o => ({ ...o, thinkingLevel: level })); }
         }}
+        cwd={t?.cwd}
         context={t?.state.context}
         cost={t?.state.cost}
         totals={t?.state.tokens}

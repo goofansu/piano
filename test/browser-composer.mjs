@@ -55,6 +55,8 @@ async function until(js) {
   throw new Error(`Timed out: ${js}`);
 }
 const layoutOnly = process.argv.includes('--layout-only');
+// Select-all in the browser is Meta+a on macOS and Control+a elsewhere.
+const selectAll = process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
 const views = layoutOnly ? [[320, 640], [390, 844], [1280, 800]] : [[320, 640], [375, 812], [390, 844], [430, 932], [390, 400], [844, 390], [768, 1024], [1024, 768], [1280, 800]];
 const geometry = `(() => {
   const t = document.querySelector('textarea');
@@ -73,6 +75,8 @@ const geometry = `(() => {
   const problems = controls.filter(r => r.x < c.x || r.right > c.right + 1 || r.right > innerWidth || r.bottom > innerHeight || r.width < 24).map(r => r.label);
   if (usageRect && (usageRect.y < c.bottom || Math.abs(usageRect.right - c.right) > 1 || usageRect.bottom > innerHeight)) problems.push('Usage footer is not below and aligned with the composer inside the viewport');
   if (card.querySelector('[aria-label="Context usage"]')) problems.push('Context usage still occupies the action toolbar');
+  const cwdLabel = document.querySelector('[aria-label="Working directory"]');
+  if (usage && cwdLabel && (rect(cwdLabel).right > rect(usage.firstElementChild).x || usage.scrollWidth > usage.clientWidth + 1)) problems.push('Working directory overlaps the usage controls');
   if (fonts.some(font=>!font.family.includes(font.tag === 'TEXTAREA' ? 'Instrument Sans' : 'JetBrains Mono'))) problems.push('Message input must use sans-serif while composer controls stay monospace');
   const action = controls.find(r => ['Send', 'Stop', 'Queue message'].includes(r.label));
   if (action && controls.some(r => Math.abs(r.y + r.height/2 - action.y - action.height/2) > 2)) problems.push('Composer toolbar wraps instead of reserving the action row');
@@ -205,7 +209,7 @@ async function run() {
   const originalOrder = visibleModels();
   for (const [query, expected] of [['fake', originalOrder], ['beta', ['fake/beta']], ['fake', originalOrder], ['sonnet', ['fake/claude-sonnet']], ['  SoNnEt  ', ['fake/claude-sonnet']], ['sol', ['fake/sol']], ['Online', ['fake/sol']], ['ta', ['fake/beta']], ['no-such-model', []], ['', originalOrder]]) {
     if (query) ab('fill', '[aria-label="Search models"]', query);
-    else { ab('focus', '[aria-label="Search models"]'); ab('press', 'Control+a'); ab('press', 'Backspace'); }
+    else { ab('focus', '[aria-label="Search models"]'); ab('press', selectAll); ab('press', 'Backspace'); }
     const actual = visibleModels();
     writeFileSync(join(evidence, `model-order-${query || 'cleared'}.json`), JSON.stringify({query,expected,actual}, null, 2));
     if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Search ${JSON.stringify(query)} returned incorrect models/order: ${JSON.stringify(actual)}; expected ${JSON.stringify(expected)}`);
@@ -298,7 +302,7 @@ async function run() {
   ab('fill', '[aria-label="Message"]', 'unsent draft');
   expectAction('Queue message');
   ab('focus', '[aria-label="Message"]');
-  ab('press', 'Control+a');
+  ab('press', selectAll);
   ab('press', 'Backspace');
   expectAction('Stop');
   ab('click', '[aria-label="Stop"]');
