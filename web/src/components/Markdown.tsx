@@ -33,7 +33,16 @@ export function Markdown({ text, className }: { text: string; className?: string
             diagram.tabIndex = 0;
             // Isolate diagram CSS from the app. No shadcn primitive renders Mermaid SVG.
             const shadow = diagram.attachShadow({ mode: "open" });
-            shadow.innerHTML = `<style>:host { display:block; overflow:auto; } svg { max-width:100%; height:auto; }</style>${svg}`;
+            shadow.innerHTML = `<style>:host { display:block; overflow:auto; }</style>${svg}`;
+            // Mermaid defaults to width:100%, which makes long diagrams illegible.
+            // Keep SVG units at natural size; the focusable host owns overflow.
+            const image = shadow.querySelector("svg");
+            const bounds = image?.viewBox.baseVal;
+            if (image && bounds && bounds.width > 0 && bounds.height > 0) {
+              image.style.width = `${bounds.width}px`;
+              image.style.height = `${bounds.height}px`;
+              image.style.maxWidth = "none";
+            }
             block.replaceWith(diagram);
           } catch {
             // Parsing/rendering failure is local to this block; keep its escaped source.

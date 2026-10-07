@@ -16,11 +16,18 @@ const env = { ...process.env, HOME: join(root, 'home'), XDG_CONFIG_HOME: join(ro
 execFileSync('git', ['init', '-q', repo], { env });
 const fence = source => '```mermaid\n' + source + '\n```';
 const valid = fence('graph LR\nA[Project] --> B[Session]');
+const wide = fence('flowchart LR\n' + [
+  'Write a prompt', 'Create a session', 'Load project context', 'Send prompt to Pi',
+  'Stream assistant response', 'Parse Markdown blocks', 'Identify Mermaid diagrams',
+  'Load diagram renderer', 'Apply security settings', 'Generate SVG diagram',
+  'Sanitize SVG output', 'Display inside message',
+].map((label, i) => `N${i}[${label}]`).join(' --> '));
 const text = [
   'Before diagrams.', valid,
   fence('sequenceDiagram\nAlice->>Bob: Hello'),
   fence('not a diagram'),
   fence('%%{init: {"securityLevel":"loose","themeCSS":"body { display:none }","htmlLabels":true}}%%\ngraph LR\nA["<img src=x onerror=alert(1)>"] --> B[Safe]\nclick B "javascript:alert(1)"'),
+  wide,
   '```js\nconst ordinary = true;\n```',
   'After diagrams.',
   '```mermaid\ngraph LR\nUnfinished -->',
@@ -47,6 +54,37 @@ async function ab(...args) {
 }
 const evaluate = async js => JSON.parse(await ab('eval', js));
 const count = `document.querySelectorAll('.mermaid-diagram').length`;
+const sizes = [];
+async function checkWideDiagram(width) {
+  await ab('set', 'viewport', String(width), '1000');
+  const size = await evaluate(`(() => {
+    const host = document.querySelectorAll('.mermaid-diagram')[3];
+    host.scrollIntoView({ block: 'center' });
+    host.scrollLeft = 0;
+    const svg = host.shadowRoot.querySelector('svg');
+    return { viewport: innerWidth, available: host.clientWidth, content: host.scrollWidth,
+      diagram: svg.getBoundingClientRect().width, natural: svg.viewBox.baseVal.width,
+      page: document.documentElement.scrollWidth };
+  })()`);
+  sizes.push(size);
+  assert.ok(size.natural > size.available, 'fixture exceeds message width');
+  assert.ok(size.diagram >= size.natural * 0.95, `diagram must not shrink: ${JSON.stringify(size)}`);
+  assert.ok(size.content > size.available, 'wide diagram scrolls inside message');
+  assert.ok(size.page <= size.viewport, 'diagram does not widen the page');
+  await ab('eval', `document.querySelectorAll('.mermaid-diagram')[3].focus()`);
+  await ab('press', 'ArrowRight');
+  await ab('wait', '--fn', `document.querySelectorAll('.mermaid-diagram')[3].scrollLeft > 0`);
+  await ab('screenshot', join(evidence, `wide-${width}-start.png`));
+  const end = await evaluate(`(() => {
+    const host = document.querySelectorAll('.mermaid-diagram')[3];
+    host.scrollLeft = host.scrollWidth;
+    const label = [...host.shadowRoot.querySelectorAll('text')].find(e => e.textContent.replace(/\\s+/g, '').includes('Displayinsidemessage'));
+    const bounds = label.getBoundingClientRect(), viewport = host.getBoundingClientRect();
+    return { visible: bounds.left >= viewport.left && bounds.right <= viewport.right, offset: host.scrollLeft };
+  })()`);
+  assert.ok(end.visible && end.offset > 0, 'last label is reachable by horizontal scrolling');
+  await ab('screenshot', join(evidence, `wide-${width}-end.png`));
+}
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
@@ -55,7 +93,7 @@ try {
   }
   await ab('set', 'viewport', '1440', '1000');
   await ab('open', 'http://127.0.0.1:7172/s/mermaid');
-  await ab('wait', '--fn', `${count} === 3`);
+  await ab('wait', '--fn', `${count} === 4`);
   const observation = await evaluate(`(() => {
     const prose = document.querySelector('.prose-chat');
     const diagrams = [...prose.querySelectorAll('.mermaid-diagram')];
@@ -66,7 +104,10 @@ try {
       outsideSVG: document.querySelectorAll('body > div > svg').length,
       bodyDisplay: getComputedStyle(document.body).display };
   })()`);
-  assert.equal(observation.diagrams, 3);
+  assert.equal(observation.diagrams, 4);
+  await checkWideDiagram(1440);
+  await checkWideDiagram(390);
+  await ab('set', 'viewport', '1440', '1000');
   assert.match(observation.labels, /Project/); assert.match(observation.labels, /Session/);
   assert.deepEqual(observation.fallback, ['not a diagram', 'const ordinary = true;', 'graph LR\nUnfinished -->']);
   assert.equal(observation.safeLabel, true, 'diagram config cannot re-enable HTML labels');
@@ -74,13 +115,13 @@ try {
   for (const theme of ['Dark', 'Light']) {
     await ab('find', 'role', 'button', 'click', '--name', 'Appearance', '--exact');
     await ab('find', 'role', 'menuitemradio', 'click', '--name', theme, '--exact');
-    await ab('wait', '--fn', `${count} === 3`);
+    await ab('wait', '--fn', `${count} === 4`);
     await ab('screenshot', join(evidence, `${theme}.png`));
   }
   await ab('set', 'viewport', '390', '844');
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   await ab('screenshot', join(evidence, 'mobile.png'));
-  await ab('reload'); await ab('wait', '--fn', `${count} === 3`);
+  await ab('reload'); await ab('wait', '--fn', `${count} === 4`);
   // Exercise the same production Markdown component through incremental text updates,
   // without a paid model or timing-dependent fake stream.
   await ab('eval', `(async () => {
@@ -100,7 +141,7 @@ try {
   await ab('wait', '--fn', `document.querySelector('#stream-check pre')?.textContent === 'not a diagram'`);
   assert.equal(await evaluate(`document.querySelectorAll('#stream-check .mermaid-diagram').length`), 0);
   assert.equal(await ab('errors'), '');
-  writeFileSync(join(evidence, 'result.json'), JSON.stringify({ outcome: 'passed', revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), dirty: true, node: process.version, modelCalls: 0, observation, checks: ['flowchart and sequence', 'invalid and incomplete source fallback', 'ordinary fences', 'untrusted diagram', 'light/dark', 'mobile', 'reload', 'incremental component updates'] }, null, 2));
+  writeFileSync(join(evidence, 'result.json'), JSON.stringify({ outcome: 'passed', revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), dirty: true, node: process.version, modelCalls: 0, observation, sizes, checks: ['flowchart and sequence', 'invalid and incomplete source fallback', 'ordinary fences', 'untrusted diagram', 'light/dark', 'mobile', 'wide diagram readability and keyboard scroll', 'reload', 'incremental component updates'] }, null, 2));
   console.log('PASS: Mermaid diagrams, fallbacks, security, themes, mobile, reload and incremental updates');
 } finally {
   try { await ab('close'); } catch {}

@@ -36,3 +36,20 @@ the component but was not separately exercised. HTML labels, external images and
 are intentionally unsupported. npm audit reports eight high findings in the existing shadcn toolchain
 and two low findings for Mermaid/its KaTeX dependency (prototype-pollution prerequisite); no unrelated
 or breaking dependency upgrades were attempted.
+
+## Wide-diagram readability follow-up
+
+The user's 12-step horizontal flow exposed a missed case: Mermaid's responsive width plus our SVG
+`max-width:100%` squeezed a 2,280px diagram into a 740px message. Preserve the SVG viewBox dimensions
+at natural size instead; the existing focusable diagram host scrolls overflow without widening the
+page. Sanitization and CSS isolation are unchanged (INV-11).
+
+Tested base `dc5d860` plus this follow-up on the same Node/browser setup. The extended
+`test/browser-mermaid.mjs` fails before the fix on the exact 740/2,280px shrinkage, then passes at
+1440px and 390px viewport widths: natural SVG size, local overflow, keyboard scrolling from the
+start, and the final label reachable at the end. Screenshots inspected at both widths. An initial
+end-label assertion needed whitespace normalization because Mermaid wraps labels into SVG tspans.
+`npm test` (75 passed), `npm run typecheck` and `git diff --check` passed.
+
+Evidence: `/tmp/piano-mermaid-wide-{red,green}` (browser commands/screenshots/results),
+`/tmp/piano-mermaid-wide-{red,green,tests,types}.log`. No new model calls or deployment.
