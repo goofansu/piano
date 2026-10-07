@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { useConnection } from "@/lib/ws";
+import { useVisualViewport } from "@/lib/useVisualViewport";
 import { type Action, type AppState, initialState, reduce, sessionDelivery } from "@/store";
 import { parseRoute, routePath, type Route } from "@/lib/routes";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
@@ -39,6 +40,7 @@ function storedCatalogs(): AppState["catalogs"] {
 }
 
 export default function App() {
+  const viewportRef = useVisualViewport();
   const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState => {
     const seeded = { ...s, catalogs: storedCatalogs() };
     return parseRoute(location).kind === "session" ? { ...seeded, view: { kind: "session" } } : seeded;
@@ -255,7 +257,7 @@ export default function App() {
 
   // An inset conversation sheet separates the work from the navigation without extra chrome.
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-surface-0 text-ink">
+    <div ref={viewportRef} className="fixed inset-x-0 top-0 flex h-[var(--app-viewport-height,100dvh)] w-full overflow-hidden bg-surface-0 text-ink">
       <aside
         className={cn(
           "relative hidden shrink-0 md:flex md:flex-col",

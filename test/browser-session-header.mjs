@@ -55,8 +55,59 @@ try {
     if (n === 100) throw new Error('Startup deadline');
     await delay(100);
   }
-  await ab('open', 'http://127.0.0.1:7172/s/header');
+  const viewportOnly = process.argv.includes('--viewport-only');
+  if (viewportOnly) {
+    // Headless browsers have no iOS keyboard. Replay its visual-viewport resize/pan
+    // independently of the unchanged layout viewport, rather than resizing the window.
+    const init = join(root, 'viewport.js');
+    writeFileSync(init, `const viewport = window.visualViewport;
+      let height = innerHeight, offsetTop = 0, scale = 1;
+      Object.defineProperties(viewport, {
+        height: { get: () => height }, offsetTop: { get: () => offsetTop }, scale: { get: () => scale }
+      });
+      window.keyboardViewport = (nextHeight, nextTop, nextScale = 1) => {
+        height = nextHeight; offsetTop = nextTop; scale = nextScale;
+        viewport.dispatchEvent(new Event('resize'));
+        viewport.dispatchEvent(new Event('scroll'));
+      };`);
+    await ab('--init-script', init, 'open', 'http://127.0.0.1:7172/s/header');
+  } else await ab('open', 'http://127.0.0.1:7172/s/header');
   await ab('wait', '--text', 'Message 39');
+  if (viewportOnly) {
+    await ab('set', 'viewport', '390', '844');
+    await evaluate('window.keyboardViewport(844, 0); true');
+    await ab('fill', '[aria-label="Message"]', 'A draft with multiple lines\n'.repeat(10));
+    const image = join(root, 'keyboard.png');
+    writeFileSync(image, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'));
+    await ab('upload', '[aria-label="Image files"]', image);
+    await ab('wait', '--fn', `!!document.querySelector('[aria-label="Remove keyboard.png"]')`);
+    const geometry = `(() => {
+      const h = document.querySelector('main header').getBoundingClientRect();
+      const c = document.querySelector('.composer-card').getBoundingClientRect();
+      const v = visualViewport;
+      return { headerTop: h.top, headerBottom: h.bottom, composerTop: c.top, composerBottom: c.bottom,
+        viewportTop: v.offsetTop, viewportBottom: v.offsetTop + v.height, layoutHeight: innerHeight };
+    })()`;
+    for (const [label, height, top] of [['keyboard-open', 400, 180], ['keyboard-pan', 400, 240], ['keyboard-closed', 844, 0]]) {
+      await evaluate(`window.keyboardViewport(${height}, ${top}); true`);
+      // Allow React/layout to commit the viewport event; don't assume synchronous DOM changes.
+      await ab('eval', 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))');
+      const g = await evaluate(geometry);
+      writeFileSync(join(evidence, `${label}.json`), JSON.stringify(g, null, 2));
+      await ab('screenshot', join(evidence, `${label}.png`));
+      assert.equal(g.layoutHeight, 844, 'Keyboard must not resize the layout viewport in this reproduction');
+      assert.ok(g.headerTop >= g.viewportTop && g.headerBottom <= g.viewportBottom, `Header outside visible viewport: ${JSON.stringify(g)}`);
+      assert.ok(g.composerTop >= g.headerBottom && g.composerBottom <= g.viewportBottom, `Composer outside visible viewport: ${JSON.stringify(g)}`);
+    }
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Message"]').value`), 'A draft with multiple lines\n'.repeat(10));
+    const beforeZoom = await evaluate(geometry);
+    await evaluate('window.keyboardViewport(422, 100, 2); true');
+    await ab('eval', 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))');
+    const zoomed = await evaluate(geometry);
+    assert.equal(zoomed.headerTop, beforeZoom.headerTop, 'Do not chase a pinch-zoom pan');
+    assert.equal(zoomed.composerBottom, beforeZoom.composerBottom, 'Do not reflow on pinch zoom');
+    console.log('PASS: replayed visual-viewport keyboard resize/pan/close keeps header and multiline/image composer visible; draft retained; pinch zoom does not reflow. Native iOS keyboard not exercised.');
+  } else {
   // Observe clipboard arguments while allowing the actual browser write to run.
   await evaluate(`window.copies = []; window.nativeWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = async value => { window.copies.push(value); await window.nativeWrite(value); }; true`);
   for (const [width, height] of [[1280, 900], [390, 844]]) {
@@ -110,6 +161,7 @@ try {
   await menu(); await item('Archive');
   await ab('wait', '--fn', `!document.querySelector('[aria-label="Session menu for Renamed from palette"]')`);
   console.log('PASS: desktop/mobile sticky identity, copy values/failure, shared confirmations, keyboard/palette rename, sidebar actions and archive');
+  }
 } catch (error) {
   await ab('snapshot').catch(() => {});
   await ab('screenshot', join(evidence, 'failure.png')).catch(() => {});

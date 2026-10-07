@@ -8,7 +8,7 @@ export const picker =
 export const composerCard = "composer-card font-mono";
 
 /** The input grows with content; on phones it leaves room for the keyboard and toolbar. */
-export const composerInput = "max-h-[min(12rem,30dvh)] min-h-14 resize-none border-0 bg-transparent px-4 pt-4 font-sans shadow-none dark:bg-transparent focus-visible:ring-0 md:px-5";
+export const composerInput = "max-h-[min(12rem,calc(var(--app-viewport-height,100dvh)*0.3))] min-h-14 resize-none border-0 bg-transparent px-4 pt-4 font-sans shadow-none dark:bg-transparent focus-visible:ring-0 md:px-5";
 
 /** Compact settings yield space to the primary action without wrapping to another row. */
 export const composerToolbar = "flex min-w-0 flex-nowrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2";
