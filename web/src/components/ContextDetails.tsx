@@ -50,7 +50,10 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
 
   return <div className="flex flex-col gap-4 text-sm">
     <section className="flex flex-col gap-2">
-      <h2 className="font-medium">{tokens === null ? "Context usage unavailable" : `Context: ${number(tokens)} tokens`}</h2>
+      <h2 className="font-medium">
+        {tokens === null ? "Context usage unavailable" : `Context: ${number(tokens)} tokens`}
+        {cachePercent !== null && <span className="text-ink-2" title="Session cached input / total input"> ({cachePercent}% cached)</span>}
+      </h2>
       {contextWindow !== undefined && contextWindow > 0 && <p className="text-ink-2">Context window: {number(contextWindow)} tokens</p>}
       {percent !== null && (
         <Progress
@@ -61,7 +64,6 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
         />
       )}
       {left !== null && <p className="text-ink-2">{left < 1 ? left.toFixed(1) : Math.round(left)}% left</p>}
-      {cachePercent !== null && <p className="text-ink-2" title="Cached input / total input">Session cache hit rate: {cachePercent}%</p>}
     </section>
     <Separator />
     <section className="flex flex-col gap-2" aria-label="Response usage history">
