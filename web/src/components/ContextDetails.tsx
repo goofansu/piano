@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ContextUsage, RenderMsg, SessionStats } from "@shared/wire";
 import { cn } from "cn";
 import { formatTokenCount } from "@/lib/format";
@@ -35,6 +35,19 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
   const cachePercent = totals && inputTokens > 0 ? Math.round(100 * totals.cacheRead / inputTokens) : null;
   const usage = selected?.usage;
   const position = selected ? responses.indexOf(selected) + 1 : 0;
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartWidth = responses.length * 12;
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || position === 0) return;
+    const step = chart.scrollWidth / responses.length;
+    const start = (position - 1) * step;
+    const end = position * step;
+    if (start < chart.scrollLeft) chart.scrollLeft = start;
+    else if (end > chart.scrollLeft + chart.clientWidth) chart.scrollLeft = end - chart.clientWidth;
+  }, [position, responses.length]);
+
   return <div className="flex flex-col gap-4 text-sm">
     <section className="flex flex-col gap-2">
       <h2 className="font-medium">{tokens === null ? "Context usage unavailable" : `Context: ${number(tokens)} tokens`}</h2>
@@ -65,9 +78,11 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
         </Empty>
       ) : <>
         <p className="text-xs text-ink-2">{metric === "tokens" ? "Tokens" : "Cost"} per response · peak {metric === "tokens" ? formatTokenCount(max) : dollars(max)}</p>
-        <svg viewBox="0 0 400 80" className="h-20 w-full text-ink-2" role="img" aria-label={`${metric === "tokens" ? "Token" : "Cost"} history across ${responses.length} responses. Use the response slider for exact values.`}>
-          {values.map((value, index) => <rect key={responses[index].id} className="transition-[opacity,height,y] duration-300" x={index * 400 / values.length} y={80 - (max > 0 ? value / max * 76 : 0)} width={Math.max(0.5, 400 / values.length - 1)} height={max > 0 ? value / max * 76 : 0} fill="currentColor" opacity={responses[index].id === selected?.id ? 1 : 0.35} />)}
-        </svg>
+        <div ref={chartRef} className="min-w-0 overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable response chart">
+          <svg viewBox={`0 0 ${chartWidth} 80`} preserveAspectRatio="none" style={{ minWidth: chartWidth }} className="block h-20 w-full text-ink-2" role="img" aria-label={`${metric === "tokens" ? "Token" : "Cost"} history across ${responses.length} responses. Use the response slider for exact values.`}>
+            {values.map((value, index) => <rect key={responses[index].id} className="transition-[opacity,height,y] duration-300" x={index * 12} y={80 - (max > 0 ? value / max * 76 : 0)} width={11} height={max > 0 ? value / max * 76 : 0} fill="currentColor" opacity={responses[index].id === selected?.id ? 1 : 0.35} />)}
+          </svg>
+        </div>
         <div className="flex items-center gap-3 text-xs">
           <span className="shrink-0 tabular-nums">Response {position} / {responses.length}</span>
           <Slider aria-label="Inspect response" min={1} max={responses.length} step={1} value={[position]} onValueChange={([value]) => setSelectedId(responses[value - 1]?.id)} className="min-w-0 flex-1" />
