@@ -306,7 +306,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
               {verb}
               {(VERBS[call.name] ?? null) === null && <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>}
             </span>
-            {summary && <span className={cn("min-w-0 flex-1 font-mono text-ink-2", !open && "truncate")}>{summary}</span>}
+            {summary && <span className="min-w-0 flex-1 truncate font-mono text-ink-2">{summary}</span>}
             {VERBS[call.name] && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
             <ChevronRightIcon className={cn("ml-auto size-3.5 shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />
           </button>
@@ -319,7 +319,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
           </Row>
         </CollapsibleContent>
       )}
-      {output && (
+      {output && (open || failed) && (
         <Row glyph={null} className="mt-1">
           <pre className={cn("border-l-2 border-line py-1 pl-3 whitespace-pre-wrap break-all", failed ? "text-err" : "text-ink-2")}>{clamp(shown.join("\n"), all ? 20000 : 2000)}</pre>
           {hidden > 0 && (
@@ -334,7 +334,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
           )}
         </Row>
       )}
-      {[...nested.values()].map(child => <div key={child.id} role="group" aria-label={`${child.name} tool call`} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
+      {[...nested.values()].filter(child => open || child.status === "error").map(child => <div key={child.id} role="group" aria-label={`${child.name} tool call`} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
         <p className="flex items-center gap-2">{child.name} <Badge variant={child.status === "error" ? "destructive" : child.status === "success" ? "success" : child.status === "running" ? "warning" : "secondary"}>{{ running: "Running", success: "Done", error: "Failed", incomplete: "Incomplete" }[child.status]}</Badge></p>
         <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
         {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}

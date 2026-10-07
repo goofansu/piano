@@ -29,6 +29,8 @@ const stories = [
       { type: 'toolCall', id: 'read-app', name: 'read', arguments: { path: 'web/src/components/session transcript with long directory names/MessageList.tsx' } },
     ] },
     { role: 'toolResult', toolCallId: 'read-app', toolName: 'read', content: [{ type: 'text', text: 'export default function App() {\n  return <Workspace />;\n}' }], isError: false },
+    { ...assistant(''), content: [{ type: 'toolCall', id: 'failed-command', name: 'bash', arguments: { command: 'node test/browser-session-header.mjs /tmp/piano-header-evidence/browser-3 > /tmp/piano-header-evidence/browser-3.log 2>&1; echo "browser: $?"', timeout: 240 } }] },
+    { role: 'toolResult', toolCallId: 'failed-command', toolName: 'bash', content: [{ type: 'text', text: 'Command failed: fixture error remains visible.' }], isError: true },
     assistant(reply),
   ]],
   ['navigation', 'Simplify project navigation', [{ role: 'user', content: 'Make the project navigation easier to scan.' }]],
@@ -70,6 +72,7 @@ async function capture(name) {
 async function appearance(name) {
   await click('Appearance'); await ab('find', 'role', 'menuitemradio', 'click', '--name', name, '--exact');
 }
+const toolsOnly = process.argv.includes('--tools-only');
 const tool = '[aria-label="read tool call"] button[aria-expanded]';
 const project = 'aside nav button[aria-expanded]';
 const argVisible = `document.getElementById(document.querySelector('${tool}').getAttribute('aria-controls'))?.textContent.includes('"path"')`;
@@ -105,9 +108,9 @@ try {
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="read tool call"]')`), true);
   assert.ok(await evaluate(`document.querySelector('main').textContent.includes('I’ll start with the parts you touch every day')`));
   assert.equal(await evaluate(`!!document.querySelector('main [aria-label="Session menu"], main [aria-label="Session information"]')`), false);
-  assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().height`), 0, 'no empty desktop header');
-  // The tool outcome dot and its label share a visual centre, including wrapped
-  // summaries after opening details. Observe layout, not Tailwind class names.
+  if (!toolsOnly) assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().height`), 0, 'no empty desktop header');
+  // Tool headers stay on one line; successful output is opt-in, errors stay visible.
+  // Observe layout and disclosure behavior, not Tailwind class names.
   for (const width of [1440, 320]) {
     await ab('set', 'viewport', String(width), '1000');
     for (const expanded of [false, true]) {
@@ -123,11 +126,14 @@ try {
       observations.push({name:'tool-alignment',width,expanded,...alignment});
       writeFileSync(join(evidence, 'tool-alignment.json'), JSON.stringify(observations, null, 2));
       assert.ok(Math.abs(alignment.dot-alignment.label) <= 1, `${width}px expanded=${expanded}: dot and label differ by ${Math.abs(alignment.dot-alignment.label)}px`);
-      if (width === 320 && expanded) assert.ok(alignment.summaryLines >= 2, 'exercise a wrapped tool summary');
+      assert.ok(Math.abs(alignment.summaryLines - 1) < 0.01, `${width}px expanded=${expanded}: single-line summary`);
+      assert.equal(await evaluate(`document.querySelector('[aria-label="read tool call"]').textContent.includes('return <Workspace />')`), expanded, 'successful output follows disclosure');
+      assert.equal(await evaluate(`document.querySelector('[aria-label="bash tool call"]').textContent.includes('fixture error remains visible')`), true, 'collapsed errors remain visible');
       if (expanded) await ab('click', tool);
     }
   }
   await ab('set', 'viewport', '1440', '1000');
+  if (!toolsOnly) {
   await appearance('Light'); await capture('session-light');
   assert.equal(await evaluate(`document.querySelector('aside [aria-current="page"]')?.title`), 'A calmer workspace');
   // Native clipboard success: paste back into the composer, preserving raw Markdown.
@@ -144,13 +150,13 @@ try {
   await evaluate('navigator.clipboard.writeText=window.nativeWrite;true');
   await capture('copy-denied');
   // Keyboard interaction must survive animated mount/unmount. Closing details keeps
-  // their trigger focused, while output previews remain available.
+  // their trigger focused, while successful output folds away.
   await ab('focus', tool); await ab('press', 'Enter'); await ab('wait', '--fn', argVisible);
   assert.ok(await evaluate(`getComputedStyle(document.getElementById(document.querySelector('${tool}').getAttribute('aria-controls'))).animationName !== 'none'`));
   await capture('tool-expanded');
   await ab('press', 'Enter'); await ab('wait', '--fn', `!(${argVisible})`);
   assert.ok(await evaluate(`document.activeElement.matches('${tool}')`));
-  assert.ok(await evaluate(`document.querySelector('[aria-label="read tool call"]').textContent.includes('return <Workspace />;')`));
+  assert.equal(await evaluate(`document.querySelector('[aria-label="read tool call"]').textContent.includes('return <Workspace />;')`), false);
   await ab('focus', project); await ab('press', 'Enter');
   await ab('wait', '--fn', `!document.querySelector('aside button[title="A calmer workspace"]')`);
   assert.ok(await evaluate(`document.activeElement.matches('${project}')`));
@@ -210,8 +216,25 @@ try {
     assert.equal(await evaluate(`!!document.querySelector('main [aria-label="Session menu"], main [aria-label="Session information"]')`), false);
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('main header button')].filter(e=>e.getBoundingClientRect().width>0).map(e=>e.getAttribute('aria-label'))`), w < 768 ? ['Show sidebar'] : []);
   }
+  }
+  if (toolsOnly) {
+    for (const width of [390, 1440]) {
+      await ab('set', 'viewport', String(width), '1000');
+      await capture(`tools-collapsed-${width}`);
+      await ab('click', tool);
+      await capture(`tools-expanded-${width}`);
+      await ab('click', tool);
+      const bash = '[aria-label="bash tool call"] button[aria-expanded]';
+      await ab('click', bash);
+      assert.equal(await evaluate(`(() => { const s=document.querySelector('${bash}').children[1]; return Math.round(s.getBoundingClientRect().height/parseFloat(getComputedStyle(s).lineHeight)); })()`), 1);
+      assert.equal(await evaluate(`document.querySelector('[aria-label="bash tool call"]').querySelectorAll('pre').length`), 2, 'one arguments block and one error output');
+      await capture(`command-expanded-${width}`);
+      await ab('click', bash);
+    }
+    console.log('PASS: single-line tool headers on desktop/mobile, successful output disclosed, collapsed errors visible');
+  }
   assert.equal(await ab('errors'), '');
-  console.log('PASS: native copy/paste and denied copy; keyboard disclosures; session draft retention; light/dark layouts; reduced-motion entrance/disclosures/streaming; mobile controls, copy visibility and sidebar focus');
+  if (!toolsOnly) console.log('PASS: native copy/paste and denied copy; keyboard disclosures; session draft retention; light/dark layouts; reduced-motion entrance/disclosures/streaming; mobile controls, copy visibility and sidebar focus');
 } finally {
   try { await ab('close'); } catch {}
   for (const proc of [backend, frontend]) if (proc.exitCode === null) { const stopped = new Promise(resolve => proc.once('exit', resolve)); proc.kill('SIGTERM'); await stopped; }
