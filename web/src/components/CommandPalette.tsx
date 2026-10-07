@@ -1,7 +1,9 @@
 import { useMemo } from "react";
-import { GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlusIcon, SunIcon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, GitBranchIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { AppState } from "@/store";
+import type { ClientCommand } from "@shared/wire";
+import { copySessionValue, currentSessionDetails, useSessionActions } from "@/components/SessionActions";
 import { sessionKey } from "@/store";
 import { cn } from "cn";
 import { abbrevPath } from "@/lib/format";
@@ -15,15 +17,20 @@ interface Props {
   select: (cwd: string, sessionId: string | null) => void;
   openNew: (cwd?: string) => void;
   toggleSidebar: () => void;
+  send: (command: ClientCommand) => void;
 }
 
 /**
- * The command palette: every session across projects, a new session in any project, and the
- * two view commands. Search matches a session's title, its project and its branch.
+ * The command palette: session navigation/actions, new sessions, and view commands.
+ * Search matches a session's title, its project and its branch.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar }: Props) {
+export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send }: Props) {
   const { setTheme } = useTheme();
   const current = state.session ?? state.selecting;
+  const details = currentSessionDetails(state);
+  const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
+  const actions = useSessionActions(send, ready);
+  const target = state.session?.sessionId ? { cwd: state.session.cwd, sessionId: state.session.sessionId, title: details.title } : undefined;
   const sessions = useMemo(() => state.projects.flatMap((p) => p.sessions.map((t) => ({
     ...t,
     project: p.name,
@@ -34,6 +41,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
   return (
+    <>
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Search and commands" description="Switch sessions, start a new one, or change the view." showCloseButton={false} className="top-[18%] translate-y-0 sm:max-w-xl">
       <CommandInput placeholder="Search sessions, projects, branches…" aria-label="Search sessions and commands" />
       <CommandList className="max-h-[min(24rem,60dvh)]">
@@ -70,6 +78,17 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           </CommandGroup>
         )}
         <CommandSeparator />
+        {state.view.kind === "session" && state.session && <>
+          <CommandGroup heading="Session actions">
+            <CommandItem value="Copy working directory" onSelect={() => run(() => { if (state.session) void copySessionValue(state.session.cwd, "Working directory"); })}><CopyIcon /> Copy working directory</CommandItem>
+            {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
+            <CommandItem value="Copy session file path" disabled={!details.sessionFile} onSelect={() => run(() => { if (details.sessionFile) void copySessionValue(details.sessionFile, "Session file path"); })}><CopyIcon /> Copy session file path</CommandItem>
+            <CommandItem value="Rename" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
+            <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
+            <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
+          </CommandGroup>
+          <CommandSeparator />
+        </>}
         <CommandGroup heading="New session">
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
@@ -96,5 +115,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
         </CommandGroup>
       </CommandList>
     </CommandDialog>
+    {actions.dialogs}
+    </>
   );
 }

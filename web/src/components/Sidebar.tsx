@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useSessionActions } from "@/components/SessionActions";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Keys, PianoMark } from "@/components/PianoMark";
@@ -240,20 +239,8 @@ interface ProjectProps extends Pick<Props, "send" | "select" | "state" | "openNe
 const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
 
 function Project({ project, current, open, onOpenChange, state, send, select, openNew, reveal }: ProjectProps) {
-  const [deleting, setDeleting] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
-  const [renaming, setRenaming] = useState<{ cwd: string; sessionId: string; title: string } | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
+  const actions = useSessionActions(send, state.connected);
   const root = project.worktrees.find(w => w.root);
-  const startRename = (t: { cwd: string; sessionId: string; title?: string }) => {
-    setDraftTitle(t.title ?? "");
-    setRenaming({ cwd: t.cwd, sessionId: t.sessionId, title: t.title || "Untitled" });
-  };
-  const canRename = !!renaming && draftTitle.trim().length > 0 && draftTitle.trim() !== (renaming.title === "Untitled" ? "" : renaming.title);
-  const commitRename = () => {
-    if (!renaming || !canRename) return;
-    send({ _tag: "rename_session", cwd: renaming.cwd, sessionId: renaming.sessionId, title: draftTitle.trim() });
-    setRenaming(null);
-  };
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -346,16 +333,14 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => startRename(t)}>
-                      <PencilIcon /> Rename
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => send({ _tag: "archive_session", cwd: t.cwd, sessionId: t.sessionId })}>
-                      <ArchiveIcon /> Archive
-                    </DropdownMenuItem>
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.rename(t)}><PencilIcon /> Rename</DropdownMenuItem>
+                      <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.archive(t)}><ArchiveIcon /> Archive</DropdownMenuItem>
+                    </DropdownMenuGroup>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive" onClick={() => setDeleting({ cwd: t.cwd, sessionId: t.sessionId, title: t.title || "Untitled" })}>
-                      <Trash2Icon /> Delete
-                    </DropdownMenuItem>
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem variant="destructive" disabled={!state.connected} onSelect={() => actions.delete(t)}><Trash2Icon /> Delete</DropdownMenuItem>
+                    </DropdownMenuGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </li>
@@ -363,43 +348,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           })}
         </ul>
       </CollapsibleContent>
-      <Dialog open={!!renaming} onOpenChange={(o) => !o && setRenaming(null)}>
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <form onSubmit={(e) => { e.preventDefault(); commitRename(); }} className="flex flex-col gap-4">
-            <DialogHeader>
-              <DialogTitle>Rename session</DialogTitle>
-              <DialogDescription>Pi records the name with the session, so it also appears in Pi's own session list.</DialogDescription>
-            </DialogHeader>
-            <Input aria-label="Session name" value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} autoFocus onFocus={(e) => e.target.select()} maxLength={200} />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setRenaming(null)}>Cancel</Button>
-              <Button type="submit" disabled={!canRename}>Rename</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Delete this session?</DialogTitle>
-            <DialogDescription>
-              "{deleting?.title}" and its transcript are removed from Pi's session store. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (deleting) send({ _tag: "delete_session", cwd: deleting.cwd, sessionId: deleting.sessionId });
-                setDeleting(null);
-              }}
-            >
-              Delete session
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {actions.dialogs}
     </Collapsible>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PanelLeftOpenIcon } from "lucide-react";
+import { SessionHeader } from "@/components/SessionHeader";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -72,10 +72,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   return (
     <>
-      <header className="flex h-12 shrink-0 items-center border-b border-line px-4 md:h-0 md:border-0">
-        <Button variant="ghost" size="icon-sm" className="-ml-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-        <span role="status" className="sr-only">{status}</span>
-      </header>
+      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} status={status} />
 
       {project?.discovery.status === "error" && (
         <Banner variant="destructive" title="Git status unavailable." action={<Button variant="ghost" size="sm" onClick={() => send({ _tag: "projects" })}>Refresh</Button>}>
@@ -167,9 +164,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           if (t?.hosted) send({ _tag: "act", action: { _tag: "set_thinking_level", level } });
           else { setEffort(level); setOverrides(o => ({ ...o, thinkingLevel: level })); }
         }}
-        cwd={t?.cwd}
-        branch={project?.worktrees.find((w) => w.path === t?.cwd)?.branch ?? undefined}
-        onNewSession={t ? () => openNew(t.cwd) : undefined}
         context={t?.state.context}
         cost={t?.state.cost}
         totals={t?.state.tokens}
