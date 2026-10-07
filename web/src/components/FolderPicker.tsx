@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftIcon, CheckIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, HomeIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, HomeIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { DirListing } from "@shared/wire";
 import { abbrevHome } from "@/lib/format";
@@ -190,7 +190,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           )}
           {dir?.parent && (
             <button type="button" onClick={() => goTo(dir.parent as string)} className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm outline-none hover:bg-fill-hover focus-visible:bg-fill-hover">
-              <ArrowLeftIcon className="size-4 text-ink-2" /> <span className="font-mono">..</span>
+              <ArrowUpIcon className="size-4 text-ink-2" /> <span className="font-mono">..</span>
             </button>
           )}
           {visible.map((e) => (
