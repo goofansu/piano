@@ -21,15 +21,16 @@ git('init', '-q', '-b', 'main'); writeFileSync(join(repo, 'app.ts'), 'export con
 const timestamp = new Date().toISOString();
 const reply = '### A quieter place to work\n\nThe layout gives the conversation more room, while keeping the things you need close by.\n\n- **A clear starting point.** Your next message is the focus.\n- **Less visual noise.** Secondary details stay out of the way.\n- **Small, useful feedback.** Interactions feel connected, not abrupt.\n\n```tsx\n<Workspace>\n  <Conversation />\n  <Composer />\n</Workspace>\n```\n\nTry switching sessions and coming back. It should feel like picking up where you left off.';
 const assistant = text => ({ role: 'assistant', api: 'openai-completions', provider: 'fake', model: 'alpha', stopReason: 'stop', content: [{ type: 'text', text }] });
-const spacingCall = id => ({ type: 'toolCall', id, name: 'read', arguments: { path: `${id}.ts` } });
-const spacingResult = id => ({ role: 'toolResult', toolCallId: id, toolName: 'read', content: [{ type: 'text', text: 'File contents' }], isError: false });
+const spacingCall = (id, name = 'read') => ({ type: 'toolCall', id, name, arguments: { path: `${id}.ts` } });
+const spacingResult = (id, toolName = 'read') => ({ role: 'toolResult', toolCallId: id, toolName, content: [{ type: 'text', text: 'File contents' }], isError: false });
 const stories = [
   ['tool-spacing', 'Tool spacing', [
     { ...assistant(''), content: [spacingCall('one'), spacingCall('two')] },
     spacingResult('one'), spacingResult('two'),
     { ...assistant(''), content: [spacingCall('three')] }, spacingResult('three'),
     assistant('Text separates tool runs.'),
-    { ...assistant(''), content: [spacingCall('four')] }, spacingResult('four'),
+    { ...assistant(''), content: [{ type: 'text', text: 'Checking the browser next.' }, spacingCall('four', 'write')] }, spacingResult('four', 'write'),
+    { ...assistant(''), content: [spacingCall('five')] }, spacingResult('five'),
   ]],
   ['daily-ui', 'A calmer workspace', [
     { role: 'user', content: 'Let’s make this workspace feel a little more welcoming. Keep it simple, but give the details some care.' },
@@ -109,16 +110,17 @@ try {
   }
   await ab('set', 'viewport', '1440', '1000');
   await ab('open', `http://127.0.0.1:${WEB_PORT}/s/tool-spacing`);
-  await ab('wait', '--text', 'four.ts');
+  await ab('wait', '--text', 'five.ts');
   for (const width of [390, 1440]) {
     await ab('set', 'viewport', String(width), '1000');
     const spacing = await evaluate(`(() => {
-      const rows = [...document.querySelectorAll('[aria-label="read tool call"]')].map(e => e.getBoundingClientRect());
-      return {within: rows[1].top - rows[0].bottom, between: rows[2].top - rows[1].bottom, textBreak: rows[3].top - rows[2].bottom};
+      const rows = [...document.querySelectorAll('[aria-label="read tool call"], [aria-label="write tool call"]')].map(e => e.getBoundingClientRect());
+      return {within: rows[1].top - rows[0].bottom, between: rows[2].top - rows[1].bottom, textBreak: rows[3].top - rows[2].bottom, afterWrite: rows[4].top - rows[3].bottom};
     })()`);
     observations.push({name:'tool-spacing',width,...spacing});
     await capture(`tool-spacing-${width}`);
     assert.ok(Math.abs(spacing.within - spacing.between) <= 1, `${width}px: unequal tool gaps ${JSON.stringify(spacing)}`);
+    assert.ok(Math.abs(spacing.within - spacing.afterWrite) <= 1, `${width}px: unequal gap after text + write ${JSON.stringify(spacing)}`);
     assert.ok(spacing.textBreak > spacing.between, 'text still separates tool runs');
   }
   await ab('set', 'viewport', '1440', '1000');
