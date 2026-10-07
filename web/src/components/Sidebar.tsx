@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, SearchIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
 import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
@@ -334,7 +334,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuGroup>
-                      <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.rename(t)}><PencilIcon /> Rename</DropdownMenuItem>
+                      <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.rename(t)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
                       <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.archive(t)}><ArchiveIcon /> Archive</DropdownMenuItem>
                     </DropdownMenuGroup>
                     <DropdownMenuSeparator />

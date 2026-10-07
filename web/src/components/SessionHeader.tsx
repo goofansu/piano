@@ -1,4 +1,4 @@
-import { ArchiveIcon, CopyIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PencilIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, MoreHorizontalIcon, PanelLeftOpenIcon, TextCursorInputIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import type { ClientCommand } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevPath } from "@/lib/format";
@@ -54,7 +54,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status }: {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.rename(target)}><PencilIcon /> Rename</DropdownMenuItem>
+            <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.rename(target)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.archive(target)}><ArchiveIcon /> Archive</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
