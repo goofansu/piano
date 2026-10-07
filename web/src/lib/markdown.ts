@@ -23,6 +23,7 @@ export function renderMarkdown(src: string): string {
   let out = "";
   let para: string[] = [];
   let fence = false;
+  let language = "";
   let fl: string[] = [];
   let inList = false;
   let ltag = "";
@@ -64,12 +65,14 @@ export function renderMarkdown(src: string): string {
   for (const ln of lines) {
     if (ln.startsWith("```")) {
       if (!fence) {
+        if (tbl.length) fT();
         fp();
         fL();
         fence = true;
+        language = ln.slice(3).trim().toLowerCase();
         fl = [];
       } else {
-        out += `<pre><code>${escH(fl.join("\n"))}</code></pre>`;
+        out += `<pre${language === "mermaid" ? ' data-mermaid=""' : ""}><code>${escH(fl.join("\n"))}</code></pre>`;
         fence = false;
       }
       continue;

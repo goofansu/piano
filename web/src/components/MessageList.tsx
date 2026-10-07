@@ -12,7 +12,7 @@ import { Keys } from "@/components/PianoMark";
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 import { abbrevHome, clamp } from "@/lib/format";
-import { renderMarkdown } from "@/lib/markdown";
+import { Markdown } from "@/components/Markdown";
 import { messageAnchorId, STICK_EVENT } from "@/lib/transcript";
 import { cn } from "cn";
 
@@ -157,14 +157,7 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
         {msg.text && (
           <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
-            <div
-              className={cn(
-                "prose-chat",
-                streaming && "streaming-caret",
-              )}
-              // renderMarkdown escapes all HTML before adding its own tags
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
-            />
+            <Markdown text={msg.text} className={cn("prose-chat", streaming && "streaming-caret")} />
             {!streaming && !msg.toolCalls?.length && <CopyResponse text={msg.text} />}
           </Row>
         )}
@@ -285,8 +278,7 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
       <CollapsibleContent className="disclosure-content">
         <div className="mt-2 border-l-2 border-line pl-3">
           <p className="mb-2 truncate font-mono text-xs text-ink-3" title={skill.location}>{abbrevHome(skill.location)}</p>
-          {/* renderMarkdown escapes all HTML before adding its own tags */}
-          <div className="prose-chat text-ink-2" dangerouslySetInnerHTML={{ __html: renderMarkdown(skill.body) }} />
+          <Markdown text={skill.body} className="prose-chat text-ink-2" />
         </div>
       </CollapsibleContent>
     </Collapsible>
