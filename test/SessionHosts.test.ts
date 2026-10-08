@@ -150,6 +150,10 @@ test('INV-01/02/06: deleted checkout history remains readable and can be archive
     assert.equal(view.snapshot.messages[0].text, 'preserved conversation');
     assert.equal(view.cwd, path);
     assert.equal(view.snapshot.state.checkoutMissing, true);
+    const history = yield* hosts.history(path, 'missing-archive');
+    assert.equal(history._tag, 'conversation_tree');
+    if (history._tag === 'conversation_tree') assert.equal(history.tree.entries[0].preview, 'preserved conversation');
+    assert.equal(records('missing-archive').length, 0, 'browsing missing-checkout history never starts Pi');
     assert.match((yield* hosts.open({ cwd: path, sessionId: 'missing-archive' }).pipe(Effect.flip)).detail, /checkout no longer exists/);
     mkdirSync(path);
     assert.equal((yield* hosts.peek(path, 'missing-archive')).snapshot.state.checkoutMissing, false);

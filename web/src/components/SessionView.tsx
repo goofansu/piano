@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { ChangesSheet } from "@/components/Changes";
 import { Composer } from "@/components/Composer";
+import { ConversationTree } from "@/components/ConversationTree";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList } from "@/components/MessageList";
 import { sessionWorkspace } from "@/components/SessionActions";
@@ -27,11 +28,13 @@ interface Props {
   openProject: (id: string) => void;
   changesOpen: boolean;
   onChangesOpenChange: (open: boolean) => void;
+  treeOpen: boolean;
+  onTreeOpenChange: (open: boolean) => void;
   pullRequestOpen: boolean;
   onPullRequestOpenChange: (open: boolean) => void;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, changesOpen, onChangesOpenChange, pullRequestOpen, onPullRequestOpenChange }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, changesOpen, onChangesOpenChange, pullRequestOpen, onPullRequestOpenChange, treeOpen, onTreeOpenChange }: Props) {
   const t = state.session;
   const checkoutMissing = !!t?.state.checkoutMissing;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
@@ -84,7 +87,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   return (
     <>
-      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)} openPullRequest={() => onPullRequestOpenChange(true)} pullRequest={<SessionPullRequestBadge value={pullRequest.value} />} />
+      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)} openPullRequest={() => onPullRequestOpenChange(true)} openTree={() => onTreeOpenChange(true)} pullRequest={<SessionPullRequestBadge value={pullRequest.value} />} />
+      {t?.sessionId && <ConversationTree key={`tree:${sessionKey(t)}`} open={treeOpen} onOpenChange={onTreeOpenChange} sessionId={t.sessionId} workspaceId={state.workspaces.find(w => w.path === t.cwd)?.id ?? workspaceId} revision={t.messages} />}
       {t?.sessionId && <SessionPullRequestDialog key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />}
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={sessionWorkspace(state)} session={t}
         onAsk={text => {

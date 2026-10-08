@@ -119,7 +119,14 @@ const image: Attachment = { kind: "image", name: "pixel.png", mimeType: "image/p
 test("image-only prompts reach Pi and survive authoritative refresh and late snapshots without embedding bytes", async () => {
   await run(Effect.gen(function* () {
     const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "images" });
+    // Prompt acknowledgement is not a finalized-context barrier (INV-03).
+    const ready = yield* Deferred.make<void>();
+    const projected = yield* collectUntil(t.events.pipe(
+      Stream.tap(e => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+    ), e => e._tag === "context" && e.messages.some(m => m.role === "user" && !!m.attachments?.length)).pipe(Effect.forkChild);
+    yield* Deferred.await(ready);
     yield* t.act({ _tag: "prompt", text: "", attachments: [image] });
+    yield* Fiber.join(projected);
     const events = yield* collectUntil(t.events, e => e._tag === "snapshot");
     const event = events[0];
     assert.ok(event._tag === "snapshot");

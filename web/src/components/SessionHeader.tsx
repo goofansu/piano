@@ -8,9 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevPath } from "@/lib/format";
 import type { AppState } from "@/store";
 
-export function SessionHeader({ state, send, onMenu, openNew, openProject, status, openChanges, openPullRequest, pullRequest }: {
+export function SessionHeader({ state, send, onMenu, openNew, openProject, status, openChanges, openPullRequest, openTree, pullRequest }: {
   state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; openProject: (id: string) => void;
-  status: string; openChanges: () => void; openPullRequest: () => void; pullRequest: React.ReactNode;
+  status: string; openChanges: () => void; openPullRequest: () => void; openTree: () => void; pullRequest: React.ReactNode;
 }) {
   const session = state.session;
   const { title, branch, sessionId, project } = currentSessionDetails(state);
@@ -63,6 +63,7 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
+            <DropdownMenuItem disabled={!target} onSelect={openTree}><GitBranchIcon /> Conversation tree</DropdownMenuItem>
             <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon /> Pull request</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />

@@ -5,7 +5,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 const record = (event: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}) => {
   const file = process.env.PIANO_PHASE0_LOG;
   if (!file) throw new Error("Phase 0 extension requires isolated fixture storage");
-  appendFileSync(file, `${JSON.stringify({ event, pid: process.pid, cwd: ctx.cwd, ...extra })}\n`);
+  appendFileSync(file, `${JSON.stringify({ event, pid: process.pid, cwd: ctx.cwd, sessionId: ctx.sessionManager.getSessionId(), ...extra })}\n`);
 };
 
 export default function (pi: ExtensionAPI) {

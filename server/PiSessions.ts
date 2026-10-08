@@ -8,6 +8,7 @@
  * orderly shutdown. The only external seam is ChildProcessSpawner.
  */
 import { randomUUID } from "node:crypto";
+import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Schema, type Scope, Semaphore, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
@@ -18,6 +19,7 @@ import { imageType } from "../shared/attachments.ts";
 import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState, SessionStats, Snapshot } from "../shared/wire.ts";
 import { Attachments, SlashCommand } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
+import { conversationDetail, conversationTree } from "./ConversationHistory.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { PiCli } from "./PiCli.ts";
 import { type PiRecord, type RawMessage, StreamAssembler } from "./PiRecords.ts";
@@ -734,6 +736,19 @@ const openSession = (spec: PiSessionSpec) =>
         const operation = action._tag === "prompt" || action._tag === "steer" || action._tag === "set_model" || action._tag === "set_thinking_level" || action._tag === "set_name"
           ? ++operationVersion : operationVersion;
         switch (action._tag) {
+          case "conversation_tree":
+          case "conversation_detail": {
+            const data = (yield* child.request({ type: "get_entries" })) as { entries?: SessionEntry[]; leafId?: string | null };
+            if (!Array.isArray(data?.entries) || !(data.leafId === null || typeof data.leafId === "string") ||
+              data.entries.some(e => !e || typeof e.id !== "string" || typeof e.type !== "string" || !(e.parentId === null || typeof e.parentId === "string"))) {
+              return yield* new PiSessionError({ reason: "protocol", detail: "Pi returned invalid conversation history." });
+            }
+            return yield* Effect.try({ try: (): SessionActionResult => action._tag === "conversation_tree"
+              ? { _tag: "conversation_tree", tree: conversationTree(spec.sessionId, data.entries!, data.leafId!) }
+              : { _tag: "conversation_detail", detail: conversationDetail(spec.sessionId, data.entries!, action.entryId) },
+              catch: error => new PiSessionError({ reason: "protocol", detail: error instanceof Error ? error.message : "Could not read conversation history." }),
+            });
+          }
           case "commands":
             return { _tag: "commands", commands: yield* child.request({ type: "get_commands" }).pipe(Effect.flatMap(commandsOf)) };
           case "prompt":

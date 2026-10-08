@@ -2,9 +2,11 @@
  * Sessions are Pi sessions. Read them from Pi's session store without starting
  * an agent, using the SDK's SessionManager as a file reader.
  */
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { readFile } from "node:fs/promises";
+import { parseSessionEntries, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
-import type { Snapshot } from "../shared/wire.ts";
+import type { SessionActionResult, Snapshot } from "../shared/wire.ts";
+import { conversationDetail, conversationTree } from "./ConversationHistory.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { sessionDirFor } from "./PiEnv.ts";
 import { type RawMessage, serializeMessages } from "./PiRecords.ts";
@@ -65,6 +67,19 @@ export const peekSession = (path: string, sessionId: string): Effect.Effect<Snap
       dialogs: [],
     })),
   );
+
+/** Pi's parser/in-memory manager cannot migrate or repair the source file. */
+export const readConversation = (path: string, sessionId: string, entryId?: string) => Effect.tryPromise({
+  try: async (): Promise<SessionActionResult> => {
+    const entries = parseSessionEntries(await readFile(path, "utf8"));
+    if (entries[0]?.type !== "session" || entries[0].id !== sessionId) throw new Error("Pi history is missing or belongs to another session.");
+    const manager = SessionManager.inMemory(entries[0].cwd, undefined, entries);
+    return entryId === undefined
+      ? { _tag: "conversation_tree", tree: conversationTree(sessionId, manager.getEntries(), manager.getLeafId()) }
+      : { _tag: "conversation_detail", detail: conversationDetail(sessionId, manager.getEntries(), entryId) };
+  },
+  catch: error => new Error(`Could not read Pi history: ${error instanceof Error ? error.message : String(error)}`),
+});
 
 export const emptySnapshot = (sessionId: string): Snapshot => ({
   state: { sessionId, isStreaming: false },
