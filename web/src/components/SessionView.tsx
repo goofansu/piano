@@ -7,7 +7,6 @@ import { ChangesSheet } from "@/components/Changes";
 import { Composer } from "@/components/Composer";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList } from "@/components/MessageList";
-import type { ProjectDialog } from "@/components/OutcomeProjects";
 import { sessionWorkspace } from "@/components/SessionActions";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestBadge, SessionPullRequestDialog } from "@/components/SessionPullRequest";
@@ -26,14 +25,13 @@ interface Props {
   onDraftAppend: (key: string, text: string) => void;
   openNew: (cwd?: string) => void;
   openProject: (id: string) => void;
-  onProjectDialog: (dialog: ProjectDialog) => void;
   changesOpen: boolean;
   onChangesOpenChange: (open: boolean) => void;
   pullRequestOpen: boolean;
   onPullRequestOpenChange: (open: boolean) => void;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, onProjectDialog, changesOpen, onChangesOpenChange, pullRequestOpen, onPullRequestOpenChange }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, changesOpen, onChangesOpenChange, pullRequestOpen, onPullRequestOpenChange }: Props) {
   const t = state.session;
   const checkoutMissing = !!t?.state.checkoutMissing;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
@@ -86,7 +84,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   return (
     <>
-      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} openProject={openProject} onProjectDialog={onProjectDialog} status={status} openChanges={() => onChangesOpenChange(true)} openPullRequest={() => onPullRequestOpenChange(true)} pullRequest={<SessionPullRequestBadge value={pullRequest.value} />} />
+      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)} openPullRequest={() => onPullRequestOpenChange(true)} pullRequest={<SessionPullRequestBadge value={pullRequest.value} />} />
       {t?.sessionId && <SessionPullRequestDialog key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />}
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={sessionWorkspace(state)} session={t}
         onAsk={text => {
