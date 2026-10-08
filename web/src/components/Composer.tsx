@@ -1,7 +1,7 @@
 import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { ContextDetails } from "@/components/ContextDetails";
 import { JumpTo } from "@/components/JumpTo";
@@ -59,6 +59,9 @@ const loadQueueMode = (): QueueMode => (readStorage(QUEUE_MODE_KEY) === "follow-
 export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
+  const [expanded, setExpanded] = useState(false);
+  const blurFrame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(blurFrame.current), []);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
   const [queueMode, setQueueModeState] = useState<QueueMode>(loadQueueMode);
   const setQueueMode = (mode: QueueMode) => {
@@ -66,7 +69,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
     writeStorage(QUEUE_MODE_KEY, mode);
   };
   const imagesWaiting = streaming && attachments.items.length > 0;
-  useAutoGrow(ref, text, 192);
+  useAutoGrow(ref, text, 192, expanded);
   useTypeToFocus(ref, onTextAppend, !disabled);
   const send = (kind: QueueMode = queueMode) => {
     const t = text.trim();
@@ -92,7 +95,18 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
 
   return (
     <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-5">
-      <div className={cn("mx-auto w-full max-w-3xl", composerCard)} {...attachmentEvents(attachments, disabled)}>
+      <div
+        className={cn("mx-auto w-full max-w-3xl", composerCard)}
+        {...attachmentEvents(attachments, disabled)}
+        onFocusCapture={() => {
+          // React focus events include our portalled menus, unlike DOM :focus-within.
+          cancelAnimationFrame(blurFrame.current);
+        }}
+        onBlurCapture={() => {
+          cancelAnimationFrame(blurFrame.current);
+          blurFrame.current = requestAnimationFrame(() => setExpanded(false));
+        }}
+      >
         <AttachmentDraftView draft={attachments} disabled={disabled} />
         {imagesWaiting && <p role="status" className="animate-in px-4 pt-2 text-sm text-ink-2 fade-in-0 slide-in-from-top-1">Images are ready. Wait for Pi to finish before sending.</p>}
         {queuedMessages.length > 0 && (
@@ -115,7 +129,10 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             </ol>
           </section>
         )}
-        <div className="flex items-end">
+        {/* No stock input-group layout reflows a full toolbar around the same slash-completion
+            editor. A grid keeps the shadcn controls and editor mounted in both layouts. */}
+        <div className={cn(!expanded && "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 p-2.5")}>
+        <div className={cn("flex min-w-0 items-end", !expanded && "col-start-2 row-start-1")}>
           <SlashTextarea
             ref={ref}
             completion={completion}
@@ -123,8 +140,11 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             disabled={disabled}
             rows={1}
             aria-label="Message"
-            className={cn(composerInput, "min-w-0 flex-1")}
+            placeholder="Message…"
+            className={cn(composerInput, "min-w-0 flex-1", !expanded && "h-lh min-h-0 overflow-hidden whitespace-nowrap px-2 py-0 md:px-2")}
             onValueChange={onTextChange}
+            // Only the editor expands a compact composer; Send/Stop must not move on pointer down.
+            onFocus={() => setExpanded(true)}
             onKeyDown={(e) => {
               if (isSendKey(e)) {
                 e.preventDefault();
@@ -142,8 +162,9 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             }}
           />
         </div>
-        <div className={composerToolbar}>
-          <AttachButton draft={attachments} disabled={disabled} />
+        <div className={expanded ? composerToolbar : "contents"}>
+          <div className={cn("flex shrink-0", !expanded && "col-start-1 row-start-1")}><AttachButton draft={attachments} disabled={disabled} /></div>
+          <div className={expanded ? "contents" : "hidden"}>
           <ModelSelect catalog={catalog} onRefresh={onRefreshModels} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
           {showDelivery && (
             <DropdownMenu>
@@ -171,13 +192,14 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          </div>
           {/* Send and Stop are one control; its face cross-fades so the key never jumps. */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 size="icon"
                 variant={showStop ? "outline" : "default"}
-                className={cn(composerAction, "relative")}
+                className={cn(composerAction, "relative", !expanded && "col-start-3 row-start-1")}
                 aria-label={showStop ? "Stop" : showDelivery ? DELIVERY[queueMode].label : streaming ? "Queue message" : "Send"}
                 disabled={showStop ? disabled : disabled || !hasText || attachments.busy || imagesWaiting}
                 onClick={showStop ? onStop : () => send()}
@@ -192,6 +214,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
                 : <>{showDelivery ? `${DELIVERY[queueMode].label}: ${DELIVERY[queueMode].detail}` : streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd></>}
             </TooltipContent>
           </Tooltip>
+        </div>
         </div>
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">
