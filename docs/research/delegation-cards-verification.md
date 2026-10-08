@@ -63,3 +63,17 @@ failed typecheck was changed to equivalent `Array.from` in `Markdown.tsx`.
 The browser journey used deterministic fake RPC, not a paid real subagent Run.
 Combined runtime compatibility with pi-subagent's separate RPC widget change remains
 unverified. No external bridge or widget text is required for these cards.
+
+## Dot alignment regression
+
+The delegation row omitted the `items-center` treatment added to ordinary tool
+rows in `afc5c15`. The scratch-browser measurement reproduced a dot centre 5.859px
+above its disclosure trigger before the fix. Applying the same alignment to the
+card row reduced the maximum error across eight delegation/result/control/tool
+rows to 0.016px on desktop (collapsed and expanded) and 0px at 390px width.
+
+`test/browser-delegation-cards.mjs` now asserts a maximum 1px vertical difference
+at each of those states. Screenshots, measurements and command output are retained
+in `/tmp/piano-delegation-alignment/{before,after}/`; gate logs are alongside them.
+Tested on main around `f79ffa8` plus this fix: browser journey, 90 tests, typecheck
+and lint passed. Only scratch processes were used; no deployment occurred.

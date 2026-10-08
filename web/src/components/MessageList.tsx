@@ -341,7 +341,7 @@ function SubagentCardView({ card, content, markdown = false, fileContext, failed
       data-run-id={runId}
       className="text-sm"
     >
-      <Row glyph={<span className={cn("block size-2 rounded-full", failed || visibleTerminal === "failed" ? "bg-err" : visibleTerminal === "completed" ? "bg-ok" : "bg-ink-3")} />}>
+      <Row className="items-center" glyph={<span className={cn("block size-2 rounded-full", failed || visibleTerminal === "failed" ? "bg-err" : visibleTerminal === "completed" ? "bg-ok" : "bg-ink-3")} />}>
         <CollapsibleTrigger asChild disabled={!hasDetails}>
           <button type="button" className="-ml-2 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring">
             <span className="min-w-0 flex-1 truncate font-medium text-ink" title={title}>{(card.kind === "result" || card.kind === "collection") && <span className="font-normal text-ink-3">Result · </span>}{title}</span>

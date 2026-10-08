@@ -86,6 +86,17 @@ async function capture(name) {
   await ab('screenshot', join(evidence, `${name}.png`));
   writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot'));
 }
+async function assertDotAlignment(stage) {
+  const rows = await evaluate(`Array.from(document.querySelectorAll('[data-slot="delegation-card"], [data-slot="subagent-result-card"], [aria-label="agent_start tool call"]')).map(group => {
+    const dot = group.querySelector('span[aria-hidden="true"] > span');
+    const trigger = group.querySelector('button[aria-expanded]');
+    const d = dot.getBoundingClientRect(), t = trigger.getBoundingClientRect();
+    return { label: group.getAttribute('aria-label'), offset: (d.top + d.height / 2) - (t.top + t.height / 2) };
+  })`);
+  observations.push({ stage, alignment: rows });
+  assert.ok(rows.length >= 6, 'measure delegation, result, control and ordinary tool rows');
+  for (const row of rows) assert.ok(Math.abs(row.offset) <= 1, `${stage}: ${row.label} dot is ${row.offset}px from its trigger centre`);
+}
 try {
   for (let attempt = 0; attempt < 100; attempt++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
@@ -98,6 +109,7 @@ try {
   await ab('wait', '--text', 'Delegation fixture ready.');
   observations.push({ stage: 'loaded', transcript: await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`) });
   await capture('loaded');
+  await assertDotAlignment('desktop-collapsed');
   const card = (slot, run) => `[data-slot="${slot}"][data-run-id="${run}"]`;
   const delegation = run => card('delegation-card', run);
   const resultCard = run => card('subagent-result-card', run);
@@ -128,11 +140,13 @@ try {
   await ab('wait', '--text', 'Readable malformed-details fallback.');
   observations.push({ stage: 'correlated-history', initial, done, failed, pending, mixedWait });
   await capture('expanded');
+  await assertDotAlignment('desktop-expanded');
   await ab('reload'); await ab('wait', '--text', 'Delegation fixture ready.');
   assert.match(await cardText(delegation('run-followup')), /Failed/);
   assert.match(await cardText(delegation('run-open')), /Started/);
   await ab('set', 'viewport', '390', '844');
   await capture('mobile');
+  await assertDotAlignment('mobile-collapsed');
   assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth`), true, 'no horizontal page overflow');
   await ab('set', 'viewport', '1440', '1100');
   await ab('fill', 'textarea', '/delegation-live');
