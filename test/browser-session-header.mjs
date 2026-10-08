@@ -213,22 +213,20 @@ try {
   await item('Copy all');
   await waitForCopies(7);
   assert.equal(await evaluate('window.copies.at(-1)'), allDetails);
-  assert.equal(await menuIsOpen(), true, 'Copy all keeps the mobile menu open');
-  await ab('click', '[aria-label="Message"]');
+  assert.equal(await menuIsOpen(), false, 'Copy all dismisses the mobile menu');
   await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
   await ab('set', 'viewport', '1280', '900');
   await menu(); await item('Copy all');
   await waitForCopies(8);
   assert.equal(await evaluate('window.copies.at(-1)'), allDetails);
-  assert.equal(await menuIsOpen(), true, 'Copy all keeps the desktop menu open');
-  await ab('click', '[aria-label="Session information and actions"]');
+  assert.equal(await menuIsOpen(), false, 'Copy all dismisses the desktop menu');
   await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
   await ab('click', '[aria-label="Search sessions"]');
   await ab('wait', '--fn', `!!document.querySelector('[role="dialog"]')`);
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group]')].slice(1).map(group => ({ heading: group.querySelector('[cmdk-group-heading]')?.textContent, items: [...group.querySelectorAll('[cmdk-item]')].map(item => item.getAttribute('data-value')) }))`), [
     { heading: 'Global commands', items: ['new session', 'toggle sidebar', 'appearance light', 'appearance dark', 'appearance system'] },
-    { heading: 'Session commands', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all', 'Rename', 'Archive', 'Delete', 'new session here'] },
+    { heading: 'Session commands', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all', 'Changes', 'Rename', 'Archive', 'Delete', 'new session here'] },
   ]);
   await ab('screenshot', join(evidence, 'palette-groups.png'));
   // A session also contains "copy all": the exact command must outrank that group.
