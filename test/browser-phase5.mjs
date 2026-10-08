@@ -64,7 +64,7 @@ async function prompt(text) {
   await ab('mouse', 'move', '10', '10');
   await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast][data-visible="true"]')`);
   await ab('fill', '[aria-label="Message"]', text);
-  await ab('click', 'main button[aria-label="Send"], main button[aria-label="Queue message"]');
+  await ab('press', 'Enter');
 }
 async function waitFor(predicate) {
   for (let i = 0; i < 100; i++) { if (predicate()) return; await delay(50); }
@@ -89,7 +89,7 @@ try {
   await ab('--init-script', init, 'open', url('ordered-a')); await status('Not running');
   await prompt('/partial'); await ab('wait', '--text', 'Partial ordered-a');
   await ab('reload'); await ab('wait', '--text', 'Partial ordered-a');
-  assert.equal(await evaluate(`sent.filter(m=>m.action?._tag==='prompt').length`), 0);
+  assert.equal(await evaluate(`sent.filter(m=>['prompt','steer'].includes(m.action?._tag)).length`), 0);
   assert.equal(await evaluate(`JSON.stringify(received).includes(${JSON.stringify(canary)})`), false);
   assert.equal(await evaluate(`received.filter(m=>m._tag==='selected'&&m.hosted).at(-1).snapshot.tools[0].status`), 'running');
   await capture('reload-mid-message-and-tool');
@@ -147,7 +147,7 @@ try {
   await evaluate('window.paused=false;control.close();true');
   await ab('wait', '--fn', `received.filter(m=>m._tag==='selected'&&m.hosted).at(-1)?.cursor.generation===${JSON.stringify(generationB)}`);
   await ab('wait', '--text', 'Partial ordered-b');
-  assert.equal(await evaluate(`sent.filter(m=>m.action?._tag==='prompt'||m._tag==='create_session').length`), 0);
+  assert.equal(await evaluate(`sent.filter(m=>['prompt','steer'].includes(m.action?._tag)||m._tag==='create_session').length`), 0);
   assert.equal(spawns('ordered-b').length, 2);
   await capture('slow-tab-resnapshot-after-exit-restart');
   assert.ok(!(await ab('errors')).includes('Error:'));

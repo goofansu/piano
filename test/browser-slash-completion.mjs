@@ -42,7 +42,12 @@ const input = 'textarea';
 const menu = '[role="listbox"][aria-label="Slash commands"]';
 const options = `${menu} [role="option"]`;
 const draft = () => evaluate(`document.querySelector('textarea').value`);
-async function fill(text) { ab('fill', input, text); }
+async function fill(text) {
+  // Refocus before replacement: after Tab, type-to-focus can otherwise append
+  // the driver's inserted text to the old draft instead of replacing it.
+  ab('click', input); ab('fill', input, text);
+  assert.equal(draft(), text, 'browser driver replaced the draft before testing completion');
+}
 async function suggestions(text) { await fill(text); ab('press', 'End'); await until(`!!document.querySelector('${options}')`); }
 function capture(name) { ab('screenshot', join(evidence, `${name}.png`)); writeFileSync(join(evidence, `${name}.txt`), ab('snapshot')); }
 try {

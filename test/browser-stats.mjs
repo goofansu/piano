@@ -81,15 +81,9 @@ try {
   assert.deepEqual(cache.values, ['—', '23%']);
   assert.equal(cache.heading, 'Context: 50 tokens');
   await capture('live-observation'); await ab('press', 'Escape');
-  assert.equal(await evaluate(`document.querySelector('[aria-label="Session cache hit rate: 23%"]')?.textContent`), 'cache 23%');
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label^="Session cache hit rate:"]')`), false, 'cache hit rate stays in opt-in usage details');
   assert.equal(await evaluate(`document.querySelector('button[aria-label="Context usage"]').textContent`), '5%/1k');
-  const gaps = await evaluate(`(() => {
-    const footer = document.querySelector('[aria-label="Session usage"]');
-    const rects = [...footer.children].map(el => el.getBoundingClientRect());
-    return rects.slice(1).map((rect, i) => rect.left - rects[i].right);
-  })()`);
-  assert.equal(gaps.length, 4);
-  assert.ok(gaps.every(gap => Math.abs(gap - 8) < 0.1), `equal dot spacing: ${gaps}`);
+  assert.doesNotMatch(await evaluate(`document.querySelector('[aria-label="Session usage"]').textContent`), /cache|\$/, 'cost and cache details stay in the popover');
 
   await stop(server);
   await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Reconnecting'`);

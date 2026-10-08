@@ -65,7 +65,7 @@ async function send(text) {
   await ab('mouse', 'move', '10', '10');
   await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast][data-visible="true"]')`);
   await ab('fill', '[aria-label="Message"]', text);
-  await ab('click', 'main button[aria-label="Send"], main button[aria-label="Queue message"]');
+  await ab('press', 'Enter');
 }
 try {
   for (let i = 0; i < 100; i++) {
@@ -76,10 +76,10 @@ try {
     await delay(100);
   }
   await ab('--init-script', init, 'open', 'http://127.0.0.1:7172/new');
-  await ab('wait', '--fn', `document.querySelector('[aria-label^="Model:"]')?.title==='piano-phase0/global'`);
+  await ab('wait', '--fn', `document.querySelector('[aria-label^="Model:"]')?.title==='piano-phase0/project'`);
   await ab('click', '[aria-label^="Model:"]');
   await ab('click', '[data-value="piano-phase0/project"]');
-  await ab('click', 'label:has(input[value="high"])');
+  await ab('find', 'role', 'radio', 'click', '--name', 'high', '--exact');
   await ab('press', 'Escape');
   await ab('fill', '[aria-label="First message"]', '/phase0-dialog');
   await ab('click', '[aria-label="Send"]');
@@ -89,11 +89,11 @@ try {
   await ab('reload');
   await ab('wait', '--text', 'Phase 0 supported dialog');
   assert.equal(fixture.observe().pi.filter(event => event.cwd === cwd && event.event === 'command-dialog').length, 1, 'reload does not execute the command twice');
-  assert.equal(await evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`), 0);
+  assert.equal(await evaluate(`sent.filter(m=>m._tag==='create_session'||['prompt','steer'].includes(m.action?._tag)).length`), 0);
   await ab('fill', '#pi-dialog-form input', 'BROWSER0');
   await ab('click', 'button[form="pi-dialog-form"]');
   await ab('wait', '--text', 'PHASE0_DIALOG_RESULT BROWSER0');
-  await ab('wait', '--text', 'Handled —');
+  await ab('wait', '--text', 'Command handled.');
   assert.equal(await header(), 'Ready');
   assert.equal(await evaluate(`document.querySelector('[aria-label^="Model:"]').title`), 'piano-phase0/project');
   assert.match(await evaluate(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label')`), /effort: high$/);
@@ -127,30 +127,36 @@ try {
   await ab('wait', '--fn', `document.querySelector('main header [role="status"]').textContent==='Exited'`);
   await capture('exited');
   await ab('reload');
-  await ab('wait', '--text', 'Not running');
+  await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Exited'`);
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Stop"]') || !!document.querySelector('[role="dialog"]')`), false);
-  assert.equal(await evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`), 0, 'exited-session reload never resubmits');
+  assert.equal(await evaluate(`sent.filter(m=>m._tag==='create_session'||['prompt','steer'].includes(m.action?._tag)).length`), 0, 'exited-session reload never resubmits');
   assert.equal(fixture.observe().requests.length, 1, 'reopening history is not continuation of the interrupted stream');
   await ab('wait', '--text', 'PHASE0_WAIT');
   await capture('exited-reload');
 
-  // A project startup dialog cannot be answered before Pi's RPC reader attaches.
-  // Observe the production 30s deadline as a bounded browser error, not fictional readiness.
+  // A project startup dialog blocks the catalog probe before RPC attaches.
+  // Its bounded failure must not leave a usable Send button or an answerable dialog.
   await ab('open', 'http://127.0.0.1:7172/new');
   await ab('click', '[aria-label="Directory"]');
   await ab('click', `[data-value="${startup}"]`);
+  // Wait for the bounded catalog result rather than starting a second probe.
+  await ab('wait', '--fn', `received.some(m=>m._tag==='models'&&m.catalog.cwd===${JSON.stringify(startup)})`);
   await ab('fill', '[aria-label="First message"]', '/phase0-facts');
-  await ab('click', '[aria-label="Send"]');
-  await ab('wait', '--fn', `received.some(m=>m._tag==='error'&&m.message.includes('get_state within 30000ms'))`);
-  const startupError = await evaluate(`received.find(m=>m._tag==='error'&&m.message.includes('get_state within 30000ms')).message`);
+  const startupError = await evaluate(`received.find(m=>m._tag==='models'&&m.catalog.cwd===${JSON.stringify(startup)}).catalog.error`);
+  assert.match(startupError, /get_available_models within 30000ms/);
+  assert.equal(await evaluate(`document.querySelector('[aria-label="Send"]').disabled`), true, 'no model catalog means startup cannot be submitted');
   assert.ok(fixture.observe().pi.some(event => event.cwd === startup && event.event === 'startup-dialog'));
-  assert.equal(await evaluate(`sent.filter(m=>m._tag==='create_session'&&m.cwd===${JSON.stringify(startup)}).length`), 1, 'a readiness failure never automatically resubmits');
+  assert.equal(await evaluate(`sent.filter(m=>m._tag==='create_session'&&m.cwd===${JSON.stringify(startup)}).length`), 0, 'failed catalog discovery never creates a session');
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Stop"]') || !!document.querySelector('[role="dialog"]')`), false, 'failed startup is neither a ready host nor an answerable dialog');
   await capture('startup-bounded-failure');
   await ab('errors');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ outcome: 'pass', facts, observations, startupError, paidModelCalls: 0 }, null, 2));
   console.log('PASS: real supported dialog/reload/answer, trusted project MCP/resource facts, model/effort, native abort, explicit exit/read-only reload, bounded startup failure without replay; startup dialog support remains blocked');
 } catch (error) {
+  try {
+    await capture('failure');
+    writeFileSync(join(evidence, 'failure-wire.json'), JSON.stringify(await evaluate('({sent,received})'), null, 2));
+  } catch {}
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ outcome: 'fail', error: String(error), observations }, null, 2));
   console.error(error); process.exitCode = 1;
 } finally {

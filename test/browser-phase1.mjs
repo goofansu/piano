@@ -55,7 +55,7 @@ function send(text) {
   ab('mouse', 'move', '10', '10');
   ab('wait', '--fn', `!document.querySelector('[data-sonner-toast][data-visible="true"]')`);
   ab('fill', '[aria-label="Message"]', text);
-  ab('click', 'main button[aria-label="Send"], main button[aria-label="Queue message"]');
+  ab('press', 'Enter');
 }
 function capture(name) {
   observations.push({ name, header: header(), lastInput: lastInput() });
@@ -96,6 +96,8 @@ try {
 
   send('live context');
   ab('wait', '[aria-label="Stop"]');
+  ab('click', '[aria-label="Delivery: steer"]');
+  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter Add work after the current task.');
   send('expand queue');
   ab('wait', '--text', 'Queued messages (1)');
   assert.equal(lastInput(), null, 'the queue itself shows pending input');
@@ -120,7 +122,7 @@ try {
   send('/compact');
   ab('wait', '--text', 'Compacting · Retrying');
   assert.equal(header(), 'Compacting · Retrying');
-  assert.match(evaluate(`document.querySelector('[aria-label="Message"]').placeholder`), /may be rejected/);
+  assert.equal(evaluate(`document.querySelector('[aria-label="Message"]').disabled`), false, 'compaction leaves the composer usable');
   send('ordinary input during compaction');
   ab('wait', '--text', 'Message rejected.');
   assert.match(lastInput(), /Cannot prompt during compaction/);
@@ -132,17 +134,17 @@ try {
 
   send('withhold acknowledgement');
   ab('wait', '--text', 'Submitting —');
-  assert.equal(evaluate(`sent.filter(m=>m.action?._tag==='prompt'&&m.action.text==='withhold acknowledgement').length`), 1);
+  assert.equal(evaluate(`sent.filter(m=>['prompt','steer'].includes(m.action?._tag)&&m.action.text==='withhold acknowledgement').length`), 1);
   capture('awaiting-ack');
   ab('reload'); // disconnect while the acknowledgement is pending, not after the timeout
   ab('wait', '--text', 'Delivery uncertain —');
   assert.equal(header(), 'Working');
   assert.match(lastInput(), /will not resend automatically/);
-  assert.equal(evaluate(`sent.filter(m=>m.action?._tag==='prompt').length`), 0);
+  assert.equal(evaluate(`sent.filter(m=>['prompt','steer'].includes(m.action?._tag)).length`), 0);
   capture('uncertain');
   ab('reload');
   ab('wait', '--text', 'Delivery uncertain —');
-  assert.equal(evaluate(`sent.filter(m=>m.action?._tag==='prompt').length`), 0, 'reload never resubmits');
+  assert.equal(evaluate(`sent.filter(m=>['prompt','steer'].includes(m.action?._tag)).length`), 0, 'reload never resubmits');
   capture('uncertain-reload');
   send('/release-ack');
   ab('wait', '--text', 'Command handled.');

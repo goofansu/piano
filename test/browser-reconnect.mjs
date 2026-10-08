@@ -58,7 +58,7 @@ const observe = `({pageToken,timeOrigin:performance.timeOrigin,path:location.pat
  disabled:document.querySelector('textarea[aria-label="Message"]')?.disabled,
  messagesPresent:document.querySelector('main')?.textContent.includes('Saved message 0'),
  partialPresent:document.querySelector('main')?.textContent.includes('Partial reconnect-example'),
- prompts:sent.filter(m=>m.action?._tag==='prompt'||m._tag==='create_session').length})`;
+ prompts:sent.filter(m=>['prompt','steer'].includes(m.action?._tag)||m._tag==='create_session').length})`;
 async function capture(name) { writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot')); await ab('screenshot', join(evidence, `${name}.png`)); }
 try {
   for (let n = 0; n < 100; n++) {

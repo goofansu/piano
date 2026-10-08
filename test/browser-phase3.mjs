@@ -63,17 +63,17 @@ async function assertQuiet() {
 }
 async function inspectUsage(withTotals) {
   await ab('click', '[aria-label="Context usage"]');
-  await ab('wait', '--text', 'Last response: physical/answer');
+  await ab('wait', '--text', 'physical/answer · high');
   const text = await evaluate(`document.querySelector('[aria-label="Context usage details"]').textContent`);
   assert.match(text, /physical\/answer · high/);
-  if (withTotals) { assert.match(text, /Session total: 150 tokens/); assert.match(text, /\$1.23 so far/); }
+  if (withTotals) { assert.match(text, /Session total: 150 tokens/); assert.equal(await evaluate(`(() => { const row = [...document.querySelectorAll('[aria-label="Token and cost breakdown"] tbody tr')].find(row => row.querySelector('th')?.textContent === 'Cost'); return row?.lastElementChild?.textContent; })()`), '$1.2300'); }
   await ab('press', 'Escape');
 }
 async function send(text) {
   await ab('mouse', 'move', '10', '10');
   await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast][data-visible="true"]')`);
   await ab('fill', '[aria-label="Message"]', text);
-  await ab('click', 'main button[aria-label="Send"], main button[aria-label="Queue message"]');
+  await ab('press', 'Enter');
   if (text !== '/error') await ab('wait', '--fn', `received.some(m=>m._tag==='session'&&m.event._tag==='notice'&&m.event.message===${JSON.stringify('barrier ' + text)})`);
 }
 try {
@@ -99,7 +99,9 @@ try {
   assert.equal(await evaluate(`JSON.stringify(received).includes(${JSON.stringify(canary.slice(0, 12))})`), false);
   await capture('partial-reload-redacted');
   await send('/finish');
-  await ab('wait', '--text', 'FINAL corrected'); await ab('wait', '[aria-label="read tool call"]');
+  await ab('wait', '--text', 'FINAL corrected');
+  await ab('click', '[aria-label="codemode tool call"] button[data-slot="collapsible-trigger"]');
+  await ab('wait', '[aria-label="read tool call"]');
   assert.equal(await evaluate(`window.pwned??null`), null);
   assert.equal(await evaluate(`!!document.querySelector('main img,main script,main a[href^="javascript:"]')`), false);
   assert.equal(await evaluate(`JSON.stringify(received).includes(${JSON.stringify(canary)})`), false);
@@ -111,10 +113,12 @@ try {
   await assertQuiet(); await inspectUsage(true);
   assert.equal(await evaluate(`document.querySelector('[aria-label="Message"]').value`), '', 'editor request must not overwrite or send a browser draft');
   await capture('final-tools-extension-safe');
-  await ab('reload'); await ab('wait', '--text', 'FINAL corrected'); await ab('wait', '[aria-label="read tool call"]');
+  await ab('reload'); await ab('wait', '--text', 'FINAL corrected');
+  await ab('click', '[aria-label="codemode tool call"] button[data-slot="collapsible-trigger"]');
+  await ab('wait', '[aria-label="read tool call"]');
   await assertQuiet(); await inspectUsage(true);
   assert.equal(await evaluate(`window.pwned??null`), null);
-  assert.equal(await evaluate(`sent.filter(m=>m.action?._tag==='prompt'||m._tag==='create_session').length`), 0);
+  assert.equal(await evaluate(`sent.filter(m=>['prompt','steer'].includes(m.action?._tag)||m._tag==='create_session').length`), 0);
   assert.equal(await evaluate(`JSON.stringify(received).includes(${JSON.stringify(canary)})`), false);
   await capture('final-reload');
   await ab('set', 'viewport', '375', '812');

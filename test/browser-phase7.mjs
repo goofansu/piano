@@ -77,7 +77,7 @@ try {
   assert.equal((await captured(workspaceB)).revision, detached.revision);
   assert.equal((await captured(workspaceA)).revision, a.revision, 'another workspace cannot relabel or invalidate A');
   const data = JSON.parse(readFileSync(registry, 'utf8'));
-  assert.equal(data.version, 1); assert.equal(data.workspaces.length, 2); assert.deepEqual(data.sessions, original.sessions);
+  assert.equal(data.version, 2); assert.equal(data.workspaces.length, 2); assert.deepEqual(data.sessions, original.sessions);
   for (const path of retiredFiles) assert.equal(readFileSync(path, 'utf8'), retiredContent, 'saved Checks files remain untouched');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ passed: true, observations, node: process.version, base: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() }, null, 2));
   console.log('PASS: workspace capture HTTP identity, external edits/detachment, failure/recovery, retired check routes and data');

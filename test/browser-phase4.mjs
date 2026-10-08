@@ -62,7 +62,7 @@ async function send(text) {
   await ab('mouse', 'move', '10', '10');
   await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast][data-visible="true"]')`);
   await ab('fill', '[aria-label="Message"]', text);
-  await ab('click', 'main button[aria-label="Send"], main button[aria-label="Queue message"]');
+  await ab('press', 'Enter');
 }
 async function connect(path) {
   const ws = new WebSocket('ws://127.0.0.1:7171/ws'); sockets.push(ws);
@@ -99,7 +99,7 @@ try {
   await ab('open', url); await waitStatus('Working');
   await ab('tab', 'new', '--label', 'second', url); await waitStatus('Working');
   assert.equal(spawns().length, 1); assert.equal(records().filter(r => r.text === '/hold').length, 1);
-  assert.equal(await evaluate(`sent.filter(m=>m.action?._tag==='prompt'||m._tag==='create_session').length`), 0);
+  assert.equal(await evaluate(`sent.filter(m=>['prompt','steer'].includes(m.action?._tag)||m._tag==='create_session').length`), 0);
   await capture('returned-two-tabs-one-execution');
   await evaluate('control.close(); true'); await waitStatus('Working');
   assert.equal(spawns().length, 1); assert.equal(records().filter(r => r.text === '/hold').length, 1);
@@ -110,13 +110,16 @@ try {
   await ab('wait', '--text', 'Unable to refresh session details.');
   await capture('hung-readback-visible-dialog-responsive');
   process.kill(spawns()[0].pid, 'SIGUSR1');
-  await ab('wait', '--text', 'Interrupted operations are not resumed'); await waitStatus('Exited');
+  await waitStatus('Exited');
+  await capture('crash-before-details');
+  await ab('find', 'first', '[role="alert"] button', 'click');
+  await ab('wait', '--text', 'Interrupted operations are not resumed');
   await capture('crashed-command');
   await ab('reload'); await waitStatus('Exited');
   await ab('wait', '--text', 'output behind hung readback');
   await ab('wait', '--text', 'Saved history');
   assert.equal(await evaluate(`!!document.querySelector('[role="dialog"]')`), false);
-  assert.equal(await evaluate(`sent.filter(m=>m.action?._tag==='prompt'||m._tag==='create_session').length`), 0);
+  assert.equal(await evaluate(`sent.filter(m=>['prompt','steer'].includes(m.action?._tag)||m._tag==='create_session').length`), 0);
   await capture('history-reopened-with-interruption');
   await ab('tab', 't1'); await waitStatus('Exited');
   await send('/after-crash'); await waitStatus('Ready');
