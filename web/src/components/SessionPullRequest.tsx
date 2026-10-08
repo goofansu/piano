@@ -9,34 +9,36 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const states = {
-  open: { label: "Open", Icon: GitPullRequestIcon },
-  draft: { label: "Draft", Icon: GitPullRequestDraftIcon },
-  merged: { label: "Merged", Icon: GitMergeIcon },
-  closed: { label: "Closed", Icon: GitPullRequestClosedIcon },
+  open: { label: "Open", Icon: GitPullRequestIcon, color: "text-ok" },
+  draft: { label: "Draft", Icon: GitPullRequestDraftIcon, color: "text-muted-foreground" },
+  merged: { label: "Merged", Icon: GitMergeIcon, color: "text-merged" },
+  closed: { label: "Closed", Icon: GitPullRequestClosedIcon, color: "text-err" },
 };
-function details(pr: PullRequest) {
+function details(pr: PullRequest, includeState = true) {
   const checks = { none: "", pending: "Checks running", success: "Checks passed", failure: "Checks failed" }[pr.checks];
   const review = { none: "", approved: "Approved", changes_requested: "Changes requested", review_required: "Review required" }[pr.review];
-  return [states[pr.state].label, ...(["open", "draft"].includes(pr.state) ? [checks, review] : [])].filter(Boolean).join(" · ");
+  return [includeState ? states[pr.state].label : "", ...(["open", "draft"].includes(pr.state) ? [checks, review] : [])].filter(Boolean).join(" · ");
 }
 
 /** One associated PR, not transcript references or a decorative link stack. */
 export function SessionPullRequestBadge({ value }: { value: SessionPullRequest | undefined }) {
   if (!value?.link) return null;
   const pr = value.pullRequest;
-  const Icon = pr ? states[pr.state].Icon : GitPullRequestIcon;
+  const status = pr ? states[pr.state] : undefined;
+  const Icon = status?.Icon ?? GitPullRequestIcon;
+  const summary = pr ? details(pr, false) : "Status unavailable";
   const number = pr?.number ?? value.link.url.split("/").pop();
   return <Tooltip>
     <TooltipTrigger asChild>
       <Button asChild variant="ghost" size="sm">
-        <a href={value.link.url} target="_blank" rel="noreferrer" aria-label={`Open pull request #${number}`}>
-          <Icon data-icon="inline-start" /> #{number}
+        <a href={value.link.url} target="_blank" rel="noreferrer" aria-label={`Open pull request #${number}`} aria-description={status?.label ?? "Status unavailable"}>
+          <Icon data-icon="inline-start" className={status?.color ?? "text-muted-foreground"} aria-hidden /> #{number}
         </a>
       </Button>
     </TooltipTrigger>
     <TooltipContent className="max-w-80">
       <p>{pr ? `${pr.repo}: ${pr.title}` : value.link.url}</p>
-      <p>{pr ? details(pr) : "Status unavailable"}</p>
+      {summary && <p>{summary}</p>}
     </TooltipContent>
   </Tooltip>;
 }

@@ -80,6 +80,21 @@ try {
   await palette('Current work'); await ab('click', '[cmdk-item][data-value$=" work"]');
   await ab('wait', '--fn', `location.pathname === '/s/work'`); await waitBadge(43);
   await ab('reload'); await waitBadge(43);
+  // State lives in the icon/color and accessible description, not a redundant tooltip line.
+  observations.prStates = [];
+  for (const [label, state, isDraft] of [['Open', 'OPEN', false], ['Draft', 'OPEN', true], ['Merged', 'MERGED', false], ['Closed', 'CLOSED', false]]) {
+    control({ prs: prs.map(pr => ({ ...pr, state, isDraft, reviewDecision: '' })) });
+    await evaluate(`window.dispatchEvent(new Event('focus')); true`);
+    await ab('wait', '--fn', `document.querySelector(${JSON.stringify(badge(43))})?.getAttribute('aria-description') === ${JSON.stringify(label)}`);
+    await ab('hover', badge(43));
+    await ab('wait', '--fn', `!!document.querySelector('[role="tooltip"]')`);
+    assert.equal(await evaluate(`document.querySelector('[role="tooltip"]').textContent`), 'example/repo: Explicitly linked work');
+    observations.prStates.push(await evaluate(`(() => { const svg = document.querySelector(${JSON.stringify(badge(43))}).querySelector('svg'); return { state: ${JSON.stringify(label)}, color: getComputedStyle(svg).color, shape: svg.innerHTML }; })()`));
+    await ab('screenshot', join(evidence, `state-${label.toLowerCase()}.png`));
+    await ab('mouse', 'move', '0', '0');
+  }
+  assert.equal(new Set(observations.prStates.map(s => s.color)).size, 4);
+  assert.equal(new Set(observations.prStates.map(s => s.shape)).size, 4);
   // A failed refresh keeps identity but does not display old approval/check success.
   control({ error: 'offline' }); await openDetails(); await ab('wait', '--text', githubHost === 'github.com' ? 'Could not read GitHub.' : 'Could not read GitHub through exe.dev.');
   assert.equal(await evaluate(`document.querySelector('[role="dialog"]').textContent.includes('Approved')`), false);

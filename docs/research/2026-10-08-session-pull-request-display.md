@@ -82,3 +82,18 @@ not reconstructed historical branch ownership. Sessions sharing a checkout can s
 its PR. For an older session after that checkout was repurposed, explicitly link the
 intended PR or remove the inferred one. Once associated, the session's link is durable.
 No claim of exclusive branch ownership or verification/integration status is made.
+
+## Status-icon follow-up
+
+Against `f7062e8` + working tree, the header now uses semantic GitHub-style status
+colors with its existing distinct icons: green open, gray draft, purple merged,
+red closed. The tooltip no longer repeats the state word; the link's accessible
+description retains it. Useful checks/review details and unavailable status remain.
+The management dialog's status text is unchanged. No state ownership changed (INV-01).
+
+`npm test` (77 passed), `npm run typecheck`, and the scratch browser journey on
+7271/7272 passed. The browser check now verifies four distinct rendered icon shapes
+and colors, accessible state descriptions, and title-only tooltips when there are
+no check/review details. Screenshots and output: `/tmp/piano-pr-icons-evidence/`;
+command logs: `/tmp/piano-pr-icons-{tests,typecheck,browser}.log`. Reviewed the open-PR
+screenshot. Fake GitHub/Pi only; scratch processes/files cleaned up. Not deployed.
