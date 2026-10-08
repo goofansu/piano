@@ -394,6 +394,8 @@ export type PullRequest = typeof PullRequest.Type;
 export const SessionPullRequestLink = Schema.Struct({
   url: Schema.String,
   source: Schema.Literals(["branch", "manual"]),
+  /** Authentication route, not the browser URL. Retained when the checkout disappears. */
+  apiHost: Schema.optional(Schema.Literal("github.int.exe.xyz")),
 });
 export type SessionPullRequestLink = typeof SessionPullRequestLink.Type;
 

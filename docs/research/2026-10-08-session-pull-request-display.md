@@ -62,6 +62,10 @@ Environment: Node 24.21.0, locked project dependencies, Git, gh 2.101.0.
 
 ## Limits
 
+The subsequent [exe.dev integration follow-up](2026-10-08-exe-github-prs.md)
+supersedes the proxy-remote and separate-login limitations below for attached
+exe.dev GitHub integrations. These paragraphs retain the original verification scope.
+
 Live GitHub access was attempted with a read-only `gh pr list` and blocked by missing
 CLI authentication (exit 4); no live-forge compatibility pass is claimed. The existing
 `gh` dependency remains. Manual links still work; discovery and live status require

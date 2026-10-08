@@ -11,13 +11,14 @@ mkdirSync(evidence, { recursive: true });
 const backendPort = process.env.PR_BACKEND_PORT ?? '7171', frontendPort = process.env.PR_FRONTEND_PORT ?? '7172';
 const backendUrl = `http://127.0.0.1:${backendPort}`, frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const root = mkdtempSync(join(tmpdir(), 'piano-session-pr-browser-'));
+const githubHost = process.env.PR_GITHUB_HOST ?? 'github.com';
 const repo = join(root, 'repo'), sessions = join(root, 'sessions'), bin = join(root, 'bin');
 for (const dir of [repo, sessions, bin, join(root, 'agent')]) mkdirSync(dir);
 const git = (...args) => execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', ...args]);
-git('init', '-q', '-b', 'feature'); git('commit', '--allow-empty', '-qm', 'Initial'); git('remote', 'add', 'origin', 'https://github.com/example/repo.git');
+git('init', '-q', '-b', 'feature'); git('commit', '--allow-empty', '-qm', 'Initial'); git('remote', 'add', 'origin', `https://${githubHost}/example/repo.git`);
 const forge = join(root, 'forge.json');
 const prs = [42, 43].map(number => ({ url: `https://github.com/example/repo/pull/${number}`, number, title: number === 42 ? 'The session deliverable' : 'Explicitly linked work', state: 'OPEN', isDraft: false, reviewDecision: 'APPROVED', statusCheckRollup: [], headRefName: number === 42 ? 'feature' : 'other', headRepository: { name: 'repo' }, headRepositoryOwner: { login: 'example' } }));
-const control = data => writeFileSync(forge, JSON.stringify(data));
+const control = data => writeFileSync(forge, JSON.stringify({ expectedHost: githubHost, ...(githubHost === 'github.int.exe.xyz' ? { expectedRepo: `${githubHost}/example/repo` } : {}), ...data }));
 control({ prs });
 writeFileSync(join(bin, 'gh'), `#!${process.execPath}\nimport ${JSON.stringify(resolve('test/fixtures/fake-gh.mjs'))};\n`, { mode: 0o755 });
 const timestamp = new Date().toISOString();
@@ -80,7 +81,7 @@ try {
   await ab('wait', '--fn', `location.pathname === '/s/work'`); await waitBadge(43);
   await ab('reload'); await waitBadge(43);
   // A failed refresh keeps identity but does not display old approval/check success.
-  control({ error: 'offline' }); await openDetails(); await ab('wait', '--text', 'Could not read GitHub.');
+  control({ error: 'offline' }); await openDetails(); await ab('wait', '--text', githubHost === 'github.com' ? 'Could not read GitHub.' : 'Could not read GitHub through exe.dev.');
   assert.equal(await evaluate(`document.querySelector('[role="dialog"]').textContent.includes('Approved')`), false);
   await closeDetails(); await waitBadge(43);
   control({ prs });
@@ -96,7 +97,7 @@ try {
   const stopped = [backend, frontend].map(p => new Promise(resolveExit => { if (p.exitCode !== null) return resolveExit(); p.once('exit', resolveExit); p.kill('SIGTERM'); }));
   await Promise.all(stopped);
   writeFileSync(join(evidence, 'commands.json'), JSON.stringify(commands, null, 2));
-  writeFileSync(join(evidence, 'observations.json'), JSON.stringify({ revision: execFileSync('git', ['rev-parse', 'HEAD']).toString().trim() + ' + working tree', backendPort, frontendPort, ...observations }, null, 2));
+  writeFileSync(join(evidence, 'observations.json'), JSON.stringify({ revision: execFileSync('git', ['rev-parse', 'HEAD']).toString().trim() + ' + working tree', backendPort, frontendPort, githubHost, ...observations }, null, 2));
   writeFileSync(join(evidence, 'processes.log'), processLog);
   rmSync(root, { recursive: true, force: true });
 }

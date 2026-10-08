@@ -70,8 +70,8 @@ test("unknown/auth/malformed results are not healthy absence; explicit link vali
   const f = await fixture(t);
   f.control({ error: "auth failed" });
   assert.match((await f.get()).error!, /authentication/);
-  f.git("remote", "set-url", "origin", "https://github.int.exe.xyz/example/repo.git");
-  assert.match((await f.get()).error!, /github.com remote/);
+  f.git("remote", "set-url", "origin", "https://unsupported.example/example/repo.git");
+  assert.match((await f.get()).error!, /GitHub integration remote/);
   f.git("remote", "set-url", "origin", "git@github.com:example/repo.git");
   f.control({ malformed: true });
   assert.match((await f.get()).error!, /invalid/);
@@ -92,6 +92,47 @@ test("unknown/auth/malformed results are not healthy absence; explicit link vali
   f.control({ prs: [{ ...candidate(42), state: "CLOSED" }] }); rmSync(f.repo, { recursive: true });
   assert.equal((await f.get()).pullRequest?.state, "closed", "saved PR can be read after checkout removal");
   await assert.rejects(f.get("unregistered"), /not registered/);
+});
+
+test("exe.dev integration routes discovery and saved/manual PR reads through gh without changing browser URLs or global host", async t => {
+  const f = await fixture(t), host = "github.int.exe.xyz";
+  const previousHost = process.env.GH_HOST;
+  process.env.GH_HOST = "unrelated.example";
+  t.after(() => { if (previousHost === undefined) delete process.env.GH_HOST; else process.env.GH_HOST = previousHost; });
+  f.git("remote", "set-url", "origin", `https://${host}/example/repo.git`);
+  const proxy = { prs: [candidate(42)], expectedHost: host, expectedRepo: `${host}/example/repo` };
+  f.control(proxy);
+  const discovered = await f.get();
+  assert.deepEqual(discovered.link, { url: candidate(42).url, source: "branch", apiHost: host });
+  assert.equal(discovered.pullRequest?.number, 42);
+  assert.equal(process.env.GH_HOST, "unrelated.example", "host routing is child-local");
+  // A later change to a normal remote does not lose the saved integration route.
+  f.git("remote", "set-url", "origin", "git@github.com:example/repo.git");
+  assert.equal((await f.get()).pullRequest?.number, 42);
+  f.control({ ...proxy, expectedHost: "github.com", expectedRepo: "github.com/example/repo" });
+  const direct = await f.change({ action: "link", url: candidate(42).url });
+  assert.equal(direct.link?.apiHost, undefined); assert.equal(direct.pullRequest?.number, 42);
+  // Existing canonical links (created before integration support) infer the workspace route.
+  f.git("remote", "set-url", "origin", `https://${host}/example/repo.git`);
+  f.control(proxy);
+  assert.equal((await f.get()).pullRequest?.number, 42);
+  f.git("switch", "--detach", "-q");
+  const manual = await f.change({ action: "link", url: candidate(42).url });
+  assert.equal(manual.link?.apiHost, host); assert.equal(manual.pullRequest?.number, 42);
+  const proxyUrl = await f.change({ action: "link", url: `https://${host}/EXAMPLE/REPO/pull/42/files#diff` });
+  assert.equal(proxyUrl.link?.url, candidate(42).url); assert.equal(proxyUrl.link?.apiHost, host);
+  await assert.rejects(f.change({ action: "link", url: "https://github.int.exe.xyz.evil/example/repo/pull/42" }), /GitHub pull request URL/);
+  f.control({ ...proxy, prs: [{ ...candidate(42), url: `https://${host}/example/repo/pull/42`, state: "MERGED" }] });
+  rmSync(f.repo, { recursive: true });
+  const restarted = ManagedRuntime.make(SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryPath, f.path))));
+  try {
+    const pr = await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "one"); }));
+    assert.equal(pr.pullRequest?.state, "merged"); assert.equal(pr.pullRequest?.url, candidate(42).url);
+  } finally { await restarted.dispose(); }
+  f.control({ error: "integration detached", expectedHost: host });
+  const unavailable = await f.get();
+  assert.equal(unavailable.pullRequest, null); assert.match(unavailable.error!, /VM's GitHub integration/);
+  assert.equal(unavailable.link?.apiHost, host);
 });
 
 test("INV-07: late discovery cannot undo removal/deletion or attach a candidate from a changed checkout", async t => {
