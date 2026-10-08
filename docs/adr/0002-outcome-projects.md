@@ -17,7 +17,7 @@ processes and evidence, while an outcome project supplies the organizational con
 It does not become a checkout owner or a multi-repository execution workspace. Registry v2 preserves
 the directory meaning of existing `project` fields and adds outcome identity
 and session associations separately. The UI calls these groupings Projects and execution locations
-Directories; persisted paths are not reinterpreted.
+Repositories; persisted paths are not reinterpreted.
 
 Simply renaming directories would not support cross-repository outcomes. A list of repository paths
 alone would not distinguish related sessions from unrelated work in those repositories. Explicit

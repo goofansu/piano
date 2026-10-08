@@ -19,7 +19,7 @@ Read these documents in order:
 The [outcome-project plan](outcome-projects.md), with its boundary decision in
 [ADR 0002](adr/0002-outcome-projects.md), adds organization around bounded goals across repositories.
 Session grouping is implemented; shared context and instructions remain deferred. The UI distinguishes
-Projects from Directories while existing directory-based `project` fields retain their meaning.
+Projects from Repositories while existing directory-based `project` fields retain their meaning.
 
 Use the [domain glossary](glossary.md) to distinguish sessions, tasks, evidence and verification.
 Contributor skill preferences are optional; see the development handoff.

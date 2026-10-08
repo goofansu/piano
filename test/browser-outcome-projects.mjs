@@ -112,7 +112,7 @@ try {
   assert.equal(await evaluate(`!!document.querySelector('nav h2')`), false);
   await openGroup('api'); await openGroup('web');
   await createWithSession('Launch subscriptions', 'API session');
-  assert.equal(await evaluate(`[...document.querySelectorAll('nav h2')].map(h => h.textContent).join()`), 'Projects,Directories');
+  assert.equal(await evaluate(`[...document.querySelectorAll('nav h2')].map(h => h.textContent).join()`), 'Projects,Repositories');
   await file('Web session', 'Launch subscriptions');
   assert.equal(member('one').outcomeProjectId, project('Launch subscriptions').id);
   assert.equal(member('two').outcomeProjectId, project('Launch subscriptions').id);
@@ -177,8 +177,8 @@ try {
   assert.ok(items.includes('/holdweb') && items.includes('API sessionapi'), `sessions found by project name: ${items}`);
   assert.ok(items.every(i => !/project/i.test(i)), `no project commands in the palette: ${items}`);
   await closeDialogs();
-  // Closing a directory leaves project references, histories and workspace identity intact.
-  await ab('click', '[aria-label="Directory menu for api"]'); await menuitem('Close'); await button('Close'); await settle();
+  // Closing a repository leaves project references, histories and workspace identity intact.
+  await ab('click', '[aria-label="Repository menu for api"]'); await menuitem('Close'); await button('Close'); await settle();
   assert.equal(registry().projects.includes(api), false);
   assert.equal(member('one').outcomeProjectId, project('Subscriptions').id);
   await button('API session api'); await ab('wait', '--text', 'History one');

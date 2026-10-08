@@ -29,7 +29,8 @@ it does not resume the deferred evidence/integration phases.
 - **Task:** a narrower intended outcome that may span sessions. Projects may eventually organize
   tasks, but the first slice requires neither task records nor a task hierarchy.
 
-The UI now uses **Project** for outcomes and **Directories** for execution locations.
+The UI now uses **Project** for outcomes and **Repositories** for the sidebar's location groups, each
+a root with its worktrees; a non-Git directory sits under the same heading with a Non-Git badge.
 Existing `project` path fields retain their directory meaning; `outcomeProjects` and
 `outcomeProjectId` hold organization separately. This is not a repository-wide code rename.
 
@@ -62,7 +63,7 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 - Archiving affects project visibility only. It is not session archive, abort, process release,
   checkout removal, verification, approval or proof that the outcome was achieved. Reopening restores
   the grouping; running work and direct session access remain available.
-- Unlinking a session does not delete it. Closing a directory does not cascade-delete the outcome
+- Unlinking a session does not delete it. Closing a repository does not cascade-delete the outcome
   project or its associations. A missing checkout/history is an explicit unavailable state, not
   a reason to silently recreate or drop the reference. Explicit session-reference removal must also
   remove its association without deleting the project or other members.
@@ -102,7 +103,7 @@ Observed outcomes are recorded in the [Step 1 evidence](research/outcome-project
 The implementation uses registry v2 with an exact pre-migration backup. Restore that backup only
 with the backend stopped; older Piano versions cannot read v2. Restoring it discards all subsequent
 registry edits, including newly added session references, but does not delete Pi-owned conversations.
-A project has no page of its own: it is a group in the sidebar beside the directories, and
+A project has no page of its own: it is a group in the sidebar beside the repositories, and
 `/projects/<id>` is its New page, where a session started joins it. Closed-directory and
 archived-session references remain reachable from the group and from session search.
 

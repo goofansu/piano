@@ -30,7 +30,7 @@ improvement, not a prerequisite for or resumption of the deferred deeper workflo
    sessions, with defined precedence, application boundaries and delivery outcomes. Preserve Pi's
    normal checkout configuration/trust; do not bundle this into the grouping slice.
 
-Step 1 is implemented with registry v2 and distinct Projects/Directories UI labels; existing
+Step 1 is implemented with registry v2 and distinct Projects/Repositories UI labels; existing
 `project` path fields retain their meaning. [Verification evidence](research/outcome-projects-step1.md)
 records grouping, non-destructive lifecycle, migration and scratch-browser gates. Step 2 is deferred.
 Covers INV-01–13 at their existing ownership, execution, evidence and trust boundaries.

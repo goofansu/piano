@@ -39,7 +39,7 @@ const loadOpen = (): Set<string> => {
     return new Set();
   }
 };
-/** Project groups share the open-state store with directories, keyed apart from paths. */
+/** Project groups share the open-state store with repositories, keyed apart from paths. */
 const projectKey = (id: string) => `project:${id}`;
 
 /** Row heights: 36px with a pointer, 44px on a touch screen. */
@@ -68,7 +68,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       return next;
     });
 
-  // The groups holding the selected session are always visible: its directory and its project.
+  // The groups holding the selected session are always visible: its repository and its project.
   useEffect(() => {
     if (!current) return;
     const owner = state.projects.find((p) => p.worktrees.some((w) => w.path === current.cwd));
@@ -140,7 +140,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-      <nav className="relative px-3 pb-4" aria-label="Projects and directories">
+      <nav className="relative px-3 pb-4" aria-label="Projects and repositories">
         {/* Two parallel groups under one nav landmark; the h2s give the structure, so neither is its own region. */}
         {sectioned && state.projectsLoaded && (
           <div>
@@ -177,7 +177,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         <div>
         {sectioned && state.projectsLoaded && (
           <div className={sectionHeading}>
-            <h2 className="flex-1">Directories</h2>
+            <h2 className="flex-1">Repositories</h2>
           </div>
         )}
         {!state.projectsLoaded ? (
@@ -185,7 +185,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         ) : state.projects.length === 0 ? (
           <Empty className="view-enter py-8">
             <EmptyHeader>
-              <EmptyDescription>No directories yet. Start a session in any directory and it appears here.</EmptyDescription>
+              <EmptyDescription>No repositories yet. Start a session in any directory and it appears here.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : null}
@@ -257,7 +257,7 @@ interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew"
 type SessionTarget = { cwd: string; sessionId: string; title?: string };
 type SessionActions = ReturnType<typeof useSessionActions>;
 
-/** One session line, identical under a directory and under a project; only the trailing detail differs. */
+/** One session line, identical under a repository and under a project; only the trailing detail differs. */
 function SessionRow({ t, trailing, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
   t: SessionTarget; trailing?: React.ReactNode; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
@@ -312,7 +312,7 @@ function SessionRow({ t, trailing, selected, disabled, hint, state, send, select
 
 const Chevron = ({ open }: { open: boolean }) => <ChevronRightIcon className={cn("size-4 shrink-0 text-ink-3 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none", open && "rotate-90")} />;
 
-/** An outcome project: the same disclosure group as a directory, whose rows come from any directory. */
+/** An outcome project: the same disclosure group as a repository, whose rows come from any repository. */
 function OutcomeGroup({ project, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: OutcomeProject }) {
   const actions = useSessionActions(send, state.connected);
   const members = state.sessionReferences.filter(s => s.outcomeProjectId === project.id);
@@ -403,7 +403,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
         </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Directory menu for ${project.name}`}>
+            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Repository menu for ${project.name}`}>
               <MoreHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -440,7 +440,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
       <Dialog open={closing} onOpenChange={setClosing}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Close this directory?</DialogTitle>
+            <DialogTitle>Close this repository?</DialogTitle>
             <DialogDescription>"{project.name}" will be removed from the sidebar. Files and session history will not be deleted.</DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -101,7 +101,7 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
     </form> : <div key="list" className="flex animate-in flex-col gap-2 fade-in-0 slide-in-from-left-2 duration-200">
       <div className="flex items-center gap-1">
         <Select value={project} onValueChange={setProject} disabled={pending}>
-          <SelectTrigger aria-label="Worktree directory" className="min-w-0 flex-1"><SelectValue /></SelectTrigger>
+          <SelectTrigger aria-label="Worktree repository" className="min-w-0 flex-1"><SelectValue /></SelectTrigger>
           <SelectContent position="popper">
             <SelectGroup>{state.projects.map(p => <SelectItem key={p.path} value={p.path}>{p.name}</SelectItem>)}</SelectGroup>
           </SelectContent>

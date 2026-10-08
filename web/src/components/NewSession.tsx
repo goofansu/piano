@@ -282,7 +282,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           <CommandList className="max-h-[min(18rem,60dvh)]">
             <CommandEmpty>No directory matches.</CommandEmpty>
             {roots.length > 0 && (
-              <CommandGroup heading="Directories">
+              <CommandGroup heading="Repositories">
                 {roots.map((k) => (
                   <CommandItem
                     key={k.path}
