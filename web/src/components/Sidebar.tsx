@@ -153,7 +153,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
                 <TooltipContent>New project</TooltipContent>
               </Tooltip>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
               {active.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
               {archived.length > 0 && (
                 <Collapsible open={openProjects.has("project:archived")} onOpenChange={open => setOpen("project:archived", open)}>
@@ -165,7 +165,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
                     </button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="disclosure-content">
-                    <div className="flex flex-col gap-3 py-1 pl-3">
+                    <div className="flex flex-col gap-1 py-1 pl-3">
                       {archived.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
                     </div>
                   </CollapsibleContent>
@@ -189,7 +189,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
             </EmptyHeader>
           </Empty>
         ) : null}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
           {state.projects.map((p) => (
             <Project key={p.path} project={p} open={openProjects.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
           ))}
@@ -204,7 +204,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
 /** Skeleton rows in the real row geometry: a project line, two session lines, another project. */
 function SidebarSkeleton() {
   return (
-    <div aria-hidden className="flex flex-col gap-3">
+    <div aria-hidden className="flex flex-col gap-1">
       {[0, 1].map((group) => (
         <div key={group} className="flex flex-col">
           <div className={cn(row, "flex items-center gap-1.5 pl-1.5")}>
