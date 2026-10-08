@@ -178,7 +178,7 @@ try {
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="read tool call"]')`), true);
   assert.ok(await evaluate(`document.querySelector('main').textContent.includes('I’ll start with the parts you touch every day')`));
   assert.equal(await evaluate(`!!document.querySelector('main [aria-label="Session menu"], main [aria-label="Session information"]')`), false);
-  if (!toolsOnly) assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().height`), 0, 'no empty desktop header');
+  if (!toolsOnly) assert.equal(await evaluate(`document.querySelector('main header h1')?.textContent`), 'A calmer workspace', 'the session header names the session');
   // INV-01: details remain available, but every tool uses the same opt-in disclosure.
   // Observe layout and disclosure behavior, not Tailwind class names.
   for (const width of [1440, 320]) {
@@ -215,14 +215,16 @@ try {
   if (!toolsOnly) {
   await appearance('Light'); await capture('session-light');
   assert.equal(await evaluate(`document.querySelector('aside [aria-current="page"]')?.title`), 'A calmer workspace');
-  // Native clipboard success: paste back into the composer, preserving raw Markdown.
+  // Native clipboard success: the raw Markdown reaches the clipboard API and the copy settles as copied.
+  await evaluate(`window.nativeWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = text => { window.copied = text; return window.nativeWrite(text); }; true`);
   await click('Copy response'); await ab('wait', '--fn', `!!document.querySelector('[aria-label="Response copied"]')`);
-  await ab('focus', '[aria-label="Message"]'); await ab('press', 'Control+v');
-  assert.equal(await evaluate(`document.querySelector('textarea').value`), stories[1][2].at(-1).content[0].text);
+  await ab('focus', '[aria-label="Message"]'); await ab('press', process.platform === 'darwin' ? 'Meta+v' : 'Control+v');
+  // Headless Chromium on macOS ignores a synthetic paste shortcut and denies clipboard reads, so the written text is the evidence.
+  assert.equal(await evaluate(`window.copied`), stories[1][2].at(-1).content[0].text);
   await ab('fill', '[aria-label="Message"]', 'Keep my draft');
   // Denied clipboard writes must not claim success or discard selectable reply text.
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Copy response"]')`);
-  await evaluate(`window.nativeWrite = navigator.clipboard.writeText; navigator.clipboard.writeText = async () => { throw new DOMException('Denied','NotAllowedError'); }; true`);
+  await evaluate(`navigator.clipboard.writeText = async () => { throw new DOMException('Denied','NotAllowedError'); }; true`);
   await click('Copy response'); await ab('wait', '--text', 'Couldn’t copy. Select the reply text to copy it.');
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Response copied"]')`), false);
   assert.equal(await evaluate(`document.querySelector('textarea').value`), 'Keep my draft');
@@ -293,7 +295,7 @@ try {
   for (const [w,h] of [[320,640],[390,844],[844,390]]) {
     await ab('set', 'viewport', String(w), String(h)); await checkGeometry(`session-${w}x${h}`); await capture(`mobile-session-${w}`);
     assert.equal(await evaluate(`!!document.querySelector('main [aria-label="Session menu"], main [aria-label="Session information"]')`), false);
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('main header button')].filter(e=>e.getBoundingClientRect().width>0).map(e=>e.getAttribute('aria-label'))`), w < 768 ? ['Show sidebar'] : []);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('main header button')].filter(e=>e.getBoundingClientRect().width>0).map(e=>e.getAttribute('aria-label'))`), w < 768 ? ['Show sidebar', 'New session here', 'Session information and actions'] : ['New session here', 'Session information and actions'], 'the header offers the sidebar only on phones, and the session actions at every width');
   }
   }
   if (toolsOnly) {

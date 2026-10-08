@@ -51,8 +51,8 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
   const target = state.session?.sessionId ? { cwd: state.session.cwd, sessionId: state.session.sessionId, title: details.title } : undefined;
   const sessions = useMemo(() => {
     const visible = state.projects.flatMap(p => p.sessions.map(t => ({ ...t, project: p.name, inWorktree: !p.worktrees.some(w => w.root && w.path === t.cwd) })));
-    // Sessions whose directory was closed still belong to their project; they are reachable here by name.
-    return [...visible, ...state.sessionReferences.filter(s => !visible.some(t => t.cwd === s.cwd && t.sessionId === s.sessionId)).map(s => ({ ...s, project: s.cwd.split("/").pop() ?? s.cwd, branch: "", inWorktree: false, createdAt: "" }))]
+    // Sessions whose directory was closed still belong to their project; they are reachable here by name. Archived ones are not.
+    return [...visible, ...state.sessionReferences.filter(s => !s.archived && !visible.some(t => t.cwd === s.cwd && t.sessionId === s.sessionId)).map(s => ({ ...s, project: s.cwd.split("/").pop() ?? s.cwd, branch: "", inWorktree: false, createdAt: "" }))]
       .map(t => ({ ...t, outcome: sessionProject(state, t)?.name ?? "" }))
       .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
   }, [state.projects, state.sessionReferences, state.outcomeProjects]);

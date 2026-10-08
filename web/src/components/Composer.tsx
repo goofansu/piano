@@ -81,7 +81,10 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
   const contextWindow = context?.contextWindow ?? selectedModel?.contextWindow;
   const percent = tokens === null ? null : context?.percent ?? null;
   const left = percent === null ? null : Math.max(0, 100 - percent);
-  const contextLabel = percent !== null ? `${Math.round(percent)}%` : tokens !== null ? formatTokenCount(tokens) : "—";
+  const used = percent !== null ? `${Math.round(percent)}%` : tokens !== null ? formatTokenCount(tokens) : null;
+  const window = contextWindow !== undefined && contextWindow > 0 ? formatTokenCount(contextWindow) : null;
+  // Before the first reply only the window is known, so it stands alone rather than reading as "—/1k".
+  const contextLabel = used && window ? `${used}/${window}` : used ?? window ?? "—";
   const hasText = text.trim().length > 0 || attachments.items.length > 0;
   const showStop = streaming && !hasText;
   const showDelivery = streaming && !compacting;
@@ -198,7 +201,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
                 aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
                 className={cn("px-1.5 font-mono text-xs font-normal", left !== null && left < 15 && "text-warning hover:text-warning")}
               >
-                {contextLabel}{contextWindow !== undefined && contextWindow > 0 ? `/${formatTokenCount(contextWindow)}` : ""}
+                {contextLabel}
               </Button>
             </PopoverTrigger>
             <PopoverContent side="top" align="end" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">

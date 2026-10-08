@@ -49,7 +49,7 @@ const noBadge = () => ab('wait', '--fn', `!document.querySelector('header a[aria
 const button = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
 const openDetails = async () => { await ab('click', '[aria-label="Session information and actions"]'); await ab('find', 'role', 'menuitem', 'click', '--name', 'Pull request', '--exact'); await ab('wait', '--fn', `!!document.querySelector('#session-pr-url:not(:disabled)')`); };
 const closeDetails = async () => { await ab('press', 'Escape'); await ab('wait', '--fn', `!document.querySelector('#session-pr-url')`); };
-const palette = async search => { await ab('press', 'Control+k'); await ab('fill', '[aria-label="Search sessions and commands"]', search); };
+const palette = async search => { await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k'); await ab('fill', '[aria-label="Search sessions and commands"]', search); };
 try {
   for (let n = 0; ; n++) {
     if (backend.exitCode !== null || frontend.exitCode !== null) throw new Error(`Scratch startup failed (possibly occupied ports): ${processLog}`);

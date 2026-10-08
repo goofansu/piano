@@ -45,8 +45,10 @@ function ab(...args) {
   return r.stdout.trim();
 }
 function evaluate(js) { return JSON.parse(ab('eval', js)); }
+// The effort control is a toggle group of radio buttons; this reads the checked level by its label.
+const checkedEffort = `document.querySelector('[aria-label="Effort"] [role="radio"][aria-checked="true"]')?.textContent.trim()`;
 function expectAction(label) {
-  const labels = evaluate(`[...document.querySelectorAll('main button[aria-label="Stop"], main button[aria-label="Queue message"], main button[aria-label="Send"]')].map(button=>button.getAttribute('aria-label'))`);
+  const labels = evaluate(`[...document.querySelectorAll('main button[aria-label="Stop"], main button[aria-label="steer"], main button[aria-label="follow-up"], main button[aria-label="Send"]')].map(button=>button.getAttribute('aria-label'))`);
   if (JSON.stringify(labels) !== JSON.stringify([label])) throw new Error(`Expected only ${label}, got ${labels.join(', ')}`);
 }
 async function until(js) {
@@ -56,7 +58,6 @@ async function until(js) {
 }
 const layoutOnly = process.argv.includes('--layout-only');
 // Select-all in the browser is Meta+a on macOS and Control+a elsewhere.
-const selectAll = process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
 const views = layoutOnly ? [[320, 640], [390, 844], [1280, 800]] : [[320, 640], [375, 812], [390, 844], [430, 932], [390, 400], [844, 390], [768, 1024], [1024, 768], [1280, 800]];
 const geometry = `(() => {
   const t = document.querySelector('textarea');
@@ -121,7 +122,7 @@ async function run() {
   ab('wait', '--text', 'Not running');
   ab('screenshot', join(evidence, 'saved-unknown-context.png'));
   if (layoutOnly) await capture('saved');
-  if (!evaluate(`document.querySelector('button[aria-label="Context usage"]')?.textContent.trim().startsWith('—')`)) throw new Error('Missing context must remain visible as unknown, not disappear');
+  if (!evaluate(`(() => { const b = document.querySelector('button[aria-label="Context usage"]'); return !!b && b.textContent.trim() === '1k' && b.getAttribute('aria-description') === 'Context usage unavailable'; })()`)) throw new Error('Unknown context must show the window alone and say usage is unavailable');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', 'Context usage unavailable');
   ab('press', 'Escape');
@@ -164,6 +165,8 @@ async function run() {
   ab('set', 'viewport', '320', '640');
   for (const label of ['Directory', 'Model']) {
     ab('click', label === 'Model' ? '[aria-label^="Model:"]' : `[aria-label="${label}"]`);
+    // The previous picker closes as this one opens; the swap is asynchronous.
+    await until(`document.querySelector('[data-slot="popover-content"]')?.getAttribute('aria-label') === '${label === 'Model' ? 'Model and effort' : 'Choose a folder'}'`);
     ab('screenshot', join(evidence, `new-${label}-320.png`));
     const pop = evaluate(`(() => {const e=document.querySelector('[data-slot="popover-content"]');const r=e.getBoundingClientRect();return {x:r.x,right:r.right,width:innerWidth};})()`);
     writeFileSync(join(evidence, `new-${label}-popover.json`), JSON.stringify(pop));
@@ -208,24 +211,25 @@ async function run() {
   const originalOrder = visibleModels();
   for (const [query, expected] of [['fake', originalOrder], ['beta', ['fake/beta']], ['fake', originalOrder], ['sonnet', ['fake/claude-sonnet']], ['  SoNnEt  ', ['fake/claude-sonnet']], ['sol', ['fake/sol']], ['Online', ['fake/sol']], ['ta', ['fake/beta']], ['no-such-model', []], ['', originalOrder]]) {
     if (query) ab('fill', '[aria-label="Search models"]', query);
-    else { ab('focus', '[aria-label="Search models"]'); ab('press', selectAll); ab('press', 'Backspace'); }
+    else evaluate(`(() => { const i = document.querySelector('[aria-label="Search models"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, ''); i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
     const actual = visibleModels();
     writeFileSync(join(evidence, `model-order-${query || 'cleared'}.json`), JSON.stringify({query,expected,actual}, null, 2));
     if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Search ${JSON.stringify(query)} returned incorrect models/order: ${JSON.stringify(actual)}; expected ${JSON.stringify(expected)}`);
     if (!expected.length && !evaluate(`document.querySelector('[cmdk-empty]')?.textContent.includes('No model matches.')`)) throw new Error('Empty model search has no feedback');
   }
   ab('click', '[data-value="fake/beta"]');
-  await until(`document.querySelector('[aria-label^="Model:"]').title === 'fake/beta' && document.querySelector('input[value="off"]')?.checked`);
-  if (evaluate(`document.querySelectorAll('[aria-label="Effort"] input').length`) !== 1) throw new Error('Non-reasoning model exposed unsupported efforts');
+  await until(`document.querySelector('[aria-label^="Model:"]').title === 'fake/beta' && ${checkedEffort} === 'off'`);
+  if (evaluate(`document.querySelectorAll('[aria-label="Effort"] [role="radio"]').length`) !== 1) throw new Error('Non-reasoning model exposed unsupported efforts');
   const shortAction = evaluate(geometry).controls.find(c => c.label === 'Send');
   if (longAction.x !== shortAction.x || longAction.y !== shortAction.y) throw new Error('Changing the model label moved Send');
   ab('click', option);
-  ab('click', 'label:has(input[value="xhigh"])');
+  ab('find', 'role', 'radio', 'click', '--name', 'xhigh', '--exact');
   await until(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: xhigh')`);
   ab('screenshot', join(evidence, 'new-model-effort-320.png'));
-  ab('click', 'label:has(input[value="medium"])');
+  ab('find', 'role', 'radio', 'click', '--name', 'medium', '--exact');
   ab('press', 'Escape');
-  if (!evaluate(`document.activeElement.matches('[aria-label^="Model:"]') && draftInput === document.querySelector('textarea') && draftInput.value === 'mobile first\\n' && draftInput.selectionStart === 2 && draftInput.selectionEnd === 5`)) throw new Error('Settings lost the draft, selection, editor identity or return focus');
+  // Focus returns to the trigger once the popover has finished closing.
+  await until(`document.activeElement.matches('[aria-label^="Model:"]') && draftInput === document.querySelector('textarea') && draftInput.value === 'mobile first\\n' && draftInput.selectionStart === 2 && draftInput.selectionEnd === 5`).catch(() => { throw new Error('Settings lost the draft, selection, editor identity or return focus'); });
   if (evaluate(`sent.some(m=>m._tag==='create_session'||m.action?._tag==='prompt')`)) throw new Error('Settings sent a prompt');
   ab('click', '[aria-label="Send"]');
   await until(`!!document.querySelector('[aria-label="Message"]') && !document.querySelector('[aria-label="Stop"]')`);
@@ -245,50 +249,56 @@ async function run() {
   ab('set', 'viewport', '320', '640');
   const idleAction = evaluate(geometry).controls.find(c => c.label === 'Send');
   ab('click', '[aria-label^="Model:"]');
-  ab('click', 'label:has(input[value="xhigh"])');
+  ab('find', 'role', 'radio', 'click', '--name', 'xhigh', '--exact');
   await until(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: xhigh')`);
   ab('press', 'Escape');
   const changedAction = evaluate(geometry).controls.find(c => c.label === 'Send');
   if (idleAction.x !== changedAction.x || idleAction.y !== changedAction.y) throw new Error('Changing effort moved Send');
   if (evaluate(`document.querySelector('textarea').value`) !== 'idle draft') throw new Error('Changing effort discarded the active session draft');
   ab('screenshot', join(evidence, 'idle-xhigh-320.png'));
-  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '1% context') throw new Error('Settled context must show percentage used');
-  if (evaluate(`document.querySelector('[aria-label="Session usage"]').textContent.trim().replace(/\\s+/g, ' ')`) !== '1% context·$0.02') throw new Error('Usage footer must show session cost alongside context');
+  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '1%/200k') throw new Error('Settled context must show percentage used over the window');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', '2,400 tokens');
+  ab('wait', '--text', '$0.02');
   ab('press', 'Escape');
   ab('fill', '[aria-label="Message"]', 'live context');
   ab('click', '[aria-label="Send"]');
-  await until(`!!document.querySelector('[aria-label="Stop"]') && document.querySelector('[aria-label="Context usage"]')?.textContent.trim() === '21% context'`);
+  await until(`!!document.querySelector('[aria-label="Stop"]') && document.querySelector('[aria-label="Context usage"]')?.textContent.trim() === '21%/200k'`);
   expectAction('Stop');
   ab('fill', '[aria-label="Message"]', ' \n  ');
   expectAction('Stop');
   ab('fill', '[aria-label="Message"]', 'queued draft');
-  expectAction('Queue message');
+  // While Pi works the action is named by the delivery mode; steering is the default.
+  expectAction('steer');
   await capture('streaming');
   // Exercise the actual actions at the narrowest phone width, not just their geometry.
   ab('set', 'viewport', '320', '640');
-  ab('click', '[aria-label="Queue message"]');
+  ab('click', '[aria-label="steer"]');
   await until(`document.querySelector('[aria-label="Message"]').value === ''`);
   expectAction('Stop');
   ab('wait', '--text', 'Queued messages (1)');
   ab('fill', '[aria-label="Message"]', `queued second ${'x'.repeat(80)}`);
-  expectAction('Queue message');
-  ab('click', '[aria-label="Queue message"]');
+  expectAction('steer');
+  ab('click', '[aria-label="steer"]');
   ab('wait', '--text', 'Queued messages (2)');
   const queueText = () => evaluate(`[...document.querySelectorAll('[aria-label="Queued messages"] li')].map(li=>li.lastElementChild.textContent)`);
-  const followUps = ['queued draft', `queued second ${'x'.repeat(80)}`];
-  if (JSON.stringify(queueText()) !== JSON.stringify(followUps)) throw new Error('Accepted queued messages are missing or reordered');
-  if (evaluate(`document.querySelector('[aria-label="Queued messages"]').textContent.includes('Follow-up')`)) throw new Error('All-follow-up queue has redundant labels');
-  ab('fill', '[aria-label="Message"]', 'mobile steering');
+  const steered = ['queued draft', `queued second ${'x'.repeat(80)}`];
+  if (JSON.stringify(queueText()) !== JSON.stringify(steered)) throw new Error('Accepted queued messages are missing or reordered');
+  if (evaluate(`[...document.querySelectorAll('[aria-label="Queued messages"] li')].map(li=>li.firstElementChild.textContent).join(',')`) !== 'Steering,Steering') throw new Error('Steering messages are not labelled');
+  // The delivery menu switches the sticky mode; a follow-up then joins the queue after the steering messages.
+  ab('click', '[aria-label="Delivery: steer"]');
+  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter Add work after the current task.');
+  await until(`!document.querySelector('[role="menu"]')`); // the menu must close before the draft can take focus
+  ab('fill', '[aria-label="Message"]', 'mobile follow-up');
   ab('press', 'Enter');
-  if (!evaluate(`document.querySelector('textarea').value === 'mobile steering\\n'`)) throw new Error('Mobile Enter submitted instead of inserting a newline');
-  ab('click', '[aria-label="Steer"]');
+  if (!evaluate(`document.querySelector('textarea').value === 'mobile follow-up\\n'`)) throw new Error('Mobile Enter submitted instead of inserting a newline');
+  ab('click', '[aria-label="follow-up"]');
   ab('wait', '--text', 'Queued messages (3)');
-  const mixedQueue = ['mobile steering', ...followUps];
-  if (JSON.stringify(queueText()) !== JSON.stringify(mixedQueue)) throw new Error('Mobile Steer did not enter the authoritative steering queue');
-  if (evaluate(`[...document.querySelectorAll('[aria-label="Queued messages"] li')].map(li=>li.firstElementChild.textContent).join(',')`) !== 'Steering,Follow-up,Follow-up') throw new Error('Mixed queue does not distinguish message kinds');
-  if (evaluate(`sent.filter(m=>m.action?._tag==='steer').length`) !== 1) throw new Error('Mobile Steer did not submit exactly once');
+  const mixedQueue = [...steered, 'mobile follow-up'];
+  if (JSON.stringify(queueText()) !== JSON.stringify(mixedQueue)) throw new Error('Follow-up did not enter the authoritative queue after the steering messages');
+  if (evaluate(`[...document.querySelectorAll('[aria-label="Queued messages"] li')].map(li=>li.firstElementChild.textContent).join(',')`) !== 'Steering,Steering,Follow-up') throw new Error('Mixed queue does not distinguish message kinds');
+  // Steering is the default, so the idle send and both queued messages each went out as one steer action.
+  if (evaluate(`sent.filter(m=>m.action?._tag==='steer').length`) !== 3) throw new Error('Steer did not submit exactly once per message');
   if (evaluate(`[...document.querySelectorAll('article')].some(article=>article.textContent.includes('queued draft'))`)) throw new Error('Pending input was incorrectly added to completed history');
   await capture('queued');
   if (!evaluate(`(() => { const q=document.querySelector('[aria-label="Queued messages"]'); return q.scrollWidth<=q.clientWidth; })()`)) throw new Error('Queue text overflows');
@@ -299,10 +309,9 @@ async function run() {
   ab('screenshot', join(evidence, 'queued-after-reload.png'));
   expectAction('Stop');
   ab('fill', '[aria-label="Message"]', 'unsent draft');
-  expectAction('Queue message');
-  ab('focus', '[aria-label="Message"]');
-  ab('press', selectAll);
-  ab('press', 'Backspace');
+  expectAction('follow-up');
+  // Headless Chromium on macOS ignores select-all shortcuts, so the draft is cleared the way React observes it.
+  evaluate(`(() => { const t = document.querySelector('[aria-label="Message"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ''); t.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
   expectAction('Stop');
   ab('click', '[aria-label="Stop"]');
   await until(`!document.querySelector('[aria-label="Stop"]')`);
@@ -319,7 +328,7 @@ async function run() {
   ab('fill', '[aria-label="Message"]', 'my unsent draft');
   const promptsBeforeRestore = evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`);
   ab('click', '[aria-label="Edit all queued messages"]');
-  const restoredText = `my unsent draft\n\nmobile steering\n\nqueued draft\n\nqueued second ${'x'.repeat(80)}`;
+  const restoredText = `my unsent draft\n\nqueued draft\n\nqueued second ${'x'.repeat(80)}\n\nmobile follow-up`;
   await until(`document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(restoredText)} && !document.querySelector('[aria-label="Queued messages"]')`);
   expectAction('Send');
   if (evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`) !== promptsBeforeRestore) throw new Error('Restore automatically sent a prompt');
@@ -333,7 +342,7 @@ async function run() {
   ab('click', '[aria-label="Send"]');
   ab('wait', '--text', 'echo: my unsent draft');
   if (evaluate(`sent.filter(m=>m.action?._tag==='prompt').at(-1).action.text`) !== restoredText) throw new Error('Manual Send did not submit the recovered draft');
-  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '21% context') throw new Error('Context percentage disappeared after settlement');
+  if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '21%/200k') throw new Error('Context percentage disappeared after settlement');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', '42,000 tokens');
   ab('wait', '--text', 'Cache read');
@@ -341,9 +350,10 @@ async function run() {
   ab('wait', '--text', '$0.0033');
   ab('click', '[aria-label="Show cost history"]');
   if (!evaluate(`document.querySelector('svg[aria-label^="Cost history"]') !== null`)) throw new Error('Cost history did not switch');
-  ab('focus', '[aria-label="Inspect response"]');
+  // The response slider is a Radix slider: its thumb carries the keyboard focus and the value.
+  ab('focus', '[aria-label="Inspect response"] [role="slider"]');
   ab('press', 'Home');
-  if (evaluate(`document.querySelector('[aria-label="Inspect response"]').value`) !== '1') throw new Error('Response history is not keyboard inspectable');
+  if (evaluate(`document.querySelector('[aria-label="Inspect response"] [role="slider"]').getAttribute('aria-valuenow')`) !== '1') throw new Error('Response history is not keyboard inspectable');
   if (!evaluate(`(() => { const r = document.querySelector('[aria-label="Context usage details"]').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()`)) throw new Error('Context popup escapes mobile viewport');
   ab('screenshot', join(evidence, 'settled-context-details.png'));
   ab('press', 'Escape');
@@ -366,9 +376,10 @@ async function run() {
   if (evaluate(`matchMedia('(pointer: coarse)').matches`)) throw new Error('Desktop fixture has coarse pointer');
   ab('click', '[aria-label^="Model:"]');
   if (evaluate(`document.activeElement.getAttribute('aria-label')`) !== 'Search models') throw new Error('Desktop settings did not focus search');
-  ab('focus', 'input[value="xhigh"]');
-  ab('press', 'ArrowLeft');
-  await until(`document.querySelector('input[value="high"]')?.checked && document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: high')`);
+  evaluate(`(() => { [...document.querySelectorAll('[aria-label="Effort"] [role="radio"]')].find(r => r.textContent.trim() === 'xhigh').focus(); return true; })()`);
+  // Arrow keys move focus through the toggle group; Space chooses the focused level.
+  ab('press', 'ArrowLeft'); ab('press', 'Space');
+  await until(`${checkedEffort} === 'high' && document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: high')`);
   ab('screenshot', join(evidence, 'desktop-keyboard-effort.png'));
   ab('press', 'Escape');
   await until(`document.activeElement.matches('[aria-label^="Model:"]')`);
@@ -397,10 +408,14 @@ async function run() {
   ab('fill', '[aria-label="Message"]', 'live context');
   ab('press', 'Enter');
   await until(`!!document.querySelector('[aria-label="Stop"]')`);
+  // Choose follow-up delivery explicitly, so Enter queues a follow-up and Alt+Enter steers whatever the sticky preference was.
+  ab('click', '[aria-label^="Delivery:"]');
+  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter Add work after the current task.');
+  await until(`!document.querySelector('[role="menu"]')`); // the menu must close before the draft can take focus
   ab('fill', '[aria-label="Message"]', 'desktop follow-up');
   ab('press', 'Enter');
   ab('wait', '--text', 'Queued messages (1)');
-  if (evaluate(`document.querySelector('[aria-label="Queued messages"]').textContent.includes('Follow-up')`)) throw new Error('Desktop all-follow-up queue has redundant labels');
+  if (/Steering|Follow-up/.test(evaluate(`document.querySelector('[aria-label="Queued messages"]').textContent`))) throw new Error('Desktop single-kind queue has redundant labels');
   ab('fill', '[aria-label="Message"]', 'desktop steering');
   ab('press', 'Alt+Enter');
   ab('wait', '--text', 'Queued messages (2)');

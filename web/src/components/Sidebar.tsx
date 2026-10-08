@@ -114,7 +114,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
     if (view.groupBy === "project") {
       // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
       const active = state.outcomeProjects.filter(p => !p.archived);
-      const all = projectGroups(active, state.sessionReferences, state.projects.flatMap(p => p.sessions), view.sortBy);
+      const all = projectGroups(active, state.sessionReferences.filter(s => !s.archived), state.projects.flatMap(p => p.sessions), view.sortBy);
       if (active.length === 0 && all.every(g => g.sessions.length === 0)) return empty("No sessions yet. Start one and it appears here.");
       return groups(all.map(g => {
         const key = projectKey(g.project?.id ?? "");

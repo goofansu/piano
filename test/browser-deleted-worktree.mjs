@@ -71,8 +71,8 @@ try {
     await ab('reload');
     await ab('wait', '--text', 'Saved conversation kept');
   }
-  await ab('press', 'Control+k');
-  await ab('fill', '[placeholder="Search sessions, projects, branches…"]', 'Rename');
+  await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'Rename');
   assert.equal(await evaluate(`document.querySelector('[role="option"][data-value="Rename"]').getAttribute('aria-disabled')`), 'true');
   await ab('press', 'Escape');
   await ab('open', 'http://127.0.0.1:7172/s/archived');
@@ -85,7 +85,7 @@ try {
   await ab('wait', '--text', 'Saved conversation deleted');
   await menu(); await item('Delete');
   await ab('wait', '--text', 'Delete this session?');
-  await ab('find', 'role', 'button', 'click', '--name', 'Delete session', '--exact');
+  await ab('find', 'role', 'button', 'click', '--name', 'Delete', '--exact');
   await ab('wait', '--text', 'Session deleted');
   assert.equal(existsSync(join(sessions, 'deleted.jsonl')), false);
   assert.equal(JSON.parse(readFileSync(registry, 'utf8')).sessions.some(s => s.sessionId === 'deleted'), false);

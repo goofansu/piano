@@ -51,6 +51,8 @@ async function ab(...args) {
 }
 const evaluate = async js => JSON.parse(await ab('eval', js));
 const input = '[aria-label="Search sessions and commands"]';
+// Headless Chromium on macOS ignores select-all shortcuts, so the field is cleared the way React observes it.
+const clear = () => evaluate(`(() => { const i = document.querySelector('[aria-label="Search sessions and commands"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, ''); i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
 const recent = ['Session 11', 'Session 10', 'Session 09', 'Session 08', 'Session 07', 'Session 06', 'Session 05', 'Session 04'];
 const titles = () => evaluate(`(() => {
   const group = [...document.querySelectorAll('[cmdk-group]')].find(e => ['Sessions', 'Recent sessions'].includes(e.querySelector('[cmdk-group-heading]')?.textContent));
@@ -69,7 +71,7 @@ try {
   await ab('set', 'viewport', '1440', '1000');
   await ab('open', `http://127.0.0.1:${webPort}/new`);
   await ab('wait', '--text', 'What should we work on?');
-  await ab('press', 'Control+k'); await ab('wait', input);
+  await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k'); await ab('wait', input);
   assert.deepEqual(await titles(), recent, 'eight newest by creation across both projects');
   await capture('desktop-recent');
   await ab('fill', input, 'Session');
@@ -84,21 +86,21 @@ try {
   assert.deepEqual(await titles(), ['Historical lighthouse'], 'search includes older, non-hosted sessions');
   await ab('press', 'Enter'); await ab('wait', '--text', 'History for Historical lighthouse');
   assert.ok((await evaluate('location.pathname')).endsWith('/s/palette-0'), 'keyboard selection opens the matched session');
-  await ab('press', 'Control+k'); await ab('wait', input);
+  await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k'); await ab('wait', input);
   assert.equal(await evaluate(`document.querySelector('${input}').value`), '', 'reopening resets search');
   assert.deepEqual(await titles(), recent);
   await ab('fill', input, 'other-project');
   assert.deepEqual(await titles(), ['Session 11', 'Session 09', 'Session 07', 'Session 05', 'Session 03', 'Session 01'], 'project search includes older sessions');
-  await ab('press', 'Control+a'); await ab('press', 'Backspace');
+  await clear();
   assert.deepEqual(await titles(), recent, 'clearing matches restores creation order');
   await ab('fill', input, 'Session 05');
   assert.equal((await titles())[0], 'Session 05', 'best search match ranks first');
-  await ab('press', 'Control+a'); await ab('press', 'Backspace');
+  await clear();
   assert.deepEqual(await titles(), recent, 'clearing a ranked search restores creation order');
   await ab('fill', input, 'Archived needle');
   assert.deepEqual(await titles(), [], 'archived sessions remain excluded');
   await ab('wait', '--text', 'No sessions or commands match.');
-  await ab('press', 'Control+a'); await ab('press', 'Backspace');
+  await clear();
   await capture('cleared-search');
   assert.deepEqual(await titles(), recent, 'clearing restores creation order and the limit');
   await ab('press', 'Escape');
@@ -121,7 +123,7 @@ try {
   await ab('wait', '--text', 'What should we work on?');
   assert.equal(await evaluate(`!!document.querySelector('${input}')`), false, 'here action closes palette');
   assert.equal(await evaluate(`document.querySelector('[role="combobox"][aria-label="Directory"]').getAttribute('title') === ${JSON.stringify(repos[0])}`), true, 'here action selects current project');
-  await ab('press', 'Control+k'); await ab('wait', input);
+  await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k'); await ab('wait', input);
   await ab('fill', input, 'new session');
   await ab('press', 'Enter');
   assert.equal(await evaluate(`!!document.querySelector('${input}')`), false, 'generic action closes palette');

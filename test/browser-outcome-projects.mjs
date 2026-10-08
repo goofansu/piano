@@ -70,8 +70,9 @@ async function palette(text) {
 }
 /** A project is created from the New page's project chip, or from a session's menu, which also files that session in it. */
 async function create(name) {
-  await ab('click', '[aria-label="Project"]'); await wait(`!!document.querySelector('[cmdk-item][data-value="__new"]')`);
-  await ab('click', '[cmdk-item][data-value="__new"]');
+  await ab('click', '[aria-label="Project"]'); await wait(`!!document.querySelector('[role="dialog"][aria-label="Choose a project"]')`);
+  // The first project is offered by the picker's empty state; later ones by the button beside its search.
+  await button('New project');
   await ab('fill', '#project-name', name); await ab('fill', '#project-goal', `Goal for ${name}`); await button('Create project');
   await wait(`document.querySelector('main h1')?.textContent === ${JSON.stringify(name)}`);
   assert.equal(await evaluate(`document.querySelector('[aria-label="Project"]').textContent.trim()`), name);
