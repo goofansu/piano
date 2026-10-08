@@ -165,8 +165,8 @@ function FileDialog({ file, onClose, onApprove }: { file: FileState | undefined;
   if (!file) return null;
   const title = file.busy ? "Opening file…" : approval ? "Approve access to this file?" : ready ? ready.kind === "download" ? "Download file" : ready.name : "Couldn’t open file";
   return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-    <DialogContent className="max-h-[min(90dvh,48rem)] overflow-hidden sm:max-w-3xl">
-      <DialogHeader>
+    <DialogContent className="flex max-h-[min(90dvh,48rem)] flex-col overflow-hidden sm:max-w-3xl">
+      <DialogHeader className="shrink-0">
         <DialogTitle>{title}</DialogTitle>
         {approval ? <DialogDescription>Piano normally reads only the session workspace. Allow one copied snapshot of this exact server file:</DialogDescription>
           : ready?.kind === "download" ? <DialogDescription>Preview isn’t supported for this format. You can download a copy.</DialogDescription>
@@ -182,7 +182,7 @@ function FileDialog({ file, onClose, onApprove }: { file: FileState | undefined;
       {!file.busy && ready?.kind === "text" && preview !== undefined && <pre className="min-h-0 overflow-auto rounded-lg bg-fill p-4 whitespace-pre-wrap break-words">{preview}</pre>}
       {!file.busy && ready?.kind === "markdown" && preview !== undefined && <div className="min-h-0 overflow-auto rounded-lg border p-4"><Markdown text={preview} className="prose-chat" /></div>}
       {downloadError && <p role="alert" className="text-sm text-destructive">{downloadError}</p>}
-      <DialogFooter>
+      <DialogFooter className="shrink-0">
         <Button variant="outline" onClick={onClose}>Close</Button>
         {approval && <Button disabled={file.busy} onClick={() => onApprove(file.href, approval)}><ExternalLinkIcon data-icon="inline-start" />Allow this file</Button>}
         {ready && <Button disabled={downloading} onClick={() => void downloadCopy()}>{downloading ? <Spinner /> : <DownloadIcon data-icon="inline-start" />}Download a copy</Button>}
