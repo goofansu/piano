@@ -19,10 +19,12 @@ interface Props {
   disabled?: boolean;
   /** Re-probe Pi for models, e.g. after adding a provider or logging in. */
   onRefresh?: () => void;
+  /** No directory is chosen yet, so there is no catalog to wait for. */
+  noDirectory?: boolean;
 }
 
 /** One settings trigger: the model label yields space before the effort or primary action does. */
-export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled, onRefresh }: Props) {
+export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled, onRefresh, noDirectory }: Props) {
   const [open, setOpen] = useState(false);
   // A refresh ends when a newer catalog arrives for this directory.
   const [refreshing, setRefreshing] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
   // Literal matching avoids unrelated fuzzy hits and preserves catalog order.
   const needle = query.trim().toLowerCase();
   const visibleModels = needle ? models.filter(m => [m.ref, m.id, m.provider, m.name ?? ""].some(text => text.toLowerCase().includes(needle))) : models;
-  const label = !catalog ? "Loading models" : catalog.error ? "No models" : want ? want.split("/").pop() : "Model";
+  const label = !catalog ? (noDirectory ? "Model" : "Loading models") : catalog.error ? "No models" : want ? want.split("/").pop() : "Model";
 
   const item = (m: ModelChoice) => (
     <CommandItem
@@ -67,7 +69,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           className={cn(picker, "h-11 min-w-0 max-w-none shrink justify-end md:h-8")}
           title={want}
         >
-          <span className={cn("min-w-0 truncate", !catalog && "shimmer")}>{label}</span>
+          <span className={cn("min-w-0 truncate", !catalog && !noDirectory && "shimmer")}>{label}</span>
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>·</span>
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>{effort}</span>
         </Button>

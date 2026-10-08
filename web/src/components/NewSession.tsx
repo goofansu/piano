@@ -145,7 +145,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
               />
               <div className={composerToolbar}>
                 <AttachButton draft={attachments} disabled={creating || !state.connected} />
-                <ModelSelect catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={model} onChange={setModel} effort={effectiveEffort} onEffortChange={setEffort} />
+                <ModelSelect catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={model} onChange={setModel} effort={effectiveEffort} onEffortChange={setEffort} noDirectory={!cwd} />
                 <Button size="icon" className={composerAction} aria-label="Send" disabled={!ready} onClick={submit}>
                   <span key={creating ? "busy" : "send"} className="control-enter inline-flex">{creating ? <Spinner /> : <ArrowUpIcon />}</span>
                 </Button>
