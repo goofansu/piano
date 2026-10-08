@@ -160,11 +160,15 @@ try {
   assert.equal(auditRecords().filter(e => e.event === 'spawn').length, 1);
   assert.equal(auditRecords().filter(e => e.event === 'exit' || e.command === 'abort').length, 0);
   await ab('open', runningUrl); await wait(`!!document.querySelector('[aria-label="Stop"]')`);
-  // Palette commands mirror the menus, without introducing global shortcuts.
-  await palette('Add to Subscriptions'); await ab('click', '[cmdk-item][data-value^="Add to project Subscriptions"]'); await settle();
+  // The header's own menu files the session on screen; the palette finds sessions by project name but offers no project commands.
+  await ab('click', '[aria-label="Session information and actions"]'); await wait(`!!document.querySelector('[role="menuitem"][aria-haspopup="menu"]')`);
+  await ab('hover', '[role="menuitem"][aria-haspopup="menu"]'); await wait(`[...document.querySelectorAll('[role="menuitemradio"]')].some(i => i.textContent === 'Subscriptions')`); await settle();
+  await ab('find', 'role', 'menuitemradio', 'click', '--name', 'Subscriptions', '--exact'); await wait(`!document.querySelector('[role="menu"]')`); await settle();
   assert.equal(member(running.sessionId).outcomeProjectId, project('Subscriptions').id);
-  await palette('New session in Subscriptions');
-  assert.equal(await evaluate(`[...document.querySelectorAll('[cmdk-item]')].some(i => i.textContent.trim() === 'New session in Subscriptions')`), true);
+  await palette('Subscriptions');
+  const items = await evaluate(`[...document.querySelectorAll('[cmdk-item]')].filter(i => i.getBoundingClientRect().height > 0).map(i => i.textContent.trim())`);
+  assert.ok(items.includes('/holdweb') && items.includes('API sessionapi'), `sessions found by project name: ${items}`);
+  assert.ok(items.every(i => !/project/i.test(i)), `no project commands in the palette: ${items}`);
   await ab('press', 'Escape');
   // Closing a directory leaves project references, histories and workspace identity intact.
   await ab('click', '[aria-label="Directory menu for api"]'); await menuitem('Close'); await button('Close'); await settle();

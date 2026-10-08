@@ -27,8 +27,8 @@ export const activeProjects = (state: AppState) => state.outcomeProjects.filter(
 
 /**
  * Membership lives in the session's own menu, like Rename or Archive. Choosing a project is a radio
- * pick; "New project…" creates one and files the session in it. Hidden entirely while there are no
- * projects and nothing to leave, so the menu does not grow for people who never group sessions.
+ * pick; "New project…" creates one and files the session in it. The command palette carries no
+ * project commands yet: which ones are wanted is left to daily use.
  */
 export function ProjectMenu({ state, send, session, onDialog }: {
   state: AppState; send: (command: ClientCommand) => void; session: SessionRef; onDialog: (dialog: ProjectDialog) => void;

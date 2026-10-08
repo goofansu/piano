@@ -12,9 +12,10 @@ organization does not confer verification or approval (INV-09–10).
   duplicate/dangling identities and incompatible/malformed data fail without resetting the file.
 - Projects are groups in the sidebar, in the same tree and rows as directories, with the member's
   directory (or worktree branch) as the row's trailing detail. Headings and project controls appear
-  only once a project exists. Membership is a **Project** submenu on every session menu (sidebar row,
-  session header, command palette); "New project…" there creates a project and files the session in
-  one step. A project's `+` and `/projects/<id>` open its New page, which names the project, shows
+  only once a project exists. Membership is a **Project** submenu on the sidebar row and session header
+  menus; "New project…" there creates a project and files the session in one step. The command palette
+  finds sessions by project name but carries no project commands yet; which ones are wanted is left to
+  daily use, a deliberate deviation from the plan's palette-parity line for this slice. A project's `+` and `/projects/<id>` open its New page, which names the project, shows
   its goal and requires an explicit directory. Edit, archive and reopen live in the group's menu;
   archived projects collapse under an **Archived** row. The session header links back to the project.
 - Closed directories and archived sessions retain references, routing and workspace identity.
@@ -57,8 +58,8 @@ the session menu's Project submenu; opens each transcript from its group and ver
 cwd/diff and header link; creates an empty project and reloads onto its route; renames a project;
 starts a grouped session only after choosing its cwd, with the project route surviving reload;
 archives/reopens under the Archived row, moves and leaves with that running session; observes one
-spawn and no abort/exit during organization; exercises palette membership and the per-project
-"New session in" command; closes a directory without losing membership or direct-route history;
+spawn and no abort/exit during organization; files the session on screen from the header menu and
+checks the palette finds sessions by project name while offering no project command; closes a directory without losing membership or direct-route history;
 removes a history file and a checkout; observes a disabled, explained row and remaining readable
 history; restarts the backend and compares the registry. The v1 backup matches the input
 byte-for-byte. Mobile assertions protect page width and row non-overlap in the sidebar sheet.
@@ -67,7 +68,7 @@ Early browser attempts exposed fixture gaps (missing `get_commands`, an unrender
 unsupported selector). Those were corrected without weakening the lifecycle assertions. Screenshot
 review also caught cramped mobile member actions; an overflow menu and responsive title fixed it.
 The final journey passed after these corrections. Manual diff review checked ownership, wire
-projection, preserved path references, archive/edit separation and palette parity.
+projection, preserved path references, archive/edit separation and the palette's session search.
 
 ## Retained artifacts and limits
 

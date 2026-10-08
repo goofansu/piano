@@ -1,9 +1,9 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, TargetIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { activeProjects, type ProjectDialog, sessionProject } from "@/components/OutcomeProjects";
+import { sessionProject } from "@/components/OutcomeProjects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -15,8 +15,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   state: AppState;
   select: (cwd: string, sessionId: string | null) => void;
-  openNew: (cwd?: string, outcomeProjectId?: string) => void;
-  onProjectDialog: (dialog: ProjectDialog) => void;
+  openNew: (cwd?: string) => void;
   toggleSidebar: () => void;
   send: (command: ClientCommand) => void;
   openChanges: () => void;
@@ -27,7 +26,7 @@ interface Props {
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest, onProjectDialog }: Props) {
+export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest }: Props) {
   const { setTheme } = useTheme();
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
@@ -50,8 +49,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
       .map(t => ({ ...t, outcome: sessionProject(state, t)?.name ?? "" }))
       .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
   }, [state.projects, state.sessionReferences, state.outcomeProjects]);
-  const projects = activeProjects(state);
-  const membership = target ? sessionProject(state, target) : undefined;
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
@@ -93,14 +90,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
           </CommandItem>
-          {projects.map(p => (
-            <CommandItem key={p.id} value={`new session in ${p.name} ${p.id}`} keywords={["project"]} onSelect={() => run(() => openNew(undefined, p.id))}>
-              <PlusIcon /> <span className="shrink-0">New session in</span> <span className="min-w-0 truncate">{p.name}</span>
-            </CommandItem>
-          ))}
-          <CommandItem value="new project" disabled={!state.connected} onSelect={() => run(() => onProjectDialog({}))}>
-            <TargetIcon /> New project
-          </CommandItem>
           <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
             <PanelLeftIcon /> Toggle sidebar
           </CommandItem>
@@ -118,17 +107,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
             <CommandItem value="Pull request" keywords={["github", "link", "pr"]} disabled={!target} onSelect={() => run(openPullRequest)}><GitPullRequestIcon /> Pull request</CommandItem>
             <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
             <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
-            {projects.filter(p => p.id !== membership?.id).map(p => (
-              <CommandItem key={p.id} value={`${membership ? "Move" : "Add"} to project ${p.name} ${p.id}`} disabled={!state.connected || !target} onSelect={() => run(() => { if (target) send({ _tag: "assign_project", cwd: target.cwd, sessionId: target.sessionId, projectId: p.id }); })}>
-                <TargetIcon /> <span className="shrink-0">{membership ? "Move to" : "Add to"}</span> <span className="min-w-0 truncate">{p.name}</span>
-              </CommandItem>
-            ))}
-            {membership && <CommandItem value={`Remove from project ${membership.name}`} disabled={!state.connected || !target} onSelect={() => run(() => { if (target) send({ _tag: "assign_project", cwd: target.cwd, sessionId: target.sessionId, projectId: null }); })}>
-              <TargetIcon /> <span className="shrink-0">Remove from</span> <span className="min-w-0 truncate">{membership.name}</span>
-            </CommandItem>}
-            <CommandItem value="new project with this session" keywords={["project"]} disabled={!state.connected || !target} onSelect={() => run(() => { if (target) onProjectDialog({ assign: target }); })}>
-              <TargetIcon /> New project with this session
-            </CommandItem>
             <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
             <CommandItem value="new session here" disabled={state.session.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => { if (state.session) openNew(state.session.cwd); })}>
               <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(state.session.cwd)}</span>
