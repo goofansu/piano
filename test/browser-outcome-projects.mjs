@@ -68,11 +68,18 @@ async function palette(text) {
   await button('Search sessions'); await wait(`!!document.querySelector('[cmdk-list]')`);
   await ab('fill', '[aria-label="Search sessions and commands"]', text); await settle();
 }
-/** The palette's "New project" command is the entry point before any project exists; the sidebar heading's + takes over later. */
+/** The first project can only come from a session's menu; once one exists, the Projects heading's + creates more. */
+async function createWithSession(name, sessionMenu) {
+  await ab('find', 'first', `[aria-label=${JSON.stringify(`Session menu for ${sessionMenu}`)}]`, 'click');
+  await wait(`!!document.querySelector('[role="menuitem"][aria-haspopup="menu"]')`);
+  await ab('hover', '[role="menuitem"][aria-haspopup="menu"]');
+  await wait(`[...document.querySelectorAll('[role="menuitem"]')].some(i => i.textContent.trim() === 'New project…')`); await settle();
+  await menuitem('New project…');
+  await ab('fill', '#project-name', name); await ab('fill', '#project-goal', `Goal for ${name}`); await button('Create and add session');
+  await wait(`!document.querySelector('[role="dialog"]')`); await settle();
+}
 async function create(name) {
-  await palette('New project');
-  await wait(`!!document.querySelector('[cmdk-item][data-value="new project"]')`);
-  await ab('click', '[cmdk-item][data-value="new project"]');
+  await ab('click', '[aria-label="New project"]');
   await ab('fill', '#project-name', name); await ab('fill', '#project-goal', `Goal for ${name}`); await button('Create project');
   await wait(`document.querySelector('main h1')?.textContent === ${JSON.stringify(name)}`);
 }
@@ -103,10 +110,10 @@ try {
   assert.equal(readFileSync(join(root, readdirSync(root).find(f => f.endsWith('.bak'))), 'utf8'), original);
   // Before the first project the sidebar is unchanged: no section headings, no project controls.
   assert.equal(await evaluate(`!!document.querySelector('nav h2')`), false);
-  await create('Launch subscriptions');
-  assert.equal(await evaluate(`[...document.querySelectorAll('nav h2')].map(h => h.textContent).join()`), 'Projects,Directories');
   await openGroup('api'); await openGroup('web');
-  await file('API session', 'Launch subscriptions'); await file('Web session', 'Launch subscriptions');
+  await createWithSession('Launch subscriptions', 'API session');
+  assert.equal(await evaluate(`[...document.querySelectorAll('nav h2')].map(h => h.textContent).join()`), 'Projects,Directories');
+  await file('Web session', 'Launch subscriptions');
   assert.equal(member('one').outcomeProjectId, project('Launch subscriptions').id);
   assert.equal(member('two').outcomeProjectId, project('Launch subscriptions').id);
   await ab('screenshot', join(evidence, 'cross-repository.png'));
@@ -169,7 +176,7 @@ try {
   const items = await evaluate(`[...document.querySelectorAll('[cmdk-item]')].filter(i => i.getBoundingClientRect().height > 0).map(i => i.textContent.trim())`);
   assert.ok(items.includes('/holdweb') && items.includes('API sessionapi'), `sessions found by project name: ${items}`);
   assert.ok(items.every(i => !/project/i.test(i)), `no project commands in the palette: ${items}`);
-  await ab('press', 'Escape');
+  await closeDialogs();
   // Closing a directory leaves project references, histories and workspace identity intact.
   await ab('click', '[aria-label="Directory menu for api"]'); await menuitem('Close'); await button('Close'); await settle();
   assert.equal(registry().projects.includes(api), false);
