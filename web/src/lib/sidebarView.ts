@@ -10,9 +10,10 @@ export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
   { value: "project", label: "Project" },
   { value: "none", label: "None" },
 ];
+/** Defaults lead in both lists. */
 export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
-  { value: "name", label: "Name" },
   { value: "recent", label: "Last activity" },
+  { value: "name", label: "Name" },
 ];
 
 const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
