@@ -49,7 +49,7 @@ const click = name => ab('find', 'role', 'button', 'click', '--name', name, '--e
 const readRegistry = () => JSON.parse(readFileSync(registry, 'utf8'));
 async function capture(name) { writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot')); await ab('screenshot', join(evidence, `${name}.png`)); observations.push(name); }
 async function openWorktrees() { await ab('click', '[aria-label="Directory"]'); writeFileSync(join(evidence, 'directory-picker.txt'), await ab('snapshot')); await ab('click', '[cmdk-item][data-value="__worktree"]'); await ab('wait', '--fn', `document.querySelector('[role="dialog"]') && !document.querySelector('[role="dialog"] [role="status"]')`); }
-async function refresh() { await click('Refresh'); await ab('wait', '--fn', `!document.querySelector('[role="dialog"] [role="status"]')`); }
+async function refresh() { await click('Refresh worktrees'); await ab('wait', '--fn', `!document.querySelector('[role="dialog"] [role="status"]')`); }
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(server.exitCode, null); assert.equal(frontend.exitCode, null);
@@ -61,15 +61,15 @@ try {
   await openWorktrees(); await ab('wait', '--text', 'Detached HEAD');
   assert.equal(readRegistry().worktrees.length, 0); assert.equal(readRegistry().sessions.length, 0);
   await capture('discovery-not-registration');
-  await click('Select detached'); await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
+  await ab('find', 'role', 'option', 'click', '--name', 'repo/Detached HEAD', '--exact'); await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
   assert.equal(await evaluate(`document.querySelector('[aria-label="Directory"]').title`), detached);
   assert.deepEqual(readRegistry().worktrees.map(w => w.path), [detached]); assert.equal(readRegistry().sessions.length, 0);
-  await openWorktrees(); await ab('fill', '#wt-branch', 'browser-feature');
-  await ab('check', 'input[type="checkbox"]'); await click('Create worktree');
+  await openWorktrees(); await click('New worktree'); await ab('fill', '#wt-branch', 'browser-feature');
+  await ab('check', 'input[type="checkbox"]'); await click('Create');
   await ab('wait', '--text', 'Worktree operation not confirmed');
   assert.equal(existsSync(join(root, 'custom/browser-feature')), false);
   assert.equal(readRegistry().worktrees.length, 1); await capture('unapproved-hook-failure');
-  await ab('uncheck', 'input[type="checkbox"]'); await click('Create worktree');
+  await ab('uncheck', 'input[type="checkbox"]'); await click('Create');
   await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
   const created = join(root, 'custom/browser-feature');
   assert.equal(await evaluate(`document.querySelector('[aria-label="Directory"]').title`), created);
@@ -91,8 +91,8 @@ try {
   await click('Close');
   await ab('wait', '--text', 'Checkout missing');
   await capture('selected-missing-checkout');
-  await openWorktrees(); await ab('click', '[aria-label="Worktree repository"]'); await ab('find', 'role', 'option', 'click', '--name', 'notes', '--exact');
-  await ab('wait', '--text', 'Non-Git directory. Chat is available');
+  // Every repository's worktrees share one searchable list; a non-Git folder is listed as such instead of picked from a dropdown.
+  await openWorktrees(); await ab('fill', '[aria-label="Search worktrees"]', 'notes'); await ab('wait', '--text', 'Non-Git directory');
   assert.equal(await evaluate(`!!document.querySelector('#wt-branch')`), false); await capture('non-git-is-explicit');
   await click('Close'); await ab('reload'); await ab('wait', '--text', 'What should we work on?');
   assert.equal(readRegistry().sessions.length, 0);

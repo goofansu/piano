@@ -1,4 +1,4 @@
-import type { ClientCommand } from "@shared/wire";
+import type { ClientCommand, ProjectView, WorktreeFacts } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowLeftIcon, CheckIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PopoverContent } from "@/components/ui/popover";
@@ -14,13 +14,25 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Spinner } from "@/components/ui/spinner";
 import type { AppState } from "@/store";
 
+/** A discovered checkout named by its repository, as the model picker names a model by its provider. */
+interface Row { project: ProjectView; worktree: WorktreeFacts; label: string }
+
+function rows(projects: readonly ProjectView[]): Row[] {
+  return projects.flatMap(project => project.discovery.status === "ready"
+    ? project.discovery.worktrees.map(worktree => ({ project, worktree, label: worktree.branch ?? worktree.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD" }))
+    : []);
+}
+
 /** One deliberate discovery/selection or new-branch operation; never automatic retries. */
 export function WorktreesPopover({ onOpenChange, onPendingChange, state, currentCwd, send, onSelect }: {
   onOpenChange: (o: boolean) => void; onPendingChange: (pending: boolean) => void; state: AppState; currentCwd: string;
   send: (m: ClientCommand) => void; onSelect: (cwd: string) => void;
 }) {
-  const owner = state.projects.find(p => p.worktrees.some(w => w.path === currentCwd))?.path ?? state.projects[0]?.path ?? "";
+  const ready = state.projects.filter(p => p.discovery.status === "ready");
+  const owner = state.projects.find(p => p.worktrees.some(w => w.path === currentCwd))?.path;
+  // The repository matters only when creating; picking searches every repository at once.
   const [project, setProject] = useState(owner);
+  const [query, setQuery] = useState("");
   const [branch, setBranch] = useState("");
   const [hooks, setHooks] = useState(false);
   // Picking is the common case; the creation form opens on request.
@@ -28,10 +40,11 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
   const [request, setRequest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
   useEffect(() => { if (error) errorRef.current?.scrollIntoView({ block: "nearest" }); }, [error]);
   const [refreshing, setRefreshing] = useState(false);
-  const p = state.projects.find(p => p.path === project);
-  const discovery = p?.discovery;
+  const target = ready.find(p => p.path === project) ?? ready[0];
   const pending = request !== null;
   useEffect(() => { onPendingChange(pending); }, [pending, onPendingChange]);
   useEffect(() => {
@@ -54,11 +67,21 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
     return () => clearTimeout(timer);
   }, [pending, state.connected]);
   const submit = () => {
-    if (pending || !state.connected || !branch.trim() || discovery?.status !== "ready") return;
+    if (pending || !state.connected || !branch.trim() || !target) return;
     const requestId = crypto.randomUUID(); setRequest(requestId); setError(null);
-    send({ _tag: "create_worktree", requestId, project, branch: branch.trim(), hooks });
+    send({ _tag: "create_worktree", requestId, project: target.path, branch: branch.trim(), hooks });
   };
+  const startCreating = (initialBranch = "") => { setError(null); setBranch(initialBranch); setCreating(true); };
   const showList = () => { setCreating(false); setError(null); };
+  // Literal matching avoids unrelated fuzzy hits and preserves discovery order.
+  const needle = query.trim().toLowerCase();
+  const all = rows(state.projects);
+  const visible = needle ? all.filter(r => [r.project.name, r.label, r.worktree.path].some(text => text.toLowerCase().includes(needle))) : all;
+  const matchesProject = (p: ProjectView) => !needle || p.name.toLowerCase().includes(needle);
+  // A non-Git folder is listed so its absence of worktrees reads as explicit; a failed discovery is a problem to act on.
+  const nonGit = state.projects.filter(p => p.discovery.status === "non-git" && matchesProject(p));
+  const failed = state.projects.flatMap(p => p.discovery.status === "error" && matchesProject(p) ? [{ name: p.name, detail: p.discovery.detail }] : []);
+  const busy = pending || !state.connected || refreshing;
   const errorBox = error && (
     <Alert ref={errorRef} variant="destructive" className="animate-in fade-in-0 slide-in-from-top-1">
       <AlertTitle>Worktree operation not confirmed</AlertTitle>
@@ -72,14 +95,26 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
       </AlertDescription>
     </Alert>
   );
-  return <PopoverContent align="start" aria-label={creating ? "New worktree" : "Worktrees"}
-      className="max-h-(--radix-popover-content-available-height) w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-2"
+  return <PopoverContent ref={content} align="start" tabIndex={-1} aria-label={creating ? "New worktree" : "Worktrees"}
+      className="max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
+      onOpenAutoFocus={event => {
+        // Opening the picker on a phone should not summon the software keyboard.
+        event.preventDefault();
+        if (window.matchMedia("(pointer: coarse)").matches) content.current?.focus({ preventScroll: true });
+        else search.current?.focus({ preventScroll: true });
+      }}
       onEscapeKeyDown={event => { if (creating && !pending) { event.preventDefault(); showList(); } }}>
     {/* The list and the form trade places with a short slide, so the swap reads as one surface. */}
-    {creating && discovery?.status === "ready" ? <form key="create" className="flex animate-in flex-col gap-3 fade-in-0 slide-in-from-right-2 duration-200" onSubmit={e => { e.preventDefault(); submit(); }}>
+    {creating && target ? <form key="create" className="flex animate-in flex-col gap-3 p-2 fade-in-0 slide-in-from-right-2 duration-200" onSubmit={e => { e.preventDefault(); submit(); }}>
       <div className="flex items-center gap-1">
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Back to worktrees" title="Back" disabled={pending} onClick={showList}><ArrowLeftIcon /></Button>
-        <p className="min-w-0 truncate text-sm font-medium">New worktree <span className="font-normal text-ink-3">in {p?.name}</span></p>
+        <p className="shrink-0 text-sm font-medium">New worktree <span className="font-normal text-ink-3">in</span></p>
+        {ready.length > 1 ? <Select value={target.path} onValueChange={setProject} disabled={pending}>
+          <SelectTrigger aria-label="Worktree repository" size="sm" className="min-w-0 flex-1"><SelectValue /></SelectTrigger>
+          <SelectContent position="popper">
+            <SelectGroup>{ready.map(p => <SelectItem key={p.path} value={p.path}>{p.name}</SelectItem>)}</SelectGroup>
+          </SelectContent>
+        </Select> : <p className="min-w-0 truncate text-sm font-medium">{target.name}</p>}
       </div>
       <FieldGroup className="gap-3">
         <Field>
@@ -98,40 +133,54 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
           {pending && <Spinner />}{pending ? "Creating" : "Create"}
         </Button>
       </div>
-    </form> : <div key="list" className="flex animate-in flex-col gap-2 fade-in-0 slide-in-from-left-2 duration-200">
-      <div className="flex items-center gap-1">
-        <Select value={project} onValueChange={setProject} disabled={pending}>
-          <SelectTrigger aria-label="Worktree repository" className="min-w-0 flex-1"><SelectValue /></SelectTrigger>
-          <SelectContent position="popper">
-            <SelectGroup>{state.projects.map(p => <SelectItem key={p.path} value={p.path}>{p.name}</SelectItem>)}</SelectGroup>
-          </SelectContent>
-        </Select>
-        {discovery?.status === "ready" && <Button variant="ghost" size="icon" aria-label="New worktree" title="New worktree" disabled={pending || !state.connected} onClick={() => { setError(null); setCreating(true); }}>
-          <PlusIcon />
-        </Button>}
-        <Button variant="ghost" size="icon" aria-label="Refresh worktrees" title="Refresh worktrees" disabled={pending || !state.connected || refreshing} onClick={() => { setRefreshing(true); send({ _tag: "projects" }); }}>
-          {refreshing ? <Spinner /> : <RefreshCwIcon />}
-        </Button>
-      </div>
-      {!state.connected && <p className="px-2 text-sm text-muted-foreground">Disconnected — showing last observation.</p>}
-      {discovery?.status === "error" && <Alert variant="destructive"><AlertDescription className="whitespace-pre-wrap break-words">{discovery.detail}</AlertDescription></Alert>}
-      {discovery?.status === "non-git" && <p className="px-2 text-sm text-muted-foreground">Non-Git directory. Chat is available; worktree creation is not.</p>}
-      {discovery?.status === "ready" && <Command>
-        <CommandList aria-label="Discovered worktrees">
-          <CommandGroup>
-            {discovery.worktrees.map(w => (
-              <CommandItem key={w.path} value={w.path} disabled={pending || !state.connected || refreshing || w.prunable} onSelect={() => {
+    </form> : <div key="list" className="flex animate-in flex-col fade-in-0 slide-in-from-left-2 duration-200">
+      <Command shouldFilter={false}>
+        <div className="flex items-center border-b border-line [&>[data-slot=command-input-wrapper]]:flex-1 [&>[data-slot=command-input-wrapper]]:border-b-0">
+          <CommandInput ref={search} value={query} onValueChange={setQuery} aria-label="Search worktrees" placeholder="Search worktrees" disabled={pending} />
+          {target && <Button variant="ghost" size="icon-sm" aria-label="New worktree" title="New worktree" disabled={pending || !state.connected} onClick={() => startCreating()} className="shrink-0 text-ink-3">
+            <PlusIcon aria-hidden />
+          </Button>}
+          <Button variant="ghost" size="icon-sm" aria-label="Refresh worktrees" title="Refresh worktrees" disabled={busy} onClick={() => { setRefreshing(true); send({ _tag: "projects" }); }} className="mr-1 shrink-0 text-ink-3">
+            {refreshing ? <Spinner /> : <RefreshCwIcon aria-hidden />}
+          </Button>
+        </div>
+        <CommandList aria-label="Discovered worktrees" className="max-h-[min(18rem,50dvh)]">
+          <CommandEmpty className="flex flex-col items-center gap-2 py-6 text-center text-sm">
+            <span>No worktree matches.</span>
+            {target && needle && <Button variant="outline" size="sm" disabled={pending || !state.connected} onClick={() => startCreating(query.trim())}>
+              <PlusIcon aria-hidden /> New worktree “{query.trim()}”
+            </Button>}
+          </CommandEmpty>
+          {(visible.length > 0 || nonGit.length > 0) && <CommandGroup>
+            {visible.map(({ project, worktree, label }) => (
+              <CommandItem key={worktree.path} value={worktree.path} disabled={busy || worktree.prunable} onSelect={() => {
                 const requestId = crypto.randomUUID(); setRequest(requestId); setError(null);
-                send({ _tag: "add_worktree", requestId, project, path: w.path });
+                send({ _tag: "add_worktree", requestId, project: project.path, path: worktree.path });
               }}>
-                <span className="min-w-0 flex-1 truncate">{w.branch ?? w.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD"}</span>
-                <CheckIcon className={cn("ml-auto", w.path === currentCwd ? "opacity-100" : "opacity-0")} />
+                <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">
+                  <span className="text-ink-3">{project.name}/</span>
+                  {label}
+                </span>
+                <CheckIcon className={cn("ml-auto", worktree.path === currentCwd ? "opacity-100" : "opacity-0")} />
               </CommandItem>
             ))}
-          </CommandGroup>
+            {nonGit.map(p => (
+              <CommandItem key={p.path} value={p.path} disabled>
+                <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                <span className="ml-auto shrink-0 text-xs text-ink-3">Non-Git directory</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>}
         </CommandList>
-      </Command>}
-      {errorBox}
+      </Command>
+      {(!state.connected || failed.length > 0 || error) && <div className="flex flex-col gap-2 border-t border-line p-2">
+        {!state.connected && <p className="px-2 text-sm text-muted-foreground">Disconnected — showing last observation.</p>}
+        {failed.map(f => <Alert key={f.name} variant="destructive">
+          {state.projects.length > 1 && <AlertTitle>{f.name}</AlertTitle>}
+          <AlertDescription className="whitespace-pre-wrap break-words">{f.detail}</AlertDescription>
+        </Alert>)}
+        {errorBox}
+      </div>}
     </div>}
   </PopoverContent>;
 }
