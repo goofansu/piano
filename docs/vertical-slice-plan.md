@@ -121,6 +121,10 @@ see the [roadmap priority](roadmap.md#current-priority-joyful-daily-use) and
 [first UX pass](research/2026-10-05-daily-ux-first-pass.md). Runtime contracts remain in force;
 this does not require full TUI parity or revive Phase 8.
 
+The proposed [outcome-project slices](outcome-projects.md) complement that daily-use priority:
+organize sessions across repositories first, then add shared context/instructions separately. They
+are not a new prerequisite for this table, do not renumber its phases, and do not resume phases 9–13.
+
 When deeper workflow work resumes, use the dependency order above. Do not parallelize two writing
 tasks in one checkout; use separate workspaces and explicit handoffs. No unsupported time estimates:
 size PRs around claims, not a speculative calendar.
@@ -536,6 +540,8 @@ own vertical slice; do not bundle the following into a new platform rewrite.
 
 | Later slice | Trigger and bounded scope | Tight exit gate |
 | --- | --- | --- |
+| Outcome-project grouping (daily-use priority) | A bounded goal needs sessions from multiple repositories. Add optional project identity, explicit session membership, a short goal and archive/reopen; migrate references without changing cwd or Pi history. Goal text is not delivered to Pi in this slice. See the [plan](outcome-projects.md#step-1--organize-sessions-across-repositories). | Two projects reuse a repository while one spans repositories; reload, reassignment, archive and migration preserve sessions/workspaces and running work. No implicit membership or verification. INV-01–11. |
+| Shared project context/instructions (later) | Grouping is useful and shared guidance is needed. Define versioned content, explicit delivery/application boundaries and precedence using supported Pi mechanisms; no second configuration loader or retroactive history rewrite. See the [plan](outcome-projects.md#step-2--shared-context-and-instructions-later). | Observe the intended version in two workspaces, no unrelated-project leakage, preserved checkout loading/trust, and explicit edit/reassignment/resume/failure outcomes. INV-01–05, INV-09, INV-11–13. |
 | Pi ergonomics (roadmap 4) | A recorded workflow needs one of steering/follow-up, queue editing, compaction, naming, discovery or conversation fork/tree control. Add one action through PiSessions and wire/UI at a time. | Fake-Pi outcome plus affected browser journey; preserve phases 1–5. A conversation fork records its relationship to code/workspace without claiming a code fork. INV-02–05, INV-07, INV-12. |
 | Independent review (roadmap 5) | Phase 10/12 evidence suggests review can catch meaningful defects. Use a separate Pi reviewer over a stable candidate/checkout with restricted read-only capabilities, criteria and bounded rounds/cost. | A seeded consequential defect produces an actionable reproducing finding; a clean control does not manufacture one; reviewer cannot mutate the candidate or award authoritative acceptance. Record cost/limits, including extension/execution restrictions. INV-01–02, INV-07–12. |
 | Orchestration experiment (roadmap 5) | A measured workflow needs restart-safe orchestration; prototype exactly one workflow, do not replace the production Pi session runtime. | Primary-source compatibility audit at the selected version plus kill/restart around external effects: no duplicate action, storage has one owner, configuration/recovery differences documented. Adoption needs an ADR; experimental capability is not production readiness. |

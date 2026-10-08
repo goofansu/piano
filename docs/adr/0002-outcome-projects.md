@@ -1,0 +1,36 @@
+# ADR 0002: Separate outcome projects from execution locations
+
+- Status: Proposed; this records a plan, not implementation authorization or a completed migration.
+- Related: [staged plan](../outcome-projects.md), [glossary](../glossary.md#planned-outcome-projects),
+  [ADR 0001](0001-pi-rpc-workspace-workbench.md).
+
+Piano currently calls an added directory a project, but a bounded initiative can span repositories,
+and one repository can support several initiatives. Add an optional outcome-project grouping above
+session references while keeping each session's workspace as its execution context. Ship grouping
+first; shared context and instructions are a separate later step.
+
+## Boundary and trade-off
+
+This proposes extending ADR 0001 decision 4: a workspace remains the context for execution, revision,
+processes and evidence, while an outcome project supplies the organizational context across that work.
+It does not become a checkout owner or a multi-repository execution workspace. The directory meaning
+of existing `project` fields remains unchanged until an explicit compatibility migration and UI naming
+pass; accepting this direction does not silently reinterpret persisted paths.
+
+Simply renaming directories would not support cross-repository outcomes. A list of repository paths
+alone would not distinguish related sessions from unrelated work in those repositories. Explicit
+session membership provides the first useful grouping without requiring a repository hierarchy. The
+initial proposal allows at most one outcome project per session, keeping reassignment and eventual
+instruction selection unambiguous; repositories remain reusable across projects.
+
+## Consequences
+
+- Registry owns project identity, organizational metadata and associations, not transcripts or evidence
+  (INV-01). Existing directory/workspace/session references survive a backed-up, validated migration.
+- Membership and archive actions do not change cwd, host ownership, trust, session history, checkout
+  lifecycle or verification/approval state (INV-02–11). Archive is organization, not acceptance.
+- Later shared context/instructions need explicit delivery, version and application-boundary semantics
+  that preserve normal Pi configuration and trust; no second loader or required skill set (INV-12–13).
+- Terminology, UI labels, storage and verification gates are detailed in the
+  [staged plan](../outcome-projects.md). Automatic orchestration and cross-repository integration are
+  not consequences of introducing this grouping.

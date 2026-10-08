@@ -16,6 +16,24 @@ chasing full TUI parity or adding more backend machinery. Preserve runtime corre
 quiet-UI principle throughout. The [first UX pass](research/2026-10-05-daily-ux-first-pass.md)
 records the initial changes and verification, not completion of the broader UX goal.
 
+### Planned: outcome-based projects
+
+The [staged plan](outcome-projects.md) and [ADR 0002](adr/0002-outcome-projects.md) propose organizing
+sessions around bounded goals independently of repository/directory boundaries. This is a daily-use
+improvement, not a prerequisite for or resumption of the deferred deeper workflow phases.
+
+1. **Grouping first:** create/name a project with an optional goal, associate sessions across
+   repositories, and archive/reopen the grouping. Keep ungrouped sessions usable, preserve each
+   session's actual workspace, and migrate existing references without creating one outcome project
+   per directory. The goal is metadata, not instructions delivered to Pi.
+2. **Shared context and instructions later:** explicitly supply versioned project material to member
+   sessions, with defined precedence, application boundaries and delivery outcomes. Preserve Pi's
+   normal checkout configuration/trust; do not bundle this into the grouping slice.
+
+The plan defines browser/migration gates and non-goals. No code or schema rename is authorized by
+this roadmap update; use **outcome project** to distinguish the proposal from today's `project` fields.
+Covers INV-01–13 at their existing ownership, execution, evidence and trust boundaries.
+
 ## 1. Runtime correctness
 
 - Preserve the deliberate exact Pi 1.0.2 package/lockfile upgrade, recorded in the
