@@ -26,7 +26,6 @@ interface Props {
   /** Pi is working and no reply text has arrived yet: the keys play in a pending row. */
   working?: boolean;
   placeholder: string;
-  fileContext?: { workspaceId: string; sessionId: string };
   className?: string;
 }
 
@@ -35,7 +34,7 @@ interface Props {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, tools, working = false, placeholder, fileContext, className }: Props) {
+export function MessageList({ messages, pending, tools, working = false, placeholder, className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -111,9 +110,9 @@ export function MessageList({ messages, pending, tools, working = false, placeho
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} fileContext={fileContext} terminalRuns={terminalRuns} />;
+            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
           })}
-          {pending && <Message msg={pending} results={results} tools={tools} active={active} fileContext={fileContext} terminalRuns={terminalRuns} streaming />}
+          {pending && <Message msg={pending} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
           {working && (
             <Row glyph={<Keys playing className="text-brand" />}>
               <span className="sr-only">Pi is working</span>
@@ -151,10 +150,10 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, results, tools, active, fileContext, terminalRuns, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; fileContext?: { workspaceId: string; sessionId: string }; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
-  if (msg.subagent) return <SubagentCardView card={msg.subagent} content={msg.text} markdown={msg.role === "context"} fileContext={fileContext} terminalStatus={msg.subagent.kind === "delegation" && msg.subagent.runId ? terminalRuns.get(msg.subagent.runId) : undefined} />;
+function Message({ msg, results, tools, active, terminalRuns, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
+  if (msg.subagent) return <SubagentCardView card={msg.subagent} content={msg.text} markdown={msg.role === "context"} terminalStatus={msg.subagent.kind === "delegation" && msg.subagent.runId ? terminalRuns.get(msg.subagent.runId) : undefined} />;
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
-  if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} fileContext={fileContext} />;
+  if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
     // Pi starts a message before its first visible text or tool block arrives.
     // An empty article would still consume the transcript's flex gap.
@@ -169,7 +168,7 @@ function Message({ msg, results, tools, active, fileContext, terminalRuns, strea
         {msg.text && (
           <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
-            <Markdown text={msg.text} className={cn("prose-chat", streaming && "streaming-caret")} fileContext={fileContext} />
+            <Markdown text={msg.text} className={cn("prose-chat", streaming && "streaming-caret")} />
             {!streaming && !msg.toolCalls?.length && <CopyResponse text={msg.text} />}
           </Row>
         )}
@@ -218,7 +217,7 @@ function CopyResponse({ text }: { text: string }) {
   );
 }
 
-function UserMessage({ id, text, skill, attachments, fileContext }: { id: string; text: string; skill: RenderMsg["skill"]; attachments: RenderMsg["attachments"]; fileContext?: { workspaceId: string; sessionId: string } }) {
+function UserMessage({ id, text, skill, attachments }: { id: string; text: string; skill: RenderMsg["skill"]; attachments: RenderMsg["attachments"] }) {
   const ref = useRef<HTMLDivElement>(null);
   const textId = useId();
   const [open, setOpen] = useState(false);
@@ -254,7 +253,7 @@ function UserMessage({ id, text, skill, attachments, fileContext }: { id: string
             className={cn("break-words", skill && "mt-2", !open && "overflow-hidden", clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}
             style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
           >
-            <Markdown text={text} className="prose-chat" fileContext={fileContext} />
+            <Markdown text={text} className="prose-chat" />
           </div>
         )}
         {long && (
@@ -322,7 +321,7 @@ function subagentBadge(card: SubagentCard, terminalStatus?: "completed" | "faile
 
 /** Structured pi-subagent facts use the standard disclosure primitive. The
  * transcript row itself is intentionally quiet; identity and output stay on demand. */
-function SubagentCardView({ card, content, markdown = false, fileContext, failed = false, terminalStatus }: { card: SubagentCard; content?: string; markdown?: boolean; fileContext?: { workspaceId: string; sessionId: string }; failed?: boolean; terminalStatus?: "completed" | "failed" | "cancelled" }) {
+function SubagentCardView({ card, content, markdown = false, failed = false, terminalStatus }: { card: SubagentCard; content?: string; markdown?: boolean; failed?: boolean; terminalStatus?: "completed" | "failed" | "cancelled" }) {
   const [open, setOpen] = useState(false);
   const title = subagentTitle(card);
   const runId = "runId" in card ? card.runId : undefined;
@@ -366,7 +365,7 @@ function SubagentCardView({ card, content, markdown = false, fileContext, failed
               {card.kind === "collection" && <p className="text-xs text-ink-3">Delivered {card.runs.length} · Unavailable {card.unavailable} · Still running when checked {card.stillRunning} · Unknown {card.unknown}</p>}
               {card.kind === "collection" && card.runs.map(run => <p key={run.runId} className="break-all font-mono text-xs">{run.runId} · {run.profile} · {run.status}</p>)}
               {card.kind === "cancellation" && card.outcomes.map(outcome => <p key={`${outcome.kind}:${outcome.runId}`} className="break-all font-mono text-xs">{outcome.runId} · {outcome.kind}{outcome.kind === "already terminal" ? ` · ${outcome.phase}` : ""}</p>)}
-              {hasOutput && (markdown ? <Markdown text={content ?? ""} className="prose-chat" fileContext={fileContext} /> : <pre className={cn("whitespace-pre-wrap break-words", failed && "text-err")}>{clamp(content, 20000)}</pre>)}
+              {hasOutput && (markdown ? <Markdown text={content ?? ""} className="prose-chat" /> : <pre className={cn("whitespace-pre-wrap break-words", failed && "text-err")}>{clamp(content, 20000)}</pre>)}
             </div>
           </Row>
         </CollapsibleContent>

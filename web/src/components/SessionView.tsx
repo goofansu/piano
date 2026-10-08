@@ -126,7 +126,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
             tools={t.tools}
             working={streaming && !t.pending?.text}
             placeholder="Nothing here yet. Send the first message."
-            fileContext={workspaceId && t.sessionId ? { workspaceId, sessionId: t.sessionId } : undefined}
           />
         )}
         <TranscriptSkeleton hidden={!!t} />

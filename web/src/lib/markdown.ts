@@ -22,11 +22,11 @@ function githubLabel(href: string): string | undefined {
 
 function webLink(href: string, label: string): string {
   const compact = githubLabel(href);
-  const text = inline(compact && label === href ? compact : label, false, false);
+  const text = inline(compact && label === href ? compact : label, false);
   return `<a href="${escH(href)}" target="_blank" rel="noreferrer"${compact ? ` class="github-link" title="${escH(href)}"` : ""}>${compact ? githubIcon : ""}${text}</a>`;
 }
 
-function inline(s: string, fileLinks: boolean, links = true): string {
+function inline(s: string, links = true): string {
   const ph: string[] = [];
   s = s.replaceAll("\u0000", "\uFFFD");
   if (!links) s = s.replace(/`([^`\n]+)`/g, (_, c: string) => {
@@ -35,14 +35,11 @@ function inline(s: string, fileLinks: boolean, links = true): string {
   });
   if (links) {
     // Protect whole links before formatting prose, so URL punctuation never becomes markup.
-    s = s.replace(/`([^`\n]+)`|\[([^\]\n]*)\]\(((?:https?|file):\/\/[^)\n]*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g, (match, code: string | undefined, label: string | undefined, href: string | undefined, autolink: string | undefined) => {
+    s = s.replace(/`([^`\n]+)`|\[([^\]\n]*)\]\((https?:\/\/[^)\n]*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g, (match, code: string | undefined, label: string | undefined, href: string | undefined, autolink: string | undefined) => {
       let html: string;
       if (code !== undefined) html = `<code>${escH(code)}</code>`;
-      else if (href) {
-        if (href.startsWith("file:")) {
-          html = fileLinks ? `<a href="#" data-file-href="${escH(href)}">${inline(label ?? "", false, false)}</a>` : escH(match);
-        } else html = webLink(href, label ?? "");
-      } else {
+      else if (href) html = webLink(href, label ?? "");
+      else {
         const url = autolink ?? match.replace(/[.,!?;:)'"\]]+$/, "");
         html = githubLabel(url) ? webLink(url, url) + (autolink ? "" : escH(match.slice(url.length))) : escH(match);
       }
@@ -58,9 +55,8 @@ function inline(s: string, fileLinks: boolean, links = true): string {
   return s;
 }
 
-export function renderMarkdown(src: string, options?: { fileLinks: true }): string {
+export function renderMarkdown(src: string): string {
   if (!src) return "";
-  const renderInline = (value: string) => inline(value, options?.fileLinks === true);
   const lines = src.split("\n");
   let out = "";
   let para: string[] = [];
@@ -72,7 +68,7 @@ export function renderMarkdown(src: string, options?: { fileLinks: true }): stri
   let tbl: string[] = [];
   const fp = () => {
     if (!para.length) return;
-    out += `<p>${para.map(renderInline).join("<br>")}</p>`;
+    out += `<p>${para.map(value => inline(value)).join("<br>")}</p>`;
     para = [];
   };
   const fL = () => {
@@ -91,13 +87,13 @@ export function renderMarkdown(src: string, options?: { fileLinks: true }): stri
     const cells = (r: string) => r.replace(/^\|/, "").replace(/\|$/, "").split("|");
     out += '<div class="markdown-table-scroll" role="region" aria-label="Table" tabindex="0"><table><thead><tr>';
     cells(tbl[0]).forEach((c) => {
-      out += `<th>${renderInline(c.trim())}</th>`;
+      out += `<th>${inline(c.trim())}</th>`;
     });
     out += "</tr></thead><tbody>";
     for (let j = 2; j < tbl.length; j++) {
       out += "<tr>";
       cells(tbl[j]).forEach((c) => {
-        out += `<td>${renderInline(c.trim())}</td>`;
+        out += `<td>${inline(c.trim())}</td>`;
       });
       out += "</tr>";
     }
@@ -134,7 +130,7 @@ export function renderMarkdown(src: string, options?: { fileLinks: true }): stri
     if (hm) {
       fp();
       fL();
-      out += `<h${hm[1].length}>${renderInline(hm[2])}</h${hm[1].length}>`;
+      out += `<h${hm[1].length}>${inline(hm[2])}</h${hm[1].length}>`;
       continue;
     }
     if (/^---+\s*$/.test(ln)) {
@@ -146,7 +142,7 @@ export function renderMarkdown(src: string, options?: { fileLinks: true }): stri
     if (ln.startsWith("> ")) {
       fp();
       fL();
-      out += `<blockquote>${renderInline(ln.slice(2))}</blockquote>`;
+      out += `<blockquote>${inline(ln.slice(2))}</blockquote>`;
       continue;
     }
     const um = ln.match(/^[-*] (.*)/);
@@ -158,7 +154,7 @@ export function renderMarkdown(src: string, options?: { fileLinks: true }): stri
         inList = true;
         ltag = "ul";
       }
-      out += `<li>${renderInline(um[1])}</li>`;
+      out += `<li>${inline(um[1])}</li>`;
       continue;
     }
     const om = ln.match(/^\d+\. (.*)/);
@@ -170,7 +166,7 @@ export function renderMarkdown(src: string, options?: { fileLinks: true }): stri
         inList = true;
         ltag = "ol";
       }
-      out += `<li>${renderInline(om[1])}</li>`;
+      out += `<li>${inline(om[1])}</li>`;
       continue;
     }
     if (!ln.trim()) {

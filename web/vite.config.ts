@@ -18,7 +18,7 @@ export default defineConfig({
   server: {
     fs: { allow: [path.resolve(import.meta.dirname, "..")] },
     proxy: {
-      "/api": { target: backend, xfwd: true },
+      "/api": backend,
       "/ws": { target: backend, ws: true },
     },
   },
