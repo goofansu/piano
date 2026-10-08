@@ -68,7 +68,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
     }
     const mine = ++seq.current;
     setLoading(true);
-    fetch(`/api/ls?path=${encodeURIComponent(key)}`)
+    fetch("/api/ls", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: key }) })
       .then((r) => r.json() as Promise<DirListing | { error: string }>)
       .then((d) => {
         if (mine !== seq.current) return;

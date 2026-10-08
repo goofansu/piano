@@ -52,9 +52,7 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
     if (!open || !cwd) return;
     const controller = new AbortController();
     setCatalog(undefined);
-    const params = new URLSearchParams({ cwd });
-    if (sessionId) params.set("sessionId", sessionId);
-    void fetch(`/api/commands?${params}`, { signal: controller.signal }).then(async response => {
+    void fetch("/api/commands", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cwd, sessionId }), signal: controller.signal }).then(async response => {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Could not load commands.");
       if (!controller.signal.aborted) setCatalog({ key, commands: result.commands });

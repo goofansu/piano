@@ -109,6 +109,10 @@ Mod+K stays the only global shortcut; other actions are reached through the pale
 Tests go through that interface only. Module files are PascalCase after their export; `main.ts` is
 the sole entry point.
 
+Keep filesystem paths out of HTTP URLs, so access logs and proxies never record them. Address a
+registered workspace or session by its ID (`?workspaceId=`, `/s/<sessionId>`); send an arbitrary
+path, such as a directory that is not registered yet, in a POST JSON body.
+
 Two Effect v4 gotchas already paid for: on an upgraded socket, acquire `reader` before `writer`
 (the reader performs the handshake and the writer waits on it); and a `forkScoped` fiber must not
 `ensuring` on an exit that a later finalizer causes, or shutdown deadlocks.

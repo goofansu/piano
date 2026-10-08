@@ -56,6 +56,17 @@ const listDirectory = (raw: string) =>
     return listing;
   });
 
+/** Paths travel in JSON bodies, never in URLs, so access logs and proxies don't record them. */
+const readBody = Effect.gen(function* () {
+  const text = yield* (yield* HttpServerRequest.HttpServerRequest).text.pipe(Effect.orElseSucceed(() => ""));
+  try {
+    const body: unknown = JSON.parse(text);
+    return body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+});
+
 const json = (body: unknown, status = 200) =>
   HttpServerResponse.text(JSON.stringify(projectDisplay(body), null, 2), { status, contentType: "application/json" });
 
@@ -73,12 +84,11 @@ export const AppRouter = HttpRouter.use((router) =>
     );
 
     yield* router.add(
-      "GET",
+      "POST",
       "/api/ls",
       Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const params = HttpServerRequest.searchParamsFromURL(new URL(request.url, "http://localhost"));
-        const raw = typeof params.path === "string" ? params.path : "~";
+        const { path } = yield* readBody;
+        const raw = typeof path === "string" ? path : "~";
         return yield* listDirectory(raw).pipe(
           Effect.map((listing) => json(listing)),
           // Answer with the failure's own message, never the Effect cause wrapper.
@@ -96,14 +106,8 @@ export const AppRouter = HttpRouter.use((router) =>
       "POST",
       "/api/mkdir",
       Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const body = yield* request.text.pipe(Effect.orElseSucceed(() => ""));
-        let target = "";
-        try {
-          target = String((JSON.parse(body) as { path?: string }).path ?? "");
-        } catch {
-          /* fall through */
-        }
+        const body = yield* readBody;
+        const target = typeof body.path === "string" ? body.path : "";
         const path = resolve(expandHome(target));
         if (!target || path === "/" ) return json({ error: "path is required" }, 400);
         try {
@@ -158,13 +162,12 @@ export const AppRouter = HttpRouter.use((router) =>
 
     // Discovery never opens a saved session or creates a second writer. A live
     // session is resolved by server-owned identity; otherwise use the cwd probe.
-    yield* router.add("GET", "/api/commands", Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      const params = new URL(request.url, "http://localhost").searchParams;
-      const raw = params.get("cwd");
+    yield* router.add("POST", "/api/commands", Effect.gen(function* () {
+      const body = yield* readBody;
+      const raw = typeof body.cwd === "string" ? body.cwd : "";
       if (!raw) return json({ error: "Directory is required." }, 400);
       const cwd = resolve(expandHome(raw));
-      const sessionId = params.get("sessionId");
+      const sessionId = typeof body.sessionId === "string" ? body.sessionId : undefined;
       if (sessionId) {
         const session = yield* (yield* SessionHosts).get(cwd, sessionId);
         if (!session) return json({ error: "Session is no longer running. Reopen the suggestions." }, 409);
@@ -177,14 +180,5 @@ export const AppRouter = HttpRouter.use((router) =>
     }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load commands. Reopen the suggestions to retry." }, 502)))));
 
     yield* router.add("GET", "/api/projects", buildProjects.pipe(Effect.map((projects) => json({ projects }))));
-    yield* router.add(
-      "GET",
-      "/api/models",
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const cwd = new URL(request.url, "http://localhost").searchParams.get("cwd") ?? homedir();
-        return json(yield* (yield* Catalog).get(resolve(expandHome(cwd))));
-      }),
-    );
   }),
 );

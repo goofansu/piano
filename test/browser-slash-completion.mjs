@@ -51,7 +51,7 @@ try {
     try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
-  assert.equal((await fetch(`http://127.0.0.1:${backendPort}/api/commands?${new URLSearchParams({ cwd, sessionId: 'not-running' })}`)).status, 409, 'discovery does not open stopped sessions');
+  assert.equal((await fetch(`http://127.0.0.1:${backendPort}/api/commands`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, sessionId: 'not-running' }) })).status, 409, 'discovery does not open stopped sessions');
   ab('open', `http://127.0.0.1:${webPort}/new`);
   await until(`document.querySelector('[aria-label^="Model:"]')?.title.includes('alpha')`);
   await suggestions('/');
