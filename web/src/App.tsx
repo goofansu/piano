@@ -180,6 +180,7 @@ export default function App() {
 
   // ── keyboard flow ──
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [composerCwd, setComposerCwd] = useState("");
   // One Changes sheet per selected session; the header menu and the palette both open it.
   const [changesOpen, setChangesOpen] = useState(false);
   const [pullRequestOpen, setPullRequestOpen] = useState(false);
@@ -317,7 +318,7 @@ export default function App() {
         {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
         <div key={state.view.kind} className="view-enter flex min-h-0 flex-1 flex-col">
           {state.view.kind === "new" ? (
-            <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} />
+            <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
           ) : state.view.kind === "missing-session" ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center" role="alert">
               <h1 className="text-xl font-medium">Session not found</h1>
@@ -340,7 +341,7 @@ export default function App() {
         />
       </main>
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} />
+      <CommandPalette send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </div>
   );

@@ -1,8 +1,9 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { directoryTrust } from "@/components/NewSession";
 import { sessionProject } from "@/components/OutcomeProjects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
@@ -20,13 +21,15 @@ interface Props {
   send: (command: ClientCommand) => void;
   openChanges: () => void;
   openPullRequest: () => void;
+  /** The New session composer's directory, while that page is open. */
+  composerCwd?: string;
 }
 
 /**
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest }: Props) {
+export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
   const { setTheme } = useTheme();
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
@@ -49,6 +52,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
       .map(t => ({ ...t, outcome: sessionProject(state, t)?.name ?? "" }))
       .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
   }, [state.projects, state.sessionReferences, state.outcomeProjects]);
+  const composerTrust = composerCwd ? directoryTrust(state, composerCwd) : undefined;
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
@@ -90,6 +94,12 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
           </CommandItem>
+          {composerCwd && composerTrust?.required && (
+            <CommandItem value={composerTrust.trusted ? "Untrust directory" : "Trust directory"} keywords={["trust", "pi settings", "skills"]} disabled={!state.connected}
+              onSelect={() => run(() => send({ _tag: "set_trust", path: composerCwd, trusted: !composerTrust.trusted }))}>
+              {composerTrust.trusted ? <><ShieldOffIcon /> Untrust directory</> : <><ShieldCheckIcon /> Trust directory</>}
+            </CommandItem>
+          )}
           <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
             <PanelLeftIcon /> Toggle sidebar
           </CommandItem>

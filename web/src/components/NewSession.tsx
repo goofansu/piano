@@ -30,12 +30,14 @@ interface Props {
   /** Open the New project dialog; the created project becomes this page's project. */
   onNewProject: () => void;
   onMenu: () => void;
+  /** The chosen directory, so the command palette can offer its trust command. */
+  onDirectoryChange?: (cwd: string) => void;
 }
 
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onNewProject, onMenu }: Props) {
+export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
     // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
@@ -57,6 +59,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
   useEffect(() => {
     if (initialCwd) setCwd(initialCwd);
   }, [initialCwd]);
+  useEffect(() => { onDirectoryChange?.(cwd); }, [cwd, onDirectoryChange]);
 
   useEffect(() => {
     const el = textarea.current;
@@ -78,7 +81,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
 
   const project = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
   const outcome = outcomeProjectId ? state.outcomeProjects.find(p => p.id === outcomeProjectId) : undefined;
-  const trust = state.trusts[cwd] ?? project?.worktrees.find(w => w.path === cwd)?.trust;
+  const trust = directoryTrust(state, cwd);
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
     setModel(undefined); setEffort(undefined);
@@ -227,6 +230,12 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
 }
 
 /** Shown only for directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted. */
+/** Pi's trust outcome for a directory: the latest probe, else what discovery recorded for a known worktree. */
+export function directoryTrust(state: AppState, cwd: string) {
+  return state.trusts[cwd] ?? state.projects.flatMap(p => p.worktrees).find(w => w.path === cwd)?.trust;
+}
+
+/** Trusted is the usual state, so it shows only its icon; untrusted names itself because the user can act on it. */
 function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trusted: boolean) => void }) {
   return (
     <Button
@@ -236,7 +245,7 @@ function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trust
       onClick={() => onChange(!trusted)}
     >
       {trusted ? <ShieldCheckIcon /> : <ShieldOffIcon />}
-      <span className="max-[360px]:hidden">{trusted ? "Trusted" : "Untrusted"}</span>
+      {!trusted && <span className="max-[360px]:hidden">Untrusted</span>}
     </Button>
   );
 }
