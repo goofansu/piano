@@ -199,7 +199,7 @@ function FileSection({ file, open, onOpenChange, onAsk }: { file: DiffFile; open
       {/* Sticky within the sheet's scroll area so the file name stays in view while its hunks scroll. */}
       <Item size="sm" className="sticky top-0 z-10 gap-1 rounded-lg bg-background py-1.5 pl-1 pr-1">
         <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start gap-2 px-2 py-1.5 text-left font-normal" aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}>
+          <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start gap-2 whitespace-normal px-2 py-1.5 text-left font-normal" aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}>
             <ChevronRightIcon className={cn("size-3.5 shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />
             <Icon className="size-3.5 shrink-0 text-ink-2" aria-hidden />
             <ItemContent className="min-w-0 gap-0">
