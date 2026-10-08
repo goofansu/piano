@@ -112,14 +112,15 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
             <p className={cn("mt-2 text-base text-ink-2", !outcome?.goal && "hidden md:block")}>{outcome?.goal || "A little progress starts with an idea."}</p>
           </div>
           <div className="shrink-0">
+            {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
             <div className="mb-2 flex min-w-0 items-center gap-1">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 shrink">
                 <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
               </div>
-              {(outcome || activeProjects(state).length > 0) && <ProjectSelect state={state} value={outcomeProjectId} onChange={onProjectChange} />}
               {trust?.required && (
                 <TrustToggle trusted={trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: cwd, trusted })} />
               )}
+              {(outcome || activeProjects(state).length > 0) && <ProjectSelect state={state} value={outcomeProjectId} onChange={onProjectChange} />}
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>
               <AttachmentDraftView draft={attachments} disabled={creating || !state.connected} />
@@ -178,7 +179,7 @@ function ProjectSelect({ state, value, onChange }: { state: AppState; value?: st
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "h-11 max-w-[45%] shrink-0 md:h-8", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "ml-auto h-11 max-w-[45%] shrink-0 md:h-8", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
           <TargetIcon className="text-ink-3" />
           <span className="truncate">{current ? current.name : "Project"}</span>
         </Button>
