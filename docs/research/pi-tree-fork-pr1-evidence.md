@@ -4,7 +4,7 @@ Slice: [browse/search plan](../pi-tree-fork-plan.md#pr-1--browse-and-search-conv
 Contracts: INV-01, INV-02, INV-05, INV-11–12.
 
 Tested on Node 24.21.0 / Linux with locked Pi 1.1.0, against `origin/main`
-`2c7ce9f` plus this PR's working tree. Scratch SQLite and isolated Pi config/session
+`15f4011` plus this PR's working tree (rebased after main's session-details update). Scratch SQLite and isolated Pi config/session
 storage; loopback backend/UI 7171/7172. No deployment or real-registry changes.
 
 ## Observations
@@ -66,6 +66,10 @@ Pi's native get_entries still returns the complete raw history to the server; th
 bounds browser payload, not Pi's subprocess response memory. Redaction is heuristic,
 not containment. A single local synthetic streaming endpoint established that
 preview remains available during a run and abort remains usable. No paid calls.
+
+After main advanced, this slice was rebased onto `15f4011` without conflicts and
+all three gates plus the browser journey were rerun. The inspector preserves the
+updated selectable-metadata session menu.
 
 Review was performed locally along Standards and Spec axes, not by independent
 reviewer agents. Live running/idle and inactive reads were exercised directly.
