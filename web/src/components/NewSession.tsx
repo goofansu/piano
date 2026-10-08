@@ -12,7 +12,6 @@ import { SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
@@ -173,26 +172,48 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
   );
 }
 
-/** Which project the new session joins. Present only once a project exists, so the page stays as it was before. */
+/** Which project the new session joins: the same searchable picker as the directory beside it. Present only once a project exists. */
 function ProjectSelect({ state, value, onChange }: { state: AppState; value?: string; onChange: (id?: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const search = useRef<HTMLInputElement>(null);
   const current = value ? state.outcomeProjects.find(p => p.id === value) : undefined;
   const choices = activeProjects(state);
   if (current?.archived) choices.push(current);
+  const pick = (id?: string) => { onChange(id); setOpen(false); };
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Project" className={cn(picker, "h-11 max-w-[45%] shrink-0 md:h-8", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "h-11 max-w-[45%] shrink-0 md:h-8", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
           <TargetIcon className="text-ink-3" />
           <span className="truncate">{current ? current.name : "Project"}</span>
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-w-[calc(100vw-2rem)]">
-        <DropdownMenuRadioGroup value={value ?? ""} onValueChange={id => onChange(id || undefined)}>
-          {choices.map(p => <DropdownMenuRadioItem key={p.id} value={p.id}><span className="truncate">{p.name}</span>{p.archived && <span className="ml-1 text-muted-foreground">· Archived</span>}</DropdownMenuRadioItem>)}
-          <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverTrigger>
+      <PopoverContent align="end" aria-label="Choose a project" className="max-h-(--radix-popover-content-available-height) w-[320px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
+        onOpenAutoFocus={event => { if (!window.matchMedia("(pointer: coarse)").matches) { event.preventDefault(); search.current?.focus({ preventScroll: true }); } }}>
+        <Command>
+          <CommandInput ref={search} aria-label="Search projects" placeholder="Search projects" />
+          <CommandList className="max-h-[min(18rem,60dvh)]">
+            <CommandEmpty>No project matches.</CommandEmpty>
+            <CommandGroup>
+              {choices.map(p => (
+                <CommandItem key={p.id} value={p.id} keywords={[p.name]} onSelect={() => pick(p.id)}>
+                  <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                  {p.archived && <span className="text-xs text-ink-3">Archived</span>}
+                  <CheckIcon className={cn("ml-auto", p.id === value ? "opacity-100" : "opacity-0")} />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup>
+              <CommandItem value="__none" keywords={["none", "no project"]} onSelect={() => pick(undefined)}>
+                <span className="min-w-0 flex-1 truncate">None</span>
+                <CheckIcon className={cn("ml-auto", !value ? "opacity-100" : "opacity-0")} />
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
