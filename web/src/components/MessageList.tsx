@@ -43,7 +43,7 @@ export function MessageList({ messages, pending, tools, working = false, placeho
   }, [messages, pending, tools, working]);
   // Content can grow without a scroll event (a prompt opens, output expands). That only
   // changes whether the bottom is in view; it never moves the reader. The container itself
-  // shrinking (a PR stack or banner appears below, the composer grows) is not the reader's
+  // shrinking (a banner appears below, the composer grows) is not the reader's
   // doing, so a pinned view follows the bottom.
   useEffect(() => {
     const el = ref.current;

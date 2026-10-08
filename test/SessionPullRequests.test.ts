@@ -1,0 +1,120 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { test, type TestContext } from "node:test";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { Registry, RegistryLive, RegistryPath } from "../server/Registry.ts";
+import { SessionPullRequests, SessionPullRequestsLive } from "../server/SessionPullRequests.ts";
+
+const candidate = (number: number, branch = "feature", owner = "example") => ({
+  url: `https://github.com/example/repo/pull/${number}`, number, title: `Work ${number}`,
+  state: "OPEN", isDraft: false, reviewDecision: "APPROVED", statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS" }],
+  headRefName: branch, headRepository: { name: "repo" }, headRepositoryOwner: { login: owner },
+});
+async function fixture(t: TestContext) {
+  const root = mkdtempSync(join(tmpdir(), "piano-session-pr-")), repo = join(root, "repo"), bin = join(root, "bin");
+  mkdirSync(repo); mkdirSync(bin);
+  const git = (...args: string[]) => execFileSync("git", ["-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } }).trim();
+  git("init", "-q", "-b", "feature"); git("commit", "--allow-empty", "-qm", "base"); git("remote", "add", "origin", "git@github.com:example/repo.git");
+  writeFileSync(join(bin, "gh"), `#!${process.execPath}\nimport ${JSON.stringify(resolve("test/fixtures/fake-gh.mjs"))};\n`, { mode: 0o755 });
+  const path = join(root, "registry.json"), forge = join(root, "forge.json");
+  const previous = { PATH: process.env.PATH, PIANO_TEST_GH_FIXTURE: process.env.PIANO_TEST_GH_FIXTURE };
+  process.env.PATH = `${bin}:${process.env.PATH}`; process.env.PIANO_TEST_GH_FIXTURE = forge;
+  const control = (data: object) => writeFileSync(forge, JSON.stringify(data));
+  control({ prs: [candidate(42), candidate(99, "feature", "unrelated-fork")] });
+  const layer = SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryPath, path)));
+  const runtime = ManagedRuntime.make(layer);
+  const registry = await runtime.runPromise(Registry), prs = await runtime.runPromise(SessionPullRequests);
+  await runtime.runPromise(registry.addSession(repo, "one"));
+  await runtime.runPromise(registry.addSession(repo, "two"));
+  t.after(async () => {
+    await runtime.dispose();
+    for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    rmSync(root, { recursive: true, force: true });
+  });
+  const get = (id = "one") => runtime.runPromise(prs.get(repo, id));
+  const change = (action: Parameters<typeof prs.change>[2], id = "one") => runtime.runPromise(prs.change(repo, id, action));
+  return { root, repo, path, git, control, runtime, registry, prs, get, change };
+}
+
+test("INV-01/07: discovers by branch AND head repository, pins identity across branch changes/restart, scopes manual links/removal to a session", async t => {
+  const f = await fixture(t);
+  const first = await f.get();
+  assert.equal(first.pullRequest?.number, 42); assert.equal(first.link?.source, "branch");
+  assert.equal(first.pullRequest?.checks, "success"); assert.equal(first.pullRequest?.review, "approved");
+  f.git("switch", "-qc", "next");
+  f.control({ prs: [{ ...candidate(42), state: "MERGED" }, candidate(43, "next")] });
+  assert.equal((await f.get()).pullRequest?.state, "merged");
+  assert.equal((await f.get("two")).pullRequest?.number, 43);
+  const linked = await f.change({ action: "link", url: "https://github.com/EXAMPLE/REPO/pull/43/files?diff=split#x" });
+  assert.equal(linked.link?.url, "https://github.com/example/repo/pull/43"); assert.equal(linked.link?.source, "manual");
+  await f.change({ action: "remove" });
+  assert.deepEqual(await f.get(), { link: null, pullRequest: null, discovery: false });
+  assert.equal((await f.get("two")).pullRequest?.number, 43);
+  // Preference is durable metadata, not forge facts or history.
+  const persisted = JSON.parse(readFileSync(f.path, "utf8"));
+  assert.equal(persisted.sessions[0].pullRequest, null);
+  assert.deepEqual(persisted.sessions[1].pullRequest, { url: "https://github.com/example/repo/pull/43", source: "branch" });
+  const restarted = ManagedRuntime.make(SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryPath, f.path))));
+  try {
+    assert.equal((await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "one"); }))).discovery, false);
+    assert.equal((await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "two"); }))).pullRequest?.number, 43);
+  } finally { await restarted.dispose(); }
+  assert.equal((await f.change({ action: "discover" })).pullRequest?.number, 43);
+});
+
+test("unknown/auth/malformed results are not healthy absence; explicit link validation and missing checkout preserve identity", async t => {
+  const f = await fixture(t);
+  f.control({ error: "auth failed" });
+  assert.match((await f.get()).error!, /authentication/);
+  f.git("remote", "set-url", "origin", "https://github.int.exe.xyz/example/repo.git");
+  assert.match((await f.get()).error!, /github.com remote/);
+  f.git("remote", "set-url", "origin", "git@github.com:example/repo.git");
+  f.control({ malformed: true });
+  assert.match((await f.get()).error!, /invalid/);
+  f.control({ prs: [candidate(42), candidate(43)] });
+  assert.match((await f.get()).error!, /Several/);
+  for (const url of ["https://github.com/example/repo/issues/42", "https://github.com.evil/example/repo/pull/42", "https://secret@github.com/example/repo/pull/42", "file:///tmp/pr"]) {
+    await assert.rejects(f.change({ action: "link", url }), /GitHub pull request URL/);
+  }
+  f.control({ prs: [candidate(42)] }); await f.get();
+  f.control({ error: "offline" });
+  const offline = await f.get();
+  assert.equal(offline.link?.url, candidate(42).url); assert.equal(offline.pullRequest, null); assert.ok(offline.error);
+  const manualOffline = await f.change({ action: "link", url: candidate(42).url });
+  assert.equal(manualOffline.link?.source, "manual"); assert.equal(manualOffline.pullRequest, null); assert.ok(manualOffline.error);
+  f.control({ prs: [] });
+  const noReplacement = await f.change({ action: "discover" });
+  assert.equal(noReplacement.link?.url, candidate(42).url, "failed discovery does not remove an existing association");
+  f.control({ prs: [{ ...candidate(42), state: "CLOSED" }] }); rmSync(f.repo, { recursive: true });
+  assert.equal((await f.get()).pullRequest?.state, "closed", "saved PR can be read after checkout removal");
+  await assert.rejects(f.get("unregistered"), /not registered/);
+});
+
+test("INV-07: late discovery cannot undo removal/deletion or attach a candidate from a changed checkout", async t => {
+  const f = await fixture(t);
+  for (const mutation of ["remove", "manual", "delete", "branch", "remote"] as const) {
+    const id = mutation;
+    await f.runtime.runPromise(f.registry.addSession(f.repo, id));
+    const started = join(f.root, `${id}-started`), release = join(f.root, `${id}-release`);
+    f.control({ prs: [candidate(42)], gate: { started, release } });
+    const pending = f.get(id).then(value => ({ value }), error => ({ error: String(error) }));
+    for (let n = 0; !existsSync(started); n++) { if (n > 300) throw new Error("Discovery did not start"); await delay(10); }
+    if (mutation === "remove") await f.change({ action: "remove" }, id);
+    if (mutation === "manual") await f.change({ action: "link", url: candidate(77).url }, id);
+    if (mutation === "delete") await f.runtime.runPromise(f.registry.removeSession(f.repo, id));
+    if (mutation === "branch") f.git("switch", "-qc", "changed");
+    if (mutation === "remote") f.git("remote", "set-url", "origin", "https://github.com/other/repo.git");
+    writeFileSync(release, "go");
+    const outcome = await pending;
+    if ("error" in outcome) assert.match(outcome.error, /changed during lookup/);
+    else { assert.equal(outcome.value.link, null); assert.match(outcome.value.error!, /checkout changed/); }
+    const saved = (await f.runtime.runPromise(f.registry.get)).sessions.find(s => s.sessionId === id);
+    if (mutation === "manual") assert.equal(saved?.pullRequest?.url, candidate(77).url);
+    else assert.ok(!saved?.pullRequest);
+    f.git("switch", "-q", "feature"); f.git("remote", "set-url", "origin", "git@github.com:example/repo.git");
+  }
+});

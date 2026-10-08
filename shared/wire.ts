@@ -378,7 +378,7 @@ export const DirListing = Schema.Struct({
 });
 export type DirListing = typeof DirListing.Type;
 
-/** A GitHub pull request tied to a session: the worktree's branch, or a URL that appeared in the transcript. */
+/** Live GitHub facts, separate from the session's durable PR association. */
 export const PullRequest = Schema.Struct({
   url: Schema.String,
   /** "owner/name" */
@@ -391,23 +391,26 @@ export const PullRequest = Schema.Struct({
 });
 export type PullRequest = typeof PullRequest.Type;
 
-/** A GitHub issue whose URL appeared in the transcript. */
-export const Issue = Schema.Struct({
+export const SessionPullRequestLink = Schema.Struct({
   url: Schema.String,
-  /** "owner/name" */
-  repo: Schema.String,
-  number: Schema.Number,
-  title: Schema.String,
-  state: Schema.Literals(["open", "closed"]),
+  source: Schema.Literals(["branch", "manual"]),
 });
-export type Issue = typeof Issue.Type;
+export type SessionPullRequestLink = typeof SessionPullRequestLink.Type;
 
-/** Live status for a link the server can look up; other links carry only what their URL says. */
-export const LinkStatus = Schema.Union([
-  Schema.TaggedStruct("pull_request", PullRequest.fields),
-  Schema.TaggedStruct("issue", Issue.fields),
+export const SessionPullRequest = Schema.Struct({
+  link: Schema.NullOr(SessionPullRequestLink),
+  pullRequest: Schema.NullOr(PullRequest),
+  /** Removal disables discovery until explicitly requested again. */
+  discovery: Schema.Boolean,
+  error: Schema.optional(Schema.String),
+});
+export type SessionPullRequest = typeof SessionPullRequest.Type;
+export const SessionPullRequestAction = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("link"), url: Schema.String }),
+  Schema.Struct({ action: Schema.Literal("remove") }),
+  Schema.Struct({ action: Schema.Literal("discover") }),
 ]);
-export type LinkStatus = typeof LinkStatus.Type;
+export type SessionPullRequestAction = typeof SessionPullRequestAction.Type;
 
 export const HostInfo = Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, streaming: Schema.Boolean });
 export type HostInfo = typeof HostInfo.Type;

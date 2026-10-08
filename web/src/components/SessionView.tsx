@@ -14,8 +14,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Composer } from "@/components/Composer";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList } from "@/components/MessageList";
-import { LinkStack } from "@/components/LinkStack";
-import { useSessionLinks } from "@/lib/sessionLinks";
+import { SessionPullRequestBadge, SessionPullRequestDialog } from "@/components/SessionPullRequest";
+import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
 interface Props {
   state: AppState;
@@ -26,9 +26,11 @@ interface Props {
   openNew: (cwd?: string) => void;
   changesOpen: boolean;
   onChangesOpenChange: (open: boolean) => void;
+  pullRequestOpen: boolean;
+  onPullRequestOpenChange: (open: boolean) => void;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, changesOpen, onChangesOpenChange }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, changesOpen, onChangesOpenChange, pullRequestOpen, onPullRequestOpenChange }: Props) {
   const t = state.session;
   const checkoutMissing = !!t?.state.checkoutMissing;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
@@ -69,7 +71,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
     uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
   }[submission.outcome] : undefined;
 
-  const links = useSessionLinks(t?.messages, !streaming);
+  const pullRequest = useSessionPullRequest(t?.cwd, t?.sessionId, streaming);
 
   const status = !state.connected || (t !== null && !ready) ? "Reconnecting"
     : !t ? "Loading"
@@ -79,7 +81,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   return (
     <>
-      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} status={status} openChanges={() => onChangesOpenChange(true)} />
+      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} status={status} openChanges={() => onChangesOpenChange(true)} openPullRequest={() => onPullRequestOpenChange(true)} pullRequest={<SessionPullRequestBadge value={pullRequest.value} />} />
+      {t?.sessionId && <SessionPullRequestDialog key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />}
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={sessionWorkspace(state)} session={t}
         onAsk={text => {
           if (!draftKey) return;
@@ -129,7 +132,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           </div>
         )}
       </div>
-      {t && <LinkStack links={links} />}
       {t?.state.dialogResolution && (
         <section aria-label="Last dialog" role="status" className="animate-in px-4 pt-2 text-sm text-ink-2 fade-in-0 slide-in-from-bottom-1 md:px-6">
           <p className="mx-auto max-w-3xl break-words">Dialog {t.state.dialogResolution.reason}: {t.state.dialogResolution.detail}</p>

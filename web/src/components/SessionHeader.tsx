@@ -1,4 +1,4 @@
-import { ArchiveIcon, CopyIcon, FileDiffIcon, MoreHorizontalIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { ClientCommand } from "@shared/wire";
 import type { AppState } from "@/store";
 import { abbrevPath } from "@/lib/format";
@@ -8,8 +8,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 
-export function SessionHeader({ state, send, onMenu, openNew, status, openChanges }: {
-  state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; status: string; openChanges: () => void;
+export function SessionHeader({ state, send, onMenu, openNew, status, openChanges, openPullRequest, pullRequest }: {
+  state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; status: string; openChanges: () => void; openPullRequest: () => void; pullRequest: React.ReactNode;
 }) {
   const session = state.session;
   const { title, branch, sessionId } = currentSessionDetails(state);
@@ -33,6 +33,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status, openChange
         </> : <><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-28" /></>}
       </div>
       <span role="status" className="sr-only">{status}</span>
+      {pullRequest}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><PlusIcon /></Button>
@@ -57,6 +58,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status, openChange
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
+            <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon /> Pull request</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target || session?.state.checkoutMissing} onSelect={() => target && actions.rename(target)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.archive(target)}><ArchiveIcon /> Archive</DropdownMenuItem>
           </DropdownMenuGroup>

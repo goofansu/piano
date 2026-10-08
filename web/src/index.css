@@ -420,14 +420,6 @@
   border-color: color-mix(in oklab, var(--brand) 45%, var(--line-strong));
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 7%, transparent), var(--shadow-1);
 }
-/* A link card in the pile. */
-.link-card {
-  background: var(--surface-1);
-  box-shadow: var(--shadow-1);
-  transition: margin 300ms var(--ease-out), transform 300ms var(--ease-out), box-shadow 180ms ease, border-color 180ms ease;
-}
-.link-card:hover { box-shadow: var(--shadow-2); }
-.dark .link-card { background: color-mix(in oklab, var(--surface-2) 92%, white 8%); }
 .welcome-enter {
   animation: welcome-enter 420ms var(--ease-enter) both;
 }

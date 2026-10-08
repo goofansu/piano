@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, Semaphore } from "effect";
-import { SessionStats, Workspace } from "../shared/wire.ts";
+import { SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
 
 export class RegistryError extends Data.TaggedError("RegistryError")<{ readonly detail: string }> {
@@ -31,6 +31,8 @@ export interface SessionEntry {
   readonly archived: boolean;
   /** Replaceable last-known Pi accounting, not session history. */
   readonly stats?: SessionStats;
+  /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
+  readonly pullRequest?: SessionPullRequestLink | null;
 }
 
 export interface RegistryData {
@@ -50,7 +52,8 @@ const legacySchema = Schema.Struct({
   projects: Schema.Array(Schema.String),
   worktrees: Schema.Array(Schema.Struct({ project: Schema.String, path: Schema.String, branch: Schema.String })),
   sessions: Schema.Array(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
-    createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.optional(Schema.Boolean), stats: Schema.optional(SessionStats) })),
+    createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.optional(Schema.Boolean), stats: Schema.optional(SessionStats),
+    pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)) })),
 });
 const currentSchema = Schema.Struct({ ...legacySchema.fields, version: Schema.Literal(1), workspaces: Schema.Array(Workspace) });
 
@@ -115,6 +118,8 @@ export class Registry extends Context.Service<
     readonly cacheSessionStats: (cwd: string, sessionId: string, stats: SessionStats) => Effect.Effect<void, RegistryError>;
     /** Set the title shown for a session; it mirrors Pi's session name whenever one is known. */
     readonly renameSession: (cwd: string, sessionId: string, title: string) => Effect.Effect<void, RegistryError>;
+    /** Compare-and-set the association: delayed forge reads cannot undo removal or overwrite a newer choice. */
+    readonly setSessionPullRequest: (expected: SessionEntry, link: SessionPullRequestLink | null | undefined) => Effect.Effect<boolean, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
     readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
   }
@@ -187,6 +192,16 @@ export const RegistryLive = Layer.effect(
           if (!entry || entry.title === next) return d;
           return { ...d, sessions: d.sessions.map((t) => (t === entry ? { ...t, title: next } : t)) };
         }),
+      setSessionPullRequest: (expected, link) => Effect.gen(function* () {
+        let saved = false;
+        yield* update(d => {
+          const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
+          if (!entry || entry.createdAt !== expected.createdAt || entry.pullRequest !== expected.pullRequest) return d;
+          saved = true;
+          return { ...d, sessions: d.sessions.map(t => t === entry ? { ...t, pullRequest: link } : t) };
+        });
+        return saved;
+      }),
       archiveSession: (cwd, sessionId) =>
         update((d) => ({ ...d, sessions: d.sessions.map((t) => (isSession(cwd, sessionId)(t) ? { ...t, archived: true } : t)) })),
       removeSession: (cwd, sessionId) => update((d) => ({ ...d, sessions: d.sessions.filter((t) => !isSession(cwd, sessionId)(t)) })),

@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Schema } from "effect";
 import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import type { DirListing } from "../shared/wire.ts";
+import { SessionPullRequestAction, type DirListing } from "../shared/wire.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { Catalog } from "./Catalog.ts";
 import { SessionHosts } from "./SessionHosts.ts";
@@ -14,7 +14,7 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { expandHome } from "./PiEnv.ts";
 import { buildProjects } from "./Views.ts";
 import { handleSocket } from "./WsClient.ts";
-import { lookupGitHubLinks } from "./GitHubLinks.ts";
+import { SessionPullRequests } from "./SessionPullRequests.ts";
 
 /** Subdirectories for the folder picker, with git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
 const listDirectory = (raw: string) =>
@@ -115,17 +115,23 @@ export const AppRouter = HttpRouter.use((router) =>
       }),
     );
 
-    // Live status for the GitHub pull requests and issues a session mentions.
-    yield* router.add(
-      "GET",
-      "/api/links",
-      Effect.gen(function* () {
+    for (const method of ["GET", "PUT"] as const) {
+      yield* router.add(method, "/api/session/pull-request", Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const params = HttpServerRequest.searchParamsFromURL(new URL(request.url, "http://localhost"));
-        const urls = typeof params.urls === "string" && params.urls ? params.urls.split(" ").filter((u) => /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/(pull|issues)\/\d+$/.test(u)) : [];
-        return json({ links: yield* lookupGitHubLinks(urls.slice(0, 12)) });
-      }),
-    );
+        const params = new URL(request.url, "http://localhost").searchParams;
+        const cwd = params.get("cwd"), sessionId = params.get("sessionId");
+        if (!cwd || !sessionId) return json({ error: "Session identity is required." }, 400);
+        const prs = yield* SessionPullRequests;
+        if (method === "GET") return json(yield* prs.get(cwd, sessionId));
+        const body = yield* request.text;
+        const action = yield* Effect.try(() => Schema.decodeUnknownSync(Schema.fromJsonString(SessionPullRequestAction))(body));
+        return json(yield* prs.change(cwd, sessionId, action));
+      }).pipe(Effect.catchCause(cause => {
+        const error = Cause.squash(cause);
+        const message = error instanceof Error && "detail" in error ? String(error.detail) : "Invalid pull request request.";
+        return Effect.succeed(json({ error: message }, 400));
+      })));
+    }
 
     yield* router.add("POST", "/api/workspace/capture", Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
