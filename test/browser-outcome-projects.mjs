@@ -68,7 +68,7 @@ async function palette(text) {
   await button('Search sessions'); await wait(`!!document.querySelector('[cmdk-list]')`);
   await ab('fill', '[aria-label="Search sessions and commands"]', text); await settle();
 }
-/** The first project can only come from a session's menu; once one exists, the Projects heading's + creates more. */
+/** Projects are created from a session's menu, which also files that session in the new project. */
 async function createWithSession(name, sessionMenu) {
   await ab('find', 'first', `[aria-label=${JSON.stringify(`Session menu for ${sessionMenu}`)}]`, 'click');
   await wait(`!!document.querySelector('[role="menuitem"][aria-haspopup="menu"]')`);
@@ -77,11 +77,6 @@ async function createWithSession(name, sessionMenu) {
   await menuitem('New project…');
   await ab('fill', '#project-name', name); await ab('fill', '#project-goal', `Goal for ${name}`); await button('Create and add session');
   await wait(`!document.querySelector('[role="dialog"]')`); await settle();
-}
-async function create(name) {
-  await ab('click', '[aria-label="New project"]');
-  await ab('fill', '#project-name', name); await ab('fill', '#project-goal', `Goal for ${name}`); await button('Create project');
-  await wait(`document.querySelector('main h1')?.textContent === ${JSON.stringify(name)}`);
 }
 /** Membership is the Project submenu of a session's own menu. `None` leaves the project. */
 async function file(sessionMenu, projectName) {
@@ -117,12 +112,20 @@ try {
   assert.equal(member('one').outcomeProjectId, project('Launch subscriptions').id);
   assert.equal(member('two').outcomeProjectId, project('Launch subscriptions').id);
   await ab('screenshot', join(evidence, 'cross-repository.png'));
-  await create('Improve accessibility'); await file('Accessibility session', 'Improve accessibility');
+  await createWithSession('Improve accessibility', 'Accessibility session');
   assert.equal(member('three').outcomeProjectId, project('Improve accessibility').id);
-  await create('Empty project'); await ab('reload');
+  // A project emptied by moving its only session out stays; its route survives reload.
+  await createWithSession('Empty project', 'Web session'); await file('Web session', 'Launch subscriptions');
+  await ab('click', '[aria-label="New session in Empty project"]');
+  await wait(`document.querySelector('main h1')?.textContent === 'Empty project'`); await ab('reload');
   await wait(`document.querySelector('main h1')?.textContent === 'Empty project'`);
   await openGroup('Empty project'); await ab('wait', '--text', 'No sessions yet');
   assert.equal(registry().outcomeProjects.length, 3);
+  // Section labels fold their list; a folded section is remembered across reload.
+  await button('Projects'); await wait(`!document.querySelector('[aria-label="New session in Empty project"]')`);
+  await ab('reload'); await ab('wait', '--text', 'Repositories');
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label="New session in Empty project"]')`), false);
+  await button('Projects'); await wait(`!!document.querySelector('[aria-label="New session in Empty project"]')`);
   // Opening a member from its project group shows that session's own directory and changes only.
   for (const [title, cwd, id, marker, other] of [['API session', api, 'one', 'API CHANGE', 'WEB CHANGE'], ['Web session', web, 'two', 'WEB CHANGE', 'API CHANGE']]) {
     await button(`${title} ${cwd === api ? 'api' : 'web'}`);

@@ -41,6 +41,16 @@ const loadOpen = (): Set<string> => {
 };
 /** Project groups share the open-state store with repositories, keyed apart from paths. */
 const projectKey = (id: string) => `project:${id}`;
+/** Sections are open unless folded; only the folded ones are remembered. */
+const CLOSED_KEY = "piano.closedSections";
+type Section = "projects" | "repositories";
+const loadClosed = (): Set<Section> => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(CLOSED_KEY) ?? "[]") as Section[]);
+  } catch {
+    return new Set();
+  }
+};
 
 /** Row heights: 36px with a pointer, 44px on a touch screen. */
 const row = "h-9 pointer-coarse:h-11";
@@ -48,12 +58,27 @@ const row = "h-9 pointer-coarse:h-11";
 const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
 const groupRow = cn(row, "reveal-row group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
 const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
-/** Section labels match the palette's group headings; the larger gap sits above a label, tying it to the list below. */
-const sectionHeading = "group mt-4 flex h-7 items-center pr-1 pl-2 text-xs font-medium text-muted-foreground first:mt-0";
+/** Section labels match the palette's group headings. */
+const sectionHeading = "flex h-7 items-center text-xs font-medium text-muted-foreground";
 
 export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette }: Props) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
+  const [closedSections, setClosedSections] = useState<Set<Section>>(loadClosed);
   const current = state.session ?? state.selecting;
+  const sectionOpen = (section: Section) => !closedSections.has(section);
+  const setSectionOpen = (section: Section, open: boolean) =>
+    setClosedSections((prev) => {
+      if (prev.has(section) !== open) return prev;
+      const next = new Set(prev);
+      if (open) next.delete(section);
+      else next.add(section);
+      try {
+        localStorage.setItem(CLOSED_KEY, JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   const setOpen = (key: string, open: boolean) =>
     setOpenProjects((prev) => {
@@ -72,9 +97,9 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   useEffect(() => {
     if (!current) return;
     const owner = state.projects.find((p) => p.worktrees.some((w) => w.path === current.cwd));
-    if (owner && !openProjects.has(owner.path)) setOpen(owner.path, true);
+    if (owner) { setSectionOpen("repositories", true); if (!openProjects.has(owner.path)) setOpen(owner.path, true); }
     const member = state.sessionReferences.find(s => s.cwd === current.cwd && s.sessionId === current.sessionId);
-    if (member?.outcomeProjectId && !openProjects.has(projectKey(member.outcomeProjectId))) setOpen(projectKey(member.outcomeProjectId), true);
+    if (member?.outcomeProjectId) { setSectionOpen("projects", true); if (!openProjects.has(projectKey(member.outcomeProjectId))) setOpen(projectKey(member.outcomeProjectId), true); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.cwd, current?.sessionId, state.projects, state.sessionReferences]);
 
@@ -83,7 +108,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   useEffect(() => {
     if (!state.projectsLoaded) return;
     const ids = state.outcomeProjects.map(p => p.id);
-    if (known.current) for (const id of ids) if (!known.current.has(id)) setOpen(projectKey(id), true);
+    if (known.current) for (const id of ids) if (!known.current.has(id)) { setSectionOpen("projects", true); setOpen(projectKey(id), true); }
     known.current = new Set(ids);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.projectsLoaded, state.outcomeProjects]);
@@ -104,6 +129,22 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   // Section headings exist only once there is a second kind of group to tell apart.
   const sectioned = state.outcomeProjects.length > 0;
   const groupProps = { state, send, select, openNew, reveal, onProjectDialog, current };
+  const repositories = <>
+    {!state.projectsLoaded ? (
+      <SidebarSkeleton />
+    ) : state.projects.length === 0 ? (
+      <Empty className="view-enter py-8">
+        <EmptyHeader>
+          <EmptyDescription>No repositories yet. Start a session in any directory and it appears here.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    ) : null}
+    <div className="flex flex-col gap-1">
+      {state.projects.map((p) => (
+        <Project key={p.path} project={p} open={openProjects.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
+      ))}
+    </div>
+  </>;
 
   return (
     <div className="flex h-full flex-col">
@@ -141,18 +182,9 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       </div>
       <ScrollArea className="min-h-0 flex-1">
       <nav className="relative px-3 pb-4" aria-label="Projects and repositories">
-        {/* Two parallel groups under one nav landmark; the h2s give the structure, so neither is its own region. */}
+        {/* Two parallel sections under one nav landmark; before the first project there is only the repository list. */}
         {sectioned && state.projectsLoaded && (
-          <div>
-            <div className={sectionHeading}>
-              <h2 className="flex-1">Projects</h2>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label="New project" disabled={!state.connected} onClick={() => onProjectDialog({})}><PlusIcon /></Button>
-                </TooltipTrigger>
-                <TooltipContent>New project</TooltipContent>
-              </Tooltip>
-            </div>
+          <SidebarSection label="Projects" open={sectionOpen("projects")} onOpenChange={open => setSectionOpen("projects", open)}>
             <div className="flex flex-col gap-1">
               {active.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
               {archived.length > 0 && (
@@ -172,32 +204,33 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
                 </Collapsible>
               )}
             </div>
-          </div>
+          </SidebarSection>
         )}
-        <div>
-        {sectioned && state.projectsLoaded && (
-          <div className={sectionHeading}>
-            <h2 className="flex-1">Repositories</h2>
-          </div>
-        )}
-        {!state.projectsLoaded ? (
-          <SidebarSkeleton />
-        ) : state.projects.length === 0 ? (
-          <Empty className="view-enter py-8">
-            <EmptyHeader>
-              <EmptyDescription>No repositories yet. Start a session in any directory and it appears here.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : null}
-        <div className="flex flex-col gap-1">
-          {state.projects.map((p) => (
-            <Project key={p.path} project={p} open={openProjects.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
-          ))}
-        </div>
-        </div>
+        {sectioned && state.projectsLoaded ? (
+          <SidebarSection label="Repositories" className="mt-4" open={sectionOpen("repositories")} onOpenChange={open => setSectionOpen("repositories", open)}>
+            {repositories}
+          </SidebarSection>
+        ) : repositories}
       </nav>
       </ScrollArea>
     </div>
+  );
+}
+
+/** A section's label is its disclosure: the chevron beside it folds the whole list, and folded sections are remembered. */
+function SidebarSection({ label, open, onOpenChange, className, children }: { label: string; open: boolean; onOpenChange: (open: boolean) => void; className?: string; children: React.ReactNode }) {
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} className={className}>
+      <h2 className={sectionHeading}>
+        <CollapsibleTrigger asChild>
+          <button type="button" className="flex h-full items-center gap-1 rounded-md pr-1.5 pl-2 outline-none transition-colors duration-(--dur-hover) hover:text-ink-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
+            {label}
+            <ChevronRightIcon aria-hidden className={cn("size-3.5 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none", open && "rotate-90")} />
+          </button>
+        </CollapsibleTrigger>
+      </h2>
+      <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>
+    </Collapsible>
   );
 }
 
