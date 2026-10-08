@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
-import { OutcomeProjectDialogs, OutcomeProjectView, type ProjectDialog } from "@/components/OutcomeProjects";
+import { type ProjectDialog, ProjectDialogView } from "@/components/OutcomeProjects";
 import { SessionView } from "@/components/SessionView";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ export default function App() {
   const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState => {
     const seeded = { ...s, catalogs: storedCatalogs() };
     const route = parseRoute(location);
-    return route.kind === "project" ? { ...seeded, view: route } : route.kind === "session" ? { ...seeded, view: { kind: "session" } } : seeded;
+    return route.kind === "session" ? { ...seeded, view: { kind: "session" } } : { ...seeded, view: { kind: "new", outcomeProjectId: route.projectId } };
   });
   useEffect(() => {
     try {
@@ -171,14 +171,12 @@ export default function App() {
   }, [state.connected, state.resync, send]);
 
   const [projectDialog, setProjectDialog] = useState<ProjectDialog | null>(null);
-  const openProject = useCallback((projectId: string) => {
-    dispatch({ type: "project", projectId });
-    setMenuOpen(false);
-  }, []);
   const openNew = useCallback((cwd?: string, outcomeProjectId?: string) => {
     dispatch({ type: "new", cwd, outcomeProjectId });
     setMenuOpen(false);
   }, []);
+  // A project's home is its New page: sessions started there join it.
+  const openProject = useCallback((projectId: string) => openNew(undefined, projectId), [openNew]);
 
   // ── keyboard flow ──
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -206,11 +204,10 @@ export default function App() {
     const r = wanted.current;
     if (!r) return;
     const s = latest.current;
-    if (r.kind === "project") { wanted.current = null; openProject(r.projectId); return; }
     if (r.kind === "new") {
       wanted.current = null;
-      // Back or forward onto the New page keeps whatever directory it already had.
-      if (s.view.kind !== "new") dispatch({ type: "new" });
+      // Back or forward onto the same New page keeps whatever directory it already had.
+      if (s.view.kind !== "new" || s.view.outcomeProjectId !== r.projectId) dispatch({ type: "new", outcomeProjectId: r.projectId });
       return;
     }
     // A session needs its directory, which only the project list knows.
@@ -220,7 +217,7 @@ export default function App() {
     const session = s.sessionReferences.find(t => t.sessionId === r.sessionId) ?? owner?.sessions.find((t) => t.sessionId === r.sessionId);
     if (session) select(session.cwd, session.sessionId);
     else dispatch({ type: "missing-session", sessionId: r.sessionId });
-  }, [select, openProject]);
+  }, [select]);
   useEffect(applyRoute, [applyRoute, state.projectsLoaded, state.projects, state.sessionReferences]);
   useEffect(() => {
     const onPop = () => {
@@ -234,8 +231,8 @@ export default function App() {
   useEffect(() => {
     if (wanted.current) return;
     const current = state.session ?? state.selecting;
-    const route: Route | null = state.view.kind === "project" ? { kind: "project", projectId: state.view.projectId } : state.view.kind === "new"
-      ? { kind: "new" }
+    const route: Route | null = state.view.kind === "new"
+      ? { kind: "new", projectId: state.view.outcomeProjectId }
       : state.view.kind === "missing-session"
         ? { kind: "session", sessionId: state.view.sessionId }
         : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
@@ -246,13 +243,15 @@ export default function App() {
       if (location.pathname === "/" || location.pathname === path) history.replaceState(null, "", path);
       else history.pushState(null, "", path);
     }
-    const title = route.kind === "project" ? state.outcomeProjects.find(p => p.id === route.projectId)?.name || "Project" : state.view.kind === "missing-session" ? "Session not found" : route.kind === "new" ? "New session" : state.sessionReferences.find(t => t.sessionId === route.sessionId)?.title || "Session";
+    const title = state.view.kind === "missing-session" ? "Session not found"
+      : route.kind === "new" ? (route.projectId && state.outcomeProjects.find(p => p.id === route.projectId)?.name) || "New session"
+      : state.sessionReferences.find(t => t.sessionId === route.sessionId)?.title || "Session";
     document.title = `${title} - Piano`;
   }, [state.view, state.session, state.selecting, state.projects, state.outcomeProjects, state.sessionReferences]);
 
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
-  const sidebarProps = { state, send, select, openNew, openProject, onProjectDialog: setProjectDialog, onPalette: () => setPaletteOpen(true) };
+  const sidebarProps = { state, send, select, openNew, onProjectDialog: setProjectDialog, onPalette: () => setPaletteOpen(true) };
   const working = !!(state.session?.state.isStreaming || state.session?.state.isCompacting || state.session?.state.isRetrying);
   const anyWorking = state.hosts.some((h) => h.streaming);
   // The tab icon presses the keys while the session on screen works.
@@ -317,10 +316,8 @@ export default function App() {
       <main className="sheet-enter relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
         {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
         <div key={state.view.kind} className="view-enter flex min-h-0 flex-1 flex-col">
-          {state.view.kind === "project" ? (
-            <OutcomeProjectView state={state} send={send} id={state.view.projectId} select={select} openNew={() => { if (state.view.kind === "project") openNew(undefined, state.view.projectId); }} onDialog={setProjectDialog} onMenu={showSidebar} />
-          ) : state.view.kind === "new" ? (
-            <NewSession key={state.view.outcomeProjectId ?? "ungrouped"} state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onMenu={showSidebar} />
+          {state.view.kind === "new" ? (
+            <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onMenu={showSidebar} />
           ) : state.view.kind === "missing-session" ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center" role="alert">
               <h1 className="text-xl font-medium">Session not found</h1>
@@ -328,7 +325,7 @@ export default function App() {
               <Button variant="outline" onClick={() => openNew()}>New session</Button>
             </div>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} changesOpen={changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} onProjectDialog={setProjectDialog} changesOpen={changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}
         </div>
         <Toaster
@@ -342,8 +339,8 @@ export default function App() {
           toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
         />
       </main>
-      {projectDialog && <OutcomeProjectDialogs key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette openProject={openProject} onProjectDialog={setProjectDialog} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} />
+      {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
+      <CommandPalette onProjectDialog={setProjectDialog} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </div>
   );

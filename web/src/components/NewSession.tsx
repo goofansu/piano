@@ -1,16 +1,18 @@
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon, TargetIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
+import { activeProjects } from "@/components/OutcomeProjects";
 import { PianoMark } from "@/components/PianoMark";
 import { SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
@@ -23,14 +25,16 @@ interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
   initialCwd?: string;
+  /** The project a session started here joins; the page is that project's home. */
   outcomeProjectId?: string;
+  onProjectChange: (outcomeProjectId?: string) => void;
   onMenu: () => void;
 }
 
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, initialCwd, outcomeProjectId, onMenu }: Props) {
+export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onMenu }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
     if (outcomeProjectId) return "";
@@ -51,6 +55,13 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onMenu }
   useEffect(() => {
     if (initialCwd) setCwd(initialCwd);
   }, [initialCwd]);
+  // A session for a project starts from an explicit directory choice, never a remembered or default one.
+  const [explicit, setExplicit] = useState(!!initialCwd);
+  useEffect(() => {
+    if (outcomeProjectId && !explicit) setCwd("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outcomeProjectId]);
+  const chooseCwd = useCallback((next: string) => { setExplicit(true); setCwd(next); }, []);
   useEffect(() => {
     const el = textarea.current;
     if (!el) return;
@@ -70,6 +81,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onMenu }
   }, [creating]);
 
   const project = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
+  const outcome = outcomeProjectId ? state.outcomeProjects.find(p => p.id === outcomeProjectId) : undefined;
   const trust = state.trusts[cwd] ?? project?.worktrees.find(w => w.path === cwd)?.trust;
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
@@ -79,7 +91,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onMenu }
   const effectiveModel = model || catalog?.defaultModel;
   const levels = levelsFor(catalog, effectiveModel);
   const effectiveEffort = clampEffort(levels, effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
-  const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy;
+  const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !outcome?.archived;
 
   const submit = () => {
     if (!ready) return;
@@ -101,14 +113,16 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onMenu }
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex [&>span]:w-1 [&>span]:scale-y-125" />
-            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{outcomeProjectId ? state.outcomeProjects.find(p => p.id === outcomeProjectId)?.name : "What should we work on?"}</h1>
-            <p className="mt-2 hidden text-base text-ink-2 md:block">A little progress starts with an idea.</p>
+            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{outcome?.name ?? "What should we work on?"}</h1>
+            {/* A project's goal is its only standing text, so it shows at every width; the tagline stays desktop-only. */}
+            <p className={cn("mt-2 text-base text-ink-2", !outcome?.goal && "hidden md:block")}>{outcome?.goal || "A little progress starts with an idea."}</p>
           </div>
           <div className="shrink-0">
             <div className="mb-2 flex min-w-0 items-center gap-1">
               <div className="min-w-0 flex-1">
-                <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
+                <DirectorySelect state={state} value={cwd} onChange={chooseCwd} onBrowse={() => setPickerOpen(true)} send={send} />
               </div>
+              {(outcome || activeProjects(state).length > 0) && <ProjectSelect state={state} value={outcomeProjectId} onChange={onProjectChange} />}
               {trust?.required && (
                 <TrustToggle trusted={trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: cwd, trusted })} />
               )}
@@ -145,12 +159,40 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onMenu }
                 <AlertDescription>Git status unavailable. Open Worktrees to inspect and refresh.</AlertDescription>
               </Alert>
             )}
+            {outcome?.archived && (
+              <Alert className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
+                <AlertDescription>This project is archived. Reopen it from its menu in the sidebar to start sessions here.</AlertDescription>
+              </Alert>
+            )}
             {creating && <p className="sr-only" role="status">Starting Pi</p>}
           </div>
         </div>
       </div>
-      <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={(path) => setCwd(path)} initialPath={cwd || undefined} />
+      <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={chooseCwd} initialPath={cwd || undefined} />
     </>
+  );
+}
+
+/** Which project the new session joins. Present only once a project exists, so the page stays as it was before. */
+function ProjectSelect({ state, value, onChange }: { state: AppState; value?: string; onChange: (id?: string) => void }) {
+  const current = value ? state.outcomeProjects.find(p => p.id === value) : undefined;
+  const choices = activeProjects(state);
+  if (current?.archived) choices.push(current);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" aria-label="Project" className={cn(picker, "h-11 max-w-[45%] shrink-0 md:h-8", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
+          <TargetIcon className="text-ink-3" />
+          <span className="truncate">{current ? current.name : "Project"}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-w-[calc(100vw-2rem)]">
+        <DropdownMenuRadioGroup value={value ?? ""} onValueChange={id => onChange(id || undefined)}>
+          {choices.map(p => <DropdownMenuRadioItem key={p.id} value={p.id}><span className="truncate">{p.name}</span>{p.archived && <span className="ml-1 text-muted-foreground">· Archived</span>}</DropdownMenuRadioItem>)}
+          <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

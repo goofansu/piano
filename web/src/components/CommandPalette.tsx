@@ -1,9 +1,9 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, TargetIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ProjectDialog } from "@/components/OutcomeProjects";
+import { activeProjects, type ProjectDialog, sessionProject } from "@/components/OutcomeProjects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -16,7 +16,6 @@ interface Props {
   state: AppState;
   select: (cwd: string, sessionId: string | null) => void;
   openNew: (cwd?: string, outcomeProjectId?: string) => void;
-  openProject: (id: string) => void;
   onProjectDialog: (dialog: ProjectDialog) => void;
   toggleSidebar: () => void;
   send: (command: ClientCommand) => void;
@@ -26,9 +25,9 @@ interface Props {
 
 /**
  * The command palette: session navigation/actions, new sessions, and view commands.
- * Search matches a session's title, its project and its branch.
+ * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest, openProject, onProjectDialog }: Props) {
+export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest, onProjectDialog }: Props) {
   const { setTheme } = useTheme();
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
@@ -46,11 +45,13 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
   const target = state.session?.sessionId ? { cwd: state.session.cwd, sessionId: state.session.sessionId, title: details.title } : undefined;
   const sessions = useMemo(() => {
     const visible = state.projects.flatMap(p => p.sessions.map(t => ({ ...t, project: p.name, inWorktree: !p.worktrees.some(w => w.root && w.path === t.cwd) })));
-    return [...visible, ...state.sessionReferences.filter(s => !visible.some(t => t.cwd === s.cwd && t.sessionId === s.sessionId)).map(s => ({ ...s, project: s.cwd, branch: "", inWorktree: false, createdAt: "" }))]
+    // Sessions whose directory was closed still belong to their project; they are reachable here by name.
+    return [...visible, ...state.sessionReferences.filter(s => !visible.some(t => t.cwd === s.cwd && t.sessionId === s.sessionId)).map(s => ({ ...s, project: s.cwd.split("/").pop() ?? s.cwd, branch: "", inWorktree: false, createdAt: "" }))]
+      .map(t => ({ ...t, outcome: sessionProject(state, t)?.name ?? "" }))
       .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
-  }, [state.projects, state.sessionReferences]);
-  const project = state.view.kind === "project" ? state.outcomeProjects.find(p => p.id === (state.view.kind === "project" ? state.view.projectId : "")) : undefined;
-  const membership = state.sessionReferences.find(s => s.cwd === target?.cwd && s.sessionId === target?.sessionId);
+  }, [state.projects, state.sessionReferences, state.outcomeProjects]);
+  const projects = activeProjects(state);
+  const membership = target ? sessionProject(state, target) : undefined;
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
@@ -68,8 +69,8 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
               return (
                 <CommandItem
                   key={`${t.cwd}\n${t.sessionId}`}
-                  value={`${t.title || "Untitled"} ${t.project} ${t.branch ?? ""} ${t.sessionId}`}
-                  keywords={[t.project, t.branch ?? ""]}
+                  value={`${t.title || "Untitled"} ${t.project} ${t.branch ?? ""} ${t.outcome} ${t.sessionId}`}
+                  keywords={[t.project, t.branch ?? "", t.outcome]}
                   onSelect={() => run(() => select(t.cwd, t.sessionId))}
                   className="gap-3"
                 >
@@ -89,19 +90,16 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           </CommandGroup>
         )}
         <CommandGroup key="global" heading="Global commands">
-          <CommandItem value="New project" disabled={!state.connected} onSelect={() => run(() => onProjectDialog({ kind: "edit" }))}>New project</CommandItem>
-          <CommandItem value="Archived projects" onSelect={() => run(() => onProjectDialog({ kind: "archived" }))}>Archived projects</CommandItem>
-          {state.outcomeProjects.map(p => <CommandItem key={p.id} value={`Open project ${p.name} ${p.id}`} onSelect={() => run(() => openProject(p.id))}>Open project {p.name}</CommandItem>)}
-          {project && <>
-            <CommandItem value="Edit project" disabled={!state.connected} onSelect={() => run(() => onProjectDialog({ kind: "edit", project }))}>Edit project</CommandItem>
-            <CommandItem value={project.archived ? "Reopen project" : "Archive project"} disabled={!state.connected} onSelect={() => run(() => send({ _tag: "archive_outcome_project", id: project.id, archived: !project.archived }))}>{project.archived ? "Reopen project" : "Archive project"}</CommandItem>
-            {!project.archived && <>
-              <CommandItem value="Add sessions" disabled={!state.connected} onSelect={() => run(() => onProjectDialog({ kind: "add", project }))}>Add sessions</CommandItem>
-              <CommandItem value="New session in project" disabled={!state.connected} onSelect={() => run(() => openNew(undefined, project.id))}>New session in project</CommandItem>
-            </>}
-          </>}
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
+          </CommandItem>
+          {projects.map(p => (
+            <CommandItem key={p.id} value={`new session in ${p.name} ${p.id}`} keywords={["project"]} onSelect={() => run(() => openNew(undefined, p.id))}>
+              <PlusIcon /> <span className="shrink-0">New session in</span> <span className="min-w-0 truncate">{p.name}</span>
+            </CommandItem>
+          ))}
+          <CommandItem value="new project" disabled={!state.connected} onSelect={() => run(() => onProjectDialog({}))}>
+            <TargetIcon /> New project
           </CommandItem>
           <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
             <PanelLeftIcon /> Toggle sidebar
@@ -112,8 +110,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
         </CommandGroup>
         {state.view.kind === "session" && state.session && (
           <CommandGroup key="session" heading="Session commands">
-            <CommandItem value="Move to project" disabled={!state.connected || !membership} onSelect={() => run(() => { if (membership) onProjectDialog({ kind: "assign", session: membership }); })}>Move to project</CommandItem>
-            {membership?.outcomeProjectId && <CommandItem value="Remove from project" disabled={!state.connected} onSelect={() => run(() => send({ _tag: "assign_project", cwd: membership.cwd, sessionId: membership.sessionId, projectId: null }))}>Remove from project</CommandItem>}
             <CommandItem value="Copy working directory" onSelect={() => run(() => { if (state.session) void copySessionValue(state.session.cwd, "Working directory"); })}><CopyIcon /> Copy working directory</CommandItem>
             {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
             <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
@@ -122,6 +118,17 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
             <CommandItem value="Pull request" keywords={["github", "link", "pr"]} disabled={!target} onSelect={() => run(openPullRequest)}><GitPullRequestIcon /> Pull request</CommandItem>
             <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
             <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
+            {projects.filter(p => p.id !== membership?.id).map(p => (
+              <CommandItem key={p.id} value={`${membership ? "Move" : "Add"} to project ${p.name} ${p.id}`} disabled={!state.connected || !target} onSelect={() => run(() => { if (target) send({ _tag: "assign_project", cwd: target.cwd, sessionId: target.sessionId, projectId: p.id }); })}>
+                <TargetIcon /> <span className="shrink-0">{membership ? "Move to" : "Add to"}</span> <span className="min-w-0 truncate">{p.name}</span>
+              </CommandItem>
+            ))}
+            {membership && <CommandItem value={`Remove from project ${membership.name}`} disabled={!state.connected || !target} onSelect={() => run(() => { if (target) send({ _tag: "assign_project", cwd: target.cwd, sessionId: target.sessionId, projectId: null }); })}>
+              <TargetIcon /> <span className="shrink-0">Remove from</span> <span className="min-w-0 truncate">{membership.name}</span>
+            </CommandItem>}
+            <CommandItem value="new project with this session" keywords={["project"]} disabled={!state.connected || !target} onSelect={() => run(() => { if (target) onProjectDialog({ assign: target }); })}>
+              <TargetIcon /> New project with this session
+            </CommandItem>
             <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
             <CommandItem value="new session here" disabled={state.session.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => { if (state.session) openNew(state.session.cwd); })}>
               <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(state.session.cwd)}</span>

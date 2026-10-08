@@ -10,9 +10,13 @@ organization does not confer verification or approval (INV-09–10).
   association on each existing `(cwd, sessionId)` reference. Existing directory/workspace fields
   keep their meaning. Legacy/unversioned and v1 registries migrate with an exact private backup;
   duplicate/dangling identities and incompatible/malformed data fail without resetting the file.
-- Projects and Directories have distinct UI labels. Project pages support empty projects, editing,
-  explicit working-location choice for new sessions, existing-session selection, confirmed moves,
-  unlinking, archive/reopen and direct routes. Command-palette entries mirror these actions.
+- Projects are groups in the sidebar, in the same tree and rows as directories, with the member's
+  directory (or worktree branch) as the row's trailing detail. Headings and project controls appear
+  only once a project exists. Membership is a **Project** submenu on every session menu (sidebar row,
+  session header, command palette); "New project…" there creates a project and files the session in
+  one step. A project's `+` and `/projects/<id>` open its New page, which names the project, shows
+  its goal and requires an explicit directory. Edit, archive and reopen live in the group's menu;
+  archived projects collapse under an **Archived** row. The session header links back to the project.
 - Closed directories and archived sessions retain references, routing and workspace identity.
   Missing history/checkout is explained on the project page. History remains readable when only
   the checkout is missing. No missing session is recreated by grouping.
@@ -22,15 +26,20 @@ organization does not confer verification or approval (INV-09–10).
 
 ## Tested inputs and environment
 
-Base: `a42b7cbf54364167a37d2b4d79f8660ae2e1a343` plus this implementation's dirty source.
-The retained `source-manifest.json` hashes server/shared/browser/test sources and package manifests;
-its SHA-256 is `e3922cc9931ec374db7c0e17cdce1f25eef09372b4f4f458b3912c59e0879deb`.
-This avoids claiming that tests ran against the untouched base commit.
+First implementation: base `a42b7cbf54364167a37d2b4d79f8660ae2e1a343` plus its dirty source, with a
+retained `source-manifest.json` (SHA-256 `e3922cc9931ec374db7c0e17cdce1f25eef09372b4f4f458b3912c59e0879deb`).
+UI rework: the `outcome-projects` branch commit that carries this paragraph, run on macOS with
+Node `24.19.0`, agent-browser `0.38.1`; `npm test` 78/78, typecheck, Biome and the browser fixture
+passed twice in a row (190 commands each, no command over 3 s).
 
 Node `24.21.0`, Effect `4.0.0-rc.118`, installed Pi `1.0.4`, Worktrunk `0.80.0`.
 The browser fixture uses `test/fake-host-pi.mjs --audit <scratch>/audit.jsonl`, not a paid model.
 Pi agent/session storage and registry are scratch-only; backend/frontend listen on loopback
 7171/7172. No real registry or running user service was changed. The worktree build was not deployed.
+
+The first implementation had a separate project page, four dialogs and permanent sidebar buttons;
+a product review found that it cost users a second vocabulary and surface. The rework above keeps
+the registry, wire and server changes and replaces only the presentation.
 
 ## Observed checks
 
@@ -39,17 +48,20 @@ Pi agent/session storage and registry are scratch-only; backend/frontend listen 
 | `npm test` | 78/78 pass. New registry test covers v1 backup, cross-repository membership, reused repository, move/unlink/archive/reopen, closed directory, reference removal, restart, stale-editor archive preservation and malformed/dangling rejection. Existing migration test retains legacy and write-failure coverage. |
 | `npm run typecheck` | Pass. |
 | `npm run build` | Pass; existing large-chunk advisory. Run before the final path-tooltip/truncation and missing-reference wording polish, which subsequently passed typecheck and browser checks. |
-| `node test/browser-outcome-projects.mjs /tmp/piano-outcome-evidence` | Pass through `npx agent-browser`; assertions and screenshots retained. |
+| `node test/browser-outcome-projects.mjs /tmp/piano-outcome-evidence` | Pass through `npx agent-browser`; assertions and screenshots retained. Rerun after the UI rework; see below. |
 | `git diff --check` and local Markdown-link review | Pass. |
 
-The browser journey creates one project spanning API/web scratch repositories and another using a
-separate API session; opens each transcript and verifies its own cwd/diff; creates/reloads an empty
-project; renames a project; starts a grouped session only after choosing its cwd; archives/reopens,
-moves and unlinks that running session; observes one spawn and no abort/exit during organization;
-reopens the ungrouped session directly; exercises palette membership; closes a directory without
-losing membership or direct-route history; removes a history file and a checkout; observes explicit
-unavailable states and remaining readable history; restarts the backend and compares the registry.
-The v1 backup matches the input byte-for-byte. Mobile assertions protect title width and non-overlap.
+The browser journey asserts the sidebar is unchanged before the first project; creates one project
+spanning API/web scratch repositories and another using a separate API session, filing each through
+the session menu's Project submenu; opens each transcript from its group and verifies its own
+cwd/diff and header link; creates an empty project and reloads onto its route; renames a project;
+starts a grouped session only after choosing its cwd, with the project route surviving reload;
+archives/reopens under the Archived row, moves and leaves with that running session; observes one
+spawn and no abort/exit during organization; exercises palette membership and the per-project
+"New session in" command; closes a directory without losing membership or direct-route history;
+removes a history file and a checkout; observes a disabled, explained row and remaining readable
+history; restarts the backend and compares the registry. The v1 backup matches the input
+byte-for-byte. Mobile assertions protect page width and row non-overlap in the sidebar sheet.
 
 Early browser attempts exposed fixture gaps (missing `get_commands`, an unrendered tool label and an
 unsupported selector). Those were corrected without weakening the lifecycle assertions. Screenshot
@@ -59,9 +71,10 @@ projection, preserved path references, archive/edit separation and palette parit
 
 ## Retained artifacts and limits
 
-Artifacts are in `/tmp/piano-outcome-evidence/`: `commands.json`, `process.log`, `result.json`
-(including the fake-Pi audit), `source-manifest.json`, command-result text files and desktop/mobile
-screenshots. The browser fixture is committed for reproduction. All scratch processes, repositories
+Artifacts are in the evidence directory given to the fixture: `commands.json` (with per-command
+wall time), `process.log`, `result.json` (including the fake-Pi audit) and the `cross-repository`,
+`unavailable-members`, `mobile-project` and `mobile-sidebar` screenshots. The browser fixture is
+committed for reproduction. All scratch processes, repositories
 and isolated session storage were removed by the fixture's cleanup.
 
 No paid Pi compatibility check was needed: Pi protocol/configuration/loading and host acquisition

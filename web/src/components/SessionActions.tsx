@@ -1,6 +1,7 @@
 import type { ClientCommand } from "@shared/wire";
 import { useState } from "react";
 import { toast } from "sonner";
+import { sessionProject } from "@/components/OutcomeProjects";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldGroup } from "@/components/ui/field";
@@ -18,6 +19,7 @@ export function currentSessionDetails(state: AppState) {
     title: session?.state.sessionName || info?.title || "Untitled",
     branch: project?.discovery.status === "ready" ? project.worktrees.find(w => w.path === session?.cwd)?.branch : undefined,
     sessionId: session?.sessionId,
+    project: session?.sessionId ? sessionProject(state, { cwd: session.cwd, sessionId: session.sessionId }) : undefined,
   };
 }
 

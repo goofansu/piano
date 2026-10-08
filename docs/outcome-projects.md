@@ -101,8 +101,10 @@ non-destructive lifecycle and migration risks. Follow [the testing policy](testi
 Observed outcomes are recorded in the [Step 1 evidence](research/outcome-projects-step1.md).
 The implementation uses registry v2 with an exact pre-migration backup. Restore that backup only
 with the backend stopped; older Piano versions cannot read v2. Restoring it discards all subsequent
-registry edits, including newly added session references, but does not delete Pi-owned conversations. Project pages use `/projects/<id>`; closed-directory
-and archived-session references remain accessible through project pages and session search.
+registry edits, including newly added session references, but does not delete Pi-owned conversations.
+A project has no page of its own: it is a group in the sidebar beside the directories, and
+`/projects/<id>` is its New page, where a session started joins it. Closed-directory and
+archived-session references remain reachable from the group and from session search.
 
 ## Step 2 — Shared context and instructions, later
 

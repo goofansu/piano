@@ -19,7 +19,7 @@ export interface AppState {
   selectionId: string | null;
   resync: boolean;
   /** What the main pane shows. */
-  view: { kind: "project"; projectId: string } | { kind: "session" } | { kind: "new"; cwd?: string; outcomeProjectId?: string } | { kind: "missing-session"; sessionId: string };
+  view: { kind: "session" } | { kind: "new"; cwd?: string; outcomeProjectId?: string } | { kind: "missing-session"; sessionId: string };
   projects: ProjectView[];
   outcomeProjects: OutcomeProject[];
   sessionReferences: SessionReference[];
@@ -67,7 +67,6 @@ export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
   | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null }
-  | { type: "project"; projectId: string }
   | { type: "new"; cwd?: string; outcomeProjectId?: string }
   | { type: "missing-session"; sessionId: string }
   | { type: "draft_changed"; key: string; text: string }
@@ -82,8 +81,6 @@ export function reduce(s: AppState, a: Action): AppState {
       return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId },
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)) };
-    case "project":
-      return { ...s, selectionId: null, resync: false, view: { kind: "project", projectId: a.projectId }, selecting: null, session: null };
     case "new":
       return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd, outcomeProjectId: a.outcomeProjectId }, selecting: null, session: null };
     case "missing-session":
