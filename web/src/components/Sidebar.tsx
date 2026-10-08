@@ -2,6 +2,7 @@ import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
 import { cn } from "cn";
 import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { ProjectDialog } from "@/components/OutcomeProjects";
 import { Keys, PianoMark } from "@/components/PianoMark";
 import { useSessionActions } from "@/components/SessionActions";
 import { Hint } from "@/components/Shortcut";
@@ -22,6 +23,8 @@ interface Props {
   send: (m: ClientMessage) => void;
   select: (cwd: string, sessionId: string | null) => void;
   openNew: (cwd?: string) => void;
+  openProject: (id: string) => void;
+  onProjectDialog: (dialog: ProjectDialog) => void;
   /** Hide the sidebar (or close the sheet it is shown in). */
   onHide: () => void;
   /** Open the command palette. */
@@ -40,7 +43,7 @@ const loadOpen = (): Set<string> => {
 /** Row heights: 36px with a pointer, 44px on a touch screen. */
 const row = "h-9 pointer-coarse:h-11";
 
-export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Props) {
+export function Sidebar({ state, send, select, openNew, openProject, onProjectDialog, onHide, onPalette }: Props) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
   const current = state.session ?? state.selecting;
 
@@ -111,13 +114,19 @@ export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Pro
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-      <nav className="relative px-3 pb-4" aria-label="Projects">
+      <nav className="relative px-3 pb-4" aria-label="Projects and directories">
+        <div className="mb-4 flex flex-col gap-1">
+          <Button variant="outline" disabled={!state.connected} onClick={() => onProjectDialog({ kind: "edit" })}>New project</Button>
+          {state.outcomeProjects.filter(p => !p.archived).map(p => <Button key={p.id} variant={state.view.kind === "project" && state.view.projectId === p.id ? "secondary" : "ghost"} className="justify-start" onClick={() => openProject(p.id)}><span className="truncate">{p.name}</span></Button>)}
+          <Button variant="ghost" onClick={() => onProjectDialog({ kind: "archived" })}>Archived projects</Button>
+        </div>
+        <h2 className="px-2 pb-2 text-xs text-muted-foreground">Directories</h2>
         {!state.projectsLoaded ? (
           <SidebarSkeleton />
         ) : state.projects.length === 0 ? (
           <Empty className="view-enter py-8">
             <EmptyHeader>
-              <EmptyDescription>No projects yet. Start a session in any directory and it becomes a project here.</EmptyDescription>
+              <EmptyDescription>No directories yet. Start a session in any directory to add it here.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : null}
@@ -134,6 +143,7 @@ export function Sidebar({ state, send, select, openNew, onHide, onPalette }: Pro
               select={select}
               openNew={openNew}
               reveal={reveal}
+              onProjectDialog={onProjectDialog}
             />
           ))}
         </div>
@@ -189,7 +199,7 @@ export function SidebarRail({ onShow, working }: { onShow: () => void; working: 
   );
 }
 
-interface ProjectProps extends Pick<Props, "send" | "select" | "state" | "openNew"> {
+interface ProjectProps extends Pick<Props, "send" | "select" | "state" | "openNew" | "onProjectDialog"> {
   project: ProjectView;
   current: { cwd: string; sessionId: string | null } | null;
   open: boolean;
@@ -200,7 +210,7 @@ interface ProjectProps extends Pick<Props, "send" | "select" | "state" | "openNe
 /** Row actions live in a fixed slot on the right and appear on hover, so nothing shifts. */
 const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
 
-function Project({ project, current, open, onOpenChange, state, send, select, openNew, reveal }: ProjectProps) {
+function Project({ project, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: ProjectProps) {
   const actions = useSessionActions(send, state.connected);
   const [closing, setClosing] = useState(false);
 
@@ -233,7 +243,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
         </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Project menu for ${project.name}`}>
+            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Directory menu for ${project.name}`}>
               <MoreHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -294,6 +304,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuGroup>
+                      <DropdownMenuItem disabled={!state.connected} onSelect={() => onProjectDialog({ kind: "assign", session: state.sessionReferences.find(s => s.cwd === t.cwd && s.sessionId === t.sessionId) ?? { ...t, archived: false } })}>Move to project</DropdownMenuItem>
                       <DropdownMenuItem disabled={!state.connected || checkoutMissing} onSelect={() => actions.rename(t)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
                       <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.archive(t)}><ArchiveIcon /> Archive</DropdownMenuItem>
                     </DropdownMenuGroup>
@@ -312,7 +323,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
       <Dialog open={closing} onOpenChange={setClosing}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Close this project?</DialogTitle>
+            <DialogTitle>Close this directory?</DialogTitle>
             <DialogDescription>"{project.name}" will be removed from the sidebar. Files and session history will not be deleted.</DialogDescription>
           </DialogHeader>
           <DialogFooter>

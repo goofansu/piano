@@ -16,10 +16,10 @@ Read these documents in order:
 4. [Developing on exe.dev](development-on-exe-dev.md) describes the private development workflow,
    scratch verification, and the Pi 1.0.2 upgrade handoff.
 
-The proposed [outcome-project plan](outcome-projects.md), with its boundary decision in
-[ADR 0002](adr/0002-outcome-projects.md), adds organization around bounded goals across repositories:
-session grouping first, shared context and instructions later. It preserves workspace execution
-identity and does not rename today's directory-based projects or authorize implementation.
+The [outcome-project plan](outcome-projects.md), with its boundary decision in
+[ADR 0002](adr/0002-outcome-projects.md), adds organization around bounded goals across repositories.
+Session grouping is implemented; shared context and instructions remain deferred. The UI distinguishes
+Projects from Directories while existing directory-based `project` fields retain their meaning.
 
 Use the [domain glossary](glossary.md) to distinguish sessions, tasks, evidence and verification.
 Contributor skill preferences are optional; see the development handoff.

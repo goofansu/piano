@@ -59,6 +59,7 @@ function handle(cmd) {
   }
   if (cmd.type === 'get_messages') return reply(cmd, { messages });
   if (cmd.type === 'get_session_stats') { if (!silence) { if (holdStats) heldStats.push(cmd); else stats(cmd); } return; }
+  if (cmd.type === 'get_commands') return reply(cmd, { commands: [] });
   if (cmd.type === 'get_available_models') return reply(cmd, { models: [{ provider: 'fake', id: 'alpha', reasoning: false, contextWindow: 1000 }] });
   if (cmd.type === 'extension_ui_response') { notify('dialog released'); return; }
   if (cmd.type === 'abort') { streaming = false; out({ type: 'agent_settled' }); return reply(cmd); }

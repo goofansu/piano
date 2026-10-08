@@ -38,7 +38,7 @@ test("INV-01/07: migration backs up exact bytes, preserves references and worksp
   writeFileSync(path, original);
   const run = <A, E>(e: Effect.Effect<A, E, Registry>) => Effect.runPromise(e.pipe(Effect.provide(RegistryLive), Effect.provideService(RegistryPath, path)));
   const migrated = await run(Effect.gen(function* () { return yield* (yield* Registry).get; }));
-  assert.equal(migrated.version, 1); assert.equal(migrated.workspaces.length, 3);
+  assert.equal(migrated.version, 2); assert.equal(migrated.workspaces.length, 3);
   assert.equal(migrated.sessions[0].cwd, worktree); assert.equal(migrated.sessions[0].archived, false);
   assert.equal(migrated.sessions[1].archived, true); assert.equal(migrated.worktrees[0].branch, "old-name");
   const backup = readdirSync(root).find(p => p.endsWith(".bak"))!;
@@ -46,7 +46,7 @@ test("INV-01/07: migration backs up exact bytes, preserves references and worksp
   const id = migrated.workspaces.find(w => w.path === repo)!.id;
   await run(Effect.gen(function* () { const r = yield* Registry; yield* r.removeProject(repo); yield* r.addProject(repo); }));
   assert.equal((await run(Effect.gen(function* () { return yield* (yield* Registry).get; }))).workspaces.find(w => w.path === repo)!.id, id);
-  for (const damaged of ["{broken", JSON.stringify({ projects: [123], worktrees: [], sessions: [] }), JSON.stringify({ ...migrated, version: 2 }), JSON.stringify({ ...migrated, workspaces: [] })]) {
+  for (const damaged of ["{broken", JSON.stringify({ projects: [123], worktrees: [], sessions: [] }), JSON.stringify({ ...migrated, version: 3 }), JSON.stringify({ ...migrated, workspaces: [] })]) {
     writeFileSync(path, damaged);
     await assert.rejects(run(Effect.gen(function* () { yield* (yield* Registry).addProject(repo); })), /has not been reset/);
     assert.equal(readFileSync(path, "utf8"), damaged);

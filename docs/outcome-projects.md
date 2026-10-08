@@ -1,8 +1,9 @@
 # Outcome-based projects
 
-Status: proposed product plan; no runtime or registry changes are implemented by this document.
+Status: Step 1 implemented; Step 2 remains deferred. See the
+[implementation evidence](research/outcome-projects-step1.md) for verification and limitations.
 [ADR 0002](adr/0002-outcome-projects.md) records the boundary decision. The
-[glossary](glossary.md#planned-outcome-projects) distinguishes these planned terms from today's code.
+[glossary](glossary.md#planned-outcome-projects) distinguishes UI terminology from existing path fields.
 
 ## Goal
 
@@ -28,11 +29,9 @@ it does not resume the deferred evidence/integration phases.
 - **Task:** a narrower intended outcome that may span sessions. Projects may eventually organize
   tasks, but the first slice requires neither task records nor a task hierarchy.
 
-Today `project` means an added directory in the registry, wire types and UI. Keep that meaning in
-existing code until a deliberate compatibility migration. Use **outcome project** in planning to
-avoid ambiguity. When the new UI ships, reserve its project label for outcomes and distinguish the
-existing repository/directory controls; do not offer two indistinguishable kinds of Project.
-The exact labels and layout belong to the first slice, not a repository-wide rename now.
+The UI now uses **Project** for outcomes and **Directories** for execution locations.
+Existing `project` path fields retain their directory meaning; `outcomeProjects` and
+`outcomeProjectId` hold organization separately. This is not a repository-wide code rename.
 
 ## Step 1 — Organize sessions across repositories
 
@@ -46,7 +45,7 @@ The exact labels and layout belong to the first slice, not a repository-wide ren
 4. Rename, move/remove a session association, or archive/reopen the project without moving code,
    changing session history or stopping running work.
 
-The initial membership rule is **zero or one outcome project per session**. This is a proposed
+The initial membership rule is **zero or one outcome project per session**. This is a
 simplicity trade-off, not a limitation on repository reuse: different sessions in the same repository
 can belong to different projects. Moving a session is explicit and changes only its association.
 Multi-project session membership can wait for a concrete need; it would also complicate future
@@ -98,8 +97,12 @@ In scratch repositories and a separate registry, observe through the browser:
 
 Use existing coverage where sufficient; add focused regression checks for new association,
 non-destructive lifecycle and migration risks. Follow [the testing policy](testing.md), including
-`npm test`, typecheck and retained scratch-browser output for the eventual implementation.
-These are future gates, not results from this documentation change.
+`npm test`, typecheck and retained scratch-browser output.
+Observed outcomes are recorded in the [Step 1 evidence](research/outcome-projects-step1.md).
+The implementation uses registry v2 with an exact pre-migration backup. Restore that backup only
+with the backend stopped; older Piano versions cannot read v2. Restoring it discards all subsequent
+registry edits, including newly added session references, but does not delete Pi-owned conversations. Project pages use `/projects/<id>`; closed-directory
+and archived-session references remain accessible through project pages and session search.
 
 ## Step 2 — Shared context and instructions, later
 

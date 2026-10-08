@@ -16,9 +16,9 @@ chasing full TUI parity or adding more backend machinery. Preserve runtime corre
 quiet-UI principle throughout. The [first UX pass](research/2026-10-05-daily-ux-first-pass.md)
 records the initial changes and verification, not completion of the broader UX goal.
 
-### Planned: outcome-based projects
+### Outcome-based projects
 
-The [staged plan](outcome-projects.md) and [ADR 0002](adr/0002-outcome-projects.md) propose organizing
+The [staged plan](outcome-projects.md) and [ADR 0002](adr/0002-outcome-projects.md) define organizing
 sessions around bounded goals independently of repository/directory boundaries. This is a daily-use
 improvement, not a prerequisite for or resumption of the deferred deeper workflow phases.
 
@@ -30,8 +30,9 @@ improvement, not a prerequisite for or resumption of the deferred deeper workflo
    sessions, with defined precedence, application boundaries and delivery outcomes. Preserve Pi's
    normal checkout configuration/trust; do not bundle this into the grouping slice.
 
-The plan defines browser/migration gates and non-goals. No code or schema rename is authorized by
-this roadmap update; use **outcome project** to distinguish the proposal from today's `project` fields.
+Step 1 is implemented with registry v2 and distinct Projects/Directories UI labels; existing
+`project` path fields retain their meaning. [Verification evidence](research/outcome-projects-step1.md)
+records grouping, non-destructive lifecycle, migration and scratch-browser gates. Step 2 is deferred.
 Covers INV-01–13 at their existing ownership, execution, evidence and trust boundaries.
 
 ## 1. Runtime correctness

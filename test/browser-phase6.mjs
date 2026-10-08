@@ -91,7 +91,7 @@ try {
   await click('Close');
   await ab('wait', '--text', 'Checkout missing');
   await capture('selected-missing-checkout');
-  await openWorktrees(); await ab('click', '[aria-label="Worktree project"]'); await ab('find', 'role', 'option', 'click', '--name', 'notes', '--exact');
+  await openWorktrees(); await ab('click', '[aria-label="Worktree directory"]'); await ab('find', 'role', 'option', 'click', '--name', 'notes', '--exact');
   await ab('wait', '--text', 'Non-Git directory. Chat is available');
   assert.equal(await evaluate(`!!document.querySelector('#wt-branch')`), false); await capture('non-git-is-explicit');
   await click('Close'); await ab('reload'); await ab('wait', '--text', 'What should we work on?');

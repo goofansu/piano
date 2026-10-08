@@ -23,15 +23,17 @@ interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
   initialCwd?: string;
+  outcomeProjectId?: string;
   onMenu: () => void;
 }
 
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, initialCwd, onMenu }: Props) {
+export function NewSession({ state, send, initialCwd, outcomeProjectId, onMenu }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
+    if (outcomeProjectId) return "";
     try {
       return localStorage.getItem(LAST_DIR) ?? "";
     } catch {
@@ -58,7 +60,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   useTypeToFocus(textarea, useCallback((s: string) => setText((t) => t + s), []));
   // Fall back to the first known project when nothing is remembered.
   useEffect(() => {
-    if (!cwd && state.projects[0]) setCwd(state.projects[0].path);
+    if (!outcomeProjectId && !cwd && state.projects[0]) setCwd(state.projects[0].path);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.projects.length]);
   useEffect(() => {
@@ -87,7 +89,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
       /* ignore */
     }
     setCreating(true);
-    send({ _tag: "create_session", cwd: cwd.trim(), options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
+    send({ _tag: "create_session", cwd: cwd.trim(), outcomeProjectId, options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
     attachments.clear();
   };
 
@@ -99,7 +101,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex [&>span]:w-1 [&>span]:scale-y-125" />
-            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">What should we work on?</h1>
+            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{outcomeProjectId ? state.outcomeProjects.find(p => p.id === outcomeProjectId)?.name : "What should we work on?"}</h1>
             <p className="mt-2 hidden text-base text-ink-2 md:block">A little progress starts with an idea.</p>
           </div>
           <div className="shrink-0">
@@ -156,7 +158,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
 function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trusted: boolean) => void }) {
   return (
     <Button
-      variant="ghost" size="sm" aria-pressed={trusted} aria-label="Project trust"
+      variant="ghost" size="sm" aria-pressed={trusted} aria-label="Directory trust"
       className={cn(picker, "h-11 shrink-0 md:h-8", trusted ? "text-ink-3" : "text-ink-2")}
       title={trusted ? "Pi loads this folder's .pi settings, extensions and skills. Click to untrust." : "Pi skips this folder's .pi settings, extensions and skills. Click to trust."}
       onClick={() => onChange(!trusted)}
@@ -221,7 +223,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           <CommandList className="max-h-[min(18rem,60dvh)]">
             <CommandEmpty>No directory matches.</CommandEmpty>
             {roots.length > 0 && (
-              <CommandGroup heading="Projects">
+              <CommandGroup heading="Directories">
                 {roots.map((k) => (
                   <CommandItem
                     key={k.path}

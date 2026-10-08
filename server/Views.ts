@@ -1,10 +1,25 @@
 /** Registry selects directories/sessions; Git/Worktrunk supply current facts, never cached registry branches. */
+import { existsSync } from "node:fs";
 import { Effect } from "effect";
-import type { ProjectView, SessionInfo, WorktreeView } from "../shared/wire.ts";
+import type { ProjectView, SessionInfo, SessionReference, WorktreeView } from "../shared/wire.ts";
 import { projectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
+import { listSessions } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { listWorktrees } from "./Worktrees.ts";
+
+/** Group references survive closed directories and missing history; discovery never removes them. */
+export const buildSessionReferences = Effect.gen(function* () {
+  const data = yield* (yield* Registry).get;
+  const running = yield* (yield* SessionHosts).list;
+  const paths = [...new Set(data.sessions.filter(s => s.outcomeProjectId).map(s => s.cwd))];
+  const histories = new Map(yield* Effect.forEach(paths, cwd => listSessions(cwd).pipe(Effect.map(sessions => [cwd, sessions] as const)), { concurrency: 4 }));
+  return data.sessions.map((s): SessionReference => ({ ...s,
+    unavailable: !s.outcomeProjectId || running.some(h => h.cwd === s.cwd && h.sessionId === s.sessionId) ? undefined
+      : !histories.get(s.cwd)?.some(h => h.sessionId === s.sessionId) ? "history"
+      : !existsSync(s.cwd) ? "checkout" : undefined,
+  }));
+});
 
 export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | Registry> = Effect.gen(function* () {
   const hosts = yield* SessionHosts;
