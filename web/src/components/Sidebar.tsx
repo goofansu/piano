@@ -175,7 +175,11 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           </div>
         )}
         <div>
-        {sectioned && state.projectsLoaded && <h2 className={sectionHeading}>Directories</h2>}
+        {sectioned && state.projectsLoaded && (
+          <div className={sectionHeading}>
+            <h2 className="flex-1">Directories</h2>
+          </div>
+        )}
         {!state.projectsLoaded ? (
           <SidebarSkeleton />
         ) : state.projects.length === 0 ? (
