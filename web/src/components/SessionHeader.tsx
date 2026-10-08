@@ -1,7 +1,7 @@
 import type { ClientCommand } from "@shared/wire";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
-import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
+import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,18 +41,24 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
       <IconButton label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><PlusIcon /></IconButton>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
-        <DropdownMenuContent align="end" collisionPadding={16} className="w-80 max-w-[calc(100vw-2rem)]">
+        <DropdownMenuContent align="end" collisionPadding={16} className="w-96 max-w-[calc(100vw-2rem)]">
+          {/* Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible. */}
+          <dl className="flex select-text flex-wrap items-center gap-x-3 gap-y-1 px-2 py-2 font-mono text-xs">
+            <div className="mb-1 w-full">
+              <dt className="sr-only">Session ID</dt>
+              <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="sr-only">Working directory</dt>
+              <dd className="break-all">{session?.cwd}</dd>
+            </div>
+            {branch && <div className="min-w-0 text-muted-foreground">
+              <dt className="sr-only">Git branch</dt>
+              <dd className="flex items-center gap-1"><GitBranchIcon aria-hidden="true" className="size-3 shrink-0" /><span className="break-all">{branch}</span></dd>
+            </div>}
+          </dl>
           <DropdownMenuGroup>
-            <DropdownMenuItem aria-label="Copy working directory" onSelect={event => { event.preventDefault(); if (session) void copySessionValue(session.cwd, "Working directory"); }}>
-              <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Working directory</span><span className="break-all font-mono text-xs text-muted-foreground">{session?.cwd}</span></span><CopyIcon />
-            </DropdownMenuItem>
-            {branch && <DropdownMenuItem aria-label="Copy git branch" onSelect={event => { event.preventDefault(); void copySessionValue(branch, "Git branch"); }}>
-              <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Git branch</span><span className="break-all font-mono text-xs text-muted-foreground">{branch}</span></span><CopyIcon />
-            </DropdownMenuItem>}
-            <DropdownMenuItem aria-label="Copy session ID" disabled={!sessionId} onSelect={event => { event.preventDefault(); if (sessionId) void copySessionValue(sessionId, "Session ID"); }}>
-              <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Session ID</span><span className="break-all font-mono text-xs text-muted-foreground">{sessionId ?? "Not available"}</span></span><CopyIcon />
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /> Copy all</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /> Copy details</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

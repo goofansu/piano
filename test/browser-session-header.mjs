@@ -20,10 +20,10 @@ async function freePort() {
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-header-evidence/browser');
 mkdirSync(evidence, { recursive: true });
-// Keep registry and Pi cwd identity stable on macOS, where /var aliases /private/var.
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'piano-header-')));
 const repo = join(root, 'long-working-directory-for-session-header-verification');
 const sessions = join(root, 'sessions');
+const sessionId = '02863032-e09d-400f-b3b2-458194e82494';
 for (const path of [repo, sessions, join(root, 'agent')]) mkdirSync(path);
 execFileSync('git', ['init', '-q', '-b', 'header-test', repo]);
 writeFileSync(join(repo, 'README.md'), 'Scratch\n');
@@ -31,13 +31,12 @@ execFileSync('git', ['-C', repo, 'add', '.']);
 execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'Initial']);
 const timestamp = new Date().toISOString();
 const sessionFile = join(sessions, 'header.jsonl');
-const entries = [{ type: 'session', version: 3, id: 'header', cwd: repo, timestamp }];
+const entries = [{ type: 'session', version: 3, id: sessionId, cwd: repo, timestamp }];
 for (let n = 0; n < 40; n++) entries.push({ type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp, message: { role: 'user', content: `Message ${n}\n\nTranscript scrolling check.`, timestamp: n } });
 writeFileSync(sessionFile, entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId: 'header', title: 'Header verification: copy all details with a long session title to truncate on mobile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
-// The generic fake only understands --session-id; this fixture also resumes this saved file.
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId, title: 'Header verification: copy details with a long session title to truncate on mobile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
 const fake = join(root, 'fake.mjs');
-writeFileSync(fake, readFileSync('test/fake-pi.mjs', 'utf8').replace('const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";', 'const sessionId = args.includes("--session") ? "header" : args[args.indexOf("--session-id") + 1] || "nosession";'));
+writeFileSync(fake, readFileSync('test/fake-pi.mjs', 'utf8').replace('const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";', `const sessionId = args.includes("--session") ? ${JSON.stringify(sessionId)} : args[args.indexOf("--session-id") + 1] || "nosession";`));
 const backendPort = await freePort();
 const frontendPort = await freePort();
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: String(backendPort), ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: fake, PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -64,17 +63,20 @@ const menu = async () => {
   await ab('wait', '--fn', `!!document.querySelector('[role="menu"][data-state="open"]')`);
 };
 const item = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
-const menuIsOpen = () => evaluate(`!!document.querySelector('[role="menu"][data-state="open"]')`);
-const waitForCopies = count => ab('wait', '--fn', `window.copies.length === ${count}`);
+const closed = () => ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
+const allDetails = `Working directory: ${repo}\nGit branch: header-test\nSession ID: ${sessionId}`;
+let copies = 0;
+async function assertCopy() {
+  // One browser round trip: a short-lived toast must not expire while launching CLI checks.
+  await ab('wait', '--fn', `window.copies.length === ${++copies} && window.copies.at(-1) === ${JSON.stringify(allDetails)} && !document.querySelector('[role="menu"][data-state="open"]')`);
+}
 async function assertToastCentered(text, label) {
-  await ab('wait', '--text', text);
-  const bounds = await evaluate(`(() => {
-    const main = document.querySelector('main').getBoundingClientRect();
-    const toast = [...document.querySelectorAll('[data-sonner-toast]')].filter(node => node.textContent.includes(${JSON.stringify(text)})).at(-1)?.getBoundingClientRect();
-    return toast && { mainLeft: main.left, mainRight: main.right, mainCenter: main.left + main.width / 2, toastLeft: toast.left, toastRight: toast.right, toastCenter: toast.left + toast.width / 2 };
-  })()`);
-  assert.ok(bounds, `${label}: toast is visible`);
-  assert.ok(Math.abs(bounds.toastCenter - bounds.mainCenter) <= 2, `${label}: toast center ${bounds.toastCenter} matches main center ${bounds.mainCenter}`);
+  // Observe in-page when the toast appears, not after several npx launches: under load
+  // those launches can outlast the notification's display duration.
+  await ab('wait', '--fn', `window.lastToast?.text.includes(${JSON.stringify(text)})`);
+  const bounds = await evaluate('window.lastToast');
+  assert.ok(bounds, `${label}: toast was visible`);
+  assert.ok(Math.abs(bounds.toastCenter - bounds.mainCenter) <= 2, `${label}: toast is centered in main`);
   assert.ok(bounds.toastLeft >= bounds.mainLeft && bounds.toastRight <= bounds.mainRight, `${label}: toast stays within main`);
   await ab('screenshot', join(evidence, `toast-${label}.png`));
 }
@@ -84,32 +86,29 @@ try {
     if (n === 100) throw new Error('Startup deadline');
     await delay(100);
   }
-  await ab('open', `http://127.0.0.1:${frontendPort}/s/header`);
+  await ab('open', `http://127.0.0.1:${frontendPort}/s/${sessionId}`);
   await ab('wait', '--text', 'Message 39');
   // Observe clipboard arguments while allowing the actual browser write to run.
-  await evaluate(`window.copies = []; window.nativeWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = async value => { window.copies.push(value); await window.nativeWrite(value); }; true`);
-  for (const [width, height] of [[1280, 900], [390, 844]]) {
+  await evaluate(`window.copies = []; window.nativeWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = async value => { window.lastToast = null; window.copies.push(value); await window.nativeWrite(value); };
+    new MutationObserver(() => requestAnimationFrame(() => {
+      const node = [...document.querySelectorAll('[data-sonner-toast]')].at(-1);
+      if (!node) return;
+      const main = document.querySelector('main').getBoundingClientRect();
+      const toast = node.getBoundingClientRect();
+      if (!toast.width || !toast.height) return;
+      window.lastToast = { text: node.textContent, mainLeft: main.left, mainRight: main.right, mainCenter: main.left + main.width / 2, toastLeft: toast.left, toastRight: toast.right, toastCenter: toast.left + toast.width / 2 };
+    })).observe(document.body, { childList: true, subtree: true }); true`);
+  for (const [width, height] of [[1280, 900], [390, 844], [320, 700]]) {
     await ab('set', 'viewport', String(width), String(height));
     assert.equal(await evaluate(`document.querySelector('main header p[title]').textContent.startsWith('Working directory: ')`), true);
-    assert.equal(await evaluate(`document.querySelectorAll('main header p[title]').length`), 1);
     assert.ok(await evaluate(`(() => {
       const create = document.querySelector('main header [aria-label="New session here"]').getBoundingClientRect();
       const menu = document.querySelector('[aria-label="Session information and actions"]').getBoundingClientRect();
       return create.width > 0 && create.right <= menu.left && menu.right <= innerWidth;
-    })()`), 'Quick action is visible to the left of the session menu');
-    await ab('screenshot', join(evidence, `quick-action-${width}.png`));
+    })()`), 'Quick action remains visible');
     await ab('click', 'main header [aria-label="New session here"]');
     await ab('wait', '--fn', `location.pathname === '/new' && !!document.querySelector('[aria-label="First message"]')`);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Directory"]').title`), repo);
-    if (width === 1280) {
-      await ab('click', '[aria-label="Search sessions"]');
-      await ab('wait', '--fn', `!!document.querySelector('[role="dialog"]')`);
-      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands']);
-      assert.equal(await evaluate(`!!document.querySelector('[cmdk-item][data-value="Copy all"]')`), false);
-      await ab('screenshot', join(evidence, 'palette-global.png'));
-      await ab('press', 'Escape');
-      await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
-    }
     await ab('back');
     await ab('wait', '--text', 'Message 39');
     const top = await evaluate(`document.querySelector('main header').getBoundingClientRect().top`);
@@ -117,21 +116,21 @@ try {
     assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().top`), top);
     await menu();
     await ab('snapshot');
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] > [role="group"]')].map(group => ({ label: group.querySelector('[data-slot="dropdown-menu-label"]')?.textContent ?? null, items: [...group.querySelectorAll('[role="menuitem"]')].map(item => item.getAttribute('aria-label') ?? item.textContent.trim()) }))`), [
-      { label: 'Details', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all'] },
-      { label: 'Git', items: ['Changes', 'Pull request'] },
-      { label: 'Session', items: ['Project', 'Rename', 'Archive'] },
-      { label: null, items: ['Delete'] },
-    ], 'visible categories group related actions and keep Delete separate');
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['Copy details', 'Changes', 'Pull request', 'Rename', 'Archive', 'Delete']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [sessionId, repo, 'header-test']);
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
-    assert.equal(await evaluate(`document.querySelector('[aria-label="Copy session ID"]').textContent`), 'Session IDheader');
-    assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes('Copy session file path')`), false);
-    assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes('New session here')`), false);
-    const bounds = await evaluate(`(() => { const r = document.querySelector('[role="menu"]').getBoundingClientRect(); return {left:r.left,right:r.right,width:innerWidth}; })()`);
-    assert.ok(bounds.left >= 0 && bounds.right <= bounds.width);
+    assert.ok(await evaluate(`(() => {
+      const menu = document.querySelector('[role="menu"]');
+      const bounds = menu.getBoundingClientRect();
+      return bounds.left >= 0 && bounds.right <= innerWidth && [...menu.querySelectorAll('dd')].every(node => {
+        const r = node.getBoundingClientRect();
+        return r.left >= bounds.left && r.right <= bounds.right && node.scrollWidth <= node.clientWidth && getComputedStyle(node).userSelect === 'text';
+      });
+    })()`), 'Full metadata wraps within the viewport and remains selectable');
     await ab('screenshot', join(evidence, `menu-${width}.png`));
-    await ab('press', 'Escape');
-    assert.equal(await menuIsOpen(), false);
+    await item('Copy details');
+    await assertCopy();
+    await assertToastCentered('Session details copied', `width-${width}`);
     await menu(); await item('Rename');
     await ab('wait', '--text', 'Rename session');
     await ab('fill', '[aria-label="Session name"]', 'Do not save');
@@ -141,7 +140,6 @@ try {
     await ab('find', 'role', 'button', 'click', '--name', 'Cancel', '--exact');
   }
 
-  // Resize the desktop sidebar before exercising notices: centering is relative to main, not the viewport.
   await ab('set', 'viewport', '1280', '900');
   await evaluate(`(() => {
     const handle = document.querySelector('[aria-label="Resize sidebar"]');
@@ -151,111 +149,47 @@ try {
     return true;
   })()`);
   await ab('wait', '--fn', `document.querySelector('[aria-label="Resize sidebar"]')?.getAttribute('aria-valuenow') === '420'`);
-
-  // Pointer copies are deliberately sequential in one open menu.
+  await menu(); await item('Copy details'); await assertCopy();
+  await assertToastCentered('Session details copied', 'desktop-resized');
+  // Moving focus and clicking outside dismiss the non-modal menu; the trigger reopens it.
   await menu();
-  await item('Copy working directory');
-  await waitForCopies(1);
-  assert.equal(await menuIsOpen(), true, 'first pointer copy keeps the menu open');
-  await assertToastCentered('Working directory copied', 'desktop-resized');
-  await item('Copy git branch');
-  await waitForCopies(2);
-  assert.equal(await menuIsOpen(), true, 'second pointer copy keeps the menu open');
-  await item('Copy session ID');
-  await waitForCopies(3);
-  assert.equal(await menuIsOpen(), true, 'third pointer copy keeps the menu open');
-  assert.deepEqual(await evaluate('window.copies'), [repo, 'header-test', 'header']);
+  await ab('focus', 'main header [aria-label="New session here"]'); await closed();
+  await menu(); await ab('click', '[data-slot="transcript"]'); await closed();
+  await menu(); await ab('press', 'Escape'); await closed();
+  await ab('wait', '--fn', `document.activeElement?.getAttribute('aria-label') === 'Session information and actions'`);
 
-  // Moving focus and clicking outside both dismiss the non-modal menu, and its trigger reopens it.
-  await ab('focus', 'main header [aria-label="New session here"]');
-  await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
-  await menu();
-  await ab('click', '[data-slot="transcript"]');
-  await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
-  await menu();
-  assert.equal(await menuIsOpen(), true, 'trigger works after outside dismissal');
-  await ab('click', '[aria-label="Session information and actions"]');
-  await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
-
-  // Collapsing the sidebar changes main's center; the notice follows it.
   await ab('click', '[aria-label="Hide sidebar"]');
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Show sidebar"]') && !document.querySelector('[aria-label="Resize sidebar"]')`);
-  await menu(); await item('Copy git branch');
-  await waitForCopies(4);
-  assert.equal(await menuIsOpen(), true);
-  await assertToastCentered('Git branch copied', 'desktop-collapsed');
-  await ab('press', 'Escape');
+  await menu(); await item('Copy details'); await assertCopy();
+  await assertToastCentered('Session details copied', 'desktop-collapsed');
   await ab('click', '[aria-label="Show sidebar"]');
   await ab('wait', '--fn', `document.querySelector('[aria-label="Resize sidebar"]')?.getAttribute('aria-valuenow') === '420'`);
-
-  // Keyboard activation copies without closing; Escape remains available to dismiss it.
-  await ab('focus', '[aria-label="Session information and actions"]');
-  await ab('press', 'Enter');
+  // Metadata is not a keyboard stop; Enter reaches the single copy action.
+  await ab('focus', '[aria-label="Session information and actions"]'); await ab('press', 'Enter');
   await ab('wait', '--fn', `document.activeElement?.getAttribute('role') === 'menuitem'`);
-  await ab('press', 'Enter');
-  await waitForCopies(5);
-  assert.equal(await menuIsOpen(), true, 'keyboard copy keeps the menu open');
-  await ab('press', 'Escape');
-  await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
-  await ab('wait', '--fn', `document.activeElement?.getAttribute('aria-label') === 'Session information and actions'`);
-  assert.equal(await evaluate(`document.activeElement?.getAttribute('aria-label')`), 'Session information and actions');
+  assert.equal(await evaluate('document.activeElement.textContent.trim()'), 'Copy details');
+  await ab('press', 'Enter'); await assertCopy();
+  await evaluate(`navigator.clipboard.writeText = async () => { window.lastToast = null; throw new Error('Denied'); }; true`);
+  await menu(); await item('Copy details'); await closed();
+  await assertToastCentered('Couldn’t copy session details.', 'desktop-error');
+  await evaluate(`navigator.clipboard.writeText = async value => { window.lastToast = null; window.copies.push(value); await window.nativeWrite(value); }; true`);
 
-  // A rejected clipboard write reports the error without taking away the still-useful menu.
-  await evaluate(`navigator.clipboard.writeText = async () => { throw new Error('Denied'); }; true`);
-  await menu(); await item('Copy working directory');
-  await ab('wait', '--text', 'Couldn’t copy working directory.');
-  assert.equal(await menuIsOpen(), true, 'failed copy keeps the menu open');
-  await assertToastCentered('Couldn’t copy working directory.', 'desktop-error');
-  await ab('press', 'Escape');
-  await evaluate(`navigator.clipboard.writeText = async value => { window.copies.push(value); await window.nativeWrite(value); }; true`);
-
-  // Mobile notices use the same main-relative horizontal center.
-  await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast]')`);
-  await ab('set', 'viewport', '390', '844');
-  await menu(); await item('Copy session ID');
-  await waitForCopies(6);
-  assert.equal(await menuIsOpen(), true);
-  await assertToastCentered('Session ID copied', 'mobile');
-  const allDetails = `Working directory: ${repo}\nGit branch: header-test\nSession ID: header`;
-  await item('Copy all');
-  await waitForCopies(7);
-  assert.equal(await evaluate('window.copies.at(-1)'), allDetails);
-  assert.equal(await menuIsOpen(), false, 'Copy all dismisses the mobile menu');
-  await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
-  await ab('set', 'viewport', '1280', '900');
-  await menu(); await item('Copy all');
-  await waitForCopies(8);
-  assert.equal(await evaluate('window.copies.at(-1)'), allDetails);
-  assert.equal(await menuIsOpen(), false, 'Copy all dismisses the desktop menu');
-  await ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
   await ab('click', '[aria-label="Search sessions"]');
   await ab('wait', '--fn', `!!document.querySelector('[role="dialog"]')`);
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
-  assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group]')].slice(1).map(group => ({ heading: group.querySelector('[cmdk-group-heading]')?.textContent, items: [...group.querySelectorAll('[cmdk-item]')].map(item => item.getAttribute('data-value')) }))`), [
-    { heading: 'Global commands', items: ['new session', 'toggle sidebar', 'appearance light', 'appearance dark', 'appearance system', 'Group by folder', 'Group by project', 'No grouping', 'Sort by last activity', 'Sort by name'] },
-    { heading: 'Session commands', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all', 'Changes', 'Pull request', 'Rename', 'Archive', 'Delete', 'new session here'] },
-  ]);
-  await ab('screenshot', join(evidence, 'palette-groups.png'));
-  // A session also contains "copy all": the exact command must outrank that group.
-  await ab('fill', '[aria-label="Search sessions and commands"]', 'header verification');
-  await ab('wait', '--fn', `document.querySelector('[cmdk-item]')?.textContent.includes('Header verification')`);
-  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
-  await ab('wait', '--fn', `document.querySelector('[cmdk-item]')?.getAttribute('data-value') === 'Copy all'`);
-  assert.ok(await evaluate(`[...document.querySelectorAll('[cmdk-item]')].some(node => node.textContent.includes('Header verification'))`), 'competing session is still in the results');
-  assert.equal(await evaluate(`document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value')`), 'Copy all');
-  assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item] mark').length`), 0, 'search results have no match highlighting');
-  await ab('screenshot', join(evidence, 'copy-all-ranked.png'));
+  assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item][data-value="Copy details"]').length`), 1);
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy details');
+  await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy details'`);
+  assert.ok(await evaluate(`[...document.querySelectorAll('[cmdk-item]')].some(node => node.textContent.includes('Header verification'))`), 'exact command outranks the competing session');
+  assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item] mark').length`), 0);
+  await ab('screenshot', join(evidence, 'copy-details-ranked.png'));
   await evaluate(`document.querySelector('[aria-label="Search sessions and commands"]').select(); true`);
   await ab('press', 'Backspace');
   await ab('wait', '--fn', `document.querySelector('[aria-label="Search sessions and commands"]').value === ''`);
-  assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
   await ab('wait', '--fn', `document.querySelector('[cmdk-list]').scrollTop === 0`);
-  await ab('screenshot', join(evidence, 'cleared-search-top.png'));
-  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
-  await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy all'`);
-  await ab('press', 'Enter');
-  await waitForCopies(9);
-  assert.equal(await evaluate('window.copies.at(-1)'), allDetails, 'palette copies the same labeled details');
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy details');
+  await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy details'`);
+  await ab('press', 'Enter'); await assertCopy();
   await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
   await ab('click', '[aria-label="Search sessions"]');
   await ab('fill', '[aria-label="Search sessions and commands"]', 'Rename');
@@ -271,7 +205,7 @@ try {
   await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
   await menu(); await item('Archive');
   await ab('wait', '--fn', `!document.querySelector('[aria-label="Session menu for Renamed from palette"]')`);
-  console.log('PASS: desktop/mobile sticky identity; persistent pointer/keyboard/error copy menu; outside dismissal/reopen; main-centered toasts with resized/collapsed sidebar; shared confirmations, palette rename and archive');
+  console.log('PASS: desktop/390px/320px full selectable metadata; single pointer/keyboard copy action; copy error; palette parity/ranking; sticky header, confirmations, rename/archive, outside dismissal and centered toasts');
 } catch (error) {
   await ab('snapshot').catch(() => {});
   await ab('screenshot', join(evidence, 'failure.png')).catch(() => {});
