@@ -25,17 +25,14 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
 
 ## Develop
 
-- Start the backend in one terminal:
+- Start the backend and UI together:
 
   ```bash
   npm run dev
   ```
 
-- Start the UI in another terminal:
-
-  ```bash
-  npm run dev:web
-  ```
+- Both processes have labeled logs. Press Ctrl+C to stop both.
+- To run them separately, use `npm run dev:server` and `npm run dev:web`.
 
 - Open <http://localhost:5173>. Vite proxies API and WebSocket requests to the backend on port 7070.
 - `npm run dev` restarts the backend on changes, interrupting active sessions. Use `npm start` when you want manual restarts.
