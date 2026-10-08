@@ -1,6 +1,6 @@
 # Bookmarks — PR 2 evidence
 
-Delta from `pi-tree-fork` / `6ee8136`; implements [PR 2](../pi-tree-fork-plan.md#pr-2--bookmark-conversation-entries).
+Delta from `pi-tree-fork` / `3f767bf`; implements [PR 2](../pi-tree-fork-plan.md#pr-2--bookmark-conversation-entries).
 Contracts: INV-01–05, INV-11–12. Node 24.21.0, locked Pi 1.1.0, Linux.
 Scratch SQLite/Pi config/history, loopback 7171/7172; no deployment or paid calls.
 
@@ -63,7 +63,9 @@ this succeeds rather than incorrectly reporting uncertain delivery.
 - Menu/palette parity and the on-demand quiet UI are preserved. No navigation,
   filesystem operation or fork is exposed in this slice.
 
-Reviewed locally along Standards and Spec axes, not by independent agents. The
+Rebased onto the refreshed parent after main advanced to `15f4011`; all three
+gates and the bookmark browser journey were rerun at this slice. Reviewed locally
+along Standards and Spec axes, not by independent agents. The
 browser covered missing capability and stale tabs; lost/wrong acknowledgements and
 incompatible capability versions were deterministic module checks, not browser
 fault injection. The capability/source check is an integration compatibility guard,

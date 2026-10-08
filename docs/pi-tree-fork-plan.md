@@ -20,8 +20,8 @@ The existing research and this plan accompany PR 1. Each PR is useful when merge
 
 | PR | Feature | Head branch | Base branch |
 | --- | --- | --- | --- |
-| 1 | Browse and search conversation history | `pi-tree-fork` | `main` |
-| 2 | Bookmark conversation entries | `pi-tree-bookmarks` | `pi-tree-fork` |
+| [1](https://github.com/goofansu/piano/pull/10) | Browse and search conversation history | `pi-tree-fork` | `main` |
+| [2](https://github.com/goofansu/piano/pull/11) | Bookmark conversation entries | `pi-tree-bookmarks` | `pi-tree-fork` |
 | 3 | Continue or revise from an earlier point | `pi-tree-navigation` | `pi-tree-bookmarks` |
 | 4 | Fork and duplicate sessions | `pi-session-forks` | `pi-tree-navigation` |
 | 5 | Carry a summary when changing branches | `pi-tree-summaries` | `pi-session-forks` |
@@ -33,7 +33,14 @@ proof and limitations; the feature diff must not include its ancestors' changes.
 
 Use `GH_HOST=github.int.exe.xyz gh ... --repo goofansu/piano`. Use the repository's Summary / Evidence /
 Merge Danger format, with the stack links in Summary. Capture before/after output or screenshots,
-not merely a list of intended tests. Report actual PR URLs as they are created; none exist yet.
+not merely a list of intended tests. Report actual PR URLs as they are created.
+
+Implementation checkpoint: PRs 1 and 2 are verified and published, rebased onto main `15f4011`.
+[PR 1 evidence](research/pi-tree-fork-pr1-evidence.md) and
+[PR 2 evidence](research/pi-tree-fork-pr2-evidence.md) record observed checks and limitations.
+**PRs 3–5 are not implemented or opened.** The full plan remains incomplete; next branch is
+`pi-tree-navigation`, from the verified `pi-tree-bookmarks` head. No PR has been auto-merged
+and no deployment was performed.
 
 Do not auto-merge. Merge order is bottom-up. If a parent changes, rebase descendants in order and
 rerun affected checks. After a parent is merged, retarget the next PR to `main`; for squash/rebase
@@ -295,5 +302,5 @@ current SQLite Registry, host/adapter assumptions, palette and focus changes aga
 No code or dependency changed at this checkpoint. Document review confirmed five visible slices
 with individual acceptance journeys; all 24 local link targets in the changed documents resolved,
 `git diff --check` passed, and the rebased branch contains `origin/main`. The application suite was
-not needed for this documentation-only checkpoint. Feature evidence and PR URLs will be added as
-slices actually pass; this plan is not a completion report.
+not needed for this documentation-only checkpoint. Feature evidence and PR URLs are recorded in the implementation checkpoint above as
+slices actually pass; this original planning evidence is not a completion report.
