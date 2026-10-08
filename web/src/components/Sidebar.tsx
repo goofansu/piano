@@ -1,6 +1,6 @@
 import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, ChevronDownIcon, ChevronRightIcon, GitBranchIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, ChevronRightIcon, GitBranchIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
@@ -146,6 +146,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           </TooltipTrigger>
           <TooltipContent><Hint of={["mod", "K"]}>Search and commands</Hint></TooltipContent>
         </Tooltip>
+        <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label="Hide sidebar" onClick={onHide}>
@@ -156,7 +157,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           <TooltipContent>Hide sidebar</TooltipContent>
         </Tooltip>
       </div>
-      <div className="px-3 pb-2">
+      <div className="px-3 pb-3">
         <Button
           variant="outline"
           className={cn("h-10 w-full justify-start rounded-xl border-line bg-conversation shadow-none transition-[background-color,border-color,color] duration-(--dur-hover)", state.view.kind === "new" && !state.view.cwd && !state.view.outcomeProjectId && "border-brand/25 bg-brand-soft text-brand hover:bg-brand-soft")}
@@ -164,10 +165,6 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         >
           <PlusIcon /> New session
         </Button>
-      </div>
-      {/* The list's own caption is its view menu: it reads as the current grouping and sort, and opens the choices. */}
-      <div className="flex h-7 shrink-0 items-center px-3">
-        <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
       </div>
       <ScrollArea className="min-h-0 flex-1">
       <nav className="relative px-3 pb-4" aria-label="Sessions">
@@ -183,7 +180,6 @@ const APPEARANCES = [
   { value: "dark", label: "Dark", icon: MoonIcon },
   { value: "system", label: "System", icon: MonitorIcon },
 ] as const;
-const groupCaption: Record<GroupBy, string> = { folder: "By folder", project: "By project", none: "Ungrouped" };
 
 /** One menu for how the list reads: grouped by folder, by project or not at all, sorted by name or activity; appearance lives here too. */
 function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: SortBy; onChange: (change: { groupBy?: GroupBy; sortBy?: SortBy }) => void }) {
@@ -193,13 +189,17 @@ function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: Sor
   const choice = (label: string, value: string) => <><span className="flex-1">{label}</span><span className="text-muted-foreground">{value}</span></>;
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="-ml-2 h-7 gap-1 px-2 text-xs font-medium text-muted-foreground hover:text-ink-2">
-          <span className="sr-only">View: </span>{groupCaption[groupBy]} · {sortLabel}
-          <ChevronDownIcon className="size-3.5 text-ink-3" aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-48">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="View options">
+              <SlidersHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>View options</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-48">
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>{choice("Group by", GROUP_BY.find(g => g.value === groupBy)?.label ?? "")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>

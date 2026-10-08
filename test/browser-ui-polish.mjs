@@ -81,7 +81,7 @@ async function capture(name) {
   writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot'));
 }
 async function appearance(name) {
-  await ab('find', 'role', 'button', 'click', '--name', 'View:'); await ab('find', 'role', 'menuitem', 'hover', '--name', 'Appearance'); await ab('wait', '--fn', `!!document.querySelector('[role="menuitemradio"]')`); await ab('find', 'role', 'menuitemradio', 'click', '--name', name, '--exact');
+  await ab('find', 'role', 'button', 'click', '--name', 'View options', '--exact'); await ab('find', 'role', 'menuitem', 'hover', '--name', 'Appearance'); await ab('wait', '--fn', `!!document.querySelector('[role="menuitemradio"]')`); await ab('find', 'role', 'menuitemradio', 'click', '--name', name, '--exact');
 }
 const toolsOnly = process.argv.includes('--tools-only');
 const tool = '[aria-label="read tool call"] button[aria-expanded]';

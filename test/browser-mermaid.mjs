@@ -113,7 +113,7 @@ try {
   assert.equal(observation.safeLabel, true, 'diagram config cannot re-enable HTML labels');
   assert.equal(observation.unsafe, false); assert.equal(observation.outsideSVG, 0); assert.notEqual(observation.bodyDisplay, 'none');
   for (const theme of ['Dark', 'Light']) {
-    await ab('find', 'role', 'button', 'click', '--name', 'View:'); await ab('find', 'role', 'menuitem', 'hover', '--name', 'Appearance'); await ab('wait', '--fn', `!!document.querySelector('[role="menuitemradio"]')`);
+    await ab('find', 'role', 'button', 'click', '--name', 'View options', '--exact'); await ab('find', 'role', 'menuitem', 'hover', '--name', 'Appearance'); await ab('wait', '--fn', `!!document.querySelector('[role="menuitemradio"]')`);
     await ab('find', 'role', 'menuitemradio', 'click', '--name', theme, '--exact');
     await ab('wait', '--fn', `${count} === 4`);
     await ab('screenshot', join(evidence, `${theme}.png`));
