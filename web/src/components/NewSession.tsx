@@ -269,7 +269,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
         <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className={cn(picker, "h-11 w-full min-w-0 max-w-none justify-start md:h-8")} title={value}>
           <FolderIcon className="text-ink-3" />
           {!value ? (
-            <span>Choose a directory</span>
+            <span>Choose a folder</span>
           ) : current ? (
             <>
               <span className="truncate font-mono">{current.project}</span>
@@ -291,7 +291,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           if (!next) { setWtOpen(false); setWtPending(false); }
         }}
         onPendingChange={setWtPending} state={state} currentCwd={value} send={send} onSelect={onChange}
-      /> : <PopoverContent ref={content} align="start" tabIndex={-1} aria-label="Choose a directory"
+      /> : <PopoverContent ref={content} align="start" tabIndex={-1} aria-label="Choose a folder"
         className="max-h-(--radix-popover-content-available-height) w-[380px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
         onOpenAutoFocus={event => {
           event.preventDefault();
@@ -299,11 +299,11 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           else search.current?.focus({ preventScroll: true });
         }}>
         <Command>
-          <CommandInput ref={search} aria-label="Search directories" placeholder="Search directories" />
+          <CommandInput ref={search} aria-label="Search folders" placeholder="Search folders" />
           <CommandList className="max-h-[min(18rem,60dvh)]">
-            <CommandEmpty>No directory matches.</CommandEmpty>
+            <CommandEmpty>No folder matches.</CommandEmpty>
             {roots.length > 0 && (
-              <CommandGroup heading="Repositories">
+              <CommandGroup heading="Folders">
                 {roots.map((k) => (
                   <CommandItem
                     key={k.path}

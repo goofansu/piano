@@ -20,7 +20,7 @@ it does not resume the deferred evidence/integration phases.
 
 - **Outcome project:** a named, bounded initiative that groups related work independently of where
   it runs. It has an identity independent of its name or any filesystem path and can start empty.
-- **Repository/directory:** a code or working location, potentially used by many outcome projects.
+- **Folder/directory:** a code or working location, potentially used by many outcome projects.
   Non-Git directories remain supported; do not rename every existing directory a repository.
 - **Workspace:** the execution context around one selected root or worktree. Grouping must not
   change its identity, path, revision, processes or evidence.
@@ -29,8 +29,9 @@ it does not resume the deferred evidence/integration phases.
 - **Task:** a narrower intended outcome that may span sessions. Projects may eventually organize
   tasks, but the first slice requires neither task records nor a task hierarchy.
 
-The UI now uses **Project** for outcomes and **Repositories** for the sidebar's location groups, each
-a root with its worktrees; a non-Git directory sits under the same heading with a Non-Git badge.
+The UI now uses **Project** for outcomes and **Folders** for the sidebar's location groups, each
+a root with its worktrees; a non-Git directory is listed the same way with a Non-Git badge. The
+sidebar's view menu groups sessions by folder, by project (with a No project group) or not at all.
 Existing `project` path fields retain their directory meaning; `outcomeProjects` and
 `outcomeProjectId` hold organization separately. This is not a repository-wide code rename.
 

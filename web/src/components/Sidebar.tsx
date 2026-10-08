@@ -1,6 +1,6 @@
 import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, ArrowUpDownIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
 import { Keys, PianoMark } from "@/components/PianoMark";
@@ -11,13 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { SIDEBAR_SORTS, type SidebarSort, sortOutcomeProjects, sortRepositories } from "@/lib/sidebarSort";
-import { useSidebarSort } from "@/lib/useSidebarSort";
+import { flatSessions, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy } from "@/lib/sidebarView";
+import { useSidebarView } from "@/lib/useSidebarView";
 import { type AppState, sessionKey } from "@/store";
 
 interface Props {
@@ -41,18 +41,8 @@ const loadOpen = (): Set<string> => {
     return new Set();
   }
 };
-/** Project groups share the open-state store with repositories, keyed apart from paths. */
+/** Project groups share the open-state store with folders, keyed apart from paths; the empty id is the No project group. */
 const projectKey = (id: string) => `project:${id}`;
-/** Sections are open unless folded; only the folded ones are remembered. */
-const CLOSED_KEY = "piano.closedSections";
-type Section = "projects" | "repositories";
-const loadClosed = (): Set<Section> => {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(CLOSED_KEY) ?? "[]") as Section[]);
-  } catch {
-    return new Set();
-  }
-};
 
 /** Row heights: 36px with a pointer, 44px on a touch screen. */
 const row = "h-9 pointer-coarse:h-11";
@@ -60,28 +50,11 @@ const row = "h-9 pointer-coarse:h-11";
 const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
 const groupRow = cn(row, "reveal-row group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
 const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
-/** Section labels match the palette's group headings. */
-const sectionHeading = "flex h-7 items-center text-xs font-medium text-muted-foreground";
 
 export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette }: Props) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
-  const [closedSections, setClosedSections] = useState<Set<Section>>(loadClosed);
-  const { sort, setSort } = useSidebarSort();
+  const { view, setView } = useSidebarView();
   const current = state.session ?? state.selecting;
-  const sectionOpen = (section: Section) => !closedSections.has(section);
-  const setSectionOpen = (section: Section, open: boolean) =>
-    setClosedSections((prev) => {
-      if (prev.has(section) !== open) return prev;
-      const next = new Set(prev);
-      if (open) next.delete(section);
-      else next.add(section);
-      try {
-        localStorage.setItem(CLOSED_KEY, JSON.stringify([...next]));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
 
   const setOpen = (key: string, open: boolean) =>
     setOpenProjects((prev) => {
@@ -96,22 +69,22 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       return next;
     });
 
-  // The groups holding the selected session are always visible: its repository and its project.
+  // The group holding the selected session is always open: its folder, or its project.
   useEffect(() => {
     if (!current) return;
     const owner = state.projects.find((p) => p.worktrees.some((w) => w.path === current.cwd));
-    if (owner) { setSectionOpen("repositories", true); if (!openProjects.has(owner.path)) setOpen(owner.path, true); }
     const member = state.sessionReferences.find(s => s.cwd === current.cwd && s.sessionId === current.sessionId);
-    if (member?.outcomeProjectId) { setSectionOpen("projects", true); if (!openProjects.has(projectKey(member.outcomeProjectId))) setOpen(projectKey(member.outcomeProjectId), true); }
+    const key = view.groupBy === "folder" ? owner?.path : view.groupBy === "project" ? projectKey(member?.outcomeProjectId ?? "") : undefined;
+    if (key && !openProjects.has(key)) setOpen(key, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.cwd, current?.sessionId, state.projects, state.sessionReferences]);
+  }, [current?.cwd, current?.sessionId, state.projects, state.sessionReferences, view.groupBy]);
 
   // A project created in this view opens at once, so the session just filed in it is in sight.
   const known = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!state.projectsLoaded) return;
     const ids = state.outcomeProjects.map(p => p.id);
-    if (known.current) for (const id of ids) if (!known.current.has(id)) { setSectionOpen("projects", true); setOpen(projectKey(id), true); }
+    if (known.current) for (const id of ids) if (!known.current.has(id)) setOpen(projectKey(id), true);
     known.current = new Set(ids);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.projectsLoaded, state.outcomeProjects]);
@@ -127,27 +100,37 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   const order = { i: 0 };
   const reveal = () => (revealing ? ({ "--i": String(order.i++) } as React.CSSProperties) : undefined);
 
-  // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
-  const active = sortOutcomeProjects(state.outcomeProjects.filter(p => !p.archived), state.sessionReferences, sort("projects"));
-  // Section headings exist only once there is a second kind of group to tell apart.
-  const sectioned = state.outcomeProjects.length > 0;
   const groupProps = { state, send, select, openNew, reveal, onProjectDialog, current };
-  const repositories = <>
-    {!state.projectsLoaded ? (
-      <SidebarSkeleton />
-    ) : state.projects.length === 0 ? (
-      <Empty className="view-enter py-8">
-        <EmptyHeader>
-          <EmptyDescription>No repositories yet. Start a session in any directory and it appears here.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    ) : null}
-    <div className="flex flex-col gap-1">
-      {sortRepositories(state.projects, sort("repositories")).map((p) => (
+  const empty = (text: string) => (
+    <Empty className="view-enter py-8">
+      <EmptyHeader>
+        <EmptyDescription>{text}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  );
+  const groups = (children: React.ReactNode) => <div className="flex flex-col gap-1">{children}</div>;
+  const list = () => {
+    if (!state.projectsLoaded) return <SidebarSkeleton />;
+    if (view.groupBy === "folder") {
+      if (state.projects.length === 0) return empty("No folders yet. Start a session in any folder and it appears here.");
+      return groups(folderGroups(state.projects, view.sortBy).map((p) => (
         <Project key={p.path} project={p} open={openProjects.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
-      ))}
-    </div>
-  </>;
+      )));
+    }
+    if (view.groupBy === "project") {
+      // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
+      const active = state.outcomeProjects.filter(p => !p.archived);
+      const all = projectGroups(active, state.sessionReferences, state.projects.flatMap(p => p.sessions), view.sortBy);
+      if (active.length === 0 && all.every(g => g.sessions.length === 0)) return empty("No sessions yet. Start one and it appears here.");
+      return groups(all.map(g => {
+        const key = projectKey(g.project?.id ?? "");
+        return <OutcomeGroup key={key} project={g.project} sessions={g.sessions} open={openProjects.has(key)} onOpenChange={open => setOpen(key, open)} {...groupProps} />;
+      }));
+    }
+    const sessions = flatSessions(state.projects, view.sortBy);
+    if (sessions.length === 0) return empty("No sessions yet. Start one and it appears here.");
+    return <SessionList sessions={sessions} {...groupProps} />;
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -163,6 +146,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           </TooltipTrigger>
           <TooltipContent><Hint of={["mod", "K"]}>Search and commands</Hint></TooltipContent>
         </Tooltip>
+        <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
         <ThemeToggle />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -184,64 +168,48 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-      <nav className="relative px-3 pb-4" aria-label="Projects and repositories">
-        {/* Two parallel sections under one nav landmark; before the first project there is only the repository list. */}
-        {sectioned && state.projectsLoaded && (
-          <SidebarSection label="Projects" open={sectionOpen("projects")} onOpenChange={open => setSectionOpen("projects", open)} sort={sort("projects")} onSortChange={s => setSort("projects", s)}>
-            {active.length === 0 ? (
-              <ListEmpty>All projects archived</ListEmpty>
-            ) : (
-              <div className="flex flex-col gap-1">
-                {active.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
-              </div>
-            )}
-          </SidebarSection>
-        )}
-        {sectioned && state.projectsLoaded ? (
-          <SidebarSection label="Repositories" className="mt-4" open={sectionOpen("repositories")} onOpenChange={open => setSectionOpen("repositories", open)} sort={sort("repositories")} onSortChange={s => setSort("repositories", s)}>
-            {repositories}
-          </SidebarSection>
-        ) : repositories}
+      <nav className="relative px-3 pb-4" aria-label="Sessions">
+        {list()}
       </nav>
       </ScrollArea>
     </div>
   );
 }
 
-/** A section's label is its disclosure: the chevron beside it folds the whole list, and folded sections are remembered.
- * Its sort choice sits in the heading's hover slot; without section headings the palette carries the same commands. */
-function SidebarSection({ label, open, onOpenChange, sort, onSortChange, className, children }: {
-  label: string; open: boolean; onOpenChange: (open: boolean) => void; sort: SidebarSort; onSortChange: (sort: SidebarSort) => void; className?: string; children: React.ReactNode;
-}) {
+/** One menu for how the list reads: grouped by folder, by project or not at all, and sorted by name or activity. */
+function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: SortBy; onChange: (change: { groupBy?: GroupBy; sortBy?: SortBy }) => void }) {
+  const current = (label: string) => <span className="ml-auto pl-4 text-muted-foreground">{label}</span>;
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange} className={className}>
-      <h2 className={cn(sectionHeading, "group pr-1")}>
-        <CollapsibleTrigger asChild>
-          <button type="button" className="flex h-full items-center gap-1 rounded-md pr-1.5 pl-2 outline-none transition-colors duration-(--dur-hover) hover:text-ink-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
-            {label}
-            <ChevronRightIcon aria-hidden className={cn("size-3.5 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none", open && "rotate-90")} />
-          </button>
-        </CollapsibleTrigger>
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-xs" className={cn(hoverSlot, "ml-auto")} aria-label={`Sort ${label.toLowerCase()}`}>
-                  <ArrowUpDownIcon />
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>Sort {label.toLowerCase()}</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent align="end">
-            <DropdownMenuRadioGroup value={sort} onValueChange={value => onSortChange(value as SidebarSort)}>
-              {SIDEBAR_SORTS.map(s => <DropdownMenuRadioItem key={s.value} value={s.value}>{s.label}</DropdownMenuRadioItem>)}
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="View options">
+              <SlidersHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Group and sort</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-52">
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Group by{current(GROUP_BY.find(g => g.value === groupBy)?.label ?? "")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup value={groupBy} onValueChange={value => onChange({ groupBy: value as GroupBy })}>
+              {GROUP_BY.map(g => <DropdownMenuRadioItem key={g.value} value={g.value}>{g.label}</DropdownMenuRadioItem>)}
             </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </h2>
-      <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>
-    </Collapsible>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Sort by{current(SORT_BY.find(s => s.value === sortBy)?.label ?? "")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup value={sortBy} onValueChange={value => onChange({ sortBy: value as SortBy })}>
+              {SORT_BY.map(s => <DropdownMenuRadioItem key={s.value} value={s.value}>{s.label}</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -365,29 +333,50 @@ function SessionRow({ t, trailing, selected, disabled, hint, state, send, select
 
 const Chevron = ({ open }: { open: boolean }) => <ChevronRightIcon className={cn("size-4 shrink-0 text-ink-3 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none", open && "rotate-90")} />;
 
-/** An outcome project: the same disclosure group as a repository, whose rows come from any repository. */
-function OutcomeGroup({ project, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: OutcomeProject }) {
+const branchTrailing = (branch: string) => <span className="flex max-w-[38%] shrink-0 items-center gap-1 truncate font-mono text-sm text-ink-3"><GitBranchIcon className="size-3 shrink-0" aria-hidden /><span className="truncate">{branch}</span></span>;
+
+/** Where a session runs, for rows listed away from their folder: a worktree by its branch, a root (or an unregistered folder) by its folder name. */
+function Location({ state, cwd }: { state: AppState; cwd: string }) {
+  const owner = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
+  const worktree = owner?.worktrees.find(w => w.path === cwd);
+  if (worktree && !worktree.root && worktree.branch) return branchTrailing(worktree.branch);
+  return <span className="max-w-[38%] shrink-0 truncate text-xs text-ink-3">{owner?.name ?? cwd.split("/").pop()}</span>;
+}
+
+const unavailableHint = (s: Pick<SessionReference, "unavailable">) => s.unavailable === "history" ? "History unavailable. Restore the Pi session file to open it."
+  : s.unavailable === "checkout" ? "Folder missing. History can be read; restore the folder to continue." : undefined;
+
+type Member = Pick<SessionReference, "cwd" | "sessionId" | "title" | "unavailable">;
+
+/** Every listed session in one list, each with its location. */
+function SessionList({ sessions, current, state, send, select, reveal, onProjectDialog }: Omit<GroupProps, "open" | "onOpenChange" | "openNew"> & { sessions: readonly Member[] }) {
   const actions = useSessionActions(send, state.connected);
-  const members = state.sessionReferences.filter(s => s.outcomeProjectId === project.id);
-  const location = (s: SessionReference) => {
-    const owner = state.projects.find(p => p.worktrees.some(w => w.path === s.cwd));
-    const worktree = owner?.worktrees.find(w => w.path === s.cwd);
-    // A worktree is named by its branch; a root (or an unregistered directory) by its directory name.
-    if (worktree && !worktree.root && worktree.branch) return <span className="flex max-w-[38%] shrink-0 items-center gap-1 truncate font-mono text-sm text-ink-3"><GitBranchIcon className="size-3 shrink-0" aria-hidden /><span className="truncate">{worktree.branch}</span></span>;
-    return <span className="max-w-[38%] shrink-0 truncate text-xs text-ink-3">{owner?.name ?? s.cwd.split("/").pop()}</span>;
-  };
-  const hint = (s: SessionReference) => s.unavailable === "history" ? "History unavailable. Restore the Pi session file to open it."
-    : s.unavailable === "checkout" ? "Directory missing. History can be read; restore the directory to continue." : undefined;
+  return <>
+    <ul className="flex flex-col gap-1">
+      {sessions.map(s => (
+        <SessionRow key={sessionKey(s)} t={s} trailing={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
+          selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
+          state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
+      ))}
+    </ul>
+    {actions.dialogs}
+  </>;
+}
+
+/** An outcome project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
+function OutcomeGroup({ project, sessions, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: OutcomeProject | null; sessions: readonly Member[] }) {
+  const actions = useSessionActions(send, state.connected);
+  const members = sessions;
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={groupRow} style={reveal()}>
         <CollapsibleTrigger asChild>
-          <button type="button" className={groupTrigger} title={project.goal || undefined}>
+          <button type="button" className={groupTrigger} title={project?.goal || undefined}>
             <Chevron open={open} />
-            <span className={cn("min-w-0 flex-1 truncate text-sm font-medium", project.archived ? "text-ink-3" : "text-ink-2")}>{project.name}</span>
+            <span className={cn("min-w-0 flex-1 truncate text-sm font-medium", !project || project.archived ? "text-ink-3" : "text-ink-2")}>{project?.name ?? "No project"}</span>
           </button>
         </CollapsibleTrigger>
-        {!project.archived && (
+        {project && !project.archived && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`New session in ${project.name}`} onClick={() => openNew(undefined, project.id)}>
@@ -397,7 +386,7 @@ function OutcomeGroup({ project, current, open, onOpenChange, state, send, selec
             <TooltipContent>New session in project</TooltipContent>
           </Tooltip>
         )}
-        <DropdownMenu>
+        {project && <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Project menu for ${project.name}`}>
               <MoreHorizontalIcon />
@@ -411,12 +400,12 @@ function OutcomeGroup({ project, current, open, onOpenChange, state, send, selec
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu>}
       </div>
       <CollapsibleContent className="disclosure-content">
         {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
           {members.map(s => (
-            <SessionRow key={sessionKey(s)} t={s} trailing={location(s)} hint={hint(s)} disabled={s.unavailable === "history"}
+            <SessionRow key={sessionKey(s)} t={s} trailing={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
               selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
               state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
           ))}
@@ -456,7 +445,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
         </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Repository menu for ${project.name}`}>
+            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Folder menu for ${project.name}`}>
               <MoreHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -476,12 +465,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           {project.sessions.map((t) => {
             // The branch is only news when the session runs somewhere other than the project root.
             const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
-            const trailing = t.branch && inWorktree ? (
-              <span className="flex max-w-[38%] shrink-0 items-center gap-1 truncate font-mono text-sm text-ink-3">
-                <GitBranchIcon className="size-3 shrink-0" aria-hidden />
-                <span className="truncate">{t.branch}</span>
-              </span>
-            ) : undefined;
+            const trailing = t.branch && inWorktree ? branchTrailing(t.branch) : undefined;
             return (
               <SessionRow key={t.sessionId} t={t} trailing={trailing} selected={current?.cwd === t.cwd && current.sessionId === t.sessionId}
                 state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
@@ -493,7 +477,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
       <Dialog open={closing} onOpenChange={setClosing}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Close this repository?</DialogTitle>
+            <DialogTitle>Close this folder?</DialogTitle>
             <DialogDescription>"{project.name}" will be removed from the sidebar. Files and session history will not be deleted.</DialogDescription>
           </DialogHeader>
           <DialogFooter>

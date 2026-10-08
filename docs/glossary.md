@@ -6,7 +6,7 @@ They do not imply that every object or capability is already implemented.
 | Term | Meaning |
 | --- | --- |
 | Project | In the UI, a named outcome grouping sessions. Existing `project` path fields still mean an explicitly added directory; see the compatibility distinction below. |
-| Repository | In the UI, an added root directory together with the worktrees created from it. Sessions in a worktree are listed under their repository with the branch beside them. A non-Git directory is listed the same way with a Non-Git badge. |
+| Folder | In the UI, an added root directory together with the worktrees created from it. Sessions in a worktree are listed under their folder with the branch beside them. A non-Git directory is listed the same way with a Non-Git badge. |
 | Directory | A filesystem path a session runs in: a repository root, one of its worktrees, or any other folder. The New page picks a directory; the sidebar groups by repository. |
 | Worktree | A Git checkout; Worktrunk is the initial backend for its lifecycle. |
 | Workspace | Piano's context around a project root or worktree, attaching sessions, revision, processes, evidence and integration state. |
@@ -39,8 +39,8 @@ existing directory/workspace fields.
 A repository can support multiple outcome projects, and an outcome project can span repositories.
 A task is a narrower intended outcome that may contribute to a project; neither tasks nor a task
 hierarchy are required for grouping sessions. Workspaces still identify where execution happens.
-The UI calls outcomes **Projects** and sidebar location groups **Repositories** (a root with its
-worktrees). In code, `outcomeProjects` names the grouping; existing `project` path fields continue to
+The UI calls outcomes **Projects** and sidebar location groups **Folders** (a root with its
+worktrees); the sidebar groups sessions by folder, by project or not at all. In code, `outcomeProjects` names the grouping; existing `project` path fields continue to
 mean an added directory.
 
 An agent can be settled while a task is unfinished. Tests can pass while an acceptance criterion

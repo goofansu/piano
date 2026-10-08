@@ -132,7 +132,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex flex-col gap-3 sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Choose a directory</DialogTitle>
+          <DialogTitle>Choose a folder</DialogTitle>
         </DialogHeader>
 
         <Input
@@ -145,7 +145,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
               select();
             }
           }}
-          placeholder="/path/to/directory"
+          placeholder="/path/to/folder"
           spellCheck={false}
           autoComplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other"
           className="font-mono text-sm"
@@ -227,7 +227,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           {dir && entries.length === 0 && !creating && (
             <Empty className="p-6 md:p-6">
               <EmptyHeader>
-                <EmptyDescription>{prefix ? "No matching directories" : "No subdirectories"}</EmptyDescription>
+                <EmptyDescription>{prefix ? "No matching folders" : "No subfolders"}</EmptyDescription>
               </EmptyHeader>
             </Empty>
           )}
@@ -240,7 +240,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           </Button>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="button" disabled={!dir || loading} onClick={select}>Use this directory</Button>
+            <Button type="button" disabled={!dir || loading} onClick={select}>Use this folder</Button>
           </div>
         </DialogFooter>
         <span className="sr-only">{selected}</span>

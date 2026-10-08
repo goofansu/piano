@@ -7,8 +7,8 @@ session is one pi session; each running session is one `pi --mode rpc` child. Se
 ## Words
 
 Use these in code and prose: **project** (a directory the user added; the UI labels it a
-**Repository**, grouping it with its worktrees, and reserves **Project** for an outcome project, a
-named group of sessions from any repositories), **worktree** (a checkout created through piano with `wt`), **session** (one pi session;
+**Folder**, grouping it with its worktrees, and reserves **Project** for an outcome project, a
+named group of sessions from any folders), **worktree** (a checkout created through piano with `wt`), **session** (one pi session;
 never "thread"), **registry** (the config file that records selected projects, outcome projects,
 worktrees and session references; Pi owns session history).
 See [the glossary](docs/glossary.md) for the planned workspace, task and evidence vocabulary.

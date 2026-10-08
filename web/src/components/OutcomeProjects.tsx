@@ -72,7 +72,7 @@ export function ProjectDialogView({ state, send, dialog, close, openProject }: {
     }}>
       <DialogHeader>
         <DialogTitle>{editing ? "Edit project" : "New project"}</DialogTitle>
-        <DialogDescription>{editing ? "Rename the project or restate its goal." : "A project groups sessions from any repositories around one outcome."}</DialogDescription>
+        <DialogDescription>{editing ? "Rename the project or restate its goal." : "A project groups sessions from any folders around one outcome."}</DialogDescription>
       </DialogHeader>
       <FieldGroup>
         <Field><FieldLabel htmlFor="project-name">Name</FieldLabel><Input id="project-name" value={name} onChange={e => setName(e.target.value)} maxLength={200} autoFocus required /></Field>

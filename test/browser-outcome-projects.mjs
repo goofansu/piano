@@ -94,6 +94,14 @@ async function file(sessionMenu, projectName) {
   await ab('find', 'role', 'menuitemradio', 'click', '--name', projectName, '--exact');
   await wait(`!document.querySelector('[role="menu"]')`); await settle();
 }
+/** The sidebar's view menu: Group by Folder, Project or None. */
+async function groupBy(option) {
+  await button('View options'); await wait(`!!document.querySelector('[role="menuitem"][aria-haspopup="menu"]')`);
+  await ab('find', 'role', 'menuitem', 'hover', '--name', 'Group by');
+  await wait(`[...document.querySelectorAll('[role="menuitemradio"]')].some(i => i.textContent.trim() === ${JSON.stringify(option)})`); await settle();
+  await ab('find', 'role', 'menuitemradio', 'click', '--name', option, '--exact');
+  await wait(`!document.querySelector('[role="menu"]')`); await settle();
+}
 async function openGroup(name) {
   const expanded = await evaluate(`[...document.querySelectorAll('nav button[aria-expanded]')].some(b => b.textContent === ${JSON.stringify(name)} && b.getAttribute('aria-expanded') === 'true')`);
   if (!expanded) await button(name);
@@ -110,10 +118,9 @@ try {
   await ab('wait', '--text', 'api');
   assert.deepEqual(registry().sessions, references);
   assert.equal(readFileSync(join(root, readdirSync(root).find(f => f.endsWith('.bak'))), 'utf8'), original);
-  // Before the first project the sidebar is unchanged: no section headings, no project controls. The chip on the New page creates the first one.
-  assert.equal(await evaluate(`!!document.querySelector('nav h2')`), false);
+  // Grouped by folder, the sidebar shows no project rows; the chip on the New page creates the first project.
   await create('Launch subscriptions');
-  assert.equal(await evaluate(`[...document.querySelectorAll('nav h2')].map(h => h.textContent).join()`), 'Projects,Repositories');
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label="Project menu for Launch subscriptions"]')`), false);
   await openGroup('api'); await openGroup('web');
   await file('API session', 'Launch subscriptions'); await file('Web session', 'Launch subscriptions');
   assert.equal(member('one').outcomeProjectId, project('Launch subscriptions').id);
@@ -124,13 +131,13 @@ try {
   // An empty project is usable; its route survives reload.
   await create('Empty project'); await ab('reload');
   await wait(`document.querySelector('main h1')?.textContent === 'Empty project'`);
-  await openGroup('Empty project'); await ab('wait', '--text', 'No sessions yet');
   assert.equal(registry().outcomeProjects.length, 3);
-  // Section labels fold their list; a folded section is remembered across reload.
-  await button('Projects'); await wait(`!document.querySelector('[aria-label="New session in Empty project"]')`);
-  await ab('reload'); await ab('wait', '--text', 'Repositories');
-  assert.equal(await evaluate(`!!document.querySelector('[aria-label="New session in Empty project"]')`), false);
-  await button('Projects'); await wait(`!!document.querySelector('[aria-label="New session in Empty project"]')`);
+  // Group by project lists every project plus a No project group; the grouping is remembered across reload.
+  await groupBy('Project'); await ab('wait', '--text', 'No project');
+  await openGroup('Empty project'); await ab('wait', '--text', 'No sessions yet');
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('nav button[aria-expanded]:not([aria-haspopup])')].map(b => b.textContent)`), ['Improve accessibility', 'Launch subscriptions', 'Empty project', 'No project'], 'by last activity: equal timestamps fall back to name, an empty project last');
+  await ab('reload'); await ab('wait', '--text', 'No project');
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label="New session in Empty project"]')`), true);
   // Opening a member from its project group shows that session's own directory and changes only.
   for (const [title, cwd, id, marker, other] of [['API session', api, 'one', 'API CHANGE', 'WEB CHANGE'], ['Web session', web, 'two', 'WEB CHANGE', 'API CHANGE']]) {
     await button(`${title} ${cwd === api ? 'api' : 'web'}`);
@@ -188,10 +195,12 @@ try {
   assert.ok(items.includes('/holdweb') && items.includes('API sessionapi'), `sessions found by project name: ${items}`);
   assert.ok(items.every(i => !/project/i.test(i)), `no project commands in the palette: ${items}`);
   await closeDialogs();
-  // Closing a repository leaves project references, histories and workspace identity intact.
-  await ab('click', '[aria-label="Repository menu for api"]'); await menuitem('Close'); await button('Close'); await settle();
+  // Closing a folder leaves project references, histories and workspace identity intact.
+  await groupBy('Folder'); await wait(`!!document.querySelector('[aria-label="Folder menu for api"]')`);
+  await ab('click', '[aria-label="Folder menu for api"]'); await menuitem('Close'); await button('Close'); await settle();
   assert.equal(registry().projects.includes(api), false);
   assert.equal(member('one').outcomeProjectId, project('Subscriptions').id);
+  await groupBy('Project'); await ab('wait', '--text', 'No project');
   await button('API session api'); await ab('wait', '--text', 'History one');
   assert.equal(await evaluate(`[...document.querySelectorAll('header p[title]')].find(p => p.textContent.startsWith('Working directory'))?.title`), api);
   await ab('reload'); await ab('wait', '--text', 'History one');
@@ -200,10 +209,10 @@ try {
   rmSync(api, { recursive: true });
   await ab('reload');
   await wait(`document.querySelector('nav [title^="History unavailable"]')?.disabled === true`);
-  await wait(`!!document.querySelector('nav [title^="Directory missing"]')`);
+  await wait(`!!document.querySelector('nav [title^="Folder missing"]')`);
   await ab('screenshot', join(evidence, 'unavailable-members.png'));
   assert.equal(registry().sessions.some(s => s.sessionId === 'two'), true);
-  await ab('click', 'nav [title^="Directory missing"]'); await ab('wait', '--text', 'History one');
+  await ab('click', 'nav [title^="Folder missing"]'); await ab('wait', '--text', 'History one');
   const saved = registry();
   await stop(backend); backend = startBackend(); await ready(); await ab('reload');
   await wait(`document.querySelector('nav [title^="History unavailable"]')?.disabled === true`);
