@@ -1,6 +1,6 @@
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
 import { GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -47,12 +47,13 @@ export function SessionPullRequestDialog({ open, onOpenChange, pr }: {
   open: boolean; onOpenChange: (open: boolean) => void; pr: ReturnType<typeof useSessionPullRequest>;
 }) {
   const [url, setUrl] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open) setUrl(pr.value?.link?.url ?? ""); }, [open, pr.value?.link?.url]);
   // Opening details is also an explicit retry; polling failures stay out of the main view.
   useEffect(() => { if (open) void pr.refresh(); }, [open]);
   const submit = async () => { if (await pr.change({ action: "link", url })) onOpenChange(false); };
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent>
+    <DialogContent onOpenAutoFocus={event => { event.preventDefault(); inputRef.current?.focus(); }}>
       <DialogHeader>
         <DialogTitle>Pull request</DialogTitle>
         <DialogDescription>Link this session’s work, or find an open pull request for its current branch.</DialogDescription>
@@ -65,10 +66,10 @@ export function SessionPullRequestDialog({ open, onOpenChange, pr }: {
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="session-pr-url">GitHub pull request URL</FieldLabel>
-            <Input id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} placeholder="https://github.com/owner/repo/pull/123" disabled={pr.busy} />
+            <Input ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} placeholder="https://github.com/owner/repo/pull/123" />
             {pr.value?.error && <FieldError>{pr.value.error}</FieldError>}
             {!pr.busy && pr.value && !pr.value.error && !pr.value.link && <p role="status" className="text-sm text-muted-foreground">
-              {pr.value.discovery ? "No matching open pull request." : "No pull request linked. Automatic discovery is off."}
+              {pr.value.discovery ? "No matching open pull request." : "No pull request linked."}
             </p>}
           </Field>
         </FieldGroup>

@@ -34,7 +34,7 @@ export interface SessionEntry {
   readonly archived: boolean;
   /** Replaceable last-known Pi accounting, not session history. */
   readonly stats?: SessionStats;
-  /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
+  /** Absent: not linked. Null: explicitly removed. No forge status is persisted. */
   readonly pullRequest?: SessionPullRequestLink | null;
 }
 

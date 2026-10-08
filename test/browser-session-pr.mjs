@@ -81,22 +81,38 @@ try {
   }
   // An extra caller-supplied path cannot redirect a valid ID pair to another workspace.
   const own = await (await fetch(endpoint({ workspaceId, sessionId: 'work', cwd: plain }))).json();
-  assert.equal(own.pullRequest?.number, 42);
+  assert.deepEqual(own, { link: null, pullRequest: null, discovery: false });
   const notes = await fetch(endpoint({ workspaceId: plainId, sessionId: 'notes' }), { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'link', url: prs[1].url }) });
   assert.equal(notes.status, 200); assert.equal((await notes.json()).link?.url, prs[1].url);
   await ab('set', 'viewport', '1280', '900'); await ab('open', `${frontendUrl}/s/work`);
-  await ab('wait', '--text', 'These are not session deliverables.'); await waitBadge(42);
+  await ab('wait', '--text', 'These are not session deliverables.'); await noBadge();
+  await openDetails(); await ab('wait', '--text', 'No pull request linked.'); await noBadge();
+  assert.equal(await evaluate(`document.activeElement?.id`), 'session-pr-url');
+  assert.equal(await evaluate(`document.querySelector('#session-pr-url').value`), '');
+  observations.manualOnly = { opening: await evaluate(`document.querySelector('[role="dialog"]').textContent`) };
+  assert.deepEqual(await (await fetch(endpoint({ workspaceId, sessionId: 'work' }))).json(), { link: null, pullRequest: null, discovery: false });
+  await button('Find from branch'); await waitBadge(42);
+  observations.manualOnly.afterFind = await evaluate(`document.querySelector('#session-pr-url').value`);
+  assert.equal(observations.manualOnly.afterFind, prs[0].url);
+  await closeDetails();
+  await ab('click', '[aria-label="Session information and actions"]');
+  await ab('find', 'role', 'menuitem', 'click', '--name', 'Rename', '--exact');
+  await ab('wait', '--fn', `!!document.querySelector('input[aria-label="Session name"]')`);
+  observations.renameFocus = await evaluate(`(() => { const input = document.querySelector('input[aria-label="Session name"]'); return { focused: document.activeElement === input, selected: input.selectionStart === 0 && input.selectionEnd === input.value.length }; })()`);
+  assert.deepEqual(observations.renameFocus, { focused: true, selected: true });
+  await button('Cancel');
   observations.initial = await evaluate(`({ prs: [...document.querySelectorAll('header a[aria-label^="Open pull request"]')].map(a => a.href), pile: !!document.querySelector('[data-slot="link-stack"]') })`);
   assert.deepEqual(observations.initial, { prs: [prs[0].url], pile: false });
   await ab('screenshot', join(evidence, '01-current-pr-desktop.png'));
   // Removal is a durable per-session preference, not a temporary hide.
   await openDetails(); await button('Remove link'); await noBadge(); await ab('reload');
   await ab('wait', '--text', 'These are not session deliverables.'); await noBadge();
-  await openDetails(); await ab('wait', '--text', 'Automatic discovery is off.');
+  await openDetails(); await ab('wait', '--text', 'No pull request linked.');
   await button('Find from branch'); await waitBadge(42); await closeDetails();
   // Header and palette reach the same control. Invalid URLs fail without changing identity.
   await palette('Pull request'); await ab('click', '[cmdk-item][data-value="Pull request"]');
   await ab('wait', '--fn', `!!document.querySelector('#session-pr-url:not(:disabled)')`);
+  assert.equal(await evaluate(`document.activeElement?.id`), 'session-pr-url');
   await ab('fill', '#session-pr-url', 'https://github.com/example/repo/issues/1'); await button('Link pull request');
   await ab('wait', '--text', 'Enter a GitHub pull request URL.'); await waitBadge(42);
   await ab('fill', '#session-pr-url', prs[1].url + '/files?diff=split#abc'); await button('Link pull request'); await waitBadge(43);
@@ -128,6 +144,7 @@ try {
   control({ prs });
   await ab('set', 'viewport', '390', '844'); await openDetails();
   await ab('wait', '--text', 'Explicitly linked work');
+  assert.equal(await evaluate(`document.activeElement?.id`), 'session-pr-url');
   observations.mobile = await evaluate(`({ width: innerWidth, scroll: document.documentElement.scrollWidth, dialogScroll: document.querySelector('[role="dialog"]').scrollWidth, dialogWidth: document.querySelector('[role="dialog"]').clientWidth })`);
   assert.ok(observations.mobile.scroll <= observations.mobile.width && observations.mobile.dialogScroll <= observations.mobile.dialogWidth);
   await ab('screenshot', join(evidence, '02-pr-dialog-mobile.png')); await closeDetails();

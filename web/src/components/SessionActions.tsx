@@ -1,5 +1,5 @@
 import type { ClientCommand } from "@shared/wire";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { sessionProject } from "@/components/OutcomeProjects";
 import { Button } from "@/components/ui/button";
@@ -56,12 +56,13 @@ export function useSessionActions(send: (command: ClientCommand) => void, enable
   const [renaming, setRenaming] = useState<Target | null>(null);
   const [deleting, setDeleting] = useState<Target | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const canRename = enabled && !!renaming && !!draftTitle.trim() && draftTitle.trim() !== (renaming.title ?? "");
   const rename = (target: Target) => { setDraftTitle(target.title ?? ""); setRenaming(target); };
   const archive = (target: Target) => { if (enabled) send({ _tag: "archive_session", cwd: target.cwd, sessionId: target.sessionId }); };
   const dialogs = <>
     <Dialog open={!!renaming} onOpenChange={open => !open && setRenaming(null)}>
-      <DialogContent className="sm:max-w-md" showCloseButton={false}>
+      <DialogContent className="sm:max-w-md" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); renameInputRef.current?.focus(); }}>
         <form onSubmit={event => {
           event.preventDefault();
           if (!renaming || !canRename) return;
@@ -72,7 +73,7 @@ export function useSessionActions(send: (command: ClientCommand) => void, enable
             <DialogTitle>Rename session</DialogTitle>
             <DialogDescription>Pi records the name with the session, so it also appears in Pi's own session list.</DialogDescription>
           </DialogHeader>
-          <FieldGroup><Field><Input aria-label="Session name" value={draftTitle} onChange={event => setDraftTitle(event.target.value)} autoFocus onFocus={event => event.target.select()} maxLength={200} /></Field></FieldGroup>
+          <FieldGroup><Field><Input ref={renameInputRef} aria-label="Session name" value={draftTitle} onChange={event => setDraftTitle(event.target.value)} onFocus={event => event.target.select()} maxLength={200} /></Field></FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRenaming(null)}>Cancel</Button>
             <Button type="submit" disabled={!canRename}>Rename</Button>
