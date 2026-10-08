@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -138,14 +138,14 @@ test('reopening uses Pi context edits, compaction and active branch without repl
 });
 
 test('catalog observations and caches belong to the requested cwd', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'piano-catalog-'));
+  const tmp = realpathSync(tmpdir()), root = mkdtempSync(join(tmp, 'piano-catalog-'));
   try {
     await run(Effect.gen(function* () {
       const catalog = yield* Catalog;
-      const home = yield* catalog.get(tmpdir());
+      const home = yield* catalog.get(tmp);
       const project = yield* catalog.get(root);
       assert.equal(project.cwd, root); assert.equal(project.models[0].name, root);
-      assert.equal(home.cwd, tmpdir()); assert.equal(home.models[0].name, tmpdir());
+      assert.equal(home.cwd, tmp); assert.equal(home.models[0].name, tmp);
       assert.equal((yield* catalog.get(root)).models[0].name, root);
     }).pipe(Effect.provide(CatalogLive), Effect.scoped));
   } finally { rmSync(root, { recursive: true, force: true }); }

@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +15,7 @@ const fixturePath = (name: string) => fileURLToPath(new URL(name, import.meta.ur
 export const sentinelTool = "mcp__piano_sentinel__identity";
 
 export async function createPiCompatibilityFixture() {
-  const root = mkdtempSync(join(tmpdir(), "piano-phase0-"));
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "piano-phase0-"));
   const agentDir = join(root, "agent");
   const sessionDir = join(root, "sessions");
   const eventsFile = join(root, "pi-events.jsonl");
