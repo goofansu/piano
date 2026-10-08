@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionPullRequest, SessionPullRequestAction } from "@shared/wire";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Only the selected session is polled. Identity and request order fence late responses. */
 export function useSessionPullRequest(cwd: string | undefined, sessionId: string | null | undefined, working: boolean) {

@@ -1,7 +1,7 @@
 /** Pi-only translation and content-indexed reconstruction. Originals stay in Pi. */
 import type { RenderMsg, SessionEvent, ToolExecution, Usage } from '../shared/wire.ts';
-import { imagePreview } from './ImagePreviews.ts';
 import { projectDisplay, redactDisplay } from './DisplayProjection.ts';
+import { imagePreview } from './ImagePreviews.ts';
 
 interface RawContent {
   type: string;

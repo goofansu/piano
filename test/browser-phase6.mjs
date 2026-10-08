@@ -1,7 +1,7 @@
 // Scratch-only Phase 6 gate: actual wt 0.80.0, fake Pi catalog, no model calls.
 // node test/browser-phase6.mjs /tmp/piano-phase6-evidence/browser
 import assert from 'node:assert/strict';
-import { spawn, spawnSync, execFileSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';

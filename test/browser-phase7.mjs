@@ -2,7 +2,7 @@
 // session chrome and navigation are now covered by browser-ui-polish.mjs.
 // Scratch-only: real Git/worktrees, fake Pi, no model calls.
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';

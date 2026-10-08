@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
-import { currentEntry, type JumpEntry, jumpEntries, jumpTo, TRANSCRIPT_SELECTOR } from "@/lib/transcript";
+import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { currentEntry, type JumpEntry, jumpEntries, jumpTo, TRANSCRIPT_SELECTOR } from "@/lib/transcript";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;

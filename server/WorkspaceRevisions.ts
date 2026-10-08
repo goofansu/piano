@@ -2,9 +2,10 @@
  * filters/hooks or diff the moving checkout. No verification claim includes ignored or
  * external inputs. Unsupported/racing inputs fail closed (INV-07/08).
  */
-import { createHash } from "node:crypto";
+
 import { spawn } from "node:child_process";
-import { constants, watch, type FSWatcher } from "node:fs";
+import { createHash } from "node:crypto";
+import { type BigIntStats, constants, type FSWatcher, watch } from "node:fs";
 import { lstat, mkdir, mkdtemp, open, readFile, readlink, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
@@ -99,7 +100,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
         const flags = await git("ls-files", "--debug", "-z");
         // Extended index flags: skip-worktree and intent-to-add have semantics not
         // represented by ordinary stage-0 blobs. Do not silently flatten them.
-        if ([...flags.toString().matchAll(/\n  size: \d+\s+flags: ([0-9a-f]+)\n/g)].some(m => (parseInt(m[1], 16) & 0x60000000) !== 0)) unsupported("Sparse/skip-worktree and intent-to-add index entries are not supported for capture.");
+        if ([...flags.toString().matchAll(/\n {2}size: \d+\s+flags: ([0-9a-f]+)\n/g)].some(m => (parseInt(m[1], 16) & 0x60000000) !== 0)) unsupported("Sparse/skip-worktree and intent-to-add index entries are not supported for capture.");
         return { head: (await git("rev-parse", "--verify", "HEAD")).toString().trim(),
           branch: (await git("rev-parse", "--abbrev-ref", "HEAD")).toString().trim(),
           index, untracked: await git("ls-files", "--others", "--exclude-standard", "-z"),
@@ -144,7 +145,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
         for (const path of paths) {
           signal.throwIfAborted();
           const full = join(cwd, path);
-          let stat;
+          let stat: BigIntStats;
           try { stat = await lstat(full, { bigint: true }); }
           catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") continue; throw e; }
           // A tracked file can become a directory containing new untracked files.

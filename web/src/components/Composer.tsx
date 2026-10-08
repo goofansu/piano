@@ -1,20 +1,20 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
-import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
-import { formatTokenCount } from "@/lib/format";
-import { useTypeToFocus } from "@/lib/typeToFocus";
+import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
+import { ContextDetails } from "@/components/ContextDetails";
+import { JumpTo } from "@/components/JumpTo";
+import { ModelSelect } from "@/components/ModelSelect";
+import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { SlashTextarea, type CompletionContext } from "@/components/SlashTextarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ModelSelect } from "@/components/ModelSelect";
-import { ContextDetails } from "@/components/ContextDetails";
-import { JumpTo } from "@/components/JumpTo";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatTokenCount } from "@/lib/format";
+import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
+import { useTypeToFocus } from "@/lib/typeToFocus";
 
 interface Props {
   draftKey: string;
@@ -116,6 +116,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             </div>
             <ol className="flex max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
               {queuedMessages.map((message, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: queued messages carry no id and may repeat text.
                 <li key={`${message.kind}-${index}`} className="flex min-w-0 animate-in flex-col gap-1 fade-in-0">
                   {showQueueKinds && <span className="text-xs text-ink-3">{message.kind === "steering" ? "Steering" : "Follow-up"}</span>}
                   <span className="min-w-0 whitespace-pre-wrap break-words">{message.text}</span>

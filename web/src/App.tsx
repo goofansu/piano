@@ -1,19 +1,19 @@
+import type { ClientCommand, ServerMessage } from "@shared/wire";
+import { cn } from "cn";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ClientCommand, ServerMessage } from "@shared/wire";
+import { CommandPalette } from "@/components/CommandPalette";
+import { DialogHost } from "@/components/DialogHost";
+import { NewSession } from "@/components/NewSession";
+import { SessionView } from "@/components/SessionView";
+import { Sidebar, SidebarRail } from "@/components/Sidebar";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Toaster } from "@/components/ui/sonner";
+import { hasMod } from "@/lib/keys";
+import { parseRoute, type Route, routePath } from "@/lib/routes";
 import { useConnection } from "@/lib/ws";
 import { type Action, type AppState, initialState, reduce, sessionDelivery } from "@/store";
-import { parseRoute, routePath, type Route } from "@/lib/routes";
-import { Sidebar, SidebarRail } from "@/components/Sidebar";
-import { SessionView } from "@/components/SessionView";
-import { NewSession } from "@/components/NewSession";
-import { DialogHost } from "@/components/DialogHost";
-import { CommandPalette } from "@/components/CommandPalette";
-import { hasMod } from "@/lib/keys";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Toaster } from "@/components/ui/sonner";
-import { cn } from "cn";
 
 const SIDEBAR_KEY = "piano.sidebar";
 /** Collapsed, the sidebar is a rail just wide enough for its icons. */
@@ -274,6 +274,7 @@ export default function App() {
         )}
         {!collapsed && (
           // The edge is the handle: drag to resize, double-click to reset, drag past the minimum to hide.
+          // biome-ignore lint/a11y/useSemanticElements: a focusable, draggable resize handle; <hr> cannot be one.
           <div
             role="separator"
             aria-orientation="vertical"

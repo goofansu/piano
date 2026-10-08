@@ -1,5 +1,6 @@
 // Deliberately contradictory partial/final records, driven by explicit prompt barriers.
 import { StringDecoder } from 'node:string_decoder';
+
 const out = value => process.stdout.write(JSON.stringify(value) + '\n');
 const reply = (c, data, error) => out({ type: 'response', id: c.id, command: c.type, success: !error, data, error });
 const args = process.argv.slice(2);
@@ -82,7 +83,7 @@ function handle(c) {
 }
 const decoder = new StringDecoder('utf8'); let buffer = '';
 process.stdin.on('data', chunk => {
-  buffer += decoder.write(chunk); let i;
-  while ((i = buffer.indexOf('\n')) !== -1) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1); if (line.trim()) handle(JSON.parse(line)); }
+  buffer += decoder.write(chunk);
+  for (let i = buffer.indexOf('\n'); i !== -1; i = buffer.indexOf('\n')) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1); if (line.trim()) handle(JSON.parse(line)); }
 });
 process.stdin.on('end', () => process.exit(0));

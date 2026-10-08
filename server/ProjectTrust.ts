@@ -5,8 +5,9 @@
  * `defaultProjectTrust` setting, which headless RPC treats as untrusted unless
  * it is "always". Piano never passes `--approve`; it records the decision.
  */
-import { Data, Effect } from "effect";
+
 import { getAgentDir, hasTrustRequiringProjectResources, ProjectTrustStore, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { Data, Effect } from "effect";
 import type { ProjectTrust } from "../shared/wire.ts";
 
 const store = () => new ProjectTrustStore(getAgentDir());

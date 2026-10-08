@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeftIcon, CheckIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import type { ClientCommand } from "@shared/wire";
-import type { AppState } from "@/store";
 import { cn } from "cn";
+import { ArrowLeftIcon, CheckIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { PopoverContent } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import type { AppState } from "@/store";
 
 /** One deliberate discovery/selection or new-branch operation; never automatic retries. */
 export function WorktreesPopover({ onOpenChange, onPendingChange, state, currentCwd, send, onSelect }: {

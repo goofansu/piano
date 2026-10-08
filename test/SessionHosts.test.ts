@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
+import { NodeServices } from '@effect/platform-node';
 import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
-import { NodeServices } from '@effect/platform-node';
 import { PiCli } from '../server/PiCli.ts';
-import { PiRequestTimeoutMs, PiSessionsLive, type PiSession } from '../server/PiSessions.ts';
+import { PiRequestTimeoutMs, type PiSession, PiSessionsLive } from '../server/PiSessions.ts';
 import { Registry, RegistryLive, RegistryPath } from '../server/Registry.ts';
 import { SessionHosts, SessionHostsLive } from '../server/SessionHosts.ts';
 import type { SessionEvent } from '../shared/wire.ts';

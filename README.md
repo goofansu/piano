@@ -41,6 +41,7 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
   ```bash
   npm test
   npm run typecheck
+  npm run lint
   ```
 
 - Tests use fake Pi and need no model credentials.

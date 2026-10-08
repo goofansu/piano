@@ -1,8 +1,8 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ComponentProps, type RefObject } from "react";
 import type { SlashCommand } from "@shared/wire";
-import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "cn";
+import { type ComponentProps, type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
 
 export interface CompletionContext {
   cwd: string;
@@ -132,8 +132,12 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
       >
         {/* cmdk assumes a separate single-line search input. This listbox keeps
             textarea focus and its caret, including on touch suggestion selection. */}
+        {/* biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the textarea drives this listbox through aria-activedescendant. */}
         <ul ref={list} id={id} role="listbox" aria-label="Slash commands" className="max-h-[min(18rem,var(--radix-popover-content-available-height))] overflow-y-auto">
           {commands.map((command, index) => (
+            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: options stay unfocusable; the textarea keeps focus and handles keys.
+            // biome-ignore lint/a11y/useFocusableInteractive: as above.
+            // biome-ignore lint/a11y/useKeyWithClickEvents: as above.
             <li key={command.name} id={`${id}-${index}`} role="option" aria-selected={index === active}
               className={cn("flex min-h-11 cursor-default flex-col gap-0.5 rounded-md px-3 py-2 text-sm", index === active && "bg-accent text-accent-foreground")}
               onPointerDown={event => event.preventDefault()} onClick={() => accept(command)}

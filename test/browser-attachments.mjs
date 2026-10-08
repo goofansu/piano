@@ -2,11 +2,12 @@
 // Run: node test/browser-attachments.mjs /tmp/piano-attachments-evidence
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { crc32, deflateSync } from 'node:zlib';
+
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-attachments-evidence');
 mkdirSync(evidence, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), 'piano-attachments-'));

@@ -7,7 +7,7 @@
  * sides decode with the same definitions.
  */
 import { Schema } from "effect";
-import { IMAGE_TYPES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES, base64Bytes } from "./attachments.ts";
+import { base64Bytes, IMAGE_TYPES, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES } from "./attachments.ts";
 
 /** Browser input, not a Pi protocol block. Future files get a distinct kind. */
 export const Attachment = Schema.Struct({

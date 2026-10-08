@@ -1,20 +1,21 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDownIcon, CheckIcon, ChevronRightIcon, CopyIcon, SparklesIcon } from "lucide-react";
-import { toast } from "sonner";
 import type { RenderMsg, ToolExecution } from "@shared/wire";
+import { ArrowDownIcon, CheckIcon, ChevronRightIcon, CopyIcon, SparklesIcon } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
+import { Keys } from "@/components/PianoMark";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Keys } from "@/components/PianoMark";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
-import { abbrevHome, clamp } from "@/lib/format";
-import { Markdown } from "@/components/Markdown";
-import { messageAnchorId, STICK_EVENT } from "@/lib/transcript";
+
 import { cn } from "cn";
+import { Markdown } from "@/components/Markdown";
+import { abbrevHome, clamp } from "@/lib/format";
+import { messageAnchorId, STICK_EVENT } from "@/lib/transcript";
 
 interface Props {
   messages: RenderMsg[];
@@ -150,7 +151,7 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
     return (
       <article
         id={streaming ? undefined : messageAnchorId(msg.id)}
-        data-tools-only={!msg.text && !msg.errorMessage && !!msg.toolCalls?.length ? "" : undefined}
+        data-tools-only={!msg.text && !msg.errorMessage && msg.toolCalls?.length ? "" : undefined}
         data-ends-with-tools={msg.toolCalls?.length ? "" : undefined}
         className="group/reply flex flex-col gap-6 rounded-2xl"
       >
@@ -372,7 +373,7 @@ function Tool({ call, result, running, executions = {} }: { call: ToolCall; resu
           )}
         </Row>
       )}
-      {open && [...nested.values()].map(child => <div key={child.id} role="group" aria-label={`${child.name} tool call`} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
+      {open && [...nested.values()].map(child => /* biome-ignore lint/a11y/useSemanticElements: a <fieldset> is for form controls. */ <div key={child.id} role="group" aria-label={`${child.name} tool call`} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
         <p className="flex items-center gap-2">{child.name} <Badge variant={child.status === "error" ? "destructive" : child.status === "success" ? "success" : child.status === "running" ? "warning" : "secondary"}>{{ running: "Running", success: "Done", error: "Failed", incomplete: "Incomplete" }[child.status]}</Badge></p>
         <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
         {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}

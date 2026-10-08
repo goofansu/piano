@@ -1,10 +1,10 @@
 // INV-01/02/06: removed worktree history, read-only UI, retention and restoration.
 // node test/browser-deleted-worktree.mjs <evidence-directory>
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-missing-evidence/browser');

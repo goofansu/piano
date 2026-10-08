@@ -3,14 +3,14 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, type TestContext } from "node:test";
-import { Effect, Layer } from "effect";
+import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
+import { Effect, Layer } from "effect";
 import { PiSessionsLive } from "../server/PiSessions.ts";
+import { setProjectTrust } from "../server/ProjectTrust.ts";
 import { RegistryLive, RegistryPath } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
 import { buildProjects } from "../server/Views.ts";
-import { setProjectTrust } from "../server/ProjectTrust.ts";
 import { WorktrunkCommand } from "../server/Worktrees.ts";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } }).trim();

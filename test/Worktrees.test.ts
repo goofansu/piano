@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, type TestContext } from "node:test";
-import { Effect, Layer } from "effect";
+import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
+import { Effect, Layer } from "effect";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryLive, RegistryPath } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";

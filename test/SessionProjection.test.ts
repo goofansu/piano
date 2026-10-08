@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { test } from 'node:test';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
-import { peekSession } from '../server/SessionFiles.ts';
-import { Catalog, CatalogLive } from '../server/Catalog.ts';
-import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
 import { NodeServices } from '@effect/platform-node';
+import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
+import { Catalog, CatalogLive } from '../server/Catalog.ts';
 import { PiCli } from '../server/PiCli.ts';
-import { PiSessions, PiSessionsLive, type PiSession } from '../server/PiSessions.ts';
+import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
+import { peekSession } from '../server/SessionFiles.ts';
 import type { SessionEvent } from '../shared/wire.ts';
 
 const cli = { node: process.execPath, cli: new URL('./fake-projection-pi.mjs', import.meta.url).pathname, extraArgs: [] };

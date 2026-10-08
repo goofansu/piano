@@ -85,7 +85,7 @@ a different purpose.
 
 ## Completion evidence
 
-For code or dependency changes, run `npm test` and `npm run typecheck` as the repository baseline.
+For code or dependency changes, run `npm test`, `npm run typecheck` and `npm run lint` as the repository baseline.
 Run build or other checks when the changed surface requires them. Observe affected application
 behavior through `agent-browser` on a scratch instance as described in root AGENTS.md.
 Documentation-only work needs document review and link checks, not a browser smoke test.

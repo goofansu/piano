@@ -2,6 +2,7 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+
 const args = process.argv.slice(2);
 const arg = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const file = arg('--session');
@@ -43,8 +44,7 @@ if (args.includes('--hold-shutdown')) setInterval(() => {}, 1000);
 let buffer = ''; const decoder = new StringDecoder('utf8');
 process.stdin.on('data', chunk => {
   buffer += decoder.write(chunk);
-  let end;
-  while ((end = buffer.indexOf('\n')) >= 0) {
+  for (let end = buffer.indexOf('\n'); end >= 0; end = buffer.indexOf('\n')) {
     const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
     if (line) handle(JSON.parse(line));
   }

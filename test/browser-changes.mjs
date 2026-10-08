@@ -1,12 +1,12 @@
 // Changes sheet (INV-01, INV-07, INV-08): scratch Git + saved Pi history, no paid calls.
 // node test/browser-changes.mjs <evidence-directory>
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 async function freePort() {
   const server = createServer();

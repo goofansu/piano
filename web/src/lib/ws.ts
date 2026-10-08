@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "@shared/wire";
+import { useEffect, useRef, useState } from "react";
 
 export interface Connection {
   send: (m: ClientMessage) => void;

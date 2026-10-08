@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { Attachments, decodeClientMessage, type Attachment, type SessionEvent } from "../shared/wire.ts";
+import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import { type Attachment, Attachments, decodeClientMessage, type SessionEvent } from "../shared/wire.ts";
 
 const fakeCli = { node: process.execPath, cli: new URL("./fake-pi.mjs", import.meta.url).pathname, extraArgs: [] };
 const TestLayer = PiSessionsLive.pipe(Layer.provide(NodeServices.layer));

@@ -1,13 +1,13 @@
 // Compatibility check through PiSessions against the locked, real Pi CLI.
 // The only fake is a loopback OpenAI-compatible stream; no model credits or credentials.
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { NodeServices } from "@effect/platform-node";
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 

@@ -1,5 +1,5 @@
-import mermaid from "mermaid";
 import DOMPurify from "dompurify";
+import mermaid from "mermaid";
 
 let sequence = 0;
 let queue: Promise<unknown> = Promise.resolve();

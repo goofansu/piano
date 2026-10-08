@@ -5,9 +5,9 @@
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import type { Snapshot } from "../shared/wire.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
 import { sessionDirFor } from "./PiEnv.ts";
 import { type RawMessage, serializeMessages } from "./PiRecords.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
 
 export interface SessionSummary {
   sessionId: string;

@@ -1,11 +1,11 @@
+import type { ClientCommand } from "@shared/wire";
 import { useState } from "react";
 import { toast } from "sonner";
-import type { ClientCommand } from "@shared/wire";
-import type { AppState } from "@/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Field, FieldGroup } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import type { AppState } from "@/store";
 
 type Target = { cwd: string; sessionId: string; title?: string };
 

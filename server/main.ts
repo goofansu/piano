@@ -5,9 +5,9 @@
 import { createServer } from "node:http";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
-import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { BroadcastLive } from "./Broadcast.ts";
 import { CatalogLive } from "./Catalog.ts";
 import { agentDir } from "./PiEnv.ts";
@@ -15,8 +15,8 @@ import { PiSessionsLive } from "./PiSessions.ts";
 import { CONFIG_PATH, RegistryLive } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
-import { WorkspaceRevisionsLive } from "./WorkspaceRevisions.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
+import { WorkspaceRevisionsLive } from "./WorkspaceRevisions.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";

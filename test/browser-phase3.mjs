@@ -5,8 +5,8 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createPiCompatibilityFixture } from './fixtures/PiCompatibility.ts';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
+import { createPiCompatibilityFixture } from './fixtures/PiCompatibility.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase3-evidence/browser');
 mkdirSync(evidence, { recursive: true });

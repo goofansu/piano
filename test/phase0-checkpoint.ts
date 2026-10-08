@@ -4,14 +4,14 @@
  * This is deliberately separate from npm test: known incompatibility must not become a passing assertion.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import type { SessionEvent } from "../shared/wire.ts";
+import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { PiCli, type PiCliConfig } from "../server/PiCli.ts";
-import { PiRequestTimeoutMs, PiSessions, PiSessionsLive, type PiSession } from "../server/PiSessions.ts";
+import { PiRequestTimeoutMs, type PiSession, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import type { SessionEvent } from "../shared/wire.ts";
 import { createPiCompatibilityFixture, sentinelTool } from "./fixtures/PiCompatibility.ts";
 
 const evidence = resolve(process.argv[2] ?? "/tmp/piano-phase0-evidence/runtime");

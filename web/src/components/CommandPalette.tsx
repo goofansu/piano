@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { ClientCommand } from "@shared/wire";
+import { cn } from "cn";
 import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
-import type { AppState } from "@/store";
-import type { ClientCommand } from "@shared/wire";
-import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
-import { cn } from "cn";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
-import { abbrevPath } from "@/lib/format";
+import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { abbrevPath } from "@/lib/format";
+import type { AppState } from "@/store";
 
 interface Props {
   open: boolean;

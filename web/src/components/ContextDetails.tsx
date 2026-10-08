@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from "react";
 import type { ContextUsage, RenderMsg, SessionStats } from "@shared/wire";
 import { cn } from "cn";
-import { formatTokenCount } from "@/lib/format";
+import { useEffect, useRef, useState } from "react";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { formatTokenCount } from "@/lib/format";
 
 interface Props {
   context?: ContextUsage;
@@ -80,6 +80,8 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
         </Empty>
       ) : <>
         <p className="text-xs text-ink-2">{metric === "tokens" ? "Tokens" : "Cost"} per response · peak {metric === "tokens" ? formatTokenCount(max) : dollars(max)}</p>
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be keyboard-focusable to scroll. */}
+        {/* biome-ignore lint/a11y/useSemanticElements: a <section> region would add a landmark inside a popover. */}
         <div ref={chartRef} className="min-w-0 overflow-x-auto overscroll-x-contain" tabIndex={0} role="region" aria-label="Scrollable response chart">
           <svg viewBox={`0 0 ${chartWidth} 80`} preserveAspectRatio="none" style={{ minWidth: chartWidth }} className="block h-20 w-full text-ink-2" role="img" aria-label={`${metric === "tokens" ? "Token" : "Cost"} history across ${responses.length} responses. Use the response slider for exact values.`}>
             {values.map((value, index) => <rect key={responses[index].id} className="transition-[opacity,height,y] duration-300" x={index * 12} y={80 - (max > 0 ? value / max * 76 : 0)} width={11} height={max > 0 ? value / max * 76 : 0} fill="currentColor" opacity={responses[index].id === selected?.id ? 1 : 0.35} />)}
@@ -109,7 +111,7 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
           ["Total tokens", usage?.totalTokens, totals?.total], ["Cost", usage?.cost, cost],
         ] as const).map(([label, response, session]) => <TableRow key={label}>
           <TableHead scope="row" className="text-left font-normal text-ink-2">{label}</TableHead>
-          {[response, session].map((value, index) => <TableCell key={index} className="break-all">{value === undefined ? "—" : label === "Cost" ? dollars(value) : label === "Cache hit" ? `${value}%` : number(value)}</TableCell>)}
+          {[response, session].map((value, index) => /* biome-ignore lint/suspicious/noArrayIndexKey: two fixed columns. */ <TableCell key={index} className="break-all">{value === undefined ? "—" : label === "Cost" ? dollars(value) : label === "Cache hit" ? `${value}%` : number(value)}</TableCell>)}
         </TableRow>)}</TableBody>
       </Table>
       {totals && <p className="sr-only">Session total: {number(totals.total)} tokens</p>}

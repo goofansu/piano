@@ -11,7 +11,9 @@
     "dev:web": "npm --prefix web run dev",
     "build": "npm --prefix web run build",
     "test": "node --test 'test/**/*.test.ts'",
-    "typecheck": "tsc -p tsconfig.json && npm --prefix web run typecheck"
+    "typecheck": "tsc -p tsconfig.json && npm --prefix web run typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.0.4",
@@ -19,6 +21,7 @@
     "effect": "4.0.0-rc.118"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@types/node": "^24.0.0",
     "concurrently": "^10.0.5",
     "typescript": "^5.9.0"

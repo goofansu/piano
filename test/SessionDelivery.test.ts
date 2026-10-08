@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Deferred, Effect, Fiber, Layer, Scope, Stream } from 'effect';
 import { NodeServices } from '@effect/platform-node';
-import { PiCli } from '../server/PiCli.ts';
-import { PiSessions, PiSessionsLive, type PiSession } from '../server/PiSessions.ts';
-import type { SessionFrame } from '../shared/wire.ts';
+import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from 'effect';
 import { makeDelivery } from '../server/BoundedDelivery.ts';
+import { PiCli } from '../server/PiCli.ts';
+import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
+import type { SessionFrame } from '../shared/wire.ts';
 
 test('delivery byte budgets fail oversized frames and retained backlogs without blocking the producer', async () => {
   for (const [values, oversized] of [[['x'.repeat(65)], true], [['x'.repeat(40), 'y'.repeat(40)], false]] as const) {

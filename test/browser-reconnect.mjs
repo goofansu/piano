@@ -1,10 +1,10 @@
 // INV-02/05: reconnect must refresh in place, not clear/remount the conversation.
 // Fake Pi; scratch registry/session files. PIANO_TEST_PORT overrides the 7171/7172 pair.
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-reconnect-evidence/browser');

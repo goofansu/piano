@@ -64,8 +64,7 @@ let buf = "";
 
 process.stdin.on("data", (d) => {
   buf += dec.write(d);
-  let i;
-  while ((i = buf.indexOf("\n")) >= 0) {
+  for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
     const line = buf.slice(0, i); buf = buf.slice(i + 1);
     if (line.trim()) handle(JSON.parse(line));
   }

@@ -7,9 +7,9 @@ import { resolve } from "node:path";
 import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
 import type { HostInfo, Snapshot } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
-import { emptySnapshot, listSessions, peekSession } from "./SessionFiles.ts";
 import { type PiSession, PiSessionError, PiSessions } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
+import { emptySnapshot, listSessions, peekSession } from "./SessionFiles.ts";
 
 export interface OpenSpec {
   readonly cwd: string;

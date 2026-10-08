@@ -1,11 +1,12 @@
 // Session PR journey: scratch Git/registry/Pi history and a controlled gh boundary, no paid calls.
 // node test/browser-session-pr.mjs <evidence-directory>
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-session-pr-evidence/browser');
 mkdirSync(evidence, { recursive: true });
 const backendPort = process.env.PR_BACKEND_PORT ?? '7171', frontendPort = process.env.PR_FRONTEND_PORT ?? '7172';

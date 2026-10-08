@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { NodeServices } from "@effect/platform-node";
-import type { Dialog, SessionEvent } from "../shared/wire.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { PiDialogRecoveryMs, PiRequestTimeoutMs, PiSessions, PiSessionsLive, type PiSession } from "../server/PiSessions.ts";
+import { PiDialogRecoveryMs, PiRequestTimeoutMs, type PiSession, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import type { Dialog, SessionEvent } from "../shared/wire.ts";
 
 const cli = { node: process.execPath, cli: new URL("./fake-dialog-pi.mjs", import.meta.url).pathname, extraArgs: [] };
 const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>) => Effect.runPromise(effect.pipe(

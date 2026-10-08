@@ -1,21 +1,21 @@
+import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
+import { cn } from "cn";
 import { useEffect, useState } from "react";
-import { SessionHeader } from "@/components/SessionHeader";
 import { toast } from "sonner";
 import { ChangesSheet } from "@/components/Changes";
+import { Composer } from "@/components/Composer";
+import { clampEffort, levelsFor } from "@/components/EffortSelect";
+import { MessageList } from "@/components/MessageList";
 import { sessionWorkspace } from "@/components/SessionActions";
-import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
-import { type AppState, sessionKey } from "@/store";
-import { cn } from "cn";
+import { SessionHeader } from "@/components/SessionHeader";
+import { SessionPullRequestBadge, SessionPullRequestDialog } from "@/components/SessionPullRequest";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { Composer } from "@/components/Composer";
-import { clampEffort, levelsFor } from "@/components/EffortSelect";
-import { MessageList } from "@/components/MessageList";
-import { SessionPullRequestBadge, SessionPullRequestDialog } from "@/components/SessionPullRequest";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
+import { type AppState, sessionKey } from "@/store";
 
 interface Props {
   state: AppState;

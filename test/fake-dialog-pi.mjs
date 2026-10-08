@@ -1,6 +1,7 @@
 // Deterministic dialog/abort barriers at the actual Pi JSONL process seam. No model calls.
 import { closeSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
+
 const out = value => process.stdout.write(`${JSON.stringify(value)}\n`);
 const reply = (cmd, data) => out({ type: 'response', id: cmd.id, command: cmd.type, success: true, data });
 const notice = message => out({ type: 'extension_ui_request', id: 'notice', method: 'notify', message });
@@ -54,8 +55,7 @@ function handle(cmd) {
 const decoder = new StringDecoder('utf8'); let buffer = '';
 process.stdin.on('data', chunk => {
   buffer += decoder.write(chunk);
-  let newline;
-  while ((newline = buffer.indexOf('\n')) >= 0) {
+  for (let newline = buffer.indexOf('\n'); newline >= 0; newline = buffer.indexOf('\n')) {
     const line = buffer.slice(0, newline); buffer = buffer.slice(newline + 1);
     if (line) handle(JSON.parse(line));
   }

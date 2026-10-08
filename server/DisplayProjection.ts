@@ -15,7 +15,7 @@ export function redactDisplay(text: string, streaming = false): string {
   for (const secret of secrets) safe = safe.split(secret).join(marker);
   safe = safe
     .replace(/\b(?:sk-|ghp_|github_pat_|xox[bp]-)[\w-]+/g, marker)
-    .replace(/(\bBearer\s+)[A-Za-z0-9._~+\/-]+=*/gi, '$1' + marker)
+    .replace(/(\bBearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1' + marker)
     .replace(/((?:api[_-]?key|token|password|secret)\s*[=:]\s*["']?)([^\s"',;\]}]+)/gi, (_, lead: string, value: string) => lead + (value.startsWith('[REDACTED') ? value : marker))
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?(?:-----END [^-]*PRIVATE KEY-----|$)/g, marker);
   if (streaming) {

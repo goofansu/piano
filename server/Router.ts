@@ -2,19 +2,19 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Cause, Effect, Schema } from "effect";
-import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { SessionPullRequestAction, type DirListing } from "../shared/wire.ts";
-import { getImagePreview } from "./ImagePreviews.ts";
+import { type DirListing, SessionPullRequestAction } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
-import { SessionHosts } from "./SessionHosts.ts";
-import { Registry } from "./Registry.ts";
-import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
+import { getImagePreview } from "./ImagePreviews.ts";
 import { expandHome } from "./PiEnv.ts";
-import { buildProjects } from "./Views.ts";
-import { handleSocket } from "./WsClient.ts";
+import { Registry } from "./Registry.ts";
+import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
+import { buildProjects } from "./Views.ts";
+import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
+import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
+import { handleSocket } from "./WsClient.ts";
 
 /** Subdirectories for the folder picker, with git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
 const listDirectory = (raw: string) =>

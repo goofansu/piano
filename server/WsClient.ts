@@ -7,11 +7,8 @@
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { expandHome } from "./PiEnv.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
 import { Cause, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { Socket } from "effect/socket";
-import { makeDelivery } from "./BoundedDelivery.ts";
 import {
   type ClientMessage,
   decodeClientMessage,
@@ -19,8 +16,11 @@ import {
   type ServerMessage,
   type StartOptions,
 } from "../shared/wire.ts";
+import { makeDelivery } from "./BoundedDelivery.ts";
 import { Broadcast } from "./Broadcast.ts";
 import { Catalog } from "./Catalog.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
+import { expandHome } from "./PiEnv.ts";
 import type { PiSession } from "./PiSessions.ts";
 import { projectTrust, setProjectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";

@@ -2,10 +2,10 @@
 // place opens on request as rendered markdown. Scratch-only, fake Pi, no paid model calls.
 // node test/browser-skill-expansion.mjs <evidence-directory>
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-skill-evidence/browser');

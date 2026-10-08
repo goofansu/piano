@@ -75,7 +75,7 @@ kept. Model calls cost real credits; use short prompts such as "Reply with exact
 reply back. Radix
 menus and popovers open on pointer events, so open them with `agent-browser click`, not a DOM
 `.click()` from `eval`. `npm test` runs the module tests against `test/fake-pi.mjs` and needs no
-credentials; run it and `npm run typecheck` for code or dependency changes. Retain command outcomes,
+credentials; run it, `npm run typecheck` and `npm run lint` (Biome) for code or dependency changes. Retain command outcomes,
 tested revision/environment and limitations. Stop expanding verification once the relevant risk is
 covered and required gates pass; explain when existing tests or inspection suffice.
 

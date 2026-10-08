@@ -1,9 +1,9 @@
 /** Registry selects directories/sessions; Git/Worktrunk supply current facts, never cached registry branches. */
 import { Effect } from "effect";
 import type { ProjectView, SessionInfo, WorktreeView } from "../shared/wire.ts";
+import { projectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
-import { projectTrust } from "./ProjectTrust.ts";
 import { listWorktrees } from "./Worktrees.ts";
 
 export const buildProjects: Effect.Effect<ProjectView[], never, SessionHosts | Registry> = Effect.gen(function* () {

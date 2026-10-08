@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, HomeIcon, XIcon } from "lucide-react";
-import { toast } from "sonner";
 import type { DirListing } from "@shared/wire";
-import { abbrevHome } from "@/lib/format";
 import { cn } from "cn";
+import { ArrowUpIcon, CheckIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, HomeIcon, XIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { abbrevHome } from "@/lib/format";
 
 interface Props {
   open: boolean;

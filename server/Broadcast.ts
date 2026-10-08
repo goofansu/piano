@@ -1,6 +1,7 @@
 /** Server messages every connected client should receive (sidebar changes). */
 import { Context, Effect, Layer, PubSub, type Scope, Stream } from "effect";
 import type { ServerMessage } from "../shared/wire.ts";
+
 type Projects = Extract<ServerMessage, { _tag: "projects" }>;
 
 export class Broadcast extends Context.Service<

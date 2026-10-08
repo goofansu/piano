@@ -1,23 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
-import type { AppState } from "@/store";
-import { abbrevHome } from "@/lib/format";
-import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
-import { useTypeToFocus } from "@/lib/typeToFocus";
 import { cn } from "cn";
+import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
+import { clampEffort, levelsFor } from "@/components/EffortSelect";
+import { FolderPicker } from "@/components/FolderPicker";
+import { ModelSelect } from "@/components/ModelSelect";
+import { PianoMark } from "@/components/PianoMark";
+import { SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { WorktreesPopover } from "@/components/Worktrees";
 import { Spinner } from "@/components/ui/spinner";
-import { SlashTextarea } from "@/components/SlashTextarea";
-import { clampEffort, levelsFor } from "@/components/EffortSelect";
-import { FolderPicker } from "@/components/FolderPicker";
-import { ModelSelect } from "@/components/ModelSelect";
-import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
-import { PianoMark } from "@/components/PianoMark";
+import { WorktreesPopover } from "@/components/Worktrees";
+import { abbrevHome } from "@/lib/format";
+import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
+import { useTypeToFocus } from "@/lib/typeToFocus";
+import type { AppState } from "@/store";
 
 interface Props {
   state: AppState;

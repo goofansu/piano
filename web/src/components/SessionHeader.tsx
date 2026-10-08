@@ -1,12 +1,12 @@
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { ClientCommand } from "@shared/wire";
-import type { AppState } from "@/store";
-import { abbrevPath } from "@/lib/format";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
+import { abbrevPath } from "@/lib/format";
+import type { AppState } from "@/store";
 
 export function SessionHeader({ state, send, onMenu, openNew, status, openChanges, openPullRequest, pullRequest }: {
   state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; status: string; openChanges: () => void; openPullRequest: () => void; pullRequest: React.ReactNode;

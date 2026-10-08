@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initialState, reduce, sessionKey, sessionDelivery } from "../web/src/store.ts";
 import type { ServerMessage } from "../shared/wire.ts";
+import { initialState, reduce, sessionDelivery, sessionKey } from "../web/src/store.ts";
 
 const selection = (sessionId: string, selectionId: string, sequence = 10, generation = "child"): Extract<ServerMessage, { _tag: "selected" }> => ({
   _tag: "selected", cwd: "/scratch", sessionId, selectionId, hosted: true,

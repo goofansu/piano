@@ -1,11 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRightIcon, FileDiffIcon, FileMinusIcon, FilePlusIcon, GitBranchIcon, MessageSquarePlusIcon, RefreshCwIcon } from "lucide-react";
-import { Schema } from "effect";
+import { type Workspace, WorkspaceCapture } from "@shared/wire";
 import { cn } from "cn";
-import { WorkspaceCapture, type Workspace } from "@shared/wire";
-import type { SessionView } from "@/store";
-import { parseUnifiedDiff, type DiffFile } from "@/lib/diff";
-import { abbrevHome } from "@/lib/format";
+import { Schema } from "effect";
+import { ChevronRightIcon, FileDiffIcon, FileMinusIcon, FilePlusIcon, GitBranchIcon, MessageSquarePlusIcon, RefreshCwIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -15,6 +12,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { type DiffFile, parseUnifiedDiff } from "@/lib/diff";
+import { abbrevHome } from "@/lib/format";
+import type { SessionView } from "@/store";
 
 /** Tools whose completion can change the checkout; a finished turn is also a refresh point. */
 const EDITING_TOOLS = new Set(["edit", "write", "bash"]);
@@ -238,6 +238,7 @@ function Hunks({ file }: { file: DiffFile }) {
       <table className="w-full border-collapse font-mono text-xs leading-5" aria-label={`Diff of ${file.path}`}>
         <tbody>
           {file.hunks.map((hunk, h) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a diff's hunks are positional and never reorder.
             <HunkRows key={h} hunk={hunk} />
           ))}
         </tbody>
@@ -252,6 +253,7 @@ function HunkRows({ hunk }: { hunk: DiffFile["hunks"][number] }) {
       <td colSpan={3} className="select-none px-3 py-0.5 whitespace-pre">{hunk.header}</td>
     </tr>
     {hunk.lines.map((line, i) => (
+      // biome-ignore lint/suspicious/noArrayIndexKey: a hunk's lines are positional and never reorder.
       <tr key={i} className={cn(line.kind === "add" && "bg-ok/10", line.kind === "del" && "bg-err/10", line.kind === "meta" && "text-ink-3")}>
         <td className="w-10 select-none pl-3 pr-1 text-right text-ink-3 tabular-nums">{line.old ?? ""}</td>
         <td className="w-10 select-none pr-2 text-right text-ink-3 tabular-nums">{line.new ?? ""}</td>

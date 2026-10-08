@@ -1,6 +1,7 @@
 // Local-only MCP stdio sentinel. Reports identity; the checkpoint never calls its tool.
 import { appendFileSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
+
 const log = process.argv[2];
 const broken = process.argv.includes('--broken');
 const record = event => appendFileSync(log, JSON.stringify({ event, pid: process.pid, cwd: process.cwd() }) + '\n');
@@ -10,8 +11,7 @@ const decoder = new StringDecoder('utf8');
 let buffer = '';
 process.stdin.on('data', data => {
   buffer += decoder.write(data);
-  let index;
-  while ((index = buffer.indexOf('\n')) !== -1) {
+  for (let index = buffer.indexOf('\n'); index !== -1; index = buffer.indexOf('\n')) {
     const line = buffer.slice(0, index); buffer = buffer.slice(index + 1);
     if (!line.trim()) continue;
     const request = JSON.parse(line);

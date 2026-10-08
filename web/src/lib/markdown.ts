@@ -13,6 +13,7 @@ function inline(s: string): string {
   s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
   s = s.replace(/\[([^\]\n]*)\]\((https?:\/\/[^)\n]*)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: NUL marks placeholders that source text cannot contain.
   s = s.replace(/\u0000(\d+)/g, (_, i: string) => ph[Number(i)]);
   return s;
 }
@@ -42,7 +43,7 @@ export function renderMarkdown(src: string): string {
   const fT = () => {
     if (!tbl.length) return;
     if (tbl.length < 2 || !/^[|\s:-]+$/.test(tbl[1])) {
-      tbl.forEach((r) => para.push(r));
+      para.push(...tbl);
       tbl = [];
       return;
     }

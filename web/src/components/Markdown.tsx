@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
 import { useTheme } from "next-themes";
+import { useEffect, useMemo, useRef } from "react";
 import { renderMarkdown } from "@/lib/markdown";
 
 /** HTML-safe prose, enhanced with diagrams only after their closing fence arrives. */
@@ -55,5 +55,6 @@ export function Markdown({ text, className }: { text: string; className?: string
     return () => { cancelled = true; };
   }, [html, resolvedTheme]);
   // Custom prose host: shadcn has no Markdown/Mermaid renderer. HTML is escaped by renderMarkdown.
+  // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes the source before adding markup.
   return <div ref={ref} className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }

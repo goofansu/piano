@@ -1,7 +1,7 @@
-import { useId, useRef, useState, useSyncExternalStore } from "react";
-import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
+import { base64Bytes, IMAGE_TYPES, imageType, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES } from "@shared/attachments";
 import type { Attachment as AttachmentData, RenderMsg } from "@shared/wire";
-import { IMAGE_TYPES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES, base64Bytes, imageType } from "@shared/attachments";
+import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
+import { useId, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Attachment, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup, AttachmentMedia, AttachmentTitle, AttachmentTrigger } from "@/components/ui/attachment";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ export function useAttachments(key: string) {
   const state = useSyncExternalStore(subscribe, () => drafts.get(key) ?? empty);
   const set = (value: typeof empty) => {
     if (value.items.length || value.busy || value.error) drafts.set(key, value); else drafts.delete(key);
-    listeners.forEach(notify => notify());
+    for (const notify of listeners) notify();
   };
   const add = async (files: File[]) => {
     const before = drafts.get(key) ?? empty;
@@ -64,7 +64,7 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
 export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
   return <>
     {(!!draft.items.length || draft.busy) && <AttachmentGroup aria-label="Attachments" className="scroll-fade-none px-3 pt-3 font-sans">
-      {draft.items.map((a, i) => <Attachment key={`${a.name}-${i}`} orientation="vertical" className="animate-in fade-in-0 zoom-in-95">
+      {draft.items.map((a, i) => /* biome-ignore lint/suspicious/noArrayIndexKey: drafts may repeat a file name and only append or clear. */ <Attachment key={`${a.name}-${i}`} orientation="vertical" className="animate-in fade-in-0 zoom-in-95">
         <AttachmentMedia variant="image"><img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} /></AttachmentMedia>
         <AttachmentContent>
           <AttachmentTitle title={a.name}>{a.name}</AttachmentTitle>
@@ -110,5 +110,5 @@ function ImagePreview({ url }: { url: string }) {
 }
 /** The group clips overflow, so inline padding (offset by the margin) keeps the first tile's focus ring visible. */
 export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
-  return items?.length ? <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1">{items.map((a, i) => <ImagePreview key={`${a.url}-${i}`} url={a.url} />)}</AttachmentGroup> : null;
+  return items?.length ? <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1">{items.map((a, i) => /* biome-ignore lint/suspicious/noArrayIndexKey: a message's attachments are fixed and may repeat a URL. */ <ImagePreview key={`${a.url}-${i}`} url={a.url} />)}</AttachmentGroup> : null;
 }

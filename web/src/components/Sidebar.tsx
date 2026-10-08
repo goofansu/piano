@@ -1,21 +1,21 @@
-import { useEffect, useState } from "react";
-import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, TextCursorInputIcon, PlusIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ClientCommand as ClientMessage, ProjectView } from "@shared/wire";
-import { type AppState, sessionKey } from "@/store";
 import { cn } from "cn";
+import { ArchiveIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Keys, PianoMark } from "@/components/PianoMark";
+import { useSessionActions } from "@/components/SessionActions";
+import { Hint } from "@/components/Shortcut";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useSessionActions } from "@/components/SessionActions";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { Keys, PianoMark } from "@/components/PianoMark";
-import { Hint } from "@/components/Shortcut";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { type AppState, sessionKey } from "@/store";
 
 interface Props {
   state: AppState;

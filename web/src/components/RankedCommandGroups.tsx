@@ -1,5 +1,5 @@
-import { Children, Fragment, isValidElement, type ReactNode } from "react";
 import { defaultFilter } from "cmdk";
+import { Children, Fragment, isValidElement, type ReactNode } from "react";
 import { CommandSeparator } from "@/components/ui/command";
 
 /** cmdk 1.1.1 leaves our groups in declaration order. Rank them by their best item,

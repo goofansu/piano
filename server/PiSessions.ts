@@ -8,18 +8,19 @@
  * orderly shutdown. The only external seam is ChildProcessSpawner.
  */
 import { randomUUID } from "node:crypto";
-import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Schema, Scope, Semaphore, Stream } from "effect";
+import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Schema, type Scope, Semaphore, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
-import { makeDelivery, type DeliveryOverflow } from "./BoundedDelivery.ts";
-import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, Snapshot, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState, SessionStats } from "../shared/wire.ts";
-import { Attachments, SlashCommand } from "../shared/wire.ts";
+
 import { imageType } from "../shared/attachments.ts";
-import { PiCli } from "./PiCli.ts";
+import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState, SessionStats, Snapshot } from "../shared/wire.ts";
+import { Attachments, SlashCommand } from "../shared/wire.ts";
+import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
-import { type PiRecord, type RawMessage, serializeMessages, StreamAssembler } from "./PiRecords.ts";
+import { PiCli } from "./PiCli.ts";
+import { type PiRecord, type RawMessage, StreamAssembler, serializeMessages } from "./PiRecords.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
 

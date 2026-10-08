@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
-import { GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon } from "lucide-react";
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
-import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
+import { GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
 const states = {
   open: { label: "Open", Icon: GitPullRequestIcon, color: "text-ok" },

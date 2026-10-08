@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { renderMarkdown } from "../web/src/lib/markdown.ts";
 
 test("only closed Mermaid fences are eligible for diagram rendering", () => {

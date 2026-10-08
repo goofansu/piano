@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from "react";
-import { CheckIcon, RefreshCwIcon } from "lucide-react";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { picker } from "@/lib/styles";
+import { CheckIcon, RefreshCwIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
-import { EffortSelect, levelsFor } from "@/components/EffortSelect";
+import { picker } from "@/lib/styles";
 
 interface Props {
   catalog: ModelCatalog | null;
