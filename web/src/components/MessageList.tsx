@@ -1,4 +1,4 @@
-import type { RenderMsg, ToolExecution } from "@shared/wire";
+import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
 import { ArrowDownIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, SparklesIcon } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -71,7 +71,14 @@ export function MessageList({ messages, pending, tools, working = false, placeho
   };
 
   const results = new Map<string, RenderMsg>();
-  for (const m of messages) if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
+  const terminalRuns = new Map<string, "completed" | "failed" | "cancelled">();
+  for (const m of messages) {
+    if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
+    const card = m.subagent;
+    if (card?.kind === "result" && card.runId && card.terminalStatus) terminalRuns.set(card.runId, card.terminalStatus);
+    if (card?.kind === "collection") for (const run of card.runs) terminalRuns.set(run.runId, run.status);
+    if (card?.kind === "cancellation") for (const outcome of card.outcomes) if (outcome.kind === "already terminal") terminalRuns.set(outcome.runId, outcome.phase);
+  }
   const active = new Set(Object.values(tools).filter(t => t.status === "running").map(t => t.id));
 
   return (
@@ -102,9 +109,9 @@ export function MessageList({ messages, pending, tools, working = false, placeho
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} fileContext={fileContext} />;
+            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} fileContext={fileContext} terminalRuns={terminalRuns} />;
           })}
-          {pending && <Message msg={pending} results={results} tools={tools} active={active} fileContext={fileContext} streaming />}
+          {pending && <Message msg={pending} results={results} tools={tools} active={active} fileContext={fileContext} terminalRuns={terminalRuns} streaming />}
           {working && (
             <Row glyph={<Keys playing className="text-brand" />}>
               <span className="sr-only">Pi is working</span>
@@ -142,7 +149,8 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, results, tools, active, fileContext, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; fileContext?: { workspaceId: string; sessionId: string }; streaming?: boolean }) {
+function Message({ msg, results, tools, active, fileContext, terminalRuns, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; fileContext?: { workspaceId: string; sessionId: string }; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
+  if (msg.subagent) return <SubagentCardView card={msg.subagent} content={msg.text} markdown={msg.role === "context"} fileContext={fileContext} terminalStatus={msg.subagent.kind === "delegation" && msg.subagent.runId ? terminalRuns.get(msg.subagent.runId) : undefined} />;
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
   if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
@@ -166,14 +174,14 @@ function Message({ msg, results, tools, active, fileContext, streaming }: { msg:
         {msg.errorMessage && <Alert variant="destructive" className="ml-7 w-auto"><AlertDescription className="break-words">{msg.stopReason}: {msg.errorMessage}</AlertDescription></Alert>}
         {!!msg.toolCalls?.length && (
           <div className="flex flex-col gap-3">
-            {msg.toolCalls.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
+            {msg.toolCalls.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} terminalRuns={terminalRuns} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
           </div>
         )}
       </article>
     );
   }
   // An orphan result: its call never reached us.
-  return <Tool call={{ id: msg.toolCallId ?? msg.id, name: msg.toolName ?? "tool", args: "" }} result={msg} executions={tools} running={false} />;
+  return <Tool call={{ id: msg.toolCallId ?? msg.id, name: msg.toolName ?? "tool", args: "" }} result={msg} executions={tools} terminalRuns={terminalRuns} running={false} />;
 }
 
 /** A prompt shows at most this many lines until opened; pasted logs and long briefs stay out of the way. */
@@ -290,6 +298,84 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
   );
 }
 
+function subagentTitle(card: SubagentCard): string {
+  if (card.kind === "collection") return card.label ?? "Subagent results";
+  if (card.kind === "cancellation") return "Subagent cancellation";
+  if (card.kind === "control") return card.label ?? "Subagent guidance";
+  return card.label ?? (card.kind === "delegation" ? card.action === "resume" ? "Resume subagent" : "Delegate task" : "Subagent result");
+}
+
+function subagentAria(card: SubagentCard, title: string): string {
+  if (card.kind === "delegation") return `Delegation: ${title}`;
+  if (card.kind === "result" || card.kind === "collection") return `Subagent result: ${title}`;
+  return `Subagent operation: ${title}`;
+}
+
+function subagentBadge(card: SubagentCard, terminalStatus?: "completed" | "failed" | "cancelled"): "destructive" | "secondary" | "success" | "warning" {
+  const terminal = terminalStatus ?? ((card.kind === "delegation" || card.kind === "result" || card.kind === "collection") ? card.terminalStatus : undefined);
+  if (terminal === "completed") return "success";
+  if (terminal === "failed") return "destructive";
+  if (terminal === "cancelled") return "secondary";
+  if (card.kind === "delegation" && !card.admitted) return "destructive";
+  if (/unknown|unavailable|still running|cancell/i.test(card.status)) return "warning";
+  return "secondary";
+}
+
+/** Structured pi-subagent facts use the standard disclosure primitive. The
+ * transcript row itself is intentionally quiet; identity and output stay on demand. */
+function SubagentCardView({ card, content, markdown = false, fileContext, failed = false, terminalStatus }: { card: SubagentCard; content?: string; markdown?: boolean; fileContext?: { workspaceId: string; sessionId: string }; failed?: boolean; terminalStatus?: "completed" | "failed" | "cancelled" }) {
+  const [open, setOpen] = useState(false);
+  const title = subagentTitle(card);
+  const runId = "runId" in card ? card.runId : undefined;
+  const visibleTerminal = terminalStatus ?? ((card.kind === "delegation" || card.kind === "result" || card.kind === "collection") ? card.terminalStatus : undefined);
+  const visibleStatus = terminalStatus ? terminalStatus[0].toUpperCase() + terminalStatus.slice(1) : card.status;
+  const hasOutput = !!content;
+  const hasDetails = hasOutput || card.kind === "collection" || card.kind === "cancellation" || ("subagentId" in card && !!card.subagentId) || !!runId || (card.kind === "delegation" && !!card.prompt) || (card.kind === "control" && !!card.message) || (card.kind === "result" && card.durationMillis !== undefined);
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      role="group"
+      aria-label={subagentAria(card, title)}
+      data-slot={card.kind === "delegation" ? "delegation-card" : "subagent-result-card"}
+      data-run-id={runId}
+      className="text-sm"
+    >
+      <Row glyph={<span className={cn("block size-2 rounded-full", failed || visibleTerminal === "failed" ? "bg-err" : visibleTerminal === "completed" ? "bg-ok" : "bg-ink-3")} />}>
+        <CollapsibleTrigger asChild disabled={!hasDetails}>
+          <button type="button" className="-ml-2 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring">
+            <span className="min-w-0 flex-1 truncate font-medium text-ink" title={title}>{(card.kind === "result" || card.kind === "collection") && <span className="font-normal text-ink-3">Result · </span>}{title}</span>
+            {"profile" in card && card.profile && <span className="max-w-28 shrink truncate text-ink-3">{card.profile}</span>}
+            <Badge variant={subagentBadge(card, terminalStatus)} className="max-w-56 truncate">{visibleStatus}</Badge>
+            {hasDetails && <ChevronRightIcon className={cn("shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />}
+          </button>
+        </CollapsibleTrigger>
+      </Row>
+      {hasDetails && (
+        <CollapsibleContent className="disclosure-content">
+          <Row glyph={null} className="pt-2">
+            <div className="flex flex-col gap-3 border-l-2 border-line pl-3 text-ink-2">
+              {("subagentId" in card && card.subagentId || runId) && (
+                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                  {"subagentId" in card && card.subagentId && <><dt className="text-ink-3">Subagent</dt><dd className="break-all font-mono">{card.subagentId}</dd></>}
+                  {runId && <><dt className="text-ink-3">Run</dt><dd className="break-all font-mono">{runId}</dd></>}
+                </dl>
+              )}
+              {card.kind === "delegation" && card.prompt && <div><p className="mb-1 text-xs text-ink-3">Prompt</p><pre className="whitespace-pre-wrap break-words">{clamp(card.prompt, 8000)}</pre></div>}
+              {card.kind === "control" && card.message && <div><p className="mb-1 text-xs text-ink-3">Guidance</p><pre className="whitespace-pre-wrap break-words">{clamp(card.message, 8000)}</pre></div>}
+              {card.kind === "result" && card.durationMillis !== undefined && <p className="text-xs text-ink-3">Duration {(card.durationMillis / 1000).toFixed(1)}s</p>}
+              {card.kind === "collection" && <p className="text-xs text-ink-3">Delivered {card.runs.length} · Unavailable {card.unavailable} · Still running when checked {card.stillRunning} · Unknown {card.unknown}</p>}
+              {card.kind === "collection" && card.runs.map(run => <p key={run.runId} className="break-all font-mono text-xs">{run.runId} · {run.profile} · {run.status}</p>)}
+              {card.kind === "cancellation" && card.outcomes.map(outcome => <p key={`${outcome.kind}:${outcome.runId}`} className="break-all font-mono text-xs">{outcome.runId} · {outcome.kind}{outcome.kind === "already terminal" ? ` · ${outcome.phase}` : ""}</p>)}
+              {hasOutput && (markdown ? <Markdown text={content ?? ""} className="prose-chat" fileContext={fileContext} /> : <pre className={cn("whitespace-pre-wrap break-words", failed && "text-err")}>{clamp(content, 20000)}</pre>)}
+            </div>
+          </Row>
+        </CollapsibleContent>
+      )}
+    </Collapsible>
+  );
+}
+
 const VERBS: Record<string, [running: string, done: string]> = {
   bash: ["Running", "Ran"],
   read: ["Reading", "Read"],
@@ -315,13 +401,15 @@ function summarize(args: string): string {
 
 const PREVIEW_LINES = 5;
 
-function Tool({ call, result, running, executions = {} }: { call: ToolCall; result: RenderMsg | undefined; running: boolean; executions?: Record<string, ToolExecution> }) {
+function Tool({ call, result, running, terminalRuns, executions = {} }: { call: ToolCall; result: RenderMsg | undefined; running: boolean; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; executions?: Record<string, ToolExecution> }) {
   const execution = executions[call.id];
+  const subagent = result?.subagent ?? execution?.subagent;
+  const [open, setOpen] = useState(false);
+  const [all, setAll] = useState(false);
+  if (subagent) return <SubagentCardView card={subagent} content={result?.text ?? execution?.text} failed={!!result?.isError || execution?.status === "error"} terminalStatus={subagent.kind === "delegation" && subagent.runId ? terminalRuns.get(subagent.runId) : undefined} />;
   const nested = new Map((result?.nestedCalls ?? []).map(c => [c.id, c]));
   for (const child of Object.values(executions)) if (child.parentId === call.id || child.id.startsWith(`${call.id}/`)) nested.set(child.id, child);
   const output = result?.text ?? execution?.text;
-  const [open, setOpen] = useState(false);
-  const [all, setAll] = useState(false);
   const [verbRunning, verbDone] = VERBS[call.name] ?? ["Calling", "Called"];
   const failed = !!result?.isError || execution?.status === "error";
   const verb = running ? verbRunning : failed ? "Failed" : execution?.status === "incomplete" ? "Incomplete" : verbDone;

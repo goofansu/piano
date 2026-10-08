@@ -20,7 +20,7 @@ import { Attachments, SlashCommand } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { PiCli } from "./PiCli.ts";
-import { type PiRecord, type RawMessage, StreamAssembler, serializeMessages } from "./PiRecords.ts";
+import { type PiRecord, type RawMessage, StreamAssembler } from "./PiRecords.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
 
@@ -348,8 +348,9 @@ const openSession = (spec: PiSessionSpec) =>
     );
     if ((initial[0] as RawState).sessionId !== spec.sessionId) return yield* new PiSessionError({ reason: "protocol", detail: "Pi opened a different session ID. History was not merged; check the saved reference." });
     const stateRef = yield* Ref.make<SessionState>({ ...toState(initial[0] as RawState), ...spec.lastKnownStats, contextIsLastKnown: true });
+    const assembler = new StreamAssembler();
     const messagesRef = yield* Ref.make(
-      serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
+      assembler.serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
     );
     const dialogsRef = yield* Ref.make(new Map<string, Dialog>());
     const subscribers = new Set<Effect.Success<ReturnType<typeof makeDelivery<SessionFrame>>>>();
@@ -362,7 +363,6 @@ const openSession = (spec: PiSessionSpec) =>
       for (const subscriber of subscribers) yield* subscriber.offer(frame);
     });
     const lock = yield* Semaphore.make(1);
-    const assembler = new StreamAssembler();
     const metadataFields = ["model", "thinkingLevel", "sessionName", "sessionFile"] as const;
     const factVersions = { model: 0, thinkingLevel: 0, sessionName: 0, sessionFile: 0 };
     let statsVersion = 0;
@@ -534,7 +534,7 @@ const openSession = (spec: PiSessionSpec) =>
         if (version !== contextVersion || announced) return;
         const applied = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
           if (version !== contextVersion || outputVersion !== child.observationVersion() || announced) return false;
-          const messages = serializeMessages(data.messages);
+          const messages = assembler.serializeMessages(data.messages);
           yield* Ref.set(messagesRef, messages);
           yield* publish({ _tag: "context", messages });
           return true;

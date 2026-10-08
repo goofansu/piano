@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -13,8 +13,9 @@ import { peekSession } from '../server/SessionFiles.ts';
 import type { SessionEvent } from '../shared/wire.ts';
 
 const cli = { node: process.execPath, cli: new URL('./fake-projection-pi.mjs', import.meta.url).pathname, extraArgs: [] };
-const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>) => Effect.runPromise(effect.pipe(
-  Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer))), Effect.provideService(PiCli, cli),
+const delegationCli = { node: process.execPath, cli: new URL('./fake-delegation-pi.mjs', import.meta.url).pathname, extraArgs: [] };
+const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>, selectedCli = cli) => Effect.runPromise(effect.pipe(
+  Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer))), Effect.provideService(PiCli, selectedCli),
 ));
 const snapshot = (session: PiSession) => session.events.pipe(Stream.take(1), Stream.runCollect, Effect.map(es => {
   assert.equal(es[0]._tag, 'snapshot'); return (es[0] as Extract<SessionEvent, { _tag: 'snapshot' }>).snapshot;
@@ -134,6 +135,88 @@ test('reopening uses Pi context edits, compaction and active branch without repl
     assert.equal(snap.state.cost, undefined, 'a file peek must not invent full-session accounting from context');
     assert.equal(readFileSync(file, 'utf8'), original, 'redaction never rewrites Pi history');
     assert.ok(original.includes(secret));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('subagent details project through PiSessions with correlation, lifecycle limits and safe fallback', async () => {
+  const secret = 'sk-delegation-test-secret-123456789';
+  process.env.PIANO_TEST_SECRET = secret;
+  try {
+    await run(Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: 'delegation-projection' });
+      const initial = yield* snapshot(session);
+      assert.ok(!JSON.stringify(initial).includes(secret), 'projected labels, prompts and results use display redaction');
+
+      const cards = initial.messages.flatMap(message => message.subagent ? [message.subagent] : []);
+      const admitted = cards.filter((card): card is Extract<typeof card, { kind: 'delegation' }> => card.kind === 'delegation' && card.admitted);
+      assert.deepEqual(admitted.map(card => [card.action, card.label, card.profile, card.status, card.runId]), [
+        ['start', 'Same label', 'reviewer', 'Completed', 'run-done'],
+        ['resume', 'Same label', 'reviewer', 'Failed', 'run-failed'],
+        ['start', 'Same label', 'reviewer', 'Cancelled', 'run-cancelled'],
+        ['start', 'Same label', 'reviewer', 'Started', 'run-open'],
+      ]);
+      assert.match(admitted[0].prompt ?? '', /\[REDACTED\]/);
+      const notice = cards.find((card): card is Extract<typeof card, { kind: 'result' }> => card.kind === 'result' && card.source === 'notification');
+      assert.equal(notice?.terminalStatus, 'completed');
+      const waited = cards.find((card): card is Extract<typeof card, { kind: 'collection' }> => card.kind === 'collection')!;
+      assert.equal(waited.label, 'Same label');
+      assert.deepEqual(waited.runs.map(run => [run.runId, run.status, run.subagentId]), [['run-failed', 'failed', 'subagent-stable']]);
+      assert.equal(waited.stillRunning, 0, 'collections carry counts, not inferred active identities');
+      const mixed = initial.messages.find(message => message.toolCallId === 'wait-mixed')?.subagent;
+      assert.equal(mixed?.kind, 'collection');
+      if (mixed?.kind === 'collection') {
+        assert.equal(mixed.runId, undefined, 'a partial collection is not the one completed Run');
+        assert.equal(mixed.terminalStatus, undefined);
+        assert.equal(mixed.status, 'Delivered 1 result · 1 still running when checked');
+        assert.deepEqual(mixed.runs.map(run => [run.runId, run.status]), [['run-done', 'completed']]);
+      }
+      const cancellation = cards.find((card): card is Extract<typeof card, { kind: 'cancellation' }> => card.kind === 'cancellation' && card.outcomes.some(outcome => outcome.kind === 'requested'))!;
+      assert.equal(cancellation.status, 'Cancellation requested: 1');
+      assert.equal(admitted.find(card => card.runId === 'run-cancelled')?.terminalStatus, 'cancelled');
+      const steering = cards.find((card): card is Extract<typeof card, { kind: 'control' }> => card.kind === 'control')!;
+      assert.equal(steering.message, 'Use the exact full guidance.');
+      assert.equal(initial.messages.find(message => message.toolCallId === 'steer-open')?.text, 'Guidance entered the local mailbox; delivery is not confirmed.');
+      const refusal = cards.find((card): card is Extract<typeof card, { kind: 'delegation' }> => card.kind === 'delegation' && !card.admitted)!;
+      assert.equal(refusal.status, 'Start refused · unknown Agent');
+      assert.equal(initial.messages.find(message => message.toolCallId === 'refused-start')?.text, 'The requested profile does not exist. No Run was started.');
+      const checkedOpen = cards.find((card): card is Extract<typeof card, { kind: 'result' }> => card.kind === 'result' && card.runId === 'run-open');
+      assert.equal(checkedOpen?.status, 'Still running when checked');
+      assert.equal(checkedOpen?.terminalStatus, undefined, 'a query or cancellation request does not settle a Run');
+      assert.equal(admitted.find(card => card.runId === 'run-open')?.status, 'Started', 'a query and cancellation request do not manufacture a terminal state');
+      assert.equal(initial.messages.find(message => message.toolCallId === 'bad-start')?.subagent, undefined);
+      assert.equal(initial.messages.find(message => message.toolCallId === 'bad-start')?.text, 'Readable malformed fallback');
+
+      yield* observe(session, '/delegation-live');
+      const live = yield* snapshot(session);
+      const liveCards = live.messages.flatMap(message => message.subagent ? [message.subagent] : []).filter(card => card.kind !== 'cancellation');
+      const liveDelegation = liveCards.find((card): card is Extract<typeof card, { kind: 'delegation' }> => card.kind === 'delegation' && card.runId === 'run-live');
+      assert.deepEqual([liveDelegation?.action, liveDelegation?.label, liveDelegation?.profile, liveDelegation?.subagentId], ['resume', 'Live delegation', 'reviewer', 'subagent-stable'], 'live records retain historical Subagent correlation');
+      assert.equal(liveCards.some(card => card.kind === 'result' && card.runId === 'run-live' && card.terminalStatus === 'cancelled'), true);
+    }).pipe(Effect.timeout('5 seconds'), Effect.scoped), delegationCli);
+  } finally { delete process.env.PIANO_TEST_SECRET; }
+});
+
+test('delegation fixture continues and persists an existing Pi JSONL session', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'piano-delegation-history-'));
+  const file = join(root, 'history.jsonl');
+  const historical = [
+    { type: 'session', version: 3, id: 'persisted-delegation', cwd: root, timestamp: new Date().toISOString() },
+    { type: 'message', id: 'a1', parentId: null, timestamp: new Date().toISOString(), message: { role: 'assistant', content: [{ type: 'toolCall', id: 'persisted-start', name: 'agent_start', arguments: { agent: 'historian', description: 'Historical task', prompt: 'Inspect history' } }] } },
+    { type: 'message', id: 'r1', parentId: 'a1', timestamp: new Date().toISOString(), message: { role: 'toolResult', toolCallId: 'persisted-start', toolName: 'agent_start', content: [{ type: 'text', text: 'Started persisted run' }], details: { kind: 'start', rowPhrase: 'Started', tone: 'toolTitle', agent: 'historian', runId: 'persisted-run', subagentId: 'persisted-subagent' } } },
+  ];
+  writeFileSync(file, historical.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+  try {
+    await run(Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({ cwd: root, sessionId: 'persisted-delegation', sessionFile: file });
+      yield* observe(session, '/delegation-live');
+      const snap = yield* snapshot(session);
+      const resumed = snap.messages.find(message => message.subagent?.kind === 'delegation' && message.subagent.runId === 'run-live')?.subagent;
+      assert.equal(resumed?.kind, 'delegation');
+      if (resumed?.kind === 'delegation') assert.deepEqual([resumed.profile, resumed.subagentId], ['historian', 'persisted-subagent']);
+      const persisted = readFileSync(file, 'utf8');
+      assert.match(persisted, /"runId":"run-live"/);
+      assert.match(persisted, /"customType":"subagent-notification"/);
+    }).pipe(Effect.timeout('5 seconds'), Effect.scoped), delegationCli);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

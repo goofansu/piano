@@ -38,6 +38,65 @@ export const Usage = Schema.Struct({
 });
 export type Usage = typeof Usage.Type;
 
+const SubagentIdentity = {
+  runId: Schema.optional(Schema.String),
+  subagentId: Schema.optional(Schema.String),
+  label: Schema.optional(Schema.String),
+  profile: Schema.optional(Schema.String),
+};
+const TerminalSubagentStatus = Schema.Literals(["completed", "failed", "cancelled"]);
+
+/** Validated presentation facts from pi-subagent. This is a historical projection,
+ * not a live child registry: "Started" means last observed admission, never "Running".
+ */
+export const SubagentCard = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("delegation"),
+    action: Schema.Literals(["start", "resume"]),
+    ...SubagentIdentity,
+    prompt: Schema.optional(Schema.String),
+    status: Schema.String,
+    terminalStatus: Schema.optional(TerminalSubagentStatus),
+    admitted: Schema.Boolean,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("control"),
+    action: Schema.Literal("steer"),
+    ...SubagentIdentity,
+    message: Schema.optional(Schema.String),
+    status: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("collection"),
+    scope: Schema.Literals(["named", "all-active"]),
+    ...SubagentIdentity,
+    status: Schema.String,
+    terminalStatus: Schema.optional(TerminalSubagentStatus),
+    runs: Schema.Array(Schema.Struct({ ...SubagentIdentity, runId: Schema.String, profile: Schema.String, status: TerminalSubagentStatus })),
+    stillRunning: Schema.Number,
+    unknown: Schema.Number,
+    unavailable: Schema.Number,
+    noActiveRuns: Schema.Boolean,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("result"),
+    source: Schema.Literals(["tool", "notification"]),
+    ...SubagentIdentity,
+    status: Schema.String,
+    terminalStatus: Schema.optional(TerminalSubagentStatus),
+    durationMillis: Schema.optional(Schema.Number),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("cancellation"),
+    status: Schema.String,
+    outcomes: Schema.Array(Schema.Union([
+      Schema.Struct({ kind: Schema.Literals(["requested", "already requested", "unknown"]), runId: Schema.String }),
+      Schema.Struct({ kind: Schema.Literal("already terminal"), runId: Schema.String, phase: TerminalSubagentStatus }),
+    ])),
+  }),
+]);
+export type SubagentCard = typeof SubagentCard.Type;
+
 /** Execution preview, not a transcript message or an additional billable result. */
 export const ToolExecution = Schema.Struct({
   id: Schema.String,
@@ -47,6 +106,7 @@ export const ToolExecution = Schema.Struct({
   text: Schema.String,
   status: Schema.Literals(["running", "success", "error", "incomplete"]),
   outputKind: Schema.Literals(["latest-update", "final", "unavailable"]),
+  subagent: Schema.optional(SubagentCard),
 });
 export type ToolExecution = typeof ToolExecution.Type;
 
@@ -79,6 +139,7 @@ export const RenderMsg = Schema.Struct({
   label: Schema.optional(Schema.String),
   nestedCalls: Schema.optional(Schema.Array(ToolExecution)),
   nestedCallsComplete: Schema.optional(Schema.Boolean),
+  subagent: Schema.optional(SubagentCard),
 });
 export type RenderMsg = typeof RenderMsg.Type;
 

@@ -31,7 +31,7 @@ export function Markdown({ text, className, fileContext }: { text: string; class
     if (!root) return;
     // Restore source when switching themes, or after an earlier async render.
     root.innerHTML = html;
-    const blocks = [...root.querySelectorAll<HTMLPreElement>("pre[data-mermaid]")];
+    const blocks = Array.from(root.querySelectorAll<HTMLPreElement>("pre[data-mermaid]"));
     if (!blocks.length) return;
     let cancelled = false;
     void (async () => {
