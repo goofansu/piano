@@ -185,9 +185,13 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         {/* Two parallel sections under one nav landmark; before the first project there is only the repository list. */}
         {sectioned && state.projectsLoaded && (
           <SidebarSection label="Projects" open={sectionOpen("projects")} onOpenChange={open => setSectionOpen("projects", open)}>
-            <div className="flex flex-col gap-1">
-              {active.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
-            </div>
+            {active.length === 0 ? (
+              <p className={cn(row, "flex items-center pl-7 text-sm text-muted-foreground")}>All projects archived</p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {active.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
+              </div>
+            )}
           </SidebarSection>
         )}
         {sectioned && state.projectsLoaded ? (
