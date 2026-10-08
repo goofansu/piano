@@ -1,8 +1,11 @@
 import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, ChevronRightIcon, GitBranchIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import { BranchLabel } from "@/components/BranchLabel";
+import { DisclosureChevron } from "@/components/Disclosure";
+import { IconButton } from "@/components/IconButton";
 import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
 import { Keys, PianoMark } from "@/components/PianoMark";
 import { useSessionActions } from "@/components/SessionActions";
@@ -17,6 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { flatSessions, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy } from "@/lib/sidebarView";
+import { readJson, writeJson } from "@/lib/storage";
 import { useSidebarView } from "@/lib/useSidebarView";
 import { type AppState, sessionKey } from "@/store";
 
@@ -34,13 +38,7 @@ interface Props {
 }
 
 const OPEN_KEY = "piano.openProjects";
-const loadOpen = (): Set<string> => {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) ?? "[]") as string[]);
-  } catch {
-    return new Set();
-  }
-};
+const loadOpen = (): Set<string> => new Set(readJson<string[]>(OPEN_KEY, []));
 /** Project groups share the open-state store with folders, keyed apart from paths; the empty id is the No project group. */
 const projectKey = (id: string) => `project:${id}`;
 
@@ -61,11 +59,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       const next = new Set(prev);
       if (open) next.add(key);
       else next.delete(key);
-      try {
-        localStorage.setItem(OPEN_KEY, JSON.stringify([...next]));
-      } catch {
-        /* ignore */
-      }
+      writeJson(OPEN_KEY, [...next]);
       return next;
     });
 
@@ -138,24 +132,14 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         <PianoMark />
         <span className="text-lg font-semibold tracking-tight">Piano</span>
         <span className="flex-1" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="Search sessions" onClick={onPalette}>
-              <SearchIcon />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><Hint of={["mod", "K"]}>Search and commands</Hint></TooltipContent>
-        </Tooltip>
+        <IconButton label="Search sessions" tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>} onClick={onPalette}>
+          <SearchIcon />
+        </IconButton>
         <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="Hide sidebar" onClick={onHide}>
-              <XIcon className="md:hidden" />
-              <PanelLeftCloseIcon className="hidden md:block" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Hide sidebar</TooltipContent>
-        </Tooltip>
+        <IconButton label="Hide sidebar" onClick={onHide}>
+          <XIcon className="md:hidden" />
+          <PanelLeftCloseIcon className="hidden md:block" />
+        </IconButton>
       </div>
       <div className="px-3 pb-3">
         <Button
@@ -270,14 +254,9 @@ function SidebarSkeleton() {
 export function SidebarRail({ onShow, working }: { onShow: () => void; working: boolean }) {
   return (
     <div className="flex h-full flex-col items-center gap-1 pt-2">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="Show sidebar" onClick={onShow}>
-            <PanelLeftOpenIcon />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="right">Show sidebar</TooltipContent>
-      </Tooltip>
+      <IconButton label="Show sidebar" side="right" onClick={onShow}>
+        <PanelLeftOpenIcon />
+      </IconButton>
       {/* With no rows in view, the mark itself says whether Pi is working somewhere. */}
       <div className="mt-auto pb-3">
         <PianoMark playing={working} className="size-6 rounded-md shadow-none" />
@@ -349,9 +328,9 @@ function SessionRow({ t, trailing, selected, disabled, hint, state, send, select
   );
 }
 
-const Chevron = ({ open }: { open: boolean }) => <ChevronRightIcon className={cn("size-4 shrink-0 text-ink-3 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none", open && "rotate-90")} />;
+const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} className="size-4" />;
 
-const branchTrailing = (branch: string) => <span className="flex max-w-[38%] shrink-0 items-center gap-1 truncate font-mono text-sm text-ink-3"><GitBranchIcon className="size-3 shrink-0" aria-hidden /><span className="truncate">{branch}</span></span>;
+const branchTrailing = (branch: string) => <BranchLabel branch={branch} className="max-w-[38%] shrink-0 text-sm text-ink-3" />;
 
 /** Where a session runs, for rows listed away from their folder: a worktree by its branch, a root (or an unregistered folder) by its folder name. */
 function Location({ state, cwd }: { state: AppState; cwd: string }) {
@@ -395,14 +374,9 @@ function OutcomeGroup({ project, sessions, current, open, onOpenChange, state, s
           </button>
         </CollapsibleTrigger>
         {project && !project.archived && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`New session in ${project.name}`} onClick={() => openNew(undefined, project.id)}>
-                <PlusIcon />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>New session in project</TooltipContent>
-          </Tooltip>
+          <IconButton size="icon-xs" className={hoverSlot} label={`New session in ${project.name}`} tooltip="New session in project" onClick={() => openNew(undefined, project.id)}>
+            <PlusIcon />
+          </IconButton>
         )}
         {project && <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -447,20 +421,9 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{project.name}</span>
           </button>
         </CollapsibleTrigger>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className={hoverSlot}
-              aria-label={`New session in ${project.name}`}
-              onClick={() => openNew(project.path)}
-            >
-              <PlusIcon />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>New session here</TooltipContent>
-        </Tooltip>
+        <IconButton size="icon-xs" className={hoverSlot} label={`New session in ${project.name}`} tooltip="New session here" onClick={() => openNew(project.path)}>
+          <PlusIcon />
+        </IconButton>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Folder menu for ${project.name}`}>

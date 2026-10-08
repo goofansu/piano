@@ -1,8 +1,9 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BranchLabel } from "@/components/BranchLabel";
 import { directoryTrust } from "@/components/NewSession";
 import { sessionProject } from "@/components/OutcomeProjects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
@@ -81,12 +82,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
                   <span className={cn("min-w-0 flex-1 truncate", !t.title && "text-ink-3", selected && "font-medium")}>{t.title || "Untitled"}</span>
                   <span className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 text-xs text-ink-3">
                     <span className="truncate">{t.project}</span>
-                    {t.branch && t.inWorktree && (
-                      <span className="flex min-w-0 items-center gap-1 truncate font-mono">
-                        <GitBranchIcon className="size-3 shrink-0" aria-hidden />
-                        <span className="truncate">{t.branch}</span>
-                      </span>
-                    )}
+                    {t.branch && t.inWorktree && <BranchLabel branch={t.branch} />}
                   </span>
                 </CommandItem>
               );
@@ -131,7 +127,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
             <CommandItem value="Copy all" onSelect={() => run(() => { void copyAllSessionDetails(state); })}><CopyIcon /> Copy all</CommandItem>
             <CommandItem value="Changes" keywords={["diff", "review", "working tree"]} disabled={!sessionWorkspace(state) || state.session?.state.checkoutMissing} onSelect={() => run(openChanges)}><FileDiffIcon /> Changes</CommandItem>
             <CommandItem value="Pull request" keywords={["github", "link", "pr"]} disabled={!target} onSelect={() => run(openPullRequest)}><GitPullRequestIcon /> Pull request</CommandItem>
-            <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><PencilIcon /> Rename</CommandItem>
+            <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><TextCursorInputIcon /> Rename</CommandItem>
             <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
             <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
             <CommandItem value="new session here" disabled={state.session.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => { if (state.session) openNew(state.session.cwd); })}>

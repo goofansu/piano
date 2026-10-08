@@ -1,11 +1,11 @@
 import type { ClientCommand } from "@shared/wire";
 import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { IconButton } from "@/components/IconButton";
 import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { abbrevPath } from "@/lib/format";
 import type { AppState } from "@/store";
 
@@ -39,12 +39,7 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, onPro
       </div>
       <span role="status" className="sr-only">{status}</span>
       {pullRequest}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><PlusIcon /></Button>
-        </TooltipTrigger>
-        <TooltipContent>New session here</TooltipContent>
-      </Tooltip>
+      <IconButton label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><PlusIcon /></IconButton>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-80 max-w-[calc(100vw-2rem)]">

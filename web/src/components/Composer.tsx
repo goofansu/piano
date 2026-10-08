@@ -1,7 +1,7 @@
 import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { ContextDetails } from "@/components/ContextDetails";
 import { JumpTo } from "@/components/JumpTo";
@@ -13,8 +13,11 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatTokenCount } from "@/lib/format";
+import { isSendKey } from "@/lib/keys";
+import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
+import { useAutoGrow } from "@/lib/useAutoGrow";
 
 interface Props {
   draftKey: string;
@@ -50,13 +53,7 @@ const DELIVERY: Record<QueueMode, { label: string; detail: string }> = {
 };
 const MODES: readonly QueueMode[] = ["steering", "follow-up"];
 const otherMode = (mode: QueueMode): QueueMode => (mode === "steering" ? "follow-up" : "steering");
-const loadQueueMode = (): QueueMode => {
-  try {
-    return localStorage.getItem(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering";
-  } catch {
-    return "steering";
-  }
-};
+const loadQueueMode = (): QueueMode => (readStorage(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering");
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
 export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
@@ -66,20 +63,10 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
   const [queueMode, setQueueModeState] = useState<QueueMode>(loadQueueMode);
   const setQueueMode = (mode: QueueMode) => {
     setQueueModeState(mode);
-    try {
-      localStorage.setItem(QUEUE_MODE_KEY, mode);
-    } catch {
-      /* ignore */
-    }
+    writeStorage(QUEUE_MODE_KEY, mode);
   };
   const imagesWaiting = streaming && attachments.items.length > 0;
-  // The box grows with its text up to a cap, whichever way the text got there.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
-  }, [text]);
+  useAutoGrow(ref, text, 192);
   useTypeToFocus(ref, onTextAppend, !disabled);
   const send = (kind: QueueMode = queueMode) => {
     const t = text.trim();
@@ -136,8 +123,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             className={cn(composerInput, "min-w-0 flex-1")}
             onValueChange={onTextChange}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
-                  e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
+              if (isSendKey(e)) {
                 e.preventDefault();
                 send(e.altKey ? otherMode(queueMode) : queueMode);
               } else if (e.key === "Escape" && streaming) {
@@ -153,7 +139,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
           {showDelivery && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className={cn(picker, "control-enter h-11 shrink-0 md:h-8")} aria-label={`Delivery: ${DELIVERY[queueMode].label}`} disabled={disabled}>
+                <Button variant="ghost" size="sm" className={cn(picker, "control-enter shrink-0")} aria-label={`Delivery: ${DELIVERY[queueMode].label}`} disabled={disabled}>
                   {DELIVERY[queueMode].label}
                   <ChevronDownIcon className="text-ink-3" aria-hidden />
                 </Button>

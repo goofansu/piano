@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { listRow } from "@/lib/styles";
 import { currentEntry, type JumpEntry, jumpEntries, jumpTo, TRANSCRIPT_SELECTOR } from "@/lib/transcript";
 
 interface Props {
@@ -53,7 +54,7 @@ export function JumpTo({ messages }: Props) {
               aria-current={entry.id === active ? "true" : undefined}
               onClick={() => go(entry)}
               className={cn(
-                "flex w-full items-center gap-3 px-4 py-1.5 text-left text-sm outline-none transition-colors hover:bg-fill-hover focus-visible:bg-fill-hover",
+                listRow, "gap-3 px-4 py-1.5",
                 entry.id === active && "bg-fill",
                 (entry.kind === "top" || entry.kind === "bottom") && "italic text-ink-3",
               )}

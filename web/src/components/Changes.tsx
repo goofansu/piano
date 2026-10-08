@@ -1,8 +1,11 @@
 import { type Workspace, WorkspaceCapture } from "@shared/wire";
 import { cn } from "cn";
 import { Schema } from "effect";
-import { ChevronRightIcon, FileDiffIcon, FileMinusIcon, FilePlusIcon, GitBranchIcon, MessageSquarePlusIcon, RefreshCwIcon } from "lucide-react";
+import { FileDiffIcon, FileMinusIcon, FilePlusIcon, MessageSquarePlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BranchLabel } from "@/components/BranchLabel";
+import { DisclosureChevron } from "@/components/Disclosure";
+import { IconButton } from "@/components/IconButton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -11,7 +14,6 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { type DiffFile, parseUnifiedDiff } from "@/lib/diff";
 import { abbrevHome } from "@/lib/format";
 import type { SessionView } from "@/store";
@@ -115,7 +117,7 @@ export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: 
           <SheetDescription className="flex min-w-0 flex-wrap items-center gap-x-2">
             <span>Working tree against HEAD</span>
             <span aria-hidden>·</span>
-            {captured && <span className="inline-flex min-w-0 items-center gap-1"><GitBranchIcon className="size-3 shrink-0" aria-hidden /><span className="truncate">{captured.branch ?? "Detached HEAD"}</span></span>}
+            {captured && <BranchLabel branch={captured.branch ?? "Detached HEAD"} />}
             {captured && <span aria-hidden>·</span>}
             <span role="status" className="truncate">{summary}</span>
             {busy && captured && <Spinner className="size-3" />}
@@ -200,7 +202,7 @@ function FileSection({ file, open, onOpenChange, onAsk }: { file: DiffFile; open
       <Item size="sm" className="sticky top-0 z-10 gap-1 rounded-lg bg-background py-1.5 pl-1 pr-1">
         <CollapsibleTrigger asChild>
           <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start gap-2 whitespace-normal px-2 py-1.5 text-left font-normal" aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}>
-            <ChevronRightIcon className={cn("size-3.5 shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />
+            <DisclosureChevron open={open} />
             <Icon className="size-3.5 shrink-0 text-ink-2" aria-hidden />
             <ItemContent className="min-w-0 gap-0">
               <ItemTitle className="min-w-0 break-all font-mono text-xs">{file.path}</ItemTitle>
@@ -214,12 +216,7 @@ function FileSection({ file, open, onOpenChange, onAsk }: { file: DiffFile; open
           </Button>
         </CollapsibleTrigger>
         <ItemActions>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label={`Ask about ${file.path}`} onClick={onAsk}><MessageSquarePlusIcon /></Button>
-            </TooltipTrigger>
-            <TooltipContent>Ask about this file</TooltipContent>
-          </Tooltip>
+          <IconButton label={`Ask about ${file.path}`} tooltip="Ask about this file" onClick={onAsk}><MessageSquarePlusIcon /></IconButton>
         </ItemActions>
       </Item>
       <CollapsibleContent className="disclosure-content">

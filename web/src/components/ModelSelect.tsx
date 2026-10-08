@@ -1,11 +1,12 @@
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { CheckIcon, RefreshCwIcon } from "lucide-react";
+import { RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { EffortSelect, levelsFor } from "@/components/EffortSelect";
+import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Button } from "@/components/ui/button";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { picker } from "@/lib/styles";
@@ -36,7 +37,6 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
     window.addEventListener("blur", dismiss);
     return () => window.removeEventListener("blur", dismiss);
   }, [open]);
-  const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const want = value || catalog?.defaultModel || "";
   const models = catalog?.models ?? [];
@@ -55,7 +55,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
         <span className="text-ink-3">{m.provider}/</span>
         {m.id}
       </span>
-      <CheckIcon className={cn("ml-auto", m.ref === want ? "opacity-100" : "opacity-0")} />
+      <PickerCheck selected={m.ref === want} />
     </CommandItem>
   );
 
@@ -66,7 +66,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           variant="ghost" size="sm" aria-haspopup="dialog" aria-expanded={open}
           aria-label={`Model: ${want || label}; effort: ${effort}`}
           disabled={disabled || (!models.length && !onRefresh) || !catalog}
-          className={cn(picker, "h-11 min-w-0 max-w-none shrink justify-end md:h-8")}
+          className={cn(picker, "min-w-0 max-w-none shrink justify-end")}
           title={want}
         >
           <span className={cn("min-w-0 truncate", !catalog && !noDirectory && "shimmer")}>{label}</span>
@@ -74,30 +74,19 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>{effort}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        ref={content} align="start" aria-label="Model and effort" tabIndex={-1}
-        className="max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0 font-mono"
-        onOpenAutoFocus={event => {
-          // Opening settings on a phone should not summon the software keyboard.
-          event.preventDefault();
-          if (window.matchMedia("(pointer: coarse)").matches) content.current?.focus({ preventScroll: true });
-          else search.current?.focus({ preventScroll: true });
-        }}
-      >
+      <PickerContent aria-label="Model and effort" className="font-mono" searchRef={search}>
         <Command shouldFilter={false}>
-          <div className="flex items-center border-b border-line [&>[data-slot=command-input-wrapper]]:flex-1 [&>[data-slot=command-input-wrapper]]:border-b-0">
-            <CommandInput ref={search} value={query} onValueChange={setQuery} aria-label="Search models" placeholder="Search models" />
+          <PickerSearch ref={search} value={query} onValueChange={setQuery} aria-label="Search models" placeholder="Search models">
             {onRefresh && (
               <Button
                 variant="ghost" size="icon-sm" aria-label="Refresh models" title="Refresh models"
                 disabled={refreshing !== null}
                 onClick={() => { setRefreshing(catalog?.fetchedAt ?? ""); onRefresh(); }}
-                className="mr-1 shrink-0 text-ink-3"
               >
                 {refreshing !== null ? <Spinner /> : <RefreshCwIcon aria-hidden />}
               </Button>
             )}
-          </div>
+          </PickerSearch>
           <CommandList className="max-h-[min(16rem,40dvh)]">
             <CommandEmpty>{catalog?.error ? "No models available." : "No model matches."}</CommandEmpty>
             <CommandGroup>{visibleModels.map(item)}</CommandGroup>
@@ -107,7 +96,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
         <div className="p-3">
           <EffortSelect value={effort} onChange={onEffortChange} levels={levelsFor(catalog, want)} defaultLevel={catalog?.defaultThinkingLevel} disabled={disabled} />
         </div>
-      </PopoverContent>
+      </PickerContent>
     </Popover>
   );
 }

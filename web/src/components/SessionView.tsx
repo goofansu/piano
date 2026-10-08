@@ -2,6 +2,7 @@ import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire
 import { cn } from "cn";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Banner } from "@/components/Banner";
 import { ChangesSheet } from "@/components/Changes";
 import { Composer } from "@/components/Composer";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
@@ -12,7 +13,6 @@ import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestBadge, SessionPullRequestDialog } from "@/components/SessionPullRequest";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
@@ -240,22 +240,5 @@ function TranscriptSkeleton({ hidden }: { hidden: boolean }) {
         </div>
       </div>
     </div>
-  );
-}
-
-/** A notice above the transcript: it slides in, and its details fold out on request. */
-function Banner({ variant, title, action, children }: { variant: "destructive" | "warning"; title: string; action?: React.ReactNode; children?: React.ReactNode }) {
-  return (
-    <Alert variant={variant} className="mx-4 mt-3 w-auto animate-in fade-in-0 slide-in-from-top-1 md:mx-6">
-      <AlertTitle className="flex items-center gap-2">{title}{action}</AlertTitle>
-      {children && (
-        <AlertDescription>
-          <Collapsible>
-            <CollapsibleTrigger asChild><Button variant="link" size="sm" className="h-auto p-0">Details</Button></CollapsibleTrigger>
-            <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>
-          </Collapsible>
-        </AlertDescription>
-      )}
-    </Alert>
   );
 }

@@ -1,15 +1,14 @@
 import type { ClientCommand, ProjectView, WorktreeFacts } from "@shared/wire";
-import { cn } from "cn";
-import { ArrowLeftIcon, CheckIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { ArrowLeftIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AlertDetails } from "@/components/Banner";
+import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { PopoverContent } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import type { AppState } from "@/store";
@@ -40,7 +39,6 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
   const [request, setRequest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
-  const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => { if (error) errorRef.current?.scrollIntoView({ block: "nearest" }); }, [error]);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,21 +86,11 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
       <AlertDescription>
         <p>Refresh discovery before retrying.</p>
         {creating && hooks && <p>For unapproved hooks, review and approve them in a terminal, or leave hooks off.</p>}
-        <Collapsible>
-          <CollapsibleTrigger asChild><Button variant="link" size="sm" className="h-auto p-0">Error details</Button></CollapsibleTrigger>
-          <CollapsibleContent className="disclosure-content"><p className="whitespace-pre-wrap break-words">{error}</p></CollapsibleContent>
-        </Collapsible>
+        <AlertDetails label="Error details"><p className="whitespace-pre-wrap break-words">{error}</p></AlertDetails>
       </AlertDescription>
     </Alert>
   );
-  return <PopoverContent ref={content} align="start" tabIndex={-1} aria-label={creating ? "New worktree" : "Worktrees"}
-      className="max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
-      onOpenAutoFocus={event => {
-        // Opening the picker on a phone should not summon the software keyboard.
-        event.preventDefault();
-        if (window.matchMedia("(pointer: coarse)").matches) content.current?.focus({ preventScroll: true });
-        else search.current?.focus({ preventScroll: true });
-      }}
+  return <PickerContent aria-label={creating ? "New worktree" : "Worktrees"} searchRef={search}
       onEscapeKeyDown={event => { if (creating && !pending) { event.preventDefault(); showList(); } }}>
     {/* The list and the form trade places with a short slide, so the swap reads as one surface. */}
     {creating && target ? <form key="create" className="flex animate-in flex-col gap-3 p-2 fade-in-0 slide-in-from-right-2 duration-200" onSubmit={e => { e.preventDefault(); submit(); }}>
@@ -135,15 +123,14 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
       </div>
     </form> : <div key="list" className="flex animate-in flex-col fade-in-0 slide-in-from-left-2 duration-200">
       <Command shouldFilter={false}>
-        <div className="flex items-center border-b border-line [&>[data-slot=command-input-wrapper]]:flex-1 [&>[data-slot=command-input-wrapper]]:border-b-0">
-          <CommandInput ref={search} value={query} onValueChange={setQuery} aria-label="Search worktrees" placeholder="Search worktrees" disabled={pending} />
-          {target && <Button variant="ghost" size="icon-sm" aria-label="New worktree" title="New worktree" disabled={pending || !state.connected} onClick={() => startCreating()} className="shrink-0 text-ink-3">
+        <PickerSearch ref={search} value={query} onValueChange={setQuery} aria-label="Search worktrees" placeholder="Search worktrees" disabled={pending}>
+          {target && <Button variant="ghost" size="icon-sm" aria-label="New worktree" title="New worktree" disabled={pending || !state.connected} onClick={() => startCreating()}>
             <PlusIcon aria-hidden />
           </Button>}
-          <Button variant="ghost" size="icon-sm" aria-label="Refresh worktrees" title="Refresh worktrees" disabled={busy} onClick={() => { setRefreshing(true); send({ _tag: "projects" }); }} className="mr-1 shrink-0 text-ink-3">
+          <Button variant="ghost" size="icon-sm" aria-label="Refresh worktrees" title="Refresh worktrees" disabled={busy} onClick={() => { setRefreshing(true); send({ _tag: "projects" }); }}>
             {refreshing ? <Spinner /> : <RefreshCwIcon aria-hidden />}
           </Button>
-        </div>
+        </PickerSearch>
         <CommandList aria-label="Discovered worktrees" className="max-h-[min(18rem,50dvh)]">
           <CommandEmpty className="flex flex-col items-center gap-2 py-6 text-center text-sm">
             <span>No worktree matches.</span>
@@ -161,7 +148,7 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
                   <span className="text-ink-3">{project.name}/</span>
                   {label}
                 </span>
-                <CheckIcon className={cn("ml-auto", worktree.path === currentCwd ? "opacity-100" : "opacity-0")} />
+                <PickerCheck selected={worktree.path === currentCwd} />
               </CommandItem>
             ))}
             {nonGit.map(p => (
@@ -182,5 +169,5 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
         {errorBox}
       </div>}
     </div>}
-  </PopoverContent>;
+  </PickerContent>;
 }

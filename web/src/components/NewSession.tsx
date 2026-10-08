@@ -1,23 +1,29 @@
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, TargetIcon } from "lucide-react";
+import { ArrowUpIcon, FolderIcon, FolderOpenIcon, GitBranchPlusIcon, PanelLeftOpenIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, TargetIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
+import { BranchLabel } from "@/components/BranchLabel";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
 import { activeProjects } from "@/components/OutcomeProjects";
 import { PianoMark } from "@/components/PianoMark";
+import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
+import { isSendKey } from "@/lib/keys";
+import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
+import { useAutoGrow } from "@/lib/useAutoGrow";
 import type { AppState } from "@/store";
 
 interface Props {
@@ -42,11 +48,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
     if (initialCwd) return initialCwd;
     // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
     if (outcomeProjectId) return "";
-    try {
-      return localStorage.getItem(LAST_DIR) ?? "";
-    } catch {
-      return "";
-    }
+    return readStorage(LAST_DIR) ?? "";
   });
   const [text, setText] = useState("");
   const attachments = useAttachments("new-session");
@@ -61,12 +63,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
   }, [initialCwd]);
   useEffect(() => { onDirectoryChange?.(cwd); }, [cwd, onDirectoryChange]);
 
-  useEffect(() => {
-    const el = textarea.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 288)}px`;
-  }, [text]);
+  useAutoGrow(textarea, text, 288);
   useTypeToFocus(textarea, useCallback((s: string) => setText((t) => t + s), []));
   // Fall back to the first known project when nothing is remembered.
   useEffect(() => {
@@ -94,11 +91,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
 
   const submit = () => {
     if (!ready) return;
-    try {
-      localStorage.setItem(LAST_DIR, cwd.trim());
-    } catch {
-      /* ignore */
-    }
+    writeStorage(LAST_DIR, cwd.trim());
     setCreating(true);
     send({ _tag: "create_session", cwd: cwd.trim(), outcomeProjectId, options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
     attachments.clear();
@@ -139,8 +132,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
                 className={cn(composerInput, "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5")}
                 onValueChange={setText}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing &&
-                      e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches) {
+                  if (isSendKey(e)) {
                     e.preventDefault();
                     submit();
                   }
@@ -187,43 +179,51 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "ml-auto h-11 max-w-[45%] shrink-0 md:h-8", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "ml-auto max-w-[45%] shrink-0", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
           <TargetIcon className="text-ink-3" />
           <span className="truncate">{current ? current.name : "Project"}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" aria-label="Choose a project" className="max-h-(--radix-popover-content-available-height) w-[320px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
-        onOpenAutoFocus={event => { if (!window.matchMedia("(pointer: coarse)").matches) { event.preventDefault(); search.current?.focus({ preventScroll: true }); } }}>
-        <Command>
-          <div className="flex items-center border-b border-line [&>[data-slot=command-input-wrapper]]:min-w-0 [&>[data-slot=command-input-wrapper]]:flex-1 [&>[data-slot=command-input-wrapper]]:border-b-0">
-            <CommandInput ref={search} aria-label="Search projects" placeholder="Search projects" />
-            <Button variant="ghost" size="icon-sm" aria-label="New project" title="New project" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }} className="mr-1 shrink-0 text-ink-3">
-              <PlusIcon aria-hidden />
-            </Button>
-          </div>
-          <CommandList className="max-h-[min(18rem,60dvh)]">
-            <CommandEmpty>No project matches.</CommandEmpty>
-            <CommandGroup>
-              {choices.map(p => (
-                <CommandItem key={p.id} value={p.id} keywords={[p.name]} onSelect={() => pick(p.id)}>
-                  <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                  {p.archived && <span className="text-xs text-ink-3">Archived</span>}
-                  <CheckIcon className={cn("ml-auto", p.id === value ? "opacity-100" : "opacity-0")} />
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            {choices.length > 0 && <>
+      <PickerContent align="end" aria-label="Choose a project" searchRef={search}>
+        {choices.length === 0 ? (
+          // Before the first project exists there is nothing to search; the page invites creating one instead.
+          <Empty className="p-6 md:p-6">
+            <EmptyHeader>
+              <EmptyDescription>No projects yet. A project groups sessions from any folders around one outcome.</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button variant="outline" size="sm" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }}><PlusIcon /> New project</Button>
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <Command>
+            <PickerSearch ref={search} aria-label="Search projects" placeholder="Search projects">
+              <Button variant="ghost" size="icon-sm" aria-label="New project" title="New project" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }}>
+                <PlusIcon aria-hidden />
+              </Button>
+            </PickerSearch>
+            <CommandList className="max-h-[min(18rem,60dvh)]">
+              <CommandEmpty>No project matches.</CommandEmpty>
+              <CommandGroup>
+                {choices.map(p => (
+                  <CommandItem key={p.id} value={p.id} keywords={[p.name]} onSelect={() => pick(p.id)}>
+                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                    {p.archived && <span className="text-xs text-ink-3">Archived</span>}
+                    <PickerCheck selected={p.id === value} />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
               <CommandSeparator />
               <CommandGroup>
                 <CommandItem value="__none" keywords={["none", "no project"]} onSelect={() => pick(undefined)}>
                   <span className="min-w-0 flex-1 truncate">None</span>
-                  <CheckIcon className={cn("ml-auto", !value ? "opacity-100" : "opacity-0")} />
+                  <PickerCheck selected={!value} />
                 </CommandItem>
               </CommandGroup>
-            </>}
-          </CommandList>
-        </Command>
-      </PopoverContent>
+            </CommandList>
+          </Command>
+        )}
+      </PickerContent>
     </Popover>
   );
 }
@@ -238,7 +238,7 @@ function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trust
   return (
     <Button
       variant="ghost" size="sm" aria-pressed={trusted} aria-label="Directory trust"
-      className={cn(picker, "h-11 shrink-0 md:h-8", trusted ? "text-ink-3" : "text-ink-2")}
+      className={cn(picker, "shrink-0", trusted ? "text-ink-3" : "text-ink-2")}
       title={trusted ? "Pi loads this folder's .pi settings, extensions and skills. Click to untrust." : "Pi skips this folder's .pi settings, extensions and skills. Click to trust."}
       onClick={() => onChange(!trusted)}
     >
@@ -253,7 +253,6 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
   const [wtPending, setWtPending] = useState(false);
-  const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const known = state.projects.flatMap((p) => p.worktrees.map((w) => ({ project: p.name, ...w })));
   const current = known.find((k) => k.path === value);
@@ -265,19 +264,14 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
       if (!next) setWtOpen(false);
     }}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className={cn(picker, "h-11 w-full min-w-0 max-w-none justify-start md:h-8")} title={value}>
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Directory" className={cn(picker, "w-full min-w-0 max-w-none justify-start")} title={value}>
           <FolderIcon className="text-ink-3" />
           {!value ? (
             <span>Choose a folder</span>
           ) : current ? (
             <>
               <span className="truncate font-mono">{current.project}</span>
-              {!current.root && (
-                <span className="inline-flex min-w-0 items-center gap-1 font-mono text-ink-3">
-                  <GitBranchIcon />
-                  <span className="truncate">{current.branch ?? (current.facts?.detached ? "Detached" : "Unknown branch")}</span>
-                </span>
-              )}
+              {!current.root && <BranchLabel branch={current.branch ?? (current.facts?.detached ? "Detached" : "Unknown branch")} className="text-ink-3" />}
             </>
           ) : (
             <span className="truncate font-mono">{abbrevHome(value)}</span>
@@ -290,15 +284,9 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           if (!next) { setWtOpen(false); setWtPending(false); }
         }}
         onPendingChange={setWtPending} state={state} currentCwd={value} send={send} onSelect={onChange}
-      /> : <PopoverContent ref={content} align="start" tabIndex={-1} aria-label="Choose a folder"
-        className="max-h-(--radix-popover-content-available-height) w-[380px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
-        onOpenAutoFocus={event => {
-          event.preventDefault();
-          if (window.matchMedia("(pointer: coarse)").matches) content.current?.focus({ preventScroll: true });
-          else search.current?.focus({ preventScroll: true });
-        }}>
+      /> : <PickerContent aria-label="Choose a folder" searchRef={search}>
         <Command>
-          <CommandInput ref={search} aria-label="Search folders" placeholder="Search folders" />
+          <PickerSearch ref={search} aria-label="Search folders" placeholder="Search folders" />
           <CommandList className="max-h-[min(18rem,60dvh)]">
             <CommandEmpty>No folder matches.</CommandEmpty>
             {roots.length > 0 && (
@@ -315,7 +303,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                     }}
                   >
                     <span className="min-w-0 flex-1 truncate">{k.project}</span>
-                    <CheckIcon className={cn("ml-auto", k.path === value ? "opacity-100" : "opacity-0")} />
+                    <PickerCheck selected={k.path === value} />
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -344,7 +332,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
             </CommandGroup>
           </CommandList>
         </Command>
-      </PopoverContent>}
+      </PickerContent>}
     </Popover>
   );
 }

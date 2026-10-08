@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevHome } from "@/lib/format";
+import { readStorage, writeStorage } from "@/lib/storage";
+import { listRow } from "@/lib/styles";
 
 interface Props {
   open: boolean;
@@ -42,14 +44,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
 
   useEffect(() => {
     if (!open) return;
-    let start = initialPath || "";
-    if (!start) {
-      try {
-        start = localStorage.getItem(LAST_KEY) || "";
-      } catch {
-        /* ignore */
-      }
-    }
+    const start = initialPath || readStorage(LAST_KEY) || "";
     setInput(start ? withSlash(start) : "~/");
     setCreating(false);
     setError(null);
@@ -99,11 +94,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
   const select = () => {
     const path = input.endsWith("/") ? dirPath || dir?.path : entries.length === 1 && prefix ? entries[0].path : dir?.path;
     if (!path) return;
-    try {
-      localStorage.setItem(LAST_KEY, path);
-    } catch {
-      /* ignore */
-    }
+    writeStorage(LAST_KEY, path);
     onPick(path);
     onOpenChange(false);
   };
@@ -189,12 +180,12 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
             </div>
           )}
           {dir?.parent && (
-            <button type="button" onClick={() => goTo(dir.parent as string)} className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm outline-none hover:bg-fill-hover focus-visible:bg-fill-hover">
+            <button type="button" onClick={() => goTo(dir.parent as string)} className={cn(listRow, "h-9 px-3")}>
               <ArrowUpIcon className="size-4 text-ink-2" /> <span className="font-mono">..</span>
             </button>
           )}
           {visible.map((e) => (
-            <button type="button" key={e.path} onClick={() => goTo(e.path)} className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm outline-none hover:bg-fill-hover focus-visible:bg-fill-hover">
+            <button type="button" key={e.path} onClick={() => goTo(e.path)} className={cn(listRow, "h-9 px-3")}>
               <FolderIcon className={cn("size-4 shrink-0", e.gitSubject ? "text-brand" : "text-ink-3")} />
               <span className="min-w-0 flex-1 truncate">
                 {prefix ? (

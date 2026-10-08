@@ -1,8 +1,9 @@
 import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
-import { ArrowDownIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, SparklesIcon } from "lucide-react";
+import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, SparklesIcon } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
+import { DisclosureChevron } from "@/components/Disclosure";
 import { Keys } from "@/components/PianoMark";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 import { cn } from "cn";
 import { Markdown } from "@/components/Markdown";
 import { abbrevHome, clamp } from "@/lib/format";
+import { disclosureRow } from "@/lib/styles";
 import { messageAnchorId, STICK_EVENT } from "@/lib/transcript";
 
 interface Props {
@@ -279,13 +281,10 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
     // Clicks here open the skill, never the prompt's own long-text disclosure around it.
     <Collapsible open={open} onOpenChange={setOpen} role="group" aria-label={`${skill.name} skill`} className="text-sm" onClick={(e) => e.stopPropagation()}>
       <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="-ml-2 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring"
-        >
+        <button type="button" className={disclosureRow}>
           <SparklesIcon className="size-3.5 shrink-0 text-brand" aria-hidden />
           <span className="min-w-0 flex-1 truncate font-mono text-ink">/skill:{skill.name}</span>
-          <ChevronRightIcon className={cn("ml-auto size-3.5 shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />
+          <DisclosureChevron open={open} className="ml-auto" />
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent className="disclosure-content">
@@ -343,11 +342,11 @@ function SubagentCardView({ card, content, markdown = false, fileContext, failed
     >
       <Row className="items-center" glyph={<span className={cn("block size-2 rounded-full", failed || visibleTerminal === "failed" ? "bg-err" : visibleTerminal === "completed" ? "bg-ok" : "bg-ink-3")} />}>
         <CollapsibleTrigger asChild disabled={!hasDetails}>
-          <button type="button" className="-ml-2 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" className={disclosureRow}>
             <span className="min-w-0 flex-1 truncate font-medium text-ink" title={title}>{(card.kind === "result" || card.kind === "collection") && <span className="font-normal text-ink-3">Result · </span>}{title}</span>
             {"profile" in card && card.profile && <span className="max-w-28 shrink truncate text-ink-3">{card.profile}</span>}
             <Badge variant={subagentBadge(card, terminalStatus)} className="max-w-56 truncate">{visibleStatus}</Badge>
-            {hasDetails && <ChevronRightIcon className={cn("shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />}
+            {hasDetails && <DisclosureChevron open={open} />}
           </button>
         </CollapsibleTrigger>
       </Row>
@@ -429,17 +428,14 @@ function Tool({ call, result, running, terminalRuns, executions = {} }: { call: 
         }
       >
         <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="-ml-2 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <button type="button" className={disclosureRow}>
             <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
               {verb}
               {(VERBS[call.name] ?? null) === null && <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>}
             </span>
             {summary && <span className="min-w-0 flex-1 truncate font-mono text-ink-2">{summary}</span>}
             {VERBS[call.name] && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
-            <ChevronRightIcon className={cn("ml-auto size-3.5 shrink-0 text-ink-3 transition-transform duration-200", open && "rotate-90")} aria-hidden />
+            <DisclosureChevron open={open} className="ml-auto" />
           </button>
         </CollapsibleTrigger>
       </Row>

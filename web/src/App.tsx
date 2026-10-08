@@ -9,10 +9,12 @@ import { type ProjectDialog, ProjectDialogView } from "@/components/OutcomeProje
 import { SessionView } from "@/components/SessionView";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { hasMod } from "@/lib/keys";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
+import { readJson, readStorage, writeJson, writeStorage } from "@/lib/storage";
 import { useConnection } from "@/lib/ws";
 import { type Action, type AppState, initialState, reduce, sessionDelivery } from "@/store";
 
@@ -27,25 +29,15 @@ const WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
 /** Model catalogs outlive reloads so the picker opens at once; its refresh button re-probes Pi. */
 const CATALOGS_KEY = "piano.catalogs";
 
-function storedCatalogs(): AppState["catalogs"] {
-  try {
-    return JSON.parse(localStorage.getItem(CATALOGS_KEY) ?? "{}") as AppState["catalogs"];
-  } catch {
-    return {};
-  }
-}
-
 export default function App() {
   const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState => {
-    const seeded = { ...s, catalogs: storedCatalogs() };
+    const seeded = { ...s, catalogs: readJson<AppState["catalogs"]>(CATALOGS_KEY, {}) };
     const route = parseRoute(location);
     return route.kind === "session" ? { ...seeded, view: { kind: "session" } } : { ...seeded, view: { kind: "new", outcomeProjectId: route.projectId } };
   });
   useEffect(() => {
-    try {
-      const usable = Object.fromEntries(Object.entries(state.catalogs).filter(([, c]) => !c.error));
-      localStorage.setItem(CATALOGS_KEY, JSON.stringify(usable));
-    } catch { /* storage unavailable: the server cache still answers */ }
+    // Without storage the server cache still answers.
+    writeJson(CATALOGS_KEY, Object.fromEntries(Object.entries(state.catalogs).filter(([, c]) => !c.error)));
   }, [state.catalogs]);
   const [menuOpen, setMenuOpen] = useState(false);
   const sidebarReturnFocus = useRef<HTMLElement | null>(null);
@@ -59,20 +51,10 @@ export default function App() {
 
   // ── sidebar ──
   // Hidden or shown on wide screens, remembered per browser; on narrow screens it is a sheet.
-  const [collapsed, setCollapsedState] = useState(() => {
-    try {
-      return localStorage.getItem(SIDEBAR_KEY) === "hidden";
-    } catch {
-      return false;
-    }
-  });
+  const [collapsed, setCollapsedState] = useState(() => readStorage(SIDEBAR_KEY) === "hidden");
   const setCollapsed = useCallback((v: boolean) => {
     setCollapsedState(v);
-    try {
-      localStorage.setItem(SIDEBAR_KEY, v ? "hidden" : "shown");
-    } catch {
-      /* ignore */
-    }
+    writeStorage(SIDEBAR_KEY, v ? "hidden" : "shown");
   }, []);
   const wide = () => matchMedia("(min-width: 768px)").matches;
   const showSidebar = useCallback(() => {
@@ -82,21 +64,13 @@ export default function App() {
   }, [setCollapsed]);
   // Resizable by dragging its edge; the width is remembered, and a drag past the minimum collapses it.
   const [width, setWidthState] = useState(() => {
-    try {
-      const v = Number(localStorage.getItem(WIDTH_KEY));
-      return v >= WIDTH.min && v <= WIDTH.max ? v : WIDTH.default;
-    } catch {
-      return WIDTH.default;
-    }
+    const v = Number(readStorage(WIDTH_KEY));
+    return v >= WIDTH.min && v <= WIDTH.max ? v : WIDTH.default;
   });
   const [dragging, setDragging] = useState(false);
   const setWidth = useCallback((v: number) => {
     setWidthState(v);
-    try {
-      localStorage.setItem(WIDTH_KEY, String(v));
-    } catch {
-      /* ignore */
-    }
+    writeStorage(WIDTH_KEY, String(v));
   }, []);
   const startResize = useCallback(
     (e: React.PointerEvent) => {
@@ -320,11 +294,15 @@ export default function App() {
           {state.view.kind === "new" ? (
             <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
           ) : state.view.kind === "missing-session" ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center" role="alert">
-              <h1 className="text-xl font-medium">Session not found</h1>
-              <p className="text-sm text-ink-2">This session is not in the registry. Its reference may have been removed or deleted.</p>
-              <Button variant="outline" onClick={() => openNew()}>New session</Button>
-            </div>
+            <Empty className="flex-1 px-4" role="alert">
+              <EmptyHeader>
+                <EmptyTitle>Session not found</EmptyTitle>
+                <EmptyDescription>This session is not in the registry. Its reference may have been removed or deleted.</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button variant="outline" onClick={() => openNew()}>New session</Button>
+              </EmptyContent>
+            </Empty>
           ) : (
             <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} onProjectDialog={setProjectDialog} changesOpen={changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}

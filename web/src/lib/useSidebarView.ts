@@ -1,15 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { DEFAULT_SIDEBAR_VIEW, type SidebarView } from "@/lib/sidebarView";
+import { readJson, writeJson } from "@/lib/storage";
 
 /** Remembered like the sidebar's open groups: per browser. */
 const KEY = "piano.sidebarView";
-const load = (): SidebarView => {
-  try {
-    return { ...DEFAULT_SIDEBAR_VIEW, ...(JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<SidebarView>) };
-  } catch {
-    return DEFAULT_SIDEBAR_VIEW;
-  }
-};
+const load = (): SidebarView => ({ ...DEFAULT_SIDEBAR_VIEW, ...readJson<Partial<SidebarView>>(KEY, {}) });
 let view = load();
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => {
@@ -22,11 +17,7 @@ const setView = (change: Partial<SidebarView>) => {
   const next = { ...view, ...change };
   if (next.groupBy === view.groupBy && next.sortBy === view.sortBy) return;
   view = next;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(view));
-  } catch {
-    /* ignore */
-  }
+  writeJson(KEY, view);
   for (const listener of listeners) listener();
 };
 
