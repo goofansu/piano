@@ -69,7 +69,7 @@ export function SessionPullRequestDialog({ open, onOpenChange, pr }: {
             <Input ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} placeholder="https://github.com/owner/repo/pull/123" />
             {pr.value?.error && <FieldError>{pr.value.error}</FieldError>}
             {!pr.busy && pr.value && !pr.value.error && !pr.value.link && <p role="status" className="text-sm text-muted-foreground">
-              {pr.value.discovery ? "No matching open pull request." : "No pull request linked."}
+              {pr.value.discovery ? "No matching open pull request." : "No pull request linked. Automatic discovery is off."}
             </p>}
           </Field>
         </FieldGroup>

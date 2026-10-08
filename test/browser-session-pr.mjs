@@ -81,19 +81,14 @@ try {
   }
   // An extra caller-supplied path cannot redirect a valid ID pair to another workspace.
   const own = await (await fetch(endpoint({ workspaceId, sessionId: 'work', cwd: plain }))).json();
-  assert.deepEqual(own, { link: null, pullRequest: null, discovery: false });
+  assert.equal(own.pullRequest?.number, 42);
   const notes = await fetch(endpoint({ workspaceId: plainId, sessionId: 'notes' }), { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'link', url: prs[1].url }) });
   assert.equal(notes.status, 200); assert.equal((await notes.json()).link?.url, prs[1].url);
   await ab('set', 'viewport', '1280', '900'); await ab('open', `${frontendUrl}/s/work`);
-  await ab('wait', '--text', 'These are not session deliverables.'); await noBadge();
-  await openDetails(); await ab('wait', '--text', 'No pull request linked.'); await noBadge();
+  await ab('wait', '--text', 'These are not session deliverables.'); await waitBadge(42);
+  await openDetails();
   assert.equal(await evaluate(`document.activeElement?.id`), 'session-pr-url');
-  assert.equal(await evaluate(`document.querySelector('#session-pr-url').value`), '');
-  observations.manualOnly = { opening: await evaluate(`document.querySelector('[role="dialog"]').textContent`) };
-  assert.deepEqual(await (await fetch(endpoint({ workspaceId, sessionId: 'work' }))).json(), { link: null, pullRequest: null, discovery: false });
-  await button('Find from branch'); await waitBadge(42);
-  observations.manualOnly.afterFind = await evaluate(`document.querySelector('#session-pr-url').value`);
-  assert.equal(observations.manualOnly.afterFind, prs[0].url);
+  assert.equal(await evaluate(`document.querySelector('#session-pr-url').value`), prs[0].url);
   await closeDetails();
   await ab('click', '[aria-label="Session information and actions"]');
   await ab('find', 'role', 'menuitem', 'click', '--name', 'Rename', '--exact');
@@ -107,7 +102,7 @@ try {
   // Removal is a durable per-session preference, not a temporary hide.
   await openDetails(); await button('Remove link'); await noBadge(); await ab('reload');
   await ab('wait', '--text', 'These are not session deliverables.'); await noBadge();
-  await openDetails(); await ab('wait', '--text', 'No pull request linked.');
+  await openDetails(); await ab('wait', '--text', 'Automatic discovery is off.');
   await button('Find from branch'); await waitBadge(42); await closeDetails();
   // Header and palette reach the same control. Invalid URLs fail without changing identity.
   await palette('Pull request'); await ab('click', '[cmdk-item][data-value="Pull request"]');
