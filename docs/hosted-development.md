@@ -28,7 +28,7 @@ and a separate Vite development process as described in root AGENTS.md and
 [the development handoff](development-on-exe-dev.md#scratch-verification):
 
 ```bash
-HOST=127.0.0.1 PIANO_CONFIG=<scratch-path>/piano-config.json PORT=7171 node server/main.ts
+HOST=127.0.0.1 PIANO_DB_PATH=<scratch-path>/piano.db PORT=7171 node server/main.ts
 PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort
 npx agent-browser open http://127.0.0.1:7172
 ```

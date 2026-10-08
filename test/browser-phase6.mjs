@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { readRegistry as readPersistedRegistry } from './fixtures/registry.ts';
+import { readRegistry as readPersistedRegistry, registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase6-evidence/browser'); mkdirSync(evidence, { recursive: true });
 const root = mkdtempSync(join(tmpdir(), 'piano-browser-phase6-')), repo = join(root, 'repo'), config = join(root, 'config'), sessions = join(root, 'sessions');
@@ -31,7 +31,7 @@ if(existsSync(${JSON.stringify(failure)})){console.error('Worktrunk unavailable:
 const r=spawnSync(${JSON.stringify(wtPath)},process.argv.slice(2),{encoding:'utf8'});let out=r.stdout??'';
 process.stdout.write(out);process.stderr.write(r.stderr??'');process.exit(r.status??1);\n`, { mode: 0o755 });
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171', webPort = process.env.PIANO_TEST_WEB_PORT ?? '7172';
-const server = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: backendPort, PIANO_CONFIG: registry, PIANO_WT_CLI: wrapper,
+const server = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: backendPort, ...registryEnv(registry), PIANO_WT_CLI: wrapper,
   PIANO_PI_CLI: resolve('test/fake-pi.mjs'), PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', webPort, '--strictPort'], {
   cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: `http://127.0.0.1:${backendPort}` }, stdio: ['ignore', 'pipe', 'pipe'] });

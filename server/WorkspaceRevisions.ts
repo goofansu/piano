@@ -10,7 +10,7 @@ import { lstat, mkdir, mkdtemp, open, readFile, readlink, realpath, rename, rm, 
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
 import type { RevisionFile, RevisionManifest, Workspace, WorkspaceCapture } from "../shared/wire.ts";
-import { RegistryPath } from "./Registry.ts";
+import { DEFAULT_DB_PATH, RegistryDatabasePath, RegistryPath, registryDatabasePath } from "./Registry.ts";
 
 export const RevisionGitCommand = Context.Reference<string>("piano/RevisionGitCommand", { defaultValue: () => "git" });
 export const RevisionStorePath = Context.Reference<string | undefined>("piano/RevisionStorePath", { defaultValue: () => process.env.PIANO_REVISION_STORE });
@@ -70,7 +70,10 @@ type GitEntry = { path: string; mode: RevisionFile["mode"]; oid: string };
 
 export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.gen(function* () {
   const config = yield* RegistryPath;
-  const store = resolve((yield* RevisionStorePath) ?? join(dirname(config), `${basename(config)}.revisions`));
+  const database = registryDatabasePath(config, yield* RegistryDatabasePath);
+  // Preserve existing default evidence; custom databases keep scratch captures alongside their DB.
+  const namespace = database === DEFAULT_DB_PATH ? config : database;
+  const store = resolve((yield* RevisionStorePath) ?? join(dirname(namespace), `${basename(namespace)}.revisions`));
   const cli = yield* RevisionGitCommand;
   const lock = yield* Semaphore.make(1);
 

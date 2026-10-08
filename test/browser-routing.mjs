@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? "/tmp/piano-routing-evidence");
 mkdirSync(evidence, { recursive: true });
@@ -15,7 +16,7 @@ mkdirSync(repo);
 spawnSync("git", ["init", repo]);
 writeFileSync(join(scratch, "registry.json"), JSON.stringify({ projects: [repo], worktrees: [], sessions: [] }));
 const backend = spawn(process.execPath, ["server/main.ts"], {
-  env: { ...process.env, HOST: "127.0.0.1", PORT: "7171", PIANO_CONFIG: join(scratch, "registry.json"), PIANO_PI_CLI: resolve("test/fake-pi.mjs"), PI_CODING_AGENT_DIR: join(scratch, "agent") },
+  env: { ...process.env, HOST: "127.0.0.1", PORT: "7171", ...registryEnv(join(scratch, "registry.json")), PIANO_PI_CLI: resolve("test/fake-pi.mjs"), PI_CODING_AGENT_DIR: join(scratch, "agent") },
   stdio: ["ignore", "pipe", "pipe"],
 });
 const frontend = spawn(process.execPath, [resolve("node_modules/vite/bin/vite.js"), "--host", "127.0.0.1", "--port", "7172", "--strictPort"], {

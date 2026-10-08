@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { createPiCompatibilityFixture } from './fixtures/PiCompatibility.ts';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase3-evidence/browser');
 mkdirSync(evidence, { recursive: true });
@@ -20,7 +21,7 @@ saved.appendMessage({ role: 'assistant', api: 'openai-completions', provider: 'p
 writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: saved.getSessionId(), title: 'Saved session', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false }] }));
 const canary = 'P3BrowserSecret-123456789';
 const server = spawn(process.execPath, ['server/main.ts'], {
-  env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry,
+  env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),
     PIANO_TEST_SECRET: canary, PIANO_PI_CLI: resolve('test/fake-projection-pi.mjs'), PIANO_PI_ARGS: '',
     PI_CODING_AGENT_DIR: fixture.agentDir, PI_CODING_AGENT_SESSION_DIR: fixture.sessionDir },
   stdio: ['ignore', 'pipe', 'pipe'],

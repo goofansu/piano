@@ -88,7 +88,7 @@ Git repository, separate registry and port, and isolate Pi resources/session sto
 Use an absolute scratch path that you created:
 
 ```bash
-HOST=127.0.0.1 PIANO_CONFIG=<scratch-path>/piano-config.json PORT=7171 node server/main.ts
+HOST=127.0.0.1 PIANO_DB_PATH=<scratch-path>/piano.db PORT=7171 node server/main.ts
 ```
 
 Start the development UI separately, pointing it only at that scratch backend:

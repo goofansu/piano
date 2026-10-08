@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-stats-evidence/browser');
 mkdirSync(evidence, { recursive: true });
@@ -12,7 +13,7 @@ const root = mkdtempSync(join(tmpdir(), 'piano-browser-stats-'));
 const repo = join(root, 'repo'), registry = join(root, 'registry.json'), statsFile = join(root, 'stats.json'), audit = join(root, 'audit.jsonl');
 for (const name of ['repo', 'home', 'agent', 'sessions']) mkdirSync(join(root, name));
 execFileSync('git', ['init', '--quiet', repo]);
-const env = { ...process.env, HOME: join(root, 'home'), HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry,
+const env = { ...process.env, HOME: join(root, 'home'), HOST: '127.0.0.1', PORT: '7171',
   PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(root, 'sessions') };
 const baseArgs = `--audit ${audit} --stats-file ${statsFile}`;
 writeFileSync(statsFile, JSON.stringify({ cost: 1.23, tokens: { input: 100, output: 20, cacheRead: 30, cacheWrite: 0, total: 150 }, contextUsage: { tokens: 50, contextWindow: 1000, percent: 5 } }));
@@ -21,7 +22,7 @@ writeFileSync(registry, JSON.stringify({ projects: [repo], worktrees: [], sessio
 })) }));
 let processLog = '';
 const track = p => { p.stdout.on('data', d => processLog += d); p.stderr.on('data', d => processLog += d); return p; };
-const startServer = (args = '') => track(spawn(process.execPath, ['server/main.ts'], { env: { ...env, PIANO_PI_ARGS: `${baseArgs} ${args}` }, stdio: ['ignore', 'pipe', 'pipe'] }));
+const startServer = (args = '') => track(spawn(process.execPath, ['server/main.ts'], { env: { ...env, ...registryEnv(registry), PIANO_PI_ARGS: `${baseArgs} ${args}` }, stdio: ['ignore', 'pipe', 'pipe'] }));
 let server = startServer();
 const frontend = track(spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], {
   cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'],

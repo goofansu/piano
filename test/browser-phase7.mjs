@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { readRegistry } from './fixtures/registry.ts';
+import { readRegistry, registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase7-evidence/http');
 mkdirSync(evidence, { recursive: true });
@@ -30,7 +30,7 @@ const retiredFiles = [join(root, 'checks.json'), `${registry}.checks.json`, join
 const retiredContent = 'Retired check data, deliberately not valid JSON.\n';
 mkdirSync(`${registry}.evidence`);
 for (const path of retiredFiles) writeFileSync(path, retiredContent);
-const server = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry,
+const server = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),
   PIANO_PI_CLI: resolve('test/fake-pi.mjs'), PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(root, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';
 server.stdout.on('data', d => processLog += d); server.stderr.on('data', d => processLog += d);

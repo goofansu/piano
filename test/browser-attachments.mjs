@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { crc32, deflateSync } from 'node:zlib';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-attachments-evidence');
 mkdirSync(evidence, { recursive: true });
@@ -34,7 +35,7 @@ const maximumImages = [boundaryImage('maximum-a.png', 97), boundaryImage('maximu
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171';
 const frontendPort = process.env.PIANO_TEST_FRONTEND_PORT ?? '7172';
 const backendUrl = `http://127.0.0.1:${backendPort}`, appUrl = `http://127.0.0.1:${frontendPort}`;
-const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: backendPort, PIANO_CONFIG: join(scratch, 'registry.json'), PIANO_PI_CLI: resolve('test/fake-pi.mjs'), PI_CODING_AGENT_DIR: join(scratch, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(scratch, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: backendPort, ...registryEnv(join(scratch, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-pi.mjs'), PI_CODING_AGENT_DIR: join(scratch, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(scratch, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', frontendPort, '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: backendUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
 let serverLog = ''; for (const proc of [server, frontend]) { proc.stdout.on('data', d => serverLog += d); proc.stderr.on('data', d => serverLog += d); }
 const session = `attachments-${process.pid}`, log = [];

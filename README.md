@@ -57,7 +57,6 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
 - `HOST`: bind address; defaults to `127.0.0.1`.
 - `PORT`: backend port; defaults to `7070`.
 - `PIANO_DB_PATH`: SQLite registry path; defaults to `$XDG_DATA_HOME/piano/piano.db` or `~/.local/share/piano/piano.db` when `XDG_DATA_HOME` is unset.
-- `PIANO_CONFIG`: legacy JSON import source; defaults to `~/.config/piano/config.json`. When explicitly set without `PIANO_DB_PATH`, the database is `<PIANO_CONFIG>.sqlite`, keeping existing scratch setups isolated.
 - `PIANO_DEV_BACKEND`: Vite proxy target; defaults to `http://127.0.0.1:7070`.
 - `PI_CODING_AGENT_DIR`: Pi settings, credentials, and sessions directory; defaults to `~/.pi/agent`.
 - `PI_CODING_AGENT_SESSION_DIR`: override Pi's session storage directory.
@@ -71,10 +70,10 @@ Piano uses Node's built-in SQLite support (no database server or extra native de
 `folders` contain the selected directories formerly called `projects` in JSON, while `projects`
 contain the named session groupings formerly called `outcomeProjects`. Workspaces, worktree references
 and session metadata are separate tables. Pi still owns conversation files; Git owns repository facts;
-revision/evidence storage is unchanged. Existing TypeScript and wire names remain compatible.
+the default revision/evidence storage is unchanged. Existing TypeScript and wire names remain compatible.
 
-On first startup with an uninitialized database, Piano validates and imports the legacy JSON in one
-transaction. Unversioned, v1 and v2 registries are supported. IDs, exact path spelling, array order,
+On first startup with an uninitialized default database, Piano automatically validates and imports
+`~/.config/piano/config.json` in one transaction. No environment variable is needed for migration. Unversioned, v1 and v2 registries are supported. IDs, exact path spelling, array order,
 closed-folder references, cached statistics and PR preferences are preserved. The source JSON stays
 unchanged, with an additional private `<config>.pre-sqlite-<id>.bak` copy. Subsequent launches use only
 SQLite: editing the old JSON no longer changes Piano. Invalid imports or unsupported/corrupt databases
@@ -88,10 +87,13 @@ and row-level writes, not a claim of faster conversation loading.
 The database and migration backups use mode `0600`. SQLite uses WAL, so `-wal` and `-shm` files may
 appear beside the database. For a file-copy backup, stop Piano cleanly first; for live backups use
 SQLite's backup facility rather than copying only the main file. Restoring an old JSON backup requires
-a fresh database destination and `PIANO_CONFIG` pointing at that backup; this loses metadata changes
-made since the backup, so retain the current database before recovery. Rolling back the application
+stopping Piano, setting aside the current default database (including any WAL files), and restoring
+the JSON at `~/.config/piano/config.json` before restarting with the default database location. This
+loses metadata changes made since the backup, so retain the current database before recovery. Rolling back the application
 to the JSON-based version likewise sees only pre-migration metadata, not subsequent SQLite writes.
 
-For scratch development, keep `PIANO_CONFIG` in your scratch directory, or set both `PIANO_DB_PATH`
-and `PIANO_CONFIG` to scratch paths. Setting just `PIANO_DB_PATH` still imports the default legacy JSON
-if it exists.
+For scratch development, set `PIANO_DB_PATH` to a file in your scratch directory. New databases at
+non-default paths start empty rather than importing your normal JSON registry; their revision captures default to
+`<database>.revisions` unless `PIANO_REVISION_STORE` overrides it. Browser fixtures explicitly seed
+scratch databases through Registry. The retired `PIANO_CONFIG` environment variable is ignored;
+if you previously used a custom SQLite location, select that existing file with `PIANO_DB_PATH`.

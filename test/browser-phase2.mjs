@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createPiCompatibilityFixture } from './fixtures/PiCompatibility.ts';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase2-evidence/browser');
 const fake = process.argv[3] === 'fake';
@@ -16,7 +17,7 @@ const registry = join(fixture.root, 'registry.json');
 writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: [] }));
 const cli = fake ? { cli: resolve('test/fake-dialog-pi.mjs'), extraArgs: [] } : fixture.cli();
 const server = spawn(process.execPath, ['server/main.ts'], {
-  env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry,
+  env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),
     PIANO_PI_CLI: cli.cli, PIANO_PI_ARGS: cli.extraArgs.join(' '), PI_CODING_AGENT_DIR: fixture.agentDir, PI_CODING_AGENT_SESSION_DIR: fixture.sessionDir },
   stdio: ['ignore', 'pipe', 'pipe'],
 });

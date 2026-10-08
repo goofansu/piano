@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-delegation-evidence');
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171';
@@ -57,7 +58,7 @@ writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], wo
   { cwd: repo, sessionId: 'delegations', title: 'Delegation cards', createdAt: timestamp, updatedAt: timestamp, archived: false },
 ] }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: backendPort,
-  PIANO_CONFIG: join(root, 'registry.json'), PIANO_PI_CLI: resolve('test/fake-delegation-pi.mjs'), PIANO_PI_ARGS: '',
+  ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-delegation-pi.mjs'), PIANO_PI_ARGS: '',
   PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(root, 'sessions') }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', webPort, '--strictPort'], {
   cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: `http://127.0.0.1:${backendPort}` }, stdio: ['ignore', 'pipe', 'pipe'],

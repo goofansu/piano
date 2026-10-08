@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-queue-edit-evidence');
 mkdirSync(evidence, { recursive: true });
@@ -22,7 +23,7 @@ writeFileSync(join(root, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').r
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171';
 const webPort = process.env.PIANO_TEST_WEB_PORT ?? '7172';
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env,
-  HOST: '127.0.0.1', PORT: backendPort, PIANO_CONFIG: join(root, 'registry.json'),
+  HOST: '127.0.0.1', PORT: backendPort, ...registryEnv(join(root, 'registry.json')),
   PIANO_PI_CLI: join(root, 'fake.mjs'), PIANO_PI_ARGS: '',
   PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(root, 'sessions'),
 }, stdio: ['ignore', 'pipe', 'pipe'] });

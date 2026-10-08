@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-chart-evidence');
 mkdirSync(evidence, { recursive: true });
@@ -21,7 +22,7 @@ const sessions = [3, 98].map(count => {
 });
 const registry = join(root, 'registry.json');
 writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions }));
-const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: root, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry, PI_CODING_AGENT_SESSION_DIR: sessionDir }, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry), PI_CODING_AGENT_SESSION_DIR: sessionDir }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';
 for (const child of [server, frontend]) { child.stdout.on('data', d => processLog += d); child.stderr.on('data', d => processLog += d); }

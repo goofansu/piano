@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -114,7 +114,7 @@ test("INV-01: competing backends cannot overwrite each other's committed metadat
   } finally { await first.dispose(); await second.dispose(); }
 });
 
-test("database location honors data home and explicit DB override while legacy scratch configs stay isolated", () => {
+test("database location honors data home and DB override, ignoring the retired config environment variable", () => {
   const env = { ...process.env };
   delete env.PIANO_CONFIG; delete env.PIANO_DB_PATH;
   const location = (extra: Record<string, string>) => execFileSync(process.execPath, ["--input-type=module", "-e",
@@ -122,6 +122,30 @@ test("database location honors data home and explicit DB override while legacy s
   { cwd: resolve("."), env: { ...env, ...extra }, encoding: "utf8" }).trim();
   assert.equal(location({ HOME: "/tmp/piano-home", XDG_DATA_HOME: "" }), "/tmp/piano-home/.local/share/piano/piano.db");
   assert.equal(location({ XDG_DATA_HOME: "/tmp/piano-data" }), "/tmp/piano-data/piano/piano.db");
-  assert.equal(location({ PIANO_CONFIG: "/tmp/scratch/config.json" }), "/tmp/scratch/config.json.sqlite");
+  assert.equal(location({ XDG_DATA_HOME: "/tmp/piano-data", PIANO_CONFIG: "/tmp/scratch/config.json" }), "/tmp/piano-data/piano/piano.db");
   assert.equal(location({ PIANO_CONFIG: "/tmp/scratch/config.json", PIANO_DB_PATH: "/tmp/explicit/piano.db" }), "/tmp/explicit/piano.db");
+});
+
+test("INV-01: default startup imports standard home JSON without configuration; custom databases start isolated", async t => {
+  const f = fixture(t), configDir = join(f.root, ".config", "piano"), config = join(configDir, "config.json");
+  mkdirSync(configDir, { recursive: true });
+  const bytes = JSON.stringify({ projects: [join(f.root, "selected")], worktrees: [], sessions: [] });
+  writeFileSync(config, bytes);
+  writeFileSync(f.config, "{broken retired config override");
+  const inspect = (override?: string) => JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", `
+    import { Effect } from 'effect';
+    import { CONFIG_PATH, Registry, RegistryLive, registryDatabasePath } from './server/Registry.ts';
+    const data = await Effect.runPromise(Effect.gen(function* () { return yield* (yield* Registry).get; }).pipe(Effect.provide(RegistryLive)));
+    console.log(JSON.stringify({ path: registryDatabasePath(CONFIG_PATH), data }));
+  `], { env: { ...process.env, HOME: f.root, XDG_DATA_HOME: join(f.root, "data"), PIANO_DB_PATH: override, PIANO_CONFIG: f.config }, encoding: "utf8" }));
+  const isolated = inspect(f.dbPath);
+  assert.equal(isolated.path, f.dbPath);
+  assert.deepEqual(isolated.data.projects, []);
+  assert.deepEqual(readdirSync(configDir), ["config.json"], "custom database never reads or backs up the user's JSON");
+  const migrated = inspect();
+  assert.equal(migrated.path, join(f.root, "data", "piano", "piano.db"));
+  assert.deepEqual(migrated.data.projects, [join(f.root, "selected")]);
+  assert.equal(readFileSync(config, "utf8"), bytes);
+  assert.equal(readdirSync(configDir).filter(p => p.endsWith(".bak")).length, 1);
+  assert.deepEqual(inspect(), migrated, "restart uses the same database and identities");
 });

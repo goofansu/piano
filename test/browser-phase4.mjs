@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createPiCompatibilityFixture } from './fixtures/PiCompatibility.ts';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase4-evidence/browser');
 mkdirSync(evidence, { recursive: true });
@@ -20,7 +21,7 @@ writeFileSync(join(fixture.sessionDir, `${id}.jsonl`), [
 ].map(x => JSON.stringify(x)).join('\n') + '\n');
 writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: id, title: 'Ownership journey', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false }] }));
 const server = spawn(process.execPath, ['server/main.ts'], {
-  env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry,
+  env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),
     PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: `--audit ${audit}`,
     PI_CODING_AGENT_DIR: fixture.agentDir, PI_CODING_AGENT_SESSION_DIR: fixture.sessionDir },
   stdio: ['ignore', 'pipe', 'pipe'],

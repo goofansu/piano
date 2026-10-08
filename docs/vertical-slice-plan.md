@@ -87,7 +87,7 @@ Use a created scratch directory, registry, throwaway Git repository and isolated
 storage as appropriate. The static/browser instance is:
 
 ```bash
-HOST=127.0.0.1 PIANO_CONFIG=<scratch-path>/piano-config.json PORT=7171 node server/main.ts
+HOST=127.0.0.1 PIANO_DB_PATH=<scratch-path>/piano.db PORT=7171 node server/main.ts
 ```
 
 Retain its PID; stop only processes you started. Register only scratch directories, remove scratch

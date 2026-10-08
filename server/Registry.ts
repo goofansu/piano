@@ -47,16 +47,15 @@ export interface RegistryData {
   readonly sessions: ReadonlyArray<SessionEntry>;
 }
 
-const defaultConfigPath = join(homedir(), ".config", "piano", "config.json");
-export const CONFIG_PATH = process.env.PIANO_CONFIG ?? defaultConfigPath;
+export const CONFIG_PATH = join(homedir(), ".config", "piano", "config.json");
+export const DEFAULT_DB_PATH = resolve(join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "piano", "piano.db"));
 
-/** Legacy import source, also retained as the existing revision-store namespace. */
+/** Internal legacy-import seam for fixtures; production always uses the standard config path. */
 export const RegistryPath = Context.Reference<string>("piano/RegistryPath", { defaultValue: () => CONFIG_PATH });
-export const RegistryDatabasePath = Context.Reference<string | undefined>("piano/RegistryDatabasePath", { defaultValue: () => process.env.PIANO_DB_PATH });
+export const RegistryDatabasePath = Context.Reference<string | undefined>("piano/RegistryDatabasePath", { defaultValue: () => undefined });
 export function registryDatabasePath(config: string, override?: string): string {
-  return resolve(override ?? (process.env.PIANO_CONFIG !== undefined || config !== defaultConfigPath
-    ? `${config}.sqlite`
-    : join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "piano", "piano.db")));
+  // An injected fixture source stays isolated from the developer's environment/database.
+  return resolve(override ?? (config === CONFIG_PATH ? process.env.PIANO_DB_PATH ?? DEFAULT_DB_PATH : `${config}.sqlite`));
 }
 
 const empty: RegistryData = { version: 2, outcomeProjects: [], projects: [], worktrees: [], sessions: [], workspaces: [] };
@@ -84,7 +83,7 @@ function withWorkspaces(data: RegistryData): RegistryData {
 function read(path: string): RegistryData {
   let bytes: Buffer;
   try {
-    if (lstatSync(path).isSymbolicLink()) throw new Error("Registry symlinks are not supported for migration. Set PIANO_CONFIG to the actual file path.");
+    if (lstatSync(path).isSymbolicLink()) throw new Error("Registry symlinks are not supported for migration. Restore the JSON as a regular file at the standard config path.");
     bytes = readFileSync(path);
   } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return empty; throw error; }
   const data = decode(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
@@ -154,7 +153,8 @@ export const RegistryLive = Layer.effect(
     const database = yield* Effect.acquireRelease(
       Effect.try({ try: () => {
         if (resolve(config) === path) throw new Error("PIANO_DB_PATH must differ from the legacy JSON path.");
-        return openRegistryDatabase(path, () => read(config));
+        // Custom databases start empty, never importing the user's selections into a scratch instance.
+        return openRegistryDatabase(path, () => config !== CONFIG_PATH || path === DEFAULT_DB_PATH ? read(config) : empty);
       }, catch: e => recovery(path, e) }),
       db => Effect.sync(() => db.close()),
     );

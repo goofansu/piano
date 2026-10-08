@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase5-evidence/browser');
 mkdirSync(evidence, { recursive: true });
@@ -20,7 +21,7 @@ for (const id of ids) writeFileSync(join(sessions, `${id}.jsonl`), [
 ].map(v => JSON.stringify(v)).join('\n') + '\n');
 writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: ids.map(sessionId => ({ cwd, sessionId, title: sessionId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false })) }));
 const canary = 'sk-phase5-browser-canary-123456789';
-const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: root, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry,
+const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),
   PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: `--audit ${audit} --hold-session delayed --burst-delay 10`,
   PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions, PIANO_TEST_SECRET: canary }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], {

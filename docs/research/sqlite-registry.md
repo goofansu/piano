@@ -48,3 +48,31 @@ UI-speed claim is made, and multiple backend writers are not supported. SQLite's
 change conversation loading or Pi persistence. Direct database edits should be made with Piano stopped.
 See [migration, location and backup guidance](../../README.md#registry-storage-and-migration).
 Rolling back to the old JSON-based application does not recover post-migration metadata edits.
+
+## Follow-up: remove the legacy configuration environment variable
+
+Based on `be0e510` plus this follow-up's working-tree diff, Node 24.21.0/Linux. `PIANO_CONFIG`
+is no longer read by the runtime. Default startup imports the fixed `~/.config/piano/config.json`
+without configuration. `PIANO_DB_PATH` remains the database override; a new non-default database
+starts empty rather than importing the user's normal selections. Existing default revision storage
+is preserved, while custom databases keep captures under `<database>.revisions` unless overridden.
+This preserves INV-01/07 and removes the prior public JSON-sidecar location rule.
+
+- `npm test`: **98 passed**, zero failed/skipped (`/tmp/piano-no-config-tests.log`). The added
+  child-process check observes default migration/restart, ignored retired environment values and
+  isolation of a custom database with a populated standard JSON file still present.
+- `npm run typecheck` and `npm run lint`: passed (`/tmp/piano-no-config-{typecheck,lint}.log`).
+- `node test/browser-outcome-projects.mjs /tmp/piano-no-config-browser`: passed the full journey
+  again, now with scratch HOME/data directories and no config/database path override. The backend
+  performs automatic import, preserves the backup and retains browser edits across restart.
+  Commands, screenshots and results are retained in the evidence directory.
+- `node test/browser-phase7.mjs /tmp/piano-no-config-revisions`: passed scratch custom-database
+  seeding and workspace capture identity/edit/failure/recovery checks through HTTP. Other browser
+  fixtures were mechanically updated to seed via Registry and launch with `PIANO_DB_PATH`; they
+  were not all rerun. The seed helper isolates fixtures from inherited developer DB settings.
+- Reviewed path selection, seed timing, default revision-store compatibility and active development
+  recipes; `git diff --check` passed. Historical research notes retain their original environment
+  names; current configuration/recovery instructions are in README.
+
+Scratch processes/files were cleaned up. No production migration, build, deployment or paid model
+call was performed.
