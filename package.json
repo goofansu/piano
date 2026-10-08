@@ -18,9 +18,9 @@
     "prepare": "node .husky/install.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "1.0.4",
-    "@effect/platform-node": "4.0.0-rc.118",
-    "effect": "4.0.0-rc.118"
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@effect/platform-node": "^4.0.2",
+    "effect": "^4.0.2"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
