@@ -3,7 +3,10 @@ import { test } from "node:test";
 import { flatSessions, folderGroups, projectGroups, sortSessions } from "../web/src/lib/sidebarView.ts";
 
 const at = (day: number) => `2026-10-${String(day).padStart(2, "0")}T00:00:00Z`;
-const session = (cwd: string, sessionId: string, title: string | undefined, day: number) => ({ cwd, sessionId, title, updatedAt: at(day) });
+const session = (cwd: string, sessionId: string, title: string | undefined, day: number) => ({
+  cwd, sessionId, title, updatedAt: at(day), createdAt: at(day), workspaceId: cwd,
+  branch: "main", hosted: false, streaming: false,
+});
 const titles = (items: ReadonlyArray<{ title?: string }>) => items.map(s => s.title);
 const folders = [
   { name: "zeta", sessions: [session("/zeta", "z1", "Zeta old", 1), session("/zeta", "z2", "Zeta new", 7)] },
