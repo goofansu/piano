@@ -64,8 +64,8 @@ const geometry = `(() => {
   const card = t.closest('.composer-card');
   const footer = card.lastElementChild;
   const rect = el => { const r = el.getBoundingClientRect(); return { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height }; };
-  const controls = [...footer.querySelectorAll('button, [data-slot="tooltip-trigger"]')].filter(el => el.getBoundingClientRect().height > 0).map(el => ({label:el.getAttribute('aria-label') || el.textContent, ...rect(el)}));
-  const model = [...footer.querySelectorAll('[aria-label^="Model:"]')].find(el => el.getBoundingClientRect().height > 0);
+  const controls = [...footer.querySelectorAll('button, [data-slot="tooltip-trigger"]')].map(el => ({label:el.getAttribute('aria-label') || el.textContent, ...rect(el)}));
+  const model = footer.querySelector('[aria-label^="Model:"]');
   const label = model?.querySelector('.truncate');
   const modelLabel = label ? { text:label.textContent, width:label.clientWidth, scrollWidth:label.scrollWidth,
     overflow:getComputedStyle(label).textOverflow, accessibleName:model.getAttribute('aria-label') } : null;
@@ -85,10 +85,7 @@ const geometry = `(() => {
   if (innerWidth < 768 && messageActions.some(c => c.width < 44 || c.height < 44)) problems.push('Message action touch target is smaller than 44px');
   if (messageActions.some(action => action.x < c.x || action.right > c.right + 1 || action.right > innerWidth || action.bottom > innerHeight)) problems.push('Message action outside viewport');
   if (model && rect(model).width - [...model.children].reduce((sum, child) => sum + rect(child).width, 0) > 26) problems.push('Model picker expands beyond its label');
-  if (!modelLabel) {
-    if (!t.matches('[aria-label="Message"]')) problems.push('New-session model control is missing');
-    if (rect(t).height > 44 || controls.some(r => Math.abs(r.y + r.height/2 - rect(t).y - rect(t).height/2) > 2)) problems.push('Unfocused session composer is not a single row');
-  }
+  if (!modelLabel) problems.push('Model control is missing');
   if (modelLabel && modelLabel.width < 24) problems.push('No readable space left for the model label');
   if (modelLabel && !modelLabel.accessibleName.includes(modelLabel.text)) problems.push('Accessible model name was truncated');
   if (modelLabel && modelLabel.scrollWidth > modelLabel.width && modelLabel.overflow !== 'ellipsis') problems.push('Long model label does not ellipsize');
@@ -125,99 +122,6 @@ async function run() {
   ab('wait', '--text', 'Not running');
   ab('screenshot', join(evidence, 'saved-unknown-context.png'));
   if (layoutOnly) await capture('saved');
-  // The compact state is a real editor, not a second input or a rewritten draft.
-  const isCompact = `document.querySelector('[aria-label^="Model:"]').getBoundingClientRect().height === 0`;
-  const input = '[aria-label="Message"]';
-  const draft = 'First draft line\nSecond draft line\nThird draft line';
-  for (const [w,h] of [[320,640], [390,400], [1280,800]]) {
-    ab('set', 'viewport', String(w), String(h));
-    await until(isCompact);
-    const collapsed = evaluate(geometry);
-    if (collapsed.problems.length) throw new Error(collapsed.problems.join(', '));
-    ab('fill', input, draft);
-    await until(`!(${isCompact})`);
-    evaluate(`window.editor = document.querySelector('${input}'); editor.setSelectionRange(7,12); true`);
-    const expandedHeight = evaluate(`editor.getBoundingClientRect().height`);
-    ab('click', '[aria-label^="Model:"]');
-    ab('wait', '[aria-label="Search models"]');
-    if (evaluate(isCompact)) throw new Error('Opening a portalled model picker collapsed the composer');
-    ab('fill', '[aria-label="Search models"]', 'beta');
-    if (evaluate(isCompact)) throw new Error('Focusing portalled search collapsed the composer');
-    ab('press', 'Escape');
-    await until(`document.activeElement.matches('[aria-label^="Model:"]')`);
-    if (evaluate(isCompact)) throw new Error('Return focus collapsed the composer');
-    ab('click', '[data-slot="transcript"]');
-    await until(isCompact);
-    if (!evaluate(`editor === document.querySelector('${input}') && editor.value === ${JSON.stringify(draft)} && editor.selectionStart === 7 && editor.selectionEnd === 12 && editor.getBoundingClientRect().height < ${expandedHeight}`)) throw new Error('Collapse lost editor identity, draft, selection, or single-line height');
-    ab('screenshot', join(evidence, `compact-draft-${w}x${h}.png`));
-    ab('focus', input);
-    if (!evaluate(`editor.selectionStart === 7 && editor.selectionEnd === 12 && editor.value === ${JSON.stringify(draft)}`)) throw new Error('Expansion lost the selection or multiline draft');
-    ab('screenshot', join(evidence, `expanded-draft-${w}x${h}.png`));
-    ab('click', '[data-slot="transcript"]');
-  }
-  if (process.argv.includes('--compact-only')) {
-    // Pointer Send from compact must not relocate before click or submit twice.
-    ab('set', 'viewport', '390', '844');
-    ab('fill', input, Array.from({length:60}, (_,i) => `Transcript line ${i+1}`).join('\n\n'));
-    ab('click', '[data-slot="transcript"]');
-    await until(isCompact);
-    ab('click', '[aria-label="Send"]');
-    ab('wait', '--text', 'echo: Transcript line 1');
-    await until(`!document.querySelector('[aria-label="Stop"]')`);
-    if (evaluate(`sent.filter(m=>m.action?._tag==='steer').length`) !== 1) throw new Error('Compact Send was lost or submitted twice');
-    ab('click', '[data-slot="transcript"]');
-    await until(isCompact);
-    evaluate(`window.transcript = document.querySelector('[data-slot="transcript"]'); transcript.scrollTop = 200; true`);
-    await until(`!!document.querySelector('[aria-label="Scroll to bottom"]')`);
-    const scroll = evaluate(`transcript.scrollTop`);
-    ab('focus', input);
-    ab('fill', input, draft);
-    if (Math.abs(evaluate(`transcript.scrollTop`) - scroll) > 1) throw new Error('Expanding composer moved the reader in history');
-    ab('click', '[data-slot="transcript"]');
-    await until(isCompact);
-    if (Math.abs(evaluate(`transcript.scrollTop`) - scroll) > 1) throw new Error('Collapsing composer moved the reader in history');
-    ab('click', '[aria-label="Scroll to bottom"]');
-    await until(`transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 2`);
-    ab('focus', input);
-    await until(`transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 2`);
-    ab('click', '[data-slot="transcript"]');
-    await until(`(${isCompact}) && transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 2`);
-    ab('fill', input, 'live context');
-    ab('click', '[aria-label="Send"]');
-    await until(`!!document.querySelector('[aria-label="Stop"]')`);
-    ab('fill', input, 'queued from compact');
-    ab('click', '[data-slot="transcript"]');
-    await until(isCompact);
-    ab('click', '[aria-label="steer"]');
-    ab('wait', '--text', 'Queued messages (1)');
-    if (!evaluate(isCompact)) throw new Error('Compact action unexpectedly expanded composer');
-    ab('focus', input);
-    ab('click', '[aria-label^="Delivery:"]');
-    if (evaluate(isCompact)) throw new Error('Delivery menu collapsed composer');
-    ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter Add work after the current task.');
-    ab('click', '[data-slot="transcript"]');
-    await until(isCompact);
-    if (!evaluate(`document.querySelector('[aria-label="Queued messages"]').getBoundingClientRect().height > 0`)) throw new Error('Compact composer hid queued input');
-    // Paste an image into the existing editor, then leave it unfocused.
-    ab('focus', input);
-    evaluate(`(() => { const bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1cAAAAASUVORK5CYII='),c=>c.charCodeAt(0)); const data=new DataTransfer(); data.items.add(new File([bytes], 'compact.png', {type:'image/png'})); editor.dispatchEvent(new ClipboardEvent('paste', {bubbles:true, clipboardData:data})); return true; })()`);
-    await until(`!!document.querySelector('[aria-label="Remove compact.png"]')`);
-    ab('click', '[data-slot="transcript"]');
-    await until(isCompact);
-    if (!evaluate(`document.querySelector('[aria-label="Attachments"]').getBoundingClientRect().height > 0`)) throw new Error('Compact composer hid attachment');
-    ab('screenshot', join(evidence, 'compact-pending-input.png'));
-    ab('click', '[aria-label="Remove compact.png"]');
-    ab('click', '[aria-label="Stop"]');
-    ab('wait', '--text', 'Paused queue (1)');
-    ab('click', '[aria-label="Edit queued message"]');
-    await until(`!(${isCompact}) && document.activeElement === editor && editor.value === 'queued from compact'`);
-    ab('open', `${appUrl}/new`);
-    await until(`!!document.querySelector('[aria-label="First message"]')`);
-    if (!evaluate(`document.querySelector('[aria-label^="Model:"]').getBoundingClientRect().height > 0`)) throw new Error('New-session composer was collapsed');
-    writeFileSync(join(evidence, 'result.json'), JSON.stringify({ outcome:'passed', revision:spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).stdout.trim(), dirty:true, node:process.version, cli:'test/fake-pi.mjs', modelCalls:0, checks:['compact/expanded desktop and mobile geometry','portal focus','draft/caret/editor identity','compact Send/Stop exactly once','reader scroll and bottom pinning','visible queue and attachments','restore expands','new session unchanged'], limitations:['Headless Chromium: reduced viewport, not an OS software keyboard or Safari.'] }, null, 2));
-    console.log('PASS: compact composer, preserved editor/draft/caret, portal controls, pending input, scroll and new-session isolation');
-    return;
-  }
   if (!evaluate(`(() => { const b = document.querySelector('button[aria-label="Context usage"]'); return !!b && b.textContent.trim() === '1k' && b.getAttribute('aria-description') === 'Context usage unavailable'; })()`)) throw new Error('Unknown context must show the window alone and say usage is unavailable');
   ab('click', '[aria-label="Context usage"]');
   ab('wait', '--text', 'Context usage unavailable');
@@ -470,7 +374,6 @@ async function run() {
   ab('--init-script', observe, 'open', sessionUrl);
   await until(`!!document.querySelector('[aria-label="Message"]')`);
   if (evaluate(`matchMedia('(pointer: coarse)').matches`)) throw new Error('Desktop fixture has coarse pointer');
-  ab('focus', '[aria-label="Message"]');
   ab('click', '[aria-label^="Model:"]');
   if (evaluate(`document.activeElement.getAttribute('aria-label')`) !== 'Search models') throw new Error('Desktop settings did not focus search');
   evaluate(`(() => { [...document.querySelectorAll('[aria-label="Effort"] [role="radio"]')].find(r => r.textContent.trim() === 'xhigh').focus(); return true; })()`);
