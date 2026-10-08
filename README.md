@@ -58,8 +58,6 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
 - `PORT`: backend port; defaults to `7070`.
 - `PIANO_DB_PATH`: SQLite registry path; defaults to `$XDG_DATA_HOME/piano/piano.db` or `~/.local/share/piano/piano.db` when `XDG_DATA_HOME` is unset.
 - `PIANO_DEV_BACKEND`: Vite proxy target; defaults to `http://127.0.0.1:7070`.
-- `PI_CODING_AGENT_DIR`: Pi settings, credentials, and sessions directory; defaults to `~/.pi/agent`.
-- `PI_CODING_AGENT_SESSION_DIR`: override Pi's session storage directory.
 - `PIANO_PI_CLI`: override the bundled Pi CLI entry path.
 - `PIANO_PI_ARGS`: extra Pi arguments, such as `-e ./ext.ts`.
 - `PIANO_IDLE_MINUTES`: idle time before retiring a session's Pi process; defaults to `30`, or `0` to disable.
