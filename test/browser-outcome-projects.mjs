@@ -159,13 +159,16 @@ try {
   const runningUrl = await evaluate('location.href');
   const auditRecords = () => readFileSync(audit, 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.sessionId === running.sessionId);
   assert.equal(auditRecords().filter(e => e.event === 'spawn').length, 1);
-  // Archive hides the group under Archived; running work continues and the session stays reachable.
+  // Archive removes the group from the sidebar; running work continues and the session stays reachable,
+  // and its header still leads to the project, whose page offers Reopen.
   await ab('click', '[aria-label="Project menu for Subscriptions"]'); await menuitem('Archive project'); await settle();
   assert.equal(project('Subscriptions').archived, true);
   assert.equal(auditRecords().filter(e => e.event === 'exit').length, 0);
+  assert.equal(await evaluate(`[...document.querySelectorAll('nav button[aria-expanded]')].some(b => b.textContent === 'Subscriptions')`), false);
   await ab('open', runningUrl); await wait(`!!document.querySelector('[aria-label="Stop"]')`);
-  await button('Archived 1'); await settle();
-  await ab('click', '[aria-label="Project menu for Subscriptions"]'); await menuitem('Reopen project'); await settle();
+  await ab('click', 'header button.text-brand'); await wait(`document.querySelector('main h1')?.textContent === 'Subscriptions'`);
+  await ab('wait', '--text', 'This project is archived.'); await button('Reopen project');
+  await wait(`[...document.querySelectorAll('nav button[aria-expanded]')].some(b => b.textContent === 'Subscriptions')`);
   assert.equal(project('Subscriptions').archived, false);
   // Move and leave with the running member, without restarting or aborting it.
   await file('/hold', 'Improve accessibility');

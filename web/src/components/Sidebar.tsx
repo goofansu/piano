@@ -124,8 +124,8 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   const order = { i: 0 };
   const reveal = () => (revealing ? ({ "--i": String(order.i++) } as React.CSSProperties) : undefined);
 
+  // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
   const active = state.outcomeProjects.filter(p => !p.archived);
-  const archived = state.outcomeProjects.filter(p => p.archived);
   // Section headings exist only once there is a second kind of group to tell apart.
   const sectioned = state.outcomeProjects.length > 0;
   const groupProps = { state, send, select, openNew, reveal, onProjectDialog, current };
@@ -187,22 +187,6 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           <SidebarSection label="Projects" open={sectionOpen("projects")} onOpenChange={open => setSectionOpen("projects", open)}>
             <div className="flex flex-col gap-1">
               {active.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
-              {archived.length > 0 && (
-                <Collapsible open={openProjects.has("project:archived")} onOpenChange={open => setOpen("project:archived", open)}>
-                  <CollapsibleTrigger asChild>
-                    <button type="button" className={cn(row, "flex w-full items-center gap-1.5 rounded-lg pl-1.5 text-left text-sm text-ink-3 outline-none transition-colors duration-(--dur-hover) hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset")}>
-                      <ChevronRightIcon className={cn("size-4 shrink-0 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none", openProjects.has("project:archived") && "rotate-90")} />
-                      <span className="min-w-0 flex-1 truncate">Archived</span>
-                      <span className="pr-2 text-xs">{archived.length}</span>
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="disclosure-content">
-                    <div className="flex flex-col gap-1 py-1 pl-3">
-                      {archived.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
             </div>
           </SidebarSection>
         )}

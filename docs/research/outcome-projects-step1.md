@@ -18,7 +18,9 @@ organization does not confer verification or approval (INV-09–10).
   finds sessions by project name but carries no project commands yet; which ones are wanted is left to
   daily use, a deliberate deviation from the plan's palette-parity line for this slice. A project's `+` and `/projects/<id>` open its New page, which names the project, shows
   its goal and requires an explicit directory. Edit, archive and reopen live in the group's menu;
-  archived projects collapse under an **Archived** row. The session header links back to the project.
+  an archived project leaves the sidebar, and its own page (reached from a member session's header)
+  offers Reopen; a place for listing archived projects and sessions is still to be designed. The
+  session header links back to the project.
 - Closed repositories and archived sessions retain references, routing and workspace identity.
   Missing history/checkout is explained on the project page. History remains readable when only
   the checkout is missing. No missing session is recreated by grouping.
@@ -58,7 +60,7 @@ spanning API/web scratch repositories and another using a separate API session, 
 the session menu's Project submenu; opens each transcript from its group and verifies its own
 cwd/diff and header link; creates an empty project and reloads onto its route; renames a project;
 starts a grouped session only after choosing its cwd, with the project route surviving reload;
-archives/reopens under the Archived row, moves and leaves with that running session; observes one
+archives from the group menu and reopens from the project page, moves and leaves with that running session; observes one
 spawn and no abort/exit during organization; files the session on screen from the header menu and
 checks the palette finds sessions by project name while offering no project command; closes a repository without losing membership or direct-route history;
 removes a history file and a checkout; observes a disabled, explained row and remaining readable
