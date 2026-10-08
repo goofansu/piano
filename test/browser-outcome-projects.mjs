@@ -68,7 +68,14 @@ async function palette(text) {
   await button('Search sessions'); await wait(`!!document.querySelector('[cmdk-list]')`);
   await ab('fill', '[aria-label="Search sessions and commands"]', text); await settle();
 }
-/** Projects are created from a session's menu, which also files that session in the new project. */
+/** A project is created from the New page's project chip, or from a session's menu, which also files that session in it. */
+async function create(name) {
+  await ab('click', '[aria-label="Project"]'); await wait(`!!document.querySelector('[cmdk-item][data-value="__new"]')`);
+  await ab('click', '[cmdk-item][data-value="__new"]');
+  await ab('fill', '#project-name', name); await ab('fill', '#project-goal', `Goal for ${name}`); await button('Create project');
+  await wait(`document.querySelector('main h1')?.textContent === ${JSON.stringify(name)}`);
+  assert.equal(await evaluate(`document.querySelector('[aria-label="Project"]').textContent.trim()`), name);
+}
 async function createWithSession(name, sessionMenu) {
   await ab('find', 'first', `[aria-label=${JSON.stringify(`Session menu for ${sessionMenu}`)}]`, 'click');
   await wait(`!!document.querySelector('[role="menuitem"][aria-haspopup="menu"]')`);
@@ -103,21 +110,19 @@ try {
   await ab('wait', '--text', 'api');
   assert.deepEqual(registry().sessions, references);
   assert.equal(readFileSync(join(root, readdirSync(root).find(f => f.endsWith('.bak'))), 'utf8'), original);
-  // Before the first project the sidebar is unchanged: no section headings, no project controls.
+  // Before the first project the sidebar is unchanged: no section headings, no project controls. The chip on the New page creates the first one.
   assert.equal(await evaluate(`!!document.querySelector('nav h2')`), false);
-  await openGroup('api'); await openGroup('web');
-  await createWithSession('Launch subscriptions', 'API session');
+  await create('Launch subscriptions');
   assert.equal(await evaluate(`[...document.querySelectorAll('nav h2')].map(h => h.textContent).join()`), 'Projects,Repositories');
-  await file('Web session', 'Launch subscriptions');
+  await openGroup('api'); await openGroup('web');
+  await file('API session', 'Launch subscriptions'); await file('Web session', 'Launch subscriptions');
   assert.equal(member('one').outcomeProjectId, project('Launch subscriptions').id);
   assert.equal(member('two').outcomeProjectId, project('Launch subscriptions').id);
   await ab('screenshot', join(evidence, 'cross-repository.png'));
   await createWithSession('Improve accessibility', 'Accessibility session');
   assert.equal(member('three').outcomeProjectId, project('Improve accessibility').id);
-  // A project emptied by moving its only session out stays; its route survives reload.
-  await createWithSession('Empty project', 'Web session'); await file('Web session', 'Launch subscriptions');
-  await ab('click', '[aria-label="New session in Empty project"]');
-  await wait(`document.querySelector('main h1')?.textContent === 'Empty project'`); await ab('reload');
+  // An empty project is usable; its route survives reload.
+  await create('Empty project'); await ab('reload');
   await wait(`document.querySelector('main h1')?.textContent === 'Empty project'`);
   await openGroup('Empty project'); await ab('wait', '--text', 'No sessions yet');
   assert.equal(registry().outcomeProjects.length, 3);
@@ -154,13 +159,16 @@ try {
   const runningUrl = await evaluate('location.href');
   const auditRecords = () => readFileSync(audit, 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.sessionId === running.sessionId);
   assert.equal(auditRecords().filter(e => e.event === 'spawn').length, 1);
-  // Archive hides the group under Archived; running work continues and the session stays reachable.
+  // Archive removes the group from the sidebar; running work continues and the session stays reachable,
+  // and its header still leads to the project, whose page offers Unarchive.
   await ab('click', '[aria-label="Project menu for Subscriptions"]'); await menuitem('Archive project'); await settle();
   assert.equal(project('Subscriptions').archived, true);
   assert.equal(auditRecords().filter(e => e.event === 'exit').length, 0);
+  assert.equal(await evaluate(`[...document.querySelectorAll('nav button[aria-expanded]')].some(b => b.textContent === 'Subscriptions')`), false);
   await ab('open', runningUrl); await wait(`!!document.querySelector('[aria-label="Stop"]')`);
-  await button('Archived 1'); await settle();
-  await ab('click', '[aria-label="Project menu for Subscriptions"]'); await menuitem('Reopen project'); await settle();
+  await ab('click', 'header button.text-brand'); await wait(`document.querySelector('main h1')?.textContent === 'Subscriptions'`);
+  await ab('wait', '--text', 'This project is archived.'); await button('Unarchive project');
+  await wait(`[...document.querySelectorAll('nav button[aria-expanded]')].some(b => b.textContent === 'Subscriptions')`);
   assert.equal(project('Subscriptions').archived, false);
   // Move and leave with the running member, without restarting or aborting it.
   await file('/hold', 'Improve accessibility');
@@ -207,7 +215,7 @@ try {
   await button('Show sidebar'); await settle(); await ab('screenshot', join(evidence, 'mobile-sidebar.png'));
   assert.ok(await evaluate(`[...document.querySelectorAll('nav li')].every(row => { const [session, menu] = row.querySelectorAll('button'); return session.getBoundingClientRect().right <= menu.getBoundingClientRect().left; })`), 'session content and actions do not overlap');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ status: 'passed', registry: saved, original, node: process.version, audit: readFileSync(audit, 'utf8') }, null, 2));
-  console.log('PASS: grouping, empty/ungrouped, workspace diffs, rename/move/leave, running archive/reopen, closed directory, unavailable members, migration backup and restart');
+  console.log('PASS: grouping, empty/ungrouped, workspace diffs, rename/move/leave, running archive/unarchive, closed directory, unavailable members, migration backup and restart');
 } finally {
   try { await ab('snapshot'); await ab('screenshot', join(evidence, 'last-view.png')); } catch {}
   try { await ab('close'); } catch {}

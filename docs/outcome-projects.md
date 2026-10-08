@@ -61,7 +61,7 @@ instruction selection. Separate concurrent writing tasks still need separate wor
   ownership hierarchy or infer membership for every session in a selected repository.
 - The goal is organizational metadata in this slice: it is **not automatically sent to Pi**.
 - Archiving affects project visibility only. It is not session archive, abort, process release,
-  checkout removal, verification, approval or proof that the outcome was achieved. Reopening restores
+  checkout removal, verification, approval or proof that the outcome was achieved. Unarchiving restores
   the grouping; running work and direct session access remain available.
 - Unlinking a session does not delete it. Closing a repository does not cascade-delete the outcome
   project or its associations. A missing checkout/history is an explicit unavailable state, not
