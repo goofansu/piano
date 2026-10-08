@@ -160,7 +160,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
               <Alert className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
                 <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>This project is archived.</span>
-                  <Button variant="link" size="sm" className="h-auto p-0" disabled={!state.connected} onClick={() => { if (outcome) send({ _tag: "archive_outcome_project", id: outcome.id, archived: false }); }}>Reopen project</Button>
+                  <Button variant="link" size="sm" className="h-auto p-0" disabled={!state.connected} onClick={() => { if (outcome) send({ _tag: "archive_outcome_project", id: outcome.id, archived: false }); }}>Unarchive project</Button>
                 </AlertDescription>
               </Alert>
             )}

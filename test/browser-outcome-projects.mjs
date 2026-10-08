@@ -160,14 +160,14 @@ try {
   const auditRecords = () => readFileSync(audit, 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.sessionId === running.sessionId);
   assert.equal(auditRecords().filter(e => e.event === 'spawn').length, 1);
   // Archive removes the group from the sidebar; running work continues and the session stays reachable,
-  // and its header still leads to the project, whose page offers Reopen.
+  // and its header still leads to the project, whose page offers Unarchive.
   await ab('click', '[aria-label="Project menu for Subscriptions"]'); await menuitem('Archive project'); await settle();
   assert.equal(project('Subscriptions').archived, true);
   assert.equal(auditRecords().filter(e => e.event === 'exit').length, 0);
   assert.equal(await evaluate(`[...document.querySelectorAll('nav button[aria-expanded]')].some(b => b.textContent === 'Subscriptions')`), false);
   await ab('open', runningUrl); await wait(`!!document.querySelector('[aria-label="Stop"]')`);
   await ab('click', 'header button.text-brand'); await wait(`document.querySelector('main h1')?.textContent === 'Subscriptions'`);
-  await ab('wait', '--text', 'This project is archived.'); await button('Reopen project');
+  await ab('wait', '--text', 'This project is archived.'); await button('Unarchive project');
   await wait(`[...document.querySelectorAll('nav button[aria-expanded]')].some(b => b.textContent === 'Subscriptions')`);
   assert.equal(project('Subscriptions').archived, false);
   // Move and leave with the running member, without restarting or aborting it.
@@ -215,7 +215,7 @@ try {
   await button('Show sidebar'); await settle(); await ab('screenshot', join(evidence, 'mobile-sidebar.png'));
   assert.ok(await evaluate(`[...document.querySelectorAll('nav li')].every(row => { const [session, menu] = row.querySelectorAll('button'); return session.getBoundingClientRect().right <= menu.getBoundingClientRect().left; })`), 'session content and actions do not overlap');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ status: 'passed', registry: saved, original, node: process.version, audit: readFileSync(audit, 'utf8') }, null, 2));
-  console.log('PASS: grouping, empty/ungrouped, workspace diffs, rename/move/leave, running archive/reopen, closed directory, unavailable members, migration backup and restart');
+  console.log('PASS: grouping, empty/ungrouped, workspace diffs, rename/move/leave, running archive/unarchive, closed directory, unavailable members, migration backup and restart');
 } finally {
   try { await ab('snapshot'); await ab('screenshot', join(evidence, 'last-view.png')); } catch {}
   try { await ab('close'); } catch {}

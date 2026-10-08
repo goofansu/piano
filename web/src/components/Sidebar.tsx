@@ -371,7 +371,7 @@ function OutcomeGroup({ project, current, open, onOpenChange, state, send, selec
             <DropdownMenuGroup>
               <DropdownMenuItem disabled={!state.connected} onSelect={() => onProjectDialog({ project })}><PencilIcon /> Edit project</DropdownMenuItem>
               <DropdownMenuItem disabled={!state.connected} onSelect={() => send({ _tag: "archive_outcome_project", id: project.id, archived: !project.archived })}>
-                {project.archived ? <><ArchiveRestoreIcon /> Reopen project</> : <><ArchiveIcon /> Archive project</>}
+                {project.archived ? <><ArchiveRestoreIcon /> Unarchive project</> : <><ArchiveIcon /> Archive project</>}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
