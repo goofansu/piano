@@ -44,6 +44,7 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
   npm run lint
   ```
 
+- `npm run lint` runs Biome and `@shadcn/lint` via ESLint. Run `npm run lint:tailwind` for Tailwind checks alone. Configure rules in `eslint.config.mjs`; currently it rejects unknown classes using the UI's Tailwind theme, including inside `components/ui`. Inline ESLint directives are ignored for this dedicated check so legacy React Hooks directives do not interfere.
 - `npm install` sets up a Husky pre-commit hook that runs `npm run lint`; a lint error blocks the commit.
 
 - Tests use fake Pi and need no model credentials.
