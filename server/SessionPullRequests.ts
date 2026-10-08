@@ -108,7 +108,8 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
     if (!(yield* registry.setSessionPullRequest(expected, link))) return yield* failure("The session's pull request changed during lookup. Refresh and try again.");
   });
   const result = (s: SessionEntry, forceDiscovery = false): Effect.Effect<SessionPullRequest, PullRequestError | RegistryError> => Effect.gen(function* () {
-    if (!forceDiscovery && s.pullRequest === null) return { link: null, pullRequest: null, discovery: false };
+    // Reads only refresh an existing association; branch lookup requires an explicit action.
+    if (!forceDiscovery && !s.pullRequest) return { link: null, pullRequest: null, discovery: false };
     if (!forceDiscovery && s.pullRequest) {
       const pullRequest = yield* view(s.pullRequest.url, yield* hostFor(s)).pipe(Effect.result);
       // A failed lookup retains the association, not stale success/checks.

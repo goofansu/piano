@@ -479,7 +479,7 @@ export type SessionPullRequestLink = typeof SessionPullRequestLink.Type;
 export const SessionPullRequest = Schema.Struct({
   link: Schema.NullOr(SessionPullRequestLink),
   pullRequest: Schema.NullOr(PullRequest),
-  /** Removal disables discovery until explicitly requested again. */
+  /** An explicit branch lookup found no association; ordinary reads never discover. */
   discovery: Schema.Boolean,
   error: Schema.optional(Schema.String),
 });

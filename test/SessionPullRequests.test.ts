@@ -42,13 +42,17 @@ async function fixture(t: TestContext) {
 
 test("INV-01/07: discovers by branch AND head repository, pins identity across branch changes/restart, scopes manual links/removal to a session", async t => {
   const f = await fixture(t);
-  const first = await f.get();
+  // Reading an unlinked session must not discover or persist a branch association.
+  assert.deepEqual(await f.get(), { link: null, pullRequest: null, discovery: false });
+  assert.equal((await f.runtime.runPromise(f.registry.get)).sessions[0]?.pullRequest, undefined);
+  const first = await f.change({ action: "discover" });
   assert.equal(first.pullRequest?.number, 42); assert.equal(first.link?.source, "branch");
   assert.equal(first.pullRequest?.checks, "success"); assert.equal(first.pullRequest?.review, "approved");
   f.git("switch", "-qc", "next");
   f.control({ prs: [{ ...candidate(42), state: "MERGED" }, candidate(43, "next")] });
   assert.equal((await f.get()).pullRequest?.state, "merged");
-  assert.equal((await f.get("two")).pullRequest?.number, 43);
+  assert.deepEqual(await f.get("two"), { link: null, pullRequest: null, discovery: false });
+  assert.equal((await f.change({ action: "discover" }, "two")).pullRequest?.number, 43);
   const linked = await f.change({ action: "link", url: "https://github.com/EXAMPLE/REPO/pull/43/files?diff=split#x" });
   assert.equal(linked.link?.url, "https://github.com/example/repo/pull/43"); assert.equal(linked.link?.source, "manual");
   await f.change({ action: "remove" });
@@ -69,18 +73,18 @@ test("INV-01/07: discovers by branch AND head repository, pins identity across b
 test("unknown/auth/malformed results are not healthy absence; explicit link validation and missing checkout preserve identity", async t => {
   const f = await fixture(t);
   f.control({ error: "auth failed" });
-  assert.match((await f.get()).error!, /authentication/);
+  assert.match((await f.change({ action: "discover" })).error!, /authentication/);
   f.git("remote", "set-url", "origin", "https://unsupported.example/example/repo.git");
-  assert.match((await f.get()).error!, /GitHub integration remote/);
+  assert.match((await f.change({ action: "discover" })).error!, /GitHub integration remote/);
   f.git("remote", "set-url", "origin", "git@github.com:example/repo.git");
   f.control({ malformed: true });
-  assert.match((await f.get()).error!, /invalid/);
+  assert.match((await f.change({ action: "discover" })).error!, /invalid/);
   f.control({ prs: [candidate(42), candidate(43)] });
-  assert.match((await f.get()).error!, /Several/);
+  assert.match((await f.change({ action: "discover" })).error!, /Several/);
   for (const url of ["https://github.com/example/repo/issues/42", "https://github.com.evil/example/repo/pull/42", "https://secret@github.com/example/repo/pull/42", "file:///tmp/pr"]) {
     await assert.rejects(f.change({ action: "link", url }), /GitHub pull request URL/);
   }
-  f.control({ prs: [candidate(42)] }); await f.get();
+  f.control({ prs: [candidate(42)] }); await f.change({ action: "discover" });
   f.control({ error: "offline" });
   const offline = await f.get();
   assert.equal(offline.link?.url, candidate(42).url); assert.equal(offline.pullRequest, null); assert.ok(offline.error);
@@ -102,7 +106,7 @@ test("exe.dev integration routes discovery and saved/manual PR reads through gh 
   f.git("remote", "set-url", "origin", `https://${host}/example/repo.git`);
   const proxy = { prs: [candidate(42)], expectedHost: host, expectedRepo: `${host}/example/repo` };
   f.control(proxy);
-  const discovered = await f.get();
+  const discovered = await f.change({ action: "discover" });
   assert.deepEqual(discovered.link, { url: candidate(42).url, source: "branch", apiHost: host });
   assert.equal(discovered.pullRequest?.number, 42);
   assert.equal(process.env.GH_HOST, "unrelated.example", "host routing is child-local");
@@ -142,7 +146,7 @@ test("INV-07: late discovery cannot undo removal/deletion or attach a candidate 
     await f.runtime.runPromise(f.registry.addSession(f.repo, id));
     const started = join(f.root, `${id}-started`), release = join(f.root, `${id}-release`);
     f.control({ prs: [candidate(42)], gate: { started, release } });
-    const pending = f.get(id).then(value => ({ value }), error => ({ error: String(error) }));
+    const pending = f.change({ action: "discover" }, id).then(value => ({ value }), error => ({ error: String(error) }));
     for (let n = 0; !existsSync(started); n++) { if (n > 300) throw new Error("Discovery did not start"); await delay(10); }
     if (mutation === "remove") await f.change({ action: "remove" }, id);
     if (mutation === "manual") await f.change({ action: "link", url: candidate(77).url }, id);
