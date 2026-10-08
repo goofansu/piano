@@ -87,6 +87,22 @@ After a phase passes its required verification and review, commit its changes an
 branch to its upstream. Report the commit and push outcome; a blocked push is not completion.
 Pushing changes does not authorize rebuilding or deploying the user's instance.
 
+## GitHub on exe.dev
+
+When the git remote uses `github.int.exe.xyz`, use the exe.dev integration for GitHub CLI
+operations too: prefix `gh` commands with `GH_HOST=github.int.exe.xyz` and specify `--repo owner/repo`.
+The integration supplies authentication; a plain `gh` login error is not evidence that access is
+missing. Try the integration before asking the user to run `gh auth login` or provide a token.
+
+```bash
+GH_HOST=github.int.exe.xyz gh pr list --repo goofansu/piano
+GH_HOST=github.int.exe.xyz gh pr create --repo goofansu/piano --head "$(git branch --show-current)" --title "..." --body "..."
+```
+
+Check for an existing PR before creating one, and report the returned GitHub URL.
+See the [exe.dev GitHub integration docs](https://exe.dev/docs/integrations-github.md) for setup
+or integration permission failures.
+
 ## Design
 
 Follow Codex/T3 Code's **quiet UI**: show only what helps users decide or act. Keep the main view

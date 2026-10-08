@@ -323,6 +323,18 @@
   text-underline-offset: 0.15em;
 }
 .prose-chat a:hover { text-decoration-color: var(--brand); }
+.prose-chat .github-link {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+.prose-chat .github-link-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-inline-end: 0.25em;
+  vertical-align: -0.125em;
+}
 .prose-chat code {
   background: var(--fill);
   border-radius: 0.3rem;
