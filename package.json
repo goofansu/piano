@@ -25,5 +25,18 @@
   },
   "workspaces": [
     "web"
-  ]
+  ],
+  "overrides": {
+    "shell-quote": "^1.11.0",
+    "source-map-js": "^1.2.2",
+    "mermaid": {
+      "katex": "^0.18.2"
+    }
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "@google/genai": false,
+    "fsevents": false,
+    "protobufjs": false
+  }
 }
