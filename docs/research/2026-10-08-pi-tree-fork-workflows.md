@@ -5,6 +5,8 @@ its exact Pi **1.1.0** dependency, and upstream tag
 `abe508e1b89912adde45528136c3221eb69acdd7`.
 This extends the [Pi 1.0.2 feasibility note](2026-10-07-pi-tree-fork.md), refreshing its
 version checkpoint and product recommendations. It is research, **not implemented behavior or a new ADR**.
+The [stacked implementation plan](../pi-tree-fork-plan.md) applies these findings to five visible,
+individually verifiable feature PRs on the rebased SQLite-registry baseline.
 
 ## Recommendation
 
