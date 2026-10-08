@@ -96,7 +96,7 @@ async function file(sessionMenu, projectName) {
 }
 /** The sidebar's view menu: Group by Folder, Project or None. */
 async function groupBy(option) {
-  await button('View options'); await wait(`!!document.querySelector('[role="menuitem"][aria-haspopup="menu"]')`);
+  await ab('find', 'role', 'button', 'click', '--name', 'View:'); await wait(`!!document.querySelector('[role="menuitem"][aria-haspopup="menu"]')`);
   await ab('find', 'role', 'menuitem', 'hover', '--name', 'Group by');
   await wait(`[...document.querySelectorAll('[role="menuitemradio"]')].some(i => i.textContent.trim() === ${JSON.stringify(option)})`); await settle();
   await ab('find', 'role', 'menuitemradio', 'click', '--name', option, '--exact');

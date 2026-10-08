@@ -63,7 +63,7 @@ async function capture(name) {
   writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot'));
 }
 async function appearance(name) {
-  await click('Appearance'); await ab('find', 'role', 'menuitemradio', 'click', '--name', name, '--exact');
+  await ab('find', 'role', 'button', 'click', '--name', 'View:'); await ab('find', 'role', 'menuitem', 'hover', '--name', 'Appearance'); await ab('wait', '--fn', `!!document.querySelector('[role="menuitemradio"]')`); await ab('find', 'role', 'menuitemradio', 'click', '--name', name, '--exact');
 }
 const group = '[role="group"][aria-label="show-me skill"]';
 const trigger = `${group} button[aria-expanded]`;

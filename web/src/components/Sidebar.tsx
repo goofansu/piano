@@ -1,12 +1,12 @@
 import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, ChevronDownIcon, ChevronRightIcon, GitBranchIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
 import { Keys, PianoMark } from "@/components/PianoMark";
 import { useSessionActions } from "@/components/SessionActions";
 import { Hint } from "@/components/Shortcut";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -146,8 +146,6 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           </TooltipTrigger>
           <TooltipContent><Hint of={["mod", "K"]}>Search and commands</Hint></TooltipContent>
         </Tooltip>
-        <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
-        <ThemeToggle />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label="Hide sidebar" onClick={onHide}>
@@ -158,7 +156,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           <TooltipContent>Hide sidebar</TooltipContent>
         </Tooltip>
       </div>
-      <div className="px-3 pb-3">
+      <div className="px-3 pb-2">
         <Button
           variant="outline"
           className={cn("h-10 w-full justify-start rounded-xl border-line bg-conversation shadow-none transition-[background-color,border-color,color] duration-(--dur-hover)", state.view.kind === "new" && !state.view.cwd && !state.view.outcomeProjectId && "border-brand/25 bg-brand-soft text-brand hover:bg-brand-soft")}
@@ -166,6 +164,10 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         >
           <PlusIcon /> New session
         </Button>
+      </div>
+      {/* The list's own caption is its view menu: it reads as the current grouping and sort, and opens the choices. */}
+      <div className="flex h-7 shrink-0 items-center px-3">
+        <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
       </div>
       <ScrollArea className="min-h-0 flex-1">
       <nav className="relative px-3 pb-4" aria-label="Sessions">
@@ -176,24 +178,30 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   );
 }
 
-/** One menu for how the list reads: grouped by folder, by project or not at all, and sorted by name or activity. */
+const APPEARANCES = [
+  { value: "light", label: "Light", icon: SunIcon },
+  { value: "dark", label: "Dark", icon: MoonIcon },
+  { value: "system", label: "System", icon: MonitorIcon },
+] as const;
+const groupCaption: Record<GroupBy, string> = { folder: "By folder", project: "By project", none: "Ungrouped" };
+
+/** One menu for how the list reads: grouped by folder, by project or not at all, sorted by name or activity; appearance lives here too. */
 function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: SortBy; onChange: (change: { groupBy?: GroupBy; sortBy?: SortBy }) => void }) {
-  const current = (label: string) => <span className="ml-auto pl-4 text-muted-foreground">{label}</span>;
+  const { setTheme, theme } = useTheme();
+  const sortLabel = SORT_BY.find(s => s.value === sortBy)?.label ?? "";
+  // The label takes the slack so the current value sits beside the trigger's own chevron.
+  const choice = (label: string, value: string) => <><span className="flex-1">{label}</span><span className="text-muted-foreground">{value}</span></>;
   return (
     <DropdownMenu>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="View options">
-              <SlidersHorizontalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Group and sort</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="end" className="min-w-52">
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="-ml-2 h-7 gap-1 px-2 text-xs font-medium text-muted-foreground hover:text-ink-2">
+          <span className="sr-only">View: </span>{groupCaption[groupBy]} · {sortLabel}
+          <ChevronDownIcon className="size-3.5 text-ink-3" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-48">
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Group by{current(GROUP_BY.find(g => g.value === groupBy)?.label ?? "")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>{choice("Group by", GROUP_BY.find(g => g.value === groupBy)?.label ?? "")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuRadioGroup value={groupBy} onValueChange={value => onChange({ groupBy: value as GroupBy })}>
               {GROUP_BY.map(g => <DropdownMenuRadioItem key={g.value} value={g.value}>{g.label}</DropdownMenuRadioItem>)}
@@ -201,10 +209,20 @@ function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: Sor
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Sort by{current(SORT_BY.find(s => s.value === sortBy)?.label ?? "")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>{choice("Sort by", sortLabel)}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuRadioGroup value={sortBy} onValueChange={value => onChange({ sortBy: value as SortBy })}>
               {SORT_BY.map(s => <DropdownMenuRadioItem key={s.value} value={s.value}>{s.label}</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>{choice("Appearance", APPEARANCES.find(a => a.value === (theme ?? "system"))?.label ?? "")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            {/* The chosen mode carries the check; the icons say what each one does. */}
+            <DropdownMenuRadioGroup value={theme ?? "system"} onValueChange={setTheme}>
+              {APPEARANCES.map(({ value, label, icon: Icon }) => <DropdownMenuRadioItem key={value} value={value}><Icon /> {label}</DropdownMenuRadioItem>)}
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
