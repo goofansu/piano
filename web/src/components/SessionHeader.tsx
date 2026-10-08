@@ -3,7 +3,7 @@ import { ArchiveIcon, BookmarkIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPu
 import { IconButton } from "@/components/IconButton";
 import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevPath } from "@/lib/format";
 import type { AppState } from "@/store";
@@ -42,12 +42,12 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-96 max-w-[calc(100vw-2rem)]">
+          <DropdownMenuGroup className="flex items-center justify-between">
+            <DropdownMenuLabel className="text-muted-foreground">Session details</DropdownMenuLabel>
+            <DropdownMenuItem onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /> Copy all</DropdownMenuItem>
+          </DropdownMenuGroup>
           {/* Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible. */}
-          <dl className="flex select-text flex-wrap items-center gap-x-3 gap-y-1 px-2 py-2 font-mono text-xs">
-            <div className="mb-1 w-full">
-              <dt className="sr-only">Session ID</dt>
-              <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
-            </div>
+          <dl className="flex select-text flex-col gap-1 px-2 py-2 font-mono text-xs">
             <div className="min-w-0">
               <dt className="sr-only">Working directory</dt>
               <dd className="break-all">{session?.cwd}</dd>
@@ -56,10 +56,11 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
               <dt className="sr-only">Git branch</dt>
               <dd className="flex items-center gap-1"><GitBranchIcon aria-hidden="true" className="size-3 shrink-0" /><span className="break-all">{branch}</span></dd>
             </div>}
+            <div className="min-w-0">
+              <dt className="sr-only">Session ID</dt>
+              <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
+            </div>
           </dl>
-          <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /> Copy details</DropdownMenuItem>
-          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>

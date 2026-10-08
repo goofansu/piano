@@ -34,7 +34,7 @@ const sessionFile = join(sessions, 'header.jsonl');
 const entries = [{ type: 'session', version: 3, id: sessionId, cwd: repo, timestamp }];
 for (let n = 0; n < 40; n++) entries.push({ type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp, message: { role: 'user', content: `Message ${n}\n\nTranscript scrolling check.`, timestamp: n } });
 writeFileSync(sessionFile, entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId, title: 'Header verification: copy details with a long session title to truncate on mobile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId, title: 'Header verification: copy all with a long session title to truncate on mobile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
 const fake = join(root, 'fake.mjs');
 writeFileSync(fake, readFileSync('test/fake-pi.mjs', 'utf8').replace('const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";', `const sessionId = args.includes("--session") ? ${JSON.stringify(sessionId)} : args[args.indexOf("--session-id") + 1] || "nosession";`));
 const backendPort = await freePort();
@@ -116,8 +116,13 @@ try {
     assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().top`), top);
     await menu();
     await ab('snapshot');
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['Copy details', 'Changes', 'Pull request', 'Rename', 'Archive', 'Delete']);
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [sessionId, repo, 'header-test']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['Copy all', 'Changes', 'Conversation tree', 'Bookmark', 'Pull request', 'Rename', 'Archive', 'Delete']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [repo, 'header-test', sessionId]);
+    assert.ok(await evaluate(`(() => {
+      const heading = document.querySelector('[role="menu"] [data-slot="dropdown-menu-label"]').getBoundingClientRect();
+      const copy = document.querySelector('[role="menu"] [role="menuitem"]').getBoundingClientRect();
+      return heading.right <= copy.left && Math.abs(heading.top + heading.height / 2 - copy.top - copy.height / 2) <= 2;
+    })()`), 'Copy all sits to the right of the section heading');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
     assert.ok(await evaluate(`(() => {
       const menu = document.querySelector('[role="menu"]');
@@ -128,7 +133,7 @@ try {
       });
     })()`), 'Full metadata wraps within the viewport and remains selectable');
     await ab('screenshot', join(evidence, `menu-${width}.png`));
-    await item('Copy details');
+    await item('Copy all');
     await assertCopy();
     await assertToastCentered('Session details copied', `width-${width}`);
     await menu(); await item('Rename');
@@ -149,7 +154,7 @@ try {
     return true;
   })()`);
   await ab('wait', '--fn', `document.querySelector('[aria-label="Resize sidebar"]')?.getAttribute('aria-valuenow') === '420'`);
-  await menu(); await item('Copy details'); await assertCopy();
+  await menu(); await item('Copy all'); await assertCopy();
   await assertToastCentered('Session details copied', 'desktop-resized');
   // Moving focus and clicking outside dismiss the non-modal menu; the trigger reopens it.
   await menu();
@@ -160,26 +165,26 @@ try {
 
   await ab('click', '[aria-label="Hide sidebar"]');
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Show sidebar"]') && !document.querySelector('[aria-label="Resize sidebar"]')`);
-  await menu(); await item('Copy details'); await assertCopy();
+  await menu(); await item('Copy all'); await assertCopy();
   await assertToastCentered('Session details copied', 'desktop-collapsed');
   await ab('click', '[aria-label="Show sidebar"]');
   await ab('wait', '--fn', `document.querySelector('[aria-label="Resize sidebar"]')?.getAttribute('aria-valuenow') === '420'`);
   // Metadata is not a keyboard stop; Enter reaches the single copy action.
   await ab('focus', '[aria-label="Session information and actions"]'); await ab('press', 'Enter');
   await ab('wait', '--fn', `document.activeElement?.getAttribute('role') === 'menuitem'`);
-  assert.equal(await evaluate('document.activeElement.textContent.trim()'), 'Copy details');
+  assert.equal(await evaluate('document.activeElement.textContent.trim()'), 'Copy all');
   await ab('press', 'Enter'); await assertCopy();
   await evaluate(`navigator.clipboard.writeText = async () => { window.lastToast = null; throw new Error('Denied'); }; true`);
-  await menu(); await item('Copy details'); await closed();
+  await menu(); await item('Copy all'); await closed();
   await assertToastCentered('Couldn’t copy session details.', 'desktop-error');
   await evaluate(`navigator.clipboard.writeText = async value => { window.lastToast = null; window.copies.push(value); await window.nativeWrite(value); }; true`);
 
   await ab('click', '[aria-label="Search sessions"]');
   await ab('wait', '--fn', `!!document.querySelector('[role="dialog"]')`);
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
-  assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item][data-value="Copy details"]').length`), 1);
-  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy details');
-  await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy details'`);
+  assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item][data-value="Copy all"]').length`), 1);
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
+  await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy all'`);
   assert.ok(await evaluate(`[...document.querySelectorAll('[cmdk-item]')].some(node => node.textContent.includes('Header verification'))`), 'exact command outranks the competing session');
   assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item] mark').length`), 0);
   await ab('screenshot', join(evidence, 'copy-details-ranked.png'));
@@ -187,8 +192,8 @@ try {
   await ab('press', 'Backspace');
   await ab('wait', '--fn', `document.querySelector('[aria-label="Search sessions and commands"]').value === ''`);
   await ab('wait', '--fn', `document.querySelector('[cmdk-list]').scrollTop === 0`);
-  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy details');
-  await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy details'`);
+  await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
+  await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy all'`);
   await ab('press', 'Enter'); await assertCopy();
   await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
   await ab('click', '[aria-label="Search sessions"]');
