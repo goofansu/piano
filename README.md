@@ -44,6 +44,8 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
   npm run lint
   ```
 
+- `npm install` sets up a Husky pre-commit hook that runs `npm run lint`; a lint error blocks the commit.
+
 - Tests use fake Pi and need no model credentials.
 - Main directories: `server/` (backend), `web/` (React UI), `shared/` (wire schemas), `test/` (tests).
 - See [development docs](docs/README.md) for architecture, invariants, and verification guidance.
