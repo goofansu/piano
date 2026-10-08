@@ -50,7 +50,7 @@ async function until(js) {
   throw new Error(`Timed out: ${js}`);
 }
 const attached = `document.querySelectorAll('[aria-label="Attachments"] [data-slot="attachment"][data-state="done"]').length`;
-const transcriptImages = `document.querySelectorAll('img[alt="Attached image"]').length`;
+const transcriptImages = `document.querySelectorAll('img[alt="Attachment preview"]').length`;
 try {
   for (let i = 0; i < 60; i++) {
     if (server.exitCode !== null || frontend.exitCode !== null) throw new Error(serverLog);
@@ -73,8 +73,8 @@ try {
   assert.equal(evaluate(`document.querySelector('[aria-label="Send"]').disabled`), false, 'image-only send enabled');
   ab('click', '[aria-label="Send"]');
   await until(`${transcriptImages} === 1`);
-  await until(`document.querySelector('img[alt="Attached image"]').naturalWidth === 1`);
-  const url = evaluate(`document.querySelector('img[alt="Attached image"]').getAttribute('src')`);
+  await until(`document.querySelector('img[alt="Attachment preview"]').naturalWidth === 1`);
+  const url = evaluate(`document.querySelector('img[alt="Attachment preview"]').getAttribute('src')`);
   const response = evaluate(`(async () => {const r=await fetch('${url}');return {type:r.headers.get('content-type'),nosniff:r.headers.get('x-content-type-options'),data:btoa(String.fromCharCode(...new Uint8Array(await r.arrayBuffer())))};})()`);
   assert.equal(response.type, 'image/png');
   assert.equal(response.nosniff, 'nosniff');
@@ -116,7 +116,7 @@ try {
   ab('upload', 'input[type="file"]', image); ab('wait', '--text', 'Images must total 20 MiB or less.');
   assert.equal(evaluate(attached), 2, 'over-limit batch does not discard valid attachments');
   ab('click', '[aria-label="Send"]'); await until(`${transcriptImages} === 4`);
-  const lengths = evaluate(`(async () => Promise.all([...document.querySelectorAll('img[alt="Attached image"]')].slice(-2).map(async img => {const r=await fetch(img.src);return {status:r.status,bytes:(await r.arrayBuffer()).byteLength};})))()`);
+  const lengths = evaluate(`(async () => Promise.all([...document.querySelectorAll('img[alt="Attachment preview"]')].slice(-2).map(async img => {const r=await fetch(img.src);return {status:r.status,bytes:(await r.arrayBuffer()).byteLength};})))()`);
   assert.deepEqual(lengths, [{status:200,bytes:10485760}, {status:200,bytes:10485760}], 'full 20 MiB survives browser → WS → Pi → preview route');
   ab('reload'); await until(`${transcriptImages} === 4`);
   console.log('PASS: validation, picker/remove/reselect, image-only creation, paste/drop follow-up, image bytes, reload, scoped drafts, mobile/desktop, four-image cap and full 20 MiB upload/readback. Fake Pi; no real model claim.');

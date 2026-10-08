@@ -104,7 +104,7 @@ try {
     return { expanded: g.querySelector('button').getAttribute('aria-expanded'), location: g.querySelector('p').innerText,
       headings: [...prose.querySelectorAll('h2')].map(h => h.innerText), bullets: prose.querySelectorAll('li').length, strong: prose.querySelectorAll('strong').length,
       code: prose.querySelectorAll('pre code').length, raw: prose.innerText.includes('**'),
-      promptOpen: g.closest('article').getAttribute('aria-expanded') };
+      promptOpen: [...g.closest('article').querySelectorAll('button[aria-expanded="true"]')].some(b => !g.contains(b)) };
   })()`);
   observations.push({ name: 'opened', ...opened });
   assert.equal(opened.expanded, 'true');
@@ -112,14 +112,14 @@ try {
   assert.deepEqual(opened.headings, ['Views']);
   assert.equal(opened.bullets, 2); assert.equal(opened.strong, 2); assert.equal(opened.code, 1);
   assert.equal(opened.raw, false, 'markdown is rendered, not shown as source');
-  assert.equal(opened.promptOpen, null, 'opening the skill does not toggle the prompt around it');
+  assert.equal(opened.promptOpen, false, 'opening the skill does not toggle the prompt around it');
   for (const theme of ['Light', 'Dark']) { await appearance(theme); await capture(`expanded-${theme.toLowerCase()}-1440`); }
   // Keyboard: the trigger is reachable and toggles with Enter.
   await ab('eval', `document.querySelector('${trigger}').focus()`); await ab('press', 'Enter');
   assert.equal(await evaluate(`document.querySelector('${trigger}').getAttribute('aria-expanded')`), 'false');
   // The jump list names the prompt by its command.
-  await click('Jump to message'); await ab('wait', '[aria-label="Jump to message"][role="dialog"] [role="listitem"]');
-  const jump = await evaluate(`[...document.querySelectorAll('[aria-label="Jump to message"][role="dialog"] [role="listitem"]')].map(e => e.innerText.replace(/\\s+/g, ' ').trim())`);
+  await click('Jump to message'); await ab('wait', '[aria-label="Jump to message"][role="dialog"] li');
+  const jump = await evaluate(`[...document.querySelectorAll('[aria-label="Jump to message"][role="dialog"] li')].map(e => e.innerText.replace(/\\s+/g, ' ').trim())`);
   observations.push({ name: 'jump', jump });
   assert.ok(jump.some(label => label.includes('/skill:show-me Show me how sessions reach the browser.')), JSON.stringify(jump));
   assert.ok(!jump.some(label => label.includes('<skill')), JSON.stringify(jump));

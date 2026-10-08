@@ -29,13 +29,6 @@
       "style": {
         "useTemplate": "off",
         "noNonNullAssertion": "off"
-      },
-      "a11y": {
-        "useAriaPropsSupportedByRole": "warn",
-        "noRedundantAlt": "warn",
-        "useAnchorContent": "warn",
-        "useSemanticElements": "warn",
-        "noInteractiveElementToNoninteractiveRole": "warn"
       }
     }
   },

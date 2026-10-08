@@ -51,7 +51,7 @@ export interface PiSession {
    * attach again for a current snapshot, never replay commands or old deltas. */
   readonly events: Stream.Stream<SessionFrame, DeliveryOverflow>;
   /** Apply a browser action; command results belong only to the requesting caller. */
-  readonly act: (action: SessionAction) => Effect.Effect<void | SessionActionResult, PiSessionError>;
+  readonly act: (action: SessionAction) => Effect.Effect<SessionActionResult | undefined, PiSessionError>;
   /** Current state without subscribing. */
   readonly state: Effect.Effect<SessionState>;
 }
@@ -726,7 +726,7 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
 
-    const act = (action: SessionAction): Effect.Effect<void | SessionActionResult, PiSessionError> =>
+    const act = (action: SessionAction): Effect.Effect<SessionActionResult | undefined, PiSessionError> =>
       Effect.gen(function* () {
         if (announced) return yield* new PiSessionError({ reason: "exited", detail: "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume." });
         // Answer/abort/queue restoration do not supersede the command whose
@@ -776,7 +776,8 @@ const openSession = (spec: PiSessionSpec) =>
                 yield* scheduleRefresh("stats");
               }
             });
-            return yield* work.pipe(Effect.ensuring(endAbortingPrompt(operation)), Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
+            yield* work.pipe(Effect.ensuring(endAbortingPrompt(operation)), Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
+            return;
           }
           case "abort": {
             const work = Effect.gen(function* () {
@@ -799,7 +800,8 @@ const openSession = (spec: PiSessionSpec) =>
                 if (current.pendingPrompts.size === 0) aborting = undefined;
               })));
             });
-            return yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
+            yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
+            return;
           }
           case "restore_queue": {
             const messages = queuedMessagesOf(yield* child.request({ type: "clear_queue" }));
@@ -845,7 +847,8 @@ const openSession = (spec: PiSessionSpec) =>
               const resolution = yield* resolveDialog(dialog, action.cancelled ? "cancelled" : "answered", response);
               if (!resolution || resolution.reason === "expired" || resolution.reason === "recovery") return yield* new PiSessionError({ reason: "rejected", detail: "Dialog was already claimed or its host deadline elapsed. The answer was not sent." });
             });
-            return yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
+            yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
+            return;
           }
         }
       });

@@ -197,7 +197,8 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
         </div>
       </div>
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">
-        <div className="ml-auto flex shrink-0 items-center gap-2" aria-label="Session usage">
+        {/* biome-ignore lint/a11y/useSemanticElements: a <fieldset> brings form semantics and min-content sizing to a row of status buttons. */}
+        <div className="ml-auto flex shrink-0 items-center gap-2" role="group" aria-label="Session usage">
           <JumpTo messages={messages} />
           <Popover>
             <PopoverTrigger asChild>

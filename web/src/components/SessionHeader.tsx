@@ -26,7 +26,8 @@ export function SessionHeader({ state, send, onMenu, openNew, status, openChange
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {session ? <>
           <h1 className="truncate text-sm font-medium" title={title}>{title}</h1>
-          <p aria-label="Working directory" title={session.cwd} className="flex min-w-0 font-mono text-xs text-muted-foreground">
+          <p title={session.cwd} className="flex min-w-0 font-mono text-xs text-muted-foreground">
+            <span className="sr-only">Working directory: </span>
             {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
             <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
           </p>

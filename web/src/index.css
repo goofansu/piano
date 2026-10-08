@@ -547,9 +547,11 @@
   50% { opacity: 0.45; transform: scale(0.8); }
 }
 @media (prefers-reduced-motion: reduce) {
+  /* biome-ignore-start lint/complexity/noImportantStyles: the reduced-motion reset must beat every component's own motion. */
   *, ::before, ::after {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
   }
+  /* biome-ignore-end lint/complexity/noImportantStyles: range closes */
 }

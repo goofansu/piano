@@ -1,6 +1,6 @@
 import type { RenderMsg, ToolExecution } from "@shared/wire";
-import { ArrowDownIcon, CheckIcon, ChevronRightIcon, CopyIcon, SparklesIcon } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowDownIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, SparklesIcon } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { Keys } from "@/components/PianoMark";
@@ -209,6 +209,7 @@ function CopyResponse({ text }: { text: string }) {
 
 function UserMessage({ id, text, skill, attachments }: { id: string; text: string; skill: RenderMsg["skill"]; attachments: RenderMsg["attachments"] }) {
   const ref = useRef<HTMLDivElement>(null);
+  const textId = useId();
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
   // Measure against the cap while closed; re-measure when the column resizes.
@@ -224,20 +225,13 @@ function UserMessage({ id, text, skill, attachments }: { id: string; text: strin
   const clamped = !open && overflows;
   const long = overflows || open;
   const toggle = () => setOpen((o) => !o);
-  // A long prompt is its own control: click or press Enter to open and close it.
+  // A long prompt opens and closes from its toggle button, or by clicking anywhere on it.
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a pointer shortcut for the toggle button below, which keyboard users reach.
     <article
       id={messageAnchorId(id)}
-      className={cn("rounded-2xl border border-line bg-fill px-4 py-3.5 outline-none transition-colors", long && "cursor-pointer select-text hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring")}
-      tabIndex={long ? 0 : undefined}
-      aria-expanded={long ? open : undefined}
+      className={cn("rounded-2xl border border-line bg-fill px-4 py-3.5 transition-colors", long && "cursor-pointer select-text hover:border-line-strong")}
       onClick={() => long && !window.getSelection()?.toString() && toggle()}
-      onKeyDown={(e) => {
-        if (long && (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
-          e.preventDefault();
-          toggle();
-        }
-      }}
     >
       <Row glyph={<span className="font-semibold text-brand">›</span>}>
         <span className="sr-only">You said</span>
@@ -245,10 +239,19 @@ function UserMessage({ id, text, skill, attachments }: { id: string; text: strin
         {(text || !skill) && (
           <div
             ref={ref}
+            id={textId}
             className={cn("whitespace-pre-wrap break-words", skill && "mt-2", !open && "overflow-hidden", clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}
             style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
           >
             {text}
+          </div>
+        )}
+        {long && (
+          <div className="flex justify-end">
+            <Button variant="ghost" size="xs" className="-mr-2 text-ink-3" aria-expanded={open} aria-controls={textId} onClick={(e) => { e.stopPropagation(); toggle(); }}>
+              {open ? "Show less" : "Show more"}
+              <ChevronDownIcon className={cn("transition-transform duration-200", open && "rotate-180")} aria-hidden />
+            </Button>
           </div>
         )}
         <MessageAttachments items={attachments} />

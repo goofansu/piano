@@ -89,8 +89,8 @@ try {
   await evaluate(`window.copies = []; window.nativeWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = async value => { window.copies.push(value); await window.nativeWrite(value); }; true`);
   for (const [width, height] of [[1280, 900], [390, 844]]) {
     await ab('set', 'viewport', String(width), String(height));
-    assert.equal(await evaluate(`document.querySelector('[aria-label="Working directory"]').tagName`), 'P');
-    assert.equal(await evaluate(`document.querySelectorAll('[aria-label="Working directory"]').length`), 1);
+    assert.equal(await evaluate(`document.querySelector('main header p[title]').textContent.startsWith('Working directory: ')`), true);
+    assert.equal(await evaluate(`document.querySelectorAll('main header p[title]').length`), 1);
     assert.ok(await evaluate(`(() => {
       const create = document.querySelector('main header [aria-label="New session here"]').getBoundingClientRect();
       const menu = document.querySelector('[aria-label="Session information and actions"]').getBoundingClientRect();

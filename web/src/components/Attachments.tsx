@@ -104,8 +104,8 @@ function ImagePreview({ url }: { url: string }) {
     <AttachmentContent><AttachmentTitle>Attached image</AttachmentTitle><AttachmentDescription>Preview unavailable. Reopen the session to reload it.</AttachmentDescription></AttachmentContent>
   </Attachment>;
   return <Attachment orientation="vertical">
-    <AttachmentMedia variant="image"><img src={url} alt="Attached image" loading="lazy" onError={() => setFailed(true)} /></AttachmentMedia>
-    <AttachmentTrigger asChild><a href={url} target="_blank" rel="noreferrer" aria-label="Open attached image" onClick={e => e.stopPropagation()} /></AttachmentTrigger>
+    <AttachmentMedia variant="image"><img src={url} alt="Attachment preview" loading="lazy" onError={() => setFailed(true)} /></AttachmentMedia>
+    <AttachmentTrigger asChild><a href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}><span className="sr-only">Open attached image</span></a></AttachmentTrigger>
   </Attachment>;
 }
 /** The group clips overflow, so inline padding (offset by the margin) keeps the first tile's focus ring visible. */

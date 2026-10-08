@@ -15,7 +15,7 @@ interface Props {
 export function JumpTo({ messages }: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string>("bottom");
-  const list = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
   const entries = useMemo(() => jumpEntries(messages), [messages]);
   const total = entries.filter(entry => entry.kind === "user" || entry.kind === "assistant").length;
   // Opening reads where the reader is and centres that entry in the list.
@@ -45,12 +45,10 @@ export function JumpTo({ messages }: Props) {
       </PopoverTrigger>
       <PopoverContent side="top" align="end" collisionPadding={16} aria-label="Jump to message" className="w-[28rem] max-w-[calc(100vw-2rem)] p-0 font-sans">
         <p className="border-b border-line px-4 py-2.5 text-sm font-medium">Jump to…</p>
-        <div ref={list} className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1" role="list">
+        <ul ref={list} className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1">
           {entries.map(entry => (
-            <button
-              key={entry.id}
+            <li key={entry.id}><button
               type="button"
-              role="listitem"
               data-entry={entry.id}
               aria-current={entry.id === active ? "true" : undefined}
               onClick={() => go(entry)}
@@ -65,9 +63,9 @@ export function JumpTo({ messages }: Props) {
               </span>
               <span className="sr-only">{entry.kind === "user" ? "You said" : entry.kind === "assistant" ? "Pi said" : ""}</span>
               <span className={cn("min-w-0 flex-1 truncate", entry.kind === "user" && "text-ink")}>{entry.label}</span>
-            </button>
+            </button></li>
           ))}
-        </div>
+        </ul>
       </PopoverContent>
     </Popover>
     <Separator orientation="vertical" className="h-3!" />
