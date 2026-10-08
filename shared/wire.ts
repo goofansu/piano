@@ -230,6 +230,7 @@ export const SessionState = Schema.Struct({
   projectionError: Schema.optional(Schema.String),
   stateRefreshError: Schema.optional(Schema.String),
   statsRefreshError: Schema.optional(Schema.String),
+  historyOperation: Schema.optional(Schema.Struct({ requestId: Schema.String, outcome: Schema.Literals(["running", "success", "uncertain"]), detail: Schema.optional(Schema.String) })),
   /** Host observation used for retirement; no pending/unobserved work, not task success. */
   isQuiescent: Schema.optional(Schema.Boolean),
   closedReason: Schema.optional(Schema.String),
@@ -288,7 +289,11 @@ export const ConversationEntry = Schema.Struct({
   onCurrentPath: Schema.Boolean,
 });
 export type ConversationEntry = typeof ConversationEntry.Type;
+export const HistoryPosition = Schema.Struct({ generation: Schema.NullOr(Schema.String), revision: Schema.String, leafId: Schema.NullOr(Schema.String) });
+export type HistoryPosition = typeof HistoryPosition.Type;
 export const ConversationTree = Schema.Struct({
+  position: HistoryPosition,
+  bookmarkUnavailable: Schema.optional(Schema.String),
   sessionId: Schema.String, leafId: Schema.NullOr(Schema.String),
   entries: Schema.Array(ConversationEntry), total: Schema.Number, truncated: Schema.Boolean,
 });
@@ -306,6 +311,7 @@ export const SessionAction = Schema.Union([
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("restore_queue", {}),
   Schema.TaggedStruct("commands", {}),
+  Schema.TaggedStruct("bookmark", { requestId: Schema.String, entryId: Schema.String, label: Schema.String.check(Schema.isMaxLength(200)), expected: HistoryPosition }),
   Schema.TaggedStruct("conversation_tree", {}),
   Schema.TaggedStruct("conversation_detail", { entryId: Schema.String }),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
@@ -324,6 +330,7 @@ export type SessionAction = typeof SessionAction.Type;
 
 /** A command result for its caller, not a broadcast session event. */
 export const SessionActionResult = Schema.Union([
+  Schema.TaggedStruct("bookmark", { requestId: Schema.String, outcome: Schema.Literals(["success", "uncertain"]), detail: Schema.optional(Schema.String), tree: Schema.optional(ConversationTree) }),
   Schema.TaggedStruct("conversation_tree", { tree: ConversationTree }),
   Schema.TaggedStruct("conversation_detail", { detail: ConversationDetail }),
   Schema.TaggedStruct("queue_restored", { messages: Schema.Array(QueuedMessage) }),

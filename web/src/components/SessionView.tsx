@@ -108,6 +108,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           <p>Interrupted operations are not resumed. Inspect the checkout before continuing.</p>
         </Banner>
       )}
+      {t?.state.historyOperation?.outcome === "uncertain" && <Banner variant="warning" title="History change needs attention."><p>{t.state.historyOperation.detail} Inspect Conversation tree before explicitly restarting Pi. Piano will not retry this change.</p></Banner>}
       {t?.state.projectionError && (
         <Banner variant="warning" title="Unable to refresh the conversation. Recent changes may be missing.">
           <p className="break-words">{t.state.projectionError}</p>
