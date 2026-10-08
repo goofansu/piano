@@ -5,7 +5,6 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { ConversationDetail, ConversationTree } from "../shared/wire.ts";
 import { redactDisplay } from "./DisplayProjection.ts";
-import { historyRevision } from "./HistoryBridge.ts";
 
 const MAX_ENTRIES = 2000;
 const PREVIEW = 280;
@@ -53,7 +52,7 @@ export function conversationTree(sessionId: string, entries: readonly SessionEnt
   const window = entries.slice(-MAX_ENTRIES);
   const leaf = leafId ? byId.get(leafId) : undefined;
   if (leaf && !window.includes(leaf)) window[0] = leaf;
-  return { sessionId, leafId, position: { generation: null, revision: historyRevision(entries, leafId), leafId }, total: entries.length, truncated: entries.length > window.length,
+  return { sessionId, leafId, total: entries.length, truncated: entries.length > window.length,
     entries: window.map(e => {
       const kind = e.type === "message" ? e.message.role : e.type;
       return { id: e.id, parentId: e.parentId, kind, preview: content(e, PREVIEW).text,

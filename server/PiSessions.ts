@@ -21,7 +21,6 @@ import { Attachments, SlashCommand } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { conversationDetail, conversationTree } from "./ConversationHistory.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
-import { historyBridgePrefix, historyExtensionPath } from "./HistoryBridge.ts";
 import { PiCli } from "./PiCli.ts";
 import { type PiRecord, type RawMessage, StreamAssembler } from "./PiRecords.ts";
 
@@ -93,7 +92,7 @@ const commandsOf = (data: unknown): Effect.Effect<ReadonlyArray<SlashCommand>, P
   const unique = new Map<string, SlashCommand>();
   // Extensions execute before skills and templates; skills expand before templates.
   for (const source of ["extension", "skill", "prompt"] as const) for (const command of commands) {
-    if (command.source === source && !command.name.startsWith("piano-history-") && !unique.has(command.name)) unique.set(command.name, {
+    if (command.source === source && !unique.has(command.name)) unique.set(command.name, {
       name: command.name, description: command.description, source,
     });
   }
@@ -331,7 +330,6 @@ const openSession = (spec: PiSessionSpec) =>
     if (spec.model) args.push("--model", spec.model);
     if (spec.thinkingLevel) args.push("--thinking", spec.thinkingLevel);
     if (spec.name) args.push("--name", spec.name);
-    args.push("--extension", historyExtensionPath);
     const child = yield* spawnChild(args, spec.cwd);
     const sessionScope = yield* Effect.scope;
     const generation = randomUUID();
@@ -376,11 +374,6 @@ const openSession = (spec: PiSessionSpec) =>
     let turnRetry = false;
     let summaryRetry = false;
     let announced = false;
-    let historyCommand: string | undefined;
-    let historyBusy = false;
-    let historyUncertain = false;
-    let admittedMutations = 0;
-    const historyResults = new Map<string, Deferred.Deferred<{ outcome: string; detail?: string }>>();
     let processedVersion = 0;
     const seenDialogs = new Set<string>();
     const dialogClosed = new Map<string, Deferred.Deferred<void>>();
@@ -604,18 +597,6 @@ const openSession = (spec: PiSessionSpec) =>
           case "extension_ui_request": {
             const method = String(record.method);
             if (method === "notify") {
-              if (typeof record.message === "string" && record.message.startsWith(historyBridgePrefix)) {
-                try {
-                  const message = JSON.parse(record.message.slice(historyBridgePrefix.length));
-                  if (message.version !== 1 || message.sessionId !== spec.sessionId) return;
-                  if (message.kind === "capability" && typeof message.command === "string" && /^piano-history-[a-f0-9-]{36}$/.test(message.command)) historyCommand = message.command;
-                  if (message.kind === "result" && typeof message.requestId === "string" && ["success", "rejected", "uncertain"].includes(message.outcome)) {
-                    const pending = historyResults.get(message.requestId);
-                    if (pending) yield* Deferred.succeed(pending, { outcome: message.outcome, detail: typeof message.detail === "string" ? message.detail : undefined });
-                  }
-                } catch { /* Private malformed envelopes never become human notices. */ }
-                return;
-              }
               const level = record.notifyType === "error" ? "error" : record.notifyType === "warning" ? "warning" : "info";
               return yield* apply([{ _tag: "notice", level, message: String(record.message ?? "") }]);
             }
@@ -718,16 +699,14 @@ const openSession = (spec: PiSessionSpec) =>
       Effect.forkScoped,
     );
 
-    const quiescentState = Effect.gen(function* () {
+    const currentState = Effect.gen(function* () {
       const state = yield* Ref.get(stateRef);
-      return { ...state, isQuiescent: !historyUncertain && !announced && !child.hasPendingWork() && processedVersion === child.observationVersion() &&
+      return { ...state, isQuiescent: !announced && !child.hasPendingWork() && processedVersion === child.observationVersion() &&
         refreshing.size === 0 && promptOperations.size === 0 && (yield* Ref.get(dialogsRef)).size === 0 &&
         !state.isStreaming && !state.isCompacting && !state.isRetrying && !state.queuedMessages?.length &&
         state.dialogResolution?.delivery !== "pending" && state.dialogResolution?.delivery !== "uncertain" &&
         state.submission?.outcome !== "submitting" && state.submission?.outcome !== "uncertain" };
     });
-
-    const currentState = quiescentState.pipe(Effect.map(state => ({ ...state, isQuiescent: state.isQuiescent && !historyBusy })));
 
     const events: Stream.Stream<SessionFrame, DeliveryOverflow> = Stream.unwrap(
       Semaphore.withPermits(lock, 1)(
@@ -764,60 +743,11 @@ const openSession = (spec: PiSessionSpec) =>
               data.entries.some(e => !e || typeof e.id !== "string" || typeof e.type !== "string" || !(e.parentId === null || typeof e.parentId === "string"))) {
               return yield* new PiSessionError({ reason: "protocol", detail: "Pi returned invalid conversation history." });
             }
-            return yield* Effect.try({ try: (): SessionActionResult => {
-              if (action._tag === "conversation_detail") return { _tag: "conversation_detail", detail: conversationDetail(spec.sessionId, data.entries!, action.entryId) };
-              const tree = conversationTree(spec.sessionId, data.entries!, data.leafId!);
-              return { _tag: "conversation_tree", tree: { ...tree, position: { ...tree.position, generation },
-                bookmarkUnavailable: historyCommand ? undefined : "Piano's history extension is unavailable. Restart Pi with the bundled extension to bookmark entries." } };
-            },
+            return yield* Effect.try({ try: (): SessionActionResult => action._tag === "conversation_tree"
+              ? { _tag: "conversation_tree", tree: conversationTree(spec.sessionId, data.entries!, data.leafId!) }
+              : { _tag: "conversation_detail", detail: conversationDetail(spec.sessionId, data.entries!, action.entryId) },
               catch: error => new PiSessionError({ reason: "protocol", detail: error instanceof Error ? error.message : "Could not read conversation history." }),
             });
-          }
-          case "bookmark": {
-            const reject = (detail: string) => new PiSessionError({ reason: "rejected", detail });
-            if (!(yield* quiescentState).isQuiescent) return yield* reject("Wait for Pi, queued work and dialogs to finish before bookmarking.");
-            if (!historyCommand) return yield* reject("Piano's history extension is unavailable. Restart Pi with the bundled extension; no prompt was sent.");
-            const catalog = (yield* child.request({ type: "get_commands" })) as { commands?: { name: string; source: string; sourceInfo?: { path?: string } }[] };
-            if (!Array.isArray(catalog.commands) || !catalog.commands.some(c => c && c.name === historyCommand && c.source === "extension" && c.sourceInfo?.path === historyExtensionPath)) {
-              historyCommand = undefined;
-              return yield* reject("Piano's history extension changed or is incompatible. Restart Pi; no prompt was sent.");
-            }
-            const before = yield* act({ _tag: "conversation_tree" });
-            if (before?._tag !== "conversation_tree" || before.tree.position.revision !== action.expected.revision || before.tree.leafId !== action.expected.leafId ||
-              (action.expected.generation !== null && action.expected.generation !== generation)) return yield* reject("The session changed. Refresh the conversation tree before bookmarking.");
-            if (!before.tree.entries.some(e => e.id === action.entryId)) return yield* reject("Select an available entry before bookmarking.");
-            const requestId = randomUUID();
-            const pending = yield* Deferred.make<{ outcome: string; detail?: string }>();
-            historyResults.set(requestId, pending);
-            yield* patchState({ historyOperation: { requestId: action.requestId, outcome: "running" } });
-            const work = Effect.gen(function* () {
-              const acknowledgement = (yield* child.request({ type: "prompt", message: `/${historyCommand} ${Buffer.from(JSON.stringify({ requestId, entryId: action.entryId, label: action.label, revision: action.expected.revision })).toString("base64url")}` })) as { disposition?: string };
-              if (acknowledgement?.disposition !== "handled") return yield* new PiSessionError({ reason: "protocol", detail: "History command was not handled. Inspect the session; do not retry automatically." });
-              const result = yield* Deferred.await(pending).pipe(Effect.timeoutOrElse({ duration: yield* PiRequestTimeoutMs,
-                orElse: () => Effect.fail(new PiSessionError({ reason: "timeout", detail: "Bookmark result was not received. It may have been saved; inspect history before retrying." })) }));
-              if (result.outcome === "rejected") return yield* reject(result.detail ?? "Bookmark was rejected.");
-              if (result.outcome !== "success") return yield* new PiSessionError({ reason: "transport", detail: result.detail ?? "Bookmark delivery is uncertain." });
-              // The label append can push its target outside the bounded tree
-              // window. Verify Pi's global label entries, not just visible rows.
-              const saved = (yield* child.request({ type: "get_entries" })) as { entries?: SessionEntry[] };
-              const label = Array.isArray(saved?.entries) ? saved.entries.findLast(e => e.type === "label" && e.targetId === action.entryId) : undefined;
-              const after = yield* act({ _tag: "conversation_tree" });
-              if (after?._tag !== "conversation_tree" || label?.type !== "label" || (label.label ?? "") !== action.label.trim()) {
-                return yield* new PiSessionError({ reason: "protocol", detail: "Bookmark readback did not agree. Inspect the conversation tree before retrying." });
-              }
-              yield* refreshContext;
-              yield* patchState({ historyOperation: { requestId: action.requestId, outcome: "success" } });
-              return { _tag: "bookmark" as const, requestId: action.requestId, outcome: "success" as const, tree: after.tree };
-            });
-            return yield* work.pipe(Effect.catchTag("PiSessionError", error => Effect.gen(function* () {
-              if (error.reason === "rejected") {
-                yield* patchState({ historyOperation: undefined });
-                return yield* error;
-              }
-              historyUncertain = true;
-              yield* patchState({ historyOperation: { requestId: action.requestId, outcome: "uncertain", detail: error.detail } });
-              return { _tag: "bookmark" as const, requestId: action.requestId, outcome: "uncertain" as const, detail: error.detail };
-            })), Effect.ensuring(Effect.sync(() => { historyResults.delete(requestId); })));
           }
           case "commands":
             return { _tag: "commands", commands: yield* child.request({ type: "get_commands" }).pipe(Effect.flatMap(commandsOf)) };
@@ -943,18 +873,7 @@ const openSession = (spec: PiSessionSpec) =>
     if (spec.lastKnownStats) yield* scheduleRefresh("stats");
     else yield* refreshStats;
     const session: PiSession = { spec, events,
-      act: action => Effect.gen(function* () {
-        const mutation = !["abort", "answer", "commands", "conversation_tree", "conversation_detail"].includes(action._tag);
-        if (mutation && (historyBusy || historyUncertain)) return yield* new PiSessionError({ reason: "rejected", detail: historyUncertain ? "A history operation has uncertain delivery. Inspect history and explicitly restart Pi before more changes." : "A history operation is still running. Wait for it to finish." });
-        if (action._tag === "bookmark" && admittedMutations > 0) return yield* new PiSessionError({ reason: "rejected", detail: "Another session action is in progress. Refresh history when it finishes." });
-        if (action._tag === "bookmark") historyBusy = true;
-        if (mutation) admittedMutations++;
-        // Admission and acknowledgement tracking outlive HTTP/WS disconnection.
-        return yield* act(action).pipe(Effect.ensuring(Effect.sync(() => {
-          if (action._tag === "bookmark") historyBusy = false;
-          if (mutation) admittedMutations--;
-        })));
-      }).pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join), Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
+      act: action => act(action).pipe(Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
       state: Semaphore.withPermits(lock, 1)(currentState).pipe(Effect.map(projectDisplay)),
     };
     return session;

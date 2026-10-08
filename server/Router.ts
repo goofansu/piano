@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Cause, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { type DirListing, SessionAction, SessionPullRequestAction } from "../shared/wire.ts";
+import { type DirListing, SessionPullRequestAction } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
@@ -143,7 +143,7 @@ export const AppRouter = HttpRouter.use((router) =>
       })));
     }
 
-    for (const method of ["GET", "POST"] as const) yield* router.add(method, "/api/session/history", Effect.gen(function* () {
+    yield* router.add("GET", "/api/session/history", Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
       const params = new URL(request.url, "http://localhost").searchParams;
       const workspaceId = params.get("workspaceId"), sessionId = params.get("sessionId");
@@ -152,15 +152,7 @@ export const AppRouter = HttpRouter.use((router) =>
       if (!workspace || !sessionId || !registry.sessions.some(s => s.cwd === workspace.path && s.sessionId === sessionId && !s.archived)) {
         return json({ error: "Session is not registered in this workspace." }, 404);
       }
-      const hosts = yield* SessionHosts;
-      if (method === "POST") {
-        const text = yield* request.text;
-        const action = yield* Effect.try(() => Schema.decodeUnknownSync(Schema.fromJsonString(SessionAction))(text));
-        if (action._tag !== "bookmark") return json({ error: "Unsupported history action." }, 400);
-        const session = yield* hosts.open({ cwd: workspace.path, sessionId });
-        return json(yield* session.act(action));
-      }
-      return json(yield* hosts.history(workspace.path, sessionId, params.get("entryId") ?? undefined));
+      return json(yield* (yield* SessionHosts).history(workspace.path, sessionId, params.get("entryId") ?? undefined));
     }).pipe(Effect.catchCause(cause => {
       const error = Cause.squash(cause);
       return Effect.succeed(json({ error: error instanceof Error && "detail" in error ? String(error.detail) : "Could not load conversation history." }, 400));

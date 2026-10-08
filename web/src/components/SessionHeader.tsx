@@ -1,5 +1,5 @@
 import type { ClientCommand } from "@shared/wire";
-import { ArchiveIcon, BookmarkIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
 import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
@@ -65,7 +65,6 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
             <DropdownMenuItem disabled={!target} onSelect={openTree}><GitBranchIcon /> Conversation tree</DropdownMenuItem>
-            <DropdownMenuItem disabled={!target || session?.state.checkoutMissing} onSelect={openTree}><BookmarkIcon /> Bookmark</DropdownMenuItem>
             <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon /> Pull request</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />

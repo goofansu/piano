@@ -7,11 +7,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /** Command supplies keyboard selection; this is an outline, not an editable ARIA tree. */
-function outline(entries: readonly ConversationEntry[], technical: boolean, search: string, bookmarks: boolean) {
+function outline(entries: readonly ConversationEntry[], technical: boolean, search: string) {
   const byId = new Map(entries.map(e => [e.id, e]));
   const children = new Map<string | null, ConversationEntry[]>();
   for (const entry of entries) {
@@ -26,7 +25,7 @@ function outline(entries: readonly ConversationEntry[], technical: boolean, sear
     if (seen.has(entry.id)) continue;
     seen.add(entry.id);
     const visible = technical || !entry.technical || !!entry.label;
-    if (visible && (!bookmarks || !!entry.label) && `${entry.kind} ${entry.preview} ${entry.label ?? ""}`.toLowerCase().includes(search.toLowerCase())) result.push({ entry, depth });
+    if (visible && `${entry.kind} ${entry.preview} ${entry.label ?? ""}`.toLowerCase().includes(search.toLowerCase())) result.push({ entry, depth });
     for (const child of [...children.get(entry.id) ?? []].reverse()) stack.push({ entry: child, depth: depth + (visible ? 1 : 0) });
   }
   return result;
@@ -40,16 +39,6 @@ export function ConversationTree({ open, onOpenChange, workspaceId, sessionId, r
   const [selected, setSelected] = useState("");
   const [search, setSearch] = useState("");
   const [technical, setTechnical] = useState(false);
-  const [bookmarks, setBookmarks] = useState(false);
-  const [bookmarkForm, setBookmarkForm] = useState(false);
-  const [label, setLabel] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [mutationError, setMutationError] = useState("");
-  const bookmarkInput = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (bookmarkForm) bookmarkInput.current?.focus(); }, [bookmarkForm]);
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { setBookmarkForm(false); }, [selected]);
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState("");
   const [detailError, setDetailError] = useState("");
@@ -88,7 +77,7 @@ export function ConversationTree({ open, onOpenChange, workspaceId, sessionId, r
   }, [open, selected, url, sessionId, refresh]);
 
   const showCurrent = () => {
-    setSearch(""); setTechnical(true); setBookmarks(false);
+    setSearch(""); setTechnical(true);
     // cmdk selects the first newly mounted result after filters change. Restore
     // the requested position after that layout, not before the rows exist.
     requestAnimationFrame(() => {
@@ -96,31 +85,13 @@ export function ConversationTree({ open, onOpenChange, workspaceId, sessionId, r
       requestAnimationFrame(() => list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" }));
     });
   };
-  const rows = outline(tree?.entries ?? [], technical, search, bookmarks);
-  const selectedEntry = tree?.entries.find(entry => entry.id === selected);
-  const saveBookmark = async (value: string) => {
-    if (!tree || !selected || saving) return;
-    const requestId = crypto.randomUUID();
-    setSaving(true); setMutationError("");
-    try {
-      // Do not cancel/replay an admitted mutation when the dialog closes.
-      const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
-        _tag: "bookmark", requestId, entryId: selected, label: value, expected: tree.position,
-      }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
-      if (result._tag !== "bookmark" || result.requestId !== requestId || result.outcome !== "success" || result.tree?.sessionId !== sessionId) throw new Error(result.detail ?? "Bookmark result is uncertain. Refresh history before retrying.");
-      if (mounted.current) { setTree(result.tree); setBookmarkForm(false); }
-    } catch (error) { if (mounted.current) setMutationError(`${error instanceof Error ? error.message : String(error)} Refresh history before deciding whether to retry; a lost response does not undo a saved bookmark.`); }
-    finally { if (mounted.current) { setSaving(false); setRefresh(r => r + 1); } }
-  };
+  const rows = outline(tree?.entries ?? [], technical, search);
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-4xl" onOpenAutoFocus={event => { event.preventDefault(); input.current?.focus(); }}>
       <DialogHeader><DialogTitle>Conversation tree</DialogTitle><DialogDescription>Preview history without changing the conversation. Search labels and the first 280 characters of each entry.</DialogDescription></DialogHeader>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={showCurrent} disabled={!tree?.leafId}>Show current position</Button>
         <Button variant="ghost" size="sm" onClick={() => setRefresh(r => r + 1)} disabled={loading}>Refresh</Button>
-        <Field orientation="horizontal" className="w-auto"><Checkbox id="tree-bookmarks" checked={bookmarks} onCheckedChange={value => setBookmarks(value === true)} /><FieldLabel htmlFor="tree-bookmarks">Bookmarks</FieldLabel></Field>
         <Field orientation="horizontal" className="w-auto"><Checkbox id="tree-technical" checked={technical} onCheckedChange={value => setTechnical(value === true)} /><FieldLabel htmlFor="tree-technical">Technical entries</FieldLabel></Field>
       </div>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
@@ -143,19 +114,6 @@ export function ConversationTree({ open, onOpenChange, workspaceId, sessionId, r
           </CommandList>
         </Command>
         <section aria-label="Entry preview" className="flex min-w-0 flex-col gap-2 overflow-auto md:max-h-[55dvh]">
-          {selectedEntry && <>
-            <Button variant="outline" size="sm" disabled={saving || !!tree?.bookmarkUnavailable} onClick={() => { setLabel(selectedEntry.label ?? ""); setBookmarkForm(true); }}>Bookmark</Button>
-            {tree?.bookmarkUnavailable && <p className="text-sm text-muted-foreground">{tree.bookmarkUnavailable}</p>}
-          </>}
-          {bookmarkForm && <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void saveBookmark(label); }}>
-            <Field><FieldLabel htmlFor="bookmark-label">Bookmark name</FieldLabel><Input ref={bookmarkInput} id="bookmark-label" aria-label="Bookmark name" value={label} onChange={event => setLabel(event.target.value)} maxLength={200} disabled={saving} /></Field>
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" size="sm" disabled={saving || !label.trim()}>{saving ? "Saving…" : "Save bookmark"}</Button>
-              {selectedEntry?.label && <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void saveBookmark("")}>Remove bookmark</Button>}
-              <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => setBookmarkForm(false)}>Cancel</Button>
-            </div>
-          </form>}
-          {mutationError && <Alert variant="destructive"><AlertDescription>{mutationError}</AlertDescription></Alert>}
           {detailError ? <Alert variant="destructive"><AlertDescription>{detailError}</AlertDescription></Alert> : detail ? <>
             <pre className="whitespace-pre-wrap break-words text-sm">{detail.text}</pre>
             {(detail.truncated || detail.omittedImages > 0) && <p className="text-sm text-muted-foreground">{detail.truncated && "Preview limited to 32,000 characters. "}{detail.omittedImages > 0 && `${detail.omittedImages} image(s) omitted.`}</p>}
