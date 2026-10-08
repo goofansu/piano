@@ -12,7 +12,7 @@ import { BroadcastLive } from "./Broadcast.ts";
 import { CatalogLive } from "./Catalog.ts";
 import { agentDir } from "./PiEnv.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
-import { CONFIG_PATH, RegistryLive } from "./Registry.ts";
+import { CONFIG_PATH, RegistryLive, registryDatabasePath } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
@@ -60,5 +60,5 @@ const main = Layer.launch(Server).pipe(
 );
 
 console.log(`[piano] http://${HOST}:${PORT}`);
-console.log(`[piano] config ${CONFIG_PATH}; Pi agent dir ${agentDir()}; web ${WEB_DIST}`);
+console.log(`[piano] database ${registryDatabasePath(CONFIG_PATH, process.env.PIANO_DB_PATH)}; legacy config ${CONFIG_PATH}; Pi agent dir ${agentDir()}; web ${WEB_DIST}`);
 NodeRuntime.runMain(main);

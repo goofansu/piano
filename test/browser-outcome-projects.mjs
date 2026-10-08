@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { readRegistry } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-outcome-evidence');
 mkdirSync(evidence, { recursive: true });
@@ -54,7 +55,7 @@ const button = name => ab('find', 'role', 'button', 'click', '--name', name, '--
 const menuitem = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
 const wait = code => ab('wait', '--fn', code);
 const settle = () => ab('wait', '300');
-const registry = () => JSON.parse(readFileSync(config, 'utf8'));
+const registry = () => readRegistry(config);
 const project = name => registry().outcomeProjects.find(p => p.name === name);
 const member = sessionId => registry().sessions.find(s => s.sessionId === sessionId);
 async function ready() {
@@ -186,10 +187,9 @@ try {
   assert.equal(auditRecords().filter(e => e.event === 'spawn').length, 1);
   assert.equal(auditRecords().filter(e => e.event === 'exit' || e.command === 'abort').length, 0);
   await ab('open', runningUrl); await wait(`!!document.querySelector('[aria-label="Stop"]')`);
-  // The header's own menu files the session on screen; the palette finds sessions by project name but offers no project commands.
-  await ab('click', '[aria-label="Session information and actions"]'); await wait(`!!document.querySelector('[role="menuitem"][aria-haspopup="menu"]')`);
-  await ab('hover', '[role="menuitem"][aria-haspopup="menu"]'); await wait(`[...document.querySelectorAll('[role="menuitemradio"]')].some(i => i.textContent === 'Subscriptions')`); await settle();
-  await ab('find', 'role', 'menuitemradio', 'click', '--name', 'Subscriptions', '--exact'); await wait(`!document.querySelector('[role="menu"]')`); await settle();
+  // Membership lives in the sidebar menu; the simplified header no longer duplicates that action.
+  // The palette finds sessions by project name but offers no project commands.
+  await file('/hold', 'Subscriptions');
   assert.equal(member(running.sessionId).outcomeProjectId, project('Subscriptions').id);
   await palette('Subscriptions');
   const items = await evaluate(`[...document.querySelectorAll('[cmdk-item]')].filter(i => i.getBoundingClientRect().height > 0).map(i => i.textContent.trim())`);

@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { readRegistry } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase7-evidence/http');
 mkdirSync(evidence, { recursive: true });
@@ -53,7 +54,7 @@ try {
     try { if ((await fetch('http://127.0.0.1:7171/api/projects')).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
-  const workspaces = JSON.parse(readFileSync(registry, 'utf8')).workspaces;
+  const workspaces = readRegistry(registry).workspaces;
   const workspaceA = workspaces.find(w => w.path === repo), workspaceB = workspaces.find(w => w.path === checkout);
   const removedRoutes = [];
   for (const [method, path] of [['GET', '/api/workspace/checks'], ['POST', '/api/workspace/checks/run'], ['POST', '/api/workspace/checks/cancel']]) {
@@ -76,7 +77,7 @@ try {
   renameSync(join(root, 'worktree-git-backup'), join(checkout, '.git'));
   assert.equal((await captured(workspaceB)).revision, detached.revision);
   assert.equal((await captured(workspaceA)).revision, a.revision, 'another workspace cannot relabel or invalidate A');
-  const data = JSON.parse(readFileSync(registry, 'utf8'));
+  const data = readRegistry(registry);
   assert.equal(data.version, 2); assert.equal(data.workspaces.length, 2); assert.deepEqual(data.sessions, original.sessions);
   for (const path of retiredFiles) assert.equal(readFileSync(path, 'utf8'), retiredContent, 'saved Checks files remain untouched');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ passed: true, observations, node: process.version, base: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() }, null, 2));

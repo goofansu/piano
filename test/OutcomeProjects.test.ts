@@ -64,12 +64,16 @@ test("INV-01/07: v1 migration preserves identities with exact backup; grouping s
   assert.equal(reopened.sessions[0].outcomeProjectId, "accessibility");
   assert.deepEqual(reopened.workspaces, old.workspaces);
   for (const invalid of [
+    { ...reopened, projects: [b, b] },
+    { ...reopened, worktrees: [{ project: a, path: b, branch: "one" }, { project: a, path: b, branch: "two" }] },
     { ...reopened, sessions: [...reopened.sessions, reopened.sessions[0]] },
     { ...reopened, sessions: [{ ...reopened.sessions[0], outcomeProjectId: "missing" }] },
     { ...reopened, outcomeProjects: [...reopened.outcomeProjects, reopened.outcomeProjects[0]] },
     { ...reopened, version: 99 },
   ]) {
     const damaged = JSON.stringify(invalid);
+    // Once imported, JSON is no longer authoritative. Exercise each invalid import in a fresh DB.
+    rmSync(`${path}.sqlite`);
     writeFileSync(path, damaged);
     await assert.rejects(run(Effect.gen(function* () { return yield* (yield* Registry).get; })), /has not been reset/);
     assert.equal(readFileSync(path, "utf8"), damaged);

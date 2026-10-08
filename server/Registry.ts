@@ -1,17 +1,18 @@
 /**
  * What piano knows about: projects, the worktrees created through piano, and
- * the sessions started through piano. Stored at ~/.config/piano/config.json
- * (override with PIANO_CONFIG). Pi's own session store is only consulted to
+ * the sessions started through piano. SQLite owns persistence; the old JSON is
+ * imported once and retained unchanged. Pi's own session store is only consulted to
  * load a session's history; it is never scanned to populate the sidebar.
  */
 
 import { randomUUID } from "node:crypto";
-import { chmodSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, Semaphore } from "effect";
 import { OutcomeProject, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
+import { openRegistryDatabase } from "./RegistryDatabase.ts";
 
 export class RegistryError extends Data.TaggedError("RegistryError")<{ readonly detail: string }> {
   override get message() { return this.detail; }
@@ -46,9 +47,17 @@ export interface RegistryData {
   readonly sessions: ReadonlyArray<SessionEntry>;
 }
 
-export const CONFIG_PATH = process.env.PIANO_CONFIG ?? join(homedir(), ".config", "piano", "config.json");
+const defaultConfigPath = join(homedir(), ".config", "piano", "config.json");
+export const CONFIG_PATH = process.env.PIANO_CONFIG ?? defaultConfigPath;
 
+/** Legacy import source, also retained as the existing revision-store namespace. */
 export const RegistryPath = Context.Reference<string>("piano/RegistryPath", { defaultValue: () => CONFIG_PATH });
+export const RegistryDatabasePath = Context.Reference<string | undefined>("piano/RegistryDatabasePath", { defaultValue: () => process.env.PIANO_DB_PATH });
+export function registryDatabasePath(config: string, override?: string): string {
+  return resolve(override ?? (process.env.PIANO_CONFIG !== undefined || config !== defaultConfigPath
+    ? `${config}.sqlite`
+    : join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "piano", "piano.db")));
+}
 
 const empty: RegistryData = { version: 2, outcomeProjects: [], projects: [], worktrees: [], sessions: [], workspaces: [] };
 const legacySchema = Schema.Struct({
@@ -73,12 +82,19 @@ function withWorkspaces(data: RegistryData): RegistryData {
   return { ...data, workspaces };
 }
 function read(path: string): RegistryData {
-  let text: string;
+  let bytes: Buffer;
   try {
-    if (lstatSync(path).isSymbolicLink()) throw new Error("Registry symlinks are not supported for atomic migration. Set PIANO_CONFIG to the actual file path.");
-    text = readFileSync(path, "utf8");
+    if (lstatSync(path).isSymbolicLink()) throw new Error("Registry symlinks are not supported for migration. Set PIANO_CONFIG to the actual file path.");
+    bytes = readFileSync(path);
   } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return empty; throw error; }
-  const raw = JSON.parse(text);
+  const data = decode(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+  // The source remains untouched; retain an explicit private, byte-exact migration backup too.
+  writeFileSync(`${path}.pre-sqlite-${randomUUID()}.bak`, bytes, { flag: "wx", mode: 0o600 });
+  return data;
+}
+function decode(value: unknown): RegistryData {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("Registry must be an object.");
+  const raw = value as Record<string, unknown>;
   const legacy = raw.version === undefined;
   const migrating = legacy || raw.version === 1;
   if (raw.sessions && raw.threads) throw new Error("Both sessions and legacy threads are present; resolve the ambiguity manually.");
@@ -87,6 +103,8 @@ function read(path: string): RegistryData {
     outcomeProjects: migrating ? [] : Schema.decodeUnknownSync(Schema.Array(OutcomeProject))(raw.outcomeProjects),
     sessions: data.sessions.map(s => ({ ...s, archived: s.archived ?? false })),
     workspaces: legacy ? [] : Schema.decodeUnknownSync(Schema.Array(Workspace))(raw.workspaces) };
+  if (new Set(initial.projects).size !== initial.projects.length) throw new Error("Duplicate selected folders.");
+  if (new Set(initial.worktrees.map(w => w.path)).size !== initial.worktrees.length) throw new Error("Duplicate worktree references.");
   const ids = new Set(initial.outcomeProjects.map(p => p.id));
   if (ids.size !== initial.outcomeProjects.length || initial.outcomeProjects.some(p => !p.name.trim())) throw new Error("Duplicate project identities or blank project name.");
   if (new Set(initial.sessions.map(s => JSON.stringify([s.cwd, s.sessionId]))).size !== initial.sessions.length) throw new Error("Duplicate session references.");
@@ -97,21 +115,7 @@ function read(path: string): RegistryData {
   if (new Set(initial.workspaces.map(w => w.id)).size !== initial.workspaces.length || new Set(initial.workspaces.map(w => w.path)).size !== initial.workspaces.length || initial.workspaces.some(w => !w.id)) throw new Error("Duplicate or empty workspace identities.");
   const complete = withWorkspaces(initial);
   if (!legacy && complete.workspaces.length !== initial.workspaces.length) throw new Error("Missing workspace identities in versioned registry.");
-  if (migrating) {
-    const backup = `${path}.pre-v${legacy ? 1 : 2}-${randomUUID()}.bak`;
-    copyFileSync(path, backup, constants.COPYFILE_EXCL);
-    chmodSync(backup, 0o600);
-    write(path, complete);
-  }
   return complete;
-}
-function write(path: string, data: RegistryData): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  try {
-    writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`, { flag: "wx", mode: 0o600 });
-    renameSync(temporary, path);
-  } finally { rmSync(temporary, { force: true }); }
 }
 const recovery = (path: string, error: unknown) => new RegistryError({ detail: `Cannot read or persist registry ${path}. It has not been reset. Restore a known-good backup or repair the file before restarting. ${String(error)}` });
 
@@ -145,8 +149,16 @@ export class Registry extends Context.Service<
 export const RegistryLive = Layer.effect(
   Registry,
   Effect.gen(function* () {
-    const path = yield* RegistryPath;
-    const state = yield* Ref.make(yield* Effect.try({ try: () => read(path), catch: e => recovery(path, e) }));
+    const config = yield* RegistryPath;
+    const path = registryDatabasePath(config, yield* RegistryDatabasePath);
+    const database = yield* Effect.acquireRelease(
+      Effect.try({ try: () => {
+        if (resolve(config) === path) throw new Error("PIANO_DB_PATH must differ from the legacy JSON path.");
+        return openRegistryDatabase(path, () => read(config));
+      }, catch: e => recovery(path, e) }),
+      db => Effect.sync(() => db.close()),
+    );
+    const state = yield* Ref.make(yield* Effect.try({ try: () => decode(database.data), catch: e => recovery(path, e) }));
     const lock = yield* Semaphore.make(1);
     const update = (f: (d: RegistryData) => RegistryData) =>
       Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
@@ -154,7 +166,8 @@ export const RegistryLive = Layer.effect(
         const next = yield* Effect.try({ try: () => f(current), catch: e => e instanceof RegistryError ? e : recovery(path, e) });
         if (next === current) return;
         const data = withWorkspaces(next);
-        yield* Effect.try({ try: () => write(path, data), catch: e => recovery(path, e) });
+        if (JSON.stringify(data) === JSON.stringify(current)) return;
+        yield* Effect.try({ try: () => database.save(current, data), catch: e => recovery(path, e) });
         yield* Ref.set(state, data);
       }).pipe(Effect.uninterruptible));
     const now = () => new Date().toISOString();
@@ -190,7 +203,7 @@ export const RegistryLive = Layer.effect(
           const d = yield* Ref.get(state);
           if (d.projects.includes(path) || d.worktrees.some((w) => w.path === path)) return path;
           if (!existsSync(path) || !statSync(path).isDirectory()) return yield* new RegistryError({ detail: `Not a directory: ${path}` });
-          yield* update((x) => ({ ...x, projects: [...x.projects, path] }));
+          yield* update((x) => x.projects.includes(path) ? x : { ...x, projects: [...x.projects, path] });
           return path;
         }),
       // Closing a project only hides it; its worktrees and sessions stay registered so

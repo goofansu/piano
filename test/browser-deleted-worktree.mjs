@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { readRegistry } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-missing-evidence/browser');
 mkdirSync(evidence, { recursive: true });
@@ -79,7 +80,7 @@ try {
   await ab('wait', '--text', 'Saved conversation archived');
   await menu(); await item('Archive');
   await ab('wait', '--fn', `!location.pathname.endsWith('/archived')`);
-  assert.equal(JSON.parse(readFileSync(registry, 'utf8')).sessions.find(s => s.sessionId === 'archived').archived, true);
+  assert.equal(readRegistry(registry).sessions.find(s => s.sessionId === 'archived').archived, true);
   assert.ok(existsSync(join(sessions, 'archived.jsonl')));
   await ab('open', 'http://127.0.0.1:7172/s/deleted');
   await ab('wait', '--text', 'Saved conversation deleted');
@@ -88,7 +89,7 @@ try {
   await ab('find', 'role', 'button', 'click', '--name', 'Delete', '--exact');
   await ab('wait', '--text', 'Session deleted');
   assert.equal(existsSync(join(sessions, 'deleted.jsonl')), false);
-  assert.equal(JSON.parse(readFileSync(registry, 'utf8')).sessions.some(s => s.sessionId === 'deleted'), false);
+  assert.equal(readRegistry(registry).sessions.some(s => s.sessionId === 'deleted'), false);
   assert.equal(readFileSync(join(sessions, 'kept.jsonl'), 'utf8'), original);
   git('worktree', 'add', '-q', worktree, 'feature');
   await ab('open', 'http://127.0.0.1:7172/s/kept');

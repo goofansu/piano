@@ -9,7 +9,7 @@ session is one pi session; each running session is one `pi --mode rpc` child. Se
 Use these in code and prose: **project** (a directory the user added; the UI labels it a
 **Folder**, grouping it with its worktrees, and reserves **Project** for an outcome project, a
 named group of sessions from any folders), **worktree** (a checkout created through piano with `wt`), **session** (one pi session;
-never "thread"), **registry** (the config file that records selected projects, outcome projects,
+never "thread"), **registry** (the SQLite store that records selected projects, outcome projects,
 worktrees and session references; Pi owns session history).
 See [the glossary](docs/glossary.md) for the planned workspace, task and evidence vocabulary.
 
@@ -63,6 +63,9 @@ Stop only the process you started, by its pid. Register only scratch directories
 repo in the scratchpad) in the scratch registry. When a check creates worktrees or pi session files,
 remove them afterwards: `git worktree remove --force` plus `git branch -D` in the scratch repo, and
 the session directory under `~/.pi/agent/sessions` whose name encodes the scratch path.
+`PIANO_CONFIG` is now the legacy JSON import source; when set, its SQLite sidecar is
+`<PIANO_CONFIG>.sqlite` unless `PIANO_DB_PATH` overrides it. Keep both paths scratch-local.
+See [registry migration and backup guidance](README.md#registry-storage-and-migration).
 
 ## Verification
 

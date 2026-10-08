@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type TestContext, test } from "node:test";
@@ -55,7 +55,8 @@ test("INV-01/07: discovers by branch AND head repository, pins identity across b
   assert.deepEqual(await f.get(), { link: null, pullRequest: null, discovery: false });
   assert.equal((await f.get("two")).pullRequest?.number, 43);
   // Preference is durable metadata, not forge facts or history.
-  const persisted = JSON.parse(readFileSync(f.path, "utf8"));
+  const persisted = await Effect.runPromise(Effect.gen(function* () { return yield* (yield* Registry).get; }).pipe(
+    Effect.provide(RegistryLive), Effect.provideService(RegistryPath, f.path)));
   assert.equal(persisted.sessions[0].pullRequest, null);
   assert.deepEqual(persisted.sessions[1].pullRequest, { url: "https://github.com/example/repo/pull/43", source: "branch" });
   const restarted = ManagedRuntime.make(SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryPath, f.path))));

@@ -3,10 +3,11 @@
 // node test/browser-phase6.mjs /tmp/piano-phase6-evidence/browser
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { readRegistry as readPersistedRegistry } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase6-evidence/browser'); mkdirSync(evidence, { recursive: true });
 const root = mkdtempSync(join(tmpdir(), 'piano-browser-phase6-')), repo = join(root, 'repo'), config = join(root, 'config'), sessions = join(root, 'sessions');
@@ -47,7 +48,7 @@ async function ab(...args) {
 }
 const evaluate = async js => JSON.parse(await ab('eval', js));
 const click = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
-const readRegistry = () => JSON.parse(readFileSync(registry, 'utf8'));
+const readRegistry = () => readPersistedRegistry(registry);
 async function capture(name) { writeFileSync(join(evidence, `${name}.txt`), await ab('snapshot')); await ab('screenshot', join(evidence, `${name}.png`)); observations.push(name); }
 async function openWorktrees() { await ab('click', '[aria-label="Directory"]'); writeFileSync(join(evidence, 'directory-picker.txt'), await ab('snapshot')); await ab('click', '[cmdk-item][data-value="__worktree"]'); await ab('wait', '--fn', `document.querySelector('[role="dialog"]') && !document.querySelector('[role="dialog"] [role="status"]')`); }
 async function refresh() { await click('Refresh worktrees'); await ab('wait', '--fn', `!document.querySelector('[role="dialog"] [role="status"]')`); }

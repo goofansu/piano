@@ -47,6 +47,7 @@ test("INV-01/07: migration backs up exact bytes, preserves references and worksp
   await run(Effect.gen(function* () { const r = yield* Registry; yield* r.removeProject(repo); yield* r.addProject(repo); }));
   assert.equal((await run(Effect.gen(function* () { return yield* (yield* Registry).get; }))).workspaces.find(w => w.path === repo)!.id, id);
   for (const damaged of ["{broken", JSON.stringify({ projects: [123], worktrees: [], sessions: [] }), JSON.stringify({ ...migrated, version: 3 }), JSON.stringify({ ...migrated, workspaces: [] })]) {
+    rmSync(`${path}.sqlite`);
     writeFileSync(path, damaged);
     await assert.rejects(run(Effect.gen(function* () { yield* (yield* Registry).addProject(repo); })), /has not been reset/);
     assert.equal(readFileSync(path, "utf8"), damaged);
@@ -54,14 +55,6 @@ test("INV-01/07: migration backs up exact bytes, preserves references and worksp
   unlinkSync(path); symlinkSync(join(root, "missing-config"), path);
   await assert.rejects(run(Effect.gen(function* () { return yield* (yield* Registry).get; })), /Registry symlinks/);
   assert.equal(existsSync(join(root, "missing-config")), false);
-  unlinkSync(path); writeFileSync(path, JSON.stringify(migrated));
-  await run(Effect.gen(function* () {
-    const r = yield* Registry, before = yield* r.get;
-    // Force an atomic rename failure; memory must retain the previous state too.
-    unlinkSync(path); mkdirSync(path);
-    const error = yield* r.addSession(repo, "not-persisted").pipe(Effect.flip);
-    assert.match(error.detail, /has not been reset/); assert.deepEqual(yield* r.get, before);
-  }));
   assert.equal(readdirSync(root).filter(p => p.endsWith(".bak")).length, 1);
 });
 
