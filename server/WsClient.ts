@@ -26,7 +26,7 @@ import { projectTrust, setProjectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
 import { emptySnapshot } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
-import { buildProjects } from "./Views.ts";
+import { buildProjects, buildSessionReferences } from "./Views.ts";
 import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
 
 const describe = (e: unknown): string => {
@@ -78,7 +78,14 @@ export const handleSocket = (socket: Socket.Socket) =>
     const send = outbox.offer;
     const sendError = (e: unknown) =>
       Effect.logWarning(`client error: ${describe(e)}`).pipe(Effect.andThen(send({ _tag: "error", message: describe(e) })));
-    const publishProjects = buildProjects.pipe(Effect.flatMap((projects) => broadcast.publish({ _tag: "projects", projects })));
+    const publishProjects = buildProjects.pipe(Effect.flatMap(projects => Effect.gen(function* () {
+      const observed = yield* buildSessionReferences;
+      // Filesystem reads may overlap a membership edit. Publish the latest metadata,
+      // never a grouping snapshot captured before those asynchronous observations.
+      const data = yield* registry.get;
+      const sessionReferences = data.sessions.map(s => ({ ...s, unavailable: observed.find(o => o.cwd === s.cwd && o.sessionId === s.sessionId)?.unavailable }));
+      yield* broadcast.publish({ _tag: "projects", projects, outcomeProjects: data.outcomeProjects, sessionReferences, workspaces: data.workspaces });
+    })));
 
     // ── selection / attachment ──
     type Selection = { cwd: string; sessionId: string | null; selectionId: string };
@@ -160,6 +167,15 @@ export const handleSocket = (socket: Socket.Socket) =>
             const cwd = resolve(expandHome(msg.cwd ?? selected?.cwd ?? homedir()));
             return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });
           }
+          case "save_outcome_project":
+            yield* registry.saveOutcomeProject(msg.project);
+            return yield* publishProjects;
+          case "archive_outcome_project":
+            yield* registry.archiveOutcomeProject(msg.id, msg.archived);
+            return yield* publishProjects;
+          case "assign_project":
+            yield* registry.assignProject(msg.cwd, msg.sessionId, msg.projectId);
+            return yield* publishProjects;
           case "add_project":
             yield* registry.addProject(msg.path);
             return yield* publishProjects;
@@ -215,8 +231,13 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "select":
             return yield* show(msg);
           case "create_session": {
+            if (msg.outcomeProjectId && !(yield* registry.get).outcomeProjects.some(p => p.id === msg.outcomeProjectId && !p.archived)) return yield* Effect.fail(new Error("Project is unavailable or archived. Choose a current project before starting."));
             const cwd = yield* registry.ensureProject(msg.cwd);
             const session = yield* Semaphore.withPermits(navigation, 1)(start({ cwd, sessionId: null, selectionId: msg.selectionId }, msg.options));
+            if (msg.outcomeProjectId) {
+              yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, msg.outcomeProjectId);
+              yield* publishProjects;
+            }
             const text = msg.text?.trim() ?? "";
             if (!text && !msg.attachments?.length) return;
             yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, text);

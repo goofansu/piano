@@ -1,8 +1,9 @@
 # Outcome-based projects
 
-Status: proposed product plan; no runtime or registry changes are implemented by this document.
+Status: Step 1 implemented; Step 2 remains deferred. See the
+[implementation evidence](research/outcome-projects-step1.md) for verification and limitations.
 [ADR 0002](adr/0002-outcome-projects.md) records the boundary decision. The
-[glossary](glossary.md#planned-outcome-projects) distinguishes these planned terms from today's code.
+[glossary](glossary.md#planned-outcome-projects) distinguishes UI terminology from existing path fields.
 
 ## Goal
 
@@ -28,11 +29,10 @@ it does not resume the deferred evidence/integration phases.
 - **Task:** a narrower intended outcome that may span sessions. Projects may eventually organize
   tasks, but the first slice requires neither task records nor a task hierarchy.
 
-Today `project` means an added directory in the registry, wire types and UI. Keep that meaning in
-existing code until a deliberate compatibility migration. Use **outcome project** in planning to
-avoid ambiguity. When the new UI ships, reserve its project label for outcomes and distinguish the
-existing repository/directory controls; do not offer two indistinguishable kinds of Project.
-The exact labels and layout belong to the first slice, not a repository-wide rename now.
+The UI now uses **Project** for outcomes and **Repositories** for the sidebar's location groups, each
+a root with its worktrees; a non-Git directory sits under the same heading with a Non-Git badge.
+Existing `project` path fields retain their directory meaning; `outcomeProjects` and
+`outcomeProjectId` hold organization separately. This is not a repository-wide code rename.
 
 ## Step 1 — Organize sessions across repositories
 
@@ -46,7 +46,7 @@ The exact labels and layout belong to the first slice, not a repository-wide ren
 4. Rename, move/remove a session association, or archive/reopen the project without moving code,
    changing session history or stopping running work.
 
-The initial membership rule is **zero or one outcome project per session**. This is a proposed
+The initial membership rule is **zero or one outcome project per session**. This is a
 simplicity trade-off, not a limitation on repository reuse: different sessions in the same repository
 can belong to different projects. Moving a session is explicit and changes only its association.
 Multi-project session membership can wait for a concrete need; it would also complicate future
@@ -63,7 +63,7 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 - Archiving affects project visibility only. It is not session archive, abort, process release,
   checkout removal, verification, approval or proof that the outcome was achieved. Reopening restores
   the grouping; running work and direct session access remain available.
-- Unlinking a session does not delete it. Closing a directory does not cascade-delete the outcome
+- Unlinking a session does not delete it. Closing a repository does not cascade-delete the outcome
   project or its associations. A missing checkout/history is an explicit unavailable state, not
   a reason to silently recreate or drop the reference. Explicit session-reference removal must also
   remove its association without deleting the project or other members.
@@ -98,8 +98,14 @@ In scratch repositories and a separate registry, observe through the browser:
 
 Use existing coverage where sufficient; add focused regression checks for new association,
 non-destructive lifecycle and migration risks. Follow [the testing policy](testing.md), including
-`npm test`, typecheck and retained scratch-browser output for the eventual implementation.
-These are future gates, not results from this documentation change.
+`npm test`, typecheck and retained scratch-browser output.
+Observed outcomes are recorded in the [Step 1 evidence](research/outcome-projects-step1.md).
+The implementation uses registry v2 with an exact pre-migration backup. Restore that backup only
+with the backend stopped; older Piano versions cannot read v2. Restoring it discards all subsequent
+registry edits, including newly added session references, but does not delete Pi-owned conversations.
+A project has no page of its own: it is a group in the sidebar beside the repositories, and
+`/projects/<id>` is its New page, where a session started joins it. Closed-directory and
+archived-session references remain reachable from the group and from session search.
 
 ## Step 2 — Shared context and instructions, later
 

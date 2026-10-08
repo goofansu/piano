@@ -1,6 +1,7 @@
 import type { ClientCommand } from "@shared/wire";
 import { useState } from "react";
 import { toast } from "sonner";
+import { sessionProject } from "@/components/OutcomeProjects";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldGroup } from "@/components/ui/field";
@@ -13,11 +14,12 @@ type Target = { cwd: string; sessionId: string; title?: string };
 export function currentSessionDetails(state: AppState) {
   const session = state.session;
   const project = state.projects.find(p => p.worktrees.some(w => w.path === session?.cwd));
-  const info = project?.sessions.find(s => s.cwd === session?.cwd && s.sessionId === session?.sessionId);
+  const info = state.sessionReferences.find(s => s.cwd === session?.cwd && s.sessionId === session?.sessionId) ?? project?.sessions.find(s => s.cwd === session?.cwd && s.sessionId === session?.sessionId);
   return {
     title: session?.state.sessionName || info?.title || "Untitled",
     branch: project?.discovery.status === "ready" ? project.worktrees.find(w => w.path === session?.cwd)?.branch : undefined,
     sessionId: session?.sessionId,
+    project: session?.sessionId ? sessionProject(state, { cwd: session.cwd, sessionId: session.sessionId }) : undefined,
   };
 }
 
@@ -25,7 +27,7 @@ export function currentSessionDetails(state: AppState) {
 export function sessionWorkspace(state: AppState) {
   const session = state.session;
   const worktree = state.projects.flatMap(p => p.worktrees).find(w => w.path === session?.cwd);
-  return worktree && worktree.status !== "non-git" ? worktree.workspace : undefined;
+  return worktree ? (worktree.status !== "non-git" ? worktree.workspace : undefined) : state.workspaces.find(w => w.path === session?.cwd);
 }
 
 export async function copySessionValue(value: string, label: string) {

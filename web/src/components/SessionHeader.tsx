@@ -1,5 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -8,11 +9,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { abbrevPath } from "@/lib/format";
 import type { AppState } from "@/store";
 
-export function SessionHeader({ state, send, onMenu, openNew, status, openChanges, openPullRequest, pullRequest }: {
-  state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; status: string; openChanges: () => void; openPullRequest: () => void; pullRequest: React.ReactNode;
+export function SessionHeader({ state, send, onMenu, openNew, openProject, onProjectDialog, status, openChanges, openPullRequest, pullRequest }: {
+  state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; openProject: (id: string) => void; onProjectDialog: (dialog: ProjectDialog) => void;
+  status: string; openChanges: () => void; openPullRequest: () => void; pullRequest: React.ReactNode;
 }) {
   const session = state.session;
-  const { title, branch, sessionId } = currentSessionDetails(state);
+  const { title, branch, sessionId, project } = currentSessionDetails(state);
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const actions = useSessionActions(send, ready);
   const target = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title } : undefined;
@@ -25,6 +27,8 @@ export function SessionHeader({ state, send, onMenu, openNew, status, openChange
       <Button variant="ghost" size="icon-sm" className="-ml-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {session ? <>
+          {/* The project is the way back to where this session was opened from. */}
+          {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal || project.name} onClick={() => openProject(project.id)}>{project.name}</button>}
           <h1 className="truncate text-sm font-medium" title={title}>{title}</h1>
           <p title={session.cwd} className="flex min-w-0 font-mono text-xs text-muted-foreground">
             <span className="sr-only">Working directory: </span>
@@ -60,6 +64,7 @@ export function SessionHeader({ state, send, onMenu, openNew, status, openChange
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
             <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon /> Pull request</DropdownMenuItem>
+            {target && <ProjectMenu state={state} send={send} session={target} onDialog={onProjectDialog} />}
             <DropdownMenuItem disabled={!ready || !target || session?.state.checkoutMissing} onSelect={() => target && actions.rename(target)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.archive(target)}><ArchiveIcon /> Archive</DropdownMenuItem>
           </DropdownMenuGroup>

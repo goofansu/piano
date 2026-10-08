@@ -6,7 +6,7 @@
 - Related: [invariants](../development-invariants.md), [roadmap](../roadmap.md),
   [original research](../research/2026-10-02-harness-direction.md)
 
-Proposed extension: [ADR 0002](0002-outcome-projects.md) separates outcome-project organization from
+Organizational extension: [ADR 0002](0002-outcome-projects.md) separates outcome-project organization from
 workspace execution. It scopes the change to decision 4 without reinterpreting existing directory
 fields or replacing the ownership, evidence and integration contracts below.
 

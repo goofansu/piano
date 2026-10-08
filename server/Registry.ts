@@ -10,7 +10,7 @@ import { chmodSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, r
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, Semaphore } from "effect";
-import { SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
+import { OutcomeProject, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
 
 export class RegistryError extends Data.TaggedError("RegistryError")<{ readonly detail: string }> {
@@ -24,6 +24,7 @@ export interface WorktreeEntry {
 }
 
 export interface SessionEntry {
+  readonly outcomeProjectId?: string;
   readonly cwd: string;
   readonly sessionId: string;
   readonly title?: string;
@@ -37,7 +38,8 @@ export interface SessionEntry {
 }
 
 export interface RegistryData {
-  readonly version: 1;
+  readonly version: 2;
+  readonly outcomeProjects: ReadonlyArray<OutcomeProject>;
   readonly workspaces: ReadonlyArray<Workspace>;
   readonly projects: ReadonlyArray<string>;
   readonly worktrees: ReadonlyArray<WorktreeEntry>;
@@ -48,7 +50,7 @@ export const CONFIG_PATH = process.env.PIANO_CONFIG ?? join(homedir(), ".config"
 
 export const RegistryPath = Context.Reference<string>("piano/RegistryPath", { defaultValue: () => CONFIG_PATH });
 
-const empty: RegistryData = { version: 1, projects: [], worktrees: [], sessions: [], workspaces: [] };
+const empty: RegistryData = { version: 2, outcomeProjects: [], projects: [], worktrees: [], sessions: [], workspaces: [] };
 const legacySchema = Schema.Struct({
   projects: Schema.Array(Schema.String),
   worktrees: Schema.Array(Schema.Struct({ project: Schema.String, path: Schema.String, branch: Schema.String })),
@@ -56,7 +58,11 @@ const legacySchema = Schema.Struct({
     createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.optional(Schema.Boolean), stats: Schema.optional(SessionStats),
     pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)) })),
 });
-const currentSchema = Schema.Struct({ ...legacySchema.fields, version: Schema.Literal(1), workspaces: Schema.Array(Workspace) });
+const v1Schema = Schema.Struct({ ...legacySchema.fields, version: Schema.Literal(1), workspaces: Schema.Array(Workspace) });
+const currentSchema = Schema.Struct({ ...v1Schema.fields, version: Schema.Literal(2),
+  outcomeProjects: Schema.Array(OutcomeProject),
+  sessions: Schema.Array(Schema.Struct({ ...legacySchema.fields.sessions.value.fields, outcomeProjectId: Schema.optional(Schema.String) })),
+});
 
 /** Path references keep their spelling: never move or merge Pi's alias-based history. */
 function withWorkspaces(data: RegistryData): RegistryData {
@@ -73,19 +79,26 @@ function read(path: string): RegistryData {
     text = readFileSync(path, "utf8");
   } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return empty; throw error; }
   const raw = JSON.parse(text);
-  const migrating = raw.version === undefined;
+  const legacy = raw.version === undefined;
+  const migrating = legacy || raw.version === 1;
   if (raw.sessions && raw.threads) throw new Error("Both sessions and legacy threads are present; resolve the ambiguity manually.");
-  const data = Schema.decodeUnknownSync(migrating ? legacySchema : currentSchema)({ ...raw, sessions: raw.sessions ?? raw.threads });
-  const initial: RegistryData = { ...data, version: 1, sessions: data.sessions.map(s => ({ ...s, archived: s.archived ?? false })),
-    workspaces: migrating ? [] : Schema.decodeUnknownSync(Schema.Array(Workspace))(raw.workspaces) };
+  const data = Schema.decodeUnknownSync(legacy ? legacySchema : raw.version === 1 ? v1Schema : currentSchema)({ ...raw, sessions: raw.sessions ?? raw.threads });
+  const initial: RegistryData = { ...data, version: 2,
+    outcomeProjects: migrating ? [] : Schema.decodeUnknownSync(Schema.Array(OutcomeProject))(raw.outcomeProjects),
+    sessions: data.sessions.map(s => ({ ...s, archived: s.archived ?? false })),
+    workspaces: legacy ? [] : Schema.decodeUnknownSync(Schema.Array(Workspace))(raw.workspaces) };
+  const ids = new Set(initial.outcomeProjects.map(p => p.id));
+  if (ids.size !== initial.outcomeProjects.length || initial.outcomeProjects.some(p => !p.name.trim())) throw new Error("Duplicate project identities or blank project name.");
+  if (new Set(initial.sessions.map(s => JSON.stringify([s.cwd, s.sessionId]))).size !== initial.sessions.length) throw new Error("Duplicate session references.");
+  if (initial.sessions.some(s => s.outcomeProjectId !== undefined && !ids.has(s.outcomeProjectId))) throw new Error("Session references an unknown outcome project.");
   for (const p of [...initial.projects, ...initial.worktrees.flatMap(w => [w.path, w.project]), ...initial.sessions.map(s => s.cwd), ...initial.workspaces.flatMap(w => [w.path, w.project])]) {
     if (!isAbsolute(p)) throw new Error(`Registry path is not absolute: ${p}`);
   }
   if (new Set(initial.workspaces.map(w => w.id)).size !== initial.workspaces.length || new Set(initial.workspaces.map(w => w.path)).size !== initial.workspaces.length || initial.workspaces.some(w => !w.id)) throw new Error("Duplicate or empty workspace identities.");
   const complete = withWorkspaces(initial);
-  if (!migrating && complete.workspaces.length !== initial.workspaces.length) throw new Error("Missing workspace identities in version 1 registry.");
+  if (!legacy && complete.workspaces.length !== initial.workspaces.length) throw new Error("Missing workspace identities in versioned registry.");
   if (migrating) {
-    const backup = `${path}.pre-v1-${randomUUID()}.bak`;
+    const backup = `${path}.pre-v${legacy ? 1 : 2}-${randomUUID()}.bak`;
     copyFileSync(path, backup, constants.COPYFILE_EXCL);
     chmodSync(backup, 0o600);
     write(path, complete);
@@ -106,6 +119,9 @@ export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
+    readonly saveOutcomeProject: (project: Omit<OutcomeProject, "archived">) => Effect.Effect<void, RegistryError>;
+    readonly archiveOutcomeProject: (id: string, archived: boolean) => Effect.Effect<void, RegistryError>;
+    readonly assignProject: (cwd: string, sessionId: string, projectId: string | null) => Effect.Effect<void, RegistryError>;
     readonly addProject: (path: string) => Effect.Effect<void, RegistryError>;
     /** Make sure a directory is usable as a session cwd: a project root or a registered worktree. Adds it as a project otherwise. */
     readonly ensureProject: (path: string) => Effect.Effect<string, RegistryError>;
@@ -135,7 +151,7 @@ export const RegistryLive = Layer.effect(
     const update = (f: (d: RegistryData) => RegistryData) =>
       Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         const current = yield* Ref.get(state);
-        const next = f(current);
+        const next = yield* Effect.try({ try: () => f(current), catch: e => e instanceof RegistryError ? e : recovery(path, e) });
         if (next === current) return;
         const data = withWorkspaces(next);
         yield* Effect.try({ try: () => write(path, data), catch: e => recovery(path, e) });
@@ -146,6 +162,22 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       get: Ref.get(state),
+      saveOutcomeProject: project => update(d => {
+        const parsed = Schema.decodeUnknownSync(OutcomeProject)({ ...project, archived: d.outcomeProjects.find(p => p.id === project.id)?.archived ?? false });
+        if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
+        const next = { ...parsed, name: parsed.name.trim(), goal: parsed.goal?.trim() || undefined };
+        return { ...d, outcomeProjects: d.outcomeProjects.some(p => p.id === next.id)
+          ? d.outcomeProjects.map(p => p.id === next.id ? next : p) : [...d.outcomeProjects, next] };
+      }),
+      archiveOutcomeProject: (id, archived) => update(d => {
+        if (!d.outcomeProjects.some(p => p.id === id)) throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
+        return { ...d, outcomeProjects: d.outcomeProjects.map(p => p.id === id ? { ...p, archived } : p) };
+      }),
+      assignProject: (cwd, sessionId, projectId) => update(d => {
+        if (!d.sessions.some(isSession(cwd, sessionId))) throw new RegistryError({ detail: "Session reference is unavailable. Refresh and try again." });
+        if (projectId !== null && !d.outcomeProjects.some(p => p.id === projectId)) throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
+        return { ...d, sessions: d.sessions.map(s => isSession(cwd, sessionId)(s) ? { ...s, outcomeProjectId: projectId ?? undefined } : s) };
+      }),
       addProject: (raw) =>
         Effect.gen(function* () {
           const path = resolve(expandHome(raw));

@@ -3,6 +3,7 @@ import { cn } from "cn";
 import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sessionProject } from "@/components/OutcomeProjects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -23,7 +24,7 @@ interface Props {
 
 /**
  * The command palette: session navigation/actions, new sessions, and view commands.
- * Search matches a session's title, its project and its branch.
+ * Search matches a session's title, its directory, its branch and its project.
  */
 export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest }: Props) {
   const { setTheme } = useTheme();
@@ -41,11 +42,13 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const actions = useSessionActions(send, ready);
   const target = state.session?.sessionId ? { cwd: state.session.cwd, sessionId: state.session.sessionId, title: details.title } : undefined;
-  const sessions = useMemo(() => state.projects.flatMap((p) => p.sessions.map((t) => ({
-    ...t,
-    project: p.name,
-    inWorktree: !p.worktrees.some((w) => w.root && w.path === t.cwd),
-  }))).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)), [state.projects]);
+  const sessions = useMemo(() => {
+    const visible = state.projects.flatMap(p => p.sessions.map(t => ({ ...t, project: p.name, inWorktree: !p.worktrees.some(w => w.root && w.path === t.cwd) })));
+    // Sessions whose directory was closed still belong to their project; they are reachable here by name.
+    return [...visible, ...state.sessionReferences.filter(s => !visible.some(t => t.cwd === s.cwd && t.sessionId === s.sessionId)).map(s => ({ ...s, project: s.cwd.split("/").pop() ?? s.cwd, branch: "", inWorktree: false, createdAt: "" }))]
+      .map(t => ({ ...t, outcome: sessionProject(state, t)?.name ?? "" }))
+      .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
+  }, [state.projects, state.sessionReferences, state.outcomeProjects]);
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
@@ -63,8 +66,8 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
               return (
                 <CommandItem
                   key={`${t.cwd}\n${t.sessionId}`}
-                  value={`${t.title || "Untitled"} ${t.project} ${t.branch ?? ""} ${t.sessionId}`}
-                  keywords={[t.project, t.branch ?? ""]}
+                  value={`${t.title || "Untitled"} ${t.project} ${t.branch ?? ""} ${t.outcome} ${t.sessionId}`}
+                  keywords={[t.project, t.branch ?? "", t.outcome]}
                   onSelect={() => run(() => select(t.cwd, t.sessionId))}
                   className="gap-3"
                 >

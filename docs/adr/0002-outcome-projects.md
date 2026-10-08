@@ -1,6 +1,7 @@
 # ADR 0002: Separate outcome projects from execution locations
 
-- Status: Proposed; this records a plan, not implementation authorization or a completed migration.
+- Status: Accepted for Step 1 by the user's implementation request. Grouping is implemented;
+  shared context/instructions remain deferred. See [evidence](../research/outcome-projects-step1.md).
 - Related: [staged plan](../outcome-projects.md), [glossary](../glossary.md#planned-outcome-projects),
   [ADR 0001](0001-pi-rpc-workspace-workbench.md).
 
@@ -11,16 +12,17 @@ first; shared context and instructions are a separate later step.
 
 ## Boundary and trade-off
 
-This proposes extending ADR 0001 decision 4: a workspace remains the context for execution, revision,
+This extends ADR 0001 decision 4: a workspace remains the context for execution, revision,
 processes and evidence, while an outcome project supplies the organizational context across that work.
-It does not become a checkout owner or a multi-repository execution workspace. The directory meaning
-of existing `project` fields remains unchanged until an explicit compatibility migration and UI naming
-pass; accepting this direction does not silently reinterpret persisted paths.
+It does not become a checkout owner or a multi-repository execution workspace. Registry v2 preserves
+the directory meaning of existing `project` fields and adds outcome identity
+and session associations separately. The UI calls these groupings Projects and execution locations
+Repositories; persisted paths are not reinterpreted.
 
 Simply renaming directories would not support cross-repository outcomes. A list of repository paths
 alone would not distinguish related sessions from unrelated work in those repositories. Explicit
 session membership provides the first useful grouping without requiring a repository hierarchy. The
-initial proposal allows at most one outcome project per session, keeping reassignment and eventual
+initial implementation allows at most one outcome project per session, keeping reassignment and eventual
 instruction selection unambiguous; repositories remain reusable across projects.
 
 ## Consequences

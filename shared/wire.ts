@@ -278,6 +278,20 @@ export type WorkspaceCapture = typeof WorkspaceCapture.Type;
 
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
+export const OutcomeProject = Schema.Struct({
+  id: Schema.String.check(Schema.isMinLength(1)),
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  goal: Schema.optional(Schema.String.check(Schema.isMaxLength(1000))),
+  archived: Schema.Boolean,
+});
+export type OutcomeProject = typeof OutcomeProject.Type;
+export const SessionReference = Schema.Struct({
+  cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
+  outcomeProjectId: Schema.optional(Schema.String), archived: Schema.Boolean,
+  unavailable: Schema.optional(Schema.Literals(["history", "checkout"])),
+});
+export type SessionReference = typeof SessionReference.Type;
+
 export const SessionInfo = Schema.Struct({
   sessionId: Schema.String,
   workspaceId: Schema.String,
@@ -430,6 +444,9 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("projects", {}),
   /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
   Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String), refresh: Schema.optional(Schema.Boolean) }),
+  Schema.TaggedStruct("save_outcome_project", { project: Schema.Struct({ id: OutcomeProject.fields.id, name: OutcomeProject.fields.name, goal: OutcomeProject.fields.goal }) }),
+  Schema.TaggedStruct("archive_outcome_project", { id: Schema.String, archived: Schema.Boolean }),
+  Schema.TaggedStruct("assign_project", { cwd: Schema.String, sessionId: Schema.String, projectId: Schema.NullOr(Schema.String) }),
   Schema.TaggedStruct("add_project", { path: Schema.String }),
   Schema.TaggedStruct("remove_project", { path: Schema.String }),
   /** Save Pi's project-trust decision for a directory; Pi applies it when a session starts there. */
@@ -440,7 +457,7 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("add_worktree", { requestId: Schema.String, project: Schema.String, path: Schema.String }),
   Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
   /** Create and start a session in a directory (registering it as a project when needed) and send its first prompt. */
-  Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, options: StartOptions, text: Schema.optional(Schema.String), attachments: attachmentInput }),
+  Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, outcomeProjectId: Schema.optional(Schema.String), options: StartOptions, text: Schema.optional(Schema.String), attachments: attachmentInput }),
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
   Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),
@@ -463,7 +480,7 @@ export const WorktreeResult = Schema.Union([
 export type WorktreeResult = typeof WorktreeResult.Type;
 
 export const ServerMessage = Schema.Union([
-  Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView) }),
+  Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView), outcomeProjects: Schema.optional(Schema.Array(OutcomeProject)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
   Schema.TaggedStruct("trust", { cwd: Schema.String, trust: ProjectTrust }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),

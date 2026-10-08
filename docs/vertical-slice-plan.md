@@ -121,9 +121,10 @@ see the [roadmap priority](roadmap.md#current-priority-joyful-daily-use) and
 [first UX pass](research/2026-10-05-daily-ux-first-pass.md). Runtime contracts remain in force;
 this does not require full TUI parity or revive Phase 8.
 
-The proposed [outcome-project slices](outcome-projects.md) complement that daily-use priority:
-organize sessions across repositories first, then add shared context/instructions separately. They
-are not a new prerequisite for this table, do not renumber its phases, and do not resume phases 9–13.
+The [outcome-project slices](outcome-projects.md) complement that daily-use priority.
+Step 1 grouping is implemented; [evidence](research/outcome-projects-step1.md) records the gates.
+Shared context/instructions remain deferred. These slices are not a new prerequisite for this table,
+do not renumber its phases, and do not resume phases 9–13.
 
 When deeper workflow work resumes, use the dependency order above. Do not parallelize two writing
 tasks in one checkout; use separate workspaces and explicit handoffs. No unsupported time estimates:

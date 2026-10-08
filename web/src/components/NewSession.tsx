@@ -1,11 +1,12 @@
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon, TargetIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
+import { activeProjects } from "@/components/OutcomeProjects";
 import { PianoMark } from "@/components/PianoMark";
 import { SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -23,15 +24,20 @@ interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
   initialCwd?: string;
+  /** The project a session started here joins; the page is that project's home. */
+  outcomeProjectId?: string;
+  onProjectChange: (outcomeProjectId?: string) => void;
   onMenu: () => void;
 }
 
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, initialCwd, onMenu }: Props) {
+export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onMenu }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
+    // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
+    if (outcomeProjectId) return "";
     try {
       return localStorage.getItem(LAST_DIR) ?? "";
     } catch {
@@ -49,6 +55,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   useEffect(() => {
     if (initialCwd) setCwd(initialCwd);
   }, [initialCwd]);
+
   useEffect(() => {
     const el = textarea.current;
     if (!el) return;
@@ -58,7 +65,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   useTypeToFocus(textarea, useCallback((s: string) => setText((t) => t + s), []));
   // Fall back to the first known project when nothing is remembered.
   useEffect(() => {
-    if (!cwd && state.projects[0]) setCwd(state.projects[0].path);
+    if (!outcomeProjectId && !cwd && state.projects[0]) setCwd(state.projects[0].path);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.projects.length]);
   useEffect(() => {
@@ -68,6 +75,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   }, [creating]);
 
   const project = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
+  const outcome = outcomeProjectId ? state.outcomeProjects.find(p => p.id === outcomeProjectId) : undefined;
   const trust = state.trusts[cwd] ?? project?.worktrees.find(w => w.path === cwd)?.trust;
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
@@ -77,7 +85,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   const effectiveModel = model || catalog?.defaultModel;
   const levels = levelsFor(catalog, effectiveModel);
   const effectiveEffort = clampEffort(levels, effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
-  const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy;
+  const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !outcome?.archived;
 
   const submit = () => {
     if (!ready) return;
@@ -87,7 +95,7 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
       /* ignore */
     }
     setCreating(true);
-    send({ _tag: "create_session", cwd: cwd.trim(), options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
+    send({ _tag: "create_session", cwd: cwd.trim(), outcomeProjectId, options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
     attachments.clear();
   };
 
@@ -99,17 +107,20 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex [&>span]:w-1 [&>span]:scale-y-125" />
-            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">What should we work on?</h1>
-            <p className="mt-2 hidden text-base text-ink-2 md:block">A little progress starts with an idea.</p>
+            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{outcome?.name ?? "What should we work on?"}</h1>
+            {/* A project's goal is its only standing text, so it shows at every width; the tagline stays desktop-only. */}
+            <p className={cn("mt-2 text-base text-ink-2", !outcome?.goal && "hidden md:block")}>{outcome?.goal || "A little progress starts with an idea."}</p>
           </div>
           <div className="shrink-0">
+            {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
             <div className="mb-2 flex min-w-0 items-center gap-1">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 shrink">
                 <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
               </div>
               {trust?.required && (
                 <TrustToggle trusted={trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: cwd, trusted })} />
               )}
+              {(outcome || activeProjects(state).length > 0) && <ProjectSelect state={state} value={outcomeProjectId} onChange={onProjectChange} />}
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>
               <AttachmentDraftView draft={attachments} disabled={creating || !state.connected} />
@@ -143,6 +154,11 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
                 <AlertDescription>Git status unavailable. Open Worktrees to inspect and refresh.</AlertDescription>
               </Alert>
             )}
+            {outcome?.archived && (
+              <Alert className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
+                <AlertDescription>This project is archived. Reopen it from its menu in the sidebar to start sessions here.</AlertDescription>
+              </Alert>
+            )}
             {creating && <p className="sr-only" role="status">Starting Pi</p>}
           </div>
         </div>
@@ -152,11 +168,56 @@ export function NewSession({ state, send, initialCwd, onMenu }: Props) {
   );
 }
 
+/** Which project the new session joins: the same searchable picker as the directory beside it. Present only once a project exists. */
+function ProjectSelect({ state, value, onChange }: { state: AppState; value?: string; onChange: (id?: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const search = useRef<HTMLInputElement>(null);
+  const current = value ? state.outcomeProjects.find(p => p.id === value) : undefined;
+  const choices = activeProjects(state);
+  if (current?.archived) choices.push(current);
+  const pick = (id?: string) => { onChange(id); setOpen(false); };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "ml-auto h-11 max-w-[45%] shrink-0 md:h-8", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
+          <TargetIcon className="text-ink-3" />
+          <span className="truncate">{current ? current.name : "Project"}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" aria-label="Choose a project" className="max-h-(--radix-popover-content-available-height) w-[320px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
+        onOpenAutoFocus={event => { if (!window.matchMedia("(pointer: coarse)").matches) { event.preventDefault(); search.current?.focus({ preventScroll: true }); } }}>
+        <Command>
+          <CommandInput ref={search} aria-label="Search projects" placeholder="Search projects" />
+          <CommandList className="max-h-[min(18rem,60dvh)]">
+            <CommandEmpty>No project matches.</CommandEmpty>
+            <CommandGroup>
+              {choices.map(p => (
+                <CommandItem key={p.id} value={p.id} keywords={[p.name]} onSelect={() => pick(p.id)}>
+                  <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                  {p.archived && <span className="text-xs text-ink-3">Archived</span>}
+                  <CheckIcon className={cn("ml-auto", p.id === value ? "opacity-100" : "opacity-0")} />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup>
+              <CommandItem value="__none" keywords={["none", "no project"]} onSelect={() => pick(undefined)}>
+                <span className="min-w-0 flex-1 truncate">None</span>
+                <CheckIcon className={cn("ml-auto", !value ? "opacity-100" : "opacity-0")} />
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** Shown only for directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted. */
 function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trusted: boolean) => void }) {
   return (
     <Button
-      variant="ghost" size="sm" aria-pressed={trusted} aria-label="Project trust"
+      variant="ghost" size="sm" aria-pressed={trusted} aria-label="Directory trust"
       className={cn(picker, "h-11 shrink-0 md:h-8", trusted ? "text-ink-3" : "text-ink-2")}
       title={trusted ? "Pi loads this folder's .pi settings, extensions and skills. Click to untrust." : "Pi skips this folder's .pi settings, extensions and skills. Click to trust."}
       onClick={() => onChange(!trusted)}
@@ -221,7 +282,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
           <CommandList className="max-h-[min(18rem,60dvh)]">
             <CommandEmpty>No directory matches.</CommandEmpty>
             {roots.length > 0 && (
-              <CommandGroup heading="Projects">
+              <CommandGroup heading="Repositories">
                 {roots.map((k) => (
                   <CommandItem
                     key={k.path}

@@ -226,7 +226,7 @@ try {
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group]')].slice(1).map(group => ({ heading: group.querySelector('[cmdk-group-heading]')?.textContent, items: [...group.querySelectorAll('[cmdk-item]')].map(item => item.getAttribute('data-value')) }))`), [
     { heading: 'Global commands', items: ['new session', 'toggle sidebar', 'appearance light', 'appearance dark', 'appearance system'] },
-    { heading: 'Session commands', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all', 'Changes', 'Rename', 'Archive', 'Delete', 'new session here'] },
+    { heading: 'Session commands', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all', 'Changes', 'Pull request', 'Rename', 'Archive', 'Delete', 'new session here'] },
   ]);
   await ab('screenshot', join(evidence, 'palette-groups.png'));
   // A session also contains "copy all": the exact command must outrank that group.
