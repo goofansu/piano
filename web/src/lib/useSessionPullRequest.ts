@@ -2,8 +2,8 @@ import type { SessionPullRequest, SessionPullRequestAction } from "@shared/wire"
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Only the selected session is polled. Identity and request order fence late responses. */
-export function useSessionPullRequest(cwd: string | undefined, sessionId: string | null | undefined, working: boolean) {
-  const url = cwd && sessionId ? `/api/session/pull-request?${new URLSearchParams({ cwd, sessionId })}` : null;
+export function useSessionPullRequest(workspaceId: string | undefined, sessionId: string | null | undefined, working: boolean) {
+  const url = workspaceId && sessionId ? `/api/session/pull-request?${new URLSearchParams({ workspaceId, sessionId })}` : null;
   const [snapshot, setSnapshot] = useState<{ url: string; value: SessionPullRequest }>();
   const [busy, setBusy] = useState(false);
   const active = useRef<{ controller: AbortController; mutation: boolean } | null>(null);

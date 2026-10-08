@@ -71,7 +71,9 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
     uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
   }[submission.outcome] : undefined;
 
-  const pullRequest = useSessionPullRequest(t?.cwd, t?.sessionId, streaming);
+  // Use the registered session reference, including non-Git or removed checkouts.
+  const workspaceId = state.projects.flatMap(p => p.sessions).find(s => s.cwd === t?.cwd && s.sessionId === t?.sessionId)?.workspaceId;
+  const pullRequest = useSessionPullRequest(workspaceId, t?.sessionId, streaming);
 
   const status = !state.connected || (t !== null && !ready) ? "Reconnecting"
     : !t ? "Loading"

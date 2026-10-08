@@ -119,8 +119,14 @@ export const AppRouter = HttpRouter.use((router) =>
       yield* router.add(method, "/api/session/pull-request", Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const params = new URL(request.url, "http://localhost").searchParams;
-        const cwd = params.get("cwd"), sessionId = params.get("sessionId");
-        if (!cwd || !sessionId) return json({ error: "Session identity is required." }, 400);
+        const workspaceId = params.get("workspaceId"), sessionId = params.get("sessionId");
+        if (!workspaceId || !sessionId) return json({ error: "Workspace and session IDs are required." }, 400);
+        const registry = yield* (yield* Registry).get;
+        const workspace = registry.workspaces.find(w => w.id === workspaceId);
+        if (!workspace || !registry.sessions.some(s => s.cwd === workspace.path && s.sessionId === sessionId)) {
+          return json({ error: "Session is not registered in this workspace. Refresh the session list." }, 404);
+        }
+        const cwd = workspace.path;
         const prs = yield* SessionPullRequests;
         if (method === "GET") return json(yield* prs.get(cwd, sessionId));
         const body = yield* request.text;

@@ -97,3 +97,25 @@ and colors, accessible state descriptions, and title-only tooltips when there ar
 no check/review details. Screenshots and output: `/tmp/piano-pr-icons-evidence/`;
 command logs: `/tmp/piano-pr-icons-{tests,typecheck,browser}.log`. Reviewed the open-PR
 screenshot. Fake GitHub/Pi only; scratch processes/files cleaned up. Not deployed.
+
+## Workspace-ID request follow-up
+
+Against `1d8c25d` + working tree, PR GET/PUT requests now send `workspaceId` and
+`sessionId`, never `cwd`. The client uses the registered session's workspace ID
+(including non-Git/removed checkouts). The router resolves the path from Registry
+and checks that the session belongs to that workspace before calling the PR module.
+Missing IDs return 400; unknown/mismatched pairs return 404 without directory paths.
+Legacy cwd-only requests no longer work. No new IDs or registry migration.
+
+This reduces path disclosure in request URLs (INV-01/07/11); it does not add
+authorization or remove cwd from other APIs. Private authenticated hosting remains
+required. The backend's existing cwd-based module boundary is unchanged.
+
+Verification: `npm test` (77 passed), typecheck, lint (success with 14 existing
+warnings), and the scratch browser journey on 7271/7272 passed. Extended that journey
+with HTTP GET/PUT missing/unknown/mismatched identity cases, rejection of cwd-only
+requests, proof that an extra caller path cannot redirect valid IDs, and non-Git
+workspace linking/display. Observed browser fetch URLs all contain the correct
+workspace/session IDs and no paths. Evidence: `/tmp/piano-pr-ids-evidence/` and
+`/tmp/piano-pr-ids-{tests,typecheck,lint,browser}.log`. Scratch processes and files
+were cleaned up; no real registry or model calls. No deployment of this follow-up.

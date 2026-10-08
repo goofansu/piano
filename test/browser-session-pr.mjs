@@ -13,8 +13,8 @@ const backendPort = process.env.PR_BACKEND_PORT ?? '7171', frontendPort = proces
 const backendUrl = `http://127.0.0.1:${backendPort}`, frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const root = mkdtempSync(join(tmpdir(), 'piano-session-pr-browser-'));
 const githubHost = process.env.PR_GITHUB_HOST ?? 'github.com';
-const repo = join(root, 'repo'), sessions = join(root, 'sessions'), bin = join(root, 'bin');
-for (const dir of [repo, sessions, bin, join(root, 'agent')]) mkdirSync(dir);
+const repo = join(root, 'repo'), plain = join(root, 'plain'), sessions = join(root, 'sessions'), bin = join(root, 'bin');
+for (const dir of [repo, plain, sessions, bin, join(root, 'agent')]) mkdirSync(dir);
 const git = (...args) => execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', ...args]);
 git('init', '-q', '-b', 'feature'); git('commit', '--allow-empty', '-qm', 'Initial'); git('remote', 'add', 'origin', `https://${githubHost}/example/repo.git`);
 const forge = join(root, 'forge.json');
@@ -23,11 +23,11 @@ const control = data => writeFileSync(forge, JSON.stringify({ expectedHost: gith
 control({ prs });
 writeFileSync(join(bin, 'gh'), `#!${process.execPath}\nimport ${JSON.stringify(resolve('test/fixtures/fake-gh.mjs'))};\n`, { mode: 0o755 });
 const timestamp = new Date().toISOString();
-for (const id of ['work', 'other']) writeFileSync(join(sessions, `${id}.jsonl`), [
-  { type: 'session', version: 3, id, cwd: repo, timestamp },
+for (const id of ['work', 'other', 'notes']) writeFileSync(join(sessions, `${id}.jsonl`), [
+  { type: 'session', version: 3, id, cwd: id === 'notes' ? plain : repo, timestamp },
   { type: 'message', id: 'm0', parentId: null, timestamp, message: { role: 'user', content: 'Research references: https://github.com/unrelated/project/pull/999 and https://github.com/example/repo/issues/1 and http://localhost:9999. These are not session deliverables.', timestamp: 0 } },
 ].map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: ['work', 'other'].map(id => ({ cwd: repo, sessionId: id, title: id === 'work' ? 'Current work' : 'Other work', createdAt: timestamp, updatedAt: timestamp, archived: false, ...(id === 'other' ? { pullRequest: null } : {}) })) }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo, plain], worktrees: [], sessions: ['work', 'other', 'notes'].map(id => ({ cwd: id === 'notes' ? plain : repo, sessionId: id, title: id === 'work' ? 'Current work' : id === 'other' ? 'Other work' : 'Notes', createdAt: timestamp, updatedAt: timestamp, archived: false, ...(id === 'other' ? { pullRequest: null } : {}) })) }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PIANO_TEST_GH_FIXTURE: forge, HOST: '127.0.0.1', PORT: backendPort, PIANO_CONFIG: join(root, 'registry.json'), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', frontendPort, '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: backendUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';
@@ -59,6 +59,30 @@ try {
     } catch {}
     if (n > 150) throw new Error(`Scratch startup deadline: ${processLog}`); await delay(100);
   }
+  // HTTP boundary: only a registered workspace/session pair can be read or changed.
+  const projects = (await (await fetch(`${backendUrl}/api/projects`)).json()).projects;
+  const workspaceId = projects.flatMap(p => p.sessions).find(s => s.sessionId === 'work').workspaceId;
+  const plainId = projects.flatMap(p => p.sessions).find(s => s.sessionId === 'notes').workspaceId;
+  const endpoint = params => `${backendUrl}/api/session/pull-request?${new URLSearchParams(params)}`;
+  observations.identityChecks = [];
+  for (const method of ['GET', 'PUT']) {
+    for (const [params, status] of [
+      [{ sessionId: 'work', cwd: repo }, 400],
+      [{ workspaceId: 'missing', sessionId: 'work' }, 404],
+      [{ workspaceId: plainId, sessionId: 'work' }, 404],
+      [{ workspaceId, sessionId: 'missing' }, 404],
+    ]) {
+      const response = await fetch(endpoint(params), { method, ...(method === 'PUT' ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'remove' }) } : {}) });
+      assert.equal(response.status, status);
+      const body = await response.text(); assert.ok(!body.includes(repo) && !body.includes(plain));
+      observations.identityChecks.push({ method, status });
+    }
+  }
+  // An extra caller-supplied path cannot redirect a valid ID pair to another workspace.
+  const own = await (await fetch(endpoint({ workspaceId, sessionId: 'work', cwd: plain }))).json();
+  assert.equal(own.pullRequest?.number, 42);
+  const notes = await fetch(endpoint({ workspaceId: plainId, sessionId: 'notes' }), { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'link', url: prs[1].url }) });
+  assert.equal(notes.status, 200); assert.equal((await notes.json()).link?.url, prs[1].url);
   await ab('set', 'viewport', '1280', '900'); await ab('open', `${frontendUrl}/s/work`);
   await ab('wait', '--text', 'These are not session deliverables.'); await waitBadge(42);
   observations.initial = await evaluate(`({ prs: [...document.querySelectorAll('header a[aria-label^="Open pull request"]')].map(a => a.href), pile: !!document.querySelector('[data-slot="link-stack"]') })`);
@@ -107,6 +131,19 @@ try {
   assert.ok(observations.mobile.scroll <= observations.mobile.width && observations.mobile.dialogScroll <= observations.mobile.dialogWidth);
   await ab('screenshot', join(evidence, '02-pr-dialog-mobile.png')); await closeDetails();
   await ab('screenshot', join(evidence, '03-current-pr-mobile.png'));
+  const requests = () => evaluate(`performance.getEntriesByType('resource').filter(e => new URL(e.name).pathname === '/api/session/pull-request').map(e => e.name)`);
+  observations.requests = await requests();
+  // A non-Git workspace must still supply its ID and display its manually associated PR.
+  await ab('open', `${frontendUrl}/s/notes`); await waitBadge(43);
+  observations.requests.push(...await requests());
+  assert.ok(observations.requests.length > 0);
+  for (const raw of observations.requests) {
+    const url = new URL(raw), id = url.searchParams.get('workspaceId');
+    assert.ok([workspaceId, plainId].includes(id));
+    assert.equal(url.searchParams.has('cwd'), false);
+    assert.ok(!decodeURIComponent(raw).includes(root));
+    assert.equal(id, url.searchParams.get('sessionId') === 'notes' ? plainId : workspaceId);
+  }
   observations.status = 'pass'; console.log('PASS');
 } finally {
   await ab('close').catch(() => {});
