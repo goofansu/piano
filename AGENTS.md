@@ -2,7 +2,7 @@
 
 Web UI that starts and continues pi sessions across projects and worktrunk worktrees. One piano
 session is one pi session; each running session is one `pi --mode rpc` child. Server on Effect 4
-(exact pins in package.json; bump deliberately), client on React + shadcn/ui.
+(keep Effect packages aligned and verify lockfile upgrades), client on React + shadcn/ui.
 
 ## Words
 

@@ -1,7 +1,8 @@
 # Pi 1.1.0 and Effect 4.0.2 upgrade
 
-Exact pins move Pi from 1.0.4 to 1.1.0 and Effect/platform-node from
-4.0.0-rc.118 to stable 4.0.2. The web workspace also pins Effect 4.0.2;
+Pi moves from 1.0.4 to an exact 1.1.0 pin. Effect/platform-node move from
+4.0.0-rc.118 to stable 4.0.2. Per user preference, root and web Effect declarations
+use `^4.0.2`, allowing later compatible 4.x releases; the lockfile retains 4.0.2.
 `npm ls` confirms a single deduplicated version. The lockfile updates Pi's
 companion packages, platform-node-shared and its required @types/ws version.
 No application API changes were needed.
@@ -50,8 +51,9 @@ Piano inspected at `dc9d251`. **No additional application migration is indicated
   release, requires matching Effect package versions and TypeScript ≥5.9.
   Piano meets these requirements. Stable release does not mean every module is
   stable: 4.0.2 marks HTTP and ChildProcess APIs `@stability unstable`, permitting
-  breaking changes in minor releases. Keep the exact **4.0.2** pins and deliberate
-  upgrade checks, not a literal `latest` dependency tag.
+  breaking changes in minor releases. The requested `^4.0.2` ranges allow these
+  minor releases, so keep Effect packages aligned and run deliberate upgrade
+  checks when updating the lockfile. A range alone does not establish compatibility.
 
 This follow-up is documentation-only: source/changelog inspection and link review,
 with the existing upgrade verification below retained rather than rerun. Individual
@@ -84,3 +86,9 @@ for these dependency-only changes, so no new regression test was added.
 `npm audit` reports seven high findings; its JSON is retained alongside the
 checks. This is not a general security cleanup. No service restart or deployment
 was performed; the live registry and instance were left alone.
+
+Range follow-up: tested `2126d46` plus the `^4.0.2` declaration/lockfile-metadata
+changes on the same Node/runtime versions. `npm test`, `npm run typecheck` and
+`npm run lint` passed again (`/tmp/piano-bump-deps/ranges-*.log`). No resolved
+package changed, so the earlier browser evidence still covers the runtime;
+no additional browser run or regression test was needed.

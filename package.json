@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.1.0",
-    "@effect/platform-node": "4.0.2",
-    "effect": "4.0.2"
+    "@effect/platform-node": "^4.0.2",
+    "effect": "^4.0.2"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
