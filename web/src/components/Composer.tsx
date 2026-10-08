@@ -99,7 +99,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
           <section className="control-enter border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
               <h2 className="font-medium text-ink-2">{streaming ? "Queued messages" : "Paused queue"} ({queuedMessages.length})</h2>
-              <Button variant="ghost" size="sm" className="h-11 shrink-0 md:h-8" aria-label={queuedMessages.length === 1 ? "Edit queued message" : "Edit all queued messages"} title="Move queued messages back to the draft without stopping Pi" disabled={disabled} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
+              <Button variant="ghost" size="sm" className="h-11 shrink-0 md:h-8" aria-label={queuedMessages.length === 1 ? "Edit queued message" : "Edit all queued messages"} title="Move queued messages back to the draft without stopping Pi (Esc)" disabled={disabled} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
                 <PencilIcon data-icon="inline-start" aria-hidden />
                 {queuedMessages.length === 1 ? "Edit" : "Edit all"}
               </Button>
@@ -129,9 +129,15 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
               if (isSendKey(e)) {
                 e.preventDefault();
                 send(e.altKey ? otherMode(queueMode) : queueMode);
-              } else if (e.key === "Escape" && streaming) {
-                e.preventDefault();
-                onStop();
+              } else if (e.key === "Escape" && !disabled) {
+                // Esc acts on the nearest thing first: queued messages return to the draft, then the next press stops Pi.
+                if (queuedMessages.length > 0) {
+                  e.preventDefault();
+                  onRestoreQueue();
+                } else if (streaming) {
+                  e.preventDefault();
+                  onStop();
+                }
               }
             }}
           />
@@ -182,7 +188,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             </TooltipTrigger>
             <TooltipContent>
               {showStop
-                ? <>Stop. Queued input is kept. <Kbd>Esc</Kbd></>
+                ? queuedMessages.length > 0 ? <>Stop. Queued input is kept. <Kbd>Esc</Kbd> edits it first.</> : <>Stop. Queued input is kept. <Kbd>Esc</Kbd></>
                 : <>{showDelivery ? `${DELIVERY[queueMode].label}: ${DELIVERY[queueMode].detail}` : streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd></>}
             </TooltipContent>
           </Tooltip>

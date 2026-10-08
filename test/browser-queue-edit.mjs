@@ -106,7 +106,27 @@ try {
   await until(`document.querySelector('${input}').value === 'Paused message' && !document.querySelector('${queue}')`);
   ab('wait', '[aria-label="Send"]');
   capture('paused-edit');
-  console.log('PASS: compact queue labels; edit while running; resend; edit all preserves draft and mixed queue; paused edit');
+  // Esc from the composer returns queued messages to the draft first; only the next press stops Pi.
+  ab('fill', input, 'live context'); ab('click', '[aria-label="Send"]'); ab('wait', '[aria-label="Stop"]');
+  ab('fill', input, 'Esc message'); ab('click', '[aria-label="follow-up"]');
+  ab('wait', '[aria-label="Edit queued message"]');
+  ab('click', input); ab('press', 'Escape');
+  await until(`document.querySelector('${input}').value === 'Esc message' && !document.querySelector('${queue}')`);
+  assert.ok(evaluate(`!!document.querySelector('[aria-label="Delivery: follow-up"]')`), 'Esc with a queue edits without stopping Pi');
+  assert.ok(evaluate(`document.activeElement.matches('${input}')`), 'Esc keeps the composer focused');
+  capture('esc-edit');
+  ab('fill', input, ''); ab('press', 'Escape');
+  ab('wait', '[aria-label="Send"]');
+  assert.equal(evaluate(`!!document.querySelector('${queue}')`), false, 'Esc without a queue stops Pi');
+  // A paused queue is edited by Esc as well.
+  ab('fill', input, 'live context'); ab('click', '[aria-label="Send"]'); ab('wait', '[aria-label="Stop"]');
+  ab('fill', input, 'Paused esc'); ab('click', '[aria-label="follow-up"]');
+  ab('wait', '[aria-label="Edit queued message"]'); ab('click', '[aria-label="Stop"]');
+  ab('wait', '--text', 'Paused queue');
+  ab('click', input); ab('press', 'Escape');
+  await until(`document.querySelector('${input}').value === 'Paused esc' && !document.querySelector('${queue}')`);
+  capture('esc-paused-edit');
+  console.log('PASS: compact queue labels; edit while running; resend; edit all preserves draft and mixed queue; paused edit; Esc edits before stopping');
 } finally {
   try { ab('close'); } catch {}
   backend.kill('SIGTERM'); frontend.kill('SIGTERM');
