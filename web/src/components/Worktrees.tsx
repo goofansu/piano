@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Command, CommandGroup, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PopoverContent } from "@/components/ui/popover";
@@ -106,6 +106,9 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
             <SelectGroup>{state.projects.map(p => <SelectItem key={p.path} value={p.path}>{p.name}</SelectItem>)}</SelectGroup>
           </SelectContent>
         </Select>
+        {discovery?.status === "ready" && <Button variant="ghost" size="icon" aria-label="New worktree" title="New worktree" disabled={pending || !state.connected} onClick={() => { setError(null); setCreating(true); }}>
+          <PlusIcon />
+        </Button>}
         <Button variant="ghost" size="icon" aria-label="Refresh worktrees" title="Refresh worktrees" disabled={pending || !state.connected || refreshing} onClick={() => { setRefreshing(true); send({ _tag: "projects" }); }}>
           {refreshing ? <Spinner /> : <RefreshCwIcon />}
         </Button>
@@ -125,12 +128,6 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
                 <CheckIcon className={cn("ml-auto", w.path === currentCwd ? "opacity-100" : "opacity-0")} />
               </CommandItem>
             ))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup>
-            <CommandItem value="__new-worktree" disabled={pending || !state.connected} onSelect={() => { setError(null); setCreating(true); }}>
-              <PlusIcon /> New worktree
-            </CommandItem>
           </CommandGroup>
         </CommandList>
       </Command>}
