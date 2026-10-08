@@ -1,8 +1,8 @@
 /*
  * piano design system.
  *
- * Type: one family for the interface (Instrument Sans) and one for anything the
- * machine produced verbatim (JetBrains Mono). Body stays 16px; labels are 16px on
+ * Type: default sans-serif for the interface and monospace for anything the
+ * machine produced verbatim. Body stays 16px; labels are 16px on
  * phones / 14px on desktop, captions 14px / 12px. Weights 400/500/600.
  *
  * Layers: every surface belongs to one of four layers, and a layer decides its
@@ -15,8 +15,6 @@
  * Colour: an ivory canvas by day, an ebony canvas by night, one felt-green accent
  * that means "live": the focus ring, the send key, the working session.
  */
-@import "@fontsource-variable/instrument-sans";
-@import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -152,9 +150,6 @@
 }
 
 @theme inline {
-  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
-
   /* Shared responsive UI layers; body and display sizes stay stable. */
   --text-xs: var(--type-caption);
   --text-sm: var(--type-label);

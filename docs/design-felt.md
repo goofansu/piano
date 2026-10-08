@@ -37,17 +37,17 @@ Motion tokens, also in `index.css`:
 
 ## Type
 
-Instrument Sans Variable for the interface, JetBrains Mono for anything verbatim (commands,
-paths, branches, usage figures). Body text stays 16px, as does the mobile composer.
+Tailwind's default `font-sans` for the interface and `font-mono` for anything verbatim
+(commands, paths, branches, usage figures), without bundled fonts or custom family overrides.
+Body text stays 16px, as does the mobile composer.
 Shared UI labels (`text-sm`) are 16px below the shell's 48rem desktop breakpoint and 14px
 at or above it; captions (`text-xs`)
 are 14px / 12px respectively. This keeps mobile navigation, menus and controls as readable as
 the composer without enlarging desktop chrome. Weights 400/500/600.
 
 Considered and rejected: 15px transcript body. The brief allows it only if the measure stays
-under 75ch; at the 48rem column the brief also asks for, 15px Instrument Sans runs to roughly
-95ch, so the column would have to narrow to about 38rem to qualify, and the composer would then
-feel cramped. The 16px body stays.
+under 75ch. The 48rem column risks exceeding that measure at 15px, depending on the system
+font, and narrowing the column would cramp the composer. The 16px body stays.
 
 ## Layout
 

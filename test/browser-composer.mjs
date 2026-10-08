@@ -77,7 +77,7 @@ const geometry = `(() => {
   if (usageRect && (usageRect.y < c.bottom || Math.abs(usageRect.right - c.right) > 1 || usageRect.bottom > innerHeight)) problems.push('Usage footer is not below and aligned with the composer inside the viewport');
   if (card.querySelector('[aria-label="Context usage"]')) problems.push('Context usage still occupies the action toolbar');
   if (usage && usage.scrollWidth > usage.clientWidth + 1) problems.push('Usage controls overflow');
-  if (fonts.some(font=>!font.family.includes(font.tag === 'TEXTAREA' ? 'Instrument Sans' : 'JetBrains Mono'))) problems.push('Message input must use sans-serif while composer controls stay monospace');
+  if (fonts.some(font=>!font.family.includes(font.tag === 'TEXTAREA' ? 'sans-serif' : 'monospace'))) problems.push('Message input must use sans-serif while composer controls stay monospace');
   const action = controls.find(r => ['Send', 'Stop', 'Queue message'].includes(r.label));
   if (action && controls.some(r => Math.abs(r.y + r.height/2 - action.y - action.height/2) > 2)) problems.push('Composer toolbar wraps instead of reserving the action row');
   const steer = card.querySelector('[aria-label="Steer"]');
@@ -204,7 +204,7 @@ async function run() {
   })()`);
   writeFileSync(join(evidence, 'model-picker-layout.json'), JSON.stringify(pickerLayout,null,2));
   if (pickerLayout.text.includes('Model and effort') || pickerLayout.close || pickerLayout.text.includes('default')) throw new Error('Retired model picker heading or default badge remains');
-  if (pickerLayout.fonts.some(font=>!font.includes('JetBrains Mono'))) throw new Error('Settings popup is not monospace');
+  if (pickerLayout.fonts.some(font=>!font.includes('monospace'))) throw new Error('Settings popup is not monospace');
   if (pickerLayout.rows.some(row=>Math.abs(row.left-pickerLayout.rows[0].left)>1 || row.checkLeft<row.right)) throw new Error('Model labels are not left aligned with checks on the right');
   if (pickerLayout.rows.filter(row=>row.checked).map(row=>row.text).join() !== `fake/${longModel}`) throw new Error('Model selection check marks the wrong option');
   const visibleModels = () => evaluate(`[...document.querySelectorAll('[cmdk-item]')].filter(e=>e.getBoundingClientRect().height>0).map(e=>e.getAttribute('data-value'))`);
