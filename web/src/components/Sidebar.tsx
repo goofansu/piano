@@ -186,7 +186,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         {sectioned && state.projectsLoaded && (
           <SidebarSection label="Projects" open={sectionOpen("projects")} onOpenChange={open => setSectionOpen("projects", open)}>
             {active.length === 0 ? (
-              <p className={cn(row, "flex items-center pl-7 text-sm text-muted-foreground")}>All projects archived</p>
+              <ListEmpty>All projects archived</ListEmpty>
             ) : (
               <div className="flex flex-col gap-1">
                 {active.map(p => <OutcomeGroup key={p.id} project={p} open={openProjects.has(projectKey(p.id))} onOpenChange={open => setOpen(projectKey(p.id), open)} {...groupProps} />)}
@@ -219,6 +219,15 @@ function SidebarSection({ label, open, onOpenChange, className, children }: { la
       </h2>
       <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/** shadcn's Empty composed down to one list row, so an empty group keeps the list's rhythm and indent. */
+function ListEmpty({ children }: { children: React.ReactNode }) {
+  return (
+    <Empty className={cn(row, "items-start justify-center gap-0 rounded-none p-0 pl-7 text-left md:p-0 md:pl-7")}>
+      <EmptyDescription className="text-sm/normal">{children}</EmptyDescription>
+    </Empty>
   );
 }
 
@@ -382,7 +391,7 @@ function OutcomeGroup({ project, current, open, onOpenChange, state, send, selec
         </DropdownMenu>
       </div>
       <CollapsibleContent className="disclosure-content">
-        {members.length === 0 ? <p className={cn(row, "flex items-center pl-7 text-sm text-muted-foreground")}>No sessions yet</p> : <ul className="flex flex-col gap-1 py-1">
+        {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
           {members.map(s => (
             <SessionRow key={sessionKey(s)} t={s} trailing={location(s)} hint={hint(s)} disabled={s.unavailable === "history"}
               selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
@@ -440,7 +449,7 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
       {project.discovery.status === "error" && <Badge variant="destructive" className="ml-7 animate-in fade-in-0" title={project.discovery.detail}>Git status unavailable</Badge>}
       {project.discovery.status === "non-git" && <Badge variant="secondary" className="ml-7">Non-Git</Badge>}
       <CollapsibleContent className="disclosure-content">
-        {project.sessions.length === 0 ? <p className={cn(row, "flex items-center pl-7 text-sm text-muted-foreground")}>No sessions yet</p> : <ul className="flex flex-col gap-1 py-1">
+        {project.sessions.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
           {project.sessions.map((t) => {
             // The branch is only news when the session runs somewhere other than the project root.
             const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
