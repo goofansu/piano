@@ -36,6 +36,7 @@ const LAST_DIR = "piano.lastDir";
 export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onMenu }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
+    // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
     if (outcomeProjectId) return "";
     try {
       return localStorage.getItem(LAST_DIR) ?? "";
@@ -54,13 +55,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
   useEffect(() => {
     if (initialCwd) setCwd(initialCwd);
   }, [initialCwd]);
-  // A session for a project starts from an explicit directory choice, never a remembered or default one.
-  const [explicit, setExplicit] = useState(!!initialCwd);
-  useEffect(() => {
-    if (outcomeProjectId && !explicit) setCwd("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outcomeProjectId]);
-  const chooseCwd = useCallback((next: string) => { setExplicit(true); setCwd(next); }, []);
+
   useEffect(() => {
     const el = textarea.current;
     if (!el) return;
@@ -119,7 +114,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
           <div className="shrink-0">
             <div className="mb-2 flex min-w-0 items-center gap-1">
               <div className="min-w-0 flex-1">
-                <DirectorySelect state={state} value={cwd} onChange={chooseCwd} onBrowse={() => setPickerOpen(true)} send={send} />
+                <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
               </div>
               {(outcome || activeProjects(state).length > 0) && <ProjectSelect state={state} value={outcomeProjectId} onChange={onProjectChange} />}
               {trust?.required && (
@@ -167,7 +162,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
           </div>
         </div>
       </div>
-      <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={chooseCwd} initialPath={cwd || undefined} />
+      <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={(path) => setCwd(path)} initialPath={cwd || undefined} />
     </>
   );
 }
