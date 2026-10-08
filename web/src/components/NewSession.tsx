@@ -235,7 +235,6 @@ export function directoryTrust(state: AppState, cwd: string) {
   return state.trusts[cwd] ?? state.projects.flatMap(p => p.worktrees).find(w => w.path === cwd)?.trust;
 }
 
-/** Trusted is the usual state, so it shows only its icon; untrusted names itself because the user can act on it. */
 function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trusted: boolean) => void }) {
   return (
     <Button
@@ -245,7 +244,7 @@ function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trust
       onClick={() => onChange(!trusted)}
     >
       {trusted ? <ShieldCheckIcon /> : <ShieldOffIcon />}
-      {!trusted && <span className="max-[360px]:hidden">Untrusted</span>}
+      <span className="max-[360px]:hidden">{trusted ? "Trusted" : "Untrusted"}</span>
     </Button>
   );
 }
