@@ -12,8 +12,9 @@ organization does not confer verification or approval (INV-09–10).
   duplicate/dangling identities and incompatible/malformed data fail without resetting the file.
 - Projects are groups in the sidebar, in the same tree and rows as repositories, with the member's
   repository (or worktree branch) as the row's trailing detail. Headings and project controls appear
-  only once a project exists. Membership is a **Project** submenu on the sidebar row and session header
-  menus; "New project…" there creates a project and files the session in one step. The command palette
+  only once a project exists. The New page always shows the project chip; its "New project…" entry
+  creates a project that the page then uses. Membership is a **Project** submenu on the sidebar row
+  and session header menus; "New project…" there creates a project and files the session in one step. The command palette
   finds sessions by project name but carries no project commands yet; which ones are wanted is left to
   daily use, a deliberate deviation from the plan's palette-parity line for this slice. A project's `+` and `/projects/<id>` open its New page, which names the project, shows
   its goal and requires an explicit directory. Edit, archive and reopen live in the group's menu;

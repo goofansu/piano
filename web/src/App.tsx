@@ -317,7 +317,7 @@ export default function App() {
         {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
         <div key={state.view.kind} className="view-enter flex min-h-0 flex-1 flex-col">
           {state.view.kind === "new" ? (
-            <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onMenu={showSidebar} />
+            <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} />
           ) : state.view.kind === "missing-session" ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center" role="alert">
               <h1 className="text-xl font-medium">Session not found</h1>

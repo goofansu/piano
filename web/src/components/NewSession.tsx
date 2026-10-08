@@ -1,6 +1,6 @@
 import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, ShieldCheckIcon, ShieldOffIcon, TargetIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GitBranchPlusIcon, PanelLeftOpenIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, TargetIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
@@ -27,13 +27,15 @@ interface Props {
   /** The project a session started here joins; the page is that project's home. */
   outcomeProjectId?: string;
   onProjectChange: (outcomeProjectId?: string) => void;
+  /** Open the New project dialog; the created project becomes this page's project. */
+  onNewProject: () => void;
   onMenu: () => void;
 }
 
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onMenu }: Props) {
+export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onNewProject, onMenu }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
     // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
@@ -120,7 +122,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
               {trust?.required && (
                 <TrustToggle trusted={trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: cwd, trusted })} />
               )}
-              {(outcome || activeProjects(state).length > 0) && <ProjectSelect state={state} value={outcomeProjectId} onChange={onProjectChange} />}
+              <ProjectSelect state={state} value={outcomeProjectId} onChange={onProjectChange} onCreate={onNewProject} />
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>
               <AttachmentDraftView draft={attachments} disabled={creating || !state.connected} />
@@ -168,8 +170,8 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
   );
 }
 
-/** Which project the new session joins: the same searchable picker as the directory beside it. Present only once a project exists. */
-function ProjectSelect({ state, value, onChange }: { state: AppState; value?: string; onChange: (id?: string) => void }) {
+/** Which project the new session joins: the same searchable picker as the directory beside it, and the place to create the first one. */
+function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; value?: string; onChange: (id?: string) => void; onCreate: () => void }) {
   const [open, setOpen] = useState(false);
   const search = useRef<HTMLInputElement>(null);
   const current = value ? state.outcomeProjects.find(p => p.id === value) : undefined;
@@ -199,11 +201,19 @@ function ProjectSelect({ state, value, onChange }: { state: AppState; value?: st
                 </CommandItem>
               ))}
             </CommandGroup>
+            {choices.length > 0 && <>
+              <CommandSeparator />
+              <CommandGroup>
+                <CommandItem value="__none" keywords={["none", "no project"]} onSelect={() => pick(undefined)}>
+                  <span className="min-w-0 flex-1 truncate">None</span>
+                  <CheckIcon className={cn("ml-auto", !value ? "opacity-100" : "opacity-0")} />
+                </CommandItem>
+              </CommandGroup>
+            </>}
             <CommandSeparator />
             <CommandGroup>
-              <CommandItem value="__none" keywords={["none", "no project"]} onSelect={() => pick(undefined)}>
-                <span className="min-w-0 flex-1 truncate">None</span>
-                <CheckIcon className={cn("ml-auto", !value ? "opacity-100" : "opacity-0")} />
+              <CommandItem value="__new" keywords={["new project", "create"]} disabled={!state.connected} onSelect={() => { setOpen(false); onCreate(); }}>
+                <PlusIcon /> New project…
               </CommandItem>
             </CommandGroup>
           </CommandList>
