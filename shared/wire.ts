@@ -505,6 +505,8 @@ export type StartOptions = typeof StartOptions.Type;
 
 export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("projects", {}),
+  /** Rediscover one registered project's worktrees; only the requesting client gets the answer. */
+  Schema.TaggedStruct("worktrees", { project: Schema.String }),
   /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
   Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String), refresh: Schema.optional(Schema.Boolean) }),
   Schema.TaggedStruct("save_outcome_project", { project: Schema.Struct({ id: OutcomeProject.fields.id, name: OutcomeProject.fields.name, goal: OutcomeProject.fields.goal }) }),
@@ -545,6 +547,7 @@ export type WorktreeResult = typeof WorktreeResult.Type;
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView), outcomeProjects: Schema.optional(Schema.Array(OutcomeProject)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
+  Schema.TaggedStruct("worktrees", { project: Schema.String, discovery: WorktreeDiscovery }),
   Schema.TaggedStruct("trust", { cwd: Schema.String, trust: ProjectTrust }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
   /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */

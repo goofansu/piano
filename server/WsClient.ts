@@ -163,6 +163,11 @@ export const handleSocket = (socket: Socket.Socket) =>
         switch (msg._tag) {
           case "projects":
             return yield* publishProjects;
+          case "worktrees": {
+            const discovery = (yield* registry.get).projects.includes(msg.project) ? yield* listWorktrees(msg.project)
+              : { status: "error" as const, observedAt: new Date().toISOString(), detail: "Select a registered project first." };
+            return yield* send({ _tag: "worktrees", project: msg.project, discovery });
+          }
           case "models": {
             const cwd = resolve(expandHome(msg.cwd ?? selected?.cwd ?? homedir()));
             return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });

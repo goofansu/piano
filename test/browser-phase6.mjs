@@ -29,10 +29,11 @@ if(existsSync(${JSON.stringify(failure)})){console.error('Worktrunk unavailable:
 const r=spawnSync(${JSON.stringify(wtPath)},process.argv.slice(2),{encoding:'utf8'});let out=r.stdout??'';
 if(existsSync(${JSON.stringify(unknown)})&&process.argv.includes('list')){const x=JSON.parse(out);for(const i of x.items)if(i.worktree){i.worktree.changes=null;i.worktree.operation=null;}out=JSON.stringify(x);}
 process.stdout.write(out);process.stderr.write(r.stderr??'');process.exit(r.status??1);\n`, { mode: 0o755 });
-const server = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: '7171', PIANO_CONFIG: registry, PIANO_WT_CLI: wrapper,
+const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171', webPort = process.env.PIANO_TEST_WEB_PORT ?? '7172';
+const server = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: backendPort, PIANO_CONFIG: registry, PIANO_WT_CLI: wrapper,
   PIANO_PI_CLI: resolve('test/fake-pi.mjs'), PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
-const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], {
-  cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', webPort, '--strictPort'], {
+  cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: `http://127.0.0.1:${backendPort}` }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = ''; for (const p of [server, frontend]) { p.stdout.on('data', d => processLog += d); p.stderr.on('data', d => processLog += d); }
 const session = `phase6-${process.pid}`, commands = [], observations = [];
 async function ab(...args) {
@@ -53,15 +54,15 @@ async function refresh() { await click('Refresh worktrees'); await ab('wait', '-
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(server.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch('http://127.0.0.1:7172')).ok && (await fetch('http://127.0.0.1:7171/api/projects')).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${webPort}`)).ok && (await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok) break; } catch {}
     if (n === 99) throw new Error('scratch startup deadline'); await delay(100);
   }
-  await ab('open', 'http://127.0.0.1:7172'); await ab('wait', '--text', 'What should we work on?');
+  await ab('open', `http://127.0.0.1:${webPort}`); await ab('wait', '--text', 'What should we work on?');
   await ab('wait', '--fn', `document.querySelector('[aria-label="Directory"]')?.title === ${JSON.stringify(repo)}`);
   await openWorktrees(); await ab('wait', '--text', 'Detached HEAD');
   assert.equal(readRegistry().worktrees.length, 0); assert.equal(readRegistry().sessions.length, 0);
   await capture('discovery-not-registration');
-  await ab('find', 'role', 'option', 'click', '--name', 'repo/Detached HEAD', '--exact'); await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
+  await ab('find', 'role', 'option', 'click', '--name', 'Detached HEAD', '--exact'); await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
   assert.equal(await evaluate(`document.querySelector('[aria-label="Directory"]').title`), detached);
   assert.deepEqual(readRegistry().worktrees.map(w => w.path), [detached]); assert.equal(readRegistry().sessions.length, 0);
   await openWorktrees(); await click('New worktree'); await ab('fill', '#wt-branch', 'browser-feature');
@@ -91,8 +92,9 @@ try {
   await click('Close');
   await ab('wait', '--text', 'Checkout missing');
   await capture('selected-missing-checkout');
-  // Every repository's worktrees share one searchable list; a non-Git folder is listed as such instead of picked from a dropdown.
-  await openWorktrees(); await ab('fill', '[aria-label="Search worktrees"]', 'notes'); await ab('wait', '--text', 'Non-Git directory');
+  // The picker covers only the chosen folder's repository; a non-Git folder says so instead of listing nothing.
+  await ab('click', '[aria-label="Directory"]'); await ab('click', `[cmdk-item][data-value=${JSON.stringify(notes)}]`);
+  await openWorktrees(); await ab('wait', '--text', 'Non-Git directory');
   assert.equal(await evaluate(`!!document.querySelector('#wt-branch')`), false); await capture('non-git-is-explicit');
   await click('Close'); await ab('reload'); await ab('wait', '--text', 'What should we work on?');
   assert.equal(readRegistry().sessions.length, 0);

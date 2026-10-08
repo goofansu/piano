@@ -1,5 +1,5 @@
 /** Client state: one reducer over ServerMessages plus local UI actions. */
-import type { Dialog, HostInfo, ModelCatalog, OutcomeProject, ProjectTrust, ProjectView, RenderMsg, ServerMessage, SessionCursor, SessionReference, SessionState, ToolExecution, Workspace } from "@shared/wire";
+import type { Dialog, HostInfo, ModelCatalog, OutcomeProject, ProjectTrust, ProjectView, RenderMsg, ServerMessage, SessionCursor, SessionReference, SessionState, ToolExecution, Workspace, WorktreeDiscovery } from "@shared/wire";
 
 export interface SessionView {
   cwd: string;
@@ -33,6 +33,8 @@ export interface AppState {
   session: SessionView | null;
   /** Correlated result; only the requesting directory picker may change its selection. */
   worktreeResult: Extract<ServerMessage, { _tag: "worktree_result" }> | null;
+  /** The picker's latest discovery per project; requested by this client, never broadcast. */
+  worktrees: Record<string, WorktreeDiscovery>;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
@@ -58,6 +60,7 @@ export const initialState: AppState = {
   trusts: {},
   session: null,
   worktreeResult: null,
+  worktrees: {},
   selecting: null,
   done: [],
   drafts: {},
@@ -125,6 +128,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       return { ...s, trusts: { ...s.trusts, [m.cwd]: m.trust } };
     case "worktree_result":
       return { ...s, worktreeResult: m };
+    case "worktrees":
+      return { ...s, worktrees: { ...s.worktrees, [m.project]: m.discovery } };
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
       if (m.cursor && (m.cursor.cwd !== m.cwd || m.cursor.sessionId !== m.sessionId || m.snapshot.state.sessionId !== m.sessionId)) return { ...s, resync: true };

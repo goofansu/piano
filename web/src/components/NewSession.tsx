@@ -319,7 +319,8 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
               >
                 <FolderOpenIcon /> Browse…
               </CommandItem>
-              {state.projects.length > 0 && (
+              {/* Worktrees belong to the chosen folder's repository. */}
+              {current && (
                 <CommandItem
                   value="__worktree"
                   onSelect={() => {
