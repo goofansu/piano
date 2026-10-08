@@ -141,8 +141,9 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       </div>
       <ScrollArea className="min-h-0 flex-1">
       <nav className="relative px-3 pb-4" aria-label="Projects and directories">
+        {/* Two parallel groups under one nav landmark; the h2s give the structure, so neither is its own region. */}
         {sectioned && state.projectsLoaded && (
-          <section aria-label="Projects">
+          <div>
             <div className={sectionHeading}>
               <h2 className="flex-1">Projects</h2>
               <Tooltip>
@@ -171,8 +172,9 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
                 </Collapsible>
               )}
             </div>
-          </section>
+          </div>
         )}
+        <div>
         {sectioned && state.projectsLoaded && <h2 className={sectionHeading}>Directories</h2>}
         {!state.projectsLoaded ? (
           <SidebarSkeleton />
@@ -187,6 +189,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           {state.projects.map((p) => (
             <Project key={p.path} project={p} open={openProjects.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
           ))}
+        </div>
         </div>
       </nav>
       </ScrollArea>
