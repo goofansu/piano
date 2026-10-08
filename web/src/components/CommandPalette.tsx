@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { directoryTrust } from "@/components/NewSession";
@@ -9,6 +9,8 @@ import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
+import { SIDEBAR_SORTS, type SidebarSection } from "@/lib/sidebarSort";
+import { useSidebarSort } from "@/lib/useSidebarSort";
 import type { AppState } from "@/store";
 
 interface Props {
@@ -31,6 +33,7 @@ interface Props {
  */
 export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
   const { setTheme } = useTheme();
+  const { sort: sidebarSort, setSort: setSidebarSort } = useSidebarSort();
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!open) setSearch(""); }, [open]);
@@ -106,6 +109,13 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           <CommandItem value="appearance light" keywords={["theme"]} onSelect={() => run(() => setTheme("light"))}><SunIcon /> Light appearance</CommandItem>
           <CommandItem value="appearance dark" keywords={["theme"]} onSelect={() => run(() => setTheme("dark"))}><MoonIcon /> Dark appearance</CommandItem>
           <CommandItem value="appearance system" keywords={["theme"]} onSelect={() => run(() => setTheme("system"))}><MonitorIcon /> System appearance</CommandItem>
+          {/* The sidebar headings' sort menus, by the same names; the only surface while there are no headings. */}
+          {(["repositories", "projects"] satisfies SidebarSection[]).filter(section => section === "repositories" || state.outcomeProjects.length > 0).flatMap(section => SIDEBAR_SORTS.map(s => (
+            <CommandItem key={`${section}-${s.value}`} value={`Sort ${section} by ${s.label.toLowerCase()}`} keywords={["sort", "order", "sidebar"]} onSelect={() => run(() => setSidebarSort(section, s.value))}>
+              <ArrowUpDownIcon /> Sort {section} by {s.label.toLowerCase()}
+              {sidebarSort(section) === s.value && <><CheckIcon className="ml-auto" aria-hidden /><span className="sr-only">current</span></>}
+            </CommandItem>
+          )))}
         </CommandGroup>
         {state.view.kind === "session" && state.session && (
           <CommandGroup key="session" heading="Session commands">

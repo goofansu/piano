@@ -1,6 +1,6 @@
 import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, ArrowUpDownIcon, ChevronRightIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
 import { Keys, PianoMark } from "@/components/PianoMark";
@@ -11,11 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SIDEBAR_SORTS, type SidebarSort, sortOutcomeProjects, sortRepositories } from "@/lib/sidebarSort";
+import { useSidebarSort } from "@/lib/useSidebarSort";
 import { type AppState, sessionKey } from "@/store";
 
 interface Props {
@@ -64,6 +66,7 @@ const sectionHeading = "flex h-7 items-center text-xs font-medium text-muted-for
 export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette }: Props) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
   const [closedSections, setClosedSections] = useState<Set<Section>>(loadClosed);
+  const { sort, setSort } = useSidebarSort();
   const current = state.session ?? state.selecting;
   const sectionOpen = (section: Section) => !closedSections.has(section);
   const setSectionOpen = (section: Section, open: boolean) =>
@@ -125,7 +128,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   const reveal = () => (revealing ? ({ "--i": String(order.i++) } as React.CSSProperties) : undefined);
 
   // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
-  const active = state.outcomeProjects.filter(p => !p.archived);
+  const active = sortOutcomeProjects(state.outcomeProjects.filter(p => !p.archived), state.sessionReferences, sort("projects"));
   // Section headings exist only once there is a second kind of group to tell apart.
   const sectioned = state.outcomeProjects.length > 0;
   const groupProps = { state, send, select, openNew, reveal, onProjectDialog, current };
@@ -140,7 +143,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       </Empty>
     ) : null}
     <div className="flex flex-col gap-1">
-      {state.projects.map((p) => (
+      {sortRepositories(state.projects, sort("repositories")).map((p) => (
         <Project key={p.path} project={p} open={openProjects.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
       ))}
     </div>
@@ -184,7 +187,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       <nav className="relative px-3 pb-4" aria-label="Projects and repositories">
         {/* Two parallel sections under one nav landmark; before the first project there is only the repository list. */}
         {sectioned && state.projectsLoaded && (
-          <SidebarSection label="Projects" open={sectionOpen("projects")} onOpenChange={open => setSectionOpen("projects", open)}>
+          <SidebarSection label="Projects" open={sectionOpen("projects")} onOpenChange={open => setSectionOpen("projects", open)} sort={sort("projects")} onSortChange={s => setSort("projects", s)}>
             {active.length === 0 ? (
               <ListEmpty>All projects archived</ListEmpty>
             ) : (
@@ -195,7 +198,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
           </SidebarSection>
         )}
         {sectioned && state.projectsLoaded ? (
-          <SidebarSection label="Repositories" className="mt-4" open={sectionOpen("repositories")} onOpenChange={open => setSectionOpen("repositories", open)}>
+          <SidebarSection label="Repositories" className="mt-4" open={sectionOpen("repositories")} onOpenChange={open => setSectionOpen("repositories", open)} sort={sort("repositories")} onSortChange={s => setSort("repositories", s)}>
             {repositories}
           </SidebarSection>
         ) : repositories}
@@ -205,17 +208,37 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   );
 }
 
-/** A section's label is its disclosure: the chevron beside it folds the whole list, and folded sections are remembered. */
-function SidebarSection({ label, open, onOpenChange, className, children }: { label: string; open: boolean; onOpenChange: (open: boolean) => void; className?: string; children: React.ReactNode }) {
+/** A section's label is its disclosure: the chevron beside it folds the whole list, and folded sections are remembered.
+ * Its sort choice sits in the heading's hover slot; without section headings the palette carries the same commands. */
+function SidebarSection({ label, open, onOpenChange, sort, onSortChange, className, children }: {
+  label: string; open: boolean; onOpenChange: (open: boolean) => void; sort: SidebarSort; onSortChange: (sort: SidebarSort) => void; className?: string; children: React.ReactNode;
+}) {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} className={className}>
-      <h2 className={sectionHeading}>
+      <h2 className={cn(sectionHeading, "group pr-1")}>
         <CollapsibleTrigger asChild>
           <button type="button" className="flex h-full items-center gap-1 rounded-md pr-1.5 pl-2 outline-none transition-colors duration-(--dur-hover) hover:text-ink-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
             {label}
             <ChevronRightIcon aria-hidden className={cn("size-3.5 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none", open && "rotate-90")} />
           </button>
         </CollapsibleTrigger>
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-xs" className={cn(hoverSlot, "ml-auto")} aria-label={`Sort ${label.toLowerCase()}`}>
+                  <ArrowUpDownIcon />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Sort {label.toLowerCase()}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup value={sort} onValueChange={value => onSortChange(value as SidebarSort)}>
+              {SIDEBAR_SORTS.map(s => <DropdownMenuRadioItem key={s.value} value={s.value}>{s.label}</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </h2>
       <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>
     </Collapsible>

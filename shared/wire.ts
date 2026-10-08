@@ -288,6 +288,8 @@ export type OutcomeProject = typeof OutcomeProject.Type;
 export const SessionReference = Schema.Struct({
   cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
   outcomeProjectId: Schema.optional(Schema.String), archived: Schema.Boolean,
+  /** Registry's last-update time, so a project's recency follows its members. */
+  updatedAt: Schema.optional(Schema.String),
   unavailable: Schema.optional(Schema.Literals(["history", "checkout"])),
 });
 export type SessionReference = typeof SessionReference.Type;
