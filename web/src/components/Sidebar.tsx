@@ -48,7 +48,8 @@ const row = "h-9 pointer-coarse:h-11";
 const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
 const groupRow = cn(row, "reveal-row group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
 const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
-const sectionHeading = "group flex h-7 items-center pr-1 pl-2 text-xs text-muted-foreground";
+/** Section labels match the palette's group headings; the larger gap sits above a label, tying it to the list below. */
+const sectionHeading = "group mt-4 flex h-7 items-center pr-1 pl-2 text-xs font-medium text-muted-foreground first:mt-0";
 
 export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette }: Props) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
@@ -141,7 +142,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       <ScrollArea className="min-h-0 flex-1">
       <nav className="relative px-3 pb-4" aria-label="Projects and directories">
         {sectioned && state.projectsLoaded && (
-          <section aria-label="Projects" className="mb-3">
+          <section aria-label="Projects">
             <div className={sectionHeading}>
               <h2 className="flex-1">Projects</h2>
               <Tooltip>
