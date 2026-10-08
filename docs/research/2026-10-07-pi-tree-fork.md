@@ -1,5 +1,9 @@
 # Supporting Pi tree navigation and fork in Piano
 
+**Follow-up:** [Taking full advantage of tree/fork on Pi 1.1.0](2026-10-08-pi-tree-fork-workflows.md)
+refreshes this version checkpoint and the recommended workflows/delivery order, and qualifies runtime
+restoration, summary inputs and checkpoint persistence. The 1.0.2 evidence below remains historical.
+
 Researched 2026-10-07 against Piano `4354c22495756dfad436d6ed3abe5f03eaf4af5a`,
 installed/locked Pi **1.0.2**, and its tagged source
 `cd32f7725fdbddbaecdff5b1e68491563394e0ca`. This is an implementation recommendation,
