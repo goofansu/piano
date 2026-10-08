@@ -195,7 +195,12 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
       <PopoverContent align="end" aria-label="Choose a project" className="max-h-(--radix-popover-content-available-height) w-[320px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
         onOpenAutoFocus={event => { if (!window.matchMedia("(pointer: coarse)").matches) { event.preventDefault(); search.current?.focus({ preventScroll: true }); } }}>
         <Command>
-          <CommandInput ref={search} aria-label="Search projects" placeholder="Search projects" />
+          <div className="flex items-center border-b border-line [&>[data-slot=command-input-wrapper]]:min-w-0 [&>[data-slot=command-input-wrapper]]:flex-1 [&>[data-slot=command-input-wrapper]]:border-b-0">
+            <CommandInput ref={search} aria-label="Search projects" placeholder="Search projects" />
+            <Button variant="ghost" size="icon-sm" aria-label="New project" title="New project" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }} className="mr-1 shrink-0 text-ink-3">
+              <PlusIcon aria-hidden />
+            </Button>
+          </div>
           <CommandList className="max-h-[min(18rem,60dvh)]">
             <CommandEmpty>No project matches.</CommandEmpty>
             <CommandGroup>
@@ -216,12 +221,6 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
                 </CommandItem>
               </CommandGroup>
             </>}
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem value="__new" keywords={["new project", "create"]} disabled={!state.connected} onSelect={() => { setOpen(false); onCreate(); }}>
-                <PlusIcon /> New project…
-              </CommandItem>
-            </CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>
