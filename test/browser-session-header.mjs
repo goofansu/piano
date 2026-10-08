@@ -116,6 +116,12 @@ try {
     assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().top`), top);
     await menu();
     await ab('snapshot');
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] > [role="group"]')].map(group => ({ label: group.querySelector('[data-slot="dropdown-menu-label"]')?.textContent ?? null, items: [...group.querySelectorAll('[role="menuitem"]')].map(item => item.getAttribute('aria-label') ?? item.textContent.trim()) }))`), [
+      { label: 'Details', items: ['Copy working directory', 'Copy git branch', 'Copy session ID', 'Copy all'] },
+      { label: 'Git', items: ['Changes', 'Pull request'] },
+      { label: 'Session', items: ['Project', 'Rename', 'Archive'] },
+      { label: null, items: ['Delete'] },
+    ], 'visible categories group related actions and keep Delete separate');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Copy session ID"]').textContent`), 'Session IDheader');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes('Copy session file path')`), false);

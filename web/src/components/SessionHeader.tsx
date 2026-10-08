@@ -3,7 +3,7 @@ import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, MoreHorizontal
 import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { abbrevPath } from "@/lib/format";
@@ -49,6 +49,7 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, onPro
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-80 max-w-[calc(100vw-2rem)]">
           <DropdownMenuGroup>
+            <DropdownMenuLabel>Details</DropdownMenuLabel>
             <DropdownMenuItem aria-label="Copy working directory" onSelect={event => { event.preventDefault(); if (session) void copySessionValue(session.cwd, "Working directory"); }}>
               <span className="flex min-w-0 flex-1 flex-col gap-1"><span>Working directory</span><span className="break-all font-mono text-xs text-muted-foreground">{session?.cwd}</span></span><CopyIcon />
             </DropdownMenuItem>
@@ -62,8 +63,13 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, onPro
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
+            <DropdownMenuLabel>Git</DropdownMenuLabel>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
             <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon /> Pull request</DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Session</DropdownMenuLabel>
             {target && <ProjectMenu state={state} send={send} session={target} onDialog={onProjectDialog} />}
             <DropdownMenuItem disabled={!ready || !target || session?.state.checkoutMissing} onSelect={() => target && actions.rename(target)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
             <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.archive(target)}><ArchiveIcon /> Archive</DropdownMenuItem>
