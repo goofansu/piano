@@ -88,7 +88,10 @@ test("INV-07/08: raw content, stage, untracked, deletion, modes, symlinks and re
   writeFileSync(join(repo, "new\nsource.ts"), "untracked source\n");
   const untracked = ready(await capture()); assert.notEqual(untracked.revision, edited.revision);
   assert.ok(untracked.manifest.files.some(f => f.path === "new\nsource.ts")); assert.match(untracked.unstagedDiff, /untracked source/);
-  assert.match(untracked.diff, /^diff --git a\/new\nsource.ts b\/new\nsource.ts$/m); assert.match(untracked.diff, /new file mode 100644[\s\S]*\+untracked source/);
+  // Git quotes control characters; no-index additions use the destination path on both sides.
+  assert.match(untracked.diff, /^diff --git "b\/new\\nsource\.ts" "b\/new\\nsource\.ts"$/m);
+  assert.match(untracked.diff, /^\+\+\+ "b\/new\\nsource\.ts"$/m);
+  assert.match(untracked.diff, /new file mode 100644[\s\S]*\+untracked source/);
   unlinkSync(join(repo, "source.txt"));
   const deleted = ready(await capture()); assert.notEqual(deleted.revision, untracked.revision); assert.match(deleted.unstagedDiff, /deleted file mode/);
   assert.equal(deleted.manifest.files.some(f => f.path === "source.txt"), false);
