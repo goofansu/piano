@@ -24,6 +24,7 @@ interface Props {
   /** Pi is working and no reply text has arrived yet: the keys play in a pending row. */
   working?: boolean;
   placeholder: string;
+  fileContext?: { workspaceId: string; sessionId: string };
   className?: string;
 }
 
@@ -32,7 +33,7 @@ interface Props {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, tools, working = false, placeholder, className }: Props) {
+export function MessageList({ messages, pending, tools, working = false, placeholder, fileContext, className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -101,9 +102,9 @@ export function MessageList({ messages, pending, tools, working = false, placeho
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} />;
+            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} fileContext={fileContext} />;
           })}
-          {pending && <Message msg={pending} results={results} tools={tools} active={active} streaming />}
+          {pending && <Message msg={pending} results={results} tools={tools} active={active} fileContext={fileContext} streaming />}
           {working && (
             <Row glyph={<Keys playing className="text-brand" />}>
               <span className="sr-only">Pi is working</span>
@@ -141,7 +142,7 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; streaming?: boolean }) {
+function Message({ msg, results, tools, active, fileContext, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; fileContext?: { workspaceId: string; sessionId: string }; streaming?: boolean }) {
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
   if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
@@ -158,7 +159,7 @@ function Message({ msg, results, tools, active, streaming }: { msg: RenderMsg; r
         {msg.text && (
           <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
-            <Markdown text={msg.text} className={cn("prose-chat", streaming && "streaming-caret")} />
+            <Markdown text={msg.text} className={cn("prose-chat", streaming && "streaming-caret")} fileContext={fileContext} />
             {!streaming && !msg.toolCalls?.length && <CopyResponse text={msg.text} />}
           </Row>
         )}

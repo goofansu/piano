@@ -6,6 +6,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type DirListing, SessionPullRequestAction } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
+import { FileLinkError, type FileLinkResult, fileLinks, sameOriginFileRequest } from "./FileLinks.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { expandHome } from "./PiEnv.ts";
 import { Registry } from "./Registry.ts";
@@ -69,6 +70,26 @@ const readBody = Effect.gen(function* () {
 
 const json = (body: unknown, status = 200) =>
   HttpServerResponse.text(JSON.stringify(projectDisplay(body), null, 2), { status, contentType: "application/json" });
+
+// File identity is authorization data: exact names and approval paths must round-trip unchanged.
+// Errors still use json() above so their user-facing details receive the display projection.
+const fileIdentityJson = (body: FileLinkResult) =>
+  HttpServerResponse.text(JSON.stringify(body, null, 2), { contentType: "application/json" });
+
+const capabilityId = (request: HttpServerRequest.HttpServerRequest) => {
+  const id = new URL(request.url, "http://localhost").pathname.split("/").pop() ?? "";
+  return /^[0-9a-f-]{36}$/.test(id) ? id : "";
+};
+const fileHeaders = {
+  "cache-control": "private, no-store",
+  "content-security-policy": "default-src 'none'; sandbox",
+  "cross-origin-resource-policy": "same-origin",
+  "x-content-type-options": "nosniff",
+};
+const disposition = (name: string, value: "inline" | "attachment") => {
+  const fallback = name.replace(/[^\x20-\x7e]|["\\]/g, "_");
+  return `${value}; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+};
 
 export const AppRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
@@ -158,6 +179,49 @@ export const AppRouter = HttpRouter.use((router) =>
       return image ? HttpServerResponse.uint8Array(image.bytes, { contentType: image.mimeType,
         headers: { "cache-control": "private, no-store", "x-content-type-options": "nosniff" } })
         : HttpServerResponse.empty({ status: 404 });
+    }));
+
+    for (const action of ["request", "approve"] as const) {
+      yield* router.add("POST", `/api/file-links/${action}`, Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        if (!sameOriginFileRequest(request.headers)) return json({ error: "File access requires a same-origin Piano page. Reload Piano and try again." }, 403);
+        const body = yield* readBody;
+        const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : "";
+        const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+        const registry = yield* (yield* Registry).get;
+        const workspace = registry.workspaces.find(w => w.id === workspaceId);
+        if (!workspace || !registry.sessions.some(s => s.sessionId === sessionId && s.cwd === workspace.path)) {
+          return json({ error: "Session workspace is not registered. Reload the session before opening files." }, 404);
+        }
+        let operation: Promise<FileLinkResult>;
+        if (action === "request") {
+          if (typeof body.href !== "string") return json({ error: "A file link is required." }, 400);
+          operation = fileLinks.request(workspace, body.href);
+        } else {
+          if (typeof body.approvalId !== "string" || typeof body.path !== "string") return json({ error: "The exact file approval is required." }, 400);
+          operation = fileLinks.approve(workspace, body.approvalId, body.path);
+        }
+        const outcome = yield* Effect.promise(() => operation.then(value => ({ value }), error => ({ error })));
+        if (!("error" in outcome)) return fileIdentityJson(outcome.value);
+        return outcome.error instanceof FileLinkError ? json({ error: outcome.error.message }, outcome.error.status)
+          : json({ error: "Piano could not prepare this file. Try opening the link again." }, 500);
+      }));
+    }
+
+    yield* router.add("GET", "/api/file-previews/:id", Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const file = fileLinks.preview(capabilityId(request));
+      return file ? HttpServerResponse.uint8Array(file.bytes, { contentType: file.mimeType,
+        headers: { ...fileHeaders, "content-disposition": disposition(file.name, "inline") } })
+        : HttpServerResponse.empty({ status: 404, headers: fileHeaders });
+    }));
+
+    yield* router.add("GET", "/api/file-downloads/:id", Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const file = fileLinks.download(capabilityId(request));
+      return file ? HttpServerResponse.uint8Array(file.bytes, { contentType: file.mimeType,
+        headers: { ...fileHeaders, "content-disposition": disposition(file.name, "attachment") } })
+        : HttpServerResponse.empty({ status: 404, headers: fileHeaders });
     }));
 
     // Discovery never opens a saved session or creates a second writer. A live

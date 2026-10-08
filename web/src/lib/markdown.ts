@@ -3,7 +3,7 @@ function escH(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function inline(s: string): string {
+function inline(s: string, fileLinks: boolean): string {
   const ph: string[] = [];
   s = s.replace(/`([^`\n]+)`/g, (_, c: string) => {
     ph.push(`<code>${escH(c)}</code>`);
@@ -12,14 +12,16 @@ function inline(s: string): string {
   s = escH(s);
   s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
+  if (fileLinks) s = s.replace(/\[([^\]\n]*)\]\((file:\/\/[^)\n]*)\)/g, '<a href="#" data-file-href="$2">$1</a>');
   s = s.replace(/\[([^\]\n]*)\]\((https?:\/\/[^)\n]*)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
   // biome-ignore lint/suspicious/noControlCharactersInRegex: NUL marks placeholders that source text cannot contain.
   s = s.replace(/\u0000(\d+)/g, (_, i: string) => ph[Number(i)]);
   return s;
 }
 
-export function renderMarkdown(src: string): string {
+export function renderMarkdown(src: string, options?: { fileLinks: true }): string {
   if (!src) return "";
+  const renderInline = (value: string) => inline(value, options?.fileLinks === true);
   const lines = src.split("\n");
   let out = "";
   let para: string[] = [];
@@ -31,7 +33,7 @@ export function renderMarkdown(src: string): string {
   let tbl: string[] = [];
   const fp = () => {
     if (!para.length) return;
-    out += `<p>${para.map(inline).join("<br>")}</p>`;
+    out += `<p>${para.map(renderInline).join("<br>")}</p>`;
     para = [];
   };
   const fL = () => {
@@ -50,13 +52,13 @@ export function renderMarkdown(src: string): string {
     const cells = (r: string) => r.replace(/^\|/, "").replace(/\|$/, "").split("|");
     out += '<div class="markdown-table-scroll" role="region" aria-label="Table" tabindex="0"><table><thead><tr>';
     cells(tbl[0]).forEach((c) => {
-      out += `<th>${inline(c.trim())}</th>`;
+      out += `<th>${renderInline(c.trim())}</th>`;
     });
     out += "</tr></thead><tbody>";
     for (let j = 2; j < tbl.length; j++) {
       out += "<tr>";
       cells(tbl[j]).forEach((c) => {
-        out += `<td>${inline(c.trim())}</td>`;
+        out += `<td>${renderInline(c.trim())}</td>`;
       });
       out += "</tr>";
     }
@@ -93,7 +95,7 @@ export function renderMarkdown(src: string): string {
     if (hm) {
       fp();
       fL();
-      out += `<h${hm[1].length}>${inline(hm[2])}</h${hm[1].length}>`;
+      out += `<h${hm[1].length}>${renderInline(hm[2])}</h${hm[1].length}>`;
       continue;
     }
     if (/^---+\s*$/.test(ln)) {
@@ -105,7 +107,7 @@ export function renderMarkdown(src: string): string {
     if (ln.startsWith("> ")) {
       fp();
       fL();
-      out += `<blockquote>${inline(ln.slice(2))}</blockquote>`;
+      out += `<blockquote>${renderInline(ln.slice(2))}</blockquote>`;
       continue;
     }
     const um = ln.match(/^[-*] (.*)/);
@@ -117,7 +119,7 @@ export function renderMarkdown(src: string): string {
         inList = true;
         ltag = "ul";
       }
-      out += `<li>${inline(um[1])}</li>`;
+      out += `<li>${renderInline(um[1])}</li>`;
       continue;
     }
     const om = ln.match(/^\d+\. (.*)/);
@@ -129,7 +131,7 @@ export function renderMarkdown(src: string): string {
         inList = true;
         ltag = "ol";
       }
-      out += `<li>${inline(om[1])}</li>`;
+      out += `<li>${renderInline(om[1])}</li>`;
       continue;
     }
     if (!ln.trim()) {
