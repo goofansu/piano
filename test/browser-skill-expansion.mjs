@@ -29,6 +29,7 @@ const messages = [
   { role: 'user', content: expansion },
   assistant('A diagram of the current topic.'),
   { role: 'user', content: 'Thanks, that is clear.' },
+  { role: 'user', content: '## User markdown\n\n**Bold** and *italic* with `inline code` and [a link](https://example.test).\n\n- First item\n- Second item\n\n```js\nconst greeting = "hello";\n```\n\n<script>alert("unsafe")</script>\n\n' + Array.from({ length: 12 }, (_, n) => `Paragraph ${n + 1}.`).join('\n\n') },
 ];
 const entries = [{ type: 'session', version: 3, id: 'skills', cwd: repo, timestamp }, ...messages.map((message, n) => ({
   type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp, message: { ...message, timestamp: n },
@@ -87,6 +88,28 @@ try {
   })()`);
   observations.push({ name: 'closed', ...closed });
   assert.deepEqual(closed, { count: 2, labels: ['/skill:show-me', '/skill:show-me'], expanded: ['false', 'false'], bodyVisible: false });
+  // User prose uses the same safe renderer, while retaining the long-prompt disclosure.
+  const userArticle = 'article:has(h2)';
+  const userProse = await evaluate(`(() => {
+    const article = document.querySelector('${userArticle}');
+    return { heading: article.querySelector('h2').textContent, strong: article.querySelector('strong').textContent,
+      italic: article.querySelector('em').textContent, code: article.querySelector('pre code').textContent,
+      items: article.querySelectorAll('li').length, scripts: article.querySelectorAll('script').length,
+      expanded: article.querySelector('button[aria-expanded]').getAttribute('aria-expanded') };
+  })()`);
+  observations.push({ name: 'user-markdown', ...userProse });
+  assert.equal(userProse.heading, 'User markdown');
+  assert.equal(userProse.strong, 'Bold'); assert.equal(userProse.italic, 'italic');
+  assert.equal(userProse.code.trim(), 'const greeting = "hello";');
+  assert.equal(userProse.items, 2); assert.equal(userProse.scripts, 0); assert.equal(userProse.expanded, 'false');
+  await ab('click', `${userArticle} button[aria-expanded]`);
+  assert.equal(await evaluate(`document.querySelector('${userArticle} button[aria-expanded]').getAttribute('aria-expanded')`), 'true');
+  // Prevent navigation so this check only observes whether link clicks toggle the prompt.
+  await ab('eval', `document.querySelector('${userArticle} a').addEventListener('click', e => e.preventDefault(), { once: true })`);
+  await ab('click', `${userArticle} a`);
+  assert.equal(await evaluate(`document.querySelector('${userArticle} button[aria-expanded]').getAttribute('aria-expanded')`), 'true');
+  await ab('click', `${userArticle} button[aria-expanded]`);
+  assert.equal(await evaluate(`document.querySelector('${userArticle} button[aria-expanded]').getAttribute('aria-expanded')`), 'false');
   // The appearance menu sits in the sidebar, so the theme is chosen at desktop width and kept for the phone capture.
   for (const theme of ['Light', 'Dark']) {
     await ab('set', 'viewport', '1440', '1000'); await appearance(theme);
@@ -125,7 +148,7 @@ try {
   assert.ok(!jump.some(label => label.includes('<skill')), JSON.stringify(jump));
   await ab('press', 'Escape');
   assert.equal(await ab('errors'), '');
-  console.log('PASS: skill prompts show the typed command, fold the skill file as rendered markdown, keep the location, and are named by command in the jump list');
+  console.log('PASS: user markdown renders safely with working disclosure and links; skill prompts fold rendered markdown and retain command labels');
 } finally {
   try { await ab('close'); } catch {}
   for (const proc of [backend, frontend]) if (proc.exitCode === null) { const stopped = new Promise(resolve => proc.once('exit', resolve)); proc.kill('SIGTERM'); await stopped; }

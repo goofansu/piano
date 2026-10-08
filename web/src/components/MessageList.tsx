@@ -154,7 +154,7 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
 function Message({ msg, results, tools, active, fileContext, terminalRuns, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; fileContext?: { workspaceId: string; sessionId: string }; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
   if (msg.subagent) return <SubagentCardView card={msg.subagent} content={msg.text} markdown={msg.role === "context"} fileContext={fileContext} terminalStatus={msg.subagent.kind === "delegation" && msg.subagent.runId ? terminalRuns.get(msg.subagent.runId) : undefined} />;
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
-  if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} />;
+  if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} fileContext={fileContext} />;
   if (msg.role === "assistant") {
     // Pi starts a message before its first visible text or tool block arrives.
     // An empty article would still consume the transcript's flex gap.
@@ -218,7 +218,7 @@ function CopyResponse({ text }: { text: string }) {
   );
 }
 
-function UserMessage({ id, text, skill, attachments }: { id: string; text: string; skill: RenderMsg["skill"]; attachments: RenderMsg["attachments"] }) {
+function UserMessage({ id, text, skill, attachments, fileContext }: { id: string; text: string; skill: RenderMsg["skill"]; attachments: RenderMsg["attachments"]; fileContext?: { workspaceId: string; sessionId: string } }) {
   const ref = useRef<HTMLDivElement>(null);
   const textId = useId();
   const [open, setOpen] = useState(false);
@@ -242,7 +242,7 @@ function UserMessage({ id, text, skill, attachments }: { id: string; text: strin
     <article
       id={messageAnchorId(id)}
       className={cn("rounded-2xl border border-line bg-fill px-4 py-3.5 transition-colors", long && "cursor-pointer select-text hover:border-line-strong")}
-      onClick={() => long && !window.getSelection()?.toString() && toggle()}
+      onClick={(event) => long && !(event.target as Element).closest("a, button, [role='dialog']") && !window.getSelection()?.toString() && toggle()}
     >
       <Row glyph={<span className="font-semibold text-brand">›</span>}>
         <span className="sr-only">You said</span>
@@ -251,10 +251,10 @@ function UserMessage({ id, text, skill, attachments }: { id: string; text: strin
           <div
             ref={ref}
             id={textId}
-            className={cn("whitespace-pre-wrap break-words", skill && "mt-2", !open && "overflow-hidden", clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}
+            className={cn("break-words", skill && "mt-2", !open && "overflow-hidden", clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}
             style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
           >
-            {text}
+            <Markdown text={text} className="prose-chat" fileContext={fileContext} />
           </div>
         )}
         {long && (
