@@ -356,6 +356,26 @@ export const WorkspaceCapture = Schema.Struct({
 });
 export type WorkspaceCapture = typeof WorkspaceCapture.Type;
 
+/** Byte budgets for live Changes only; exact revision capture has separate limits. */
+export const CHANGES_INITIAL_PATCH_BYTES = 120_000;
+export const CHANGES_FILE_PATCH_BYTES = 1024 * 1024;
+
+/** Live Git observations, not immutable revisions or verification evidence. */
+export const ChangeFile = Schema.Struct({
+  path: Schema.String, additions: Schema.Number, deletions: Schema.Number, binary: Schema.Boolean,
+});
+export type ChangeFile = typeof ChangeFile.Type;
+export const WorkspaceChanges = Schema.Struct({
+  workspace: Workspace, observedAt: Schema.String,
+  result: Schema.Union([
+    Schema.Struct({ status: Schema.Literal("ready"), head: Schema.NullOr(Schema.String),
+      branch: Schema.NullOr(Schema.String), files: Schema.Array(ChangeFile),
+      diff: Schema.String, truncated: Schema.Boolean }),
+    Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
+  ]),
+});
+export type WorkspaceChanges = typeof WorkspaceChanges.Type;
+
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
 export const OutcomeProject = Schema.Struct({

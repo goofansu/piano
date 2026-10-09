@@ -1,4 +1,4 @@
-import { type Workspace, WorkspaceCapture } from "@shared/wire";
+import { CHANGES_FILE_PATCH_BYTES, CHANGES_INITIAL_PATCH_BYTES, type ChangeFile, type Workspace, WorkspaceChanges } from "@shared/wire";
 import { cn } from "cn";
 import { Schema } from "effect";
 import { FileDiffIcon, FileMinusIcon, FilePlusIcon, MessageSquarePlusIcon, RefreshCwIcon } from "lucide-react";
@@ -21,38 +21,39 @@ import type { SessionView } from "@/store";
 /** Tools whose completion can change the checkout; a finished turn is also a refresh point. */
 const EDITING_TOOLS = new Set(["edit", "write", "bash"]);
 const LARGE_FILE_LINES = 800;
+const FILE_PATCH_LIMIT = `${CHANGES_FILE_PATCH_BYTES / (1024 * 1024)} MiB`;
 
-/** Capture the workspace while the sheet is open: on open, on window focus and after edits.
- * Overlapping requests coalesce into one trailing capture; stale responses are dropped.
- */
-function useWorkspaceCapture(workspace: Workspace | undefined, active: boolean, mutationKey: string) {
-  const [capture, setCapture] = useState<WorkspaceCapture | null>(null);
+/** Refresh live observations on open, focus and edits; superseded requests cannot publish. */
+function useWorkspaceChanges(workspace: Workspace | undefined, active: boolean, mutationKey: string) {
+  const [observation, setObservation] = useState<WorkspaceChanges | null>(null);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const sequence = useRef(0), inflight = useRef(false), again = useRef(false);
+  const sequence = useRef(0), controller = useRef<AbortController | null>(null);
   const workspaceId = workspace?.id, workspacePath = workspace?.path;
   const refresh = useCallback(() => {
     if (!workspaceId || !workspacePath) return;
-    if (inflight.current) { again.current = true; return; }
+    controller.current?.abort();
+    const request = new AbortController(); controller.current = request;
     const mine = ++sequence.current;
-    inflight.current = true; setBusy(true); setError(undefined);
+    setBusy(true); setError(undefined);
     (async () => {
-      const response = await fetch(`/api/workspace/capture?workspaceId=${encodeURIComponent(workspaceId)}`, { method: "POST" });
-      if (!response.ok) throw new Error(`Capture request failed (${response.status}). Refresh projects or inspect the server.`);
-      const value = Schema.decodeUnknownSync(WorkspaceCapture)(await response.json());
-      if (value.workspace.id !== workspaceId || value.workspace.path !== workspacePath) throw new Error("Capture returned a different workspace. Refresh before inspecting changes.");
-      if (mine === sequence.current) setCapture(value);
+      const response = await fetch(`/api/workspace/changes?workspaceId=${encodeURIComponent(workspaceId)}`, { method: "POST", signal: request.signal });
+      if (!response.ok) throw new Error(`Changes request failed (${response.status}). Refresh projects or inspect the server.`);
+      const value = Schema.decodeUnknownSync(WorkspaceChanges)(await response.json());
+      if (value.workspace.id !== workspaceId || value.workspace.path !== workspacePath) throw new Error("Changes returned a different workspace. Refresh before inspecting changes.");
+      if (value.result.status === "error") throw new Error(value.result.detail);
+      if (mine === sequence.current) setObservation(value);
     })().catch(e => { if (mine === sequence.current) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => {
-        inflight.current = false;
-        if (mine !== sequence.current) return;
-        setBusy(false);
-        if (again.current) { again.current = false; refresh(); }
+        if (mine === sequence.current) setBusy(false);
       });
   }, [workspaceId, workspacePath]);
   // A new workspace starts from nothing; an older response for it is ignored.
-  useEffect(() => { setCapture(null); setError(undefined); setBusy(false); sequence.current++; inflight.current = false; again.current = false; }, [workspaceId, workspacePath]);
-  useEffect(() => { if (active) refresh(); }, [active, refresh]);
+  useEffect(() => {
+    setObservation(null); setError(undefined); setBusy(false);
+    if (active) refresh();
+    return () => { sequence.current++; controller.current?.abort(); };
+  }, [active, refresh]);
   useEffect(() => {
     if (!active) return;
     const onFocus = () => refresh();
@@ -66,7 +67,7 @@ function useWorkspaceCapture(workspace: Workspace | undefined, active: boolean, 
     const timer = setTimeout(refresh, 600);
     return () => clearTimeout(timer);
   }, [active, mutationKey, refresh]);
-  return { capture, error, busy, refresh };
+  return { observation, error, busy, refresh };
 }
 
 /** The latest checkout-changing tool result plus the streaming flag: when either moves, the checkout may have. */
@@ -87,27 +88,31 @@ export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: 
   onAsk: (text: string) => void;
 }) {
   const key = mutationKey(session);
-  const { capture, error, busy, refresh } = useWorkspaceCapture(workspace, open, key);
-  const result = capture?.result;
-  const captured = result?.status === "captured" ? result : undefined;
-  const files = useMemo(() => captured ? parseUnifiedDiff(captured.diff) : [], [captured]);
+  const { observation, error, busy, refresh } = useWorkspaceChanges(workspace, open, key);
+  const result = observation?.workspace.id === workspace?.id ? observation?.result : undefined;
+  const ready = result?.status === "ready" ? result : undefined;
+  const files = ready?.files ?? [];
+  const initial = useMemo(() => {
+    const parsed = ready ? parseUnifiedDiff(ready.diff) : [];
+    if (ready?.truncated) parsed.pop(); // The last file may have an incomplete hunk.
+    return new Map(parsed.map(file => [file.path, file]));
+  }, [ready]);
   const additions = files.reduce((n, f) => n + f.additions, 0), deletions = files.reduce((n, f) => n + f.deletions, 0);
   // Collapsed paths persist across refreshes so a reader keeps their place; large files start folded.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [expandedLarge, setExpandedLarge] = useState<Set<string>>(() => new Set());
-  const isOpen = (f: DiffFile) => !collapsed.has(f.path) && (lineCount(f) <= LARGE_FILE_LINES || expandedLarge.has(f.path));
+  const isOpen = (f: ChangeFile) => !collapsed.has(f.path) && ((initial.has(f.path) && lineCount(initial.get(f.path)!) <= LARGE_FILE_LINES) || expandedLarge.has(f.path));
   const allCollapsed = files.length > 0 && files.every(f => !isOpen(f));
   const toggleAll = () => {
     if (allCollapsed) { setCollapsed(new Set()); setExpandedLarge(new Set(files.map(f => f.path))); }
     else setCollapsed(new Set(files.map(f => f.path)));
   };
-  const ask = (file: DiffFile) => {
-    if (!captured || !capture) return;
-    onAsk(`About \`${file.path}\` (working tree against HEAD ${captured.manifest.baseHead.slice(0, 12)}, captured ${clock(capture.observedAt)}):\n\n\`\`\`diff\n${file.raw}\`\`\`\n`);
+  const ask = (file: DiffFile, observedAt: string, truncated: boolean) => {
+    onAsk(`About \`${file.path}\` (live working-tree diff inspected at ${clock(observedAt)}; ${truncated ? "partial patch, not the complete file" : "not an immutable revision"}):\n\n\`\`\`diff\n${file.raw}\`\`\`\n`);
   };
-  const summary = captured
+  const summary = ready
     ? files.length === 0 ? "no changes" : `${files.length} ${files.length === 1 ? "file" : "files"} · +${additions} −${deletions}`
-    : error || result ? "Capture unavailable" : "Capturing…";
+    : error || result ? "Changes unavailable" : "Loading…";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -117,28 +122,23 @@ export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: 
           <SheetDescription className="flex min-w-0 flex-wrap items-center gap-x-2">
             <span>Working tree against HEAD</span>
             <span aria-hidden>·</span>
-            {captured && <BranchLabel branch={captured.branch ?? "Detached HEAD"} />}
-            {captured && <span aria-hidden>·</span>}
+            {ready && <BranchLabel branch={ready.branch ?? "Detached HEAD"} />}
+            {ready && <span aria-hidden>·</span>}
             <span role="status" className="truncate">{summary}</span>
-            {busy && captured && <Spinner className="size-3" />}
+            {busy && ready && <Spinner className="size-3" />}
           </SheetDescription>
           <div className="-ml-2 flex items-center gap-1">
             <Button variant="ghost" size="sm" disabled={!workspace} onClick={refresh} aria-label="Refresh changes"><RefreshCwIcon className={cn(busy && "animate-spin")} /> Refresh</Button>
             <Button variant="ghost" size="sm" disabled={files.length === 0} onClick={toggleAll}>{allCollapsed ? "Expand all" : "Collapse all"}</Button>
           </div>
+          {error && ready && <p role="status" title={error} className="text-xs text-ink-2">Refresh failed. Showing previous changes.</p>}
         </SheetHeader>
         <ScrollArea className="min-h-0 flex-1">
           <div className="flex flex-col gap-3 p-4">
-            {error && <Alert variant="destructive"><AlertTitle>Capture unavailable</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-            {!error && result && result.status !== "captured" && (
-              <Alert variant="destructive">
-                <AlertTitle>{result.status === "inconclusive" ? "Capture inconclusive" : result.status === "unsupported" ? "Capture unsupported" : "Capture failed"}</AlertTitle>
-                <AlertDescription>{result.detail}</AlertDescription>
-              </Alert>
-            )}
-            {(error || (result && result.status !== "captured")) && captured && <p className="text-sm text-warn">Showing the previous capture; it was not refreshed.</p>}
-            {busy && !capture && !error && <div className="flex items-center gap-2 py-10 text-sm text-ink-2" role="status"><Spinner className="size-4" /> Capturing the working tree…</div>}
-            {captured && files.length === 0 && (
+            {error && !ready && <Alert variant="destructive"><AlertTitle>Changes unavailable</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+            {result?.status === "error" && <Alert variant="destructive"><AlertTitle>Changes unavailable</AlertTitle><AlertDescription>{result.detail}</AlertDescription></Alert>}
+            {busy && !observation && !error && <div className="flex items-center gap-2 py-10 text-sm text-ink-2" role="status"><Spinner className="size-4" /> Reading changes…</div>}
+            {ready && files.length === 0 && (
               <Empty className="py-10">
                 <EmptyHeader>
                   <EmptyMedia variant="icon"><FileDiffIcon /></EmptyMedia>
@@ -150,32 +150,31 @@ export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: 
             {files.length > 0 && (
               <ItemGroup className="gap-2" aria-label="Changed files">
                 {files.map(file => (
-                  <FileSection key={file.path} file={file} open={isOpen(file)}
+                  <LiveFile key={`${observation!.workspace.id}:${observation!.observedAt}:${file.path}`} metadata={file} initial={initial.get(file.path)} workspace={observation!.workspace} observedAt={observation!.observedAt} open={isOpen(file)}
                     onOpenChange={next => {
                       setCollapsed(prev => { const s = new Set(prev); if (next) s.delete(file.path); else s.add(file.path); return s; });
-                      if (next && lineCount(file) > LARGE_FILE_LINES) setExpandedLarge(prev => new Set(prev).add(file.path));
+                      if (next) setExpandedLarge(prev => new Set(prev).add(file.path));
                     }}
-                    onAsk={() => ask(file)} />
+                    onAsk={ask} />
                 ))}
               </ItemGroup>
             )}
           </div>
         </ScrollArea>
-        {captured && (
+        {ready && (
           <SheetFooter className="mt-0 border-t border-line py-3">
             <Collapsible className="text-xs text-ink-2">
               <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="-ml-2 h-7 text-xs">Capture details</Button>
+                <Button variant="ghost" size="sm" className="-ml-2 h-7 text-xs">Changes details</Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="disclosure-content">
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all font-mono">
-                  <dt>Checkout</dt><dd>{abbrevHome(captured.physicalPath)}</dd>
-                  <dt>HEAD</dt><dd>{captured.manifest.baseHead}</dd>
-                  <dt>Revision</dt><dd>{captured.revision}</dd>
-                  <dt>Captured</dt><dd>{new Date(capture!.observedAt).toLocaleString()}</dd>
+                  <dt>Checkout</dt><dd>{abbrevHome(observation!.workspace.path)}</dd>
+                  <dt>HEAD</dt><dd>{ready.head ?? "No commits yet"}</dd>
+                  <dt>Observed</dt><dd>{new Date(observation!.observedAt).toLocaleString()}</dd>
                 </dl>
-                <ul className="mt-2 list-disc pl-4 font-sans">{captured.limitations.map(text => <li key={text}>{text}</li>)}</ul>
-                <p className="mt-2 font-sans">A saved capture, not a live view or a passing check. Edits made after it appear on refresh.</p>
+                <p className="mt-2 font-sans">Live Git reads, not an immutable review or verification evidence. Expanding unloaded files reads them afresh; files may change between reads. Refresh reloads all patches. Ignored files are excluded. Renames appear as deletion and addition.</p>
+                <p className="mt-2 font-sans">Initial patch: {CHANGES_INITIAL_PATCH_BYTES.toLocaleString("en-US")} bytes. Per-file patch: {FILE_PATCH_LIMIT}. {ready.truncated ? "Expand unloaded files to read their patches." : ""}</p>
               </CollapsibleContent>
             </Collapsible>
           </SheetFooter>
@@ -187,7 +186,43 @@ export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: 
 
 const lineCount = (file: DiffFile) => file.hunks.reduce((n, h) => n + h.lines.length, 0);
 
-function FileSection({ file, open, onOpenChange, onAsk }: { file: DiffFile; open: boolean; onOpenChange: (open: boolean) => void; onAsk: () => void }) {
+function LiveFile({ metadata, initial, workspace, observedAt, open, onOpenChange, onAsk }: {
+  metadata: ChangeFile; initial?: DiffFile; workspace: Workspace; observedAt: string; open: boolean;
+  onOpenChange: (open: boolean) => void; onAsk: (file: DiffFile, observedAt: string, truncated: boolean) => void;
+}) {
+  const [loaded, setLoaded] = useState(initial ? { file: { ...initial, ...metadata }, observedAt, truncated: false } : undefined);
+  const [error, setError] = useState<string>();
+  const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open || loaded) return;
+    const controller = new AbortController();
+    setBusy(true); setError(undefined);
+    (async () => {
+      const response = await fetch(`/api/workspace/changes/file?workspaceId=${encodeURIComponent(workspace.id)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: metadata.path }), signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`File request failed (${response.status}).`);
+      const value = Schema.decodeUnknownSync(WorkspaceChanges)(await response.json());
+      if (value.workspace.id !== workspace.id || value.workspace.path !== workspace.path) throw new Error("File response belongs to another workspace.");
+      if (value.result.status === "error") throw new Error(value.result.detail);
+      const file = parseUnifiedDiff(value.result.diff).find(f => f.path === metadata.path);
+      const stats = value.result.files.find(f => f.path === metadata.path);
+      if (!stats) throw new Error("File metadata is unavailable. Refresh changes.");
+      if (!file) throw new Error(value.result.truncated ? `Patch is too large to display a complete line (${FILE_PATCH_LIMIT} limit).` : "File changed or no longer has a diff. Refresh changes.");
+      if (!controller.signal.aborted) setLoaded({ file: { ...file, ...stats }, observedAt: value.observedAt, truncated: value.result.truncated });
+    })().catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (!controller.signal.aborted) setBusy(false); });
+    return () => controller.abort();
+  }, [open, loaded, workspace.id, workspace.path, metadata.path, attempt]);
+  const file: DiffFile = loaded?.file ?? { ...metadata, status: "modified", notes: [], hunks: [], raw: "" };
+  return <FileSection file={file} open={open} onOpenChange={onOpenChange}
+    onAsk={loaded && open ? () => onAsk(loaded.file, loaded.observedAt, loaded.truncated) : undefined}
+    message={error ?? (busy && !loaded ? "Loading fresh patch…" : !loaded ? "Expand to load patch" : loaded.truncated ? `Partial patch: exceeds the ${FILE_PATCH_LIMIT} per-file limit. Inspect the remainder locally.` : undefined)}
+    retry={error ? () => setAttempt(n => n + 1) : undefined} />;
+}
+
+function FileSection({ file, open, onOpenChange, onAsk, message, retry }: { file: DiffFile; open: boolean; onOpenChange: (open: boolean) => void; onAsk?: () => void; message?: string; retry?: () => void }) {
   const Icon = file.status === "added" ? FilePlusIcon : file.status === "deleted" ? FileMinusIcon : FileDiffIcon;
   const large = lineCount(file) > LARGE_FILE_LINES;
   const description = [
@@ -216,12 +251,13 @@ function FileSection({ file, open, onOpenChange, onAsk }: { file: DiffFile; open
           </Button>
         </CollapsibleTrigger>
         <ItemActions>
-          <IconButton label={`Ask about ${file.path}`} tooltip="Ask about this file" onClick={onAsk}><MessageSquarePlusIcon /></IconButton>
+          <IconButton label={`Ask about ${file.path}`} tooltip="Ask about this file" disabled={!onAsk} onClick={onAsk}><MessageSquarePlusIcon /></IconButton>
         </ItemActions>
       </Item>
       <CollapsibleContent className="disclosure-content">
+        {message && <p role="status" className="px-3 py-2 text-xs text-ink-2">{message} {retry && <Button variant="ghost" size="sm" onClick={retry}>Retry</Button>}</p>}
         {file.binary || file.hunks.length === 0
-          ? <p className="border-t border-line px-3 py-2 text-xs text-ink-3">{file.binary ? "Binary file." : "No text changes."}</p>
+          ? !message && <p className="border-t border-line px-3 py-2 text-xs text-ink-3">{file.binary ? "Binary file." : "No text changes."}</p>
           : <Hunks file={file} />}
       </CollapsibleContent>
     </Collapsible>

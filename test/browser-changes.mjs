@@ -1,4 +1,4 @@
-// Changes sheet (INV-01, INV-07, INV-08): scratch Git + saved Pi history, no paid calls.
+// Live Changes sheet (INV-01/07/09): scratch Git + saved Pi history, no paid calls.
 // node test/browser-changes.mjs <evidence-directory>
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -27,6 +27,8 @@ mkdirSync(join(repo, 'src'));
 writeFileSync(join(repo, 'README.md'), 'Scratch\n');
 writeFileSync(join(repo, 'src', 'app.ts'), 'import a;\nold line\n\ntail\n');
 writeFileSync(join(repo, 'gone.txt'), 'bye\n');
+mkdirSync(join(repo, 'inventory'));
+for (let i = 0; i < 10_010; i++) writeFileSync(join(repo, 'inventory', `${i}.txt`), 'unchanged\n');
 execFileSync('git', ['-C', repo, 'add', '.']);
 execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'Initial']);
 // Working tree: one edit, one untracked file, one deletion; nothing staged.
@@ -109,17 +111,18 @@ try {
   await ab('wait', '--fn', `${sheet}.textContent.includes('EDITED_AGAIN')`);
   assert.equal(await evaluate(`${sheet}.querySelector('[role="status"]').textContent`), '3 files · +4 −2');
 
-  // 4. Capture details are on demand.
-  await ab('find', 'role', 'button', 'click', '--name', 'Capture details', '--exact');
-  await ab('wait', '--fn', `${sheet}.textContent.includes('Revision')`);
-  assert.match(await sheetText(), /v1-[0-9a-f]{12}/);
+  // 4. Live-read limitations are on demand, never claimed as captured evidence.
+  await ab('find', 'role', 'button', 'click', '--name', 'Changes details', '--exact');
+  await ab('wait', '--fn', `${sheet}.textContent.includes('Live Git reads')`);
+  assert.match(await sheetText(), /Expanding unloaded files reads them afresh/);
 
   // 5. Ask about this file appends the file's diff to the draft and closes the sheet.
   await ab('click', `[aria-label="Ask about src/app.ts"]`);
   await waitClosed();
   await ab('wait', '--text', 'Added to your message');
   const draft = await evaluate(`document.querySelector('[aria-label="Message"]').value`);
-  assert.match(draft, /^About `src\/app\.ts` \(working tree against HEAD [0-9a-f]{12}, captured \d/);
+  assert.match(draft, /^About `src\/app\.ts` \(live working-tree diff inspected at/);
+  assert.match(draft, /not an immutable revision/);
   assert.match(draft, /```diff\ndiff --git a\/src\/app\.ts b\/src\/app\.ts\n[\s\S]*\+EDITED_AGAIN\n[\s\S]*```\n$/);
   assert.ok(!draft.includes('notes.md'), 'only the asked file is attached');
   await ab('screenshot', join(evidence, 'ask-draft.png'));
@@ -154,7 +157,108 @@ try {
   await ab('wait', '--text', 'No changes');
   assert.match(await sheetText(), /HEAD·review·no changes/);
   await ab('screenshot', join(evidence, 'sheet-empty.png'));
-  writeFileSync(join(evidence, 'result.json'), JSON.stringify({ status: 'pass', repo, backendPort, frontendPort }, null, 2));
+  // 9. >10k tracked paths with only a tiny edit opens without exact capture.
+  writeFileSync(join(repo, 'README.md'), 'TINY_EDIT_IN_LARGE_REPO\n');
+  await ab('find', 'role', 'button', 'click', '--name', 'Refresh changes', '--exact');
+  await ab('wait', '--text', 'TINY_EDIT_IN_LARGE_REPO');
+  assert.deepEqual(await filePaths(), ['README.md']);
+  await ab('screenshot', join(evidence, 'large-repo-tiny-edit.png'));
+
+  // 10. An oversized aggregate keeps the complete list; expanding reads a fresh per-file patch.
+  writeFileSync(join(repo, 'a-large.txt'), 'large source line\n'.repeat(75_000));
+  writeFileSync(join(repo, 'z-lazy.txt'), 'before lazy read\n');
+  await ab('find', 'role', 'button', 'click', '--name', 'Refresh changes', '--exact');
+  await ab('wait', '--fn', `${sheet}.textContent.includes('3 files')`);
+  assert.deepEqual(await filePaths(), ['README.md', 'a-large.txt', 'z-lazy.txt']);
+  assert.equal(await evaluate(`${sheet}.querySelector('[aria-label="Ask about z-lazy.txt"]').disabled`), true);
+  writeFileSync(join(repo, 'z-lazy.txt'), 'FRESH_LAZY_PATCH\n');
+  await ab('click', '[data-path="z-lazy.txt"] [data-slot="collapsible-trigger"]');
+  await ab('wait', '--text', 'FRESH_LAZY_PATCH');
+  assert.match(await evaluate(`${sheet}.querySelector('[data-path="a-large.txt"] [data-slot="collapsible-trigger"]').getAttribute('aria-label')`), /75000 added, 0 removed/);
+  writeFileSync(join(repo, 'a-large.txt'), 'large source line\n'.repeat(100_000));
+  await ab('click', '[data-path="a-large.txt"] [data-slot="collapsible-trigger"]');
+  await ab('wait', '--text', 'Partial patch: exceeds the 1 MiB');
+  assert.match(await evaluate(`${sheet}.querySelector('[data-path="a-large.txt"] [data-slot="collapsible-trigger"]').getAttribute('aria-label')`), /100000 added, 0 removed/);
+  await ab('screenshot', join(evidence, 'bounded-lazy-patch.png'));
+  await ab('click', '[aria-label="Ask about z-lazy.txt"]');
+  await waitClosed();
+  const lazyDraft = await evaluate(`document.querySelector('[aria-label="Message"]').value`);
+  assert.match(lazyDraft, /FRESH_LAZY_PATCH/);
+  assert.ok(!lazyDraft.includes('before lazy read'));
+  // 11. A late refresh response cannot replace a newer observation (even if abort is ignored).
+  rmSync(join(repo, 'a-large.txt')); rmSync(join(repo, 'z-lazy.txt'));
+  writeFileSync(join(repo, 'README.md'), 'TINY_EDIT_IN_LARGE_REPO\n' + 'scrollable source line\n'.repeat(150));
+  await openMenu(); await menuItem('Changes'); await waitSheet();
+  await ab('wait', '--text', 'TINY_EDIT_IN_LARGE_REPO');
+  await evaluate(`(() => {
+    const original = window.fetch;
+    window.holdNextChanges = true;
+    window.fetch = async (...args) => {
+      if (window.failNextChanges && String(args[0]).includes('/api/workspace/changes?')) {
+        window.failNextChanges = false;
+        throw new TypeError('Simulated network failure');
+      }
+      if (window.holdNextChanges && String(args[0]).includes('/api/workspace/changes?')) {
+        window.holdNextChanges = false;
+        const response = await original(args[0], { ...args[1], signal: undefined });
+        return await new Promise(resolve => { window.releaseChanges = () => resolve(response); });
+      }
+      return original(...args);
+    };
+    return true;
+  })()`);
+  const scrollPosition = await evaluate(`(() => {
+    window.retainedFile = ${sheet}.querySelector('[data-path="README.md"]');
+    window.changesViewport = ${sheet}.querySelector('[data-slot="scroll-area-viewport"]');
+    window.changesViewport.scrollTop = 600;
+    return window.changesViewport.scrollTop;
+  })()`);
+  assert.ok(scrollPosition > 0, 'fixture must have a scrolled viewport');
+  await evaluate(`window.dispatchEvent(new Event('focus')); true`);
+  await ab('wait', '--fn', 'typeof window.releaseChanges === "function"');
+  assert.deepEqual(await filePaths(), ['README.md']);
+  assert.equal(await evaluate(`${sheet}.querySelector('[data-path="README.md"]') === window.retainedFile`), true);
+  assert.equal(await evaluate('window.changesViewport.scrollTop'), scrollPosition, 'held focus refresh retains scroll');
+  await ab('screenshot', join(evidence, 'held-refresh-retained.png'));
+  await evaluate(`window.failNextChanges = true; window.dispatchEvent(new Event('focus')); true`);
+  await ab('wait', '--text', 'Refresh failed. Showing previous changes.');
+  assert.deepEqual(await filePaths(), ['README.md']);
+  assert.equal(await evaluate(`${sheet}.querySelector('[data-path="README.md"]') === window.retainedFile`), true);
+  assert.equal(await evaluate('window.changesViewport.scrollTop'), scrollPosition, 'failed focus refresh retains scroll');
+  await ab('screenshot', join(evidence, 'failed-refresh-retained.png'));
+  writeFileSync(join(repo, 'README.md'), 'NEWEST_REFRESH_WINS\n');
+  await ab('find', 'role', 'button', 'click', '--name', 'Refresh changes', '--exact');
+  await ab('wait', '--text', 'NEWEST_REFRESH_WINS');
+  await evaluate('window.releaseChanges(); true');
+  await ab('wait', '--fn', `${sheet}.textContent.includes('NEWEST_REFRESH_WINS') && !${sheet}.textContent.includes('TINY_EDIT_IN_LARGE_REPO')`);
+  await ab('screenshot', join(evidence, 'refresh-race.png'));
+  // 12. A lazy response from before refresh cannot repopulate the new file view.
+  writeFileSync(join(repo, 'a-large.txt'), 'large source line\n'.repeat(10_000));
+  writeFileSync(join(repo, 'z-race.txt'), 'OLD_LAZY_RESPONSE\n');
+  await ab('find', 'role', 'button', 'click', '--name', 'Refresh changes', '--exact');
+  await ab('wait', '--fn', `${sheet}.textContent.includes('3 files')`);
+  await evaluate(`(() => {
+    const original = window.fetch;
+    window.holdNextFile = true;
+    window.fetch = async (...args) => {
+      if (window.holdNextFile && String(args[0]).includes('/api/workspace/changes/file?') && args[1].body.includes('z-race')) {
+        window.holdNextFile = false;
+        const response = await original(args[0], { ...args[1], signal: undefined });
+        return await new Promise(resolve => { window.releaseFile = () => resolve(response); });
+      }
+      return original(...args);
+    };
+    return true;
+  })()`);
+  await ab('click', '[data-path="z-race.txt"] [data-slot="collapsible-trigger"]');
+  await ab('wait', '--fn', 'typeof window.releaseFile === "function"');
+  writeFileSync(join(repo, 'z-race.txt'), 'NEWEST_LAZY_RESPONSE\n');
+  await ab('find', 'role', 'button', 'click', '--name', 'Refresh changes', '--exact');
+  await ab('wait', '--text', 'NEWEST_LAZY_RESPONSE');
+  await evaluate('window.releaseFile(); true');
+  await ab('wait', '--fn', `${sheet}.textContent.includes('NEWEST_LAZY_RESPONSE') && !${sheet}.textContent.includes('OLD_LAZY_RESPONSE')`);
+  await ab('screenshot', join(evidence, 'lazy-refresh-race.png'));
+  writeFileSync(join(evidence, 'result.json'), JSON.stringify({ status: 'pass', trackedPaths: 10013, repo, backendPort, frontendPort }, null, 2));
   console.log('PASS');
 } finally {
   writeFileSync(join(evidence, 'commands.json'), JSON.stringify(commands, null, 2));

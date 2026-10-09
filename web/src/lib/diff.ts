@@ -1,6 +1,7 @@
-/** Parse Git unified diff text into files, hunks and numbered lines for review.
- * Input is the capture's `git diff --no-index --no-renames` output with empty prefixes,
- * so headers read `diff --git a/path b/path`. Unknown header lines are kept as notes.
+/** Parse no-renames Git unified patches with a/ and b/ path prefixes.
+ * Live previews can be truncated: parsed counts describe only the supplied patch;
+ * callers use numstat metadata for full-file totals and track truncation separately.
+ * Unknown header lines are kept as notes.
  */
 
 export type DiffLineKind = "context" | "add" | "del" | "meta";
@@ -15,7 +16,7 @@ export interface DiffFile {
   hunks: DiffHunk[];
   additions: number;
   deletions: number;
-  /** The file's complete diff text, for copying or attaching to a prompt. */
+  /** The supplied diff text for this file, possibly partial; not a completeness guarantee. */
   raw: string;
 }
 
@@ -39,15 +40,14 @@ export function unquotePath(value: string): string {
   return new TextDecoder().decode(new Uint8Array(bytes));
 }
 
-/** The capture diffs directories `a` and `b` with empty prefixes, so the header is
- * `a/P b/P`; a side that lacks the file repeats the other side's path (`b/P b/P`).
- * Stripping the directory, not an `a/` prefix, keeps repository paths that start with `a/`.
+/** Headers use `a/P b/P`; no-index directory diffs can repeat a side (`b/P b/P`).
+ * Strip exactly one prefix, preserving repository paths that themselves start with `a/`.
  */
 function pathFromHeader(rest: string): string {
   let left: string, right: string;
   if (rest.startsWith('"')) {
     let end = 1;
-    while (end < rest.length && !(rest[end] === '"' && rest[end - 1] !== "\\")) end++;
+    while (end < rest.length && rest[end] !== '"') end += rest[end] === "\\" ? 2 : 1;
     left = unquotePath(rest.slice(0, end + 1)); right = unquotePath(rest.slice(end + 2));
   } else {
     const width = (rest.length - 1) / 2;

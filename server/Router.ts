@@ -13,6 +13,7 @@ import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { buildProjects } from "./Views.ts";
+import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { handleSocket } from "./WsClient.ts";
@@ -142,6 +143,18 @@ export const AppRouter = HttpRouter.use((router) =>
         const message = error instanceof Error && "detail" in error ? String(error.detail) : "Invalid pull request request.";
         return Effect.succeed(json({ error: message }, 400));
       })));
+    }
+
+    for (const endpoint of ["changes", "changes/file"] as const) {
+      yield* router.add("POST", `/api/workspace/${endpoint}`, Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId");
+        const workspace = (yield* (yield* Registry).get).workspaces.find(w => w.id === id);
+        if (!workspace) return json({ error: "Workspace is not registered. Refresh the project list." }, 404);
+        const body = endpoint === "changes/file" ? yield* readBody : undefined;
+        if (body && typeof body.path !== "string") return json({ error: "File path is required in the request body." }, 400);
+        return json(yield* (yield* WorkspaceChanges).preview(workspace, body?.path as string | undefined));
+      }));
     }
 
     yield* router.add("POST", "/api/workspace/capture", Effect.gen(function* () {
