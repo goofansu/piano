@@ -7,9 +7,12 @@ import { stripVTControlCharacters } from 'node:util';
 const marker = '[REDACTED]';
 const prefixes = ['sk-', 'ghp_', 'github_pat_', 'xoxb-', 'xoxp-'];
 
+/** Environment variables whose values are treated as known secrets. */
+export const isSecretName = (key: string) => /(?:TOKEN|SECRET|PASSWORD|API_?KEY|CREDENTIAL)/i.test(key);
+
 export function redactDisplay(text: string, streaming = false): string {
   const secrets = Object.entries(process.env)
-    .filter(([key, value]) => /(?:TOKEN|SECRET|PASSWORD|API_?KEY|CREDENTIAL)/i.test(key) && value && value.length >= 8)
+    .filter(([key, value]) => isSecretName(key) && value && value.length >= 8)
     .map(([, value]) => value!).sort((a, b) => b.length - a.length);
   let safe = stripVTControlCharacters(text);
   for (const secret of secrets) safe = safe.split(secret).join(marker);
