@@ -92,7 +92,7 @@ try {
       return json({state:f.state});
     };
   })()`);
-  await button('Settings');await button('Radius');await ab('wait','--text','Radius tools');
+  await button('Settings');await button('Radius');await ab('wait','--text','Radius MCP');
   assert.equal(await evaluate(`document.querySelector('main').textContent.includes('Configured')`),false);
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false);
   assert.equal(await evaluate(`document.querySelector('main').textContent.includes('Connect your Radius account and tools on this machine.')`),false);

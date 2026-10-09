@@ -117,7 +117,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         </Item>
         <Item variant="outline" role="listitem" className="flex-col items-start sm:flex-row sm:items-center">
           <ItemContent className="w-full min-w-0 sm:w-auto">
-            <ItemTitle>2. Radius tools</ItemTitle>
+            <ItemTitle>2. Radius MCP</ItemTitle>
             <ItemDescription className="line-clamp-none">Let Pi use Radius tools through MCP with your connected account.</ItemDescription>
             {state.mcp.detail && <p className="text-sm text-muted-foreground">{state.mcp.detail}</p>}
           </ItemContent>
