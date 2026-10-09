@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PaletteIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -98,6 +98,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
           </CommandItem> : <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
           </CommandItem>}
+          <CommandItem value="Appearance" keywords={["settings", "theme", "font"]} onSelect={() => run(() => openSettings("appearance"))}>
+            <PaletteIcon /> Appearance
+          </CommandItem>
           <CommandItem value="Models" keywords={["settings", "default", "effort", "thinking"]} onSelect={() => run(() => openSettings("models"))}>
             <SlidersHorizontalIcon /> Models
           </CommandItem>

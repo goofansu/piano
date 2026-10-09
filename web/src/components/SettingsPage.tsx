@@ -1,7 +1,8 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, HomeIcon, PanelLeftOpenIcon, PlugIcon, SlidersHorizontalIcon } from "lucide-react";
+import { AlertCircleIcon, HomeIcon, PaletteIcon, PanelLeftOpenIcon, PlugIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AppearanceSettings } from "@/components/AppearanceSettings";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
 import { ModelSettings } from "@/components/ModelSettings";
@@ -14,8 +15,8 @@ import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/componen
 import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export type SettingsSection = "models" | "providers";
-const SECTIONS = [{ id: "models", label: "Models", icon: SlidersHorizontalIcon }, { id: "providers", label: "Providers", icon: PlugIcon }] as const;
+export type SettingsSection = "appearance" | "models" | "providers";
+const SECTIONS = [{ id: "appearance", label: "Appearance", icon: PaletteIcon }, { id: "models", label: "Models", icon: SlidersHorizontalIcon }, { id: "providers", label: "Providers", icon: PlugIcon }] as const;
 
 export function SettingsNavigation({ compact, section, onShow, onHide, onSelect, onHome }: { compact: boolean; section: SettingsSection; onShow: () => void; onHide: () => void; onSelect: (section: SettingsSection) => void; onHome: () => void }) {
   const menu = <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
@@ -67,17 +68,17 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
     } finally { setSigningOut(undefined); }
   };
-  if (section === "models") return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
+  if (section !== "providers") return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
-      <section aria-labelledby="settings-models-title" className="mx-auto flex max-w-2xl flex-col gap-6">
+      <section aria-labelledby="settings-section-title" className="mx-auto flex max-w-2xl flex-col gap-6">
         <header className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-            <h1 id="settings-models-title" className="text-xl font-semibold">Models</h1>
+            <h1 id="settings-section-title" className="text-xl font-semibold">{section === "appearance" ? "Appearance" : "Models"}</h1>
           </div>
-          <p className="text-sm text-muted-foreground">Defaults for new sessions on this machine. Folder and per-model settings take precedence.</p>
+          <p className="text-sm text-muted-foreground">{section === "appearance" ? "Customize how Piano looks in this browser." : "Defaults for new sessions on this machine. Folder and per-model settings take precedence."}</p>
         </header>
-        <ModelSettings />
+        {section === "appearance" ? <AppearanceSettings /> : <ModelSettings />}
       </section>
     </div>
   </section>;

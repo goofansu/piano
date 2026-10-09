@@ -1,7 +1,6 @@
 import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
-import { useTheme } from "next-themes";
+import { ArchiveIcon, ArchiveRestoreIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -185,15 +184,8 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   );
 }
 
-const APPEARANCES = [
-  { value: "light", label: "Light", icon: SunIcon },
-  { value: "dark", label: "Dark", icon: MoonIcon },
-  { value: "system", label: "System", icon: MonitorIcon },
-] as const;
-
-/** One menu for grouping and sorting the list; appearance lives here too. */
+/** One menu for grouping and sorting the list. */
 function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: SortBy; onChange: (change: { groupBy?: GroupBy; sortBy?: SortBy }) => void }) {
-  const { setTheme, theme } = useTheme();
   const sortLabel = SORT_BY.find(s => s.value === sortBy)?.label ?? "";
   // The label takes the slack so the current value sits beside the trigger's own chevron.
   const choice = (label: string, value: string) => <><span className="flex-1">{label}</span><span className="text-muted-foreground">{value}</span></>;
@@ -223,16 +215,6 @@ function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: Sor
           <DropdownMenuSubContent>
             <DropdownMenuRadioGroup value={sortBy} onValueChange={value => onChange({ sortBy: value as SortBy })}>
               {SORT_BY.map(s => <DropdownMenuRadioItem key={s.value} value={s.value}>{s.label}</DropdownMenuRadioItem>)}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Appearance", APPEARANCES.find(a => a.value === (theme ?? "system"))?.label ?? "")}</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            {/* The chosen mode carries the check; the icons say what each one does. */}
-            <DropdownMenuRadioGroup value={theme ?? "system"} onValueChange={setTheme}>
-              {APPEARANCES.map(({ value, label, icon: Icon }) => <DropdownMenuRadioItem key={value} value={value}><Icon /> {label}</DropdownMenuRadioItem>)}
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
