@@ -105,31 +105,30 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
     </Dialog>
     <Popover open={open && !!link && !linking} onOpenChange={onOpenChange}>
       {link && <SessionPullRequestTrigger value={pr.value} />}
-      <PopoverContent onCloseAutoFocus={restoreFocus} align="start" sideOffset={8} collisionPadding={16} aria-labelledby={titleId} className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto">
+      <PopoverContent onCloseAutoFocus={restoreFocus} align="start" sideOffset={8} collisionPadding={16} aria-labelledby={titleId} className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto">
         <PopoverHeader className="flex-row items-center justify-between gap-2">
           {showingDetails ? <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
             <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
-            <span className="min-w-0 break-all">{repo}</span>
+            <span className="min-w-0 break-all">{repo} <span className="whitespace-nowrap">· #{number}</span></span>
           </p> : <PopoverTitle id={titleId}>Pull request</PopoverTitle>}
           <Button ref={closeRef} variant="ghost" size="icon-xs" aria-label="Close pull request" onClick={close}><XIcon /></Button>
         </PopoverHeader>
         {link && showingDetails ? <>
           {/* Plain PR facts, not a second card inside the popover. */}
-          <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-2">
             <PopoverTitle id={titleId}>
               <a href={link.url} target="_blank" rel="noreferrer" className="break-words hover:underline">{pullRequest?.title ?? "View pull request"}</a>
             </PopoverTitle>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground">#{number}</span>
               {status ? <Badge variant={status.variant}><status.Icon data-icon="inline-start" aria-hidden />{status.label}</Badge>
                 : <Badge variant="secondary">Status unavailable</Badge>}
             </div>
             {pullRequest && <PullRequestSignals pr={pullRequest} />}
           </div>
-          <Separator />
-          <div className="flex justify-between gap-2">
-            <Button variant="ghost" size="sm" disabled={pr.busy} onClick={() => setEditing(true)}>Change link</Button>
-            <Button variant="ghost" size="sm" disabled={pr.busy} onClick={async () => { if (await pr.change({ action: "remove" })) close(); }}>Remove link</Button>
+          <Separator className="opacity-50" />
+          <div className="flex justify-end gap-1">
+            <Button variant="ghost" size="xs" disabled={pr.busy} onClick={() => setEditing(true)}>Change link</Button>
+            <Button variant="ghost" size="xs" disabled={pr.busy} onClick={async () => { if (await pr.change({ action: "remove" })) close(); }}>Remove link</Button>
           </div>
         </> : <PullRequestForm pr={pr} editing={editing} onCancel={() => link ? setEditing(false) : close()} onSave={close} />}
       </PopoverContent>
