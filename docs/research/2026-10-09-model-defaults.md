@@ -49,3 +49,21 @@ upstream composer-stop and message-error changes. Reverified implementation comm
 (before this report-only amendment): `npm test` **116 passed**, typecheck and lint **passed**,
 and the full model-settings browser journey **passed** again. Logs use the suffix `-rebased.log`;
 browser artifacts are in `/tmp/piano-defaults-evidence/rebased-browser/`. No force push or deployment.
+
+## Shared picker follow-up
+
+User feedback on `8c186f8` requested the composer's combined model-and-effort picker, model-aware
+effort choices, and the shorter **Save** label (not autosave). Settings now reuses `ModelSelect`
+and its effort capability/clamping rules; edits remain pending until Save. The saved effort is the
+supported value displayed in the picker. Pi ownership and the explicit durability boundary are unchanged.
+
+Extended `test/browser-model-settings.mjs` first failed against `8c186f8` because the shared picker
+was absent, then passed against the follow-up changes. The journey switches from a reasoning model
+at high effort to a non-reasoning model (only off), back to a reasoning model (supported levels
+restored), verifies no settings are written before Save, and repeats persistence, reload, error/retry,
+new-session readback and mobile checks. Desktop/mobile screenshots were inspected. Real Pi 1.1.0,
+Node v24.21.0 and the same isolated scratch setup were used; zero model calls.
+
+`npm test`: **116 passed**; typecheck, lint and `git diff --check`: **passed**. Logs are
+`/tmp/piano-model-picker-{red,browser,test,typecheck,lint}.log`, with browser artifacts under
+`/tmp/piano-model-picker-evidence/{red,green}/`. Scratch resources were cleaned up. No deployment.

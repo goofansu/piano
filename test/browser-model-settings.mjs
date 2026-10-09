@@ -36,6 +36,13 @@ async function ab(...args) {
 const evaluate = async code => JSON.parse(await ab('eval', code));
 const button = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
 const stored = () => JSON.parse(readFileSync(settingsPath, 'utf8'));
+const picker = 'section[aria-labelledby="settings-models-title"] button[aria-label^="Model:"]';
+const pickerLabel = () => evaluate(`document.querySelector(${JSON.stringify(picker)}).getAttribute('aria-label')`);
+const efforts = () => evaluate(`[...document.querySelectorAll('[aria-label="Model and effort"] [role="radio"]')].map(button => button.textContent.trim())`);
+const chooseModel = async ref => {
+  await ab('fill', 'input[aria-label="Search models"]', ref);
+  await ab('find', 'role', 'option', 'click', '--name', ref, '--exact');
+};
 let socket;
 try {
   for (let n = 0; ; n++) {
@@ -64,14 +71,24 @@ try {
   await ab('wait', '--fn', `!!document.querySelector('button[aria-label^="Model: piano-phase0/"]')`);
   // Warm the ordinary cwd catalog before saving a different default.
   await button('Settings');
-  await ab('wait', '--fn', `!!document.querySelector('#default-model:not(:disabled)')`);
-  assert.equal(await evaluate(`document.querySelector('#default-model').textContent.trim()`), 'Automatic (Pi chooses)');
-  assert.equal(await evaluate(`document.querySelector('[aria-labelledby="default-effort-label"] [data-state="on"]').textContent`), 'medium');
-  await ab('click', '#default-model');
-  await ab('fill', 'input[aria-label="Search default models"]', 'piano-phase0/project');
-  await ab('find', 'role', 'option', 'click', '--name', 'piano-phase0/project', '--exact');
+  await ab('wait', '--fn', `!!document.querySelector('section[aria-labelledby="settings-models-title"] button:not(:disabled)')`);
+  assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent === 'Save defaults')`), false, 'the button is simply Save');
+  await ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(picker + ':not(:disabled)')})`);
+  assert.match(await pickerLabel(), /effort: medium$/);
+  assert.equal(stored().defaultModel, undefined, 'resolved automatic selection is not persisted by loading');
+  await ab('click', picker);
+  await chooseModel('piano-phase0/project');
+  assert.deepEqual(await efforts(), ['off', 'minimal', 'low', 'medium', 'high']);
   await ab('find', 'role', 'radio', 'click', '--name', 'high', '--exact');
-  await button('Save defaults'); await ab('wait', '--text', 'Defaults saved for new sessions.');
+  await chooseModel('piano-phase0/plain');
+  assert.deepEqual(await efforts(), ['off'], 'non-reasoning model only offers off');
+  assert.match(await pickerLabel(), /plain; effort: off$/);
+  await chooseModel('piano-phase0/project');
+  assert.deepEqual(await efforts(), ['off', 'minimal', 'low', 'medium', 'high']);
+  await ab('find', 'role', 'radio', 'click', '--name', 'high', '--exact');
+  await ab('press', 'Escape');
+  assert.equal(stored().defaultModel, undefined, 'edits remain pending until Save');
+  await button('Save'); await ab('wait', '--text', 'Defaults saved for new sessions.');
   assert.deepEqual({ provider: stored().defaultProvider, model: stored().defaultModel, effort: stored().defaultThinkingLevel, theme: stored().theme }, { provider: 'piano-phase0', model: 'project', effort: 'high', theme: 'dark' });
   assert.ok(invalidations > 0, 'other clients receive catalog invalidation');
   await ab('screenshot', join(evidence, '01-saved-desktop.png'));
@@ -83,27 +100,27 @@ try {
   await ab('wait', '--fn', `!!document.querySelector('button[aria-label="Model: piano-phase0/project; effort: high"]')`);
   await ab('press', 'Control+k'); await ab('fill', 'input[aria-label="Search sessions and commands"]', 'Models');
   await ab('find', 'role', 'option', 'click', '--name', 'Models', '--exact');
-  await ab('wait', '--fn', `document.querySelector('#default-model')?.textContent.includes('piano-phase0/project')`);
-  assert.equal(await evaluate(`document.querySelector('[aria-labelledby="default-effort-label"] [data-state="on"]').textContent`), 'high');
+  await ab('wait', '--fn', `document.querySelector(${JSON.stringify(picker)})?.getAttribute('aria-label').includes('piano-phase0/project; effort: high')`);
   const invalid = await fetch(`${backendUrl}/api/settings/defaults`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ thinkingLevel: 'bogus' }) });
   assert.equal(invalid.status, 400);
   assert.equal(stored().defaultThinkingLevel, 'high');
   // A failed durability boundary stays visible, retains the draft, and never claims success.
   chmodSync(settingsPath, 0o400);
-  await ab('find', 'role', 'radio', 'click', '--name', 'low', '--exact'); await button('Save defaults');
+  await ab('click', picker);
+  await ab('find', 'role', 'radio', 'click', '--name', 'low', '--exact'); await ab('press', 'Escape'); await button('Save');
   await ab('wait', '--text', 'Could not save defaults');
   assert.equal(stored().defaultThinkingLevel, 'high');
-  assert.equal(await evaluate(`document.querySelector('[aria-labelledby="default-effort-label"] [data-state="on"]').textContent`), 'low');
+  assert.match(await pickerLabel(), /effort: low$/);
   await ab('set', 'viewport', '390', '844'); await ab('screenshot', join(evidence, '02-save-error-mobile.png'));
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   chmodSync(settingsPath, 0o600);
-  await button('Save defaults'); await ab('wait', '--text', 'Defaults saved for new sessions.');
+  await button('Save'); await ab('wait', '--text', 'Defaults saved for new sessions.');
   assert.equal(stored().defaultThinkingLevel, 'low');
   await ab('screenshot', join(evidence, '03-saved-mobile.png'));
   await ab('set', 'viewport', '1280', '900'); await button('Providers');
   await ab('wait', '--fn', `!!document.querySelector('#settings-providers-title')`);
   assert.equal(fixture.observe().requests.length, 0);
-  console.log('PASS: unset defaults, model + effort persistence, catalog invalidation, new-session readback, reload, palette, validation, save failure/retry, mobile layout, Providers navigation; zero model requests.');
+  console.log('PASS: shared model/effort picker, model-aware effort choices and clamping, explicit Save, persistence, catalog invalidation, new-session readback, reload, palette, validation, save failure/retry, mobile layout, Providers navigation; zero model requests.');
 } finally {
   socket?.close();
   try { await ab('close'); } catch {}
