@@ -41,12 +41,16 @@ const RawPr = Schema.Struct({
     __typename: Schema.optional(Schema.String), status: Schema.optional(Schema.String),
     conclusion: Schema.optional(Schema.NullOr(Schema.String)), state: Schema.optional(Schema.String),
   }))),
+  author: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
+  headRefName: Schema.optional(Schema.String), baseRefName: Schema.optional(Schema.String),
+  additions: Schema.optional(Schema.Number), deletions: Schema.optional(Schema.Number), changedFiles: Schema.optional(Schema.Number),
+  updatedAt: Schema.optional(Schema.String), closedAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 const Candidate = Schema.Struct({ ...RawPr.fields, headRefName: Schema.String,
   headRepository: Schema.NullOr(Schema.Struct({ name: Schema.String })),
   headRepositoryOwner: Schema.NullOr(Schema.Struct({ login: Schema.String })),
 });
-const fields = "url,number,title,state,isDraft,reviewDecision,statusCheckRollup";
+const fields = "url,number,title,state,isDraft,reviewDecision,statusCheckRollup,author,headRefName,baseRefName,additions,deletions,changedFiles,updatedAt,closedAt";
 function facts(raw: typeof RawPr.Type): PullRequest {
   const checks = raw.statusCheckRollup ?? [];
   const failed = checks.some(c => c.__typename === "StatusContext" ? c.state === "FAILURE" || c.state === "ERROR"
@@ -58,6 +62,12 @@ function facts(raw: typeof RawPr.Type): PullRequest {
     state: raw.state === "MERGED" ? "merged" : raw.state === "CLOSED" ? "closed" : raw.isDraft ? "draft" : "open",
     checks: failed ? "failure" : pending ? "pending" : checks.length ? "success" : "none",
     review: raw.reviewDecision === "APPROVED" ? "approved" : raw.reviewDecision === "CHANGES_REQUESTED" ? "changes_requested" : raw.reviewDecision === "REVIEW_REQUIRED" ? "review_required" : "none",
+    ...(raw.author ? { author: raw.author.login } : {}),
+    ...(raw.headRefName && raw.baseRefName ? { head: raw.headRefName, base: raw.baseRefName } : {}),
+    ...(raw.additions !== undefined && raw.deletions !== undefined && raw.changedFiles !== undefined
+      ? { additions: raw.additions, deletions: raw.deletions, changedFiles: raw.changedFiles } : {}),
+    // Merged and closed PRs date their disposition; open work dates its last activity.
+    ...(raw.state !== "OPEN" && raw.closedAt ? { at: raw.closedAt } : raw.updatedAt ? { at: raw.updatedAt } : {}),
   };
 }
 
@@ -122,7 +132,7 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
       // Normal remotes let gh select the base repository (including fork parents).
       // Integration remotes name the authorized repository explicitly. Match the head
       // repository too: unrelated forks often have identically named branches.
-      const output = yield* gh(s.cwd, ["pr", "list", "--head", before.branch, "--state", "open", "--limit", "100", "--json", `${fields},headRefName,headRepository,headRepositoryOwner`,
+      const output = yield* gh(s.cwd, ["pr", "list", "--head", before.branch, "--state", "open", "--limit", "100", "--json", `${fields},headRepository,headRepositoryOwner`,
         ...(before.apiHost === EXE_GITHUB ? ["--repo", `${EXE_GITHUB}/${before.repo}`] : [])], before.apiHost);
       const candidates = yield* Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Candidate)))(output),
         catch: () => failure("GitHub returned an invalid pull request response.") });

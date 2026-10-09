@@ -514,6 +514,14 @@ export const PullRequest = Schema.Struct({
   state: Schema.Literals(["open", "draft", "merged", "closed"]),
   checks: Schema.Literals(["none", "pending", "success", "failure"]),
   review: Schema.Literals(["none", "approved", "changes_requested", "review_required"]),
+  author: Schema.optional(Schema.String),
+  head: Schema.optional(Schema.String),
+  base: Schema.optional(Schema.String),
+  additions: Schema.optional(Schema.Number),
+  deletions: Schema.optional(Schema.Number),
+  changedFiles: Schema.optional(Schema.Number),
+  /** Close or merge time once disposed, otherwise last update (ISO). */
+  at: Schema.optional(Schema.String),
 });
 export type PullRequest = typeof PullRequest.Type;
 

@@ -1,5 +1,5 @@
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
-import { BookMarkedIcon, CheckIcon, ClockIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
+import { ArrowRightIcon, BookMarkedIcon, CheckIcon, ClockIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -46,22 +46,58 @@ function PullRequestSignals({ pr }: { pr: PullRequest }) {
   if (pr.state !== "open" && pr.state !== "draft") return null;
   const checks = {
     none: null,
-    pending: { label: "Checks running", Icon: ClockIcon },
-    success: { label: "Checks passed", Icon: CheckIcon },
-    failure: { label: "Checks failed", Icon: XCircleIcon },
+    pending: { label: "Checks running", Icon: ClockIcon, color: "text-muted-foreground" },
+    success: { label: "Checks passed", Icon: CheckIcon, color: "text-ok" },
+    failure: { label: "Checks failed", Icon: XCircleIcon, color: "text-err" },
   }[pr.checks];
   const review = {
     none: null,
-    approved: { label: "Approved", Icon: CheckIcon },
-    changes_requested: { label: "Changes requested", Icon: MessageSquareIcon },
-    review_required: { label: "Review required", Icon: MessageSquareIcon },
+    approved: { label: "Approved", Icon: CheckIcon, color: "text-ok" },
+    changes_requested: { label: "Changes requested", Icon: MessageSquareIcon, color: "text-err" },
+    review_required: { label: "Review required", Icon: MessageSquareIcon, color: "text-muted-foreground" },
   }[pr.review];
   if (!checks && !review) return null;
-  // Plain supporting facts, rather than competing status badges.
+  // Plain supporting facts, rather than competing status badges; only the icon carries the outcome color.
   return <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
     {[checks, review].map(signal => signal && <span key={signal.label} className="flex items-center gap-1">
-      <signal.Icon className="size-3 shrink-0" aria-hidden />{signal.label}
+      <signal.Icon className={`size-3 shrink-0 ${signal.color}`} aria-hidden />{signal.label}
     </span>)}
+  </div>;
+}
+
+const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+function ago(iso: string) {
+  const seconds = (new Date(iso).getTime() - Date.now()) / 1000;
+  for (const [unit, size] of [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]] as const)
+    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
+  return "just now";
+}
+
+/** GitHub's five-square diffstat: no standard component draws a proportion this small. */
+function DiffStat({ additions, deletions, changedFiles }: { additions: number; deletions: number; changedFiles: number }) {
+  const total = additions + deletions;
+  const added = total ? Math.round(additions / total * 5) : 0, removed = total ? 5 - added : 0;
+  const squares = ["a", "b", "c", "d", "e"].map((id, i) => ({ id, color: i < added ? "bg-ok" : i < added + removed ? "bg-err" : "bg-muted" }));
+  return <div className="flex items-center gap-2 text-xs tabular-nums">
+    <span className="font-medium text-ok"><span className="sr-only">Additions </span>+{additions.toLocaleString()}</span>
+    <span className="font-medium text-err"><span className="sr-only">Deletions </span>−{deletions.toLocaleString()}</span>
+    <span className="flex gap-0.5" aria-hidden>
+      {squares.map(square => <span key={square.id} className={`size-2 rounded-[2px] ${square.color}`} />)}
+    </span>
+    <span className="text-muted-foreground">{changedFiles} {changedFiles === 1 ? "file" : "files"}</span>
+  </div>;
+}
+
+/** Where and how big: the facts that decide whether to open the PR. */
+function PullRequestFacts({ pr }: { pr: PullRequest }) {
+  const hasDiff = pr.additions !== undefined && pr.deletions !== undefined && pr.changedFiles !== undefined;
+  if (!pr.head && !hasDiff) return null;
+  return <div className="flex flex-col gap-2">
+    {pr.head && pr.base && <div className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted-foreground" title={`${pr.head} into ${pr.base}`}>
+      <GitBranchIcon className="size-3 shrink-0" aria-hidden />
+      <span className="truncate">{pr.head}</span><ArrowRightIcon className="size-3 shrink-0" aria-label="into" /><span className="shrink-0">{pr.base}</span>
+    </div>}
+    {hasDiff && <DiffStat additions={pr.additions!} deletions={pr.deletions!} changedFiles={pr.changedFiles!} />}
   </div>;
 }
 
@@ -122,9 +158,19 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
             <div className="flex flex-wrap items-center gap-2">
               {status ? <Badge variant={status.variant}><status.Icon data-icon="inline-start" aria-hidden />{status.label}</Badge>
                 : <Badge variant="secondary">Status unavailable</Badge>}
+              {pullRequest && (pullRequest.author || pullRequest.at) && <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                {pullRequest.author && <>
+                  <img src={`https://github.com/${pullRequest.author}.png?size=40`} alt="" className="size-4 shrink-0 rounded-full bg-muted" />
+                  <span className="truncate text-foreground">{pullRequest.author}</span>
+                </>}
+                {pullRequest.at && <span className="shrink-0">
+                  {pullRequest.state === "open" || pullRequest.state === "draft" ? `updated ${ago(pullRequest.at)}` : ago(pullRequest.at)}
+                </span>}
+              </span>}
             </div>
-            {pullRequest && <PullRequestSignals pr={pullRequest} />}
           </div>
+          {pullRequest && <PullRequestFacts pr={pullRequest} />}
+          {pullRequest && <PullRequestSignals pr={pullRequest} />}
           <Separator className="opacity-50" />
           <div className="flex justify-end gap-1">
             <Button variant="ghost" size="xs" disabled={pr.busy} onClick={() => setEditing(true)}>Change link</Button>
