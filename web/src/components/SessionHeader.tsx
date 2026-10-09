@@ -29,11 +29,19 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
           {/* The project is the way back to where this session was opened from. */}
           {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal || project.name} onClick={() => openProject(project.id)}>{project.name}</button>}
           <h1 className="truncate text-sm font-medium" title={title}>{title}</h1>
-          <p title={session.cwd} className="flex min-w-0 font-mono text-xs text-muted-foreground">
-            <span className="sr-only">Working directory: </span>
-            {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
-            <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
-          </p>
+          {/* Plain workspace metadata has no dedicated UI primitive. */}
+          <div className="flex min-w-0 items-center gap-3 font-mono text-xs text-muted-foreground">
+            <p title={session.cwd} className="flex min-w-0">
+              <span className="sr-only">Working directory: </span>
+              {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
+              <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
+            </p>
+            {branch && <p title={branch} className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-1">
+              <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
+              <span className="sr-only">Git branch: </span>
+              <span className="truncate">{branch}</span>
+            </p>}
+          </div>
         </> : <><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-28" /></>}
       </div>
       <span role="status" className="sr-only">{status}</span>
@@ -49,10 +57,6 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
                 <dt className="sr-only">Working directory</dt>
                 <dd className="break-all">{session?.cwd}</dd>
               </div>
-              {branch && <div className="min-w-0 text-muted-foreground">
-                <dt className="sr-only">Git branch</dt>
-                <dd className="flex items-start gap-1"><GitBranchIcon aria-hidden="true" className="mt-0.5 size-3 shrink-0" /><span className="min-w-0 break-all">{branch}</span></dd>
-              </div>}
               <div className="min-w-0">
                 <dt className="sr-only">Session ID</dt>
                 <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
