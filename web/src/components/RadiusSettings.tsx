@@ -1,6 +1,6 @@
 import type { RadiusSetupState } from "@shared/radius";
 import type { OAuthProvider } from "@shared/wire";
-import { CheckCircle2Icon, ExternalLinkIcon, GlobeIcon, PanelLeftOpenIcon, RefreshCwIcon, UserRoundIcon, WrenchIcon } from "lucide-react";
+import { CheckCircle2Icon, ChevronLeftIcon, ExternalLinkIcon, GlobeIcon, RefreshCwIcon, UserRoundIcon, WrenchIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
@@ -91,7 +91,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   return <>
     <header className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
+        <Button variant="ghost" className="md:hidden" onClick={onMenu}><ChevronLeftIcon data-icon="inline-start" />Settings</Button>
         <h1 id="settings-section-title" className="text-xl font-semibold">Radius</h1>
         <IconButton className="ml-auto" label="Refresh setup" disabled={busy || signingOut || refreshing} onClick={() => { setActionError(""); setRevision(value => value + 1); }}>
           {refreshing ? <Spinner /> : <RefreshCwIcon />}
