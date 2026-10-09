@@ -195,10 +195,10 @@ export default function App() {
         : compact ? <SidebarRail openSettings={openSettings} onShow={layout.show} working={anyWorking} />
           : <Sidebar {...sidebarProps} onHide={layout.hide} />}
       content={<>
-        {/* Keep the previous view mounted for drafts and session continuity (INV-02). */}
+        {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
         <LayoutView key={state.view.kind} active={!settingsOpen}>
           {state.view.kind === "new" ? (
-            <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
+            <NewSession state={state} send={send} onDraftChange={onDraftChange} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
           ) : state.view.kind === "missing-session" ? (
             <Empty className="flex-1 px-4" role="alert">
               <EmptyHeader>

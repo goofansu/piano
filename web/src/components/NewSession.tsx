@@ -29,6 +29,7 @@ import type { AppState } from "@/store";
 interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
+  onDraftChange: (key: string, text: string) => void;
   initialCwd?: string;
   /** The project a session started here joins; the page is that project's home. */
   outcomeProjectId?: string;
@@ -43,14 +44,15 @@ interface Props {
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
+export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProjectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
     // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
     if (outcomeProjectId) return "";
     return readStorage(LAST_DIR) ?? "";
   });
-  const [text, setText] = useState("");
+  const text = state.drafts["new-session"] ?? "";
+  const setText = (value: string) => onDraftChange("new-session", value);
   const attachments = useAttachments("new-session");
   const [model, setModel] = useState<string | undefined>(undefined);
   const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
@@ -64,7 +66,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
   useEffect(() => { onDirectoryChange?.(cwd); }, [cwd, onDirectoryChange]);
 
   useAutoGrow(textarea, text, 288);
-  useTypeToFocus(textarea, useCallback((s: string) => setText((t) => t + s), []));
+  useTypeToFocus(textarea, useCallback((s: string) => onDraftChange("new-session", text + s), [onDraftChange, text]));
   // Fall back to the first known project when nothing is remembered.
   useEffect(() => {
     if (!outcomeProjectId && !cwd && state.projects[0]) setCwd(state.projects[0].path);
@@ -96,6 +98,7 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
     writeStorage(LAST_DIR, cwd.trim());
     setCreating(true);
     send({ _tag: "create_session", cwd: cwd.trim(), outcomeProjectId, options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
+    setText("");
     attachments.clear();
   };
 

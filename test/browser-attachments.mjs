@@ -94,12 +94,21 @@ try {
   assert.equal(evaluate(attached), 0);
   // Draft stays scoped and survives navigation without becoming a new session's upload.
   ab('upload', 'input[type="file"]', image); await until(`${attached} === 1`);
-  evaluate(`(() => {const native=FileReader.prototype.readAsDataURL;FileReader.prototype.readAsDataURL=function(file){window.finishImageRead=()=>{FileReader.prototype.readAsDataURL=native;native.call(this,file);};};return true;})()`);
-  fileEvent('paste', 'slow.png'); await until(`typeof window.finishImageRead === 'function'`);
   ab('set', 'viewport', '1280', '800');
   const sessionTitle = evaluate(`document.querySelector('button[aria-current="page"]').title`);
   ab('find', 'role', 'button', 'click', '--name', 'New session', '--exact'); await until(`!!document.querySelector('[aria-label="First message"]')`);
   assert.equal(evaluate(attached), 0);
+  ab('fill', '[aria-label="First message"]', 'unsent new session draft');
+  ab('upload', 'input[type="file"]', image); await until(`${attached} === 1`);
+  ab('click', `button[title="${sessionTitle}"]`); await until(`!!document.querySelector('[aria-label="Message"]')`);
+  ab('find', 'role', 'button', 'click', '--name', 'New session', '--exact'); await until(`!!document.querySelector('[aria-label="First message"]')`);
+  assert.equal(evaluate(attached), 1, 'new-session images survive navigation');
+  assert.equal(evaluate(`document.querySelector('[aria-label="First message"]').value`), 'unsent new session draft', 'new-session text survives navigation with its images');
+  ab('click', '[aria-label="Remove pixel.png"]');
+  ab('click', `button[title="${sessionTitle}"]`); await until(`${attached} === 1`);
+  evaluate(`(() => {const native=FileReader.prototype.readAsDataURL;FileReader.prototype.readAsDataURL=function(file){window.finishImageRead=()=>{FileReader.prototype.readAsDataURL=native;native.call(this,file);};};return true;})()`);
+  fileEvent('paste', 'slow.png'); await until(`typeof window.finishImageRead === 'function'`);
+  ab('find', 'role', 'button', 'click', '--name', 'New session', '--exact'); await until(`!!document.querySelector('[aria-label="First message"]')`);
   ab('click', `button[title="${sessionTitle}"]`); await until(`${attached} === 1`);
   assert.equal(evaluate(`document.querySelector('[aria-label="Attach images"]').disabled`), true, 'reading state survives navigation');
   evaluate(`(() => {window.finishImageRead();return true;})()`); await until(`${attached} === 2`);
@@ -120,7 +129,13 @@ try {
   const lengths = evaluate(`(async () => Promise.all([...document.querySelectorAll('img[alt="Attachment preview"]')].slice(-2).map(async img => {const r=await fetch(img.src);return {status:r.status,bytes:(await r.arrayBuffer()).byteLength};})))()`);
   assert.deepEqual(lengths, [{status:200,bytes:10485760}, {status:200,bytes:10485760}], 'full 20 MiB survives browser → WS → Pi → preview route');
   ab('reload'); await until(`${transcriptImages} === 4`);
-  console.log('PASS: validation, picker/remove/reselect, image-only creation, paste/drop follow-up, image bytes, reload, scoped drafts, mobile/desktop, four-image cap and full 20 MiB upload/readback. Fake Pi; no real model claim.');
+  ab('find', 'role', 'button', 'click', '--name', 'New session', '--exact'); await until(`!!document.querySelector('[aria-label="First message"]')`);
+  ab('fill', '[aria-label="First message"]', 'unsent new session draft');
+  ab('click', '[aria-label="Send"]'); ab('wait', '--text', 'echo: unsent new session draft');
+  ab('find', 'role', 'button', 'click', '--name', 'New session', '--exact'); await until(`!!document.querySelector('[aria-label="First message"]')`);
+  assert.equal(evaluate(`document.querySelector('[aria-label="First message"]').value`), '', 'sent new-session text is cleared');
+  assert.equal(evaluate(attached), 0);
+  console.log('PASS: new-session text retention and clearing, validation, picker/remove/reselect, image-only creation, paste/drop follow-up, image bytes, reload, scoped drafts, mobile/desktop, four-image cap and full 20 MiB upload/readback. Fake Pi; no real model claim.');
 } finally {
   try { ab('close'); } catch {}
   server.kill('SIGTERM'); frontend.kill('SIGTERM');
