@@ -135,10 +135,12 @@ try {
   await ab('find', 'role', 'button', 'click', '--name', 'echo duplicate-tool');
   check((await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`)).includes('Command aborted'), 'Tool retains Command aborted detail');
   await capture('tool-aborted');
-  // Conversation detail is display-only, persists across reload, and is reversible.
+  // Session display is display-only, persists across reload, and is reversible.
   await ab('press', 'Control+k');
   await ab('find', 'role', 'option', 'click', '--name', 'Appearance', '--exact');
   await ab('find', 'role', 'radio', 'click', '--name', 'Messages only', '--exact');
+  check(await evaluate(`localStorage.getItem('piano:session-display')`) === 'messages', 'Session display uses the renamed localStorage key');
+  check((await ab('snapshot')).includes('Session display'), 'Appearance labels the preference Session display');
   await capture('appearance-messages-only');
   await ab('press', 'Control+k');
   await ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
@@ -170,7 +172,7 @@ try {
   await capture('everything-restored');
   check((await ab('errors')) === '', 'No browser errors');
   assert.deepEqual(failures, [], failures.join('\n'));
-  console.log('PASS: concise standalone provider errors, on-demand raw diagnostics, duplicate abort suppression, desktop/mobile containment, and persistent reversible conversation detail');
+  console.log('PASS: concise standalone provider errors, on-demand raw diagnostics, duplicate abort suppression, desktop/mobile containment, and persistent reversible session display');
 } finally {
   try { await ab('close'); } catch {}
   for (const proc of [backend, frontend]) if (proc.exitCode === null) { const stopped = new Promise(resolve => proc.once('exit', resolve)); proc.kill('SIGTERM'); await stopped; }
