@@ -187,7 +187,7 @@ export default function App() {
   return (
     <AppLayout layout={layout} navigationTitle={settingsOpen ? "Settings navigation" : "Projects and sessions"}
       navigation={compact => settingsOpen
-        ? <SettingsNavigation compact={compact} onShow={layout.show} onHide={layout.hide} onSelect={closeMobile} />
+        ? <SettingsNavigation compact={compact} onShow={layout.show} onHide={layout.hide} onSelect={closeMobile} onHome={closeSettings} />
         : compact ? <SidebarRail openSettings={openSettings} onShow={layout.show} working={anyWorking} />
           : <Sidebar {...sidebarProps} onHide={layout.hide} />}
       content={<>
@@ -209,7 +209,7 @@ export default function App() {
             <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={!settingsOpen && changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={!settingsOpen && pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}
         </LayoutView>
-        {settingsOpen && <LayoutView><SettingsPage close={closeSettings} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
+        {settingsOpen && <LayoutView><SettingsPage onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
       </>}>
       <Toaster
         position="top-center"

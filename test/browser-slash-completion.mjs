@@ -57,6 +57,14 @@ function assertFullPageSettings() {
   assert.equal(evaluate(`!!document.querySelector('nav[aria-label="Sessions"]')?.checkVisibility()`), false, 'session navigation is hidden in Settings');
   assert.equal(evaluate('document.documentElement.scrollWidth > innerWidth'), false, 'Settings fits without horizontal overflow');
 }
+function navigationButtonBox(label) {
+  return evaluate(`(() => {
+    const button = Array.from(document.querySelectorAll('aside button')).find(element =>
+      element.checkVisibility({ visibilityProperty: true }) && (element.getAttribute('aria-label') === ${JSON.stringify(label)} || element.textContent.trim() === ${JSON.stringify(label)}));
+    const { x, y, width, height } = button.getBoundingClientRect();
+    return { x, y, width, height };
+  })()`);
+}
 function cardStyle(selector) {
   return evaluate(`(() => {
     const style = getComputedStyle(document.querySelector(${JSON.stringify(selector)}));
@@ -90,6 +98,7 @@ try {
   assert.equal(sessionStyle.border, '1px');
   assert.notEqual(sessionStyle.shadow, 'none');
   await fill('Keep this draft');
+  const settingsFooter = navigationButtonBox('Settings');
   evaluate(`(() => {
     window.layoutCard = document.querySelector('main');
     window.layoutDraft = document.querySelector('textarea');
@@ -111,6 +120,7 @@ try {
   })()`);
   ab('find', 'role', 'button', 'click', '--name', 'Hide sidebar', '--exact');
   await until(`document.querySelector('main').getBoundingClientRect().x === 48`);
+  const settingsRailFooter = navigationButtonBox('Settings');
   ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
   await until(`document.querySelector('main').getBoundingClientRect().x === 288`);
   assert.ok(evaluate('sessionNavigation === document.querySelector(\'nav[aria-label="Sessions"]\')'), 'collapse/expand keeps expanded navigation mounted');
@@ -123,9 +133,14 @@ try {
   assert.equal(evaluate('location.pathname'), '/settings');
   await assertSettingsCard(288, sessionStyle);
   assert.ok(evaluate('layoutCard === document.querySelector("main") && layoutDraft === document.querySelector("textarea")'), 'Settings does not replace the content card or session composer');
+  assert.deepEqual(navigationButtonBox('Home'), settingsFooter, 'Home mirrors Settings in the expanded sidebar footer');
+  assert.ok(evaluate(`Array.from(document.querySelectorAll('aside h2')).some(heading => heading.textContent === 'Settings')`), 'Settings title belongs to the navigation');
+  assert.equal(evaluate(`Array.from(document.querySelectorAll('main h1, main h2')).some(heading => heading.textContent === 'Settings')`), false, 'content has no redundant Settings heading');
+  assert.equal(evaluate(`document.querySelector('main [aria-label="Settings"] h1').textContent`), 'Providers');
   capture('settings-desktop-expanded');
   ab('find', 'role', 'button', 'click', '--name', 'Hide sidebar', '--exact');
   await assertSettingsCard(48, sessionStyle);
+  assert.deepEqual(navigationButtonBox('Home'), settingsRailFooter, 'Home mirrors Settings above the Piano mark in the collapsed rail');
   capture('settings-desktop-collapsed');
   ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
   await assertSettingsCard(288, sessionStyle);
@@ -144,7 +159,7 @@ try {
   })()`);
   assert.ok(interruptedAt > 48 && interruptedAt < 288, 'collapse can reverse before it finishes');
   await assertSettingsCard(288, sessionStyle);
-  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Home', '--exact');
   assert.equal(draft(), 'Keep this draft');
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   await until('layoutMotion.views.length >= 3');
@@ -156,16 +171,16 @@ try {
   writeFileSync(join(evidence, 'layout-motion.json'), JSON.stringify({ sessionMotion, pageMotion }, null, 2));
   ab('mouse', 'move', '288', '450'); ab('mouse', 'down'); ab('mouse', 'move', '400', '450'); ab('mouse', 'up');
   await assertSettingsCard(400, sessionStyle);
-  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Home', '--exact');
   await until(`document.querySelector('main').getBoundingClientRect().x === 400`);
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   await assertSettingsCard(400, sessionStyle);
   ab('find', 'role', 'button', 'click', '--name', 'Sign in to Radius', '--exact');
-  ab('wait', '--text', 'Sign in · radius');
+  ab('wait', '--text', 'Sign in to Radius');
   await until(`!!document.querySelector('#login-answer')`);
   ab('click', '#login-answer');
   ab('wait', '--text', 'Sign in with device code (when signing in from another device)');
-  capture('settings-radius'); ab('press', 'Escape'); ab('press', 'Escape');
+  capture('settings-radius'); ab('press', 'Escape'); // Close the method menu; reload preserves the running sign-in.
   ab('reload'); ab('wait', '--text', 'Providers');
   assert.equal(evaluate('location.pathname'), '/settings');
   await assertSettingsCard(400, sessionStyle);
@@ -173,10 +188,10 @@ try {
   await assertSettingsCard(288, sessionStyle);
   ab('find', 'role', 'button', 'click', '--name', 'Sign in to Radius', '--exact');
   await until(`!!document.querySelector('#login-answer')`);
-  ab('find', 'role', 'button', 'click', '--name', 'Cancel sign-in', '--exact');
-  ab('wait', '--text', 'Sign-in cancelled.');
-  ab('click', '[data-slot="dialog-footer"] button:last-child');
-  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Cancel', '--exact');
+  await until(`!document.querySelector('[role="dialog"]')`);
+  assert.ok(evaluate(`fetch('/api/provider-login').then(response => response.json()).then(result => result.state?.status === 'cancelled')`), 'Cancel resolves the running sign-in');
+  ab('find', 'role', 'button', 'click', '--name', 'Home', '--exact');
   await fill('Keep this draft');
   ab('press', 'Control+k'); ab('fill', '[placeholder="Search sessions and commands…"]', 'Settings');
   ab('click', '[role="option"]'); ab('wait', '--text', 'Providers');
@@ -185,8 +200,9 @@ try {
   await until(`location.pathname === '/new'`);
   evaluate('history.forward(); true');
   await until(`location.pathname === '/settings'`);
-  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
-  assert.equal(draft(), 'Keep this draft', 'settings navigation preserves the new-session draft');
+  ab('press', 'Control+k'); ab('fill', '[placeholder="Search sessions and commands…"]', 'Home');
+  ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
+  assert.equal(draft(), 'Keep this draft', 'Home command preserves the new-session draft');
   await fill('/login rad'); assert.equal(evaluate(`!!document.querySelector('${menu}')`), false, 'no provider completion remains');
   await suggestions('/');
   assert.ok(evaluate(`document.querySelector('${menu}').textContent.includes('probe-only')`));
@@ -232,8 +248,8 @@ try {
   ab('press', 'Escape'); await fill('Keep session draft');
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('wait', '--text', 'Providers');
-  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
-  assert.equal(draft(), 'Keep session draft', 'settings navigation preserves the session draft');
+  ab('find', 'role', 'button', 'click', '--name', 'Home', '--exact');
+  assert.equal(draft(), 'Keep session draft', 'Home returns to the previous session and preserves its draft');
   await fill('live context'); ab('press', 'Enter'); ab('wait', '[aria-label="Stop"]');
   await fill('/handled'); ab('wait', '--text', 'No matching commands.');
   ab('press', 'Enter'); ab('wait', '--text', 'Command handled.');
@@ -285,17 +301,24 @@ try {
   ab('find', 'role', 'button', 'click', '--name', 'Providers', '--exact');
   await until(`!document.querySelector('[role="dialog"]')`);
   assertFullPageSettings();
+  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Home', '--exact');
+  await until(`location.pathname === '/new' && !document.querySelector('[role="dialog"]')`);
+  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
+  ab('wait', '--text', 'Providers');
+  assertFullPageSettings();
   ab('set', 'viewport', '1440', '1000');
   ab('set', 'media', 'light', 'reduced-motion');
   ab('find', 'role', 'button', 'click', '--name', 'Hide sidebar', '--exact');
   await assertSettingsCard(48, sessionStyle);
   assert.equal(evaluate(`getComputedStyle(document.querySelector('aside')).transitionDuration`), '0s');
-  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Home', '--exact');
   ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
   await until(`document.querySelector('main').getBoundingClientRect().x === 288`);
   assert.equal(evaluate(`getComputedStyle(document.querySelector('aside')).transitionDuration`), '0s');
   assert.equal(evaluate('document.getAnimations().filter(animation => animation.playState === "running").length'), 0, 'reduced motion suppresses layout and page entrances');
-  console.log('PASS: shared Settings/session card, collapse/expand motion and page entrances, retained DOM/drafts, resize persistence, reduced motion, mobile sheet/focus, OAuth resume/cancel, composer completion, keyboard/pointer/IME, stale responses and bounds');
+  console.log('PASS: reciprocal Home/Settings footers and palette, sidebar title without content header, shared card/motion, retained DOM/drafts, resize persistence, reduced motion, mobile navigation/focus, OAuth resume/cancel, composer completion, keyboard/pointer/IME, stale responses and bounds');
 } finally {
   try { capture('final'); ab('close'); } catch {}
   backend.kill('SIGTERM'); frontend.kill('SIGTERM');

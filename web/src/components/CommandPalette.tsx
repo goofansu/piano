@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArrowLeftIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -92,12 +92,11 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
           </CommandGroup>
         )}
         <CommandGroup key="global" heading="Global commands">
-          {closeSettings && <CommandItem value="Back to session" onSelect={() => run(closeSettings)}>
-            <ArrowLeftIcon /> Back to session
-          </CommandItem>}
-          <CommandItem value="Settings" onSelect={() => run(openSettings)}>
+          {closeSettings ? <CommandItem value="Home" keywords={["back", "session"]} onSelect={() => run(closeSettings)}>
+            <HomeIcon /> Home
+          </CommandItem> : <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
-          </CommandItem>
+          </CommandItem>}
           <CommandItem value="Providers" keywords={["settings", "oauth", "sign in"]} onSelect={() => run(openSettings)}>
             <PlugIcon /> Providers
           </CommandItem>

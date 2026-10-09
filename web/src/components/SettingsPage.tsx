@@ -1,19 +1,19 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, ArrowLeftIcon, PanelLeftOpenIcon, PlugIcon } from "lucide-react";
+import { AlertCircleIcon, HomeIcon, PanelLeftOpenIcon, PlugIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
+import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
-import { Separator } from "@/components/ui/separator";
 import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function SettingsNavigation({ compact, onShow, onHide, onSelect }: { compact: boolean; onShow: () => void; onHide: () => void; onSelect: () => void }) {
+export function SettingsNavigation({ compact, onShow, onHide, onSelect, onHome }: { compact: boolean; onShow: () => void; onHide: () => void; onSelect: () => void; onHome: () => void }) {
   const menu = <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
     <SidebarMenu><SidebarMenuItem>
       <SidebarMenuButton isActive aria-current="page" aria-label="Providers" tooltip="Providers" className={compact ? "size-8 justify-center p-2" : "h-9 pointer-coarse:h-11"} onClick={onSelect}>
@@ -21,13 +21,16 @@ export function SettingsNavigation({ compact, onShow, onHide, onSelect }: { comp
       </SidebarMenuButton>
     </SidebarMenuItem></SidebarMenu>
   </nav>;
-  return compact ? <LayoutRail onShow={onShow}>{menu}</LayoutRail> : <div className="flex h-full flex-col">
-    <LayoutHeader onHide={onHide} />
+  return compact ? <LayoutRail onShow={onShow} footer={<IconButton label="Home" side="right" onClick={onHome}><HomeIcon /></IconButton>}>{menu}</LayoutRail> : <div className="flex h-full flex-col">
+    <LayoutHeader title="Settings" onHide={onHide} />
     <SidebarContent><SidebarGroup className="px-3"><SidebarGroupContent>{menu}</SidebarGroupContent></SidebarGroup></SidebarContent>
+    <div className="shrink-0 p-3">
+      <Button variant="ghost" className="w-full justify-start" onClick={onHome}><HomeIcon data-icon="inline-start" />Home</Button>
+    </div>
   </div>;
 }
 
-export function SettingsPage({ close, onMenu, providersChanged }: { close: () => void; onMenu: () => void; providersChanged: () => void }) {
+export function SettingsPage({ onMenu, providersChanged }: { onMenu: () => void; providersChanged: () => void }) {
   const [providers, setProviders] = useState<OAuthProvider[]>();
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
@@ -60,16 +63,13 @@ export function SettingsPage({ close, onMenu, providersChanged }: { close: () =>
     } finally { setSigningOut(undefined); }
   };
   return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-16 shrink-0 items-center gap-2 px-4">
-        <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-        <Button variant="ghost" size="icon" aria-label="Back to session" onClick={close}><ArrowLeftIcon /></Button>
-        <h1 className="text-lg font-semibold">Settings</h1>
-      </header>
-      <Separator />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
         <section id="settings-providers" aria-labelledby="settings-providers-title" className="mx-auto flex max-w-2xl flex-col gap-6">
           <header className="flex flex-col gap-2">
-            <h2 id="settings-providers-title" className="text-xl font-semibold">Providers</h2>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
+              <h1 id="settings-providers-title" className="text-xl font-semibold">Providers</h1>
+            </div>
             <p className="text-sm text-muted-foreground">Connect your AI subscriptions through Pi.</p>
           </header>
           {error ? <Alert variant="destructive">

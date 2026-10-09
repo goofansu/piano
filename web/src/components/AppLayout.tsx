@@ -153,9 +153,9 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
   return <div data-slot="layout-view" data-active={active} hidden={!active} className={cn("min-h-0 flex-1 flex-col", active ? "view-enter flex" : "hidden")}>{children}</div>;
 }
 
-export function LayoutHeader({ onHide, children }: { onHide: () => void; children?: ReactNode }) {
+export function LayoutHeader({ onHide, title, children }: { onHide: () => void; title?: string; children?: ReactNode }) {
   return <SidebarHeader className="h-16 shrink-0 flex-row items-center gap-2.5 px-4">
-    <PianoMark /><span className="text-lg font-semibold tracking-tight">Piano</span><span className="flex-1" />
+    {title ? <h2 className="text-lg font-semibold tracking-tight">{title}</h2> : <><PianoMark /><span className="text-lg font-semibold tracking-tight">Piano</span></>}<span className="flex-1" />
     {children}
     <IconButton label="Hide sidebar" onClick={onHide}><XIcon className="md:hidden" /><PanelLeftCloseIcon className="hidden md:block" /></IconButton>
   </SidebarHeader>;
