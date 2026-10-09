@@ -25,13 +25,15 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
     {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
     <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 md:px-6">
       <Button variant="ghost" size="icon-sm" className="-ml-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
         {cwd ? <>
-          {/* The project is the way back to where this session was opened from. */}
-          {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal || project.name} onClick={() => openProject(project.id)}>{project.name}</button>}
-          <h1 className="truncate text-sm font-medium" title={session ? title : undefined}>{session ? title : "New session"}</h1>
+          <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-1">
+            {/* The project is the way back to where this session was opened from. */}
+            {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal || project.name} onClick={() => openProject(project.id)}>{project.name}</button>}
+            <h1 className="truncate text-sm font-medium" title={session ? title : undefined}>{session ? title : "New session"}</h1>
+          </div>
           {/* Plain workspace metadata has no dedicated UI primitive. */}
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="col-start-1 row-start-2 flex min-w-0 items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <p title={cwd} className="flex min-w-0 max-w-48 font-mono text-xs text-muted-foreground">
                 <span className="sr-only">Working directory: </span>
@@ -44,9 +46,9 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
                 <span className="truncate">{branch}</span>
               </p>}
             </div>
-            {pullRequest}
           </div>
-        </> : <><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-28" /></>}
+          <div className="col-start-2 row-start-2 shrink-0 justify-self-end md:row-span-2 md:row-start-1">{pullRequest}</div>
+        </> : <><Skeleton className="col-span-2 h-4 w-40" /><Skeleton className="col-span-2 h-3 w-28" /></>}
       </div>
       <span role="status" className="sr-only">{status}</span>
       <IconButton label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><PlusIcon /></IconButton>

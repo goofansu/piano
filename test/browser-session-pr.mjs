@@ -45,9 +45,9 @@ async function ab(...args) {
   commands.push({ args, ...result }); assert.equal(result.status, 0, result.stderr || result.stdout); return result.stdout.trim();
 }
 const evaluate = async code => JSON.parse(await ab('eval', code));
-const badge = number => `header a[aria-label="Open pull request #${number}"]`;
+const badge = number => `header button[aria-label="Pull request #${number}"]`;
 const waitBadge = number => ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(badge(number))})`);
-const noBadge = () => ab('wait', '--fn', `!document.querySelector('header a[aria-label^="Open pull request"]')`);
+const noBadge = () => ab('wait', '--fn', `!document.querySelector('header button[aria-label^="Pull request #"]')`);
 const button = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
 const popover = '[data-slot="popover-content"][aria-labelledby]';
 const waitDetails = () => ab('wait', '--fn', `!!document.querySelector('${popover}[data-state="open"]')`);
@@ -99,6 +99,10 @@ try {
   assert.ok(observations.metadataLayout.pathWidth <= 192 && observations.metadataLayout.branchWidth <= 192, 'Metadata has capped widths');
   assert.equal(observations.metadataLayout.gap, 12, 'Path and branch stay grouped with their original spacing');
   assert.equal(observations.metadataLayout.truncated, true, 'Long branch is truncated');
+  await ab('hover', badge(42));
+  await ab('wait', '--fn', `!!document.querySelector('[role="tooltip"]')`);
+  assert.equal(await evaluate(`document.querySelector('[role="tooltip"]').textContent`), 'The session deliverable', 'Hover shows only the title, not status/checks/review');
+  await ab('mouse', 'move', '0', '0');
   const refreshGate = { operation: 'view', started: join(root, 'refresh-started'), release: join(root, 'refresh-release') };
   control({ prs, gate: refreshGate });
   await openDetails();
@@ -136,8 +140,17 @@ try {
   observations.renameFocus = await evaluate(`(() => { const input = document.querySelector('input[aria-label="Session name"]'); return { focused: document.activeElement === input, selected: input.selectionStart === 0 && input.selectionEnd === input.value.length }; })()`);
   assert.deepEqual(observations.renameFocus, { focused: true, selected: true });
   await button('Cancel');
-  observations.initial = await evaluate(`({ prs: [...document.querySelectorAll('header a[aria-label^="Open pull request"]')].map(a => a.href), pile: !!document.querySelector('[data-slot="link-stack"]') })`);
-  assert.deepEqual(observations.initial, { prs: [prs[0].url], pile: false });
+  observations.initial = await evaluate(`({ prs: [...document.querySelectorAll('header button[aria-label^="Pull request #"]')].map(b => b.textContent.trim()), links: document.querySelectorAll('header a').length })`);
+  assert.deepEqual(observations.initial, { prs: ['#42'], links: 0 });
+  observations.desktopPR = await evaluate(`(() => {
+    const button = document.querySelector(${JSON.stringify(badge(42))}), r = button.getBoundingClientRect();
+    const title = document.querySelector('header h1').getBoundingClientRect();
+    const metadata = document.querySelector('header p[title]').getBoundingClientRect();
+    return { height: r.height, center: r.top + r.height / 2, rowsCenter: (title.top + metadata.bottom) / 2, icons: button.querySelectorAll('svg').length };
+  })()`);
+  assert.equal(observations.desktopPR.height, 40);
+  assert.equal(observations.desktopPR.icons, 1, 'One PR icon, no chevron');
+  assert.ok(Math.abs(observations.desktopPR.center - observations.desktopPR.rowsCenter) < 2, 'Desktop PR spans and centers across both header rows');
   await ab('screenshot', join(evidence, '01-current-pr-desktop.png'));
   // Removal is a durable per-session preference, not a temporary hide.
   await openDetails(); await button('Remove link'); await noBadge(); await ab('reload');
@@ -214,7 +227,7 @@ try {
   await ab('fill', '#session-pr-url', prs[0].url);
   await ab('click', `${popover} button[type="submit"]`); await waitBadge(42);
   await ab('wait', '--fn', `!document.querySelector('${popover}')`);
-  assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger', 'Linking restores focus to the new chevron');
+  assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger', 'Linking restores focus to the PR button');
   await palette('Current work'); await ab('click', '[cmdk-item][data-value$=" work"]');
   await ab('wait', '--fn', `location.pathname === '/s/work'`); await waitBadge(43);
   await ab('reload'); await waitBadge(43);
@@ -226,7 +239,7 @@ try {
     await ab('wait', '--fn', `document.querySelector(${JSON.stringify(badge(43))})?.getAttribute('aria-description') === ${JSON.stringify(label)}`);
     await ab('hover', badge(43));
     await ab('wait', '--fn', `!!document.querySelector('[role="tooltip"]')`);
-    assert.equal(await evaluate(`document.querySelector('[role="tooltip"]').textContent`), 'example/repo: Explicitly linked work');
+    assert.equal(await evaluate(`document.querySelector('[role="tooltip"]').textContent`), 'Explicitly linked work');
     observations.prStates.push(await evaluate(`(() => { const svg = document.querySelector(${JSON.stringify(badge(43))}).querySelector('svg'); return { state: ${JSON.stringify(label)}, color: getComputedStyle(svg).color, shape: svg.innerHTML }; })()`));
     await ab('screenshot', join(evidence, `state-${label.toLowerCase()}.png`));
     await ab('mouse', 'move', '0', '0');
@@ -250,7 +263,10 @@ try {
   await ab('wait', '--text', 'Status unavailable');
   control({ prs });
   await closeDetails(); await openDetails(); await ab('wait', '--text', 'Explicitly linked work'); await closeDetails();
-  await ab('set', 'viewport', '390', '844'); await openDetails();
+  await ab('set', 'viewport', '390', '844');
+  await ab('wait', '--fn', `document.querySelector('header [data-slot="popover-trigger"]').getBoundingClientRect().height === 24`);
+  assert.ok(await evaluate(`(() => { const r = document.querySelector('header [data-slot="popover-trigger"]').getBoundingClientRect(), m = document.querySelector('header p[title]').getBoundingClientRect(); return Math.abs((r.top + r.bottom) / 2 - (m.top + m.bottom) / 2) < 2; })()`), 'Mobile PR remains compact beside metadata');
+  await openDetails();
   await ab('wait', '--text', 'Explicitly linked work');
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true);
   observations.mobile = await evaluate(`({ width: innerWidth, scroll: document.documentElement.scrollWidth, dialogScroll: document.querySelector('[role="dialog"]').scrollWidth, dialogWidth: document.querySelector('[role="dialog"]').clientWidth })`);

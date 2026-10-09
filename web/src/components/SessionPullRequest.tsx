@@ -1,15 +1,15 @@
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
-import { BookMarkedIcon, CheckIcon, ChevronDownIcon, ClockIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
+import { BookMarkedIcon, CheckIcon, ClockIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverAnchor, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
 const states = {
@@ -18,31 +18,24 @@ const states = {
   merged: { label: "Merged", Icon: GitMergeIcon, color: "text-merged", variant: "merged" },
   closed: { label: "Closed", Icon: GitPullRequestClosedIcon, color: "text-err", variant: "error" },
 } as const;
-function details(pr: PullRequest, includeState = true) {
-  const checks = { none: "", pending: "Checks running", success: "Checks passed", failure: "Checks failed" }[pr.checks];
-  const review = { none: "", approved: "Approved", changes_requested: "Changes requested", review_required: "Review required" }[pr.review];
-  return [includeState ? states[pr.state].label : "", ...(["open", "draft"].includes(pr.state) ? [checks, review] : [])].filter(Boolean).join(" · ");
-}
 
 /** One associated PR, not transcript references or a decorative link stack. */
-function SessionPullRequestBadge({ value }: { value: SessionPullRequest | undefined }) {
-  if (!value?.link) return null;
-  const pr = value.pullRequest;
+function SessionPullRequestTrigger({ value }: { value: SessionPullRequest | undefined }) {
+  const mobile = useIsMobile();
+  const pr = value?.pullRequest;
   const status = pr ? states[pr.state] : undefined;
   const Icon = status?.Icon ?? GitPullRequestIcon;
-  const summary = pr ? details(pr, false) : "Status unavailable";
-  const number = pr?.number ?? value.link.url.split("/").pop();
+  const number = pr?.number ?? value?.link?.url.split("/").pop();
   return <Tooltip>
-    <TooltipTrigger asChild>
-      <Button asChild variant="ghost" size="xs">
-        <a href={value.link.url} target="_blank" rel="noreferrer" aria-label={`Open pull request #${number}`} aria-description={status?.label ?? "Status unavailable"}>
-          <Icon data-icon="inline-start" className={status?.color ?? "text-muted-foreground"} aria-hidden /> #{number}
-        </a>
-      </Button>
-    </TooltipTrigger>
+    <PopoverTrigger asChild>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size={mobile ? "xs" : "lg"} aria-label={number ? `Pull request #${number}` : "PR"} aria-description={number ? status?.label ?? "Status unavailable" : undefined}>
+          <Icon data-icon="inline-start" className={status?.color ?? "text-muted-foreground"} aria-hidden /> {number ? `#${number}` : "PR"}
+        </Button>
+      </TooltipTrigger>
+    </PopoverTrigger>
     <TooltipContent className="max-w-80">
-      <p>{pr ? `${pr.repo}: ${pr.title}` : value.link.url}</p>
-      {summary && <p>{summary}</p>}
+      <p>{pr?.title ?? (value?.link ? "View pull request" : "Link pull request")}</p>
     </TooltipContent>
   </Tooltip>;
 }
@@ -92,16 +85,7 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
   useEffect(() => { if (open && link) void pr.refresh(); }, [open]);
   const close = () => onOpenChange(false);
   return <Popover open={open} onOpenChange={onOpenChange}>
-    <PopoverAnchor asChild>
-      <ButtonGroup aria-label="Pull request" className="shrink-0">
-        {link && <><SessionPullRequestBadge value={pr.value} /><ButtonGroupSeparator /></>}
-        <PopoverTrigger asChild>
-          <Button variant="ghost" size={link ? "icon-xs" : "xs"} aria-label={link ? "Pull request" : "PR"}>
-            {link ? <ChevronDownIcon /> : <><GitPullRequestIcon data-icon="inline-start" /> PR</>}
-          </Button>
-        </PopoverTrigger>
-      </ButtonGroup>
-    </PopoverAnchor>
+    <SessionPullRequestTrigger value={pr.value} />
     <PopoverContent align="start" sideOffset={8} collisionPadding={16} aria-labelledby={titleId} className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto">
       <PopoverHeader className="flex-row items-center justify-between gap-2">
         {showingDetails ? <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
