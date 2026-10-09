@@ -12,7 +12,7 @@ export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
 ];
 /** Defaults lead in both lists. */
 export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
-  { value: "recent", label: "Last activity" },
+  { value: "recent", label: "Activity" },
   { value: "name", label: "Name" },
 ];
 
