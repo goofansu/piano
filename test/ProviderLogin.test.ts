@@ -42,7 +42,7 @@ test("INV-01/04/11/12: OAuth interactions persist through Pi, never expose token
     return { type: "oauth", access: "private-access-token", refresh: "private-refresh-token", expires: Date.now() + 3600_000 };
   }, (login, authPath) => Effect.gen(function* () {
     const providers = yield* login.providers;
-    assert(providers.some(p => p.id === "radius"));
+    assert.equal(providers.find(p => p.id === "radius")?.signedIn, false);
     assert(!providers.some(p => p.id === "deepseek"));
     const started = yield* login.start("radius");
     assert.equal(started.status, "running");
@@ -61,6 +61,10 @@ test("INV-01/04/11/12: OAuth interactions persist through Pi, never expose token
     const stored = JSON.parse(readFileSync(authPath, "utf8"));
     assert.equal(stored.radius.access, "private-access-token");
     assert.equal(stored.openai.key, "existing-key");
+    const refreshed = yield* login.providers;
+    assert.equal(refreshed.find(p => p.id === "radius")?.signedIn, true);
+    assert.equal(refreshed.find(p => p.id === "openai")?.signedIn, false);
+    assert(!JSON.stringify(refreshed).includes("private-"));
   }));
 });
 

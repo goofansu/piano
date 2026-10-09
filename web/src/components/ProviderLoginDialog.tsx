@@ -1,9 +1,13 @@
 import type { ProviderLoginState } from "@shared/wire";
+import { CheckCircleIcon, CopyIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 async function request(method = "GET", body?: unknown): Promise<{ state: ProviderLoginState | null }> {
@@ -67,16 +71,31 @@ export function ProviderLoginDialog({ initialProvider, close, signedIn }: { init
         <DialogTitle>Sign in{state ? ` · ${state.provider}` : ""}</DialogTitle>
         <DialogDescription>Connect an OAuth provider through Pi.</DialogDescription>
       </DialogHeader>
-      {state?.message && <p role="status" className="text-sm text-muted-foreground">{state.message}</p>}
+      {state?.status === "success" ? <Alert role="status">
+        <CheckCircleIcon />
+        <AlertTitle>Sign-in complete</AlertTitle>
+        <AlertDescription>{state.message}</AlertDescription>
+      </Alert> : state?.message && <p role="status" className="text-sm text-muted-foreground">{state.message}</p>}
       {state?.status === "running" && url && <Button asChild variant="outline"><a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Open sign-in page</a></Button>}
-      {state?.userCode && <FieldGroup><Field><FieldLabel htmlFor="login-device-code">Device code</FieldLabel><Input id="login-device-code" value={state.userCode} readOnly /></Field></FieldGroup>}
+      {state?.userCode && <FieldGroup><Field>
+        <FieldLabel htmlFor="login-device-code">Device code</FieldLabel>
+        <InputGroup>
+          <InputGroupInput id="login-device-code" className="font-mono" value={state.userCode} readOnly spellCheck={false} />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton size="icon-sm" aria-label="Copy device code" onClick={async () => {
+              try { await navigator.clipboard.writeText(state.userCode!); toast.success("Device code copied."); }
+              catch { toast.error("Could not copy. Select the code and copy it manually."); }
+            }}><CopyIcon /></InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </Field></FieldGroup>}
       {prompt && <LoginPromptForm key={prompt.id} state={state!} busy={busy} answer={value => void change("PUT", { id: state!.id, promptId: prompt.id, value })} />}
       {busy && !prompt && <p role="status" className="text-sm text-muted-foreground">Loading…</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       <DialogFooter>
         {state?.status === "running" && <Button variant="outline" disabled={busy} onClick={() => void change("DELETE", { id: state.id })}>Cancel sign-in</Button>}
         {(state?.status === "error" || state?.status === "cancelled") && <Button disabled={busy} onClick={() => void change("POST", { provider: state.provider })}>Try again</Button>}
-        <Button variant="ghost" onClick={close}>{state?.status === "running" ? "Hide" : "Close"}</Button>
+        <Button variant={state?.status === "success" ? "default" : "ghost"} onClick={close}>{state?.status === "running" ? "Hide" : "Close"}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>;

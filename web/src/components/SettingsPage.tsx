@@ -1,7 +1,8 @@
 import type { OAuthProvider } from "@shared/wire";
 import { ArrowLeftIcon, PanelLeftOpenIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 
@@ -20,6 +21,10 @@ export function SettingsPage({ close, onMenu, signedIn }: { close: () => void; o
     }).catch(() => { if (!controller.signal.aborted) setError("Could not load providers."); });
     return () => controller.abort();
   }, [revision]);
+  const refreshAfterSignIn = useCallback(() => {
+    setRevision(value => value + 1);
+    signedIn();
+  }, [signedIn]);
   return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
     <header className="flex shrink-0 items-center gap-2 p-4">
       <Button variant="ghost" size="icon" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
@@ -35,10 +40,13 @@ export function SettingsPage({ close, onMenu, signedIn }: { close: () => void; o
           : providers.length === 0 ? <p>No OAuth providers available.</p>
           : <ItemGroup>{providers.map(provider => <Item key={provider.id} size="sm">
             <ItemContent><ItemTitle>{provider.name}</ItemTitle></ItemContent>
-            <ItemActions><Button variant="outline" size="sm" aria-label={`Sign in to ${provider.name}`} onClick={() => setLogin({ provider: provider.id, key: crypto.randomUUID() })}>Sign in</Button></ItemActions>
+            <ItemActions>
+              {provider.signedIn && <Badge variant="secondary">Signed in</Badge>}
+              <Button variant="outline" size="sm" aria-label={`${provider.signedIn ? "Sign in again to" : "Sign in to"} ${provider.name}`} onClick={() => setLogin({ provider: provider.id, key: crypto.randomUUID() })}>{provider.signedIn ? "Sign in again" : "Sign in"}</Button>
+            </ItemActions>
           </Item>)}</ItemGroup>}
       </div>
     </div>
-    {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} close={() => setLogin(undefined)} signedIn={signedIn} />}
+    {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} close={() => setLogin(undefined)} signedIn={refreshAfterSignIn} />}
   </section>;
 }

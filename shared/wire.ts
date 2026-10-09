@@ -282,7 +282,7 @@ export const SlashCommand = Schema.Struct({
 export type SlashCommand = typeof SlashCommand.Type;
 
 /** Global provider sign-in; never part of a session transcript or registry. */
-export interface OAuthProvider { id: string; name: string }
+export interface OAuthProvider { id: string; name: string; signedIn: boolean }
 export interface LoginPrompt {
   id: string;
   type: "text" | "secret" | "select" | "manual_code";

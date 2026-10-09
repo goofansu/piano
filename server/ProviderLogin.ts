@@ -6,7 +6,7 @@ import type { OAuthProvider, ProviderLoginState } from "../shared/wire.ts";
 import { agentDir } from "./PiEnv.ts";
 
 type Interaction = Parameters<ModelRuntime["login"]>[2];
-type Runtime = Pick<ModelRuntime, "getProviders" | "login">;
+type Runtime = Pick<ModelRuntime, "getProviders" | "listCredentials" | "login">;
 export const ProviderLoginRuntime = Context.Reference<{ create: () => Promise<Runtime>; deviceId: () => string }>("piano/ProviderLoginRuntime", {
   defaultValue: () => ({
     create: () => ModelRuntime.create({ refreshOnCreate: false }),
@@ -38,9 +38,14 @@ export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function
     await current?.done;
   }));
   return ProviderLogin.of({
-    providers: Effect.tryPromise(async () => (await factory.create()).getProviders()
-      .filter(p => p.auth.oauth).map(p => ({ id: p.id, name: p.auth.oauth!.name }))
-      .sort((a, b) => a.id.localeCompare(b.id))),
+    providers: Effect.tryPromise(async () => {
+      const runtime = await factory.create();
+      // Read Pi's credential metadata, not tokens or the availability cache.
+      const signedIn = new Set((await runtime.listCredentials()).filter(c => c.type === "oauth").map(c => c.providerId));
+      return runtime.getProviders().filter(p => p.auth.oauth)
+        .map(p => ({ id: p.id, name: p.auth.oauth!.name, signedIn: signedIn.has(p.id) }))
+        .sort((a, b) => a.id.localeCompare(b.id));
+    }),
     state: Effect.sync(snapshot),
     start: provider => Effect.try(() => {
       // Serialize globally: several providers bind the same loopback callback port.
