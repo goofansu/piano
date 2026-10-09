@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { flatSessions, folderGroups, projectGroups, sortSessions } from "../web/src/lib/sidebarView.ts";
+import { dateGroups, flatSessions, folderGroups, projectGroups, sortSessions } from "../web/src/lib/sidebarView.ts";
+
+const datedSession = (title: string, updatedAt?: string) => ({ title, updatedAt });
 
 const at = (day: number) => `2026-10-${String(day).padStart(2, "0")}T00:00:00Z`;
 const session = (cwd: string, sessionId: string, title: string | undefined, day: number) => ({
@@ -14,6 +16,54 @@ const folders = [
   { name: "beta-10", sessions: [session("/beta-10", "b1", undefined, 8), session("/beta-10", "b2", "Beta titled", 3)] },
   { name: "beta-2", sessions: [session("/beta-2", "c1", "Carol", 7)] },
 ];
+
+test("sidebar view: date sections use inclusive calendar boundaries, omit empties and lose no unknown dates", () => {
+  const previousTZ = process.env.TZ;
+  process.env.TZ = "America/New_York";
+  try {
+    const input = [
+      { sessions: [datedSession("today", "2026-03-31T00:00:00-04:00"), datedSession("future", "2026-04-02T12:00:00-04:00"), datedSession("yesterday", "2026-03-30T23:59:59-04:00")] },
+      { sessions: [datedSession("two", "2026-03-29T23:59:59-04:00"), datedSession("seven", "2026-03-24T00:00:00-04:00"), datedSession("eight", "2026-03-23T23:59:59-04:00"), datedSession("thirty", "2026-03-01T00:00:00-05:00"), datedSession("older", "2026-02-28T23:59:59-05:00"), datedSession("missing"), datedSession("invalid", "not a date"), datedSession("empty", "")] },
+    ];
+    const result = dateGroups(input, "recent", new Date("2026-03-31T00:05:00-04:00"));
+    assert.deepEqual(result.map(g => [g.label, titles(g.sessions)]), [
+      ["Today", ["future", "today"]], ["Yesterday", ["yesterday"]],
+      ["Previous 7 days", ["two", "seven"]], ["Previous 30 days", ["eight", "thirty"]],
+      ["Older", ["older"]], ["Unknown date", ["invalid", "empty", "missing"]],
+    ]);
+    assert.equal(result.flatMap(g => g.sessions).length, input.flatMap(f => f.sessions).length);
+    assert.deepEqual(dateGroups([], "recent").map(g => g.label), []);
+    assert.deepEqual(dateGroups([input[0]!], "name", new Date("2026-03-31T12:00:00-04:00")).map(g => [g.label, titles(g.sessions)]), [
+      ["Today", ["future", "today"]], ["Yesterday", ["yesterday"]],
+    ], "empty buckets are omitted and Name sorts within, not across, sections");
+    const byName = dateGroups(input, "name", new Date("2026-03-31T12:00:00-04:00"));
+    assert.deepEqual(titles(byName[2]!.sessions), ["seven", "two"]);
+    assert.equal(input[0]!.sessions[0]!.title, "today", "input order is preserved");
+  } finally {
+    if (previousTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZ;
+  }
+});
+
+test("sidebar view: local midnight and both DST transitions are calendar days, not elapsed durations", () => {
+  const previousTZ = process.env.TZ;
+  process.env.TZ = "America/New_York";
+  try {
+    const spring = [{ sessions: [datedSession("late Saturday", "2026-03-07T23:59:00-05:00"), datedSession("early Sunday", "2026-03-08T00:00:00-05:00")] }];
+    assert.deepEqual(dateGroups(spring, "recent", new Date("2026-03-09T00:01:00-04:00")).map(g => [g.label, titles(g.sessions)]), [
+      ["Yesterday", ["early Sunday"]], ["Previous 7 days", ["late Saturday"]],
+    ], "a time less than 24 hours ago can be two calendar days ago at spring-forward");
+    const fall = [{ sessions: [datedSession("early Sunday", "2026-11-01T00:00:00-04:00")] }];
+    assert.equal(dateGroups(fall, "recent", new Date("2026-11-02T00:01:00-05:00"))[0]!.label, "Yesterday", "yesterday can be over 25 hours ago at fall-back");
+    const midnight = [{ sessions: [datedSession("last minute", "2026-03-31T23:59:00-04:00")] }];
+    assert.equal(dateGroups(midnight, "recent", new Date("2026-03-31T23:59:59-04:00"))[0]!.label, "Today");
+    assert.equal(dateGroups(midnight, "recent", new Date("2026-04-01T00:00:00-04:00"))[0]!.label, "Yesterday");
+    assert.equal(dateGroups([{ sessions: [datedSession("UTC next day", "2026-04-01T02:00:00Z")] }], "recent", new Date("2026-03-31T23:00:00-04:00"))[0]!.label, "Today", "grouping uses the local date, not the ISO date prefix");
+  } finally {
+    if (previousTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZ;
+  }
+});
 
 test("sidebar view: sessions sort by title with untitled last, or by last activity", () => {
   const all = folders.flatMap(f => f.sessions);

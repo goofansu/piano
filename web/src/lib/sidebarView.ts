@@ -1,13 +1,14 @@
 import type { OutcomeProject, ProjectView, SessionInfo, SessionReference } from "@shared/wire";
 
-/** How the sidebar lists sessions: under their folders, under their projects, or as one list. */
-export type GroupBy = "folder" | "project" | "none";
+/** How the sidebar lists sessions: by folder, project, date, or as one list. */
+export type GroupBy = "folder" | "project" | "date" | "none";
 export type SortBy = "name" | "recent";
 export interface SidebarView { groupBy: GroupBy; sortBy: SortBy }
 export const DEFAULT_SIDEBAR_VIEW: SidebarView = { groupBy: "folder", sortBy: "recent" };
 export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
   { value: "folder", label: "Folder" },
   { value: "project", label: "Project" },
+  { value: "date", label: "Date" },
   { value: "none", label: "None" },
 ];
 /** Defaults lead in both lists. */
@@ -55,6 +56,20 @@ export function projectGroups<P extends Pick<OutcomeProject, "id" | "name">, R e
   const filed = new Set(references.filter(s => s.outcomeProjectId).map(s => `${s.cwd}\n${s.sessionId}`));
   const ungrouped: ProjectGroup<P, S> = { project: null, sessions: sortSessions(listed.filter(s => !filed.has(`${s.cwd}\n${s.sessionId}`)), sort) };
   return [...order(groups, sort, g => g.project?.name ?? "", g => latest(g.sessions.map(s => s.updatedAt))), ungrouped];
+}
+
+/** Listed sessions across folders, by local calendar date; unknown times stay visible last. */
+export function dateGroups<S extends SessionLike>(folders: ReadonlyArray<{ sessions: readonly S[] }>, sort: SortBy, now = new Date()): Array<{ label: string; sessions: S[] }> {
+  const labels = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older", "Unknown date"];
+  const groups = labels.map(label => ({ label, sessions: [] as S[] }));
+  // Local midnights, not elapsed 24-hour periods: DST days can be shorter or longer.
+  const boundaries = [0, 1, 7, 30].map(days => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days).getTime());
+  for (const session of folders.flatMap(f => f.sessions)) {
+    const time = session.updatedAt ? Date.parse(session.updatedAt) : Number.NaN;
+    const bucket = Number.isNaN(time) ? 5 : boundaries.findIndex(boundary => time >= boundary);
+    groups[bucket === -1 ? 4 : bucket]!.sessions.push(session);
+  }
+  return groups.filter(g => g.sessions.length > 0).map(g => ({ ...g, sessions: sortSessions(g.sessions, sort) }));
 }
 
 /** Every listed session as one list. */

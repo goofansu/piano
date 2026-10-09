@@ -19,7 +19,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { flatSessions, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy } from "@/lib/sidebarView";
+import { dateGroups, flatSessions, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy } from "@/lib/sidebarView";
 import { readJson, writeJson } from "@/lib/storage";
 import { useSidebarView } from "@/lib/useSidebarView";
 import { type AppState, sessionKey } from "@/store";
@@ -54,6 +54,23 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
   const { view, setView } = useSidebarView();
   const current = state.session ?? state.selecting;
+  const [dateNow, setDateNow] = useState(() => new Date());
+
+  // Refresh an idle date view at local midnight; focus also catches sleep and clock changes.
+  useEffect(() => {
+    if (view.groupBy !== "date") return;
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = () => {
+      clearTimeout(timer);
+      const now = new Date();
+      setDateNow(now);
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = setTimeout(refresh, midnight.getTime() - now.getTime());
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { clearTimeout(timer); window.removeEventListener("focus", refresh); };
+  }, [view.groupBy]);
 
   const setOpen = (key: string, open: boolean) =>
     setOpenProjects((prev) => {
@@ -122,6 +139,17 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         return <OutcomeGroup key={key} project={g.project} sessions={g.sessions} open={openProjects.has(key)} onOpenChange={open => setOpen(key, open)} {...groupProps} />;
       }));
     }
+    if (view.groupBy === "date") {
+      const dated = dateGroups(state.projects, view.sortBy, dateNow);
+      if (dated.length === 0) return empty("No sessions yet. Start one and it appears here.");
+      return groups(dated.map(g => (
+        <section key={g.label} aria-label={g.label}>
+          {/* No standalone shadcn heading fits this noninteractive list section. */}
+          <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">{g.label}</h2>
+          <SessionList sessions={g.sessions} {...groupProps} />
+        </section>
+      )));
+    }
     const sessions = flatSessions(state.projects, view.sortBy);
     if (sessions.length === 0) return empty("No sessions yet. Start one and it appears here.");
     return <SessionList sessions={sessions} {...groupProps} />;
@@ -169,7 +197,7 @@ const APPEARANCES = [
   { value: "system", label: "System", icon: MonitorIcon },
 ] as const;
 
-/** One menu for how the list reads: grouped by folder, by project or not at all, sorted by name or activity; appearance lives here too. */
+/** One menu for grouping and sorting the list; appearance lives here too. */
 function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: SortBy; onChange: (change: { groupBy?: GroupBy; sortBy?: SortBy }) => void }) {
   const { setTheme, theme } = useTheme();
   const sortLabel = SORT_BY.find(s => s.value === sortBy)?.label ?? "";
