@@ -86,6 +86,21 @@ test("messages-only shows the same prompts and final replies as Jump to", () => 
   assert.match(render(history), /Intermediate commentary/);
 });
 
+test("copy is offered only on final assistant messages in either display mode", () => {
+  const history: RenderMsg[] = [
+    { id: "user", role: "user", text: "Question" },
+    { id: "commentary", role: "assistant", text: "Intermediate commentary" },
+    call, result,
+    { id: "final", role: "assistant", text: "Final answer" },
+  ];
+  for (const showTools of [true, false]) {
+    const html = render(history, {}, { id: "pending", role: "assistant", text: "Unfinished reply" }, showTools);
+    assert.equal((html.match(/aria-label="Copy response"/g) ?? []).length, 1);
+    assert.match(html, /id="msg-final".*?aria-label="Copy response"/s);
+    assert.doesNotMatch(html, /id="msg-commentary"(?:(?!<\/article>).)*aria-label="Copy response"/s);
+  }
+});
+
 test("summarization retains exact raw details and safely falls back for unknown payloads", () => {
   const present = (raw: string) => messageError(failure(raw), [], new Map(), {});
   assert.deepEqual(present(apiError), { summary: "The usage limit has been reached", details: apiError });

@@ -169,6 +169,9 @@ try {
   await ab('wait', '--text', 'echo duplicate-tool');
   const restored = await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`);
   check(restored.includes('echo duplicate-tool') && restored.includes('Intermediate commentary before tool activity.'), 'Show everything restores tool history and intermediate commentary');
+  const copyMessages = await evaluate(`[...document.querySelectorAll('[data-slot="transcript"] [aria-label="Copy response"]')].map(b => b.closest('article').innerText)`);
+  observations.push({ name: 'final-message-copy-buttons', messages: copyMessages });
+  check(copyMessages.length === 1 && copyMessages[0].includes('Partial answer before provider failure.'), 'Only the final assistant message offers Copy in Show everything');
   await capture('everything-restored');
   check((await ab('errors')) === '', 'No browser errors');
   assert.deepEqual(failures, [], failures.join('\n'));

@@ -76,7 +76,7 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
     el.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };
 
-  const messageIds = showTools ? null : new Set(jumpEntries(messages).flatMap(entry => "messageId" in entry ? [entry.messageId] : []));
+  const finalMessageIds = new Set(jumpEntries(messages).flatMap(entry => "messageId" in entry ? [entry.messageId] : []));
   const results = new Map<string, RenderMsg>();
   const terminalRuns = new Map<string, "completed" | "failed" | "cancelled">();
   for (const m of messages) {
@@ -117,9 +117,10 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            if (messageIds && !messageIds.has(m.id) && !m.errorMessage) return null;
-            const displayed = messageIds && !messageIds.has(m.id) ? { ...m, text: "" } : m;
-            return <Message key={m.id} msg={displayed} showTools={showTools} error={m.errorMessage ? messageError(m, showTools ? messages.slice(0, index) : [], showTools ? results : new Map(), showTools ? tools : {}) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
+            const isFinalMessage = finalMessageIds.has(m.id);
+            if (!showTools && !isFinalMessage && !m.errorMessage) return null;
+            const displayed = !showTools && !isFinalMessage ? { ...m, text: "" } : m;
+            return <Message key={m.id} msg={displayed} canCopy={isFinalMessage} showTools={showTools} error={m.errorMessage ? messageError(m, showTools ? messages.slice(0, index) : [], showTools ? results : new Map(), showTools ? tools : {}) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
           })}
           {pending && <Message msg={showTools ? pending : { ...pending, text: "" }} showTools={showTools} error={messageError(pending, showTools ? messages : [], showTools ? results : new Map(), showTools ? tools : {})} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
           {activity && (
@@ -159,7 +160,7 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, error, results, tools, active, terminalRuns, streaming, showTools }: { showTools: boolean; msg: RenderMsg; error?: MessageError; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
+function Message({ msg, error, results, tools, active, terminalRuns, streaming, showTools, canCopy = false }: { canCopy?: boolean; showTools: boolean; msg: RenderMsg; error?: MessageError; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
   if (!showTools && (msg.subagent || msg.role === "tool_result" || msg.role === "context")) return null;
   if (msg.subagent) return <SubagentCardView card={msg.subagent} content={msg.text} markdown={msg.role === "context"} terminalStatus={msg.subagent.kind === "delegation" && msg.subagent.runId ? terminalRuns.get(msg.subagent.runId) : undefined} />;
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
@@ -181,7 +182,7 @@ function Message({ msg, error, results, tools, active, terminalRuns, streaming, 
           <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
             <Markdown text={msg.text} className={cn("prose-chat", streaming && "streaming-caret")} />
-            {!streaming && !hasTools && <CopyResponse text={msg.text} />}
+            {canCopy && !streaming && <CopyResponse text={msg.text} />}
           </Row>
         )}
         {hasTools && (
