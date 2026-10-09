@@ -342,6 +342,53 @@ test("Pi's steering and follow-up queues remain paused after abort and can be re
   }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
 });
 
+for (const mode of ["success", "abort-failure", "abort-exit", "clear-failure", "concurrent"]) {
+  test(`composer Stop takes the queue before abort: ${mode}`, async () => {
+    await run(Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: `stop-${mode}` });
+      yield* session.act({ _tag: "prompt", text: "ask queue" });
+      yield* session.act({ _tag: "steer", text: "duplicate" });
+      yield* session.act({ _tag: "prompt", text: "duplicate" });
+      const expected = [{ kind: "steering", text: "duplicate" }, { kind: "follow-up", text: "duplicate" }];
+      const ready = yield* Deferred.make<void>();
+      const cleared = yield* collectUntil(session.events.pipe(
+        Stream.tap(e => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+      ), e => e._tag === "queue_update" && e.messages.length === 0).pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
+      if (mode === "clear-failure") {
+        const error = yield* session.act({ _tag: "stop" }).pipe(Effect.flip);
+        assert.match(error.detail, /fixture clear failed/);
+        assert.deepEqual((yield* session.state).queuedMessages, expected);
+        assert.equal((yield* session.state).isStreaming, true, "failed clear must not abort");
+        assert.equal((yield* session.state).isStopping, false, "failed clear releases the composer");
+        return;
+      }
+      const stop = yield* session.act({ _tag: "stop" }).pipe(Effect.forkChild);
+      yield* Fiber.join(cleared);
+      if (mode === "concurrent") {
+        assert.equal((yield* session.state).isStopping, true, "subscribers can disable sending while Stop is pending");
+        for (const action of [{ _tag: "stop" }, { _tag: "restore_queue" }, { _tag: "abort" }, { _tag: "steer", text: "racing input" }, { _tag: "prompt", text: "racing input" }] as const) {
+          assert.equal((yield* session.act(action).pipe(Effect.flip)).reason, "rejected");
+        }
+        yield* session.act({ _tag: "commands" }); // release the held clear acknowledgement
+      }
+      const result = yield* Fiber.join(stop);
+      assert.equal(result?._tag, "queue_restored");
+      if (result?._tag !== "queue_restored") return;
+      assert.deepEqual(result.messages, expected);
+      assert.equal((yield* session.state).isStopping, false);
+      assert.deepEqual((yield* session.state).queuedMessages, []);
+      if (mode === "abort-failure" || mode === "abort-exit") {
+        assert.match(result.stopError ?? "", /Stop failed:/, "partial failure must reach the caller even after the event stream closes");
+        if (mode === "abort-failure") assert.match(result.stopError ?? "", /fixture abort failed/);
+      } else {
+        assert.equal(result.stopError, undefined);
+        assert.equal((yield* session.state).dialogResolution?.reason, "aborted", "Stop retains native dialog cancellation");
+      }
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+  });
+}
+
 test("busy input preserves extension commands and retry/compaction remain active after agent_end", async () => {
   await run(Effect.gen(function* () {
     const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "activity" });

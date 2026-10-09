@@ -187,7 +187,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       // while awaiting a command whose dialog another action must answer.
       const fiber = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         if (hosts.get(key) !== host || host.closing) return yield* rejected("Pi is closing or has stopped. Refresh before sending new input.");
-        if (action._tag !== "abort") yield* requireCheckout(raw.spec.cwd);
+        if (action._tag !== "abort" && action._tag !== "stop") yield* requireCheckout(raw.spec.cwd);
         host.actions++;
         host.lastActivity = yield* Clock.currentTimeMillis;
         return yield* raw.act(action).pipe(Effect.ensuring(Effect.gen(function* () {

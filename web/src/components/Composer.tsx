@@ -31,6 +31,7 @@ interface Props {
   compacting?: boolean;
   onSend: (text: string, kind: QueuedMessage["kind"], attachments: readonly Attachment[]) => void;
   onStop: () => void;
+  stopping?: boolean;
   catalog: ModelCatalog | null;
   onRefreshModels?: () => void;
   model: string | undefined;
@@ -56,7 +57,7 @@ const otherMode = (mode: QueueMode): QueueMode => (mode === "steering" ? "follow
 const loadQueueMode = (): QueueMode => (readStorage(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering");
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
+export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, stopping, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
@@ -70,7 +71,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
   useTypeToFocus(ref, onTextAppend, !disabled);
   const send = (kind: QueueMode = queueMode) => {
     const t = text.trim();
-    if (disabled || attachments.busy || imagesWaiting || (!t && !attachments.items.length)) return;
+    if (disabled || stopping || attachments.busy || imagesWaiting || (!t && !attachments.items.length)) return;
     // Nothing can steer a compaction; whatever is sent then waits for it to finish.
     onSend(t, compacting ? "follow-up" : kind, attachments.items);
     onTextChange("");
@@ -99,7 +100,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
           <section className="control-enter border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
               <h2 className="font-medium text-ink-2">{streaming ? "Queued messages" : "Paused queue"} ({queuedMessages.length})</h2>
-              <Button variant="ghost" size="sm" className="h-11 shrink-0 md:h-8" aria-label={queuedMessages.length === 1 ? "Edit queued message" : "Edit all queued messages"} title="Move queued messages back to the draft without stopping Pi (Esc)" disabled={disabled} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
+              <Button variant="ghost" size="sm" className="h-11 shrink-0 md:h-8" aria-label={queuedMessages.length === 1 ? "Edit queued message" : "Edit all queued messages"} title="Move queued messages back to the draft without stopping Pi (Esc)" disabled={disabled || stopping} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
                 <PencilIcon data-icon="inline-start" aria-hidden />
                 {queuedMessages.length === 1 ? "Edit" : "Edit all"}
               </Button>
@@ -129,7 +130,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
               if (isSendKey(e)) {
                 e.preventDefault();
                 send(e.altKey ? otherMode(queueMode) : queueMode);
-              } else if (e.key === "Escape" && !disabled) {
+              } else if (e.key === "Escape" && !disabled && !stopping) {
                 // Esc acts on the nearest thing first: queued messages return to the draft, then the next press stops Pi.
                 if (queuedMessages.length > 0) {
                   e.preventDefault();
@@ -179,7 +180,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
                 variant={showStop ? "outline" : "default"}
                 className={cn(composerAction, "relative")}
                 aria-label={showStop ? "Stop" : showDelivery ? DELIVERY[queueMode].label : streaming ? "Queue message" : "Send"}
-                disabled={showStop ? disabled : disabled || !hasText || attachments.busy || imagesWaiting}
+                disabled={stopping || (showStop ? disabled : disabled || !hasText || attachments.busy || imagesWaiting)}
                 onClick={showStop ? onStop : () => send()}
               >
                 <span aria-hidden className={cn("absolute inset-0 grid place-items-center transition-[opacity,transform] duration-(--dur-enter) ease-(--ease-enter)", showStop ? "scale-75 opacity-0" : "scale-100 opacity-100")}><ArrowUpIcon /></span>
@@ -188,7 +189,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             </TooltipTrigger>
             <TooltipContent>
               {showStop
-                ? queuedMessages.length > 0 ? <>Stop. Queued input is kept. <Kbd>Esc</Kbd> edits it first.</> : <>Stop. Queued input is kept. <Kbd>Esc</Kbd></>
+                ? queuedMessages.length > 0 ? <>Stop and move queued input to the draft. <Kbd>Esc</Kbd> edits without stopping.</> : <>Stop <Kbd>Esc</Kbd></>
                 : <>{showDelivery ? `${DELIVERY[queueMode].label}: ${DELIVERY[queueMode].detail}` : streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd></>}
             </TooltipContent>
           </Tooltip>

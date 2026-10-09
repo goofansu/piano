@@ -213,6 +213,8 @@ export const SessionState = Schema.Struct({
   /** A session-level run remains active until agent_settled, not merely agent_end. */
   isStreaming: Schema.Boolean,
   isCompacting: Schema.optional(Schema.Boolean),
+  /** Piano is returning queued input and cancelling the current run. */
+  isStopping: Schema.optional(Schema.Boolean),
   isRetrying: Schema.optional(Schema.Boolean),
   submission: Schema.optional(PromptSubmission),
   dialogResolution: Schema.optional(DialogResolution),
@@ -305,6 +307,7 @@ export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", { text: Schema.String, attachments: attachmentInput }),
   Schema.TaggedStruct("steer", { text: Schema.String, attachments: attachmentInput }),
   Schema.TaggedStruct("abort", {}),
+  Schema.TaggedStruct("stop", {}),
   Schema.TaggedStruct("restore_queue", {}),
   Schema.TaggedStruct("commands", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
@@ -323,7 +326,7 @@ export type SessionAction = typeof SessionAction.Type;
 
 /** A command result for its caller, not a broadcast session event. */
 export const SessionActionResult = Schema.Union([
-  Schema.TaggedStruct("queue_restored", { messages: Schema.Array(QueuedMessage) }),
+  Schema.TaggedStruct("queue_restored", { messages: Schema.Array(QueuedMessage), stopError: Schema.optional(Schema.String) }),
   Schema.TaggedStruct("commands", { commands: Schema.Array(SlashCommand) }),
 ]);
 export type SessionActionResult = typeof SessionActionResult.Type;

@@ -186,6 +186,22 @@ for (const removed of ['checkout', 'alias']) test(`INV-02/06: ${removed} removal
   }));
 });
 
+test('INV-02/06: Stop remains available for active work after its checkout is removed', async () => {
+  const id = 'stop-deleted-checkout', path = join(root, id);
+  mkdirSync(path);
+  await run(Effect.gen(function* () {
+    const hosts = yield* SessionHosts;
+    yield* (yield* Registry).addSession(path, id);
+    const session = yield* hosts.open({ cwd: path, sessionId: id });
+    yield* prompt(session, '/hold');
+    rmSync(path, { recursive: true });
+    assert.deepEqual(yield* session.act({ _tag: 'stop' }), { _tag: 'queue_restored', messages: [] });
+    yield* quiescent(session);
+    assert.equal((yield* session.state).isStreaming, false);
+    assert.deepEqual(records(id).filter(r => r.command === 'clear_queue' || r.command === 'abort').map(r => r.command), ['clear_queue', 'abort']);
+  }));
+});
+
 test('INV-02: concurrent public opens through real/symlink paths have one child lifetime', async () => {
   await run(Effect.gen(function* () {
     const hosts = yield* SessionHosts;

@@ -205,7 +205,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         case "dialog_resolved":
           return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.resolution.id || d.generation !== e.resolution.generation) } };
         case "closed":
-          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }, pending: null, dialogs: [], closedReason: e.reason, starting: false } };
+          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, isStopping: false, queuedMessages: [] }, pending: null, dialogs: [], closedReason: e.reason, starting: false } };
         case "notice":
           return s;
       }

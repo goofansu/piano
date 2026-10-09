@@ -27,6 +27,7 @@ let streaming = false;
 let compacting = false;
 let delayedPrompt;
 let heldState;
+let heldClear;
 let holdNextState = false;
 let liveContext;
 let liveStage = 0;
@@ -83,7 +84,9 @@ function handle(cmd) {
         return;
       }
       return respond(cmd, state());
-    case "get_commands": return respond(cmd, { commands: [
+    case "get_commands":
+      if (heldClear) { respond(heldClear.cmd, heldClear.restored); heldClear = undefined; }
+      return respond(cmd, { commands: [
       { name: "handled", description: "Handle without a model call", source: "extension" },
       { name: "handled", description: "Shadowed template", source: "prompt" },
       { name: "skill:research", description: "Investigate a question", source: "skill" },
@@ -99,16 +102,21 @@ function handle(cmd) {
     case "set_model": model = { provider: cmd.provider, id: cmd.modelId }; return respond(cmd, model);
     case "set_thinking_level": thinkingLevel = cmd.level; out({ type: "thinking_level_changed", level: cmd.level }); return respond(cmd, undefined);
     case "abort":
+      if (sessionId === "stop-abort-exit") return process.exit(3);
+      if (sessionId === "stop-abort-failure") return respond(cmd, undefined, "fixture abort failed");
+      if (sessionId.startsWith("stop-") && (steering.length || followUp.length)) return respond(cmd, undefined, "abort before clear");
       // Pi 1.0.2 abort pauses pending work; it does not consume its queues.
       streaming = false;
       out({ type: "agent_end", messages: [], willRetry: false });
       out({ type: "agent_settled" });
       return respond(cmd, undefined);
     case "clear_queue": {
+      if (sessionId === "stop-clear-failure") return respond(cmd, undefined, "fixture clear failed");
       const restored = { steering: [...steering], followUp: [...followUp] };
       steering.length = 0;
       followUp.length = 0;
       queueUpdate();
+      if (sessionId === "stop-concurrent") { heldClear = { cmd, restored }; return; }
       return respond(cmd, restored);
     }
     case "follow_up": {

@@ -62,6 +62,7 @@ function handle(cmd) {
   if (cmd.type === 'get_commands') return reply(cmd, { commands: [] });
   if (cmd.type === 'get_available_models') return reply(cmd, { models: [{ provider: 'fake', id: 'alpha', reasoning: false, contextWindow: 1000 }] });
   if (cmd.type === 'extension_ui_response') { notify('dialog released'); return; }
+  if (cmd.type === 'clear_queue') { out({ type: 'queue_update', steering: [], followUp: [] }); return reply(cmd, { steering: [], followUp: [] }); }
   if (cmd.type === 'abort') { streaming = false; out({ type: 'agent_settled' }); return reply(cmd); }
   if (cmd.type !== 'prompt') return reply(cmd);
   switch (cmd.message) {

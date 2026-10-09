@@ -401,7 +401,7 @@ const openSession = (spec: PiSessionSpec) =>
                   ? { ...state, submission: event.submission } : state);
                 break;
               case "closed":
-                yield* Ref.update(stateRef, (state) => ({ ...state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [], contextIsLastKnown: true, closedReason: event.reason }));
+                yield* Ref.update(stateRef, (state) => ({ ...state, isStreaming: false, isCompacting: false, isRetrying: false, isStopping: false, queuedMessages: [], contextIsLastKnown: true, closedReason: event.reason }));
                 break;
               case "dialog":
                 yield* Ref.update(dialogsRef, (m) => new Map(m).set(event.dialog.id, event.dialog));
@@ -701,7 +701,7 @@ const openSession = (spec: PiSessionSpec) =>
       const state = yield* Ref.get(stateRef);
       return { ...state, isQuiescent: !announced && !child.hasPendingWork() && processedVersion === child.observationVersion() &&
         refreshing.size === 0 && promptOperations.size === 0 && (yield* Ref.get(dialogsRef)).size === 0 &&
-        !state.isStreaming && !state.isCompacting && !state.isRetrying && !state.queuedMessages?.length &&
+        !state.isStreaming && !state.isCompacting && !state.isRetrying && !state.isStopping && !state.queuedMessages?.length &&
         state.dialogResolution?.delivery !== "pending" && state.dialogResolution?.delivery !== "uncertain" &&
         state.submission?.outcome !== "submitting" && state.submission?.outcome !== "uncertain" };
     });
@@ -726,6 +726,7 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
 
+    let stopping = false;
     const act = (action: SessionAction): Effect.Effect<SessionActionResult | undefined, PiSessionError> =>
       Effect.gen(function* () {
         if (announced) return yield* new PiSessionError({ reason: "exited", detail: "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume." });
@@ -803,6 +804,28 @@ const openSession = (spec: PiSessionSpec) =>
             yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
             return;
           }
+          case "stop": {
+            stopping = true;
+            // Pi has no compound RPC. Take its authoritative queue before abort
+            // can drain steering at a tool boundary (INV-01/03). Keep ownership
+            // in the session if the requesting browser disconnects mid-operation.
+            const work = Effect.gen(function* () {
+              yield* patchState({ isStopping: true });
+              const restored = yield* act({ _tag: "restore_queue" });
+              if (restored?._tag !== "queue_restored") return yield* new PiSessionError({ reason: "protocol", detail: "Pi did not return the cleared queue." });
+              const stopError = yield* act({ _tag: "abort" }).pipe(
+                Effect.as(undefined),
+                Effect.catchTag("PiSessionError", error => Effect.succeed(`Queued input was taken back, but Stop failed: ${error.detail}`)),
+              );
+              // Return partial failure with the text: session events may already
+              // have ended at `closed`, so a notice there could be lost.
+              return stopError ? { ...restored, stopError } : restored;
+            }).pipe(Effect.ensuring(Effect.gen(function* () {
+              stopping = false;
+              yield* patchState({ isStopping: false });
+            })));
+            return yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
+          }
           case "restore_queue": {
             const messages = queuedMessagesOf(yield* child.request({ type: "clear_queue" }));
             if (!messages) return yield* new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid cleared queue." });
@@ -858,7 +881,14 @@ const openSession = (spec: PiSessionSpec) =>
     if (spec.lastKnownStats) yield* scheduleRefresh("stats");
     else yield* refreshStats;
     const session: PiSession = { spec, events,
-      act: action => act(action).pipe(Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
+      act: action => Effect.suspend(() => {
+        // Reject rather than delay input: delayed submissions could accidentally
+        // start new work as soon as Stop completes. Answers must remain available.
+        if (stopping && ["prompt", "steer", "stop", "abort", "restore_queue"].includes(action._tag)) {
+          return Effect.fail(new PiSessionError({ reason: "rejected", detail: "Stop is in progress. Wait before sending input or changing the queue." }));
+        }
+        return act(action);
+      }).pipe(Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
       state: Semaphore.withPermits(lock, 1)(currentState).pipe(Effect.map(projectDisplay)),
     };
     return session;
