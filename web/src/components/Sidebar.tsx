@@ -348,11 +348,9 @@ const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} 
 
 const branchTrailing = (branch: string) => <BranchLabel branch={branch} className="max-w-[38%] shrink-0 text-sm text-ink-3" />;
 
-/** Where a session runs, for rows listed away from their folder: a worktree by its branch, a root (or an unregistered folder) by its folder name. */
+/** Rows listed away from their folder always name the owning folder, including worktree sessions. */
 function Location({ state, cwd }: { state: AppState; cwd: string }) {
   const owner = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
-  const worktree = owner?.worktrees.find(w => w.path === cwd);
-  if (worktree && !worktree.root && worktree.branch) return branchTrailing(worktree.branch);
   return <span className="max-w-[38%] shrink-0 truncate text-xs text-ink-3">{owner?.name ?? cwd.split("/").pop()}</span>;
 }
 
