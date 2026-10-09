@@ -71,7 +71,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           variant={variant === "outline" ? "outline-transparent" : variant} size={variant === "outline" ? "default" : "sm"} aria-haspopup="dialog" aria-expanded={open}
           aria-label={`Model: ${want || label}; effort: ${effort}`}
           disabled={disabled || (!models.length && !onRefresh) || !catalog}
-          className={cn("min-w-0 shrink", variant === "outline" ? "max-w-full justify-start" : [picker, "max-w-none justify-end"])}
+          className={cn("min-w-0 shrink font-mono", variant === "outline" ? "max-w-full justify-start" : [picker, "max-w-none justify-end"])}
           title={want}
         >
           <span className={cn("min-w-0 truncate", !catalog && !noDirectory && "shimmer")}>{label}</span>
