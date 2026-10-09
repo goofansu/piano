@@ -42,9 +42,9 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-96 max-w-[calc(100vw-2rem)]">
-          <DropdownMenuGroup className="flex items-center justify-between">
+          <DropdownMenuGroup className="flex items-center">
             <DropdownMenuLabel className="text-muted-foreground">Session details</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /> Copy all</DropdownMenuItem>
+            <DropdownMenuItem aria-label="Copy all" title="Copy all" onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /></DropdownMenuItem>
           </DropdownMenuGroup>
           {/* Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible. */}
           <dl className="flex select-text flex-col gap-1 px-2 py-2 font-mono text-xs">

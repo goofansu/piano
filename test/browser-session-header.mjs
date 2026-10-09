@@ -116,12 +116,12 @@ try {
     assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().top`), top);
     await menu();
     await ab('snapshot');
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['Copy all', 'Changes', 'Conversation tree', 'Bookmark', 'Pull request', 'Rename', 'Archive', 'Delete']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['', 'Changes', 'Conversation tree', 'Pull request', 'Rename', 'Archive', 'Delete']);
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [repo, 'header-test', sessionId]);
     assert.ok(await evaluate(`(() => {
       const heading = document.querySelector('[role="menu"] [data-slot="dropdown-menu-label"]').getBoundingClientRect();
       const copy = document.querySelector('[role="menu"] [role="menuitem"]').getBoundingClientRect();
-      return heading.right <= copy.left && Math.abs(heading.top + heading.height / 2 - copy.top - copy.height / 2) <= 2;
+      return heading.right <= copy.left && copy.left - heading.right <= 4 && Math.abs(heading.top + heading.height / 2 - copy.top - copy.height / 2) <= 2;
     })()`), 'Copy all sits to the right of the section heading');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
     assert.ok(await evaluate(`(() => {
@@ -172,7 +172,7 @@ try {
   // Metadata is not a keyboard stop; Enter reaches the single copy action.
   await ab('focus', '[aria-label="Session information and actions"]'); await ab('press', 'Enter');
   await ab('wait', '--fn', `document.activeElement?.getAttribute('role') === 'menuitem'`);
-  assert.equal(await evaluate('document.activeElement.textContent.trim()'), 'Copy all');
+  assert.equal(await evaluate('document.activeElement.getAttribute("aria-label")'), 'Copy all');
   await ab('press', 'Enter'); await assertCopy();
   await evaluate(`navigator.clipboard.writeText = async () => { window.lastToast = null; throw new Error('Denied'); }; true`);
   await menu(); await item('Copy all'); await closed();
