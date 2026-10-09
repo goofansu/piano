@@ -39,13 +39,12 @@ export async function copySessionValue(value: string, label: string) {
   }
 }
 
-/** Copy only available identity fields; never invent a branch for a detached checkout. */
+/** Copy the working directory and available session ID shown in the details menu. */
 export function copyAllSessionDetails(state: AppState) {
   if (!state.session) return;
-  const { branch, sessionId } = currentSessionDetails(state);
+  const { sessionId } = currentSessionDetails(state);
   const lines = [
     `Working directory: ${state.session.cwd}`,
-    ...(branch ? [`Git branch: ${branch}`] : []),
     ...(sessionId ? [`Session ID: ${sessionId}`] : []),
   ];
   return copySessionValue(lines.join("\n"), "Session details");
