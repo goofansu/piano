@@ -88,6 +88,11 @@ try {
   assert.equal(await evaluate(`observedFrames.filter(m=>m.direction==='in'&&m.tag==='selected').length`), 0, 'No selected response received');
   assert.equal(promptCount('EARLY_FIRST_MESSAGE'), 0, 'Pi has not received the prompt yet');
   assert.equal(await evaluate(`document.querySelector('main header [role="status"]').textContent`), 'Starting');
+  assert.equal(await evaluate(`document.querySelector('main header [role="status"]').classList.contains('sr-only')`), true, 'Starting remains screen-reader-only');
+  assert.equal(await evaluate(`document.querySelector('[aria-label="Last input"]') === null`), true, 'No visible startup sentence above the composer');
+  assert.equal(await evaluate(`document.querySelectorAll('[data-slot="transcript"] .keys[data-playing="true"]').length`), 1, 'Animated Piano keys occupy the reply area during startup');
+  assert.equal(await evaluate(`document.querySelector('[data-slot="transcript"] .keys').getAnimations({subtree:true}).filter(a=>a.animationName==='key-press'&&a.playState==='running').length`), 3, 'All three keys are actually animating');
+  assert.equal(await evaluate(`document.querySelector('[data-slot="transcript"] .keys').getBoundingClientRect().top > document.querySelector('[data-slot="submitted-input"]').getBoundingClientRect().bottom`), true, 'Startup indicator follows the submitted message');
   assert.equal(await evaluate(`document.querySelectorAll('img[alt="Attachment preview"]').length`), 1, 'Submitted image appears before readiness');
   assert.equal(await evaluate(`document.querySelector('[aria-label="Send"]').disabled`), true, 'No second send before readiness');
   await ab('set', 'viewport', '390', '844'); await capture('startup-held-mobile');
@@ -99,6 +104,7 @@ try {
   assert.equal(await userCount('EARLY_FIRST_MESSAGE'), 1, 'Authoritative user message replaces local preview');
   assert.equal(await evaluate(`startingTranscript === document.querySelector('[data-slot="transcript"]')`), true, 'Readiness handoff keeps the mounted transcript without restarting its fade');
   assert.equal(promptCount('EARLY_FIRST_MESSAGE'), 1);
+  await ab('wait', '--fn', `document.querySelectorAll('[data-slot="transcript"] .keys[data-playing="true"]').length === 0`);
   await capture('first-response');
   await ab('reload'); await ab('wait', '--text', 'echo: EARLY_FIRST_MESSAGE');
   assert.equal(promptCount('EARLY_FIRST_MESSAGE'), 1, 'Reload never resends first prompt');
@@ -126,6 +132,7 @@ try {
   await ab('wait', '--fn', `document.querySelector('main')?.innerText.includes('Could not start') || document.querySelector('main')?.innerText.includes('could not start') || document.querySelector('main')?.innerText.includes('Unable to start') || document.querySelector('main')?.innerText.includes('Delivery uncertain')`);
   assert.equal(promptCount('RECOVER_FIRST_MESSAGE'), 0);
   assert.equal(await userCount('RECOVER_FIRST_MESSAGE'), 1, 'Failed creation retains submitted text');
+  assert.equal(await evaluate(`document.querySelectorAll('[data-slot="transcript"] .keys[data-playing="true"]').length`), 0, 'Startup animation stops on failure');
   await capture('startup-failed');
   observations.push('Startup failure retains submitted text and explains failure without replay');
   outcome = 'pass';

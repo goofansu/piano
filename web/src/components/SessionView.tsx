@@ -64,16 +64,22 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
     t?.state.isRetrying ? "Retrying" : null,
   ].filter(Boolean).join(" · ");
   const submission = t?.state.submission;
+  const starting = input?.outcome === "starting";
+  let replyActivity: "starting" | "working" | undefined;
+  if (!t?.pending?.text) {
+    if (starting) replyActivity = "starting";
+    else if (streaming) replyActivity = "working";
+  }
   // Sent but not yet in the transcript: created with a first message, submitting, or running.
   const firstMessageOnItsWay = !!t && (submission?.outcome === "submitting" || streaming);
   const inputText = input ? {
-    starting: "Starting…",
+    starting: undefined, // The reply area's Piano keys provide startup feedback.
     submitted: undefined,
     handled: "Command handled.",
     rejected: "Message rejected.",
     uncertain: "Delivery uncertain — inspect the session list before deciding whether to send again. Piano will not resend automatically.",
   }[input.outcome] : undefined;
-  const submissionText = inputText ?? (submission ? {
+  const submissionText = input ? inputText : (submission ? {
     submitting: "Submitting — waiting for Pi.",
     started: undefined, // Running/ready state already describes the work.
     queued: undefined, // The queue itself shows pending input.
@@ -86,7 +92,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const workspaceId = state.projects.flatMap(p => p.sessions).find(s => s.cwd === t?.cwd && s.sessionId === t?.sessionId)?.workspaceId;
   const pullRequest = useSessionPullRequest(workspaceId, t?.sessionId, streaming);
 
-  const status = input?.outcome === "starting" ? "Starting"
+  const status = starting ? "Starting"
     : !t && input ? "Delivery uncertain"
     : !state.connected || (t !== null && !ready) ? "Reconnecting"
     : !t ? "Loading"
@@ -137,7 +143,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
             pending={t?.pending ?? null}
             submittedInput={input}
             tools={t?.tools ?? {}}
-            working={streaming && !t?.pending?.text}
+            activity={replyActivity}
             placeholder={firstMessageOnItsWay ? undefined : "No messages yet."}
           />
         )}

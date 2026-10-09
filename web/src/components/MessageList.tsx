@@ -25,8 +25,8 @@ interface Props {
   /** Local first input awaiting authoritative history; not a transcript message. */
   submittedInput?: Pick<RenderMsg, "text" | "attachments"> | null;
   tools: Record<string, ToolExecution>;
-  /** Pi is working and no reply text has arrived yet: the keys play in a pending row. */
-  working?: boolean;
+  /** Startup or Pi work awaiting reply text: the keys play in the reply area. */
+  activity?: "starting" | "working";
   /** Shown while the transcript is empty; omitted while something is on its way. */
   placeholder?: string;
   className?: string;
@@ -37,7 +37,7 @@ interface Props {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, submittedInput, tools, working = false, placeholder, className }: Props) {
+export function MessageList({ messages, pending, submittedInput, tools, activity, placeholder, className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -46,7 +46,7 @@ export function MessageList({ messages, pending, submittedInput, tools, working 
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [messages, pending, submittedInput, tools, working]);
+  }, [messages, pending, submittedInput, tools, activity]);
   // Content can grow without a scroll event (a prompt opens, output expands). That only
   // changes whether the bottom is in view; it never moves the reader. The container itself
   // shrinking (a banner appears below, the composer grows) is not the reader's
@@ -99,7 +99,7 @@ export function MessageList({ messages, pending, submittedInput, tools, working 
         className="h-full overflow-y-auto px-4 md:px-6"
       >
       <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
-        {placeholder && messages.length === 0 && !pending && !submittedInput && !working && (
+        {placeholder && messages.length === 0 && !pending && !submittedInput && !activity && (
           <Empty className="py-16">
             <EmptyHeader>
               <EmptyDescription className="text-base">{placeholder}</EmptyDescription>
@@ -117,9 +117,9 @@ export function MessageList({ messages, pending, submittedInput, tools, working 
             return <Message key={m.id} msg={m} error={m.errorMessage ? messageError(m, messages.slice(0, index), results, tools) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
           })}
           {pending && <Message msg={pending} error={messageError(pending, messages, results, tools)} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
-          {working && (
+          {activity && (
             <Row glyph={<Keys playing className="text-brand" />}>
-              <span className="sr-only">Pi is working</span>
+              <span className="sr-only">{activity === "starting" ? "Starting" : "Pi is working"}</span>
               <span aria-hidden className="inline-block h-[1em] w-0.5 animate-caret bg-brand align-[-0.15em]" />
             </Row>
           )}
