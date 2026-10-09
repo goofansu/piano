@@ -6,7 +6,7 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
 
 - Node.js 24 and npm.
 - Git.
-- Pi configured with model credentials (default agent directory: `~/.pi/agent`). The Pi runtime is installed with Piano's dependencies.
+- Pi model credentials (sign in through Piano below, or configure Pi directly; default agent directory: `~/.pi/agent`). The Pi runtime is installed with Piano's dependencies.
 - [Worktrunk](https://worktrunk.dev) (`wt`) on `PATH` for worktree support.
 
 ## Install and run
@@ -21,7 +21,25 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
   ```
 
 - Open <http://127.0.0.1:7070>.
-- Keep Piano on loopback or behind private authenticated access: it has no built-in authentication and can execute commands as your user.
+- Keep Piano on loopback or behind private authenticated access: it has no built-in access authentication and can execute commands as your user.
+
+## Provider sign-in
+
+Type `/login` in either composer to choose an OAuth provider, or `/login radius` to
+start directly. Completion suggests `/login` and Pi's configured OAuth provider IDs.
+**Sign in** is also available in the Mod+K command palette, without a folder or model.
+
+Pi handles authorization and saves credentials in its normal `auth.json`; Piano does
+not put tokens or pasted codes in session history, the registry or browser storage.
+Use device-code/copy-code methods when Piano runs on another machine. Radius's browser
+method requires a callback on the Piano server; its device-code method works remotely.
+Hiding or reloading the dialog preserves an active sign-in; reopen **Sign in** to resume
+it. **Cancel sign-in** stops it. Attempts expire after 15 minutes or when Piano stops.
+
+Start a new session after signing in: already-running RPC children retain their model
+availability snapshot. This global flow uses the bundled Pi SDK's built-in providers
+and `models.json` configuration; extension-only OAuth providers, API-key setup and
+logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credential format.
 
 ## Develop
 

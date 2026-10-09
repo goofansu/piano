@@ -60,13 +60,29 @@ try {
   assert.equal((await fetch(`http://127.0.0.1:${backendPort}/api/commands`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, sessionId: 'not-running' }) })).status, 409, 'discovery does not open stopped sessions');
   ab('open', `http://127.0.0.1:${webPort}/new`);
   await until(`document.querySelector('[aria-label^="Model:"]')?.title.includes('alpha')`);
+  // Built-in OAuth completion never starts a session or makes model calls.
+  await suggestions('/lo'); ab('press', 'Tab'); assert.equal(draft(), '/login ');
+  await until(`document.querySelectorAll('${options}').length === 9`);
+  await suggestions('/login rad'); ab('press', 'Tab'); assert.equal(draft(), '/login radius ');
+  ab('press', 'Enter'); ab('wait', '--text', 'Sign in · radius');
+  ab('click', '[role="combobox"][id="login-answer"]');
+  ab('wait', '--text', 'Sign in with device code (when signing in from another device)');
+  capture('radius-methods');
+  ab('press', 'Escape'); ab('press', 'Escape'); ab('reload'); ab('press', 'Control+k');
+  ab('fill', '[placeholder="Search sessions and commands…"]', 'Sign in');
+  ab('click', '[role="option"]'); ab('wait', '--text', 'Sign in · radius');
+  await until(`[...document.querySelectorAll('button')].some(button => button.textContent === 'Cancel sign-in')`);
+  ab('find', 'role', 'button', 'click', '--name', 'Cancel sign-in', '--exact'); ab('wait', '--text', 'Sign-in cancelled.');
+  ab('click', '[data-slot="dialog-footer"] button:last-child');
+  assert.ok(evaluate(`location.pathname === '/new'`), 'login never creates a session');
   await suggestions('/');
+  assert.ok(evaluate(`document.querySelector('${menu}').textContent.includes('/login')`));
   assert.ok(evaluate(`document.querySelector('${menu}').textContent.includes('probe-only')`));
   assert.equal(evaluate(`document.querySelector('${menu}').textContent.includes('live-only')`), false);
-  assert.deepEqual(evaluate(`[...document.querySelectorAll('${options}')].map(e=>e.innerText.match(/\\/skill:[\\w-]+/)?.[0])`), ['/skill:probe-only', '/skill:research'], 'only skills, never extensions or templates');
+  assert.deepEqual(evaluate(`[...document.querySelectorAll('${options}')].map(e=>e.innerText.match(/\\/skill:[\\w-]+/)?.[0]).filter(Boolean)`), ['/skill:probe-only', '/skill:research'], 'skills and built-in login, never extensions or templates');
   assert.ok(evaluate(`document.activeElement === document.querySelector('textarea')`));
   assert.ok(evaluate(`document.getElementById(document.querySelector('textarea').getAttribute('aria-activedescendant'))?.getAttribute('role') === 'option'`));
-  ab('press', 'ArrowDown'); ab('press', 'Tab'); assert.equal(draft(), '/skill:research ');
+  ab('press', 'ArrowDown'); ab('press', 'ArrowDown'); ab('press', 'Tab'); assert.equal(draft(), '/skill:research ');
   assert.ok(evaluate(`location.pathname === '/new'`), 'acceptance did not send');
   await suggestions('/re'); ab('press', 'Alt+Enter'); assert.equal(draft(), '/skill:research ');
   await fill('/no-such-command'); ab('wait', '--text', 'No matching commands.');
@@ -99,8 +115,13 @@ try {
   await suggestions('/');
   assert.ok(evaluate(`document.querySelector('${menu}').textContent.includes('live-only')`));
   assert.equal(evaluate(`document.querySelector('${menu}').textContent.includes('probe-only')`), false);
-  assert.deepEqual(evaluate(`[...document.querySelectorAll('${options}')].map(e=>e.innerText.match(/\\/skill:[\\w-]+/)?.[0])`), ['/skill:live-only', '/skill:research'], 'live suggestions also contain only skills');
-  capture('active-desktop');
+  assert.deepEqual(evaluate(`[...document.querySelectorAll('${options}')].map(e=>e.innerText.match(/\\/skill:[\\w-]+/)?.[0]).filter(Boolean)`), ['/skill:live-only', '/skill:research'], 'live suggestions contain skills and built-in login');
+  await suggestions('/login anth'); ab('press', 'Tab'); assert.equal(draft(), '/login anthropic ');
+  ab('press', 'Enter'); ab('wait', '--text', 'Sign in · anthropic');
+  await until(`[...document.querySelectorAll('button')].some(button => button.textContent === 'Cancel sign-in')`); capture('live-login');
+  ab('find', 'role', 'button', 'click', '--name', 'Cancel sign-in', '--exact'); ab('wait', '--text', 'Sign-in cancelled.');
+  ab('click', '[data-slot="dialog-footer"] button:last-child');
+  await suggestions('/'); capture('active-desktop');
   await fill('live context'); ab('press', 'Enter'); ab('wait', '[aria-label="Stop"]');
   await fill('/handled'); ab('wait', '--text', 'No matching commands.');
   ab('press', 'Enter'); ab('wait', '--text', 'Command handled.');
@@ -132,7 +153,7 @@ try {
   await suggestions('/re'); ab('click', options); assert.equal(draft(), '/skill:research ');
   await suggestions('/'); ab('set', 'viewport', '320', '640'); capture('new-mobile');
   assert.ok(evaluate(`(() => {const r=document.querySelector('${menu}').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;})()`), 'suggestions fit phone viewport');
-  console.log('PASS: both composers, live/probe discovery, keyboard and pointer acceptance, middle caret, literal prose, IME, stale response, Escape/abort, mobile newline and bounds');
+  console.log('PASS: OAuth provider completion, Radius methods, reload/resume/cancel, live-session login, both composers, live/probe discovery, keyboard and pointer acceptance, middle caret, literal prose, IME, stale response, Escape/abort, mobile newline and bounds');
 } finally {
   try { capture('final'); ab('close'); } catch {}
   backend.kill('SIGTERM'); frontend.kill('SIGTERM');

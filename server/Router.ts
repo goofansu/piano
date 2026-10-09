@@ -8,6 +8,7 @@ import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { expandHome } from "./PiEnv.ts";
+import { ProviderLogin } from "./ProviderLogin.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
@@ -178,6 +179,35 @@ export const AppRouter = HttpRouter.use((router) =>
       const catalog = yield* (yield* Catalog).get(cwd);
       return catalog.error ? json({ error: catalog.error }, 502) : json({ commands: catalog.commands ?? [] });
     }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load commands. Reopen the suggestions to retry." }, 502)))));
+
+    yield* router.add("GET", "/api/oauth-providers", Effect.gen(function* () {
+      return json({ providers: yield* (yield* ProviderLogin).providers });
+    }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load OAuth providers." }, 502)))));
+
+    // Credential values and callback URLs travel only in POST bodies. This
+    // global operation creates no session and owns no conversation history.
+    let invalidatedLogin: string | undefined;
+    for (const method of ["GET", "POST", "DELETE", "PUT"] as const) {
+      yield* router.add(method, "/api/provider-login", Effect.gen(function* () {
+        const login = yield* ProviderLogin;
+        let result: unknown;
+        if (method === "GET") {
+          const state = yield* login.state;
+          if (state?.status === "success" && state.id !== invalidatedLogin) {
+            invalidatedLogin = state.id;
+            yield* (yield* Catalog).invalidate;
+          }
+          result = { state };
+        } else {
+          const body = yield* readBody;
+          if (method === "POST" && typeof body.provider === "string") result = { state: yield* login.start(body.provider) };
+          else if (method === "DELETE" && typeof body.id === "string") result = { state: yield* login.cancel(body.id) };
+          else if (method === "PUT" && typeof body.id === "string" && typeof body.promptId === "string" && typeof body.value === "string" && body.value.length <= 16_384) result = { state: yield* login.answer(body.id, body.promptId, body.value) };
+          else return json({ error: "Invalid sign-in request." }, 400);
+        }
+        return HttpServerResponse.text(JSON.stringify(result), { contentType: "application/json", headers: { "cache-control": "no-store" } });
+      }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Sign-in request could not be completed. Resume the current sign-in or try again." }, 409)))));
+    }
 
     yield* router.add("GET", "/api/projects", buildProjects.pipe(Effect.map((projects) => json({ projects }))));
   }),

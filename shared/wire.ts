@@ -281,6 +281,25 @@ export const SlashCommand = Schema.Struct({
 });
 export type SlashCommand = typeof SlashCommand.Type;
 
+/** Global provider sign-in; never part of a session transcript or registry. */
+export interface OAuthProvider { id: string; name: string }
+export interface LoginPrompt {
+  id: string;
+  type: "text" | "secret" | "select" | "manual_code";
+  message: string;
+  placeholder?: string;
+  options?: readonly { id: string; label: string; description?: string }[];
+}
+export interface ProviderLoginState {
+  id: string;
+  provider: string;
+  status: "running" | "success" | "error" | "cancelled";
+  message?: string;
+  url?: string;
+  userCode?: string;
+  prompt?: LoginPrompt;
+}
+
 /** Everything a browser client may do to a running session. */
 export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", { text: Schema.String, attachments: attachmentInput }),

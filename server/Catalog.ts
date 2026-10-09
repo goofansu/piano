@@ -13,6 +13,8 @@ export class Catalog extends Context.Service<
   {
     /** Cached catalog, loading it on first use. */
     readonly get: (cwd: string) => Effect.Effect<ModelCatalog>;
+    /** Credentials changed; new session pickers must not reuse old availability. */
+    readonly invalidate: Effect.Effect<void>;
     /** Re-run the probe. */
     readonly refresh: (cwd: string) => Effect.Effect<ModelCatalog>;
   }
@@ -49,6 +51,7 @@ export const CatalogLive = Layer.effect(
     const sessions = yield* PiSessions;
     const cache = new Map<string, ModelCatalog>();
     const locks = new Map<string, Semaphore.Semaphore>();
+    let epoch = 0;
     const locked = (cwd: string, refresh = false) => Effect.gen(function* () {
       let lock = locks.get(cwd);
       if (!lock) { lock = yield* Semaphore.make(1); locks.set(cwd, lock); }
@@ -57,6 +60,7 @@ export const CatalogLive = Layer.effect(
     });
 
     const load = (cwd: string): Effect.Effect<ModelCatalog> => Effect.gen(function* () {
+      const loadingEpoch = epoch;
       const probe = yield* sessions.probe(cwd);
       const isEnabled = patternMatcher(enabledModelPatterns(cwd));
       const models: ModelChoice[] = probe.models.map((m) => {
@@ -78,6 +82,7 @@ export const CatalogLive = Layer.effect(
         defaultThinkingLevel: probe.defaultThinkingLevel,
         fetchedAt: new Date().toISOString(),
       };
+      if (loadingEpoch === epoch) cache.set(cwd, catalog);
       return catalog;
     }).pipe(
       Effect.catchTag("PiSessionError", (e) => {
@@ -85,7 +90,7 @@ export const CatalogLive = Layer.effect(
         return Effect.succeed(failed);
       }),
       // A failed probe is not cached, so the next request retries it.
-      Effect.tap((c) => Effect.sync(() => { if (c.error) cache.delete(cwd); else cache.set(cwd, c); })),
+      Effect.tap((c) => Effect.sync(() => { if (c.error) cache.delete(cwd); })),
       Effect.tap((c) =>
         c.error
           ? Effect.logWarning(`model catalog: ${c.error}`)
@@ -94,6 +99,7 @@ export const CatalogLive = Layer.effect(
     );
 
     return Catalog.of({
+      invalidate: Effect.sync(() => { epoch++; cache.clear(); }),
       get: cwd => locked(cwd),
       refresh: cwd => locked(cwd, true),
     });

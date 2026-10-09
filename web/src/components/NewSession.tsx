@@ -20,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
 import { isSendKey } from "@/lib/keys";
+import { loginProvider } from "@/lib/login";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
@@ -29,6 +30,7 @@ import type { AppState } from "@/store";
 interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
+  onLogin: (provider: string) => void;
   initialCwd?: string;
   /** The project a session started here joins; the page is that project's home. */
   outcomeProjectId?: string;
@@ -43,7 +45,7 @@ interface Props {
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
+export function NewSession({ state, send, onLogin, initialCwd, outcomeProjectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
     // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
@@ -87,10 +89,12 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
   const effectiveModel = model || catalog?.defaultModel;
   const levels = levelsFor(catalog, effectiveModel);
   const effectiveEffort = clampEffort(levels, effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
-  const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !outcome?.archived;
+  const login = loginProvider(text);
+  const ready = state.connected && !creating && !attachments.busy && (login !== null || (cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !outcome?.archived));
 
   const submit = () => {
     if (!ready) return;
+    if (login !== null) { onLogin(login); setText(""); return; }
     writeStorage(LAST_DIR, cwd.trim());
     setCreating(true);
     send({ _tag: "create_session", cwd: cwd.trim(), outcomeProjectId, options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });

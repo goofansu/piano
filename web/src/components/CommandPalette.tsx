@@ -20,6 +20,7 @@ interface Props {
   state: AppState;
   select: (cwd: string, sessionId: string | null) => void;
   openNew: (cwd?: string) => void;
+  openLogin: () => void;
   toggleSidebar: () => void;
   send: (command: ClientCommand) => void;
   openChanges: () => void;
@@ -32,7 +33,7 @@ interface Props {
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
+export function CommandPalette({ open, onOpenChange, state, select, openNew, openLogin, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
   const { setTheme } = useTheme();
   const { view, setView } = useSidebarView();
   const [search, setSearch] = useState("");
@@ -90,6 +91,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, tog
           </CommandGroup>
         )}
         <CommandGroup key="global" heading="Global commands">
+          <CommandItem value="Sign in" keywords={["login", "oauth", "provider", "radius"]} onSelect={() => run(openLogin)}>
+            <ShieldCheckIcon /> Sign in
+          </CommandItem>
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
           </CommandItem>

@@ -6,6 +6,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
 import { type ProjectDialog, ProjectDialogView } from "@/components/OutcomeProjects";
+import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { SessionView } from "@/components/SessionView";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { hasMod } from "@/lib/keys";
+import { loginProvider } from "@/lib/login";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
 import { readJson, readStorage, writeJson, writeStorage } from "@/lib/storage";
 import { useConnection } from "@/lib/ws";
@@ -111,7 +113,13 @@ export default function App() {
   const onStatus = useCallback((connected: boolean) => dispatch({ type: "connected", connected }), []);
   const conn = useConnection(onMessage, onStatus);
 
+  const [login, setLogin] = useState<{ provider: string; key: string } | null>(null);
+  const openLogin = useCallback((provider = "") => setLogin({ provider, key: crypto.randomUUID() }), []);
   const send = useCallback((m: ClientCommand) => {
+    if (m._tag === "act" && (m.action._tag === "prompt" || m.action._tag === "steer")) {
+      const provider = loginProvider(m.action.text);
+      if (provider !== null) { openLogin(provider); return; }
+    }
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = crypto.randomUUID();
       dispatch({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null,
@@ -121,7 +129,7 @@ export default function App() {
       const s = latest.current;
       if (s.connected && !s.resync && !s.selecting && s.selectionId) conn.send({ ...m, selectionId: s.selectionId });
     } else conn.send(m);
-  }, [conn, dispatch]);
+  }, [conn, dispatch, openLogin]);
   const select = useCallback(
     (cwd: string, sessionId: string | null) => {
       setMenuOpen(false);
@@ -293,7 +301,7 @@ export default function App() {
         {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
         <div key={state.view.kind} className="view-enter flex min-h-0 flex-1 flex-col">
           {state.view.kind === "new" ? (
-            <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
+            <NewSession state={state} send={send} onLogin={openLogin} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
           ) : state.view.kind === "missing-session" ? (
             <Empty className="flex-1 px-4" role="alert">
               <EmptyHeader>
@@ -320,7 +328,8 @@ export default function App() {
         />
       </main>
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} close={() => setLogin(null)} signedIn={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} />}
+      <CommandPalette openLogin={() => openLogin()} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </div>
   );
