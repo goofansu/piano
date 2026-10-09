@@ -36,7 +36,7 @@ export function SettingsNavigation({ compact, section, onShow, onHide, onSelect,
   </div>;
 }
 
-export function SettingsPage({ section, onMenu, providersChanged }: { section: SettingsSection; onMenu: () => void; providersChanged: () => void }) {
+export function SettingsPage({ section, onMenu, onSelect, providersChanged }: { section: SettingsSection; onMenu: () => void; onSelect: (section: SettingsSection) => void; providersChanged: () => void }) {
   const [providers, setProviders] = useState<OAuthProvider[]>();
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
@@ -72,13 +72,13 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
   if (section !== "providers") return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
       <section aria-labelledby="settings-section-title" className="mx-auto flex max-w-2xl flex-col gap-6">
-        <header className="flex flex-col gap-2">
+        {section !== "radius" && <header className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
             <h1 id="settings-section-title" className="text-xl font-semibold">{SECTIONS.find(item => item.id === section)?.label}</h1>
           </div>
-        </header>
-        {section === "appearance" ? <AppearanceSettings /> : section === "radius" ? <RadiusSettings providersChanged={providersChanged} /> : <ModelSettings />}
+        </header>}
+        {section === "appearance" ? <AppearanceSettings /> : section === "radius" ? <RadiusSettings onMenu={onMenu} openProviders={() => onSelect("providers")} providersChanged={providersChanged} /> : <ModelSettings />}
       </section>
     </div>
   </section>;

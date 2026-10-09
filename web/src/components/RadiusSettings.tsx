@@ -1,8 +1,9 @@
 import type { RadiusSetupState } from "@shared/radius";
 import type { OAuthProvider } from "@shared/wire";
-import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
+import { CheckCircleIcon, ExternalLinkIcon, PanelLeftOpenIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 async function setupRequest(action?: "configure-mcp" | "install-web-search", signal?: AbortSignal): Promise<RadiusSetupState> {
   const response = await fetch("/api/settings/radius", { signal, ...(action ? {
@@ -20,19 +22,21 @@ async function setupRequest(action?: "configure-mcp" | "install-web-search", sig
   return result.state;
 }
 
-export function RadiusSettings({ providersChanged }: { providersChanged: () => void }) {
+export function RadiusSettings({ onMenu, openProviders, providersChanged }: { onMenu: () => void; openProviders: () => void; providersChanged: () => void }) {
   const [state, setState] = useState<RadiusSetupState>();
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(true);
   const [login, setLogin] = useState<string>();
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     let installing = false;
     const load = async () => {
+      setRefreshing(true);
       try {
         const [next, response] = await Promise.all([setupRequest(undefined, controller.signal), fetch("/api/oauth-providers", { signal: controller.signal })]);
         if (!response.ok) throw new Error("Could not load Radius sign-in status.");
@@ -41,6 +45,7 @@ export function RadiusSettings({ providersChanged }: { providersChanged: () => v
         setProviders(result.providers); setState(next); setError("");
         installing = next.installation.status === "running";
       } catch { if (!controller.signal.aborted) setError("Could not refresh Radius setup. Check your connection and try again."); }
+      finally { if (!controller.signal.aborted) setRefreshing(false); }
       if (!controller.signal.aborted && installing) timer = setTimeout(load, 1500);
     };
     void load();
@@ -58,8 +63,20 @@ export function RadiusSettings({ providersChanged }: { providersChanged: () => v
   const radius = providers.find(provider => provider.id === "radius");
   const installing = state?.installation.status === "running";
   const disabled = busy || installing || !!error;
+  const configured = radius?.signedIn && state?.mcp.status === "ready" && state.webSearch.status === "ready"
+    && !disabled && !refreshing && !actionError && state.installation.status !== "error";
   return <>
-    <p className="text-sm text-muted-foreground">Connect your Radius account and tools on this machine. Changes apply to new sessions.</p>
+    <header className="flex items-center gap-2">
+      <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
+      <h1 id="settings-section-title" className="text-xl font-semibold">Radius</h1>
+      {configured && <Tooltip>
+        <TooltipTrigger asChild><CheckCircleIcon className="size-4 text-brand" role="img" aria-label="Radius setup configured" tabIndex={0} /></TooltipTrigger>
+        <TooltipContent>All three setup steps are configured.</TooltipContent>
+      </Tooltip>}
+      <IconButton className="ml-auto" label="Refresh setup" disabled={busy || refreshing} onClick={() => { setActionError(""); setRevision(value => value + 1); }}>
+        {refreshing ? <Spinner /> : <RefreshCwIcon />}
+      </IconButton>
+    </header>
     {(error || actionError) && <Alert variant="destructive"><AlertTitle>Radius setup needs attention</AlertTitle><AlertDescription>{error || actionError}</AlertDescription></Alert>}
     {!state ? <div role="status" className="flex flex-col gap-3"><span className="sr-only">Loading Radius setup…</span>{[0, 1, 2].map(row => <Skeleton key={row} className="h-28 w-full" />)}</div>
       : <ItemGroup className="gap-3">
@@ -69,8 +86,11 @@ export function RadiusSettings({ providersChanged }: { providersChanged: () => v
             <ItemDescription className="line-clamp-none">Use OAuth to connect your account. Pi stores and refreshes the credentials.</ItemDescription>
             {!radius && <p className="text-sm text-muted-foreground">Radius OAuth is unavailable in this Pi installation.</p>}
           </ItemContent>
-          <ItemActions>{radius?.signedIn ? <Badge variant="secondary">Signed in</Badge>
-            : <Button variant="outline" size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}</ItemActions>
+          <ItemActions className="flex-wrap">
+            <Button variant="link" size="sm" onClick={openProviders}>Manage providers</Button>
+            {radius?.signedIn ? <Badge variant="secondary">Signed in</Badge>
+              : <Button variant="outline" size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
+          </ItemActions>
         </Item>
         <Item variant="outline" role="listitem" className="flex-col items-start sm:flex-row sm:items-center">
           <ItemContent className="w-full min-w-0 sm:w-auto">
@@ -95,7 +115,6 @@ export function RadiusSettings({ providersChanged }: { providersChanged: () => v
       </ItemGroup>}
     {state?.installation.status === "error" && <Alert variant="destructive"><AlertTitle>Web search was not installed</AlertTitle><AlertDescription>{state.installation.detail}</AlertDescription></Alert>}
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setActionError(""); setRevision(value => value + 1); }}><RefreshCwIcon data-icon="inline-start" />Refresh setup</Button>
       <Button asChild variant="link" size="sm"><a href="https://radius.earendil.com/docs/extensions" target="_blank" rel="noopener noreferrer">Radius setup guide<ExternalLinkIcon data-icon="inline-end" /></a></Button>
     </div>
     {login && <ProviderLoginDialog key={login} initialProvider="radius" providers={providers} close={() => { setLogin(undefined); setRevision(value => value + 1); }} signedIn={signedIn} />}

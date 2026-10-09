@@ -87,6 +87,12 @@ try {
   })()`);
   await button('Settings');await button('Radius');await ab('wait','--text','Set up Radius MCP');
   assert.equal(await evaluate(`document.querySelector('main').textContent.includes('Configured')`),false);
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false);
+  assert.equal(await evaluate(`document.querySelector('main').textContent.includes('Connect your Radius account and tools on this machine.')`),false);
+  assert.equal(await evaluate(`!!document.querySelector('header button[aria-label="Refresh setup"]')`),true);
+  await button('Manage providers');
+  await ab('wait','#settings-providers-title');
+  await button('Radius');await ab('wait','--text','Set up Radius MCP');
   await capture('01-signed-out');
   assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Set up MCP')?.disabled`),true);
   await button('Sign in to Radius');await ab('wait','--text','Choose sign-in method');
@@ -110,6 +116,10 @@ try {
   const settings=JSON.parse(readFileSync(join(agent,'settings.json'),'utf8'));
   assert(settings.packages.includes(packageSource));assert.equal(settings.defaultThinkingLevel,'high');
   assert.equal(readFileSync(audit,'utf8').trim().split('\n').length,2);
+  await ab('wait','[aria-label="Radius setup configured"]');
+  await ab('focus','[aria-label="Radius setup configured"]');
+  await ab('wait','--text','All three setup steps are configured.');
+  await ab('press','Escape');
   await capture('05-complete');
   assert.match(await ab('snapshot'),/must enable Web search separately in Radius/);
   // Mod+K is the same navigation surface as the settings sidebar.
@@ -120,8 +130,13 @@ try {
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true);
   assert.equal(await evaluate(`[...document.querySelectorAll('[data-slot="item-description"]')].every(element => element.scrollHeight <= element.clientHeight)`),true, 'setup descriptions must not be clamped on mobile');
   await ab('eval','window.radiusFixture.unavailable=true');await button('Refresh setup');await ab('wait','--text','Radius setup needs attention');
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false, 'a failed refresh must not keep a completion claim');
   await capture('07-refresh-error');await ab('eval','window.radiusFixture.unavailable=false');await button('Refresh setup');
   await ab('wait','--fn',`!document.querySelector('[role="alert"]')`);
+  await ab('wait','[aria-label="Radius setup configured"]');
+  await ab('eval','window.radiusFixture.signedIn=false');await button('Refresh setup');
+  await ab('wait','--fn',`!document.querySelector('[aria-label="Radius setup configured"]') && !document.querySelector('[aria-label="Refresh setup"]').disabled`);
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false, 'installed tools alone are not complete without sign-in');
   // Persistence readback after a full browser reload, with no mock signed-in claim.
   await ab('reload');await button('Show sidebar');await button('Radius');await ab('wait','--text','Configured');
   assert.match(await ab('snapshot'),/Installed/);
