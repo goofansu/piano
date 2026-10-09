@@ -90,6 +90,15 @@ try {
   assert.equal(notes.status, 200); assert.equal((await notes.json()).link?.url, prs[1].url);
   await ab('set', 'viewport', '1280', '900'); await ab('open', `${frontendUrl}/s/work`);
   await ab('wait', '--text', 'These are not session deliverables.'); await waitBadge(42);
+  observations.metadataLayout = await evaluate(`(() => {
+    const [path, branch] = document.querySelectorAll('header p[title]');
+    const p = path.getBoundingClientRect(), b = branch.getBoundingClientRect();
+    return { pathWidth: p.width, branchWidth: b.width, gap: b.left - p.right,
+      truncated: [...branch.querySelectorAll('span')].some(s => s.scrollWidth > s.clientWidth) };
+  })()`);
+  assert.ok(observations.metadataLayout.pathWidth <= 192 && observations.metadataLayout.branchWidth <= 192, 'Metadata has capped widths');
+  assert.equal(observations.metadataLayout.gap, 12, 'Path and branch stay grouped with their original spacing');
+  assert.equal(observations.metadataLayout.truncated, true, 'Long branch is truncated');
   await openDetails();
   assert.equal(await evaluate(`!!document.querySelector('#session-pr-url')`), false, 'Linked PR opens details, not a form');
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true);

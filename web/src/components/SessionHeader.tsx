@@ -32,16 +32,18 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
           <h1 className="truncate text-sm font-medium" title={session ? title : undefined}>{session ? title : "New session"}</h1>
           {/* Plain workspace metadata has no dedicated UI primitive. */}
           <div className="flex min-w-0 items-center gap-2">
-            <p title={cwd} className="flex min-w-0 flex-1 font-mono text-xs text-muted-foreground">
-              <span className="sr-only">Working directory: </span>
-              {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
-              <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
-            </p>
-            {branch && <p title={branch} className="flex min-w-0 max-w-1/2 flex-1 items-center gap-1 font-mono text-xs text-muted-foreground">
-              <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
-              <span className="sr-only">Git branch: </span>
-              <span className="truncate">{branch}</span>
-            </p>}
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <p title={cwd} className="flex min-w-0 max-w-48 font-mono text-xs text-muted-foreground">
+                <span className="sr-only">Working directory: </span>
+                {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
+                <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
+              </p>
+              {branch && <p title={branch} className="flex min-w-0 max-w-48 items-center gap-1 font-mono text-xs text-muted-foreground">
+                <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
+                <span className="sr-only">Git branch: </span>
+                <span className="truncate">{branch}</span>
+              </p>}
+            </div>
             {pullRequest}
           </div>
         </> : <><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-28" /></>}
