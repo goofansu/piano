@@ -3,8 +3,8 @@ import { ChevronDownIcon, ExternalLinkIcon, GitBranchIcon, GitMergeIcon, GitPull
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
-import { Field, FieldError, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverAnchor, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -59,23 +59,23 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
   useEffect(() => { if (!open) setEditing(false); }, [open]);
   // Cancel and successful discovery replace the focused form controls.
   useEffect(() => { if (open && showingDetails) closeRef.current?.focus(); }, [open, showingDetails]);
-  // Opening details is also an explicit retry; polling failures stay out of the main view.
-  useEffect(() => { if (open) void pr.refresh(); }, [open]);
+  // Opening may refresh an existing link, but must not discover or associate one.
+  useEffect(() => { if (open && link) void pr.refresh(); }, [open]);
   const close = () => onOpenChange(false);
   return <Popover open={open} onOpenChange={onOpenChange}>
     <PopoverAnchor asChild>
       <ButtonGroup aria-label="Pull request" className="shrink-0">
         {link && <><SessionPullRequestBadge value={pr.value} /><ButtonGroupSeparator /></>}
         <PopoverTrigger asChild>
-          <Button variant="ghost" size={link ? "icon-xs" : "xs"} aria-label={link ? "Pull request" : "Link PR"}>
-            {link ? <ChevronDownIcon /> : <><GitPullRequestIcon data-icon="inline-start" /> Link PR</>}
+          <Button variant="ghost" size={link ? "icon-xs" : "xs"} aria-label={link ? "Pull request" : "PR"}>
+            {link ? <ChevronDownIcon /> : <><GitPullRequestIcon data-icon="inline-start" /> PR</>}
           </Button>
         </PopoverTrigger>
       </ButtonGroup>
     </PopoverAnchor>
     <PopoverContent align="start" sideOffset={8} collisionPadding={16} aria-labelledby={titleId} className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto">
       <PopoverHeader className="flex-row items-center justify-between gap-2">
-        <PopoverTitle id={titleId}>{editing ? "Change pull request" : link ? "Pull request" : "Link a pull request"}</PopoverTitle>
+        <PopoverTitle id={titleId}>{editing ? "Change pull request" : "Pull request"}</PopoverTitle>
         <Button ref={closeRef} variant="ghost" size="icon-xs" aria-label="Close pull request" onClick={close}><XIcon /></Button>
       </PopoverHeader>
       {link && showingDetails ? <>
@@ -112,18 +112,19 @@ function PullRequestForm({ pr, editing, errorId, onCancel, onSave }: {
   return <form onSubmit={async event => { event.preventDefault(); if (await pr.change({ action: "link", url })) onSave(); }} className="flex flex-col gap-4">
     <FieldGroup>
       {!editing && <>
-        <Button type="button" variant="outline" disabled={pr.busy} onClick={() => { void pr.change({ action: "discover" }); }}><GitBranchIcon data-icon="inline-start" /> Find from branch</Button>
+        <Button type="button" variant="ghost" className="self-start" disabled={pr.busy} onClick={() => { void pr.change({ action: "discover" }); }}><GitBranchIcon data-icon="inline-start" /> Find from branch</Button>
         {!pr.busy && pr.value?.discovery && !pr.value.error && !pr.value.link && <p role="status" className="text-sm text-muted-foreground">No matching open pull request.</p>}
-        <FieldSeparator>or paste a link</FieldSeparator>
       </>}
       <Field>
-        <FieldLabel htmlFor="session-pr-url">GitHub pull request URL</FieldLabel>
-        <Input ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} aria-describedby={pr.value?.error ? errorId : undefined} placeholder="https://github.com/owner/repo/pull/123" />
+        <FieldLabel htmlFor="session-pr-url" className="sr-only">GitHub pull request URL</FieldLabel>
+        <InputGroup>
+          <InputGroupInput ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} aria-describedby={pr.value?.error ? errorId : undefined} placeholder="Paste GitHub PR URL…" />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton type="submit" variant="default" disabled={pr.busy || !url.trim()}>{editing ? "Save link" : "Link"}</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
       </Field>
     </FieldGroup>
-    <div className="flex justify-end gap-2">
-      <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-      <Button type="submit" disabled={pr.busy || !url.trim()}>{editing ? "Save link" : "Link PR"}</Button>
-    </div>
+    {editing && <Button type="button" variant="ghost" className="self-end" onClick={onCancel}>Cancel</Button>}
   </form>;
 }

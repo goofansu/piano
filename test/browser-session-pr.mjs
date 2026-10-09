@@ -14,12 +14,13 @@ const backendPort = process.env.PR_BACKEND_PORT ?? '7171', frontendPort = proces
 const backendUrl = `http://127.0.0.1:${backendPort}`, frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const root = mkdtempSync(join(tmpdir(), 'piano-session-pr-browser-'));
 const githubHost = process.env.PR_GITHUB_HOST ?? 'github.com';
-const repo = join(root, 'repo'), plain = join(root, 'plain'), sessions = join(root, 'sessions'), bin = join(root, 'bin');
+const repo = join(root, 'a-very-long-workspace-name-for-header-truncation'), plain = join(root, 'plain'), sessions = join(root, 'sessions'), bin = join(root, 'bin');
 for (const dir of [repo, plain, sessions, bin, join(root, 'agent')]) mkdirSync(dir);
 const git = (...args) => execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', ...args]);
-git('init', '-q', '-b', 'feature'); git('commit', '--allow-empty', '-qm', 'Initial'); git('remote', 'add', 'origin', `https://${githubHost}/example/repo.git`);
+const branch = 'feature/a-very-long-branch-name-that-must-not-push-the-pr-control-away';
+git('init', '-q', '-b', branch); git('commit', '--allow-empty', '-qm', 'Initial'); git('remote', 'add', 'origin', `https://${githubHost}/example/repo.git`);
 const forge = join(root, 'forge.json');
-const prs = [42, 43].map(number => ({ url: `https://github.com/example/repo/pull/${number}`, number, title: number === 42 ? 'The session deliverable' : 'Explicitly linked work', state: 'OPEN', isDraft: false, reviewDecision: 'APPROVED', statusCheckRollup: [], headRefName: number === 42 ? 'feature' : 'other', headRepository: { name: 'repo' }, headRepositoryOwner: { login: 'example' } }));
+const prs = [42, 43].map(number => ({ url: `https://github.com/example/repo/pull/${number}`, number, title: number === 42 ? 'The session deliverable' : 'Explicitly linked work', state: 'OPEN', isDraft: false, reviewDecision: 'APPROVED', statusCheckRollup: [], headRefName: number === 42 ? branch : 'other', headRepository: { name: 'repo' }, headRepositoryOwner: { login: 'example' } }));
 const control = data => writeFileSync(forge, JSON.stringify({ expectedHost: githubHost, ...(githubHost === 'github.int.exe.xyz' ? { expectedRepo: `${githubHost}/example/repo` } : {}), ...data }));
 control({ prs });
 writeFileSync(join(bin, 'gh'), `#!${process.execPath}\nimport ${JSON.stringify(resolve('test/fixtures/fake-gh.mjs'))};\n`, { mode: 0o755 });
@@ -118,7 +119,7 @@ try {
   // Removal is a durable per-session preference, not a temporary hide.
   await openDetails(); await button('Remove link'); await noBadge(); await ab('reload');
   await ab('wait', '--text', 'These are not session deliverables.'); await noBadge();
-  assert.equal(await evaluate(`document.querySelector('header [data-slot="popover-trigger"]').textContent.trim()`), 'Link PR');
+  assert.equal(await evaluate(`document.querySelector('header [data-slot="popover-trigger"]').textContent.trim()`), 'PR');
   assert.equal(await evaluate(`document.querySelector('header').textContent.includes('No PR')`), false);
   await openDetails();
   await ab('wait', '--fn', `!!document.querySelector('#session-pr-url')`);
@@ -127,7 +128,7 @@ try {
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true, 'Discovery keeps keyboard focus in details');
   await closeDetails();
   // Header and palette reach the same control. Invalid URLs fail without changing identity.
-  await palette('Pull request'); await ab('click', '[cmdk-item][data-value="Pull request"]');
+  await palette('Pull request'); await ab('click', '[cmdk-item][data-value="PR"]');
   await waitDetails();
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true, 'Palette moves focus into the popover');
   await editLink();
@@ -138,12 +139,29 @@ try {
   assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger');
   await palette('Other work'); await ab('click', '[cmdk-item][data-value$=" other"]');
   await ab('wait', '--fn', `location.pathname === '/s/other'`); await noBadge();
-  await palette('Pull request'); await ab('click', '[cmdk-item][data-value="Pull request"]'); await waitDetails();
+  await palette('Pull request'); await ab('click', '[cmdk-item][data-value="PR"]'); await waitDetails();
   await ab('wait', '--fn', `!!document.querySelector('#session-pr-url')`);
   control({ prs: [] });
   await button('Find from branch'); await ab('wait', '--text', 'No matching open pull request.');
   await noBadge();
+  await closeDetails();
   control({ prs });
+  // A newly available branch PR must not be discovered just by opening the control.
+  await evaluate(`window.prRequests = 0; window.originalFetch = window.fetch; window.fetch = (...args) => { if (String(args[0]).includes('/api/session/pull-request')) window.prRequests++; return window.originalFetch(...args); }; true`);
+  await openDetails();
+  assert.equal(await evaluate('window.prRequests'), 0, 'Opening an unlinked popover makes no PR request');
+  await noBadge();
+  assert.equal(await evaluate(`!!document.querySelector('${popover} button[type="button"]') && ![...document.querySelectorAll('${popover} button')].some(b => b.textContent === 'Cancel')`), true);
+  await ab('set', 'viewport', '390', '844');
+  await ab('screenshot', join(evidence, 'unlinked-compact-mobile.png'));
+  await closeDetails();
+  // Existing background reconciliation can still associate the newly created PR.
+  await evaluate(`window.fetch = window.originalFetch; window.dispatchEvent(new Event('focus')); true`);
+  await waitBadge(42);
+  observations.openWithoutDiscovery = 'pass';
+  observations.backgroundDiscovery = 'pass';
+  await ab('set', 'viewport', '1280', '900');
+  await openDetails(); await button('Remove link'); await noBadge(); await openDetails();
   await ab('fill', '#session-pr-url', prs[0].url);
   await ab('click', `${popover} button[type="submit"]`); await waitBadge(42);
   await ab('wait', '--fn', `!document.querySelector('${popover}')`);

@@ -31,13 +31,13 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
           {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal || project.name} onClick={() => openProject(project.id)}>{project.name}</button>}
           <h1 className="truncate text-sm font-medium" title={session ? title : undefined}>{session ? title : "New session"}</h1>
           {/* Plain workspace metadata has no dedicated UI primitive. */}
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <p title={cwd} className="flex min-w-0 max-w-full font-mono text-xs text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-2">
+            <p title={cwd} className="flex min-w-0 flex-1 font-mono text-xs text-muted-foreground">
               <span className="sr-only">Working directory: </span>
               {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
               <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
             </p>
-            {branch && <p title={branch} className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-1 font-mono text-xs text-muted-foreground">
+            {branch && <p title={branch} className="flex min-w-0 max-w-1/2 flex-1 items-center gap-1 font-mono text-xs text-muted-foreground">
               <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
               <span className="sr-only">Git branch: </span>
               <span className="truncate">{branch}</span>
