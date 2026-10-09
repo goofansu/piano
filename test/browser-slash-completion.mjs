@@ -51,6 +51,14 @@ async function fill(text) {
 }
 async function suggestions(text) { await fill(text); ab('press', 'End'); await until(`!!document.querySelector('${options}')`); }
 function capture(name) { ab('screenshot', join(evidence, `${name}.png`)); writeFileSync(join(evidence, `${name}.txt`), ab('snapshot')); }
+function assertFullPageSettings() {
+  assert.ok(evaluate(`(() => {
+    const rect = document.querySelector('[aria-label="Settings"]').getBoundingClientRect();
+    return rect.x === 0 && rect.y === 0 && rect.width === innerWidth && rect.height === innerHeight;
+  })()`), 'Settings occupies the whole viewport, not the conversation inset');
+  assert.equal(evaluate(`!!document.querySelector('nav[aria-label="Sessions"]')?.checkVisibility()`), false, 'session navigation is hidden in Settings');
+  assert.equal(evaluate('document.documentElement.scrollWidth > innerWidth'), false, 'Settings fits without horizontal overflow');
+}
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
@@ -64,6 +72,7 @@ try {
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('wait', '--text', 'Providers');
   assert.equal(evaluate('location.pathname'), '/settings');
+  assertFullPageSettings();
   ab('find', 'role', 'button', 'click', '--name', 'Sign in to Radius', '--exact');
   ab('wait', '--text', 'Sign in · radius');
   await until(`!!document.querySelector('#login-answer')`);
@@ -169,7 +178,14 @@ try {
   ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('wait', '--text', 'Providers'); capture('settings-mobile');
-  assert.equal(evaluate(`!!document.querySelector('[data-slot="sheet-content"]')`), false, 'mobile settings closes the sidebar');
+  assertFullPageSettings();
+  assert.equal(evaluate(`!!document.querySelector('[role="dialog"]')`), false, 'mobile settings closes the sidebar');
+  ab('find', 'role', 'button', 'click', '--name', 'Toggle sidebar', '--exact');
+  ab('wait', '[role="dialog"]');
+  assert.ok(evaluate(`document.querySelector('nav[aria-label="Settings sections"]').checkVisibility()`), 'mobile Settings exposes its own navigation');
+  ab('find', 'role', 'button', 'click', '--name', 'Providers', '--exact');
+  await until(`!document.querySelector('[role="dialog"]')`);
+  assertFullPageSettings();
   console.log('PASS: Settings sidebar/palette/mobile entry, OAuth resume/cancel, draft preservation, no login completion, both composers, live/probe discovery, keyboard and pointer acceptance, middle caret, literal prose, IME, stale response, Escape/abort, mobile newline and bounds');
 } finally {
   try { capture('final'); ab('close'); } catch {}

@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowLeftIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -9,6 +9,7 @@ import { sessionProject } from "@/components/OutcomeProjects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { useSidebar } from "@/components/ui/sidebar";
 import { abbrevPath } from "@/lib/format";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -21,6 +22,7 @@ interface Props {
   select: (cwd: string, sessionId: string | null) => void;
   openNew: (cwd?: string) => void;
   openSettings: () => void;
+  closeSettings?: () => void;
   toggleSidebar: () => void;
   send: (command: ClientCommand) => void;
   openChanges: () => void;
@@ -33,7 +35,8 @@ interface Props {
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, openSettings, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
+export function CommandPalette({ open, onOpenChange, state, select, openNew, openSettings, closeSettings, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
+  const { toggleSidebar: toggleSettingsSidebar } = useSidebar();
   const { setTheme } = useTheme();
   const { view, setView } = useSidebarView();
   const [search, setSearch] = useState("");
@@ -91,6 +94,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
           </CommandGroup>
         )}
         <CommandGroup key="global" heading="Global commands">
+          {closeSettings && <CommandItem value="Back to session" onSelect={() => run(closeSettings)}>
+            <ArrowLeftIcon /> Back to session
+          </CommandItem>}
           <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
           </CommandItem>
@@ -106,7 +112,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
               {composerTrust.trusted ? <><ShieldOffIcon /> Untrust folder</> : <><ShieldCheckIcon /> Trust folder</>}
             </CommandItem>
           )}
-          <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
+          <CommandItem value="toggle sidebar" onSelect={() => run(closeSettings ? toggleSettingsSidebar : toggleSidebar)}>
             <PanelLeftIcon /> Toggle sidebar
           </CommandItem>
           <CommandItem value="appearance light" keywords={["theme"]} onSelect={() => run(() => setTheme("light"))}><SunIcon /> Light appearance</CommandItem>

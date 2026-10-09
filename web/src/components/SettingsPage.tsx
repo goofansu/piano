@@ -1,7 +1,8 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, ArrowLeftIcon, PanelLeftOpenIcon, PlugIcon } from "lucide-react";
+import { AlertCircleIcon, ArrowLeftIcon, PlugIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { PianoMark } from "@/components/PianoMark";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -9,10 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function SettingsPage({ close, onMenu, providersChanged }: { close: () => void; onMenu: () => void; providersChanged: () => void }) {
+export function SettingsPage({ close, providersChanged }: { close: () => void; providersChanged: () => void }) {
+  const { setOpenMobile } = useSidebar();
+  // Leaving Settings must also dismiss its portalled mobile navigation.
+  useEffect(() => () => setOpenMobile(false), [setOpenMobile]);
   const [providers, setProviders] = useState<OAuthProvider[]>();
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
@@ -44,32 +48,36 @@ export function SettingsPage({ close, onMenu, providersChanged }: { close: () =>
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
     } finally { setSigningOut(undefined); }
   };
-  return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
-    <header className="flex shrink-0 items-center gap-2 p-4">
-      <Button variant="ghost" size="icon" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-      <Button variant="ghost" size="icon" aria-label="Back to session" onClick={close}><ArrowLeftIcon /></Button>
-      <h1 className="text-lg font-semibold">Settings</h1>
-    </header>
-    <Separator />
-    <SidebarProvider className="min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-      <Sidebar collapsible="none" className="h-auto w-full shrink-0 md:h-full md:w-48">
-        <SidebarContent>
-          <SidebarGroup className="p-4">
-            <SidebarGroupLabel className="hidden md:flex">Sections</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <nav aria-label="Settings sections">
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive>
-                      <a href="#settings-providers" aria-current="page"><PlugIcon /><span>Providers</span></a>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </nav>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-      </Sidebar>
+  return <section aria-label="Settings" className="flex h-full w-full overflow-hidden">
+    <Sidebar>
+      <SidebarHeader className="h-16 flex-row items-center gap-2.5 px-4">
+        <PianoMark />
+        <span className="text-lg font-semibold tracking-tight">Piano</span>
+        <SidebarTrigger className="ml-auto md:hidden" aria-label="Hide settings navigation" />
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup className="px-3">
+          <SidebarGroupContent>
+            <nav aria-label="Settings sections">
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton isActive aria-current="page" className="h-9 pointer-coarse:h-11" onClick={() => setOpenMobile(false)}>
+                    <PlugIcon /><span>Providers</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </nav>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+    <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-conversation">
+      <header className="flex h-16 shrink-0 items-center gap-2 px-4">
+        <Button variant="ghost" size="icon" aria-label="Back to session" onClick={close}><ArrowLeftIcon /></Button>
+        <SidebarTrigger aria-label="Toggle sidebar" />
+        <h1 className="text-lg font-semibold">Settings</h1>
+      </header>
+      <Separator />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
         <section id="settings-providers" aria-labelledby="settings-providers-title" className="mx-auto flex max-w-2xl flex-col gap-6">
           <header className="flex flex-col gap-2">
@@ -108,7 +116,7 @@ export function SettingsPage({ close, onMenu, providersChanged }: { close: () =>
             </Item>)}</ItemGroup>}
         </section>
       </div>
-    </SidebarProvider>
+    </main>
     {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} close={() => setLogin(undefined)} signedIn={refreshProviders} />}
   </section>;
 }

@@ -12,7 +12,9 @@ import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { hasMod } from "@/lib/keys";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
 import { readJson, readStorage, writeJson, writeStorage } from "@/lib/storage";
@@ -243,12 +245,15 @@ export default function App() {
     if (link) link.href = working ? "/favicon-working.svg" : "/favicon.svg";
   }, [working]);
 
-  // An inset conversation sheet separates the work from the navigation without extra chrome.
+  // Settings owns the viewport; the session layout stays mounted but out of view.
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-surface-0 text-ink">
+    <SidebarProvider className="relative h-dvh min-h-0 overflow-hidden bg-surface-0 text-ink">
+      {/* SidebarProvider defaults to instant tooltips; retain the app's existing delay. */}
+      <TooltipProvider delayDuration={300}>
       <aside
         className={cn(
           "relative hidden shrink-0 md:flex md:flex-col",
+          settingsOpen && "md:hidden",
           !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
         )}
         style={{ width: collapsed ? RAIL_WIDTH : width }}
@@ -282,7 +287,7 @@ export default function App() {
           />
         )}
       </aside>
-      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+      <Sheet open={!settingsOpen && menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="h-dvh w-full border-0 bg-surface-0 p-0 sm:max-w-none" showCloseButton={false} aria-describedby={undefined} onOpenAutoFocus={event => {
           // Focus the sheet itself, not its first button, so no tooltip opens with it.
           event.preventDefault();
@@ -296,10 +301,10 @@ export default function App() {
           <Sidebar {...sidebarProps} onHide={() => setMenuOpen(false)} />
         </SheetContent>
       </Sheet>
-      <main className="sheet-enter relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
+      {/* Keep the previous view mounted for drafts and session continuity (INV-02), not as Settings chrome. */}
+      <main className={cn("sheet-enter relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1", settingsOpen && "hidden")}>
         {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
-        {settingsOpen && <SettingsPage close={() => setSettingsOpen(false)} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} />}
-        <div key={state.view.kind} className={cn("view-enter min-h-0 flex-1 flex-col", settingsOpen ? "hidden" : "flex")}>
+        <div key={state.view.kind} className="view-enter flex min-h-0 flex-1 flex-col">
           {state.view.kind === "new" ? (
             <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
           ) : state.view.kind === "missing-session" ? (
@@ -313,23 +318,25 @@ export default function App() {
               </EmptyContent>
             </Empty>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={!settingsOpen && changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={!settingsOpen && pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}
         </div>
-        <Toaster
-          position="top-center"
-          className="toaster group !absolute"
-          offset={{ top: 16 }}
-          mobileOffset={{ top: 12, left: 16, right: 16 }}
-          visibleToasts={4}
-          duration={4000}
-          closeButton
-          toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
-        />
       </main>
+      {settingsOpen && <SettingsPage close={() => setSettingsOpen(false)} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} />}
+      <Toaster
+        position="top-center"
+        className="toaster group !absolute"
+        offset={{ top: 16 }}
+        mobileOffset={{ top: 12, left: 16, right: 16 }}
+        visibleToasts={4}
+        duration={4000}
+        closeButton
+        toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
+      />
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette openSettings={openSettings} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette openSettings={openSettings} closeSettings={settingsOpen ? () => setSettingsOpen(false) : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { setSettingsOpen(false); setChangesOpen(true); }} openPullRequest={() => { setSettingsOpen(false); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
-    </div>
+      </TooltipProvider>
+    </SidebarProvider>
   );
 }
