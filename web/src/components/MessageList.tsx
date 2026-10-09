@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { Keys } from "@/components/PianoMark";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -16,6 +15,7 @@ type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 import { cn } from "cn";
 import { Markdown } from "@/components/Markdown";
 import { abbrevHome, clamp } from "@/lib/format";
+import { type MessageError, messageError } from "@/lib/messageError";
 import { disclosureRow } from "@/lib/styles";
 import { messageAnchorId, STICK_EVENT } from "@/lib/transcript";
 
@@ -106,14 +106,14 @@ export function MessageList({ messages, pending, tools, working = false, placeho
         )}
         {/* Adjacent tool rows keep one gap, even when the previous message also had text. */}
         <div className="flex flex-col gap-6 [&>[data-ends-with-tools]+[data-tools-only]]:-mt-3">
-          {messages.map((m) => {
+          {messages.map((m, index) => {
             if (m.role === "tool_result" && m.toolCallId && messages.some((x) => x.toolCalls?.some((c) => c.id === m.toolCallId))) {
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            return <Message key={m.id} msg={m} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
+            return <Message key={m.id} msg={m} error={m.errorMessage ? messageError(m, messages.slice(0, index), results, tools) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
           })}
-          {pending && <Message msg={pending} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
+          {pending && <Message msg={pending} error={messageError(pending, messages, results, tools)} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
           {working && (
             <Row glyph={<Keys playing className="text-brand" />}>
               <span className="sr-only">Pi is working</span>
@@ -151,18 +151,19 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, results, tools, active, terminalRuns, streaming }: { msg: RenderMsg; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
+function Message({ msg, error, results, tools, active, terminalRuns, streaming }: { msg: RenderMsg; error?: MessageError; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
   if (msg.subagent) return <SubagentCardView card={msg.subagent} content={msg.text} markdown={msg.role === "context"} terminalStatus={msg.subagent.kind === "delegation" && msg.subagent.runId ? terminalRuns.get(msg.subagent.runId) : undefined} />;
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
   if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
     // Pi starts a message before its first visible text or tool block arrives.
     // An empty article would still consume the transcript's flex gap.
-    if (!msg.text && !msg.errorMessage && !msg.toolCalls?.length) return null;
+    if (!msg.text && !error && !msg.toolCalls?.length) return null;
     return (
-      <article
+      <>
+      {(msg.text || !!msg.toolCalls?.length) && <article
         id={streaming ? undefined : messageAnchorId(msg.id)}
-        data-tools-only={!msg.text && !msg.errorMessage && msg.toolCalls?.length ? "" : undefined}
+        data-tools-only={!msg.text && msg.toolCalls?.length ? "" : undefined}
         data-ends-with-tools={msg.toolCalls?.length ? "" : undefined}
         className="group/reply flex flex-col gap-6 rounded-2xl"
       >
@@ -173,17 +174,43 @@ function Message({ msg, results, tools, active, terminalRuns, streaming }: { msg
             {!streaming && !msg.toolCalls?.length && <CopyResponse text={msg.text} />}
           </Row>
         )}
-        {msg.errorMessage && <Alert variant="destructive" className="ml-7 w-auto"><AlertDescription className="break-words">{msg.stopReason}: {msg.errorMessage}</AlertDescription></Alert>}
         {!!msg.toolCalls?.length && (
           <div className="flex flex-col gap-3">
-            {msg.toolCalls.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} terminalRuns={terminalRuns} running={active.has(tc.id) || (!!streaming && !results.has(tc.id))} />)}
+            {msg.toolCalls.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} terminalRuns={terminalRuns} running={active.has(tc.id) || (!!streaming && !results.has(tc.id) && !tools[tc.id])} />)}
           </div>
         )}
-      </article>
+      </article>}
+      {error && <ErrorMessage error={error} id={!streaming && !msg.text && !msg.toolCalls?.length ? messageAnchorId(msg.id) : undefined} />}
+      </>
     );
   }
   // An orphan result: its call never reached us.
   return <Tool call={{ id: msg.toolCallId ?? msg.id, name: msg.toolName ?? "tool", args: "" }} result={msg} executions={tools} terminalRuns={terminalRuns} running={false} />;
+}
+
+function ErrorMessage({ error, id }: { error: MessageError; id?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    // A transcript error is a standalone row, not a boxed callout inside an assistant message.
+    <div id={id}>
+      <Row glyph={<span className="text-err">!</span>}>
+        <p role="alert" className="break-words text-err">{error.summary}</p>
+        {error.details && (
+          <Collapsible open={open} onOpenChange={setOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="xs" className="-ml-2">
+                Error details
+                <DisclosureChevron open={open} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="disclosure-content">
+              <pre className="whitespace-pre-wrap break-words text-sm text-ink-2">{error.details}</pre>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </Row>
+    </div>
+  );
 }
 
 /** A prompt shows at most this many lines until opened; pasted logs and long briefs stay out of the way. */
