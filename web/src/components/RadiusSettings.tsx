@@ -8,14 +8,18 @@ import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-async function setupRequest(action?: "configure-mcp" | "install-web-search", signal?: AbortSignal): Promise<RadiusSetupState> {
+type SetupAction = "configure-mcp" | "install-web-search" | "remove-mcp" | "uninstall-web-search";
+type Removal = { action: "remove-mcp" | "uninstall-web-search"; key: string };
+
+async function setupRequest(action?: SetupAction, signal?: AbortSignal, removalKey?: string): Promise<RadiusSetupState> {
   const response = await fetch("/api/settings/radius", { signal, ...(action ? {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }),
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, removalKey }),
   } : {}) });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error ?? "Could not load Radius setup.");
@@ -32,6 +36,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const [signingOut, setSigningOut] = useState(false);
   const [refreshing, setRefreshing] = useState(true);
   const [login, setLogin] = useState<string>();
+  const [removal, setRemoval] = useState<Removal>();
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -66,13 +71,14 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not sign out. Try again."); }
     finally { setSigningOut(false); }
   };
-  const act = async (action: "configure-mcp" | "install-web-search") => {
+  const act = async (action: SetupAction, removalKey?: string) => {
     setBusy(true); setActionError("");
     try {
-      setState(await setupRequest(action));
+      setState(await setupRequest(action, undefined, removalKey));
       if (action === "configure-mcp") toast.success("Radius MCP configured. Start a new session to use it.");
+      if (action === "remove-mcp") toast.success("Radius MCP removed for new sessions.");
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not complete setup. Refresh before retrying."); }
-    finally { setBusy(false); setRevision(value => value + 1); }
+    finally { setBusy(false); setRemoval(undefined); setRevision(value => value + 1); }
   };
   const radius = providers.find(provider => provider.id === "radius");
   const installing = state?.installation.status === "running";
@@ -115,8 +121,10 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
             <ItemDescription className="line-clamp-none">Give Pi access to Radius tools using the same sign-in, without a second OAuth flow.</ItemDescription>
             {state.mcp.detail && <p className="text-sm text-muted-foreground">{state.mcp.detail}</p>}
           </ItemContent>
-          <ItemActions>{state.mcp.status === "ready" ? <Badge variant="secondary">Configured</Badge>
-            : <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !radius?.signedIn} onClick={() => void act("configure-mcp")}>Set up MCP</Button>}</ItemActions>
+          <ItemActions className="flex-wrap">{state.mcp.status === "ready" ? <Badge variant="secondary">Configured</Badge>
+            : <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !radius?.signedIn} onClick={() => void act("configure-mcp")}>Set up MCP</Button>}
+            {state.mcp.removalKey && <Button variant="outline" size="sm" disabled={disabled} onClick={() => setRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })}>Remove MCP</Button>}
+          </ItemActions>
         </Item>
         <Item variant="outline" role="listitem" className="flex-col items-start sm:flex-row sm:items-center">
           <ItemContent className="w-full min-w-0 sm:w-auto">
@@ -125,15 +133,38 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
             <p className="text-sm text-muted-foreground">An organization owner or admin must enable Web search separately in Radius.</p>
             {state.webSearch.detail && <p className="text-sm text-muted-foreground">{state.webSearch.detail}</p>}
           </ItemContent>
-          <ItemActions>{installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />Installing…</Button>
-            : state.webSearch.status === "ready" ? <Badge variant="secondary" role="status">Installed</Badge>
-            : <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !radius?.signedIn} onClick={() => void act("install-web-search")}>Install web search</Button>}</ItemActions>
+          <ItemActions className="flex-wrap">{installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
+            : <>
+              {state.webSearch.status === "ready" ? <Badge variant="secondary" role="status">Installed</Badge>
+                : <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !radius?.signedIn} onClick={() => void act("install-web-search")}>Install web search</Button>}
+              {state.webSearch.removalKey && <Button variant="outline" size="sm" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })}>Uninstall extension</Button>}
+            </>}
+          </ItemActions>
         </Item>
       </ItemGroup>}
-    {state?.installation.status === "error" && <Alert variant="destructive"><AlertTitle>Web search was not installed</AlertTitle><AlertDescription>{state.installation.detail}</AlertDescription></Alert>}
+    {state?.installation.status === "error" && <Alert variant="destructive"><AlertTitle>{state.installation.action === "uninstall" ? "Extension was not uninstalled" : "Web search was not installed"}</AlertTitle><AlertDescription>{state.installation.detail}</AlertDescription></Alert>}
     <div className="flex flex-wrap items-center gap-2">
       <Button asChild variant="link" size="sm"><a href="https://radius.earendil.com/docs/extensions" target="_blank" rel="noopener noreferrer">Radius setup guide<ExternalLinkIcon data-icon="inline-end" /></a></Button>
     </div>
+    <Dialog open={!!removal} onOpenChange={open => { if (!open && !busy) setRemoval(undefined); }}>
+      <DialogContent className="sm:max-w-md" showCloseButton={false} onInteractOutside={event => event.preventDefault()}>
+        <DialogHeader>
+          <DialogTitle>{removal?.action === "remove-mcp" ? "Remove Radius MCP?" : "Uninstall web-search extension?"}</DialogTitle>
+          <DialogDescription>
+            {removal?.action === "remove-mcp"
+              ? "Removes the Radius MCP entry from your Pi configuration on this machine. Your sign-in and web-search extension stay unchanged."
+              : "Uninstalls the Radius web-search package from your Pi setup on this machine. Your sign-in and MCP configuration stay unchanged."}
+            {" "}Existing sessions are not reloaded. Start a new session to use the updated setup.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={() => setRemoval(undefined)}>Cancel</Button>
+          <Button variant="destructive" disabled={disabled} onClick={() => { if (removal) void act(removal.action, removal.key); }}>
+            {busy && <Spinner data-icon="inline-start" />}{removal?.action === "remove-mcp" ? "Remove MCP" : "Uninstall extension"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     {login && <ProviderLoginDialog key={login} initialProvider="radius" providers={providers} close={() => { setLogin(undefined); setRevision(value => value + 1); }} signedIn={refreshProviders} />}
   </>;
 }

@@ -14,6 +14,13 @@ for the OS account running Piano, not a browser account or an outcome Project.
    and settings persistence. **Installed** means a global package declaration and
    package manifest were observed, not that search has been authorized or used.
 
+**Remove MCP** and **Uninstall extension** undo steps 2 and 3 after confirmation.
+They work even while signed out, affect only the matching global Radius entry/package,
+and do not sign you out or remove the other tool. Uninstall delegates to `pi remove`,
+removing the global package declaration and Pi-managed installation; externally managed
+copies are not deleted. Existing sessions are not reloaded; start a new session for the
+updated setup. A changed configuration requires refreshing and confirming again.
+
 A Radius organization owner/admin must enable **Web search** separately in Radius.
 Installation does not change organization permissions or billing settings. The
 extension is optional to Radius itself: MCP also offers a web-search operation.
@@ -43,12 +50,14 @@ apply configuration to them. Do not send `/reload` as a Piano prompt: stock Pi
   exposure, tool filters and unrelated settings. Old MCP OAuth settings and an
   Authorization header are removed so provider authentication takes effect.
   Conflicting names, duplicate endpoints, malformed configuration, disabled/hidden
-  servers and custom package filters require attention in Pi instead of being
-  overwritten. Project overrides remain Pi's responsibility; this page does not
+  servers and custom package filters are not silently overwritten by setup. A single
+  recognized disabled/filtered entry can still be explicitly removed. Project overrides
+  remain Pi's responsibility; this page does not
   claim to describe every folder's effective setup.
 - Opening the page never installs packages or connects MCP servers. Installations
   require an explicit click, survive navigation/disconnection, deduplicate concurrent
-  requests and have a two-minute deadline. Timeout/shutdown terminates only the owned
+  requests and have a two-minute deadline. Uninstalls use the same lifecycle and reject
+  a competing install until completion. Timeout/shutdown terminates only the owned
   installer process group. Errors are sanitized; retry rereads Pi's actual settings.
   Existing pinned sources are retained. No arbitrary URL/package/command is accepted
   by the API. Restart loses in-memory operation messages, not persisted Pi setup.
@@ -62,18 +71,22 @@ apply configuration to them. Do not send `/reload` as a Piano prompt: stock Pi
 Acceptance: all three steps are reachable from one quiet settings section; OAuth is
 reused for MCP; package installation is explicit and failure-safe; state survives
 navigation without duplicating work; unrelated settings and credentials stay private.
-Relevant invariants: INV-01/02/04/07/09/11/12.
+Relevant invariants: INV-01/02/04/07/09/10/11/12.
 
 - `test/RadiusSetup.test.ts`: real Pi config/package readback, provider-auth migration,
   alternate names, unrelated data preservation, malformed/conflicting/disabled states,
   pinned package repair, concurrent observers, sanitized failure/retry, false-success
-  rejection, custom-filter preservation and shutdown cancellation. Existing
+  rejection, custom-filter preservation and shutdown cancellation. Removal tests bind
+  confirmation to the reviewed configuration, refuse stale/conflicting targets, preserve
+  credentials and unrelated entries, and serialize installs against uninstalls. Existing
   `ProviderLogin` tests cover OAuth interaction/persistence and terminal claims.
 - `test/browser-radius-setup.mjs`: agent-browser against an isolated scratch backend
   and Vite; real config writes and Pi install CLI with a controlled fake npm executable.
   Only the browser OAuth HTTP boundary is simulated. Checks sign-in, MCP setup,
   install navigation/duplicate requests, failure/retry, reload readback, Mod+K,
-  request failure recovery, and mobile descriptions without truncation.
+  request failure recovery, and mobile descriptions without truncation. Removal checks
+  cover cancellation, changed-target rejection, signed-out cleanup, real Pi remove CLI
+  through fake npm, uninstall failure/retry and duplicate/opposing requests.
 - Baseline gates: `npm test` passed all 130 tests; `npm run typecheck` and
   `npm run lint` passed. Changes were tested on base `f523ee6` plus this feature;
   command output and the tested patch are retained with the evidence.
@@ -81,6 +94,11 @@ Relevant invariants: INV-01/02/04/07/09/11/12.
   headless Chromium on Linux; final browser ports 7181/7182 because another task
   owned 7171/7172. Desktop 1280×900 and mobile dark 390×844. No user registry, real
   credentials, package downloads or paid model calls were used.
+
+Removal follow-up: verified on `f8db26c` plus the removal changes, with the same
+Node/Pi environment and scratch ports 7171/7172. All 132 module tests, typecheck,
+lint and the extended browser journey passed. Evidence is retained under
+`/tmp/piano-radius-removal-evidence/`; no real credentials or packages were removed.
 
 This verifies the setup boundary, not a real Radius authorization, live MCP tool call,
 organization search enablement or the published extension's runtime behavior. No

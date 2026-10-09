@@ -221,6 +221,8 @@ export const AppRouter = HttpRouter.use((router) =>
           const body = yield* readBody;
           if (body.action === "configure-mcp") state = yield* setup.configureMcp;
           else if (body.action === "install-web-search") state = yield* setup.installWebSearch;
+          else if (body.action === "remove-mcp" && typeof body.removalKey === "string") state = yield* setup.removeMcp(body.removalKey);
+          else if (body.action === "uninstall-web-search" && typeof body.removalKey === "string") state = yield* setup.uninstallWebSearch(body.removalKey);
           else return json({ error: "Invalid Radius setup action." }, 400);
         }
         return HttpServerResponse.text(JSON.stringify({ state }), { contentType: "application/json", headers: { "cache-control": "no-store" } });

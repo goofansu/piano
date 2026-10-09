@@ -12,12 +12,12 @@ const URL = "https://radius.pi.dev/mcp";
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringify(value, null, 2));
 type Installer = typeof RadiusSetupEnvironment.Service.install;
-async function fixture(run: (setup: RadiusSetup["Service"], directory: string) => Effect.Effect<void, unknown>, install?: Installer) {
+async function fixture(run: (setup: RadiusSetup["Service"], directory: string) => Effect.Effect<void, unknown>, install?: Installer, uninstall?: Installer) {
   const directory = mkdtempSync(join(tmpdir(), "piano-radius-"));
   try {
     await Effect.runPromise(Effect.gen(function* () { yield* run(yield* RadiusSetup, directory); }).pipe(
       Effect.provide(RadiusSetupLive), Effect.scoped,
-      Effect.provideService(RadiusSetupEnvironment, { directory: () => directory, install: install ?? (async () => { throw new Error("Unexpected install"); }) }),
+      Effect.provideService(RadiusSetupEnvironment, { directory: () => directory, install: install ?? (async () => { throw new Error("Unexpected install"); }), uninstall: uninstall ?? (async () => { throw new Error("Unexpected uninstall"); }) }),
     ));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
@@ -150,4 +150,82 @@ test("INV-02: stopping the service aborts only its installer and waits for clean
     started();
   }));
   assert.equal(aborted, true);
+});
+
+test("INV-01/10/11: confirmed MCP removal targets the reviewed entry, preserves credentials and refuses stale identities", async () => {
+  await fixture((setup, directory) => Effect.gen(function* () {
+    const file = join(directory, "mcp.json");
+    const other = { command: "do-not-run", env: { TOKEN: "private-other" } };
+    const auth = { radius: { type: "oauth", access: "private-access", refresh: "private-refresh" } };
+    save(join(directory, "auth.json"), auth);
+    save(file, { custom: "keep", mcpServers: { personal: { url: URL, enabled: false }, other } });
+    const reviewed = (yield* setup.state).mcp.removalKey!;
+    assert(reviewed);
+    // Another tab/editor changed the target after opening the confirmation.
+    save(file, { custom: "keep", mcpServers: { personal: { url: URL, exposure: "hidden" }, other } });
+    assert.equal((yield* Effect.result(setup.removeMcp(reviewed)))._tag, "Failure");
+    assert(json(file).mcpServers.personal);
+    const latest = (yield* setup.state).mcp.removalKey!;
+    assert.notEqual(latest, reviewed);
+    assert.equal((yield* setup.removeMcp(latest)).mcp.status, "missing");
+    assert.deepEqual(json(file), { custom: "keep", mcpServers: { other } });
+    assert.deepEqual(json(join(directory, "auth.json")), auth);
+    assert.equal((yield* Effect.result(setup.removeMcp(latest)))._tag, "Failure");
+    save(file, { mcpServers: { radius: { url: "https://unrelated.invalid" } } });
+    const before = readFileSync(file, "utf8");
+    assert.equal((yield* Effect.result(setup.removeMcp(latest)))._tag, "Failure");
+    assert.equal(readFileSync(file, "utf8"), before);
+    writeFileSync(file, "{malformed");
+    assert.equal((yield* Effect.result(setup.removeMcp(latest)))._tag, "Failure");
+    assert.equal(readFileSync(file, "utf8"), "{malformed");
+  }));
+});
+
+test("INV-02/10: uninstall is confirmation-bound, retryable and serialized with installs without touching sign-in or MCP", async () => {
+  let calls = 0;
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await fixture((setup, directory) => Effect.gen(function* () {
+    yield* Effect.promise(() => installed(`${PACKAGE}@1.0.0`, directory));
+    const file = join(directory, "settings.json");
+    const auth = { radius: { type: "oauth", access: "private-access" } };
+    save(join(directory, "auth.json"), auth);
+    yield* setup.configureMcp;
+    const mcp = json(join(directory, "mcp.json"));
+    const stale = (yield* setup.state).webSearch.removalKey!;
+    // Filters and pinned version are part of the review identity. Explicit removal
+    // may remove a filtered package, while installation still refuses to reset it.
+    save(file, { defaultThinkingLevel: "high", packages: ["/keep", { source: `${PACKAGE}@1.0.0`, extensions: [] }] });
+    assert.equal((yield* Effect.result(setup.uninstallWebSearch(stale)))._tag, "Failure");
+    const key = (yield* setup.state).webSearch.removalKey!;
+    assert.equal((yield* setup.uninstallWebSearch(key)).installation.action, "uninstall");
+    const failed = yield* settled(setup);
+    assert.equal(failed.installation.status, "error");
+    assert(!JSON.stringify(failed).includes("private-"));
+    yield* setup.uninstallWebSearch(key);
+    assert.equal((yield* settled(setup)).installation.status, "error", "successful exit without removing the declaration is not success");
+    yield* setup.uninstallWebSearch(key);
+    assert.equal((yield* setup.uninstallWebSearch(key)).installation.status, "running");
+    assert.equal((yield* Effect.result(setup.installWebSearch))._tag, "Failure");
+    release();
+    const done = yield* settled(setup);
+    assert.equal(done.installation.status, "success");
+    assert.equal(done.webSearch.status, "missing");
+    assert.equal(done.webSearch.removalKey, undefined);
+    assert.equal(calls, 3);
+    assert.deepEqual(json(file), { defaultThinkingLevel: "high", packages: ["/keep"] });
+    assert.deepEqual(json(join(directory, "auth.json")), auth);
+    assert.deepEqual(json(join(directory, "mcp.json")), mcp);
+    assert.equal((yield* Effect.result(setup.uninstallWebSearch(key)))._tag, "Failure");
+  }), undefined, async (source, directory) => {
+    assert.equal(source, `${PACKAGE}@1.0.0`);
+    calls++;
+    if (calls === 1) throw new Error("private-package-error");
+    if (calls === 2) return;
+    await gate;
+    const settings = SettingsManager.create(directory, directory, { projectTrusted: false });
+    new DefaultPackageManager({ cwd: directory, agentDir: directory, settingsManager: settings }).removeSourceFromSettings(source);
+    await settings.flush();
+    rmSync(join(directory, "npm/node_modules/@earendil-works/pi-radius-web-search"), { recursive: true });
+  });
 });

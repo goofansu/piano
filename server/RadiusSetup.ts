@@ -1,6 +1,7 @@
 /** Machine-wide Radius onboarding, not an MCP client. Pi owns auth, configuration
  * parsing and package installation. Nothing here mutates running sessions. */
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,21 +10,22 @@ import { Context, Data, Effect, Layer } from "effect";
 // Pi 1.1.0 has no public provider-auth configuration writer. Keep this pinned
 // compatibility dependency here; RadiusSetup tests exercise the installed helper.
 // Do not reproduce Pi's config loader or move configuration into Registry (INV-01/12).
-import { addMcpServerConfig, loadMcpConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
+import { addMcpServerConfig, loadMcpConfig, removeMcpServerConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
 import type { RadiusSetupState, RadiusSetupStep } from "../shared/radius.ts";
 import { agentDir } from "./PiEnv.ts";
 
 const RADIUS_MCP_URL = "https://radius.pi.dev/mcp";
 const PACKAGE = "npm:@earendil-works/pi-radius-web-search";
 const isWebSearch = (source: string) => source === PACKAGE || source.startsWith(`${PACKAGE}@`);
+const removalKey = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** No shell interpolation, arbitrary package input, installer output or credentials
  * cross the HTTP boundary. A disconnected browser does not cancel the install. */
-function install(source: string, directory: string, signal: AbortSignal): Promise<void> {
+function runPackage(action: "install" | "remove", source: string, directory: string, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const cli = fileURLToPath(new URL("./bundle/cli.js", import.meta.resolve("@earendil-works/pi-coding-agent")));
     mkdirSync(directory, { recursive: true });
-    const child = spawn(process.execPath, [cli, "install", source, "--no-approve"], {
+    const child = spawn(process.execPath, [cli, action, source, "--no-approve"], {
       cwd: directory, env: { ...process.env, PI_CODING_AGENT_DIR: directory }, detached: true, stdio: "ignore",
     });
     const stop = () => {
@@ -44,19 +46,26 @@ function install(source: string, directory: string, signal: AbortSignal): Promis
 export const RadiusSetupEnvironment = Context.Reference<{
   directory: () => string;
   install: (source: string, directory: string, signal: AbortSignal) => Promise<void>;
-}>("piano/RadiusSetupEnvironment", { defaultValue: () => ({ directory: agentDir, install }) });
+  uninstall: (source: string, directory: string, signal: AbortSignal) => Promise<void>;
+}>("piano/RadiusSetupEnvironment", { defaultValue: () => ({
+  directory: agentDir,
+  install: (source, directory, signal) => runPackage("install", source, directory, signal),
+  uninstall: (source, directory, signal) => runPackage("remove", source, directory, signal),
+}) });
 
 export class RadiusSetupError extends Data.TaggedError("RadiusSetupError")<{ readonly detail: string }> {}
 export class RadiusSetup extends Context.Service<RadiusSetup, {
   readonly state: Effect.Effect<RadiusSetupState>;
   readonly configureMcp: Effect.Effect<RadiusSetupState, RadiusSetupError>;
   readonly installWebSearch: Effect.Effect<RadiusSetupState, RadiusSetupError>;
+  readonly removeMcp: (key: string) => Effect.Effect<RadiusSetupState, RadiusSetupError>;
+  readonly uninstallWebSearch: (key: string) => Effect.Effect<RadiusSetupState, RadiusSetupError>;
 }>()("piano/RadiusSetup") {}
 
 export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* () {
   const environment = yield* RadiusSetupEnvironment;
   let installation: RadiusSetupState["installation"] = { status: "idle" };
-  let pending: { abort: AbortController; done: Promise<void> } | undefined;
+  let pending: { action: "install" | "uninstall"; key?: string; abort: AbortController; done: Promise<void> } | undefined;
   const directory = environment.directory();
   const settings = () => {
     const manager = SettingsManager.create(directory, directory, { projectTrusted: false });
@@ -77,14 +86,15 @@ export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* ()
   const mcpStep = (): RadiusSetupStep => {
     try {
       const entry = mcp();
+      const identity = entry ? { removalKey: removalKey([entry.name, entry.config]) } : {};
       if (settings().getGlobalSettings().extensions?.includes("-builtin:mcp") || entry?.config.enabled === false || entry?.config.exposure === "hidden") {
-        return { status: "blocked", detail: "Radius MCP is disabled or hidden in Pi. Enable it in Pi before continuing." };
+        return { status: "blocked", ...identity, detail: "Radius MCP is disabled or hidden in Pi. Enable it in Pi before continuing." };
       }
       if (!entry) return { status: "missing" };
       const config = entry.config;
       const configured = "url" in config && config.auth?.provider === "radius" && !config.oauth
         && !Object.keys(config.headers ?? {}).some(key => key.toLowerCase() === "authorization");
-      return { status: configured ? "ready" : "missing" };
+      return { status: configured ? "ready" : "missing", ...identity };
     } catch {
       return { status: "blocked", detail: "Check Pi's global MCP configuration for invalid or conflicting entries before continuing." };
     }
@@ -103,17 +113,52 @@ export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* ()
       try { installed = JSON.parse(readFileSync(join(path, "package.json"), "utf8")).name === "@earendil-works/pi-radius-web-search"; }
       catch { /* Incomplete installation: offer repair, not a success label. */ }
     }
-    return { source, filtered: typeof entry !== "string", installed };
+    return { source, filtered: typeof entry !== "string", installed, removalKey: removalKey(entry) };
   };
   const webSearchStep = (): RadiusSetupStep => {
     try {
       const entry = packageState();
-      if (entry?.filtered) return { status: "blocked", detail: "This package has custom resource filters. Manage it with Pi to preserve your choices." };
-      return { status: entry?.installed ? "ready" : "missing" };
+      const identity = entry ? { removalKey: entry.removalKey } : {};
+      if (entry?.filtered) return { status: "blocked", ...identity, detail: "This package has custom resource filters. Manage it with Pi to preserve your choices." };
+      return { status: entry?.installed ? "ready" : "missing", ...identity };
     } catch { return { status: "blocked", detail: "Could not read Pi's package settings. Check them before installing." }; }
   };
   const snapshot = (): RadiusSetupState => ({ mcp: mcpStep(), webSearch: webSearchStep(), installation: { ...installation } });
   yield* Effect.addFinalizer(() => Effect.promise(async () => { pending?.abort.abort(); await pending?.done; }));
+  const changePackage = (action: "install" | "uninstall", key?: string) => Effect.try({
+    try: () => {
+      // Duplicate requests reattach; opposing operations must never race on disk.
+      if (pending) {
+        if (pending.action !== action || pending.key !== key) throw new Error("Package operation in progress.");
+        return snapshot();
+      }
+      const entry = packageState();
+      if (action === "uninstall") {
+        if (!entry || !key || entry.removalKey !== key) throw new Error("Package changed since confirmation.");
+      } else {
+        const step = webSearchStep();
+        if (step.status === "blocked") throw new Error(step.detail);
+        if (step.status === "ready") { installation = { action, status: "success" }; return snapshot(); }
+      }
+      const source = entry?.source ?? PACKAGE;
+      const abort = new AbortController();
+      installation = { action, status: "running" };
+      const timer = setTimeout(() => abort.abort(), 120_000);
+      const done = (async () => {
+        try {
+          await Promise.resolve().then(() => environment[action](source, directory, abort.signal));
+          const verified = action === "install" ? webSearchStep().status === "ready" : !packageState();
+          if (abort.signal.aborted || !verified) throw new Error("Package operation not verified.");
+          installation = { action, status: "success" };
+        } catch {
+          installation = { action, status: "error", detail: `${action === "install" ? "Installation" : "Uninstallation"} did not complete. Check your network and Pi package settings, then refresh before retrying.` };
+        } finally { clearTimeout(timer); pending = undefined; }
+      })();
+      pending = { action, key, abort, done };
+      return snapshot();
+    },
+    catch: () => new RadiusSetupError({ detail: "Could not change the web-search package. Finish any operation in progress and refresh before retrying." }),
+  });
   return RadiusSetup.of({
     state: Effect.sync(snapshot),
     configureMcp: Effect.try({
@@ -137,31 +182,17 @@ export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* ()
       },
       catch: () => new RadiusSetupError({ detail: "Could not configure Radius MCP. Check Pi's global configuration and file permissions, then refresh." }),
     }),
-    installWebSearch: Effect.try({
+    installWebSearch: changePackage("install"),
+    uninstallWebSearch: key => changePackage("uninstall", key),
+    removeMcp: key => Effect.try({
       try: () => {
-        // Claim before starting async work. Duplicate requests reattach, never install twice.
-        if (pending) return snapshot();
-        const step = webSearchStep();
-        if (step.status === "blocked") throw new Error(step.detail);
-        if (step.status === "ready") { installation = { status: "success" }; return snapshot(); }
-        // A missing pinned package is repaired at its existing version, not upgraded.
-        const source = packageState()?.source ?? PACKAGE;
-        const abort = new AbortController();
-        installation = { status: "running" };
-        const timer = setTimeout(() => abort.abort(), 120_000);
-        const done = (async () => {
-          try {
-            await Promise.resolve().then(() => environment.install(source, directory, abort.signal));
-            if (abort.signal.aborted || webSearchStep().status !== "ready") throw new Error("Installation not verified.");
-            installation = { status: "success" };
-          } catch {
-            installation = { status: "error", detail: "Installation did not complete. Check your network and Pi package settings, then retry." };
-          } finally { clearTimeout(timer); pending = undefined; }
-        })();
-        pending = { abort, done };
+        const entry = mcp();
+        if (!entry || !key || removalKey([entry.name, entry.config]) !== key) throw new Error("MCP configuration changed since confirmation.");
+        removeMcpServerConfig(join(directory, "mcp.json"), entry.name);
+        if (mcp()) throw new Error("MCP removal not verified.");
         return snapshot();
       },
-      catch: () => new RadiusSetupError({ detail: "Could not install web search. Check Pi's package settings, then refresh." }),
+      catch: () => new RadiusSetupError({ detail: "Could not remove Radius MCP. Its configuration may have changed. Refresh and confirm again." }),
     }),
   });
 }));

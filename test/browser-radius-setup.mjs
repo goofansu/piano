@@ -3,7 +3,7 @@
 // node test/browser-radius-setup.mjs <evidence-directory>
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -26,18 +26,19 @@ const packageSource = `npm:${packageName}`;
 const hold = join(root, 'hold'), fail = join(root, 'fail'), audit = join(root, 'audit.jsonl');
 const fakeNpm = join(root, 'npm.mjs');
 writeFileSync(fakeNpm, `
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 const args = process.argv.slice(2);
 if (args[0] === 'root') { console.log(${JSON.stringify(join(root, 'empty-global'))}); process.exit(0); }
 appendFileSync(${JSON.stringify(audit)}, JSON.stringify(args)+'\\n');
-if (args[0] !== 'install' || !args.includes(${JSON.stringify(packageName)})) process.exit(3);
+if (!['install','uninstall'].includes(args[0]) || !args.includes(${JSON.stringify(packageName)})) process.exit(3);
 const prefix = args[args.indexOf('--prefix')+1];
 if (prefix !== ${JSON.stringify(join(agent, 'npm'))}) process.exit(4);
 for (let n=0; existsSync(${JSON.stringify(hold)}) && n<600; n++) await delay(100);
 if (existsSync(${JSON.stringify(fail)})) { console.error('private-installer-token'); process.exit(1); }
 const dir = join(prefix, 'node_modules', ${JSON.stringify(packageName)});
+if(args[0] === 'uninstall') { rmSync(dir,{recursive:true,force:true}); process.exit(0); }
 mkdirSync(dir, {recursive:true});
 writeFileSync(join(dir,'package.json'), JSON.stringify({name:${JSON.stringify(packageName)},version:'1.0.0',pi:{extensions:[]}}));
 `);
@@ -161,6 +162,44 @@ try {
   // Persistence readback after a full browser reload, with no mock signed-in claim.
   await ab('reload');await button('Show sidebar');await button('Radius');await ab('wait','--text','Configured');
   assert.match(await ab('snapshot'),/Installed/);
+  // Removal works while signed out, requires confirmation, and never removes
+  // unrelated configuration. A changed target invalidates an open confirmation.
+  await ab('set','viewport','1280','900');
+  await button('Remove MCP');await ab('wait','--text','Remove Radius MCP?');
+  await capture('11-remove-mcp-confirm');await button('Cancel');
+  assert.deepEqual(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')),config);
+  await button('Remove MCP');await ab('wait','--text','Remove Radius MCP?');
+  config.mcpServers.radius.timeout=45;
+  writeFileSync(join(agent,'mcp.json'),JSON.stringify(config));
+  await ab('click','[role="dialog"] button:last-child');
+  await ab('wait','--text','Could not remove Radius MCP.');
+  assert(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')).mcpServers.radius);
+  await ab('wait','--fn',`!document.querySelector('[aria-label="Refresh setup"]').disabled`);
+  await button('Remove MCP');await ab('wait','--text','Remove Radius MCP?');await ab('click','[role="dialog"] button:last-child');
+  await ab('wait','--fn',`![...document.querySelectorAll('button')].some(button => button.textContent === 'Remove MCP')`);
+  assert.deepEqual(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')),{custom:'preserve',mcpServers:{other:{command:'do-not-start'}}});
+  assert.match(await ab('snapshot'),/Installed/);
+  await button('Uninstall extension');await ab('wait','--text','Uninstall web-search extension?');await button('Cancel');
+  assert.equal(readFileSync(audit,'utf8').trim().split('\n').length,2);
+  const beforeRemoval=await (await fetch(`${backendUrl}/api/settings/radius`)).json();
+  writeFileSync(hold,'');writeFileSync(fail,'');
+  await button('Uninstall extension');await ab('wait','--text','Uninstall web-search extension?');
+  await ab('set','viewport','390','844');await capture('12-uninstall-confirm-mobile');await ab('click','[role="dialog"] button:last-child');
+  await ab('wait','--text','Uninstalling…');
+  const action=body=>fetch(`${backendUrl}/api/settings/radius`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  assert.equal((await action({action:'install-web-search'})).status,409);
+  assert.equal((await action({action:'uninstall-web-search',removalKey:beforeRemoval.state.webSearch.removalKey})).status,200);
+  await capture('13-uninstalling');rmSync(hold);
+  await ab('wait','--text','Extension was not uninstalled');
+  assert(JSON.parse(readFileSync(join(agent,'settings.json'),'utf8')).packages.includes(packageSource));
+  assert(!await ab('snapshot').then(text=>text.includes('private-installer-token')));
+  rmSync(fail);await button('Uninstall extension');await ab('wait','--text','Uninstall web-search extension?');await ab('click','[role="dialog"] button:last-child');
+  await ab('wait','--fn',`![...document.querySelectorAll('button')].some(button => button.textContent.includes('Uninstall'))`);
+  const removedSettings=JSON.parse(readFileSync(join(agent,'settings.json'),'utf8'));
+  assert(!(removedSettings.packages??[]).includes(packageSource));assert.equal(removedSettings.defaultThinkingLevel,'high');
+  assert(!existsSync(join(agent,'npm/node_modules',packageName)));
+  assert.equal(readFileSync(audit,'utf8').trim().split('\n').length,4);
+  await capture('14-removed');
   assert.equal(await ab('errors'),'');
   writeFileSync(join(evidence,'observed-config.json'),JSON.stringify(config,null,2));
   writeFileSync(join(evidence,'installer-argv.jsonl'),readFileSync(audit));
