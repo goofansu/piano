@@ -59,6 +59,24 @@ function assertFullPageSettings() {
   assert.equal(evaluate(`!!document.querySelector('nav[aria-label="Sessions"]')?.checkVisibility()`), false, 'session navigation is hidden in Settings');
   assert.equal(evaluate('document.documentElement.scrollWidth > innerWidth'), false, 'Settings fits without horizontal overflow');
 }
+function cardStyle(selector) {
+  return evaluate(`(() => {
+    const style = getComputedStyle(document.querySelector(${JSON.stringify(selector)}));
+    return { radius: style.borderRadius, border: style.borderWidth, borderColor: style.borderColor,
+      shadow: style.boxShadow, background: style.backgroundColor };
+  })()`);
+}
+async function assertSettingsCard(sidebarWidth, sessionStyle) {
+  // Wait for the sidebar's width transition before checking the visible card geometry.
+  await until(`document.querySelector('[aria-label="Settings"] main').getBoundingClientRect().x === ${sidebarWidth}`);
+  assert.deepEqual(evaluate(`(() => {
+    const { x, y, width, height } = document.querySelector('[aria-label="Settings"] main').getBoundingClientRect();
+    return { x, y, width, height };
+  })()`), { x: sidebarWidth, y: 8, width: 1440 - sidebarWidth - 8, height: 984 }, 'Settings matches the session card geometry at 1440×1000');
+  assert.deepEqual(cardStyle('[aria-label="Settings"] main'), sessionStyle, 'Settings matches the session card radius, border, shadow and background');
+  assert.ok(evaluate(`document.querySelector('nav[aria-label="Settings sections"] button').checkVisibility()`), 'Settings navigation remains available in both expanded and icon modes');
+  assertFullPageSettings();
+}
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
@@ -67,12 +85,23 @@ try {
   }
   assert.equal((await fetch(`http://127.0.0.1:${backendPort}/api/commands`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, sessionId: 'not-running' }) })).status, 409, 'discovery does not open stopped sessions');
   ab('open', `http://127.0.0.1:${webPort}/new`);
+  ab('set', 'viewport', '1440', '1000');
   await until(`document.querySelector('[aria-label^="Model:"]')?.title.includes('alpha')`);
+  const sessionStyle = cardStyle('main');
+  assert.equal(sessionStyle.radius, '16px');
+  assert.equal(sessionStyle.border, '1px');
+  assert.notEqual(sessionStyle.shadow, 'none');
   await fill('Keep this draft');
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('wait', '--text', 'Providers');
   assert.equal(evaluate('location.pathname'), '/settings');
-  assertFullPageSettings();
+  await assertSettingsCard(288, sessionStyle);
+  capture('settings-desktop-expanded');
+  ab('find', 'role', 'button', 'click', '--name', 'Toggle sidebar', '--exact');
+  await assertSettingsCard(48, sessionStyle);
+  capture('settings-desktop-collapsed');
+  ab('find', 'role', 'button', 'click', '--name', 'Toggle sidebar', '--exact');
+  await assertSettingsCard(288, sessionStyle);
   ab('find', 'role', 'button', 'click', '--name', 'Sign in to Radius', '--exact');
   ab('wait', '--text', 'Sign in · radius');
   await until(`!!document.querySelector('#login-answer')`);
@@ -186,7 +215,7 @@ try {
   ab('find', 'role', 'button', 'click', '--name', 'Providers', '--exact');
   await until(`!document.querySelector('[role="dialog"]')`);
   assertFullPageSettings();
-  console.log('PASS: Settings sidebar/palette/mobile entry, OAuth resume/cancel, draft preservation, no login completion, both composers, live/probe discovery, keyboard and pointer acceptance, middle caret, literal prose, IME, stale response, Escape/abort, mobile newline and bounds');
+  console.log('PASS: Settings session-style card, sidebar collapse/expand, palette/mobile entry, OAuth resume/cancel, draft preservation, no login completion, both composers, live/probe discovery, keyboard and pointer acceptance, middle caret, literal prose, IME, stale response, Escape/abort, mobile newline and bounds');
 } finally {
   try { capture('final'); ab('close'); } catch {}
   backend.kill('SIGTERM'); frontend.kill('SIGTERM');

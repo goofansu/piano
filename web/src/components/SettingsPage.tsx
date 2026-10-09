@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function SettingsPage({ close, providersChanged }: { close: () => void; providersChanged: () => void }) {
@@ -48,20 +48,21 @@ export function SettingsPage({ close, providersChanged }: { close: () => void; p
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
     } finally { setSigningOut(undefined); }
   };
-  return <section aria-label="Settings" className="flex h-full w-full overflow-hidden">
-    <Sidebar>
-      <SidebarHeader className="h-16 flex-row items-center gap-2.5 px-4">
+  return <section aria-label="Settings" className="flex h-full w-full overflow-hidden [--sidebar-width:288px] [--sidebar-width-icon:48px]">
+    {/* Use the icon rail without inset's extra sidebar padding to match the session's 288/48px widths. */}
+    <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0">
+      <SidebarHeader className="h-16 flex-row items-center gap-2.5 px-4 group-data-[collapsible=icon]:px-2.5">
         <PianoMark />
-        <span className="text-lg font-semibold tracking-tight">Piano</span>
+        <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">Piano</span>
         <SidebarTrigger className="ml-auto md:hidden" aria-label="Hide settings navigation" />
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup className="px-3">
+        <SidebarGroup className="px-3 group-data-[collapsible=icon]:px-2">
           <SidebarGroupContent>
             <nav aria-label="Settings sections">
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton isActive aria-current="page" className="h-9 pointer-coarse:h-11" onClick={() => setOpenMobile(false)}>
+                  <SidebarMenuButton isActive aria-current="page" aria-label="Providers" tooltip="Providers" className="h-9 pointer-coarse:h-11" onClick={() => setOpenMobile(false)}>
                     <PlugIcon /><span>Providers</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -71,7 +72,8 @@ export function SettingsPage({ close, providersChanged }: { close: () => void; p
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-    <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-conversation">
+    {/* Keep the session main's exact card tokens, rather than SidebarInset's default radius/shadow. */}
+    <SidebarInset className="min-h-0 min-w-0 overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
       <header className="flex h-16 shrink-0 items-center gap-2 px-4">
         <Button variant="ghost" size="icon" aria-label="Back to session" onClick={close}><ArrowLeftIcon /></Button>
         <SidebarTrigger aria-label="Toggle sidebar" />
@@ -116,7 +118,7 @@ export function SettingsPage({ close, providersChanged }: { close: () => void; p
             </Item>)}</ItemGroup>}
         </section>
       </div>
-    </main>
+    </SidebarInset>
     {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} close={() => setLogin(undefined)} signedIn={refreshProviders} />}
   </section>;
 }
