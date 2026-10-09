@@ -291,9 +291,9 @@ interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew"
 type SessionTarget = { cwd: string; sessionId: string; title?: string };
 type SessionActions = ReturnType<typeof useSessionActions>;
 
-/** One session line, identical under a repository and under a project; only the trailing detail differs. */
-function SessionRow({ t, trailing, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
-  t: SessionTarget; trailing?: React.ReactNode; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
+/** A session title, with a second line only when its grouping needs location metadata. */
+function SessionRow({ t, metadata, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
+  t: SessionTarget; metadata?: React.ReactNode; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
   const checkoutMissing = state.session?.cwd === t.cwd && state.session.state.checkoutMissing;
   // Live host state comes from the `hosts` broadcast, which changes more often than the project list.
@@ -304,7 +304,7 @@ function SessionRow({ t, trailing, selected, disabled, hint, state, send, select
   return (
     <li
       style={reveal()}
-      className={cn(row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-conversation shadow-1")}
+      className={cn(metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-conversation shadow-1")}
     >
       <button
         type="button"
@@ -317,8 +317,11 @@ function SessionRow({ t, trailing, selected, disabled, hint, state, send, select
         <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
           {host?.streaming ? <Keys playing className="text-brand" /> : dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
         </span>
-        <span className={cn("min-w-0 flex-1 truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
-        {trailing}
+        {/* No standalone shadcn primitive fits the title and metadata inside this existing navigation button. */}
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className={cn("truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
+          {metadata && <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">{metadata}</span>}
+        </span>
         {host?.streaming ? <span className="sr-only">working</span> : done ? <span className="sr-only">done</span> : null}
         {hint && <span className="sr-only">{hint}</span>}
       </button>
@@ -346,12 +349,15 @@ function SessionRow({ t, trailing, selected, disabled, hint, state, send, select
 
 const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} className="size-4" />;
 
-const branchTrailing = (branch: string) => <BranchLabel branch={branch} className="max-w-[38%] shrink-0 text-sm text-ink-3" />;
-
-/** Rows listed away from their folder always name the owning folder, including worktree sessions. */
+/** Away from Folder grouping, keep the owning folder alongside any worktree branch. */
 function Location({ state, cwd }: { state: AppState; cwd: string }) {
   const owner = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
-  return <span className="max-w-[38%] shrink-0 truncate text-xs text-ink-3">{owner?.name ?? cwd.split("/").pop()}</span>;
+  const worktree = owner?.worktrees.find(w => w.path === cwd);
+  const branch = worktree && !worktree.root ? worktree.branch : null;
+  return <>
+    <span className={cn("min-w-0 truncate", branch && "max-w-1/2 shrink-0")}>{owner?.name ?? cwd.split("/").pop()}</span>
+    {branch && <><span aria-hidden>·</span><BranchLabel branch={branch} className="shrink" /></>}
+  </>;
 }
 
 const unavailableHint = (s: Pick<SessionReference, "unavailable">) => s.unavailable === "history" ? "History unavailable. Restore the Pi session file to open it."
@@ -365,7 +371,7 @@ function SessionList({ sessions, current, state, send, select, reveal, onProject
   return <>
     <ul className="flex flex-col gap-1">
       {sessions.map(s => (
-        <SessionRow key={sessionKey(s)} t={s} trailing={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
+        <SessionRow key={sessionKey(s)} t={s} metadata={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
           selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
           state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
       ))}
@@ -411,7 +417,7 @@ function OutcomeGroup({ project, sessions, current, open, onOpenChange, state, s
       <CollapsibleContent className="disclosure-content">
         {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
           {members.map(s => (
-            <SessionRow key={sessionKey(s)} t={s} trailing={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
+            <SessionRow key={sessionKey(s)} t={s} metadata={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
               selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
               state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
           ))}
@@ -460,9 +466,9 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           {project.sessions.map((t) => {
             // The branch is only news when the session runs somewhere other than the project root.
             const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
-            const trailing = t.branch && inWorktree ? branchTrailing(t.branch) : undefined;
+            const metadata = t.branch && inWorktree ? <BranchLabel branch={t.branch} /> : undefined;
             return (
-              <SessionRow key={t.sessionId} t={t} trailing={trailing} selected={current?.cwd === t.cwd && current.sessionId === t.sessionId}
+              <SessionRow key={t.sessionId} t={t} metadata={metadata} selected={current?.cwd === t.cwd && current.sessionId === t.sessionId}
                 state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
             );
           })}
