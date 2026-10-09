@@ -9,7 +9,7 @@ import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList } from "@/components/MessageList";
 import { sessionWorkspace } from "@/components/SessionActions";
 import { SessionHeader } from "@/components/SessionHeader";
-import { SessionPullRequestBadge, SessionPullRequestDialog } from "@/components/SessionPullRequest";
+import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -104,8 +104,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   return (
     <>
-      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)} openPullRequest={() => onPullRequestOpenChange(true)} pullRequest={<SessionPullRequestBadge value={pullRequest.value} />} />
-      {t?.sessionId && <SessionPullRequestDialog key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />}
+      <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)}
+        pullRequest={t?.sessionId && <SessionPullRequestControl key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />} />
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={sessionWorkspace(state)} session={t}
         onAsk={text => {
           if (!draftKey) return;

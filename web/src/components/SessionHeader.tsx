@@ -1,5 +1,5 @@
 import type { ClientCommand } from "@shared/wire";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
 import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevPath } from "@/lib/format";
 import type { AppState } from "@/store";
 
-export function SessionHeader({ state, send, onMenu, openNew, openProject, status, openChanges, openPullRequest, pullRequest }: {
+export function SessionHeader({ state, send, onMenu, openNew, openProject, status, openChanges, pullRequest }: {
   state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; openProject: (id: string) => void;
-  status: string; openChanges: () => void; openPullRequest: () => void; pullRequest: React.ReactNode;
+  status: string; openChanges: () => void; pullRequest: React.ReactNode;
 }) {
   const session = state.session;
   const { title, branch, sessionId, project } = currentSessionDetails(state);
@@ -31,22 +31,22 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
           {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal || project.name} onClick={() => openProject(project.id)}>{project.name}</button>}
           <h1 className="truncate text-sm font-medium" title={session ? title : undefined}>{session ? title : "New session"}</h1>
           {/* Plain workspace metadata has no dedicated UI primitive. */}
-          <div className="flex min-w-0 items-center gap-3 font-mono text-xs text-muted-foreground">
-            <p title={cwd} className="flex min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <p title={cwd} className="flex min-w-0 max-w-full font-mono text-xs text-muted-foreground">
               <span className="sr-only">Working directory: </span>
               {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
               <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
             </p>
-            {branch && <p title={branch} className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-1">
+            {branch && <p title={branch} className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-1 font-mono text-xs text-muted-foreground">
               <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
               <span className="sr-only">Git branch: </span>
               <span className="truncate">{branch}</span>
             </p>}
+            {pullRequest}
           </div>
         </> : <><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-28" /></>}
       </div>
       <span role="status" className="sr-only">{status}</span>
-      {pullRequest}
       <IconButton label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><PlusIcon /></IconButton>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
@@ -68,7 +68,6 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
-            <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon /> Pull request</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
