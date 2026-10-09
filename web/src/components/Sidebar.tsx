@@ -304,7 +304,7 @@ function SessionRow({ t, metadata, selected, disabled, hint, state, send, select
   return (
     <li
       style={reveal()}
-      className={cn(metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-conversation shadow-1")}
+      className={cn(metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-brand-soft hover:bg-brand-soft")}
     >
       <button
         type="button"
