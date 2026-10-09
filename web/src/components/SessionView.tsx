@@ -33,6 +33,7 @@ interface Props {
 
 export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, changesOpen, onChangesOpenChange, pullRequestOpen, onPullRequestOpenChange }: Props) {
   const t = state.session;
+  const input = state.pendingCreate;
   const checkoutMissing = !!t?.state.checkoutMissing;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const draftKey = t ? sessionKey(t) : undefined;
@@ -64,21 +65,30 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   ].filter(Boolean).join(" · ");
   const submission = t?.state.submission;
   // Sent but not yet in the transcript: created with a first message, submitting, or running.
-  const firstMessageOnItsWay = !!t && (!!t.starting || submission?.outcome === "submitting" || streaming);
-  const submissionText = submission ? {
+  const firstMessageOnItsWay = !!t && (submission?.outcome === "submitting" || streaming);
+  const inputText = input ? {
+    starting: "Starting…",
+    submitted: undefined,
+    handled: "Command handled.",
+    rejected: "Message rejected.",
+    uncertain: "Delivery uncertain — inspect the session list before deciding whether to send again. Piano will not resend automatically.",
+  }[input.outcome] : undefined;
+  const submissionText = inputText ?? (submission ? {
     submitting: "Submitting — waiting for Pi.",
     started: undefined, // Running/ready state already describes the work.
     queued: undefined, // The queue itself shows pending input.
     handled: "Command handled.",
     rejected: "Message rejected.",
     uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
-  }[submission.outcome] : undefined;
+  }[submission.outcome] : undefined);
 
   // Use the registered session reference, including non-Git or removed checkouts.
   const workspaceId = state.projects.flatMap(p => p.sessions).find(s => s.cwd === t?.cwd && s.sessionId === t?.sessionId)?.workspaceId;
   const pullRequest = useSessionPullRequest(workspaceId, t?.sessionId, streaming);
 
-  const status = !state.connected || (t !== null && !ready) ? "Reconnecting"
+  const status = input?.outcome === "starting" ? "Starting"
+    : !t && input ? "Delivery uncertain"
+    : !state.connected || (t !== null && !ready) ? "Reconnecting"
     : !t ? "Loading"
     : checkoutMissing ? "Read-only"
     : t.closedReason ? "Exited"
@@ -117,21 +127,21 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           <p className="break-words">{t.state.statsRefreshError}</p>
         </Banner>
       )}
-      {/* The transcript fades in over a skeleton of itself. The skeleton covers a session that is loading
-          or whose first message is on its way; a settled empty session shows its quiet placeholder. */}
+      {/* Submitted input renders immediately outside Pi's history. Only an ordinary
+          history load uses the skeleton; terminal input outcomes retain the original. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {t && (
+        {(t || input) && (
           <MessageList
-            key={sessionKey(t)}
             className="transcript-enter"
-            messages={t.messages}
-            pending={t.pending}
-            tools={t.tools}
-            working={streaming && !t.pending?.text}
+            messages={t?.messages ?? []}
+            pending={t?.pending ?? null}
+            submittedInput={input}
+            tools={t?.tools ?? {}}
+            working={streaming && !t?.pending?.text}
             placeholder={firstMessageOnItsWay ? undefined : "No messages yet."}
           />
         )}
-        <TranscriptSkeleton hidden={!!t && (t.messages.length > 0 || !!t.pending || !firstMessageOnItsWay)} />
+        {!input && <TranscriptSkeleton hidden={!!t && (t.messages.length > 0 || !!t.pending || !firstMessageOnItsWay)} />}
         {!state.connected && (
           <div role="status" className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center">
             <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2"><Spinner className="size-3.5" /> Reconnecting…</span>
@@ -147,7 +157,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         <section aria-label="Last input" role="status" className={cn("animate-in px-4 pt-2 text-sm fade-in-0 slide-in-from-bottom-1 md:px-6", submission?.outcome === "uncertain" || submission?.outcome === "rejected" ? "text-warning" : "text-ink-2")}>
           <div className="mx-auto max-w-3xl break-words">
             <p>{submissionText}</p>
-            {submission?.detail && <p className="mt-1">{submission.detail}</p>}
+            {(input?.detail ?? submission?.detail) && <p className="mt-1">{input?.detail ?? submission?.detail}</p>}
           </div>
         </section>
       )}
@@ -175,7 +185,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
         onTextAppend={(text) => { if (draftKey) onDraftAppend(draftKey, text); }}
         onRestoreQueue={() => send({ _tag: "act", action: { _tag: "restore_queue" } })}
-        disabled={!ready || !t}
+        disabled={!ready || !t || input?.outcome === "starting"}
         streaming={streaming}
         compacting={t?.state.isCompacting}
         onSend={(text, kind, attachments) => send({ _tag: "act", action: { _tag: kind === "steering" ? "steer" : "prompt", text, attachments }, start: startOptions() })}

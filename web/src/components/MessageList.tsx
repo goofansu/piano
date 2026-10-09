@@ -22,6 +22,8 @@ import { messageAnchorId, STICK_EVENT } from "@/lib/transcript";
 interface Props {
   messages: RenderMsg[];
   pending: RenderMsg | null;
+  /** Local first input awaiting authoritative history; not a transcript message. */
+  submittedInput?: Pick<RenderMsg, "text" | "attachments"> | null;
   tools: Record<string, ToolExecution>;
   /** Pi is working and no reply text has arrived yet: the keys play in a pending row. */
   working?: boolean;
@@ -35,7 +37,7 @@ interface Props {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, tools, working = false, placeholder, className }: Props) {
+export function MessageList({ messages, pending, submittedInput, tools, working = false, placeholder, className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -44,7 +46,7 @@ export function MessageList({ messages, pending, tools, working = false, placeho
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [messages, pending, tools, working]);
+  }, [messages, pending, submittedInput, tools, working]);
   // Content can grow without a scroll event (a prompt opens, output expands). That only
   // changes whether the bottom is in view; it never moves the reader. The container itself
   // shrinking (a banner appears below, the composer grows) is not the reader's
@@ -97,7 +99,7 @@ export function MessageList({ messages, pending, tools, working = false, placeho
         className="h-full overflow-y-auto px-4 md:px-6"
       >
       <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
-        {placeholder && messages.length === 0 && !pending && !working && (
+        {placeholder && messages.length === 0 && !pending && !submittedInput && !working && (
           <Empty className="py-16">
             <EmptyHeader>
               <EmptyDescription className="text-base">{placeholder}</EmptyDescription>
@@ -106,6 +108,7 @@ export function MessageList({ messages, pending, tools, working = false, placeho
         )}
         {/* Adjacent tool rows keep one gap, even when the previous message also had text. */}
         <div className="flex flex-col gap-6 [&>[data-ends-with-tools]+[data-tools-only]]:-mt-3">
+          {submittedInput && <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />}
           {messages.map((m, index) => {
             if (m.role === "tool_result" && m.toolCallId && messages.some((x) => x.toolCalls?.some((c) => c.id === m.toolCallId))) {
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
@@ -245,7 +248,7 @@ function CopyResponse({ text }: { text: string }) {
   );
 }
 
-function UserMessage({ id, text, skill, attachments }: { id: string; text: string; skill: RenderMsg["skill"]; attachments: RenderMsg["attachments"] }) {
+function UserMessage({ id, text, skill, attachments }: { id?: string; text: string; skill?: RenderMsg["skill"]; attachments: RenderMsg["attachments"] }) {
   const ref = useRef<HTMLDivElement>(null);
   const textId = useId();
   const [open, setOpen] = useState(false);
@@ -267,7 +270,8 @@ function UserMessage({ id, text, skill, attachments }: { id: string; text: strin
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a pointer shortcut for the toggle button below, which keyboard users reach.
     <article
-      id={messageAnchorId(id)}
+      id={id ? messageAnchorId(id) : undefined}
+      data-slot={id ? undefined : "submitted-input"}
       className={cn("rounded-2xl border border-line bg-fill px-4 py-3.5 transition-colors", long && "cursor-pointer select-text hover:border-line-strong")}
       onClick={(event) => long && !(event.target as Element).closest("a, button, [role='dialog']") && !window.getSelection()?.toString() && toggle()}
     >

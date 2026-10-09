@@ -65,7 +65,8 @@ export default function App() {
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = crypto.randomUUID();
       dispatch({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null,
-        firstMessage: m._tag === "create_session" && !!(m.text?.trim() || m.attachments?.length) });
+        firstMessage: m._tag === "create_session" && (m.text?.trim() || m.attachments?.length)
+          ? { text: m.text ?? "", attachments: m.attachments?.map(a => ({ kind: "image" as const, url: `data:${a.mimeType};base64,${a.data}` })) } : undefined });
       conn.send({ ...m, selectionId });
     } else if (m._tag === "act") {
       const s = latest.current;

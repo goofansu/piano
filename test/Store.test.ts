@@ -134,24 +134,176 @@ test("an empty native queue result does not erase editor text", () => {
   assert.equal(restored.drafts[sessionKey(identity)], "keep this");
 });
 
-test("a session created with a first message is starting until Pi reports its submission or the request fails", () => {
+test("INV-01/03: first input survives selection and submission until authoritative user history, including expanded commands", () => {
   const created = (selectionId: string): Extract<ServerMessage, { _tag: "selected" }> => ({
     _tag: "selected", cwd: "/scratch", sessionId: "new", selectionId, hosted: true,
     cursor: { cwd: "/scratch", sessionId: "new", generation: "child", sequence: 0 },
     snapshot: { state: { sessionId: "new", isStreaming: false }, messages: [], dialogs: [] },
   });
-  const open = (selectionId: string, firstMessage?: boolean) => reduce(
-    reduce({ ...initialState, connected: true }, { type: "selecting", cwd: "/scratch", sessionId: null, selectionId, firstMessage }),
-    { type: "server", message: created(selectionId) });
-
-  assert.equal(open("empty").session?.starting, false, "a session created without a message is settled");
-  let state = open("sent", true);
-  assert.equal(state.session?.starting, true);
+  const firstMessage = { text: "/skill:review original", attachments: [{ kind: "image" as const, url: "data:image/png;base64,aW1hZ2U=" }] };
+  let state = reduce({ ...initialState, connected: true }, { type: "selecting", cwd: "/scratch", sessionId: null, selectionId: "sent", firstMessage });
+  assert.equal(state.session, null, "no invented session or history before Pi starts");
+  assert.deepEqual(state.pendingCreate, { cwd: "/scratch", ...firstMessage, outcome: "starting" });
+  state = reduce(state, { type: "server", message: created("sent") });
+  assert.equal(state.pendingCreate?.outcome, "starting");
+  assert.deepEqual(state.session?.messages, []);
   state = reduce(state, { type: "server", message: {
     _tag: "session", selectionId: "sent", cursor: { cwd: "/scratch", sessionId: "new", generation: "child", sequence: 1 },
-    event: { _tag: "submission", submission: { id: 1, outcome: "rejected" } },
+    event: { _tag: "submission", submission: { id: 1, outcome: "started" } },
   } });
-  assert.equal(state.session?.starting, false, "the submission outcome now describes the message");
-  state = reduce(open("failed", true), { type: "server", message: { _tag: "error", message: "prompt failed" } });
-  assert.equal(state.session?.starting, false, "a failed request leaves nothing on its way");
+  assert.equal(state.pendingCreate?.outcome, "submitted");
+  assert.equal(state.pendingCreate?.text, firstMessage.text);
+  state = reduce(state, { type: "server", message: {
+    _tag: "session", selectionId: "sent", cursor: { cwd: "/scratch", sessionId: "new", generation: "child", sequence: 2 },
+    event: { _tag: "message_end", message: { id: "pi-user", role: "user", text: "expanded skill body" } },
+  } });
+  assert.equal(state.pendingCreate, null);
+  assert.deepEqual(state.session?.messages.map(m => m.text), ["expanded skill body"]);
+});
+
+const beginCreate = () => reduce({ ...initialState, connected: true }, {
+  type: "selecting", cwd: "/scratch", sessionId: null, selectionId: "create",
+  firstMessage: { text: "original input", attachments: [{ kind: "image", url: "data:image/png;base64,aW1hZ2U=" }] },
+});
+const emptyCreated = (): Extract<ServerMessage, { _tag: "selected" }> => ({
+  ...selection("new", "create", 0),
+  snapshot: { state: { sessionId: "new", isStreaming: false }, messages: [], dialogs: [] },
+});
+
+test("INV-03: handled, rejected and uncertain input retain the original without inventing history or waiting for a run", () => {
+  for (const outcome of ["handled", "rejected", "uncertain"] as const) {
+    const selected = emptyCreated();
+    let state = reduce(beginCreate(), { type: "server", message: selected });
+    state = reduce(state, { type: "server", message: {
+      _tag: "session", selectionId: "create", cursor: { ...selected.cursor!, sequence: 1 },
+      event: { _tag: "submission", submission: { id: 1, outcome, detail: "Pi outcome" } },
+    } });
+    assert.equal(state.pendingCreate?.outcome, outcome);
+    assert.equal(state.pendingCreate?.text, "original input");
+    assert.equal(state.pendingCreate?.attachments?.length, 1);
+    assert.deepEqual(state.session?.messages, []);
+    assert.equal(state.selecting, null);
+  }
+});
+
+test("INV-03: a newer submission supersedes the first input receipt without relabelling its text", () => {
+  for (const outcome of ["handled", "rejected"] as const) {
+    const selected = emptyCreated();
+    let state = reduce(beginCreate(), { type: "server", message: {
+      ...selected, snapshot: { ...selected.snapshot, state: { ...selected.snapshot.state, submission: { id: 1, outcome: "submitting" } } },
+    } });
+    const deliver = (sequence: number, event: Extract<ServerMessage, { _tag: "session" }>["event"]) => {
+      state = reduce(state, { type: "server", message: {
+        _tag: "session", selectionId: "create", cursor: { ...selected.cursor!, sequence }, event,
+      } });
+    };
+    deliver(1, { _tag: "submission", submission: { id: 1, outcome } });
+    assert.equal(state.pendingCreate?.text, "original input");
+    assert.equal(state.pendingCreate?.outcome, outcome, "same submission retains its receipt");
+    const submission = { id: 2, outcome: "submitting" as const };
+    deliver(2, outcome === "handled"
+      ? { _tag: "submission", submission }
+      : { _tag: "snapshot", snapshot: { ...selected.snapshot, state: { ...selected.snapshot.state, submission } } });
+    assert.equal(state.pendingCreate, null, "new input must remove the old receipt immediately");
+    assert.equal(state.session?.state.submission?.outcome, "submitting");
+    deliver(3, { _tag: "submission", submission: { id: 2, outcome: "rejected", detail: "second input rejected" } });
+    assert.equal(state.pendingCreate, null, "later outcomes cannot relabel the first input");
+    assert.deepEqual(state.session?.messages, [], "receipts never enter authoritative history");
+    assert.equal(state.session?.state.submission?.detail, "second input rejected");
+  }
+});
+
+test("INV-02/05: startup failure and disconnect retain recoverable input without a null-session reconnect or stale navigation", () => {
+  let state = beginCreate();
+  const initial = state;
+  for (const selectionId of [undefined, "older"]) {
+    state = reduce(state, { type: "server", message: { _tag: "error", selectionId, message: "unrelated failure" } });
+    assert.equal(state, initial);
+  }
+  state = reduce(state, { type: "server", message: { _tag: "error", selectionId: "create", message: "Pi startup failed" } });
+  assert.equal(state.selecting, null);
+  assert.equal(state.session, null);
+  assert.equal(state.pendingCreate?.outcome, "uncertain");
+  assert.equal(state.pendingCreate?.detail, "Pi startup failed");
+  assert.equal(state.pendingCreate?.text, "original input");
+
+  state = reduce(beginCreate(), { type: "connected", connected: false });
+  assert.equal(state.pendingCreate?.outcome, "uncertain");
+  assert.equal(state.selecting, null, "unknown identity must not reconnect by selecting null");
+  assert.equal(state.session, null);
+  state = reduce(state, { type: "connected", connected: true });
+  assert.equal(state.pendingCreate?.text, "original input");
+  const reconnected = state;
+  state = reduce(state, { type: "server", message: emptyCreated() });
+  assert.equal(state, reconnected, "late old-socket snapshot is ignored");
+
+  state = reduce(beginCreate(), { type: "selecting", cwd: "/elsewhere", sessionId: "other", selectionId: "navigate" });
+  const navigated = state;
+  state = reduce(state, { type: "server", message: emptyCreated() });
+  state = reduce(state, { type: "server", message: { _tag: "error", selectionId: "create", message: "late failure" } });
+  assert.equal(state, navigated);
+  assert.equal(state.pendingCreate, null);
+});
+
+test("INV-01/05: reconnect and snapshot reconciliation retain local input only until Pi supplies the first user message", () => {
+  let state = reduce(beginCreate(), { type: "server", message: emptyCreated() });
+  state = reduce(state, { type: "connected", connected: false });
+  state = reduce(state, { type: "connected", connected: true });
+  state = reduce(state, { type: "selecting", cwd: "/scratch", sessionId: "new", selectionId: "reattach" });
+  assert.equal(state.pendingCreate?.outcome, "uncertain");
+  const snapshot = { ...emptyCreated(), selectionId: "reattach" };
+  state = reduce(state, { type: "server", message: snapshot });
+  assert.equal(state.pendingCreate?.text, "original input");
+  state = reduce(state, { type: "server", message: {
+    _tag: "session", selectionId: "reattach", cursor: { ...snapshot.cursor!, sequence: 1 },
+    event: { _tag: "snapshot", snapshot: { ...snapshot.snapshot, messages: [{ id: "pi-user", role: "user", text: "original input" }] } },
+  } });
+  assert.equal(state.pendingCreate, null);
+  assert.equal(state.session?.messages.length, 1);
+
+  const selected = emptyCreated();
+  state = reduce(beginCreate(), { type: "server", message: { ...selected,
+    snapshot: { ...selected.snapshot, messages: [{ id: "pi-user", role: "user", text: "expanded" }] },
+  } });
+  assert.equal(state.pendingCreate, null, "first selected snapshot can already include the user message");
+});
+
+test("INV-03: disconnect or child exit cannot revoke a confirmed first-input outcome", () => {
+  for (const outcome of ["started", "queued", "handled", "rejected"] as const) {
+    const selected = emptyCreated();
+    let state = reduce(beginCreate(), { type: "server", message: selected });
+    state = reduce(state, { type: "server", message: {
+      _tag: "session", selectionId: "create", cursor: { ...selected.cursor!, sequence: 1 },
+      event: { _tag: "submission", submission: { id: 1, outcome } },
+    } });
+    const expected = outcome === "started" || outcome === "queued" ? "submitted" : outcome;
+    state = reduce(state, { type: "connected", connected: false });
+    assert.equal(state.pendingCreate?.outcome, expected);
+    state = reduce(state, { type: "connected", connected: true });
+    state = reduce(state, { type: "selecting", cwd: "/scratch", sessionId: "new", selectionId: "reattach" });
+    state = reduce(state, { type: "server", message: { ...selected, selectionId: "reattach", snapshot: {
+      ...selected.snapshot, state: { ...selected.snapshot.state, submission: { id: 1, outcome } },
+    } } });
+    state = reduce(state, { type: "server", message: {
+      _tag: "session", selectionId: "reattach", cursor: { ...selected.cursor!, sequence: 1 },
+      event: { _tag: "closed", reason: "process exited with code 1" },
+    } });
+    assert.equal(state.pendingCreate?.outcome, expected, "worker exit is separate from prompt delivery");
+    assert.equal(state.pendingCreate?.text, "original input");
+    assert.equal(state.session?.closedReason, "process exited with code 1");
+  }
+});
+
+test("INV-03: a child exit before first input reaches history ends Starting without losing the input", () => {
+  const selected = emptyCreated();
+  let state = reduce(beginCreate(), { type: "server", message: selected });
+  state = reduce(state, { type: "server", message: {
+    _tag: "session", selectionId: "create", cursor: { ...selected.cursor!, sequence: 1 },
+    event: { _tag: "closed", reason: "process exited with code 1" },
+  } });
+  assert.equal(state.pendingCreate?.outcome, "uncertain");
+  assert.equal(state.pendingCreate?.text, "original input");
+  assert.equal(state.pendingCreate?.detail, "process exited with code 1");
+  assert.equal(state.session?.hosted, false);
+  assert.deepEqual(state.session?.messages, []);
 });

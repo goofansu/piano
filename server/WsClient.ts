@@ -76,8 +76,8 @@ export const handleSocket = (socket: Socket.Socket) =>
       Effect.forkScoped,
     );
     const send = outbox.offer;
-    const sendError = (e: unknown) =>
-      Effect.logWarning(`client error: ${describe(e)}`).pipe(Effect.andThen(send({ _tag: "error", message: describe(e) })));
+    const sendError = (e: unknown, selectionId?: string) =>
+      Effect.logWarning(`client error: ${describe(e)}`).pipe(Effect.andThen(send({ _tag: "error", message: describe(e), selectionId })));
     const publishProjects = buildProjects.pipe(Effect.flatMap(projects => Effect.gen(function* () {
       const observed = yield* buildSessionReferences;
       // Filesystem reads may overlap a membership edit. Publish the latest metadata,
@@ -335,7 +335,7 @@ export const handleSocket = (socket: Socket.Socket) =>
         // Each message runs in its own fiber: a prompt that opens an extension dialog only
         // gets its response after the dialog is answered, so handling must not serialize.
         yield* handle(msg).pipe(
-          Effect.catchCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : sendError(Cause.squash(cause)))),
+          Effect.catchCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : sendError(Cause.squash(cause), "selectionId" in msg ? msg.selectionId : undefined))),
           Effect.forkScoped,
         );
       }

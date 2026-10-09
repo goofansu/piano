@@ -612,7 +612,7 @@ export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("session", { selectionId: Schema.String, cursor: SessionCursor, event: SessionEvent }),
   Schema.TaggedStruct("action_result", { cwd: Schema.String, sessionId: Schema.String, result: SessionActionResult }),
   Schema.TaggedStruct("worktree_result", { requestId: Schema.String, result: WorktreeResult }),
-  Schema.TaggedStruct("error", { message: Schema.String }),
+  Schema.TaggedStruct("error", { message: Schema.String, selectionId: Schema.optional(Schema.String) }),
   /** A notice for the person; `level` picks the icon. */
   Schema.TaggedStruct("toast", { message: Schema.String, level: Schema.optional(Schema.Literals(["success", "info", "warning", "error"])) }),
 ]);

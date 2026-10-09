@@ -12,8 +12,17 @@ export interface SessionView {
   dialogs: Dialog[];
   tools: Record<string, ToolExecution>;
   closedReason?: string;
-  /** Created with a first message that Pi has not yet reported a submission for. */
-  starting?: boolean;
+}
+
+/** Browser-only submitted input, never part of Pi's transcript or registry. */
+export interface PendingCreate {
+  cwd: string;
+  text: string;
+  attachments?: RenderMsg["attachments"];
+  outcome: "starting" | "submitted" | "handled" | "rejected" | "uncertain";
+  /** First observed Pi submission; later input supersedes this local receipt. */
+  submissionId?: number;
+  detail?: string;
 }
 
 export interface AppState {
@@ -39,7 +48,8 @@ export interface AppState {
   /** The picker's latest discovery per project; requested by this client, never broadcast. */
   worktrees: Record<string, WorktreeDiscovery>;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
-  selecting: { cwd: string; sessionId: string | null; firstMessage?: boolean } | null;
+  selecting: { cwd: string; sessionId: string | null } | null;
+  pendingCreate: PendingCreate | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
   /** Unsent editor text belongs to this browser, keyed by session identity. */
@@ -66,6 +76,7 @@ export const initialState: AppState = {
   worktreeResult: null,
   worktrees: {},
   selecting: null,
+  pendingCreate: null,
   done: [],
   drafts: {},
 };
@@ -73,25 +84,55 @@ export const initialState: AppState = {
 export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
-  | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null; firstMessage?: boolean }
+  | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null; firstMessage?: Pick<PendingCreate, "text" | "attachments"> }
   | { type: "new"; cwd?: string; outcomeProjectId?: string }
   | { type: "missing-session"; sessionId: string }
   | { type: "draft_changed"; key: string; text: string }
   | { type: "draft_appended"; key: string; text: string };
 
 export function reduce(s: AppState, a: Action): AppState {
+  let next = reduceAction(s, a);
+  if (next === s) return s;
+  let input = next.pendingCreate;
+  const t = next.session;
+  if (!input || !t) return next;
+  // Pi may expand slash commands, so reconcile by the new session's first user
+  // message, not text equality. Never insert the local input into history.
+  if (t.messages.some(m => m.role === "user") || t.pending?.role === "user") return { ...next, pendingCreate: null };
+  const submission = t.state.submission;
+  if (submission) {
+    if (input.submissionId !== undefined && submission.id > input.submissionId) return { ...next, pendingCreate: null };
+    if (input.submissionId === undefined) {
+      input = { ...input, submissionId: submission.id };
+      next = { ...next, pendingCreate: input };
+    }
+  }
+  if (submission && (submission.outcome === "handled" || submission.outcome === "rejected" || submission.outcome === "uncertain")) {
+    return { ...next, pendingCreate: { ...input, outcome: submission.outcome, detail: submission.detail } };
+  }
+  if (submission?.outcome === "started" || submission?.outcome === "queued") return { ...next, pendingCreate: { ...input, outcome: "submitted", detail: undefined } };
+  if (t.closedReason && input.outcome !== "submitted") return { ...next, pendingCreate: { ...input, outcome: "uncertain", detail: t.closedReason } };
+  return next;
+}
+
+function reduceAction(s: AppState, a: Action): AppState {
   switch (a.type) {
     case "connected":
       // A reopened socket is not attached until it receives a new selection snapshot.
-      return { ...s, connected: a.connected, selectionId: a.connected ? s.selectionId : null };
+      return { ...s, connected: a.connected, selectionId: a.connected ? s.selectionId : null,
+        selecting: !a.connected && s.pendingCreate ? null : s.selecting,
+        pendingCreate: !a.connected && s.pendingCreate?.outcome === "starting"
+          ? { ...s.pendingCreate, outcome: "uncertain", detail: "Connection lost before delivery was confirmed." } : s.pendingCreate };
     case "selecting":
-      return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId, ...(a.firstMessage && { firstMessage: true }) },
+      return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId },
+        pendingCreate: a.firstMessage ? { cwd: a.cwd, ...a.firstMessage, outcome: "starting" }
+          : s.session && sessionKey(s.session) === sessionKey(a) ? s.pendingCreate : null,
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)) };
     case "new":
-      return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd, outcomeProjectId: a.outcomeProjectId }, selecting: null, session: null };
+      return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd, outcomeProjectId: a.outcomeProjectId }, selecting: null, session: null, pendingCreate: null };
     case "missing-session":
-      return { ...s, selectionId: null, resync: false, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null };
+      return { ...s, selectionId: null, resync: false, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null, pendingCreate: null };
     case "draft_changed":
       return { ...s, drafts: { ...s.drafts, [a.key]: a.text } };
     case "draft_appended":
@@ -147,7 +188,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       }
       // A selection without a session (what the server answers after archiving the one
       // being viewed) has nothing to show; sessions start from the New page.
-      if (m.sessionId === null) return { ...s, view: { kind: "new", cwd: m.cwd }, selecting: null, session: null };
+      if (m.sessionId === null) return { ...s, view: { kind: "new", cwd: m.cwd }, selecting: null, session: null, pendingCreate: null };
       return {
         ...s,
         view: { kind: "session" },
@@ -160,7 +201,6 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           cursor: m.cursor,
           state: m.snapshot.state,
           closedReason: m.snapshot.state.closedReason,
-          starting: !!s.selecting?.firstMessage && !m.snapshot.state.submission,
           messages: [...m.snapshot.messages],
           pending: m.snapshot.pending ?? null,
           dialogs: [...m.snapshot.dialogs],
@@ -168,8 +208,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         },
       };
     case "error":
-      // A first message that failed before reaching Pi is no longer on its way.
-      return s.session?.starting ? { ...s, session: { ...s.session, starting: false } } : s;
+      if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;
+      return { ...s, selecting: null, pendingCreate: { ...s.pendingCreate, outcome: "uncertain", detail: m.message } };
     case "action_result": {
       if (m.result._tag !== "queue_restored") return s;
       const restored = m.result.messages.map((message) => message.text).join("\n\n");
@@ -195,7 +235,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           return { ...s, session: { ...t, state: { ...t.state, queuedMessages: [...e.messages] } } };
         case "submission":
           if (t.state.submission && e.submission.id < t.state.submission.id) return s;
-          return { ...s, session: { ...t, starting: false, state: { ...t.state, submission: e.submission } } };
+          return { ...s, session: { ...t, state: { ...t.state, submission: e.submission } } };
         case "message_update":
           return { ...s, session: { ...t, pending: e.message } };
         case "message_end":
@@ -209,7 +249,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         case "dialog_resolved":
           return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.resolution.id || d.generation !== e.resolution.generation) } };
         case "closed":
-          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, isStopping: false, queuedMessages: [] }, pending: null, dialogs: [], closedReason: e.reason, starting: false } };
+          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, isStopping: false, queuedMessages: [] }, pending: null, dialogs: [], closedReason: e.reason } };
         case "notice":
           return s;
       }

@@ -18,20 +18,21 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
   const actions = useSessionActions(send, ready);
   const target = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title } : undefined;
   const workspace = sessionWorkspace(state);
-  const short = session ? abbrevPath(session.cwd) : "";
+  const cwd = session?.cwd ?? state.pendingCreate?.cwd;
+  const short = cwd ? abbrevPath(cwd) : "";
   const slash = short.lastIndexOf("/");
   return <>
     {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
     <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 md:px-6">
       <Button variant="ghost" size="icon-sm" className="-ml-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        {session ? <>
+        {cwd ? <>
           {/* The project is the way back to where this session was opened from. */}
           {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal || project.name} onClick={() => openProject(project.id)}>{project.name}</button>}
-          <h1 className="truncate text-sm font-medium" title={title}>{title}</h1>
+          <h1 className="truncate text-sm font-medium" title={session ? title : undefined}>{session ? title : "New session"}</h1>
           {/* Plain workspace metadata has no dedicated UI primitive. */}
           <div className="flex min-w-0 items-center gap-3 font-mono text-xs text-muted-foreground">
-            <p title={session.cwd} className="flex min-w-0">
+            <p title={cwd} className="flex min-w-0">
               <span className="sr-only">Working directory: </span>
               {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
               <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
