@@ -44,13 +44,21 @@ try {
   // Only the provider HTTP boundary is simulated. The real settings/dialog components run in Vite.
   await ab('eval', `(() => {
     const original = window.fetch.bind(window);
-    const fixture = window.loginFixture = { state: null, deletes: 0, failCancel: false, completeOnCancel: false, signedIn: false, providerReads: 0, polls: 0 };
+    const fixture = window.loginFixture = { state: null, deletes: 0, failCancel: false, completeOnCancel: false, signedIn: false, providerReads: 0, polls: 0, logoutCalls: 0, failLogout: false, holdLogout: false };
     window.fetch = async (input, init = {}) => {
       const path = new URL(typeof input === 'string' ? input : input.url, location.href).pathname;
       const json = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
       if (path === '/api/oauth-providers') {
         fixture.providerReads++;
         return json({ providers: [{ id: 'openai-codex', name: 'OpenAI Codex', signedIn: fixture.signedIn }] });
+      }
+      if (path === '/api/provider-logout') {
+        if (init.method !== 'POST' || JSON.parse(init.body).provider !== 'openai-codex') return json({ error: 'Wrong provider' }, 400);
+        fixture.logoutCalls++;
+        if (fixture.failLogout) return json({ error: 'Could not sign out. Try again.' }, 503);
+        if (fixture.holdLogout) await new Promise(resolve => { fixture.finishLogout = resolve; });
+        fixture.signedIn = false; fixture.state = null;
+        return json({});
       }
       if (path !== '/api/provider-login') return original(input, init);
       switch (init.method ?? 'GET') {
@@ -121,7 +129,28 @@ try {
   await ab('eval', 'window.loginFixture.completeOnCancel = true'); await button('Cancel'); await waitClosed();
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Sign out of OpenAI Codex"]')`);
   assert.ok(await evaluate('window.loginFixture.providerReads') > reads);
-  console.log('PASS: method/device/manual-code steps, Cancel/×/Escape, outside click, cancellation failure, retry, success and completion race.');
+  // Sign-out is explicit on Providers too. Dismissal never sends a logout, and
+  // the confirmation stays put while an accepted request is pending.
+  for (const dismiss of ['Cancel', 'Escape']) {
+    await button('Sign out of OpenAI Codex');await ab('wait','--text','Sign out of OpenAI Codex?');
+    assert.equal(await evaluate('window.loginFixture.logoutCalls'),0);
+    if (dismiss === 'Escape') await ab('press','Escape'); else await button('Cancel');
+    await waitClosed();
+  }
+  await ab('eval','window.loginFixture.failLogout = true');
+  await button('Sign out of OpenAI Codex');await button('Sign out');
+  await ab('wait','--text','Could not sign out. Try again.');await waitClosed();
+  assert.equal(await evaluate('window.loginFixture.signedIn'),true);
+  await ab('eval','window.loginFixture.failLogout = false; window.loginFixture.holdLogout = true');
+  await button('Sign out of OpenAI Codex');
+  await ab('set','viewport','390','844');await ab('screenshot',join(evidence,'03-sign-out-confirm-mobile.png'));
+  await button('Sign out');await ab('wait','--fn','!!window.loginFixture.finishLogout');
+  assert.equal(await evaluate(`[...document.querySelectorAll('[role="dialog"] button')].every(button => button.disabled)`),true);
+  await ab('press','Escape');assert.equal(await evaluate(`!!document.querySelector('[role="dialog"]')`),true);
+  await ab('eval','window.loginFixture.finishLogout()');await waitClosed();
+  await ab('wait','[aria-label="Sign in to OpenAI Codex"]');
+  assert.equal(await evaluate('window.loginFixture.logoutCalls'),2);
+  console.log('PASS: OAuth dialog lifecycle and sign-out confirmation, cancellation, failure/retry and pending-request guards.');
 } finally {
   try { await ab('close'); } catch {}
   for (const p of [frontend, backend]) {

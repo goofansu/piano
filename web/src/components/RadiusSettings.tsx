@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
+import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [refreshing, setRefreshing] = useState(true);
   const [login, setLogin] = useState<string>();
   const [removal, setRemoval] = useState<Removal>();
@@ -69,7 +71,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
       refreshProviders();
       toast.success("Signed out of Radius.");
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not sign out. Try again."); }
-    finally { setSigningOut(false); }
+    finally { setSigningOut(false); setConfirmSignOut(false); }
   };
   const act = async (action: SetupAction, removalKey?: string) => {
     setBusy(true); setActionError("");
@@ -109,7 +111,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
           <ItemActions className="flex-wrap">
             {radius?.signedIn ? <>
               <Badge variant="secondary">Signed in</Badge>
-              <Button variant="outline" size="sm" disabled={disabled} aria-label="Sign out of Radius" onClick={() => void signOut()}>
+              <Button variant="outline" size="sm" disabled={disabled} aria-label="Sign out of Radius" onClick={() => setConfirmSignOut(true)}>
                 {signingOut && <Spinner data-icon="inline-start" />}{signingOut ? "Signing out…" : "Sign out"}
               </Button>
             </> : <Button variant="outline" size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
@@ -152,9 +154,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
           <DialogTitle>{removal?.action === "remove-mcp" ? "Remove Radius MCP?" : "Uninstall web-search extension?"}</DialogTitle>
           <DialogDescription>
             {removal?.action === "remove-mcp"
-              ? "Removes the Radius MCP entry from your Pi configuration on this machine. Your sign-in and web-search extension stay unchanged."
-              : "Uninstalls the Radius web-search package from your Pi setup on this machine. Your sign-in and MCP configuration stay unchanged."}
-            {" "}Existing sessions are not reloaded. Start a new session to use the updated setup.
+              ? "Removes Radius MCP from Pi on this machine."
+              : "Removes the web-search extension from Pi on this machine."}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -165,6 +166,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {confirmSignOut && <ProviderSignOutDialog name="Radius" busy={signingOut} cancel={() => setConfirmSignOut(false)} confirm={() => void signOut()} />}
     {login && <ProviderLoginDialog key={login} initialProvider="radius" providers={providers} close={() => { setLogin(undefined); setRevision(value => value + 1); }} signedIn={refreshProviders} />}
   </>;
 }

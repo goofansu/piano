@@ -7,6 +7,7 @@ import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
 import { ModelSettings } from "@/components/ModelSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
+import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RadiusSettings } from "@/components/RadiusSettings";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
   const [revision, setRevision] = useState(0);
   const [login, setLogin] = useState<{ provider: string; key: string }>();
   const [signingOut, setSigningOut] = useState<string>();
+  const [signOutTarget, setSignOutTarget] = useState<OAuthProvider>();
   useEffect(() => {
     if (section !== "providers") return;
     const controller = new AbortController();
@@ -67,7 +69,7 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
       toast.success(`Signed out of ${provider.name}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
-    } finally { setSigningOut(undefined); }
+    } finally { setSigningOut(undefined); setSignOutTarget(undefined); }
   };
   if (section !== "providers") return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
@@ -116,13 +118,14 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
               </ItemContent>
               <ItemActions className="shrink-0">
                 <Button variant="outline" size="sm" disabled={!!signingOut} aria-label={`${provider.signedIn ? "Sign out of" : "Sign in to"} ${provider.name}`} onClick={() => {
-                  if (provider.signedIn) void signOut(provider);
+                  if (provider.signedIn) setSignOutTarget(provider);
                   else setLogin({ provider: provider.id, key: crypto.randomUUID() });
                 }}>{signingOut === provider.id ? "Signing out…" : provider.signedIn ? "Sign out" : "Sign in"}</Button>
               </ItemActions>
             </Item>)}</ItemGroup>}
         </section>
       </div>
+    {signOutTarget && <ProviderSignOutDialog name={signOutTarget.name} busy={!!signingOut} cancel={() => setSignOutTarget(undefined)} confirm={() => void signOut(signOutTarget)} />}
     {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} providers={providers ?? []} close={() => setLogin(undefined)} signedIn={refreshProviders} />}
   </section>;
 }

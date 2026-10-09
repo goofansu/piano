@@ -141,12 +141,16 @@ try {
   await ab('wait','[aria-label="Radius setup configured"]');
   // Both account actions stay on Radius. A failed logout must preserve sign-in;
   // successful logout must remove the completion claim but keep saved tool setup.
-  await ab('eval','window.radiusFixture.failLogout=true');await button('Sign out of Radius');
+  await button('Sign out of Radius');await ab('wait','--text','Sign out of Radius?');
+  assert.equal(await evaluate('window.radiusFixture.logoutCalls'),0,'opening confirmation must not sign out');
+  await capture('08-sign-out-confirm-mobile');await button('Cancel');
+  assert.equal(await evaluate('window.radiusFixture.logoutCalls'),0,'cancelling must not sign out');
+  await ab('eval','window.radiusFixture.failLogout=true');await button('Sign out of Radius');await button('Sign out');
   await ab('wait','--text','Could not sign out. Try again.');
   assert.equal(await evaluate('window.radiusFixture.signedIn'),true);
   assert.equal(await evaluate(`document.querySelector('#settings-section-title')?.textContent`),'Radius');
   await capture('08-sign-out-error');
-  await ab('eval','window.radiusFixture.failLogout=false');await button('Sign out of Radius');
+  await ab('eval','window.radiusFixture.failLogout=false');await button('Sign out of Radius');await button('Sign out');
   await ab('wait','--fn',`[...document.querySelectorAll('button')].some(button => button.textContent === 'Sign in to Radius' && !button.disabled)`);
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false, 'installed tools alone are not complete without sign-in');
   assert.equal(await evaluate('window.radiusFixture.logoutCalls'),2);
@@ -166,6 +170,7 @@ try {
   // unrelated configuration. A changed target invalidates an open confirmation.
   await ab('set','viewport','1280','900');
   await button('Remove MCP');await ab('wait','--text','Remove Radius MCP?');
+  assert.equal(await evaluate(`document.querySelector('[role="dialog"] [data-slot="dialog-description"]').textContent`),'Removes Radius MCP from Pi on this machine.');
   await capture('11-remove-mcp-confirm');await button('Cancel');
   assert.deepEqual(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')),config);
   await button('Remove MCP');await ab('wait','--text','Remove Radius MCP?');
@@ -184,6 +189,7 @@ try {
   const beforeRemoval=await (await fetch(`${backendUrl}/api/settings/radius`)).json();
   writeFileSync(hold,'');writeFileSync(fail,'');
   await button('Uninstall extension');await ab('wait','--text','Uninstall web-search extension?');
+  assert.equal(await evaluate(`document.querySelector('[role="dialog"] [data-slot="dialog-description"]').textContent`),'Removes the web-search extension from Pi on this machine.');
   await ab('set','viewport','390','844');await capture('12-uninstall-confirm-mobile');await ab('click','[role="dialog"] button:last-child');
   await ab('wait','--text','Uninstalling…');
   const action=body=>fetch(`${backendUrl}/api/settings/radius`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
