@@ -4,14 +4,14 @@ import type { OutcomeProject, ProjectView, SessionInfo, SessionReference } from 
 export type GroupBy = "folder" | "project" | "date" | "none";
 export type SortBy = "name" | "recent";
 export interface SidebarView { groupBy: GroupBy; sortBy: SortBy }
-export const DEFAULT_SIDEBAR_VIEW: SidebarView = { groupBy: "folder", sortBy: "recent" };
+export const DEFAULT_SIDEBAR_VIEW: SidebarView = { groupBy: "date", sortBy: "recent" };
 export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
-  { value: "folder", label: "Folder" },
-  { value: "project", label: "Project" },
   { value: "date", label: "Date" },
+  { value: "folder", label: "Folder" },
   { value: "none", label: "None" },
+  { value: "project", label: "Project" },
 ];
-/** Defaults lead in both lists. */
+/** Group and sort choices are alphabetical by label. */
 export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
   { value: "recent", label: "Activity" },
   { value: "name", label: "Name" },
