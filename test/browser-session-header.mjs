@@ -24,8 +24,9 @@ const root = realpathSync(mkdtempSync(join(tmpdir(), 'piano-header-')));
 const repo = join(root, 'long-working-directory-for-session-header-verification');
 const sessions = join(root, 'sessions');
 const sessionId = '02863032-e09d-400f-b3b2-458194e82494';
+const branch = 'header-test/long-branch-name-that-must-wrap-without-truncating-or-overflowing-the-session-menu';
 for (const path of [repo, sessions, join(root, 'agent')]) mkdirSync(path);
-execFileSync('git', ['init', '-q', '-b', 'header-test', repo]);
+execFileSync('git', ['init', '-q', '-b', branch, repo]);
 writeFileSync(join(repo, 'README.md'), 'Scratch\n');
 execFileSync('git', ['-C', repo, 'add', '.']);
 execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'Initial']);
@@ -64,7 +65,7 @@ const menu = async () => {
 };
 const item = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
 const closed = () => ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
-const allDetails = `Working directory: ${repo}\nGit branch: header-test\nSession ID: ${sessionId}`;
+const allDetails = `Working directory: ${repo}\nGit branch: ${branch}\nSession ID: ${sessionId}`;
 let copies = 0;
 async function assertCopy() {
   // One browser round trip: a short-lived toast must not expire while launching CLI checks.
@@ -117,12 +118,13 @@ try {
     await menu();
     await ab('snapshot');
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['', 'Changes', 'Conversation tree', 'Pull request', 'Rename', 'Archive', 'Delete']);
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [repo, 'header-test', sessionId]);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [repo, branch, sessionId]);
     assert.ok(await evaluate(`(() => {
-      const heading = document.querySelector('[role="menu"] [data-slot="dropdown-menu-label"]').getBoundingClientRect();
-      const copy = document.querySelector('[role="menu"] [role="menuitem"]').getBoundingClientRect();
-      return heading.right <= copy.left && copy.left - heading.right <= 4 && Math.abs(heading.top + heading.height / 2 - copy.top - copy.height / 2) <= 2;
-    })()`), 'Copy all sits to the right of the section heading');
+      const menu = document.querySelector('[role="menu"]');
+      const path = menu.querySelector('dd').getBoundingClientRect();
+      const copy = menu.querySelector('[aria-label="Copy all"]').getBoundingClientRect();
+      return !menu.querySelector('[data-slot="dropdown-menu-label"]') && path.right <= copy.left && Math.abs(path.top - copy.top) <= 4;
+    })()`), 'Copy icon sits at the top-right beside the directory without a heading');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
     assert.ok(await evaluate(`(() => {
       const menu = document.querySelector('[role="menu"]');
@@ -132,6 +134,10 @@ try {
         return r.left >= bounds.left && r.right <= bounds.right && node.scrollWidth <= node.clientWidth && getComputedStyle(node).userSelect === 'text';
       });
     })()`), 'Full metadata wraps within the viewport and remains selectable');
+    if (width === 320) assert.ok(await evaluate(`(() => {
+      const values = [...document.querySelectorAll('[role="menu"] dd')];
+      return values.every(node => node.getBoundingClientRect().height > parseFloat(getComputedStyle(node).lineHeight));
+    })()`), 'Long path, branch and session ID all wrap on narrow screens');
     await ab('screenshot', join(evidence, `menu-${width}.png`));
     await item('Copy all');
     await assertCopy();

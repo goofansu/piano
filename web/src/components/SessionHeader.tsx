@@ -3,7 +3,7 @@ import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon,
 import { IconButton } from "@/components/IconButton";
 import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevPath } from "@/lib/format";
 import type { AppState } from "@/store";
@@ -42,25 +42,24 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-96 max-w-[calc(100vw-2rem)]">
-          <DropdownMenuGroup className="flex items-center">
-            <DropdownMenuLabel className="text-muted-foreground">Session details</DropdownMenuLabel>
-            <DropdownMenuItem aria-label="Copy all" title="Copy all" onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /></DropdownMenuItem>
+          <DropdownMenuGroup className="flex items-start">
+            {/* Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible. */}
+            <dl className="flex min-w-0 flex-1 select-text flex-col gap-1 px-2 py-2 font-mono text-xs">
+              <div className="min-w-0">
+                <dt className="sr-only">Working directory</dt>
+                <dd className="break-all">{session?.cwd}</dd>
+              </div>
+              {branch && <div className="min-w-0 text-muted-foreground">
+                <dt className="sr-only">Git branch</dt>
+                <dd className="flex items-start gap-1"><GitBranchIcon aria-hidden="true" className="mt-0.5 size-3 shrink-0" /><span className="min-w-0 break-all">{branch}</span></dd>
+              </div>}
+              <div className="min-w-0">
+                <dt className="sr-only">Session ID</dt>
+                <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
+              </div>
+            </dl>
+            <DropdownMenuItem className="mt-1 shrink-0" aria-label="Copy all" title="Copy all" onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /></DropdownMenuItem>
           </DropdownMenuGroup>
-          {/* Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible. */}
-          <dl className="flex select-text flex-col gap-1 px-2 py-2 font-mono text-xs">
-            <div className="min-w-0">
-              <dt className="sr-only">Working directory</dt>
-              <dd className="break-all">{session?.cwd}</dd>
-            </div>
-            {branch && <div className="min-w-0 text-muted-foreground">
-              <dt className="sr-only">Git branch</dt>
-              <dd className="flex items-center gap-1"><GitBranchIcon aria-hidden="true" className="size-3 shrink-0" /><span className="break-all">{branch}</span></dd>
-            </div>}
-            <div className="min-w-0">
-              <dt className="sr-only">Session ID</dt>
-              <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
-            </div>
-          </dl>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
