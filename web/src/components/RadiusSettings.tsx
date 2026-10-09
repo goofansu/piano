@@ -120,7 +120,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
               ? <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} aria-label="Sign out of Radius" onClick={() => setConfirmSignOut(true)}>
                 {signingOut && <Spinner data-icon="inline-start" />}{signingOut ? "Signing out…" : "Sign out"}
               </Button>
-              : <Button size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
+              : <Button size="sm" disabled={disabled || !radius} aria-label="Sign in to Radius" onClick={() => setLogin(crypto.randomUUID())}>Sign in</Button>}
           </ItemActions>
         </Item>
         <section aria-labelledby="radius-features" className="flex flex-col gap-3">
@@ -134,8 +134,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
                 {state.mcp.detail && <p className="text-xs text-muted-foreground">{state.mcp.detail}</p>}
               </ItemContent>
               <ItemActions className="max-sm:basis-full max-sm:pl-12">
-                {!mcpReady && <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !signedIn} onClick={() => void act("configure-mcp")}>Set up MCP</Button>}
-                {state.mcp.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })}>Remove MCP</Button>}
+                {!mcpReady && <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !signedIn} aria-label="Set up Radius MCP" onClick={() => void act("configure-mcp")}>Set up</Button>}
+                {state.mcp.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })} aria-label="Remove Radius MCP">Remove</Button>}
               </ItemActions>
             </Item>
             <ItemSeparator />
@@ -150,8 +150,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
               <ItemActions className="max-sm:basis-full max-sm:pl-12">
                 {installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
                   : <>
-                    {!webSearchReady && <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} onClick={() => void act("install-web-search")}>Install web search</Button>}
-                    {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })}>Uninstall extension</Button>}
+                    {!webSearchReady && <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} aria-label="Install web search" onClick={() => void act("install-web-search")}>Install</Button>}
+                    {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })} aria-label="Uninstall web search">Uninstall</Button>}
                   </>}
               </ItemActions>
             </Item>
@@ -162,17 +162,17 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
     <Dialog open={!!removal} onOpenChange={open => { if (!open && !busy) setRemoval(undefined); }}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onInteractOutside={event => event.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>{removal?.action === "remove-mcp" ? "Remove Radius MCP?" : "Uninstall web-search extension?"}</DialogTitle>
+          <DialogTitle>{removal?.action === "remove-mcp" ? "Remove Radius MCP?" : "Uninstall web search?"}</DialogTitle>
           <DialogDescription>
             {removal?.action === "remove-mcp"
               ? "Removes Radius MCP from Pi on this machine."
-              : "Removes the web-search extension from Pi on this machine."}
+              : "Removes the Radius web-search extension from Pi on this machine."}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={() => setRemoval(undefined)}>Cancel</Button>
           <Button variant="destructive" disabled={disabled} onClick={() => { if (removal) void act(removal.action, removal.key); }}>
-            {busy && <Spinner data-icon="inline-start" />}{removal?.action === "remove-mcp" ? "Remove MCP" : "Uninstall extension"}
+            {busy && <Spinner data-icon="inline-start" />}{removal?.action === "remove-mcp" ? "Remove" : "Uninstall"}
           </Button>
         </DialogFooter>
       </DialogContent>
