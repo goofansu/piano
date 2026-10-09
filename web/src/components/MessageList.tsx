@@ -9,7 +9,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 
@@ -25,7 +24,6 @@ interface Props {
   tools: Record<string, ToolExecution>;
   /** Pi is working and no reply text has arrived yet: the keys play in a pending row. */
   working?: boolean;
-  placeholder: string;
   className?: string;
 }
 
@@ -34,7 +32,7 @@ interface Props {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, tools, working = false, placeholder, className }: Props) {
+export function MessageList({ messages, pending, tools, working = false, className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -96,13 +94,6 @@ export function MessageList({ messages, pending, tools, working = false, placeho
         className="h-full overflow-y-auto px-4 md:px-6"
       >
       <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
-        {messages.length === 0 && !pending && !working && (
-          <Empty className="py-16">
-            <EmptyHeader>
-              <EmptyDescription className="text-base">{placeholder}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
         {/* Adjacent tool rows keep one gap, even when the previous message also had text. */}
         <div className="flex flex-col gap-6 [&>[data-ends-with-tools]+[data-tools-only]]:-mt-3">
           {messages.map((m) => {

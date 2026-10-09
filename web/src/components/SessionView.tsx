@@ -119,7 +119,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           <p className="break-words">{t.state.statsRefreshError}</p>
         </Banner>
       )}
-      {/* The transcript fades in over a skeleton of itself; the skeleton is on screen within a frame of a switch. */}
+      {/* The transcript fades in over a skeleton of itself; the skeleton is on screen within a frame of a switch
+          and stays as the empty state of a new session until its first message. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
         {t && (
           <MessageList
@@ -129,10 +130,9 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
             pending={t.pending}
             tools={t.tools}
             working={streaming && !t.pending?.text}
-            placeholder="Nothing here yet. Send the first message."
           />
         )}
-        <TranscriptSkeleton hidden={!!t} />
+        <TranscriptSkeleton hidden={!!t && (t.messages.length > 0 || !!t.pending || streaming)} />
         {!state.connected && (
           <div role="status" className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center">
             <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2"><Spinner className="size-3.5" /> Reconnecting…</span>
@@ -205,8 +205,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
 /**
  * A skeleton in the transcript's own geometry: a prompt card, a reply with three lines and a
- * tool row. It is visible while a session is being fetched and fades out as the real transcript
- * fades in; it stays mounted just long enough to finish leaving.
+ * tool row. It is visible while a session is being fetched or has no messages yet, and fades out as
+ * the real transcript fades in; it stays mounted just long enough to finish leaving.
  */
 function TranscriptSkeleton({ hidden }: { hidden: boolean }) {
   const [lingering, setLingering] = useState(false);
