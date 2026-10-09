@@ -66,7 +66,7 @@ export function ModelSettings() {
         <Field data-disabled={saving} aria-labelledby="default-model-label">
           <FieldTitle id="default-model-label">Model and effort</FieldTitle>
           <FieldContent className="items-start">
-            <ModelSelect catalog={catalog} value={draft.model} onChange={chooseModel} effort={effort} onEffortChange={chooseEffort} disabled={saving} />
+            <ModelSelect variant="outline" catalog={catalog} value={draft.model} onChange={chooseModel} effort={effort} onEffortChange={chooseEffort} disabled={saving} />
           </FieldContent>
         </Field>
         {catalog?.error ? <FieldDescription>Could not load models. <Button type="button" variant="link" size="sm" onClick={() => setRevision(value => value + 1)}>Retry</Button></FieldDescription>

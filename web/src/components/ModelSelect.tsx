@@ -1,6 +1,6 @@
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { RefreshCwIcon } from "lucide-react";
+import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
@@ -18,6 +18,8 @@ interface Props {
   effort: ThinkingLevel;
   onEffortChange: (level: ThinkingLevel) => void;
   disabled?: boolean;
+  /** Bordered control for standalone forms; composers retain the quiet trigger. */
+  variant?: "ghost" | "outline";
   /** Re-probe Pi for models, e.g. after adding a provider or logging in. */
   onRefresh?: () => void;
   /** No directory is chosen yet, so there is no catalog to wait for. */
@@ -25,7 +27,7 @@ interface Props {
 }
 
 /** One settings trigger: the model label yields space before the effort or primary action does. */
-export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled, onRefresh, noDirectory }: Props) {
+export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled, variant = "ghost", onRefresh, noDirectory }: Props) {
   const [open, setOpen] = useState(false);
   // A refresh ends when a newer catalog arrives for this directory.
   const [refreshing, setRefreshing] = useState<string | null>(null);
@@ -63,15 +65,16 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
     <Popover open={open} onOpenChange={next => { setOpen(next); setQuery(""); }}>
       <PopoverTrigger asChild>
         <Button
-          variant="ghost" size="sm" aria-haspopup="dialog" aria-expanded={open}
+          variant={variant} size={variant === "outline" ? "default" : "sm"} aria-haspopup="dialog" aria-expanded={open}
           aria-label={`Model: ${want || label}; effort: ${effort}`}
           disabled={disabled || (!models.length && !onRefresh) || !catalog}
-          className={cn(picker, "min-w-0 max-w-none shrink justify-end")}
+          className={cn("min-w-0 shrink", variant === "outline" ? "max-w-full justify-start" : [picker, "max-w-none justify-end"])}
           title={want}
         >
           <span className={cn("min-w-0 truncate", !catalog && !noDirectory && "shimmer")}>{label}</span>
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>·</span>
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>{effort}</span>
+          {variant === "outline" && <ChevronDownIcon data-icon="inline-end" aria-hidden />}
         </Button>
       </PopoverTrigger>
       <PickerContent aria-label="Model and effort" className="font-mono" searchRef={search}>

@@ -1,5 +1,5 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, HomeIcon, PaletteIcon, PanelLeftOpenIcon, PlugIcon, SlidersHorizontalIcon } from "lucide-react";
+import { AlertCircleIcon, BrainCircuitIcon, HomeIcon, PaletteIcon, PanelLeftOpenIcon, PlugIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppearanceSettings } from "@/components/AppearanceSettings";
@@ -16,7 +16,7 @@ import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, Sidebar
 import { Skeleton } from "@/components/ui/skeleton";
 
 export type SettingsSection = "appearance" | "models" | "providers";
-const SECTIONS = [{ id: "appearance", label: "Appearance", icon: PaletteIcon }, { id: "models", label: "Models", icon: SlidersHorizontalIcon }, { id: "providers", label: "Providers", icon: PlugIcon }] as const;
+const SECTIONS = [{ id: "appearance", label: "Appearance", icon: PaletteIcon }, { id: "models", label: "Models", icon: BrainCircuitIcon }, { id: "providers", label: "Providers", icon: PlugIcon }] as const;
 
 export function SettingsNavigation({ compact, section, onShow, onHide, onSelect, onHome }: { compact: boolean; section: SettingsSection; onShow: () => void; onHide: () => void; onSelect: (section: SettingsSection) => void; onHome: () => void }) {
   const menu = <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
