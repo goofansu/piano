@@ -31,9 +31,17 @@ Motion tokens, also in `index.css`:
 | `--dur-hover` | 120ms | hover, press, colour |
 | `--dur-enter` | 200ms | things appearing |
 | `--dur-exit` | 150ms | things leaving |
-| `--dur-layout` | 320ms | the selection bar, the sidebar width, the link pile |
+| `--dur-layout` | 300ms | shared desktop sidebar width |
+| `--ease-layout` | `cubic-bezier(0.32, 0.72, 0, 1)` | shared desktop sidebar width |
 | `--ease-enter` | `cubic-bezier(0.22, 1, 0.36, 1)` | every entrance |
 | `--ease-exit` | `ease-out` | every exit |
+
+The shared layout refactor promotes the session sidebar's actual 300ms easing to layout tokens.
+The previous 320ms token/documentation did not drive either sidebar: Settings used 200ms linear.
+Both pages now use one width-bearing surface, one persisted width/collapse preference, and one
+persistent inset main card. Content activation uses the same 200ms entrance without remounting
+session content; the card's 360ms first-load entrance runs only when the shell mounts. Mobile
+navigation retains the shared Sheet's 300ms entrance / 200ms exit and focus policy.
 
 ## Type
 
@@ -92,7 +100,7 @@ expanded. The row already says so; two instruments playing at once is noise.
 
 - **Answer the action.** Motion exists to show what changed. Nothing animates on its own except
   the keys while Pi works and the caret while text streams.
-- **Never wait.** Enter 200ms, exit 150ms, hover 120ms, layout 320ms. Interruptible CSS
+- **Never wait.** Enter 200ms, exit 150ms, hover 120ms, layout 300ms. Interruptible CSS
   transitions and `animate-in/out`, no JS timelines.
 - **One orchestrated first load.** Sidebar skeleton rows (glyph + line, the real row geometry)
   appear at once; when projects arrive the real rows fade in with a 20ms stagger capped at eight

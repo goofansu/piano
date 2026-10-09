@@ -52,10 +52,8 @@ async function fill(text) {
 async function suggestions(text) { await fill(text); ab('press', 'End'); await until(`!!document.querySelector('${options}')`); }
 function capture(name) { ab('screenshot', join(evidence, `${name}.png`)); writeFileSync(join(evidence, `${name}.txt`), ab('snapshot')); }
 function assertFullPageSettings() {
-  assert.ok(evaluate(`(() => {
-    const rect = document.querySelector('[aria-label="Settings"]').getBoundingClientRect();
-    return rect.x === 0 && rect.y === 0 && rect.width === innerWidth && rect.height === innerHeight;
-  })()`), 'Settings occupies the whole viewport, not the conversation inset');
+  assert.ok(evaluate(`document.querySelector('[aria-label="Settings"]').checkVisibility()`), 'Settings is the visible page');
+  assert.equal(evaluate('document.querySelectorAll("main").length'), 1, 'one shared content card serves every page');
   assert.equal(evaluate(`!!document.querySelector('nav[aria-label="Sessions"]')?.checkVisibility()`), false, 'session navigation is hidden in Settings');
   assert.equal(evaluate('document.documentElement.scrollWidth > innerWidth'), false, 'Settings fits without horizontal overflow');
 }
@@ -68,13 +66,13 @@ function cardStyle(selector) {
 }
 async function assertSettingsCard(sidebarWidth, sessionStyle) {
   // Wait for the sidebar's width transition before checking the visible card geometry.
-  await until(`document.querySelector('[aria-label="Settings"] main').getBoundingClientRect().x === ${sidebarWidth}`);
+  await until(`document.querySelector('main').getBoundingClientRect().x === ${sidebarWidth}`);
   assert.deepEqual(evaluate(`(() => {
-    const { x, y, width, height } = document.querySelector('[aria-label="Settings"] main').getBoundingClientRect();
+    const { x, y, width, height } = document.querySelector('main').getBoundingClientRect();
     return { x, y, width, height };
   })()`), { x: sidebarWidth, y: 8, width: 1440 - sidebarWidth - 8, height: 984 }, 'Settings matches the session card geometry at 1440×1000');
-  assert.deepEqual(cardStyle('[aria-label="Settings"] main'), sessionStyle, 'Settings matches the session card radius, border, shadow and background');
-  assert.ok(evaluate(`document.querySelector('nav[aria-label="Settings sections"] button').checkVisibility()`), 'Settings navigation remains available in both expanded and icon modes');
+  assert.deepEqual(cardStyle('main'), sessionStyle, 'Settings matches the session card radius, border, shadow and background');
+  assert.ok(evaluate(`Array.from(document.querySelectorAll('button')).some(button => button.checkVisibility() && (button.getAttribute('aria-label') === 'Providers' || button.textContent.trim() === 'Providers'))`), 'Settings navigation remains available in both expanded and icon modes');
   assertFullPageSettings();
 }
 try {
@@ -92,16 +90,76 @@ try {
   assert.equal(sessionStyle.border, '1px');
   assert.notEqual(sessionStyle.shadow, 'none');
   await fill('Keep this draft');
+  evaluate(`(() => {
+    window.layoutCard = document.querySelector('main');
+    window.layoutDraft = document.querySelector('textarea');
+    window.sessionNavigation = document.querySelector('nav[aria-label="Sessions"]');
+    window.layoutMotion = { widths: [], views: [] };
+    document.addEventListener('transitionrun', event => {
+      if (event.target.matches('aside') && event.propertyName === 'width') {
+        const style = getComputedStyle(event.target);
+        layoutMotion.widths.push({ duration: style.transitionDuration, easing: style.transitionTimingFunction });
+      }
+    });
+    document.addEventListener('animationstart', event => {
+      if (event.animationName === 'view-enter' || event.animationName === 'sheet-enter') {
+        const style = getComputedStyle(event.target);
+        layoutMotion.views.push({ name: event.animationName, duration: style.animationDuration, easing: style.animationTimingFunction });
+      }
+    });
+    return true;
+  })()`);
+  ab('find', 'role', 'button', 'click', '--name', 'Hide sidebar', '--exact');
+  await until(`document.querySelector('main').getBoundingClientRect().x === 48`);
+  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  await until(`document.querySelector('main').getBoundingClientRect().x === 288`);
+  assert.ok(evaluate('sessionNavigation === document.querySelector(\'nav[aria-label="Sessions"]\')'), 'collapse/expand keeps expanded navigation mounted');
+  const sessionMotion = evaluate('layoutMotion.widths');
+  assert.equal(sessionMotion.length, 2, 'session collapse and expand each animate the shared width');
+  assert.notEqual(sessionMotion[0].duration, '0s');
+  evaluate('layoutMotion.widths = []; true');
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('wait', '--text', 'Providers');
   assert.equal(evaluate('location.pathname'), '/settings');
   await assertSettingsCard(288, sessionStyle);
+  assert.ok(evaluate('layoutCard === document.querySelector("main") && layoutDraft === document.querySelector("textarea")'), 'Settings does not replace the content card or session composer');
   capture('settings-desktop-expanded');
-  ab('find', 'role', 'button', 'click', '--name', 'Toggle sidebar', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Hide sidebar', '--exact');
   await assertSettingsCard(48, sessionStyle);
   capture('settings-desktop-collapsed');
-  ab('find', 'role', 'button', 'click', '--name', 'Toggle sidebar', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
   await assertSettingsCard(288, sessionStyle);
+  assert.deepEqual(evaluate('layoutMotion.widths'), sessionMotion, 'Settings collapse/expand uses identical transition timing and easing');
+  const interruptedAt = evaluate(`(async () => {
+    // These are plain layout buttons, not Radix menu triggers. Reverse within a frame of visible travel.
+    const button = label => Array.from(document.querySelectorAll('button')).find(element => element.getAttribute('aria-label') === label && element.checkVisibility());
+    button('Hide sidebar').click();
+    const deadline = performance.now() + 1000;
+    while (performance.now() < deadline) {
+      await new Promise(requestAnimationFrame);
+      const width = document.querySelector('aside').getBoundingClientRect().width;
+      if (width < 287 && width > 48) { button('Show sidebar').click(); return width; }
+    }
+    throw new Error('No intermediate sidebar width observed');
+  })()`);
+  assert.ok(interruptedAt > 48 && interruptedAt < 288, 'collapse can reverse before it finishes');
+  await assertSettingsCard(288, sessionStyle);
+  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
+  assert.equal(draft(), 'Keep this draft');
+  ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
+  await until('layoutMotion.views.length >= 3');
+  const pageMotion = evaluate('layoutMotion.views');
+  assert.equal(pageMotion.length, 3, 'one content entrance per page switch, no card re-entrance');
+  assert.equal(pageMotion[0].name, 'view-enter');
+  assert.deepEqual(pageMotion[1], pageMotion[0], 'returning to the session uses the Settings entrance');
+  assert.deepEqual(pageMotion[2], pageMotion[0]);
+  writeFileSync(join(evidence, 'layout-motion.json'), JSON.stringify({ sessionMotion, pageMotion }, null, 2));
+  ab('mouse', 'move', '288', '450'); ab('mouse', 'down'); ab('mouse', 'move', '400', '450'); ab('mouse', 'up');
+  await assertSettingsCard(400, sessionStyle);
+  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
+  await until(`document.querySelector('main').getBoundingClientRect().x === 400`);
+  ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
+  await assertSettingsCard(400, sessionStyle);
   ab('find', 'role', 'button', 'click', '--name', 'Sign in to Radius', '--exact');
   ab('wait', '--text', 'Sign in · radius');
   await until(`!!document.querySelector('#login-answer')`);
@@ -110,6 +168,9 @@ try {
   capture('settings-radius'); ab('press', 'Escape'); ab('press', 'Escape');
   ab('reload'); ab('wait', '--text', 'Providers');
   assert.equal(evaluate('location.pathname'), '/settings');
+  await assertSettingsCard(400, sessionStyle);
+  ab('dblclick', '[aria-label="Resize sidebar"]');
+  await assertSettingsCard(288, sessionStyle);
   ab('find', 'role', 'button', 'click', '--name', 'Sign in to Radius', '--exact');
   await until(`!!document.querySelector('#login-answer')`);
   ab('find', 'role', 'button', 'click', '--name', 'Cancel sign-in', '--exact');
@@ -205,17 +266,36 @@ try {
   await suggestions('/'); ab('set', 'viewport', '320', '640'); capture('new-mobile');
   assert.ok(evaluate(`(() => {const r=document.querySelector('${menu}').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;})()`), 'suggestions fit phone viewport');
   ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  const mobileSheetStyle = cardStyle('[role="dialog"]');
+  ab('press', 'Escape');
+  await until(`document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
+  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('wait', '--text', 'Providers'); capture('settings-mobile');
   assertFullPageSettings();
   assert.equal(evaluate(`!!document.querySelector('[role="dialog"]')`), false, 'mobile settings closes the sidebar');
-  ab('find', 'role', 'button', 'click', '--name', 'Toggle sidebar', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
   ab('wait', '[role="dialog"]');
-  assert.ok(evaluate(`document.querySelector('nav[aria-label="Settings sections"]').checkVisibility()`), 'mobile Settings exposes its own navigation');
+  assert.deepEqual(cardStyle('[role="dialog"]'), mobileSheetStyle, 'both pages use the same mobile sheet style');
+  assert.equal(evaluate(`document.querySelector('[role="dialog"]').getBoundingClientRect().width`), 320, 'Settings uses the same full-width mobile sheet');
+  ab('press', 'Escape');
+  await until(`document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
+  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  assert.ok(evaluate(`document.querySelector('[role="dialog"] nav[aria-label="Settings sections"]').checkVisibility()`), 'mobile Settings exposes its own navigation');
   ab('find', 'role', 'button', 'click', '--name', 'Providers', '--exact');
   await until(`!document.querySelector('[role="dialog"]')`);
   assertFullPageSettings();
-  console.log('PASS: Settings session-style card, sidebar collapse/expand, palette/mobile entry, OAuth resume/cancel, draft preservation, no login completion, both composers, live/probe discovery, keyboard and pointer acceptance, middle caret, literal prose, IME, stale response, Escape/abort, mobile newline and bounds');
+  ab('set', 'viewport', '1440', '1000');
+  ab('set', 'media', 'light', 'reduced-motion');
+  ab('find', 'role', 'button', 'click', '--name', 'Hide sidebar', '--exact');
+  await assertSettingsCard(48, sessionStyle);
+  assert.equal(evaluate(`getComputedStyle(document.querySelector('aside')).transitionDuration`), '0s');
+  ab('find', 'role', 'button', 'click', '--name', 'Back to session', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  await until(`document.querySelector('main').getBoundingClientRect().x === 288`);
+  assert.equal(evaluate(`getComputedStyle(document.querySelector('aside')).transitionDuration`), '0s');
+  assert.equal(evaluate('document.getAnimations().filter(animation => animation.playState === "running").length'), 0, 'reduced motion suppresses layout and page entrances');
+  console.log('PASS: shared Settings/session card, collapse/expand motion and page entrances, retained DOM/drafts, resize persistence, reduced motion, mobile sheet/focus, OAuth resume/cancel, composer completion, keyboard/pointer/IME, stale responses and bounds');
 } finally {
   try { capture('final'); ab('close'); } catch {}
   backend.kill('SIGTERM'); frontend.kill('SIGTERM');

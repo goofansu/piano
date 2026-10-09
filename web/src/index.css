@@ -399,7 +399,7 @@
 }
 
 /* Motion. Every state change is answered by motion that explains what changed, at a tempo
- * that never makes you wait. Hover 120ms, enter 200ms, exit 150ms, layout 320ms; one easing for
+ * that never makes you wait. Hover 120ms, enter 200ms, exit 150ms, layout 300ms; one easing for
  * entrances and a plain ease-out for exits. CSS transitions and animate-in/out only, so a change
  * of mind interrupts cleanly. Never animate transcript updates or remount the conversation to
  * get a transition. */
@@ -407,7 +407,9 @@
   --dur-hover: 120ms;
   --dur-enter: 200ms;
   --dur-exit: 150ms;
-  --dur-layout: 320ms;
+  /* Preserve the session sidebar's established tempo, now shared by every page. */
+  --dur-layout: 300ms;
+  --ease-layout: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-exit: ease-out;
   --ease-out: var(--ease-enter);

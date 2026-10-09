@@ -1,33 +1,22 @@
 import type { ClientCommand, ServerMessage } from "@shared/wire";
-import { cn } from "cn";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AppLayout, LayoutView, useAppLayout } from "@/components/AppLayout";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
 import { type ProjectDialog, ProjectDialogView } from "@/components/OutcomeProjects";
 import { SessionView } from "@/components/SessionView";
-import { SettingsPage } from "@/components/SettingsPage";
+import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { hasMod } from "@/lib/keys";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
-import { readJson, readStorage, writeJson, writeStorage } from "@/lib/storage";
+import { readJson, writeJson } from "@/lib/storage";
 import { useConnection } from "@/lib/ws";
 import { type Action, type AppState, initialState, reduce, sessionDelivery } from "@/store";
-
-const SIDEBAR_KEY = "piano.sidebar";
-/** Collapsed, the sidebar is a rail just wide enough for its icons. */
-const RAIL_WIDTH = 48;
-
-const WIDTH_KEY = "piano.sidebarWidth";
-/** Sidebar width bounds in px; dragging under the minimum by a margin collapses it. */
-const WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
 
 /** Model catalogs outlive reloads so the picker opens at once; its refresh button re-probes Pi. */
 const CATALOGS_KEY = "piano.catalogs";
@@ -42,8 +31,8 @@ export default function App() {
     // Without storage the server cache still answers.
     writeJson(CATALOGS_KEY, Object.fromEntries(Object.entries(state.catalogs).filter(([, c]) => !c.error)));
   }, [state.catalogs]);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const sidebarReturnFocus = useRef<HTMLElement | null>(null);
+  const layout = useAppLayout();
+  const { closeMobile, show: showSidebar, toggle: toggleSidebar } = layout;
   const latest = useRef(state);
   latest.current = state;
   // Socket frames can arrive before React renders. Keep acceptance/correlation current.
@@ -51,54 +40,6 @@ export default function App() {
     latest.current = reduce(latest.current, action);
     reactDispatch(action);
   }, []);
-
-  // ── sidebar ──
-  // Hidden or shown on wide screens, remembered per browser; on narrow screens it is a sheet.
-  const [collapsed, setCollapsedState] = useState(() => readStorage(SIDEBAR_KEY) === "hidden");
-  const setCollapsed = useCallback((v: boolean) => {
-    setCollapsedState(v);
-    writeStorage(SIDEBAR_KEY, v ? "hidden" : "shown");
-  }, []);
-  const wide = () => matchMedia("(min-width: 768px)").matches;
-  const showSidebar = useCallback(() => {
-    if (wide()) { setCollapsed(false); return; }
-    sidebarReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setMenuOpen(true);
-  }, [setCollapsed]);
-  // Resizable by dragging its edge; the width is remembered, and a drag past the minimum collapses it.
-  const [width, setWidthState] = useState(() => {
-    const v = Number(readStorage(WIDTH_KEY));
-    return v >= WIDTH.min && v <= WIDTH.max ? v : WIDTH.default;
-  });
-  const [dragging, setDragging] = useState(false);
-  const setWidth = useCallback((v: number) => {
-    setWidthState(v);
-    writeStorage(WIDTH_KEY, String(v));
-  }, []);
-  const startResize = useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      setDragging(true);
-      let last = width;
-      const move = (ev: PointerEvent) => {
-        last = ev.clientX;
-        setWidthState(Math.min(WIDTH.max, Math.max(WIDTH.min, ev.clientX)));
-      };
-      const up = () => {
-        removeEventListener("pointermove", move);
-        removeEventListener("pointerup", up);
-        setDragging(false);
-        if (last < WIDTH.collapseBelow) {
-          // Collapsed by dragging: come back at the width it had before the drag.
-          setWidthState(width);
-          setCollapsed(true);
-        } else setWidth(Math.min(WIDTH.max, Math.max(WIDTH.min, last)));
-      };
-      addEventListener("pointermove", move);
-      addEventListener("pointerup", up);
-    },
-    [width, setWidth, setCollapsed],
-  );
 
   const onMessage = useCallback((m: ServerMessage) => {
     const notifySession = m._tag === "session" && sessionDelivery(latest.current, m) === "apply";
@@ -115,7 +56,8 @@ export default function App() {
   const conn = useConnection(onMessage, onStatus);
 
   const [settingsOpen, setSettingsOpen] = useState(location.pathname === "/settings");
-  const openSettings = useCallback(() => { setSettingsOpen(true); setMenuOpen(false); }, []);
+  const openSettings = useCallback(() => { setSettingsOpen(true); closeMobile(); }, [closeMobile]);
+  const closeSettings = useCallback(() => { setSettingsOpen(false); closeMobile(); }, [closeMobile]);
   const send = useCallback((m: ClientCommand) => {
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = crypto.randomUUID();
@@ -129,14 +71,14 @@ export default function App() {
   }, [conn, dispatch]);
   const select = useCallback(
     (cwd: string, sessionId: string | null) => {
-      setMenuOpen(false);
+      closeMobile();
       setSettingsOpen(false);
       // Clicking the session already on screen (or already being fetched) is a no-op.
       const current = latest.current.session ?? latest.current.selecting;
       if (current && current.cwd === cwd && current.sessionId === sessionId && latest.current.view.kind === "session") return;
       send({ _tag: "select", cwd, sessionId });
     },
-    [send],
+    [send, closeMobile],
   );
 
   // Re-select the current session after a reconnect so the server re-attaches us.
@@ -155,8 +97,8 @@ export default function App() {
   const openNew = useCallback((cwd?: string, outcomeProjectId?: string) => {
     setSettingsOpen(false);
     dispatch({ type: "new", cwd, outcomeProjectId });
-    setMenuOpen(false);
-  }, []);
+    closeMobile();
+  }, [closeMobile]);
   // A project's home is its New page: sessions started there join it.
   const openProject = useCallback((projectId: string) => openNew(undefined, projectId), [openNew]);
 
@@ -167,10 +109,6 @@ export default function App() {
   const [changesOpen, setChangesOpen] = useState(false);
   const [pullRequestOpen, setPullRequestOpen] = useState(false);
   useEffect(() => { setChangesOpen(false); setPullRequestOpen(false); }, [state.session?.cwd, state.session?.sessionId]);
-  const toggleSidebar = useCallback(() => {
-    if (wide()) setCollapsed(!collapsed);
-    else setMenuOpen((open) => !open);
-  }, [collapsed, setCollapsed]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
@@ -204,6 +142,7 @@ export default function App() {
   useEffect(applyRoute, [applyRoute, state.projectsLoaded, state.projects, state.sessionReferences]);
   useEffect(() => {
     const onPop = () => {
+      closeMobile();
       setSettingsOpen(location.pathname === "/settings");
       if (location.pathname === "/settings") return;
       wanted.current = parseRoute(location);
@@ -211,7 +150,7 @@ export default function App() {
     };
     addEventListener("popstate", onPop);
     return () => removeEventListener("popstate", onPop);
-  }, [applyRoute]);
+  }, [applyRoute, closeMobile]);
   // The address bar follows the state; a route that is still being applied already matches it.
   useEffect(() => {
     if (wanted.current) return;
@@ -245,66 +184,15 @@ export default function App() {
     if (link) link.href = working ? "/favicon-working.svg" : "/favicon.svg";
   }, [working]);
 
-  // Settings owns the viewport; the session layout stays mounted but out of view.
   return (
-    <SidebarProvider className="relative h-dvh min-h-0 overflow-hidden bg-surface-0 text-ink">
-      {/* SidebarProvider defaults to instant tooltips; retain the app's existing delay. */}
-      <TooltipProvider delayDuration={300}>
-      <aside
-        className={cn(
-          "relative hidden shrink-0 md:flex md:flex-col",
-          settingsOpen && "md:hidden",
-          !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-        )}
-        style={{ width: collapsed ? RAIL_WIDTH : width }}
-      >
-        {collapsed ? (
-          <SidebarRail openSettings={openSettings} onShow={() => setCollapsed(false)} working={anyWorking} />
-        ) : (
-          <div className="h-full overflow-hidden">
-            <div className="h-full shrink-0" style={{ width }}>
-              <Sidebar {...sidebarProps} onHide={() => setCollapsed(true)} />
-            </div>
-          </div>
-        )}
-        {!collapsed && (
-          // The edge is the handle: drag to resize, double-click to reset, drag past the minimum to hide.
-          // biome-ignore lint/a11y/useSemanticElements: a focusable, draggable resize handle; <hr> cannot be one.
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
-            aria-valuenow={width}
-            aria-valuemin={WIDTH.min}
-            aria-valuemax={WIDTH.max}
-            title="Drag to resize. Double-click to reset."
-            onPointerDown={startResize}
-            onDoubleClick={() => setWidth(WIDTH.default)}
-            className={cn(
-              "absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize select-none after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-brand after:opacity-0 after:transition-opacity hover:after:opacity-100",
-              dragging && "after:opacity-100",
-            )}
-          />
-        )}
-      </aside>
-      <Sheet open={!settingsOpen && menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="h-dvh w-full border-0 bg-surface-0 p-0 sm:max-w-none" showCloseButton={false} aria-describedby={undefined} onOpenAutoFocus={event => {
-          // Focus the sheet itself, not its first button, so no tooltip opens with it.
-          event.preventDefault();
-          (event.currentTarget as HTMLElement | null)?.focus?.();
-        }} onCloseAutoFocus={event => {
-          const target = sidebarReturnFocus.current;
-          sidebarReturnFocus.current = null;
-          if (target?.isConnected) { event.preventDefault(); target.focus(); }
-        }}>
-          <SheetTitle className="sr-only">Projects and sessions</SheetTitle>
-          <Sidebar {...sidebarProps} onHide={() => setMenuOpen(false)} />
-        </SheetContent>
-      </Sheet>
-      {/* Keep the previous view mounted for drafts and session continuity (INV-02), not as Settings chrome. */}
-      <main className={cn("sheet-enter relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1", settingsOpen && "hidden")}>
-        {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
-        <div key={state.view.kind} className="view-enter flex min-h-0 flex-1 flex-col">
+    <AppLayout layout={layout} navigationTitle={settingsOpen ? "Settings navigation" : "Projects and sessions"}
+      navigation={compact => settingsOpen
+        ? <SettingsNavigation compact={compact} onShow={layout.show} onHide={layout.hide} onSelect={closeMobile} />
+        : compact ? <SidebarRail openSettings={openSettings} onShow={layout.show} working={anyWorking} />
+          : <Sidebar {...sidebarProps} onHide={layout.hide} />}
+      content={<>
+        {/* Keep the previous view mounted for drafts and session continuity (INV-02). */}
+        <LayoutView key={state.view.kind} active={!settingsOpen}>
           {state.view.kind === "new" ? (
             <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
           ) : state.view.kind === "missing-session" ? (
@@ -320,9 +208,9 @@ export default function App() {
           ) : (
             <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={!settingsOpen && changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={!settingsOpen && pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}
-        </div>
-      </main>
-      {settingsOpen && <SettingsPage close={() => setSettingsOpen(false)} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} />}
+        </LayoutView>
+        {settingsOpen && <LayoutView><SettingsPage close={closeSettings} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
+      </>}>
       <Toaster
         position="top-center"
         className="toaster group !absolute"
@@ -334,9 +222,8 @@ export default function App() {
         toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
       />
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette openSettings={openSettings} closeSettings={settingsOpen ? () => setSettingsOpen(false) : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { setSettingsOpen(false); setChangesOpen(true); }} openPullRequest={() => { setSettingsOpen(false); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette openSettings={openSettings} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
-      </TooltipProvider>
-    </SidebarProvider>
+    </AppLayout>
   );
 }

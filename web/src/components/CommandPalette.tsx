@@ -9,7 +9,6 @@ import { sessionProject } from "@/components/OutcomeProjects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { useSidebar } from "@/components/ui/sidebar";
 import { abbrevPath } from "@/lib/format";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -36,7 +35,6 @@ interface Props {
  * Search matches a session's title, its directory, its branch and its project.
  */
 export function CommandPalette({ open, onOpenChange, state, select, openNew, openSettings, closeSettings, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
-  const { toggleSidebar: toggleSettingsSidebar } = useSidebar();
   const { setTheme } = useTheme();
   const { view, setView } = useSidebarView();
   const [search, setSearch] = useState("");
@@ -112,7 +110,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
               {composerTrust.trusted ? <><ShieldOffIcon /> Untrust folder</> : <><ShieldCheckIcon /> Trust folder</>}
             </CommandItem>
           )}
-          <CommandItem value="toggle sidebar" onSelect={() => run(closeSettings ? toggleSettingsSidebar : toggleSidebar)}>
+          <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
             <PanelLeftIcon /> Toggle sidebar
           </CommandItem>
           <CommandItem value="appearance light" keywords={["theme"]} onSelect={() => run(() => setTheme("light"))}><SunIcon /> Light appearance</CommandItem>

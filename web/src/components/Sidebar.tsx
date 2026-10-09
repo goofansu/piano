@@ -1,13 +1,14 @@
 import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { BranchLabel } from "@/components/BranchLabel";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
-import { Keys, PianoMark } from "@/components/PianoMark";
+import { Keys } from "@/components/PianoMark";
 import { useSessionActions } from "@/components/SessionActions";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
@@ -157,19 +158,12 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-16 shrink-0 items-center gap-2.5 px-4">
-        <PianoMark />
-        <span className="text-lg font-semibold tracking-tight">Piano</span>
-        <span className="flex-1" />
+      <LayoutHeader onHide={onHide}>
         <IconButton label="Search sessions" tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>} onClick={onPalette}>
           <SearchIcon />
         </IconButton>
         <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
-        <IconButton label="Hide sidebar" onClick={onHide}>
-          <XIcon className="md:hidden" />
-          <PanelLeftCloseIcon className="hidden md:block" />
-        </IconButton>
-      </div>
+      </LayoutHeader>
       <div className="px-3 pb-3">
         <Button
           variant="outline"
@@ -284,18 +278,7 @@ function SidebarSkeleton() {
 
 /** The collapsed sidebar: a vertical rail with the expand control and activity mark. */
 export function SidebarRail({ onShow, working, openSettings }: { onShow: () => void; working: boolean; openSettings: () => void }) {
-  return (
-    <div className="flex h-full flex-col items-center gap-1 pt-2">
-      <IconButton label="Show sidebar" side="right" onClick={onShow}>
-        <PanelLeftOpenIcon />
-      </IconButton>
-      {/* With no rows in view, the mark itself says whether Pi is working somewhere. */}
-      <div className="mt-auto flex flex-col items-center gap-3 pb-3">
-        <IconButton label="Settings" side="right" onClick={openSettings}><SettingsIcon /></IconButton>
-        <PianoMark playing={working} className="size-6 rounded-md shadow-none" />
-      </div>
-    </div>
-  );
+  return <LayoutRail onShow={onShow} working={working} footer={<IconButton label="Settings" side="right" onClick={openSettings}><SettingsIcon /></IconButton>} />;
 }
 
 interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew" | "onProjectDialog"> {

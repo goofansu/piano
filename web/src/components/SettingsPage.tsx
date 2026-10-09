@@ -1,8 +1,8 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, ArrowLeftIcon, PlugIcon } from "lucide-react";
+import { AlertCircleIcon, ArrowLeftIcon, PanelLeftOpenIcon, PlugIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PianoMark } from "@/components/PianoMark";
+import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,13 +10,24 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function SettingsPage({ close, providersChanged }: { close: () => void; providersChanged: () => void }) {
-  const { setOpenMobile } = useSidebar();
-  // Leaving Settings must also dismiss its portalled mobile navigation.
-  useEffect(() => () => setOpenMobile(false), [setOpenMobile]);
+export function SettingsNavigation({ compact, onShow, onHide, onSelect }: { compact: boolean; onShow: () => void; onHide: () => void; onSelect: () => void }) {
+  const menu = <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
+    <SidebarMenu><SidebarMenuItem>
+      <SidebarMenuButton isActive aria-current="page" aria-label="Providers" tooltip="Providers" className={compact ? "size-8 justify-center p-2" : "h-9 pointer-coarse:h-11"} onClick={onSelect}>
+        <PlugIcon />{!compact && <span>Providers</span>}
+      </SidebarMenuButton>
+    </SidebarMenuItem></SidebarMenu>
+  </nav>;
+  return compact ? <LayoutRail onShow={onShow}>{menu}</LayoutRail> : <div className="flex h-full flex-col">
+    <LayoutHeader onHide={onHide} />
+    <SidebarContent><SidebarGroup className="px-3"><SidebarGroupContent>{menu}</SidebarGroupContent></SidebarGroup></SidebarContent>
+  </div>;
+}
+
+export function SettingsPage({ close, onMenu, providersChanged }: { close: () => void; onMenu: () => void; providersChanged: () => void }) {
   const [providers, setProviders] = useState<OAuthProvider[]>();
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
@@ -48,35 +59,10 @@ export function SettingsPage({ close, providersChanged }: { close: () => void; p
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
     } finally { setSigningOut(undefined); }
   };
-  return <section aria-label="Settings" className="flex h-full w-full overflow-hidden [--sidebar-width:288px] [--sidebar-width-icon:48px]">
-    {/* Use the icon rail without inset's extra sidebar padding to match the session's 288/48px widths. */}
-    <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0">
-      <SidebarHeader className="h-16 flex-row items-center gap-2.5 px-4 group-data-[collapsible=icon]:px-2.5">
-        <PianoMark />
-        <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">Piano</span>
-        <SidebarTrigger className="ml-auto md:hidden" aria-label="Hide settings navigation" />
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup className="px-3 group-data-[collapsible=icon]:px-2">
-          <SidebarGroupContent>
-            <nav aria-label="Settings sections">
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton isActive aria-current="page" aria-label="Providers" tooltip="Providers" className="h-9 pointer-coarse:h-11" onClick={() => setOpenMobile(false)}>
-                    <PlugIcon /><span>Providers</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </nav>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-    </Sidebar>
-    {/* Keep the session main's exact card tokens, rather than SidebarInset's default radius/shadow. */}
-    <SidebarInset className="min-h-0 min-w-0 overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
+  return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-16 shrink-0 items-center gap-2 px-4">
+        <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
         <Button variant="ghost" size="icon" aria-label="Back to session" onClick={close}><ArrowLeftIcon /></Button>
-        <SidebarTrigger aria-label="Toggle sidebar" />
         <h1 className="text-lg font-semibold">Settings</h1>
       </header>
       <Separator />
@@ -118,7 +104,6 @@ export function SettingsPage({ close, providersChanged }: { close: () => void; p
             </Item>)}</ItemGroup>}
         </section>
       </div>
-    </SidebarInset>
     {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} close={() => setLogin(undefined)} signedIn={refreshProviders} />}
   </section>;
 }
