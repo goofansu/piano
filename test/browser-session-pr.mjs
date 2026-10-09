@@ -20,7 +20,7 @@ const git = (...args) => execFileSync('git', ['-C', repo, '-c', 'user.name=Test'
 const branch = 'feature/a-very-long-branch-name-that-must-not-push-the-pr-control-away';
 git('init', '-q', '-b', branch); git('commit', '--allow-empty', '-qm', 'Initial'); git('remote', 'add', 'origin', `https://${githubHost}/example/repo.git`);
 const forge = join(root, 'forge.json');
-const prs = [42, 43].map(number => ({ url: `https://github.com/example/repo/pull/${number}`, number, title: number === 42 ? 'The session deliverable' : 'Explicitly linked work', state: 'OPEN', isDraft: false, reviewDecision: 'APPROVED', statusCheckRollup: [], headRefName: number === 42 ? branch : 'other', headRepository: { name: 'repo' }, headRepositoryOwner: { login: 'example' } }));
+const prs = [42, 43].map(number => ({ url: `https://github.com/example/repo/pull/${number}`, number, title: number === 42 ? 'The session deliverable' : 'Explicitly linked work', state: 'OPEN', isDraft: false, reviewDecision: 'APPROVED', statusCheckRollup: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' }], headRefName: number === 42 ? branch : 'other', headRepository: { name: 'repo' }, headRepositoryOwner: { login: 'example' } }));
 const control = data => writeFileSync(forge, JSON.stringify({ expectedHost: githubHost, ...(githubHost === 'github.int.exe.xyz' ? { expectedRepo: `${githubHost}/example/repo` } : {}), ...data }));
 control({ prs });
 writeFileSync(join(bin, 'gh'), `#!${process.execPath}\nimport ${JSON.stringify(resolve('test/fixtures/fake-gh.mjs'))};\n`, { mode: 0o755 });
@@ -103,6 +103,10 @@ try {
   assert.equal(await evaluate(`!!document.querySelector('#session-pr-url')`), false, 'Linked PR opens details, not a form');
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true);
   await ab('wait', '--text', 'The session deliverable');
+  assert.equal(await evaluate(`document.querySelector('${popover}').textContent.includes('Checks passed') && document.querySelector('${popover}').textContent.includes('Approved')`), true);
+  assert.equal(await evaluate(`document.querySelector('${popover} [data-slot="popover-title"] a').href`), prs[0].url, 'PR title is the primary link');
+  assert.equal(await evaluate(`document.querySelector('${popover} [data-slot="badge"]').textContent`), 'Open');
+  assert.equal(await evaluate(`document.querySelector('${popover} [data-slot="popover-header"]').textContent.includes('example/repo')`), true);
   await ab('screenshot', join(evidence, '00-pr-popover-desktop.png'));
   await editLink();
   assert.equal(await evaluate(`document.querySelector('#session-pr-url').value`), prs[0].url);
@@ -207,7 +211,7 @@ try {
   // State lives in the icon/color and accessible description, not a redundant tooltip line.
   observations.prStates = [];
   for (const [label, state, isDraft] of [['Open', 'OPEN', false], ['Draft', 'OPEN', true], ['Merged', 'MERGED', false], ['Closed', 'CLOSED', false]]) {
-    control({ prs: prs.map(pr => ({ ...pr, state, isDraft, reviewDecision: '' })) });
+    control({ prs: prs.map(pr => ({ ...pr, state, isDraft, reviewDecision: '', statusCheckRollup: [] })) });
     await evaluate(`window.dispatchEvent(new Event('focus')); true`);
     await ab('wait', '--fn', `document.querySelector(${JSON.stringify(badge(43))})?.getAttribute('aria-description') === ${JSON.stringify(label)}`);
     await ab('hover', badge(43));
@@ -216,6 +220,14 @@ try {
     observations.prStates.push(await evaluate(`(() => { const svg = document.querySelector(${JSON.stringify(badge(43))}).querySelector('svg'); return { state: ${JSON.stringify(label)}, color: getComputedStyle(svg).color, shape: svg.innerHTML }; })()`));
     await ab('screenshot', join(evidence, `state-${label.toLowerCase()}.png`));
     await ab('mouse', 'move', '0', '0');
+    await openDetails();
+    assert.equal(await evaluate(`document.querySelector('${popover} [data-slot="badge"]').textContent`), label, 'Card has an explicit state badge');
+    assert.equal(await evaluate(`!!document.querySelector('${popover} [data-slot="badge"] svg')`), true, 'Status includes an icon');
+    await ab('screenshot', join(evidence, `card-${label.toLowerCase()}.png`));
+    await evaluate(`document.documentElement.classList.add('dark'); true`);
+    await ab('screenshot', join(evidence, `card-${label.toLowerCase()}-dark.png`));
+    await evaluate(`document.documentElement.classList.remove('dark'); true`);
+    await closeDetails();
   }
   assert.equal(new Set(observations.prStates.map(s => s.color)).size, 4);
   assert.equal(new Set(observations.prStates.map(s => s.shape)).size, 4);

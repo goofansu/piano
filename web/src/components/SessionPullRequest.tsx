@@ -1,7 +1,8 @@
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
-import { ChevronDownIcon, ExternalLinkIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, XIcon } from "lucide-react";
+import { BookMarkedIcon, CheckIcon, ChevronDownIcon, ClockIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -12,11 +13,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
 const states = {
-  open: { label: "Open", Icon: GitPullRequestIcon, color: "text-ok" },
-  draft: { label: "Draft", Icon: GitPullRequestDraftIcon, color: "text-muted-foreground" },
-  merged: { label: "Merged", Icon: GitMergeIcon, color: "text-merged" },
-  closed: { label: "Closed", Icon: GitPullRequestClosedIcon, color: "text-err" },
-};
+  open: { label: "Open", Icon: GitPullRequestIcon, color: "text-ok", variant: "success" },
+  draft: { label: "Draft", Icon: GitPullRequestDraftIcon, color: "text-muted-foreground", variant: "secondary" },
+  merged: { label: "Merged", Icon: GitMergeIcon, color: "text-merged", variant: "merged" },
+  closed: { label: "Closed", Icon: GitPullRequestClosedIcon, color: "text-err", variant: "error" },
+} as const;
 function details(pr: PullRequest, includeState = true) {
   const checks = { none: "", pending: "Checks running", success: "Checks passed", failure: "Checks failed" }[pr.checks];
   const review = { none: "", approved: "Approved", changes_requested: "Changes requested", review_required: "Review required" }[pr.review];
@@ -46,6 +47,30 @@ function SessionPullRequestBadge({ value }: { value: SessionPullRequest | undefi
   </Tooltip>;
 }
 
+/** Checks and reviews matter while work is open, not after its final disposition. */
+function PullRequestSignals({ pr }: { pr: PullRequest }) {
+  if (pr.state !== "open" && pr.state !== "draft") return null;
+  const checks = {
+    none: null,
+    pending: { label: "Checks running", Icon: ClockIcon },
+    success: { label: "Checks passed", Icon: CheckIcon },
+    failure: { label: "Checks failed", Icon: XCircleIcon },
+  }[pr.checks];
+  const review = {
+    none: null,
+    approved: { label: "Approved", Icon: CheckIcon },
+    changes_requested: { label: "Changes requested", Icon: MessageSquareIcon },
+    review_required: { label: "Review required", Icon: MessageSquareIcon },
+  }[pr.review];
+  if (!checks && !review) return null;
+  // Plain supporting facts, rather than competing status badges.
+  return <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+    {[checks, review].map(signal => signal && <span key={signal.label} className="flex items-center gap-1">
+      <signal.Icon className="size-3 shrink-0" aria-hidden />{signal.label}
+    </span>)}
+  </div>;
+}
+
 type PullRequestControl = ReturnType<typeof useSessionPullRequest>;
 
 export function SessionPullRequestControl({ open, onOpenChange, pr }: {
@@ -57,6 +82,9 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
   const link = pr.value?.link;
   const pullRequest = pr.value?.pullRequest;
   const showingDetails = !!link && !editing;
+  const status = pullRequest ? states[pullRequest.state] : undefined;
+  const repo = pullRequest?.repo ?? (link ? new URL(link.url).pathname.split("/").slice(1, 3).join("/") : "");
+  const number = pullRequest?.number ?? link?.url.split("/").pop();
   useEffect(() => { if (!open) setEditing(false); }, [open]);
   // Cancel and successful discovery replace the focused form controls.
   useEffect(() => { if (open && showingDetails) closeRef.current?.focus(); }, [open, showingDetails]);
@@ -76,18 +104,24 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
     </PopoverAnchor>
     <PopoverContent align="start" sideOffset={8} collisionPadding={16} aria-labelledby={titleId} className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto">
       <PopoverHeader className="flex-row items-center justify-between gap-2">
-        <PopoverTitle id={titleId}>{editing ? "Change pull request" : link ? "Pull request" : "Link pull request"}</PopoverTitle>
+        {showingDetails ? <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
+          <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 break-all">{repo}</span>
+        </p> : <PopoverTitle id={titleId}>{editing ? "Change pull request" : "Link pull request"}</PopoverTitle>}
         <Button ref={closeRef} variant="ghost" size="icon-xs" aria-label="Close pull request" onClick={close}><XIcon /></Button>
       </PopoverHeader>
       {link && showingDetails ? <>
         {/* Plain PR facts, not a second card inside the popover. */}
-        <div className="flex min-w-0 flex-col gap-2 text-sm">
-          <a href={link.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-muted-foreground hover:underline">
-            <span className="min-w-0 break-words">{pullRequest ? `${pullRequest.repo} #${pullRequest.number}` : link.url}</span>
-            <ExternalLinkIcon className="size-3 shrink-0" aria-hidden />
-          </a>
-          {pullRequest && <p className="break-words font-medium">{pullRequest.title}</p>}
-          <p className="text-muted-foreground">{pullRequest ? details(pullRequest) : "Status unavailable"}</p>
+        <div className="flex min-w-0 flex-col gap-3">
+          <PopoverTitle id={titleId}>
+            <a href={link.url} target="_blank" rel="noreferrer" className="break-words hover:underline">{pullRequest?.title ?? "View pull request"}</a>
+          </PopoverTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">#{number}</span>
+            {status ? <Badge variant={status.variant}><status.Icon data-icon="inline-start" aria-hidden />{status.label}</Badge>
+              : <Badge variant="secondary">Status unavailable</Badge>}
+          </div>
+          {pullRequest && <PullRequestSignals pr={pullRequest} />}
         </div>
         <Separator />
         <div className="flex justify-between gap-2">
