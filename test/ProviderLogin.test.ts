@@ -42,6 +42,16 @@ test("INV-01/04/11/12: OAuth interactions persist through Pi, never expose token
     return { type: "oauth", access: "private-access-token", refresh: "private-refresh-token", expires: Date.now() + 3600_000 };
   }, (login, authPath) => Effect.gen(function* () {
     const providers = yield* login.providers;
+    assert.deepEqual(providers.map(p => [p.id, p.name]), [
+      ["anthropic", "Anthropic"],
+      ["github-copilot", "GitHub Copilot"],
+      ["kimi-coding", "Kimi For Coding"],
+      ["meta", "Meta"],
+      ["openai", "OpenAI"],
+      ["openrouter", "OpenRouter"],
+      ["radius", "Radius"],
+      ["xai", "xAI"],
+    ]);
     assert.equal(providers.find(p => p.id === "radius")?.signedIn, false);
     assert(!providers.some(p => p.id === "deepseek"));
     const started = yield* login.start("radius");
@@ -118,6 +128,9 @@ test("INV-01/11/12: sign-out requires an OAuth credential and sign-in requires s
 
 test("INV-11: unknown providers and provider failures cannot disclose token response bodies", async () => {
   await fixture(async () => { throw new Error("Token exchange: secret-response-token"); }, login => Effect.gen(function* () {
+    yield* login.start("openai-codex");
+    const legacy = yield* until(login, s => s.status === "error");
+    assert.match(legacy.message!, /does not support OAuth/);
     yield* login.start("not-a-provider");
     const unknown = yield* until(login, s => s.status === "error");
     assert.match(unknown.message!, /does not support OAuth/);

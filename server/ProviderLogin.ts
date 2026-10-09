@@ -44,8 +44,8 @@ export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function
       const runtime = await factory.create();
       // Read Pi's credential metadata, not tokens or the availability cache.
       const signedIn = new Set((await runtime.listCredentials()).filter(c => c.type === "oauth").map(c => c.providerId));
-      return runtime.getProviders().filter(p => p.auth.oauth)
-        .map(p => ({ id: p.id, name: p.auth.oauth!.name, signedIn: signedIn.has(p.id) }))
+      return runtime.getProviders().filter(p => p.auth.oauth && p.id !== "openai-codex")
+        .map(p => ({ id: p.id, name: p.name, signedIn: signedIn.has(p.id) }))
         .sort((a, b) => a.id.localeCompare(b.id));
     }),
     state: Effect.sync(snapshot),
@@ -86,7 +86,7 @@ export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function
         try {
           const runtime = await factory.create();
           if (signal.aborted) return;
-          if (!runtime.getProviders().some(p => p.id === provider && p.auth.oauth)) {
+          if (provider === "openai-codex" || !runtime.getProviders().some(p => p.id === provider && p.auth.oauth)) {
             attempt.state = { id: attempt.state.id, provider, status: "error", message: "This provider does not support OAuth sign-in in Piano." };
             return;
           }
