@@ -12,7 +12,7 @@
  *   2 raised   things that float over the canvas: menus, popovers, tooltips
  *   3 overlay  things that take over: dialogs, the mobile sidebar sheet
  *
- * Colour: an ivory canvas by day, an ebony canvas by night, one felt-green accent
+ * Colour: an ivory canvas by day, warm charcoal by night, one felt-green accent
  * that means "live": the focus ring, the send key, the working session.
  */
 @import "tailwindcss";
@@ -110,35 +110,40 @@
 }
 
 .dark {
-  --surface-0: oklch(0.155 0.006 270);
-  --conversation: oklch(0.185 0.006 270);
-  --surface-1: oklch(0.215 0.007 270);
-  --surface-2: oklch(0.22 0.007 270);
-  --surface-3: oklch(0.23 0.007 270);
-  --line: oklch(1 0 0 / 8%);
-  --line-strong: oklch(1 0 0 / 14%);
-  --fill: oklch(1 0 0 / 4%);
-  --fill-hover: oklch(1 0 0 / 7%);
-  --fill-active: oklch(1 0 0 / 11%);
-  --shadow-1: 0 1px 2px oklch(0 0 0 / 30%), 0 8px 24px -16px oklch(0 0 0 / 60%);
-  --shadow-2: 0 2px 6px oklch(0 0 0 / 35%), 0 16px 40px -18px oklch(0 0 0 / 70%), inset 0 1px oklch(1 0 0 / 5%);
-  --shadow-3: 0 8px 20px oklch(0 0 0 / 40%), 0 32px 80px -24px oklch(0 0 0 / 80%), inset 0 1px oklch(1 0 0 / 6%);
+  /* The ivory palette after dusk: warm neutrals, not blue-black. Elevation adds
+   * lightness so menus and dialogs separate without bright outlines. */
+  --surface-0: oklch(0.195 0.004 75);
+  --conversation: oklch(0.225 0.005 75);
+  --surface-1: oklch(0.255 0.006 75);
+  --surface-2: oklch(0.28 0.007 75);
+  --surface-3: oklch(0.3 0.007 75);
+  --line: oklch(0.93 0.012 85 / 9%);
+  --line-strong: oklch(0.93 0.012 85 / 17%);
+  --fill: oklch(0.93 0.012 85 / 4%);
+  --fill-hover: oklch(0.93 0.012 85 / 6%);
+  --fill-active: oklch(0.93 0.012 85 / 8%);
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 25%), 0 8px 24px -16px oklch(0 0 0 / 50%);
+  --shadow-2: 0 2px 6px oklch(0 0 0 / 30%), 0 16px 40px -18px oklch(0 0 0 / 60%), inset 0 1px oklch(0.93 0.012 85 / 5%);
+  --shadow-3: 0 8px 20px oklch(0 0 0 / 35%), 0 32px 80px -24px oklch(0 0 0 / 70%), inset 0 1px oklch(0.93 0.012 85 / 6%);
 
-  --ink: oklch(0.93 0.005 85);
-  --ink-2: oklch(0.7 0.008 85);
-  --ink-3: oklch(0.62 0.008 85);
+  /* Soft ivory, with readable secondary and tertiary text on raised surfaces. */
+  --ink: oklch(0.91 0.012 85);
+  --ink-2: oklch(0.78 0.012 85);
+  --ink-3: oklch(0.725 0.012 85);
 
-  --brand: oklch(0.74 0.1 160);
-  --brand-ink: oklch(0.15 0.02 160);
-  --brand-soft: oklch(0.74 0.1 160 / 14%);
+  --brand: oklch(0.75 0.09 160);
+  --brand-ink: oklch(0.195 0.004 75);
+  --brand-soft: oklch(0.75 0.09 160 / 11%);
 
-  --busy: oklch(0.82 0.14 85);
-  --done: oklch(0.8 0.1 195);
-  --ok: oklch(0.74 0.13 155);
-  --warn: oklch(0.8 0.13 75);
-  --err: oklch(0.72 0.17 25);
-  --err-soft: oklch(0.72 0.17 25 / 14%);
-  --merged: oklch(0.78 0.14 300);
+  /* Muted amber, teal, sage, coral and lilac retain the existing state meanings. */
+  --busy: oklch(0.8 0.11 85);
+  --done: oklch(0.77 0.075 195);
+  --ok: oklch(0.75 0.1 155);
+  --warn: oklch(0.8 0.115 75);
+  --err: oklch(0.74 0.135 25);
+  --err-soft: oklch(0.74 0.135 25 / 12%);
+  --merged: oklch(0.77 0.105 300);
+  --warning-foreground: var(--brand-ink);
 }
 
 /* Match the shell's md breakpoint; preserve desktop information density. */

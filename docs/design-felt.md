@@ -1,4 +1,4 @@
-# Theme "Felt": Linear's motion discipline on Piano's ivory and ebony
+# Theme "Felt": Linear's motion discipline on Piano's ivory and warm charcoal
 
 Branch `design/felt`. Reference product: Linear. The theme keeps Piano's palette family and
 wins on motion, hierarchy and keyboard flow. Every state change is answered by motion that
@@ -6,23 +6,36 @@ explains what changed, at a tempo that never makes you wait.
 
 ## Tokens
 
-Colour stays in the existing family; the values below are the ones the theme ships. Hex values
-are sRGB approximations of the oklch definitions in `web/src/index.css`.
+Colour stays in the existing family; `web/src/index.css` is authoritative. The light palette
+is unchanged. Night's sRGB approximations below describe the warm-charcoal refinement, not
+an inversion of the light theme.
 
 | Token | Day | Night | Role |
 | --- | --- | --- | --- |
-| `--surface-0` canvas | `oklch(0.967 0.006 85)` ≈ `#F5F3EE` | `oklch(0.155 0.006 270)` ≈ `#16171B` | sidebar and shell |
-| `--conversation` sheet | `oklch(0.995 0.002 85)` ≈ `#FEFEFC` | `oklch(0.185 0.006 270)` ≈ `#1E1F24` | the inset conversation sheet |
-| `--surface-1` | `oklch(1 0 0)` `#FFFFFF` | `oklch(0.215 0.007 270)` ≈ `#25262C` | composer, prompt cards, code |
-| `--surface-2` | `#FFFFFF` | `oklch(0.22 0.007 270)` ≈ `#26272D` | menus, popovers, the palette |
-| `--ink` | `oklch(0.22 0.01 85)` ≈ `#2E2C27` | `oklch(0.93 0.005 85)` ≈ `#EBE9E4` | text |
-| `--ink-2` | `oklch(0.5 0.012 85)` ≈ `#6E6A62` | `oklch(0.7 0.008 85)` ≈ `#A6A39D` | secondary text |
-| `--ink-3` | `oklch(0.6 0.012 85)` ≈ `#8B877F` | `oklch(0.62 0.008 85)` ≈ `#8F8C86` | tertiary text, glyphs |
-| `--brand` felt green | `oklch(0.52 0.1 160)` ≈ `#2F8A62` | `oklch(0.74 0.1 160)` ≈ `#6DC79B` | focus ring, send key, the working session, the selection bar, the keys |
-| `--busy` / `--done` / `--ok` / `--err` | existing | existing | tool and host status dots |
+| `--surface-0` canvas | `oklch(0.967 0.006 85)` | `oklch(0.195 0.004 75)` ≈ `#161513` | sidebar and shell |
+| `--conversation` sheet | `oklch(0.995 0.002 85)` | `oklch(0.225 0.005 75)` ≈ `#1D1B19` | the inset conversation sheet |
+| `--surface-1` | `#FFFFFF` | `oklch(0.255 0.006 75)` ≈ `#252220` | composer and card surfaces |
+| `--surface-2` | `#FFFFFF` | `oklch(0.28 0.007 75)` ≈ `#2B2825` | menus, popovers, the palette |
+| `--surface-3` | `#FFFFFF` | `oklch(0.3 0.007 75)` ≈ `#302D2A` | dialogs and mobile navigation |
+| `--ink` | `oklch(0.22 0.01 85)` | `oklch(0.91 0.012 85)` ≈ `#E5E1D9` | soft ivory text |
+| `--ink-2` | `oklch(0.5 0.012 85)` | `oklch(0.78 0.012 85)` ≈ `#BBB7AF` | secondary text |
+| `--ink-3` | `oklch(0.6 0.012 85)` | `oklch(0.725 0.012 85)` ≈ `#A9A69E` | tertiary text, glyphs |
+| `--brand` felt green | `oklch(0.52 0.1 160)` | `oklch(0.75 0.09 160)` ≈ `#79C09A` | focus ring, send key, live state, selection and keys |
 
-Green means live and nothing else is green. Tertiary ink was moved further from secondary ink
-(0.55 → 0.6 by day) so three text levels read as three.
+### Dark palette rationale
+
+- **Warm, not sepia.** Very low-chroma charcoal replaces the blue-black foundation. Each
+  elevated layer gets a little lighter, so the composer, menus and dialogs remain distinct
+  without glaring borders. Lines, fills and inset highlights share the ivory hue.
+- **Less glare, not less legibility.** Main text is softer than white. Secondary and tertiary
+  inks are lifted to stay readable on raised and selected surfaces; hierarchy is deliberately
+  gentler than by day. Hover/active fills are restrained rather than washing out small labels.
+- **Colour stays purposeful.** Felt green is slightly desaturated. Status hues keep their
+  established meanings with muted amber (working/warning), teal (done), sage (success), coral
+  (error) and lilac (merged). Soft selection/error tints do not compete with the conversation.
+  Filled warning surfaces use dark ink rather than light text on amber.
+- **Shared tokens, not component exceptions.** The refinement lives in `.dark`; the light
+  palette, component composition, layout and motion remain unchanged.
 
 Motion tokens, also in `index.css`:
 
@@ -184,7 +197,30 @@ Considered and rejected:
   environment, and `PiSessions` "catalog observations" failed once in a full run on a macOS
   `/private/var` vs `/var` path comparison and passed on three isolated reruns.
 
-## Evidence
+## Dark palette verification
+
+Verified on base `71698de` plus the dark-token changes, with Node 24.21.0 and headless
+Chromium 154 on Linux. Scratch backend/UI: loopback 7171/7172, separate SQLite registry,
+throwaway repository and `test/fake-host-pi.mjs`; no model calls or hosted-instance changes
+(INV-07/09/11). Evidence: `/tmp/piano-dark-theme-GgJtU4/`.
+
+- Agent-browser screenshots cover the transcript, selected sidebar row, model picker, command
+  palette, deletion dialog (cancelled), Changes diff, appearance settings and mobile navigation/New.
+  Checked 1440×1000 and 390×844; System appearance remained dark after reload with dark media.
+- Browser-resolved colours, composited into sRGB, meet 4.5:1 for the ten ink/brand/status tokens
+  across all five base surfaces with each individual neutral/selection/error fill. The lowest
+  tertiary-ink pairing is 4.58:1. Sampled rendered text also passes, including the deletion
+  button's actual translucent background (4.63:1) and selected model/palette metadata (5.17:1).
+- `npm test`: 125 passed; `npm run typecheck` and `npm run lint`: passed. No new unit test for
+  aesthetic token values; browser observation and contrast measurements address the changed risk.
+- Source comparison confirms all non-dark CSS is unchanged, apart from comments. Light appearance
+  was visually rechecked, not redesigned. Its existing contrast limitations remain out of scope.
+
+These are bounded colour checks, not a whole-app accessibility certification. The automatic axe
+scan had incomplete contrast checks, so it is not used as proof. Actual displays, other browser
+engines, diagram-library palettes and every possible stacked transparency were not verified.
+
+## Original Felt evidence
 
 Observed against the scratch fixture on backend 7181 and Vite 7182 with agent-browser session
 `piano-felt`. Everything is kept under the session scratchpad
