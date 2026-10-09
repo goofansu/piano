@@ -14,6 +14,7 @@ import { agentDir } from "./PiEnv.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
 import { PiSettingsLive } from "./PiSettings.ts";
 import { ProviderLoginLive } from "./ProviderLogin.ts";
+import { RadiusSetupLive } from "./RadiusSetup.ts";
 import { CONFIG_PATH, RegistryLive, registryDatabasePath } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
@@ -45,7 +46,7 @@ process.once("SIGTERM", drain);
 const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds" });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive.pipe(Layer.provideMerge(CatalogLive)), BroadcastLive, ProviderLoginLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
+const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive.pipe(Layer.provideMerge(CatalogLive)), BroadcastLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
   Layer.provideMerge(RegistryLive),
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),

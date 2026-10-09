@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArrowUpDownIcon, BrainCircuitIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PaletteIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowUpDownIcon, BrainCircuitIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PaletteIcon, PanelLeftIcon, PlugIcon, PlusIcon, RadiusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -106,6 +106,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
           </CommandItem>
           <CommandItem value="Providers" keywords={["settings", "oauth", "sign in"]} onSelect={() => run(() => openSettings("providers"))}>
             <PlugIcon /> Providers
+          </CommandItem>
+          <CommandItem value="Radius" keywords={["settings", "setup", "oauth", "mcp", "web search"]} onSelect={() => run(() => openSettings("radius"))}>
+            <RadiusIcon /> Radius
           </CommandItem>
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session

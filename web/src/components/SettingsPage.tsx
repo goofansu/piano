@@ -1,5 +1,5 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, BrainCircuitIcon, HomeIcon, PaletteIcon, PanelLeftOpenIcon, PlugIcon } from "lucide-react";
+import { AlertCircleIcon, BrainCircuitIcon, HomeIcon, PaletteIcon, PanelLeftOpenIcon, PlugIcon, RadiusIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppearanceSettings } from "@/components/AppearanceSettings";
@@ -7,6 +7,7 @@ import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
 import { ModelSettings } from "@/components/ModelSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
+import { RadiusSettings } from "@/components/RadiusSettings";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,8 +16,8 @@ import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/componen
 import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export type SettingsSection = "appearance" | "models" | "providers";
-const SECTIONS = [{ id: "appearance", label: "Appearance", icon: PaletteIcon }, { id: "models", label: "Models", icon: BrainCircuitIcon }, { id: "providers", label: "Providers", icon: PlugIcon }] as const;
+export type SettingsSection = "appearance" | "models" | "providers" | "radius";
+const SECTIONS = [{ id: "appearance", label: "Appearance", icon: PaletteIcon }, { id: "models", label: "Models", icon: BrainCircuitIcon }, { id: "providers", label: "Providers", icon: PlugIcon }, { id: "radius", label: "Radius", icon: RadiusIcon }] as const;
 
 export function SettingsNavigation({ compact, section, onShow, onHide, onSelect, onHome }: { compact: boolean; section: SettingsSection; onShow: () => void; onHide: () => void; onSelect: (section: SettingsSection) => void; onHome: () => void }) {
   const menu = <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
@@ -74,10 +75,10 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
         <header className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-            <h1 id="settings-section-title" className="text-xl font-semibold">{section === "appearance" ? "Appearance" : "Models"}</h1>
+            <h1 id="settings-section-title" className="text-xl font-semibold">{SECTIONS.find(item => item.id === section)?.label}</h1>
           </div>
         </header>
-        {section === "appearance" ? <AppearanceSettings /> : <ModelSettings />}
+        {section === "appearance" ? <AppearanceSettings /> : section === "radius" ? <RadiusSettings providersChanged={providersChanged} /> : <ModelSettings />}
       </section>
     </div>
   </section>;

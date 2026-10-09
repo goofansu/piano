@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Cause, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import type { RadiusSetupState } from "../shared/radius.ts";
 import { type DirListing, SessionDefaults, SessionPullRequestAction } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
@@ -10,6 +11,7 @@ import { getImagePreview } from "./ImagePreviews.ts";
 import { expandHome } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
+import { RadiusSetup } from "./RadiusSetup.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
@@ -209,6 +211,21 @@ export const AppRouter = HttpRouter.use((router) =>
       if (parsed._tag === "Failure") return json({ error: "Choose a valid default model and effort." }, 400);
       return json({ defaults: yield* (yield* PiSettings).saveDefaults(parsed.value) });
     }).pipe(Effect.catchTag("PiSettingsError", error => Effect.succeed(json({ error: error.detail }, 400)))));
+
+    for (const method of ["GET", "POST"] as const) {
+      yield* router.add(method, "/api/settings/radius", Effect.gen(function* () {
+        const setup = yield* RadiusSetup;
+        let state: RadiusSetupState;
+        if (method === "GET") state = yield* setup.state;
+        else {
+          const body = yield* readBody;
+          if (body.action === "configure-mcp") state = yield* setup.configureMcp;
+          else if (body.action === "install-web-search") state = yield* setup.installWebSearch;
+          else return json({ error: "Invalid Radius setup action." }, 400);
+        }
+        return HttpServerResponse.text(JSON.stringify({ state }), { contentType: "application/json", headers: { "cache-control": "no-store" } });
+      }).pipe(Effect.catchTag("RadiusSetupError", error => Effect.succeed(json({ error: error.detail }, 409)))));
+    }
 
     yield* router.add("GET", "/api/oauth-providers", Effect.gen(function* () {
       return json({ providers: yield* (yield* ProviderLogin).providers });
