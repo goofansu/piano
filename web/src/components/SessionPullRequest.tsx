@@ -36,7 +36,7 @@ function SessionPullRequestTrigger({ value }: { value: SessionPullRequest | unde
       </TooltipTrigger>
     </PopoverTrigger>
     <TooltipContent className="max-w-80">
-      <p className="text-wrap">{pr?.title ?? (value?.link ? "View pull request" : "Link pull request")}</p>
+      <p className="text-wrap">{pr?.title ?? "Pull request"}</p>
     </TooltipContent>
   </Tooltip>;
 }
@@ -99,7 +99,7 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
   return <>
     <Dialog open={open && (!link || linking)} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm" aria-describedby={undefined} onCloseAutoFocus={restoreFocus}>
-        <DialogHeader><DialogTitle>Link pull request</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Pull request</DialogTitle></DialogHeader>
         <PullRequestForm pr={pr} editing={false} onCancel={close} onSave={close} />
       </DialogContent>
     </Dialog>
@@ -110,7 +110,7 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
           {showingDetails ? <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
             <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
             <span className="min-w-0 break-all">{repo}</span>
-          </p> : <PopoverTitle id={titleId}>{editing ? "Change pull request" : "Link pull request"}</PopoverTitle>}
+          </p> : <PopoverTitle id={titleId}>Pull request</PopoverTitle>}
           <Button ref={closeRef} variant="ghost" size="icon-xs" aria-label="Close pull request" onClick={close}><XIcon /></Button>
         </PopoverHeader>
         {link && showingDetails ? <>

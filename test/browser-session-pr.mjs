@@ -55,7 +55,7 @@ const openDetails = async () => {
   if (await evaluate(`!!document.querySelector('header [data-slot="popover-trigger"]')`)) await ab('click', 'header [data-slot="popover-trigger"]');
   else {
     await ab('click', '[aria-label="Session information and actions"]');
-    await ab('find', 'role', 'menuitem', 'click', '--name', 'Link pull request', '--exact');
+    await ab('find', 'role', 'menuitem', 'click', '--name', 'Pull request', '--exact');
   }
   await waitDetails();
 };
@@ -142,7 +142,7 @@ try {
   await closeDetails();
   assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger');
   await ab('click', '[aria-label="Session information and actions"]');
-  assert.equal(await evaluate(`[...document.querySelectorAll('[role="menuitem"]')].some(n => n.textContent === 'Pull request')`), true);
+  assert.equal(await evaluate(`[...document.querySelectorAll('[role="menuitem"]')].some(n => n.textContent.trim() === 'Pull request')`), true);
   await ab('find', 'role', 'menuitem', 'click', '--name', 'Rename', '--exact');
   await ab('wait', '--fn', `!!document.querySelector('input[aria-label="Session name"]')`);
   observations.renameFocus = await evaluate(`(() => { const input = document.querySelector('input[aria-label="Session name"]'); return { focused: document.activeElement === input, selected: input.selectionStart === 0 && input.selectionEnd === input.value.length }; })()`);
@@ -186,7 +186,7 @@ try {
   assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger');
   await palette('Other work'); await ab('click', '[cmdk-item][data-value$=" other"]');
   await ab('wait', '--fn', `location.pathname === '/s/other'`); await noBadge();
-  await palette('Link pull request'); await ab('click', '[cmdk-item][data-value="Link pull request"]'); await waitDetails();
+  await palette('Pull request'); await ab('click', '[cmdk-item][data-value="Pull request"]'); await waitDetails();
   assert.equal(await evaluate(`!!document.querySelector('[data-slot="dialog-content"]') && document.activeElement?.id === 'session-pr-url'`), true, 'Palette opens the same focused dialog');
   await ab('wait', '--fn', `!!document.querySelector('#session-pr-url')`);
   assert.equal(await evaluate(`document.querySelector('${popover}').textContent.includes('No matching') || !!document.querySelector('[data-sonner-toast]')`), false, 'Opening shows no absence message');

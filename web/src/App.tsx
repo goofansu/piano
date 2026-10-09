@@ -242,7 +242,7 @@ export default function App() {
         toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
       />
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette openSettings={openSettingsSection} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} hasPullRequest={!!pullRequest.value?.link} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette openSettings={openSettingsSection} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </AppLayout>
   );

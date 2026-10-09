@@ -102,7 +102,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   return (
     <>
       <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)}
-        hasPullRequest={!!pullRequest.value?.link} openPullRequest={() => onPullRequestOpenChange(true)}
+        openPullRequest={() => onPullRequestOpenChange(true)}
         pullRequest={t?.sessionId && <SessionPullRequestControl key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />} />
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={sessionWorkspace(state)} session={t}
         onAsk={text => {
