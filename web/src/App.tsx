@@ -6,15 +6,14 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
 import { type ProjectDialog, ProjectDialogView } from "@/components/OutcomeProjects";
-import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { SessionView } from "@/components/SessionView";
+import { SettingsPage } from "@/components/SettingsPage";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { hasMod } from "@/lib/keys";
-import { loginProvider } from "@/lib/login";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
 import { readJson, readStorage, writeJson, writeStorage } from "@/lib/storage";
 import { useConnection } from "@/lib/ws";
@@ -113,13 +112,9 @@ export default function App() {
   const onStatus = useCallback((connected: boolean) => dispatch({ type: "connected", connected }), []);
   const conn = useConnection(onMessage, onStatus);
 
-  const [login, setLogin] = useState<{ provider: string; key: string } | null>(null);
-  const openLogin = useCallback((provider = "") => setLogin({ provider, key: crypto.randomUUID() }), []);
+  const [settingsOpen, setSettingsOpen] = useState(location.pathname === "/settings");
+  const openSettings = useCallback(() => { setSettingsOpen(true); setMenuOpen(false); }, []);
   const send = useCallback((m: ClientCommand) => {
-    if (m._tag === "act" && (m.action._tag === "prompt" || m.action._tag === "steer")) {
-      const provider = loginProvider(m.action.text);
-      if (provider !== null) { openLogin(provider); return; }
-    }
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = crypto.randomUUID();
       dispatch({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null,
@@ -129,10 +124,11 @@ export default function App() {
       const s = latest.current;
       if (s.connected && !s.resync && !s.selecting && s.selectionId) conn.send({ ...m, selectionId: s.selectionId });
     } else conn.send(m);
-  }, [conn, dispatch, openLogin]);
+  }, [conn, dispatch]);
   const select = useCallback(
     (cwd: string, sessionId: string | null) => {
       setMenuOpen(false);
+      setSettingsOpen(false);
       // Clicking the session already on screen (or already being fetched) is a no-op.
       const current = latest.current.session ?? latest.current.selecting;
       if (current && current.cwd === cwd && current.sessionId === sessionId && latest.current.view.kind === "session") return;
@@ -155,6 +151,7 @@ export default function App() {
 
   const [projectDialog, setProjectDialog] = useState<ProjectDialog | null>(null);
   const openNew = useCallback((cwd?: string, outcomeProjectId?: string) => {
+    setSettingsOpen(false);
     dispatch({ type: "new", cwd, outcomeProjectId });
     setMenuOpen(false);
   }, []);
@@ -205,6 +202,8 @@ export default function App() {
   useEffect(applyRoute, [applyRoute, state.projectsLoaded, state.projects, state.sessionReferences]);
   useEffect(() => {
     const onPop = () => {
+      setSettingsOpen(location.pathname === "/settings");
+      if (location.pathname === "/settings") return;
       wanted.current = parseRoute(location);
       applyRoute();
     };
@@ -221,7 +220,7 @@ export default function App() {
         ? { kind: "session", sessionId: state.view.sessionId }
         : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
     if (!route) return;
-    const path = routePath(route);
+    const path = settingsOpen ? "/settings" : routePath(route);
     if (path !== location.pathname + location.search) {
       // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
       if (location.pathname === "/" || location.pathname === path) history.replaceState(null, "", path);
@@ -230,12 +229,12 @@ export default function App() {
     const title = state.view.kind === "missing-session" ? "Session not found"
       : route.kind === "new" ? (route.projectId && state.outcomeProjects.find(p => p.id === route.projectId)?.name) || "New session"
       : state.sessionReferences.find(t => t.sessionId === route.sessionId)?.title || "Session";
-    document.title = `${title} - Piano`;
-  }, [state.view, state.session, state.selecting, state.projects, state.outcomeProjects, state.sessionReferences]);
+    document.title = `${settingsOpen ? "Settings" : title} - Piano`;
+  }, [settingsOpen, state.view, state.session, state.selecting, state.projects, state.outcomeProjects, state.sessionReferences]);
 
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
-  const sidebarProps = { state, send, select, openNew, onProjectDialog: setProjectDialog, onPalette: () => setPaletteOpen(true) };
+  const sidebarProps = { state, send, select, openNew, openSettings, onProjectDialog: setProjectDialog, onPalette: () => setPaletteOpen(true) };
   const working = !!(state.session?.state.isStreaming || state.session?.state.isCompacting || state.session?.state.isRetrying);
   const anyWorking = state.hosts.some((h) => h.streaming);
   // The tab icon presses the keys while the session on screen works.
@@ -255,7 +254,7 @@ export default function App() {
         style={{ width: collapsed ? RAIL_WIDTH : width }}
       >
         {collapsed ? (
-          <SidebarRail onShow={() => setCollapsed(false)} working={anyWorking} />
+          <SidebarRail openSettings={openSettings} onShow={() => setCollapsed(false)} working={anyWorking} />
         ) : (
           <div className="h-full overflow-hidden">
             <div className="h-full shrink-0" style={{ width }}>
@@ -299,9 +298,10 @@ export default function App() {
       </Sheet>
       <main className="sheet-enter relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
         {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
-        <div key={state.view.kind} className="view-enter flex min-h-0 flex-1 flex-col">
+        {settingsOpen && <SettingsPage close={() => setSettingsOpen(false)} onMenu={showSidebar} signedIn={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} />}
+        <div key={state.view.kind} className={cn("view-enter min-h-0 flex-1 flex-col", settingsOpen ? "hidden" : "flex")}>
           {state.view.kind === "new" ? (
-            <NewSession state={state} send={send} onLogin={openLogin} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
+            <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
           ) : state.view.kind === "missing-session" ? (
             <Empty className="flex-1 px-4" role="alert">
               <EmptyHeader>
@@ -328,8 +328,7 @@ export default function App() {
         />
       </main>
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} close={() => setLogin(null)} signedIn={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} />}
-      <CommandPalette openLogin={() => openLogin()} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette openSettings={openSettings} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </div>
   );

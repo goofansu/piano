@@ -1,6 +1,6 @@
 import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -35,6 +35,7 @@ interface Props {
   onHide: () => void;
   /** Open the command palette. */
   onPalette: () => void;
+  openSettings: () => void;
 }
 
 const OPEN_KEY = "piano.openProjects";
@@ -49,7 +50,7 @@ const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hov
 const groupRow = cn(row, "reveal-row group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
 const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
-export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette }: Props) {
+export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette, openSettings }: Props) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
   const { view, setView } = useSidebarView();
   const current = state.session ?? state.selecting;
@@ -155,6 +156,9 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         {list()}
       </nav>
       </ScrollArea>
+      <div className="shrink-0 p-3">
+        <Button variant="ghost" className="w-full justify-start" onClick={openSettings}><SettingsIcon data-icon="inline-start" />Settings</Button>
+      </div>
     </div>
   );
 }
@@ -251,14 +255,15 @@ function SidebarSkeleton() {
 }
 
 /** The collapsed sidebar: a vertical rail with the expand control and activity mark. */
-export function SidebarRail({ onShow, working }: { onShow: () => void; working: boolean }) {
+export function SidebarRail({ onShow, working, openSettings }: { onShow: () => void; working: boolean; openSettings: () => void }) {
   return (
     <div className="flex h-full flex-col items-center gap-1 pt-2">
       <IconButton label="Show sidebar" side="right" onClick={onShow}>
         <PanelLeftOpenIcon />
       </IconButton>
       {/* With no rows in view, the mark itself says whether Pi is working somewhere. */}
-      <div className="mt-auto pb-3">
+      <div className="mt-auto flex flex-col items-center gap-3 pb-3">
+        <IconButton label="Settings" side="right" onClick={openSettings}><SettingsIcon /></IconButton>
         <PianoMark playing={working} className="size-6 rounded-md shadow-none" />
       </div>
     </div>

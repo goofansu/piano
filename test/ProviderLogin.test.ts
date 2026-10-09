@@ -7,7 +7,6 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { ProviderLogin, ProviderLoginLive, ProviderLoginRuntime } from "../server/ProviderLogin.ts";
 import type { ProviderLoginState } from "../shared/wire.ts";
-import { loginProvider } from "../web/src/lib/login.ts";
 
 type Login = NonNullable<NonNullable<ReturnType<ModelRuntime["getProvider"]>>["auth"]["oauth"]>["login"];
 const until = (login: ProviderLogin["Service"], predicate: (state: ProviderLoginState) => boolean) => Effect.gen(function* () {
@@ -95,11 +94,4 @@ test("INV-11: unknown providers and provider failures cannot disclose token resp
     const failed = yield* until(login, s => s.status === "error");
     assert(!JSON.stringify(failed).includes("secret-response-token"));
   }));
-});
-
-test("/login recognition intercepts only the built-in command", () => {
-  assert.equal(loginProvider(" /login "), "");
-  assert.equal(loginProvider("/login Radius"), "radius");
-  assert.equal(loginProvider("Explain /login radius"), null);
-  assert.equal(loginProvider("/loginSomething"), null);
 });

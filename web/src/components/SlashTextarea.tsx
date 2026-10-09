@@ -1,4 +1,4 @@
-import type { OAuthProvider, SlashCommand } from "@shared/wire";
+import type { SlashCommand } from "@shared/wire";
 import { cn } from "cn";
 import { type ComponentProps, type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -19,25 +19,15 @@ type Props = Omit<ComponentProps<typeof Textarea>, "value" | "ref" | "onChange">
   completion?: CompletionContext;
 };
 
-type Suggestion = { name: string; description?: string; source: string };
-
-/** Leading command, or the provider argument to /login. Never complete prose. */
+/** Leading command token only. Sending trims the prompt, so whitespace before it is harmless. */
 function tokenAt(text: string, start: number, end: number) {
   if (start !== end) return null;
-  const login = /^\s*\/login[\t ]+([^\s/]*)/.exec(text);
-  if (login) {
-    const from = login[0].indexOf("/");
-    const argument = login[0].length - login[1].length;
-    const to = login[0].length;
-    if (start < argument || start > to || text[to] === "/") return null;
-    return { from, to, kind: "provider" as const, query: text.slice(argument, start).toLowerCase() };
-  }
   const match = /^\s*\/([^\s/]*)/.exec(text);
   if (!match) return null;
   const from = match[0].indexOf("/");
   const to = match[0].length;
   if (start <= from || start > to || text[to] === "/") return null;
-  return { from, to, kind: "command" as const, query: text.slice(from + 1, start).toLowerCase() };
+  return { from, to, query: text.slice(from + 1, start).toLowerCase() };
 }
 
 /** One textarea/listbox interaction for both composers. No prompt transformation or execution. */
@@ -48,45 +38,34 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
   const [composing, setComposing] = useState(false);
   const [dismissed, setDismissed] = useState<string>();
   const [selected, setSelected] = useState(0);
-  const [catalog, setCatalog] = useState<{ key: string; commands: readonly Suggestion[]; error?: string }>();
+  const [catalog, setCatalog] = useState<{ key: string; commands: readonly SlashCommand[]; error?: string }>();
   const list = useRef<HTMLUListElement>(null);
+  const key = JSON.stringify(completion);
   const range = tokenAt(value, selection.start, selection.end);
-  const key = JSON.stringify([completion, range?.kind]);
   const position = JSON.stringify([key, value, selection]);
-  const kind = range?.kind;
-  const open = !props.disabled && focused && !composing && !!range && dismissed !== position;
+  const open = !!completion?.cwd && !props.disabled && focused && !composing && !!range && dismissed !== position;
   const cwd = completion?.cwd;
   const sessionId = completion?.sessionId;
   // Fetch once per opening, not per keystroke. Reopening gets the live catalog
   // again, including changes made by a handled extension command.
   useEffect(() => {
-    if (!open) return;
+    if (!open || !cwd) return;
     const controller = new AbortController();
     setCatalog(undefined);
-    const discovery = kind === "provider"
-      ? fetch("/api/oauth-providers", { signal: controller.signal }).then(async response => {
-        if (!response.ok) throw new Error("Could not load providers.");
-        const result: { providers: OAuthProvider[] } = await response.json();
-        return result.providers.map(provider => ({ name: `login ${provider.id}`, description: provider.name, source: "OAuth" }));
-      })
-      : cwd ? fetch("/api/commands", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cwd, sessionId }), signal: controller.signal }).then(async response => {
-        if (!response.ok) throw new Error("Could not load commands.");
-        const result: { commands: SlashCommand[] } = await response.json();
-        return result.commands.filter(command => command.source === "skill");
-      }) : Promise.resolve([]);
-    void discovery.then(commands => {
-      if (!controller.signal.aborted) setCatalog({ key, commands: kind === "provider" ? commands : [{ name: "login", description: "Sign in to an OAuth provider", source: "Piano" }, ...commands] });
+    void fetch("/api/commands", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cwd, sessionId }), signal: controller.signal }).then(async response => {
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not load commands.");
+      if (!controller.signal.aborted) setCatalog({ key, commands: result.commands });
     }).catch(error => {
-      if (!controller.signal.aborted) setCatalog({ key, commands: kind === "provider" ? [] : [{ name: "login", description: "Sign in to an OAuth provider", source: "Piano" }], error: error.message });
+      if (!controller.signal.aborted) setCatalog({ key, commands: [], error: error.message });
     });
     return () => controller.abort();
-  }, [open, kind, cwd, sessionId, key]);
+  }, [open, cwd, sessionId, key]);
   const current = catalog?.key === key ? catalog : undefined;
   const query = range?.query ?? "";
-  const nameOf = (command: Suggestion) => kind === "provider" ? command.name.slice(6) : command.name.replace(/^skill:/, "");
-  const commands = (current?.commands ?? []).filter(command => (kind === "provider" ? nameOf(command) : command.name).toLowerCase().includes(query))
+  const commands = (current?.commands ?? []).filter(command => command.source === "skill" && command.name.toLowerCase().includes(query))
     .sort((a, b) => {
-      const rank = (command: Suggestion) => nameOf(command).toLowerCase().startsWith(query) ? 0 : 1;
+      const rank = (command: SlashCommand) => command.name.replace(/^skill:/, "").toLowerCase().startsWith(query) ? 0 : 1;
       return rank(a) - rank(b) || a.name.localeCompare(b.name);
     }).slice(0, 50);
   const active = Math.min(selected, Math.max(0, commands.length - 1));
@@ -96,7 +75,7 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
   }, [open, active]);
   const syncSelection = (element: HTMLTextAreaElement) => setSelection({ start: element.selectionStart, end: element.selectionEnd });
   const close = () => setDismissed(position);
-  const accept = (command: Suggestion) => {
+  const accept = (command: SlashCommand) => {
     const element = ref.current;
     if (!element || !range || composing || !open) return;
     // Guard against a pointer action or delayed render accepting an obsolete range.
@@ -109,9 +88,7 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
     // character becomes an argument rather than extending the command name.
     const caret = range.from + inserted.length + (hasSeparator ? 1 : 0);
     onValueChange(next);
-    // Selecting /login opens its argument completion immediately; all other
-    // suggestions close until the user edits or reopens the textarea.
-    setDismissed(command.name === "login" ? undefined : JSON.stringify([key, next, { start: caret, end: caret }]));
+    setDismissed(JSON.stringify([key, next, { start: caret, end: caret }]));
     requestAnimationFrame(() => {
       if (ref.current !== element || element.value !== next) return;
       element.focus({ preventScroll: true });
@@ -168,7 +145,7 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
             </li>
           ))}
         </ul>
-        {(!commands.length || current?.error) && <p role="status" className="px-3 py-2 text-sm text-muted-foreground">{!current ? "Loading commands…" : current.error ? "Could not load commands. Close and reopen to retry." : "No matching commands."}</p>}
+        {!commands.length && <p role="status" className="px-3 py-2 text-sm text-muted-foreground">{!current ? "Loading commands…" : current.error ? "Could not load commands. Close and reopen to retry." : "No matching commands."}</p>}
       </PopoverContent>
     </Popover>
   );

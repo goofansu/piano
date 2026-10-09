@@ -15,14 +15,14 @@ export function useTypeToFocus(ref: RefObject<HTMLTextAreaElement | null>, inser
     if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
-      if (e.key.length !== 1 || editable(e.target) || overlayOpen() || !ref.current || ref.current.disabled) return;
+      if (e.key.length !== 1 || editable(e.target) || overlayOpen() || !ref.current || ref.current.disabled || !ref.current.getClientRects().length) return;
       e.preventDefault();
       ref.current.focus();
       insert(e.key);
     };
     const onPaste = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData("text/plain");
-      if (!text || editable(e.target) || overlayOpen() || !ref.current || ref.current.disabled) return;
+      if (!text || editable(e.target) || overlayOpen() || !ref.current || ref.current.disabled || !ref.current.getClientRects().length) return;
       e.preventDefault();
       ref.current.focus();
       insert(text);

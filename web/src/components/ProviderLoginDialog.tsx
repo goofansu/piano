@@ -1,4 +1,4 @@
-import type { OAuthProvider, ProviderLoginState } from "@shared/wire";
+import type { ProviderLoginState } from "@shared/wire";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,25 +18,20 @@ function safeUrl(raw?: string) {
 
 /** Global operation: closing the window does not cancel server-owned sign-in. */
 export function ProviderLoginDialog({ initialProvider, close, signedIn }: { initialProvider: string; close: () => void; signedIn: () => void }) {
-  const [providers, setProviders] = useState<OAuthProvider[]>([]);
-  const [provider, setProvider] = useState(initialProvider);
   const [state, setState] = useState<ProviderLoginState | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const epoch = useRef(0);
   // StrictMode must not submit login twice. Re-attach to the same initialization.
-  const initialization = useRef<Promise<{ providers: OAuthProvider[]; state: ProviderLoginState | null }> | null>(null);
+  const initialization = useRef<Promise<{ state: ProviderLoginState | null }> | null>(null);
   useEffect(() => {
     let alive = true;
     initialization.current ??= (async () => {
-      const response = await fetch("/api/oauth-providers");
-      if (!response.ok) throw new Error("Could not load OAuth providers.");
-      const { providers } = await response.json();
       let { state } = await request();
       if (initialProvider && state?.status !== "running") ({ state } = await request("POST", { provider: initialProvider }));
-      return { providers, state: state?.status === "running" || initialProvider ? state : null };
+      return { state };
     })();
-    void initialization.current.then(result => { if (alive) { setProviders(result.providers); setState(result.state); } }).catch(error => { if (alive) setError(error.message); }).finally(() => { if (alive) setBusy(false); });
+    void initialization.current.then(result => { if (alive) { setState(result.state); } }).catch(error => { if (alive) setError(error.message); }).finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
   }, [initialProvider]);
   useEffect(() => {
@@ -72,11 +67,6 @@ export function ProviderLoginDialog({ initialProvider, close, signedIn }: { init
         <DialogTitle>Sign in{state ? ` · ${state.provider}` : ""}</DialogTitle>
         <DialogDescription>Connect an OAuth provider through Pi.</DialogDescription>
       </DialogHeader>
-      {!state && !busy && <FieldGroup><Field><FieldLabel>Provider</FieldLabel>
-        <Select value={provider} onValueChange={setProvider}><SelectTrigger aria-label="Provider"><SelectValue placeholder="Choose a provider" /></SelectTrigger>
-          <SelectContent><SelectGroup>{providers.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectGroup></SelectContent>
-        </Select>
-      </Field><Button disabled={!provider || busy} onClick={() => void change("POST", { provider })}>Sign in</Button></FieldGroup>}
       {state?.message && <p role="status" className="text-sm text-muted-foreground">{state.message}</p>}
       {state?.status === "running" && url && <Button asChild variant="outline"><a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Open sign-in page</a></Button>}
       {state?.userCode && <FieldGroup><Field><FieldLabel htmlFor="login-device-code">Device code</FieldLabel><Input id="login-device-code" value={state.userCode} readOnly /></Field></FieldGroup>}

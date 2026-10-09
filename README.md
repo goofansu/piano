@@ -25,15 +25,15 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
 
 ## Provider sign-in
 
-Type `/login` in either composer to choose an OAuth provider, or `/login radius` to
-start directly. Completion suggests `/login` and Pi's configured OAuth provider IDs.
-**Sign in** is also available in the Mod+K command palette, without a folder or model.
+Open **Settings** at the bottom of the sidebar, then choose **Sign in** next to a
+provider in **Providers**. Settings is also reachable through Mod+K and `/settings`.
+No folder or model selection is required. Provider sign-in is not a composer command.
 
 Pi handles authorization and saves credentials in its normal `auth.json`; Piano does
 not put tokens or pasted codes in session history, the registry or browser storage.
 Use device-code/copy-code methods when Piano runs on another machine. Radius's browser
 method requires a callback on the Piano server; its device-code method works remotely.
-Hiding or reloading the dialog preserves an active sign-in; reopen **Sign in** to resume
+Hiding or reloading the dialog preserves an active sign-in; return to **Settings → Providers** and click **Sign in** to resume
 it. **Cancel sign-in** stops it. Attempts expire after 15 minutes or when Piano stops.
 
 Start a new session after signing in: already-running RPC children retain their model
