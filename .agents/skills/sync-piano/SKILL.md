@@ -23,11 +23,21 @@ Run `npm ci` and `npm run build`, retaining their output. On remote machines, pr
 
 ## 3. Restart ready remote services
 
-Immediately after each remote build succeeds, restart through a uniquely named transient systemd unit outside `piano.service`'s process tree. Active-session interruption is preapproved. For example, over SSH:
+After each remote build succeeds, schedule a uniquely named transient systemd unit outside `piano.service`'s process tree. For this skill, gate the restart on RPC processes: check immediately, then wait 600 seconds and check again whenever any are present. Repeat without a timeout until none remain, then restart. An idle RPC process still counts as a running session. Each machine waits independently; keep the loop alive on the remote VM rather than relying on the SSH connection. For example, over SSH:
 
 ```bash
 sudo systemd-run --collect --unit="piano-deploy-$(date +%s)-$$" /bin/bash -c '
   exec > /tmp/piano-deploy.log 2>&1
+  while true; do
+    date -Is
+    pgrep -f -- "(^|[[:space:]])--mode(=|[[:space:]]+)rpc([[:space:]]|$)"
+    status=$?
+    case "$status" in
+      0) echo "RPC sessions present; checking again in 10 minutes"; sleep 600 ;;
+      1) echo "No RPC sessions; restarting"; break ;;
+      *) echo "RPC process check failed; restart blocked"; exit 1 ;;
+    esac
+  done
   systemctl restart piano.service &&
   curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/projects -o /dev/null &&
   curl -fsS http://127.0.0.1:8000/ -o /dev/null &&
@@ -35,7 +45,9 @@ sudo systemd-run --collect --unit="piano-deploy-$(date +%s)-$$" /bin/bash -c '
 '
 ```
 
-Read `/tmp/piano-deploy.log` over SSH after the job finishes. Require this run's `DEPLOY OK` and active `piano.service`, `piano-web.socket`, and `piano-web.service`. If still pending, inspect the transient unit; if failed, retain its log and report the failure. Submission of a restart job alone is not completion.
+Retain RPC PIDs and check timestamps in the remote log. The check covers remote processes using the RPC mode flag, including sessions outside Piano. There is a small check/restart race: a session starting after the final check can still be interrupted.
+
+While the job waits, report it as pending, not deployed. Continue monitoring until it restarts or fails; a dropped SSH connection does not authorize skipping the gate. Read `/tmp/piano-deploy.log` over SSH after the job finishes. Require this run's `DEPLOY OK` and active `piano.service`, `piano-web.socket`, and `piano-web.service`. If still pending, inspect the transient unit; if failed, retain its log and report the failure. Submission of a restart job alone is not completion.
 
 Keep registry data, credentials, access policy, and proxy units unchanged.
 
