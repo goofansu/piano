@@ -8,10 +8,10 @@ export const DEFAULT_SIDEBAR_VIEW: SidebarView = { groupBy: "date", sortBy: "rec
 export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
   { value: "date", label: "Date" },
   { value: "folder", label: "Folder" },
-  { value: "none", label: "None" },
   { value: "project", label: "Project" },
+  { value: "none", label: "None" },
 ];
-/** Group and sort choices are alphabetical by label. */
+/** Choices are alphabetical by label, with no grouping last. */
 export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
   { value: "recent", label: "Activity" },
   { value: "name", label: "Name" },

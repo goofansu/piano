@@ -206,7 +206,9 @@ function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: Sor
           <DropdownMenuSubTrigger>{choice("Group by", GROUP_BY.find(g => g.value === groupBy)?.label ?? "")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuRadioGroup value={groupBy} onValueChange={value => onChange({ groupBy: value as GroupBy })}>
-              {GROUP_BY.map(g => <DropdownMenuRadioItem key={g.value} value={g.value}>{g.label}</DropdownMenuRadioItem>)}
+              {GROUP_BY.filter(g => g.value !== "none").map(g => <DropdownMenuRadioItem key={g.value} value={g.value}>{g.label}</DropdownMenuRadioItem>)}
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioItem value="none">None</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
