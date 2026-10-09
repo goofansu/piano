@@ -5,13 +5,13 @@ export const picker =
   "inline-flex h-11 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 transition-colors duration-(--dur-hover) hover:bg-fill-hover hover:text-ink data-[state=open]:bg-fill-hover data-[state=open]:text-ink md:h-8";
 
 /** Shared surface and focus treatment for the first-message and session composers. */
-export const composerCard = "composer-card font-mono";
+export const composerCard = "composer-card font-sans";
 
 /** The input grows with content; on phones it leaves room for the keyboard and toolbar. */
 export const composerInput = "max-h-[min(12rem,30dvh)] min-h-14 resize-none border-0 bg-transparent px-4 pt-4 font-sans shadow-none dark:bg-transparent focus-visible:ring-0 md:px-5";
 
 /** Compact settings yield space to the primary action without wrapping to another row. */
-export const composerToolbar = "flex min-w-0 flex-nowrap items-center gap-1 px-2.5 pb-2.5 text-sm text-ink-2";
+export const composerToolbar = "flex min-w-0 flex-nowrap items-center gap-1 px-2.5 pb-2.5 font-mono text-sm text-ink-2";
 export const composerAction = "ml-auto size-11 shrink-0 rounded-xl transition-[background-color,color,border-color,transform,opacity] duration-(--dur-hover) active:scale-95 md:size-9";
 
 /** A folding row in the transcript gutter: full width, quiet hover, a focus ring; the chevron sits at its end. */
