@@ -298,7 +298,7 @@ export default function App() {
       </Sheet>
       <main className="sheet-enter relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">
         {/* The sheet's content fades and rises when the view changes; the sheet itself stays. */}
-        {settingsOpen && <SettingsPage close={() => setSettingsOpen(false)} onMenu={showSidebar} signedIn={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} />}
+        {settingsOpen && <SettingsPage close={() => setSettingsOpen(false)} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} />}
         <div key={state.view.kind} className={cn("view-enter min-h-0 flex-1 flex-col", settingsOpen ? "hidden" : "flex")}>
           {state.view.kind === "new" ? (
             <NewSession state={state} send={send} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />

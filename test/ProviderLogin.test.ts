@@ -65,6 +65,10 @@ test("INV-01/04/11/12: OAuth interactions persist through Pi, never expose token
     assert.equal(refreshed.find(p => p.id === "radius")?.signedIn, true);
     assert.equal(refreshed.find(p => p.id === "openai")?.signedIn, false);
     assert(!JSON.stringify(refreshed).includes("private-"));
+    yield* login.signOut("radius");
+    assert.equal((yield* login.providers).find(p => p.id === "radius")?.signedIn, false);
+    assert.deepEqual(JSON.parse(readFileSync(authPath, "utf8")), { openai: { type: "api_key", key: "existing-key" } });
+    assert.equal(yield* login.state, null);
   }));
 });
 
@@ -76,6 +80,7 @@ test("INV-04: per-prompt callback cancellation closes input; whole-flow cancella
   }, (login, authPath) => Effect.gen(function* () {
     const started = yield* login.start("radius");
     const first = yield* until(login, s => !!s.prompt);
+    assert((yield* Effect.result(login.signOut("radius")))._tag === "Failure");
     callback.abort();
     const next = yield* until(login, s => s.prompt?.message === "Next step");
     assert.notEqual(next.prompt!.id, first.prompt!.id);
@@ -86,6 +91,28 @@ test("INV-04: per-prompt callback cancellation closes input; whole-flow cancella
     assert(!cancelled?.prompt);
     assert((yield* Effect.result(login.answer(started.id, next.prompt!.id, "late")))._tag === "Failure");
     assert.deepEqual(JSON.parse(readFileSync(authPath, "utf8")), { openai: { type: "api_key", key: "existing-key" } });
+  }));
+});
+
+test("INV-01/11/12: sign-out requires an OAuth credential and sign-in requires signing out first", async () => {
+  await fixture(async () => ({ type: "oauth", access: "private-access", refresh: "private-refresh", expires: Date.now() + 3600_000 }), (login, authPath) => Effect.gen(function* () {
+    assert((yield* Effect.result(login.signOut("not-a-provider")))._tag === "Failure");
+    assert((yield* Effect.result(login.signOut("openai")))._tag === "Failure");
+    yield* login.start("radius");
+    yield* until(login, s => s.status === "success");
+    yield* login.start("radius");
+    const blocked = yield* until(login, s => s.status === "error");
+    assert.match(blocked.message!, /Sign out/);
+    const competing = yield* Effect.all([
+      Effect.result(login.signOut("radius")),
+      Effect.result(login.start("radius")),
+      Effect.result(login.signOut("radius")),
+    ], { concurrency: "unbounded" });
+    assert.deepEqual(competing.map(result => result._tag), ["Success", "Failure", "Failure"]);
+    yield* login.start("radius");
+    yield* until(login, s => s.status === "success");
+    assert.equal((yield* login.providers).find(p => p.id === "radius")?.signedIn, true);
+    assert.equal(JSON.parse(readFileSync(authPath, "utf8")).openai.key, "existing-key");
   }));
 });
 

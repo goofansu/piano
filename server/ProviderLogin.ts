@@ -6,7 +6,7 @@ import type { OAuthProvider, ProviderLoginState } from "../shared/wire.ts";
 import { agentDir } from "./PiEnv.ts";
 
 type Interaction = Parameters<ModelRuntime["login"]>[2];
-type Runtime = Pick<ModelRuntime, "getProviders" | "listCredentials" | "login">;
+type Runtime = Pick<ModelRuntime, "getProviders" | "listCredentials" | "login" | "logout">;
 export const ProviderLoginRuntime = Context.Reference<{ create: () => Promise<Runtime>; deviceId: () => string }>("piano/ProviderLoginRuntime", {
   defaultValue: () => ({
     create: () => ModelRuntime.create({ refreshOnCreate: false }),
@@ -20,12 +20,14 @@ export class ProviderLogin extends Context.Service<ProviderLogin, {
   readonly start: (provider: string) => Effect.Effect<ProviderLoginState, Error>;
   readonly answer: (id: string, promptId: string, value: string) => Effect.Effect<ProviderLoginState, Error>;
   readonly cancel: (id: string) => Effect.Effect<ProviderLoginState, Error>;
+  readonly signOut: (provider: string) => Effect.Effect<void, Error>;
 }>()("piano/ProviderLogin") {}
 
 export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function* () {
   const factory = yield* ProviderLoginRuntime;
   let current: { state: ProviderLoginState; abort: AbortController; done: Promise<void>; active: boolean } | undefined;
   let pending: { id: string; resolve: (value: string) => void; reject: (error: Error) => void } | undefined;
+  let signingOut = false;
   const snapshot = () => current ? structuredClone(current.state) : null;
   const error = (message: string) => new Error(message);
   const cancel = (message: string) => {
@@ -49,7 +51,7 @@ export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function
     state: Effect.sync(snapshot),
     start: provider => Effect.try(() => {
       // Serialize globally: several providers bind the same loopback callback port.
-      if (current?.active) throw error("Sign-in is already in progress. Resume or cancel it first.");
+      if (signingOut || current?.active) throw error("A provider operation is already in progress. Finish it before signing in.");
       const attempt = { state: { id: crypto.randomUUID(), provider, status: "running" } as ProviderLoginState,
         abort: new AbortController(), done: Promise.resolve(), active: true };
       current = attempt;
@@ -88,6 +90,11 @@ export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function
             attempt.state = { id: attempt.state.id, provider, status: "error", message: "This provider does not support OAuth sign-in in Piano." };
             return;
           }
+          if ((await runtime.listCredentials()).some(c => c.providerId === provider && c.type === "oauth")) {
+            attempt.state = { id: attempt.state.id, provider, status: "error", message: "Sign out of this provider before signing in again." };
+            return;
+          }
+          if (signal.aborted) return;
           await runtime.login(provider, "oauth", interaction, { getDeviceId: factory.deviceId });
           attempt.state = { id: attempt.state.id, provider, status: "success", message: "Signed in. Start a new session to use the updated providers." };
         } catch (cause) {
@@ -114,6 +121,27 @@ export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function
       pending = undefined;
       claim.resolve(value);
       return snapshot()!;
+    }),
+    signOut: provider => Effect.tryPromise({
+      try: async () => {
+        // Claim before awaiting so another tab cannot race login with logout.
+        if (signingOut || current?.active) throw error("Provider operation in progress.");
+        signingOut = true;
+        try {
+          const runtime = await factory.create();
+          if (!runtime.getProviders().some(p => p.id === provider && p.auth.oauth)
+            || !(await runtime.listCredentials()).some(c => c.providerId === provider && c.type === "oauth")) {
+            throw error("No OAuth credential for this provider.");
+          }
+          try { await runtime.logout(provider); }
+          catch (cause) {
+            // The credential was removed even if refreshing Pi's local snapshot failed.
+            if (!(cause instanceof CredentialSynchronizationError && cause.operation === "logout")) throw cause;
+          }
+          if (current?.state.provider === provider) current = undefined;
+        } finally { signingOut = false; }
+      },
+      catch: () => error("Could not sign out. Finish any sign-in in progress and try again."),
     }),
     cancel: id => Effect.try(() => {
       if (current?.state.id !== id) throw error("This sign-in is no longer current.");

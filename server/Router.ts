@@ -184,6 +184,14 @@ export const AppRouter = HttpRouter.use((router) =>
       return json({ providers: yield* (yield* ProviderLogin).providers });
     }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load OAuth providers." }, 502)))));
 
+    yield* router.add("POST", "/api/provider-logout", Effect.gen(function* () {
+      const body = yield* readBody;
+      if (typeof body.provider !== "string") return json({ error: "Invalid sign-out request." }, 400);
+      yield* (yield* ProviderLogin).signOut(body.provider);
+      yield* (yield* Catalog).invalidate;
+      return json({ ok: true });
+    }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not sign out. Finish any sign-in in progress and try again." }, 409)))));
+
     // Credential values and callback URLs travel only in POST bodies. This
     // global operation creates no session and owns no conversation history.
     let invalidatedLogin: string | undefined;
