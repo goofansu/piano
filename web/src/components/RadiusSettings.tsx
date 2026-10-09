@@ -142,27 +142,27 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
             <Item className="rounded-none px-4 sm:px-5">
               <ItemMedia variant="icon"><GlobeIcon /></ItemMedia>
               <ItemContent className="min-w-0">
-                <ItemTitle>Web search<ReadyMark ready={webSearchReady} label="Added" /></ItemTitle>
+                <ItemTitle>Web search<ReadyMark ready={webSearchReady} label="Installed" /></ItemTitle>
                 <ItemDescription className="line-clamp-none">Let Pi search the web with the Radius extension.</ItemDescription>
                 {state.webSearch.detail && <p className="text-xs text-muted-foreground">{state.webSearch.detail}</p>}
                 <p className="text-xs text-muted-foreground">An organization owner or admin must enable Web search separately in Radius.</p>
               </ItemContent>
               <ItemActions className="max-sm:basis-full max-sm:pl-12">
-                {installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Removing…" : "Adding…"}</Button>
+                {installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
                   : <>
-                    {!webSearchReady && <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} aria-label="Add web search" onClick={() => void act("install-web-search")}>Add</Button>}
-                    {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })} aria-label="Remove web search">Remove</Button>}
+                    {!webSearchReady && <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} aria-label="Install web search" onClick={() => void act("install-web-search")}>Install</Button>}
+                    {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })} aria-label="Uninstall web search">Uninstall</Button>}
                   </>}
               </ItemActions>
             </Item>
           </ItemGroup>
         </section>
       </>}
-    {state?.installation.status === "error" && <Alert variant="destructive"><AlertTitle>{state.installation.action === "uninstall" ? "Web search was not removed" : "Web search was not added"}</AlertTitle><AlertDescription>{state.installation.detail}</AlertDescription></Alert>}
+    {state?.installation.status === "error" && <Alert variant="destructive"><AlertTitle>{state.installation.action === "uninstall" ? "Web search was not uninstalled" : "Web search was not installed"}</AlertTitle><AlertDescription>{state.installation.detail}</AlertDescription></Alert>}
     <Dialog open={!!removal} onOpenChange={open => { if (!open && !busy) setRemoval(undefined); }}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onInteractOutside={event => event.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>{removal?.action === "remove-mcp" ? "Remove Radius MCP?" : "Remove web search?"}</DialogTitle>
+          <DialogTitle>{removal?.action === "remove-mcp" ? "Remove Radius MCP?" : "Uninstall web search?"}</DialogTitle>
           <DialogDescription>
             {removal?.action === "remove-mcp"
               ? "Removes Radius MCP from Pi on this machine."
@@ -172,7 +172,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={() => setRemoval(undefined)}>Cancel</Button>
           <Button variant="destructive" disabled={disabled} onClick={() => { if (removal) void act(removal.action, removal.key); }}>
-            {busy && <Spinner data-icon="inline-start" />}Remove
+            {busy && <Spinner data-icon="inline-start" />}{removal?.action === "remove-mcp" ? "Remove" : "Uninstall"}
           </Button>
         </DialogFooter>
       </DialogContent>
