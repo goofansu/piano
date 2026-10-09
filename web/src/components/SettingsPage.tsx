@@ -17,7 +17,10 @@ import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/componen
 import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export type SettingsSection = "appearance" | "models" | "providers" | "radius";
+import type { SettingsSection } from "@/lib/routes";
+
+export type { SettingsSection } from "@/lib/routes";
+
 const SECTIONS = [{ id: "appearance", label: "Appearance", icon: PaletteIcon }, { id: "models", label: "Models", icon: BrainCircuitIcon }, { id: "providers", label: "Providers", icon: PlugIcon }, { id: "radius", label: "Radius", icon: RadiusIcon }] as const;
 
 export function SettingsNavigation({ compact, section, onShow, onHide, onSelect, onHome }: { compact: boolean; section: SettingsSection; onShow: () => void; onHide: () => void; onSelect: (section: SettingsSection) => void; onHome: () => void }) {

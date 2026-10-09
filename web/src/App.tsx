@@ -26,7 +26,7 @@ export default function App() {
   const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState => {
     const seeded = { ...s, catalogs: readJson<AppState["catalogs"]>(CATALOGS_KEY, {}) };
     const route = parseRoute(location);
-    return route.kind === "session" ? { ...seeded, view: { kind: "session" } } : { ...seeded, view: { kind: "new", outcomeProjectId: route.projectId } };
+    return route.kind === "session" ? { ...seeded, view: { kind: "session" } } : { ...seeded, view: { kind: "new", outcomeProjectId: route.kind === "new" ? route.projectId : undefined } };
   });
   useEffect(() => {
     // Without storage the server cache still answers.
@@ -58,8 +58,11 @@ export default function App() {
   const onStatus = useCallback((connected: boolean) => dispatch({ type: "connected", connected }), []);
   const conn = useConnection(onMessage, onStatus);
 
-  const [settingsOpen, setSettingsOpen] = useState(location.pathname === "/settings");
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("appearance");
+  const [settingsOpen, setSettingsOpen] = useState(() => parseRoute(location).kind === "settings");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>(() => {
+    const route = parseRoute(location);
+    return route.kind === "settings" ? route.section : "appearance";
+  });
   const openSettingsSection = useCallback((section: SettingsSection = "appearance") => { setSettingsSection(section); setSettingsOpen(true); closeMobile(); }, [closeMobile]);
   const openSettings = useCallback(() => openSettingsSection("appearance"), [openSettingsSection]);
   const closeSettings = useCallback(() => { setSettingsOpen(false); closeMobile(); }, [closeMobile]);
@@ -131,6 +134,12 @@ export default function App() {
     const r = wanted.current;
     if (!r) return;
     const s = latest.current;
+    if (r.kind === "settings") {
+      wanted.current = null;
+      setSettingsSection(r.section);
+      setSettingsOpen(true);
+      return;
+    }
     if (r.kind === "new") {
       wanted.current = null;
       // Back or forward onto the same New page keeps whatever directory it already had.
@@ -149,9 +158,9 @@ export default function App() {
   useEffect(() => {
     const onPop = () => {
       closeMobile();
-      setSettingsOpen(location.pathname === "/settings");
-      if (location.pathname === "/settings") return;
-      wanted.current = parseRoute(location);
+      const route = parseRoute(location);
+      setSettingsOpen(route.kind === "settings");
+      wanted.current = route;
       applyRoute();
     };
     addEventListener("popstate", onPop);
@@ -167,17 +176,17 @@ export default function App() {
         ? { kind: "session", sessionId: state.view.sessionId }
         : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
     if (!route) return;
-    const path = settingsOpen ? "/settings" : routePath(route);
+    const path = routePath(settingsOpen ? { kind: "settings", section: settingsSection } : route);
     if (path !== location.pathname + location.search) {
       // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
-      if (location.pathname === "/" || location.pathname === path) history.replaceState(null, "", path);
+      if (location.pathname === "/" || location.pathname === "/settings" || location.pathname === path) history.replaceState(null, "", path);
       else history.pushState(null, "", path);
     }
     const title = state.view.kind === "missing-session" ? "Session not found"
       : route.kind === "new" ? (route.projectId && state.outcomeProjects.find(p => p.id === route.projectId)?.name) || "New session"
       : state.sessionReferences.find(t => t.sessionId === route.sessionId)?.title || "Session";
     document.title = `${settingsOpen ? "Settings" : title} - Piano`;
-  }, [settingsOpen, state.view, state.session, state.selecting, state.projects, state.outcomeProjects, state.sessionReferences]);
+  }, [settingsOpen, settingsSection, state.view, state.session, state.selecting, state.projects, state.outcomeProjects, state.sessionReferences]);
 
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
