@@ -479,6 +479,13 @@ export const ModelCatalog = Schema.Struct({
 });
 export type ModelCatalog = typeof ModelCatalog.Type;
 
+/** Machine-wide Pi defaults, not a folder's resolved startup selection. */
+export const SessionDefaults = Schema.Struct({
+  model: Schema.optional(Schema.String),
+  thinkingLevel: ThinkingLevel,
+});
+export type SessionDefaults = typeof SessionDefaults.Type;
+
 export const DirEntry = Schema.Struct({
   name: Schema.String,
   path: Schema.String,
@@ -589,6 +596,7 @@ export type WorktreeResult = typeof WorktreeResult.Type;
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView), outcomeProjects: Schema.optional(Schema.Array(OutcomeProject)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
+  Schema.TaggedStruct("catalogs_invalidated", {}),
   Schema.TaggedStruct("worktrees", { project: Schema.String, discovery: WorktreeDiscovery }),
   Schema.TaggedStruct("trust", { cwd: Schema.String, trust: ProjectTrust }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),

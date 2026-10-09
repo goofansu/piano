@@ -3,11 +3,12 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Cause, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { type DirListing, SessionPullRequestAction } from "../shared/wire.ts";
+import { type DirListing, SessionDefaults, SessionPullRequestAction } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { expandHome } from "./PiEnv.ts";
+import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
@@ -192,6 +193,19 @@ export const AppRouter = HttpRouter.use((router) =>
       const catalog = yield* (yield* Catalog).get(cwd);
       return catalog.error ? json({ error: catalog.error }, 502) : json({ commands: catalog.commands ?? [] });
     }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load commands. Reopen the suggestions to retry." }, 502)))));
+
+    yield* router.add("GET", "/api/settings/defaults", Effect.gen(function* () {
+      const defaults = yield* (yield* PiSettings).defaults;
+      const catalog = yield* (yield* Catalog).global;
+      return json({ defaults, catalog });
+    }).pipe(Effect.catchTag("PiSettingsError", error => Effect.succeed(json({ error: error.detail }, 500)))));
+
+    yield* router.add("PUT", "/api/settings/defaults", Effect.gen(function* () {
+      const body = yield* readBody;
+      const parsed = Schema.decodeUnknownExit(SessionDefaults)(body);
+      if (parsed._tag === "Failure") return json({ error: "Choose a valid default model and effort." }, 400);
+      return json({ defaults: yield* (yield* PiSettings).saveDefaults(parsed.value) });
+    }).pipe(Effect.catchTag("PiSettingsError", error => Effect.succeed(json({ error: error.detail }, 400)))));
 
     yield* router.add("GET", "/api/oauth-providers", Effect.gen(function* () {
       return json({ providers: yield* (yield* ProviderLogin).providers });

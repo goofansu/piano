@@ -77,7 +77,7 @@ export class PiSessions extends Context.Service<
     /** Spawn Pi for a session. The child lives as long as the calling Scope. */
     readonly open: (spec: PiSessionSpec) => Effect.Effect<PiSession, PiSessionError, Scope.Scope>;
     /** One-shot `pi --mode rpc --no-session`: available models and Pi's default. */
-    readonly probe: (cwd: string) => Effect.Effect<ProbeResult, PiSessionError>;
+    readonly probe: (cwd: string, options?: { globalSettingsOnly?: boolean }) => Effect.Effect<ProbeResult, PiSessionError>;
   }
 >()("piano/PiSessions") {}
 
@@ -894,9 +894,9 @@ const openSession = (spec: PiSessionSpec) =>
     return session;
   });
 
-const probe = (cwd: string): Effect.Effect<ProbeResult, PiSessionError, ChildProcessSpawner> =>
+const probe = (cwd: string, options?: { globalSettingsOnly?: boolean }): Effect.Effect<ProbeResult, PiSessionError, ChildProcessSpawner> =>
   Effect.gen(function* () {
-    const child = yield* spawnChild(["--no-session"], cwd);
+    const child = yield* spawnChild(["--no-session", ...(options?.globalSettingsOnly ? ["--no-approve"] : [])], cwd);
     const [models, state, commands] = yield* Effect.all([
       child.request({ type: "get_available_models" }),
       child.request({ type: "get_state" }),
@@ -923,7 +923,7 @@ export const PiSessionsLive: Layer.Layer<PiSessions, never, ChildProcessSpawner>
     const spawner = yield* ChildProcessSpawner;
     return PiSessions.of({
       open: (spec) => openSession(spec).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
-      probe: (cwd) => probe(cwd).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
+      probe: (cwd, options) => probe(cwd, options).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
     });
   }),
 );

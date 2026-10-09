@@ -307,6 +307,7 @@ export const handleSocket = (socket: Socket.Socket) =>
     // The browser requests models for its selected cwd; home cannot establish
     // project-local providers/resources and must not stand in for that catalog.
     yield* updates.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
+    yield* catalog.changes.pipe(Stream.runForEach(() => send({ _tag: "catalogs_invalidated" })), Effect.ignore, Effect.forkScoped);
     yield* publishProjects.pipe(Effect.forkScoped);
     yield* hosts.changes.pipe(
       Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),

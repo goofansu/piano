@@ -67,7 +67,7 @@ try {
       return json({ state: fixture.state });
     };
   })()`);
-  await button('Settings');
+  await button('Settings'); await button('Providers');
   await open();
   assert.match(await ab('snapshot'), /Sign in to OpenAI Codex/);
   assert.deepEqual(await dialogButtons(), ['Choose a sign-in method', 'Cancel', 'Continue', 'Close']);
@@ -116,7 +116,7 @@ try {
   // Completion winning the cancellation race must also refresh the provider list.
   await ab('eval', 'window.loginFixture.signedIn = false');
   await ab('set', 'viewport', '1280', '900');
-  await button('Home'); await button('Settings'); await open();
+  await button('Home'); await button('Settings'); await button('Providers'); await open();
   const reads = await evaluate('window.loginFixture.providerReads');
   await ab('eval', 'window.loginFixture.completeOnCancel = true'); await button('Cancel'); await waitClosed();
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Sign out of OpenAI Codex"]')`);

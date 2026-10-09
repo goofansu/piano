@@ -7,7 +7,7 @@ import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
 import { type ProjectDialog, ProjectDialogView } from "@/components/OutcomeProjects";
 import { SessionView } from "@/components/SessionView";
-import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
+import { SettingsNavigation, SettingsPage, type SettingsSection } from "@/components/SettingsPage";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -57,7 +57,9 @@ export default function App() {
   const conn = useConnection(onMessage, onStatus);
 
   const [settingsOpen, setSettingsOpen] = useState(location.pathname === "/settings");
-  const openSettings = useCallback(() => { setSettingsOpen(true); closeMobile(); }, [closeMobile]);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("models");
+  const openSettingsSection = useCallback((section: SettingsSection = "models") => { setSettingsSection(section); setSettingsOpen(true); closeMobile(); }, [closeMobile]);
+  const openSettings = useCallback(() => openSettingsSection("models"), [openSettingsSection]);
   const closeSettings = useCallback(() => { setSettingsOpen(false); closeMobile(); }, [closeMobile]);
   const send = useCallback((m: ClientCommand) => {
     if (m._tag === "select" || m._tag === "create_session") {
@@ -188,7 +190,7 @@ export default function App() {
   return (
     <AppLayout layout={layout} navigationTitle={settingsOpen ? "Settings navigation" : "Projects and sessions"}
       navigation={compact => settingsOpen
-        ? <SettingsNavigation compact={compact} onShow={layout.show} onHide={layout.hide} onSelect={closeMobile} onHome={closeSettings} />
+        ? <SettingsNavigation compact={compact} section={settingsSection} onShow={layout.show} onHide={layout.hide} onSelect={openSettingsSection} onHome={closeSettings} />
         : compact ? <SidebarRail openSettings={openSettings} onShow={layout.show} working={anyWorking} />
           : <Sidebar {...sidebarProps} onHide={layout.hide} />}
       content={<>
@@ -210,7 +212,7 @@ export default function App() {
             <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={!settingsOpen && changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={!settingsOpen && pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}
         </LayoutView>
-        {settingsOpen && <LayoutView><SettingsPage onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
+        {settingsOpen && <LayoutView><SettingsPage section={settingsSection} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
       </>}>
       <Toaster
         position="top-center"
@@ -223,7 +225,7 @@ export default function App() {
         toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
       />
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette openSettings={openSettings} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette openSettings={openSettingsSection} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </AppLayout>
   );

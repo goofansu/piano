@@ -1,9 +1,10 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, HomeIcon, PanelLeftOpenIcon, PlugIcon } from "lucide-react";
+import { AlertCircleIcon, HomeIcon, PanelLeftOpenIcon, PlugIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
+import { ModelSettings } from "@/components/ModelSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +14,16 @@ import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/componen
 import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function SettingsNavigation({ compact, onShow, onHide, onSelect, onHome }: { compact: boolean; onShow: () => void; onHide: () => void; onSelect: () => void; onHome: () => void }) {
+export type SettingsSection = "models" | "providers";
+const SECTIONS = [{ id: "models", label: "Models", icon: SlidersHorizontalIcon }, { id: "providers", label: "Providers", icon: PlugIcon }] as const;
+
+export function SettingsNavigation({ compact, section, onShow, onHide, onSelect, onHome }: { compact: boolean; section: SettingsSection; onShow: () => void; onHide: () => void; onSelect: (section: SettingsSection) => void; onHome: () => void }) {
   const menu = <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
-    <SidebarMenu><SidebarMenuItem>
-      <SidebarMenuButton isActive aria-current="page" aria-label="Providers" tooltip="Providers" className={compact ? "size-8 justify-center p-2" : "h-9 pointer-coarse:h-11"} onClick={onSelect}>
-        <PlugIcon />{!compact && <span>Providers</span>}
+    <SidebarMenu>{SECTIONS.map(item => <SidebarMenuItem key={item.id}>
+      <SidebarMenuButton isActive={section === item.id} aria-current={section === item.id ? "page" : undefined} aria-label={item.label} tooltip={item.label} className={compact ? "size-8 justify-center p-2" : "h-9 pointer-coarse:h-11"} onClick={() => onSelect(item.id)}>
+        <item.icon />{!compact && <span>{item.label}</span>}
       </SidebarMenuButton>
-    </SidebarMenuItem></SidebarMenu>
+    </SidebarMenuItem>)}</SidebarMenu>
   </nav>;
   return compact ? <LayoutRail onShow={onShow} footer={<IconButton label="Home" side="right" onClick={onHome}><HomeIcon /></IconButton>}>{menu}</LayoutRail> : <div className="flex h-full flex-col">
     <LayoutHeader title="Settings" onHide={onHide} />
@@ -30,13 +34,14 @@ export function SettingsNavigation({ compact, onShow, onHide, onSelect, onHome }
   </div>;
 }
 
-export function SettingsPage({ onMenu, providersChanged }: { onMenu: () => void; providersChanged: () => void }) {
+export function SettingsPage({ section, onMenu, providersChanged }: { section: SettingsSection; onMenu: () => void; providersChanged: () => void }) {
   const [providers, setProviders] = useState<OAuthProvider[]>();
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [login, setLogin] = useState<{ provider: string; key: string }>();
   const [signingOut, setSigningOut] = useState<string>();
   useEffect(() => {
+    if (section !== "providers") return;
     const controller = new AbortController();
     setError("");
     void fetch("/api/oauth-providers", { signal: controller.signal }).then(async response => {
@@ -45,7 +50,7 @@ export function SettingsPage({ onMenu, providersChanged }: { onMenu: () => void;
       if (!controller.signal.aborted) setProviders(result.providers);
     }).catch(() => { if (!controller.signal.aborted) setError("Could not load providers."); });
     return () => controller.abort();
-  }, [revision]);
+  }, [revision, section]);
   const refreshProviders = useCallback(() => {
     setRevision(value => value + 1);
     providersChanged();
@@ -62,6 +67,20 @@ export function SettingsPage({ onMenu, providersChanged }: { onMenu: () => void;
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
     } finally { setSigningOut(undefined); }
   };
+  if (section === "models") return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
+    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
+      <section aria-labelledby="settings-models-title" className="mx-auto flex max-w-2xl flex-col gap-6">
+        <header className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
+            <h1 id="settings-models-title" className="text-xl font-semibold">Models</h1>
+          </div>
+          <p className="text-sm text-muted-foreground">Defaults for new sessions on this machine. Folder and per-model settings take precedence.</p>
+        </header>
+        <ModelSettings />
+      </section>
+    </div>
+  </section>;
   return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
         <section id="settings-providers" aria-labelledby="settings-providers-title" className="mx-auto flex max-w-2xl flex-col gap-6">

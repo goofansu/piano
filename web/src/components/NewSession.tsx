@@ -82,12 +82,14 @@ export function NewSession({ state, send, initialCwd, outcomeProjectId, onProjec
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
     setModel(undefined); setEffort(undefined);
+  }, [cwd, state.connected]);
+  useEffect(() => {
     if (state.connected && cwd) { send({ _tag: "models", cwd }); send({ _tag: "trust", cwd }); }
-  }, [cwd, state.connected, send]);
+  }, [cwd, state.connected, state.catalogRevision, send]);
   const effectiveModel = model || catalog?.defaultModel;
   const levels = levelsFor(catalog, effectiveModel);
   const effectiveEffort = clampEffort(levels, effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
-  const ready = state.connected && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !outcome?.archived;
+  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !outcome?.archived;
 
   const submit = () => {
     if (!ready) return;

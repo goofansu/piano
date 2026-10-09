@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -8,6 +8,7 @@ import { directoryTrust } from "@/components/NewSession";
 import { sessionProject } from "@/components/OutcomeProjects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
+import type { SettingsSection } from "@/components/SettingsPage";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
@@ -20,7 +21,7 @@ interface Props {
   state: AppState;
   select: (cwd: string, sessionId: string | null) => void;
   openNew: (cwd?: string) => void;
-  openSettings: () => void;
+  openSettings: (section?: SettingsSection) => void;
   closeSettings?: () => void;
   toggleSidebar: () => void;
   send: (command: ClientCommand) => void;
@@ -97,7 +98,10 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
           </CommandItem> : <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
           </CommandItem>}
-          <CommandItem value="Providers" keywords={["settings", "oauth", "sign in"]} onSelect={() => run(openSettings)}>
+          <CommandItem value="Models" keywords={["settings", "default", "effort", "thinking"]} onSelect={() => run(() => openSettings("models"))}>
+            <SlidersHorizontalIcon /> Models
+          </CommandItem>
+          <CommandItem value="Providers" keywords={["settings", "oauth", "sign in"]} onSelect={() => run(() => openSettings("providers"))}>
             <PlugIcon /> Providers
           </CommandItem>
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>

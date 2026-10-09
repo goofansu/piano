@@ -43,7 +43,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
   useEffect(() => setEffort(t?.state.thinkingLevel as ThinkingLevel | undefined), [t?.cwd, t?.sessionId, t?.state.thinkingLevel]);
   const catalog = t ? state.catalogs[t.cwd] ?? null : null;
-  useEffect(() => { if (state.connected && t?.cwd && !checkoutMissing) send({ _tag: "models", cwd: t.cwd }); }, [t?.cwd, checkoutMissing, state.connected, send]);
+  useEffect(() => { if (state.connected && t?.cwd && !checkoutMissing) send({ _tag: "models", cwd: t.cwd }); }, [t?.cwd, checkoutMissing, state.connected, state.catalogRevision, send]);
   const effectiveModel = model || catalog?.defaultModel;
   const effectiveEffort = (t?.hosted ? t.state.thinkingLevel as ThinkingLevel | undefined : undefined)
     ?? clampEffort(levelsFor(catalog, effectiveModel), effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");

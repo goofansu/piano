@@ -30,6 +30,7 @@ export interface AppState {
   projectsLoaded: boolean;
   hosts: HostInfo[];
   catalogs: Record<string, ModelCatalog>;
+  catalogRevision: number;
   /** Pi's trust outcome per directory asked about, including directories that are not registered yet. */
   trusts: Record<string, ProjectTrust>;
   session: SessionView | null;
@@ -59,6 +60,7 @@ export const initialState: AppState = {
   projectsLoaded: false,
   hosts: [],
   catalogs: {},
+  catalogRevision: 0,
   trusts: {},
   session: null,
   worktreeResult: null,
@@ -126,6 +128,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     }
     case "models":
       return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
+    case "catalogs_invalidated":
+      return { ...s, catalogs: {}, catalogRevision: s.catalogRevision + 1 };
     case "trust":
       return { ...s, trusts: { ...s.trusts, [m.cwd]: m.trust } };
     case "worktree_result":
