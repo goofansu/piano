@@ -1,5 +1,5 @@
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
-import { ArrowRightIcon, BookMarkedIcon, CheckIcon, ClockIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
+import { ArrowRightIcon, BookMarkedIcon, CheckIcon, ClockIcon, FileDiffIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -58,8 +58,8 @@ function PullRequestSignals({ pr }: { pr: PullRequest }) {
   }[pr.review];
   if (!checks && !review) return null;
   // Plain supporting facts, rather than competing status badges; only the icon carries the outcome color.
-  return <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-    {[checks, review].map(signal => signal && <span key={signal.label} className="flex items-center gap-1">
+  return <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+    {[checks, review].map(signal => signal && <span key={signal.label} className="flex items-center gap-1.5">
       <signal.Icon className={`size-3 shrink-0 ${signal.color}`} aria-hidden />{signal.label}
     </span>)}
   </div>;
@@ -78,26 +78,29 @@ function DiffStat({ additions, deletions, changedFiles }: { additions: number; d
   const total = additions + deletions;
   const added = total ? Math.round(additions / total * 5) : 0, removed = total ? 5 - added : 0;
   const squares = ["a", "b", "c", "d", "e"].map((id, i) => ({ id, color: i < added ? "bg-ok" : i < added + removed ? "bg-err" : "bg-muted" }));
-  return <div className="flex items-center gap-2 text-xs tabular-nums">
+  return <div className="flex items-center gap-1.5 text-xs tabular-nums">
+    <FileDiffIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
     <span className="font-medium text-ok"><span className="sr-only">Additions </span>+{additions.toLocaleString()}</span>
     <span className="font-medium text-err"><span className="sr-only">Deletions </span>−{deletions.toLocaleString()}</span>
     <span className="flex gap-0.5" aria-hidden>
       {squares.map(square => <span key={square.id} className={`size-2 rounded-[2px] ${square.color}`} />)}
     </span>
-    <span className="text-muted-foreground">{changedFiles} {changedFiles === 1 ? "file" : "files"}</span>
+    <span className="ml-1.5 text-muted-foreground">{changedFiles} {changedFiles === 1 ? "file" : "files"}</span>
   </div>;
 }
 
-/** Where and how big: the facts that decide whether to open the PR. */
+/** Where, how big and how ready: the facts that decide whether to open the PR. */
 function PullRequestFacts({ pr }: { pr: PullRequest }) {
   const hasDiff = pr.additions !== undefined && pr.deletions !== undefined && pr.changedFiles !== undefined;
-  if (!pr.head && !hasDiff) return null;
-  return <div className="flex flex-col gap-2">
+  const signals = (pr.state === "open" || pr.state === "draft") && (pr.checks !== "none" || pr.review !== "none");
+  if (!pr.head && !hasDiff && !signals) return null;
+  return <div className="flex flex-col gap-1.5">
     {pr.head && pr.base && <div className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted-foreground" title={`${pr.head} into ${pr.base}`}>
       <GitBranchIcon className="size-3 shrink-0" aria-hidden />
       <span className="truncate">{pr.head}</span><ArrowRightIcon className="size-3 shrink-0" aria-label="into" /><span className="shrink-0">{pr.base}</span>
     </div>}
     {hasDiff && <DiffStat additions={pr.additions!} deletions={pr.deletions!} changedFiles={pr.changedFiles!} />}
+    <PullRequestSignals pr={pr} />
   </div>;
 }
 
@@ -170,9 +173,9 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
             </div>
           </div>
           {pullRequest && <PullRequestFacts pr={pullRequest} />}
-          {pullRequest && <PullRequestSignals pr={pullRequest} />}
           <Separator className="opacity-50" />
-          <div className="flex justify-end gap-1">
+          {/* Pull the ghost buttons' padding out so their labels meet the content edge. */}
+          <div className="-mr-2 -mb-1 flex justify-end gap-1">
             <Button variant="ghost" size="xs" disabled={pr.busy} onClick={() => setEditing(true)}>Change link</Button>
             <Button variant="ghost" size="xs" disabled={pr.busy} onClick={async () => { if (await pr.change({ action: "remove" })) close(); }}>Remove link</Button>
           </div>
