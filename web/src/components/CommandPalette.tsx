@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -93,6 +93,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
         <CommandGroup key="global" heading="Global commands">
           <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
+          </CommandItem>
+          <CommandItem value="Providers" keywords={["settings", "oauth", "sign in"]} onSelect={() => run(openSettings)}>
+            <PlugIcon /> Providers
           </CommandItem>
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
