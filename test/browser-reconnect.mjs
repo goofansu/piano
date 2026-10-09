@@ -38,7 +38,7 @@ const Native=WebSocket;
 window.WebSocket=class extends Native {
  constructor(...args){super(...args);if(this.url.endsWith('/ws')){window.control=this;window.controlConnections++;}}
  set onmessage(handler){super.onmessage=e=>{if(this.url.endsWith('/ws')&&window.holdFrames){held.push(()=>handler(e));return;}handler(e);};}
- send(data){if(this.url.endsWith('/ws'))window.sent.push(JSON.parse(data));return super.send(data);}
+ send(data){if(this.url.endsWith('/ws')){window.sent.push(JSON.parse(data));if(window.dropOutbound)return;}return super.send(data);}
 };`);
 const session = `reconnect-${process.pid}`, commands = [];
 async function ab(...args) {
@@ -74,13 +74,22 @@ try {
   await ab('fill', 'textarea[aria-label="Message"]', 'unsent draft');
   await evaluate(`window.originalTranscript=document.querySelector('main .h-full.overflow-y-auto');originalTranscript.scrollTop=150;originalTranscript.dispatchEvent(new Event('scroll'));true`);
   const before = await evaluate(observe); assert.equal(before.scrollTop, 150); assert.equal(before.prompts, 1);
+  // Keep incoming frames working while the outgoing path silently fails.
+  await evaluate('window.dropOutbound=true;true');
+  await ab('wait', '--fn', `document.querySelector('textarea[aria-label="Message"]')?.disabled===true`);
+  await ab('wait', '--text', 'Reconnecting');
+  const halfOpen = await evaluate(observe); await capture('half-open');
+  assert.equal(halfOpen.draft, before.draft);
+  assert.equal(halfOpen.prompts, before.prompts, 'health checks never replay input');
+  await evaluate('window.dropOutbound=false;true');
+  await ab('wait', '--fn', `document.querySelector('textarea[aria-label="Message"]')?.disabled===false`);
   await evaluate('window.holdFrames=true;control.close();true');
   await ab('wait', '--fn', 'controlConnections>=2&&control.readyState===1&&held.length>0');
   const during = await evaluate(observe); await capture('awaiting-snapshot');
   await evaluate('window.holdFrames=false;held.splice(0).forEach(deliver=>deliver());true');
   await ab('wait', '--fn', `document.querySelector('textarea[aria-label="Message"]')?.disabled===false`);
   const after = await evaluate(observe); await capture('reattached');
-  writeFileSync(join(evidence, 'observations.json'), JSON.stringify({ before, during, after }, null, 2));
+  writeFileSync(join(evidence, 'observations.json'), JSON.stringify({ before, halfOpen, during, after }, null, 2));
   for (const [phase, observed] of [['during', during], ['after', after]]) {
     assert.equal(observed.pageToken, before.pageToken, `${phase}: no document reload`);
     assert.equal(observed.timeOrigin, before.timeOrigin);
@@ -93,7 +102,7 @@ try {
   }
   assert.equal(during.disabled, true, 'wait for attachment before enabling actions');
   assert.equal(after.disabled, false);
-  console.log('PASS: reconnect keeps the conversation, partial reply, draft and scroll position; actions wait for the snapshot; no prompt replay');
+  console.log('PASS: half-open outgoing connections show Reconnecting and disable actions; recovery keeps the conversation, partial reply, draft and scroll position; actions wait for the snapshot; no prompt replay');
 } finally {
   try { await ab('close'); } catch {}
   for (const p of [backend, frontend]) if (p.exitCode === null) { const done = new Promise(resolve => p.once('exit', resolve)); p.kill('SIGTERM'); await done; }

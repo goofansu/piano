@@ -10,33 +10,63 @@ export function useConnection(onMessage: (m: ServerMessage) => void, onStatus: (
   const socket = useRef<WebSocket | null>(null);
   const handlers = useRef({ onMessage, onStatus });
   handlers.current = { onMessage, onStatus };
+  const recover = useRef<() => void>(() => {});
   const [conn] = useState<Connection>(() => ({
     send: (m) => {
       const ws = socket.current;
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(encodeClientMessage(m));
+      try {
+        if (!ws || ws.readyState !== WebSocket.OPEN) { recover.current(); return; }
+        ws.send(encodeClientMessage(m));
+      } catch { recover.current(); }
     },
   }));
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let heartbeat: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
     const connect = () => {
+      if (closed) return;
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
       const ws = new WebSocket(`${proto}//${location.host}/ws`);
       socket.current = ws;
       let lastDeliveryId = 0;
-      ws.onopen = () => { if (!closed && socket.current === ws) handlers.current.onStatus(true); };
-      ws.onclose = (event) => {
+      let nonce: string | null = null;
+      const lost = (code?: number) => {
         if (closed || socket.current !== ws) return;
+        // A half-open socket may never finish its close handshake. Retire it now,
+        // rather than waiting for onclose to disable actions and start recovery.
+        socket.current = null;
+        clearTimeout(heartbeat);
         handlers.current.onStatus(false);
-        if (event.code === 1013) handlers.current.onMessage({ _tag: "toast", level: "warning", message: "Connection fell behind. Reconnecting for a current view; some live notices may have been missed." });
-        if (event.code === 1009) {
+        ws.close();
+        if (code === 1013) handlers.current.onMessage({ _tag: "toast", level: "warning", message: "Connection fell behind. Reconnecting for a current view; some live notices may have been missed." });
+        if (code === 1009) {
           handlers.current.onMessage({ _tag: "toast", level: "error", message: "Session view exceeds the delivery limit. Reduce its context before reloading." });
           return;
         }
         timer = setTimeout(connect, 2000);
       };
-      ws.onerror = () => ws.close();
+      recover.current = lost;
+      const probe = () => {
+        if (closed || socket.current !== ws) return;
+        nonce = crypto.randomUUID();
+        try { ws.send(encodeClientMessage({ _tag: "ping", nonce })); }
+        catch { lost(); return; }
+        // Only the matching pong proves that the outgoing path works. Streaming
+        // frames must not extend this deadline (INV-02/05).
+        heartbeat = setTimeout(lost, 8000);
+      };
+      // Bound connection establishment too: mobile sockets can stick CONNECTING.
+      heartbeat = setTimeout(lost, 10000);
+      ws.onopen = () => {
+        if (closed || socket.current !== ws) return;
+        clearTimeout(heartbeat);
+        handlers.current.onStatus(true);
+        probe();
+      };
+      ws.onclose = (event) => lost(event.code);
+      ws.onerror = () => lost();
       ws.onmessage = (e) => {
         if (closed || socket.current !== ws || ws.readyState !== WebSocket.OPEN) return;
         try {
@@ -46,21 +76,38 @@ export function useConnection(onMessage: (m: ServerMessage) => void, onStatus: (
           if (message.deliveryId > lastDeliveryId) {
             if (message.deliveryId !== lastDeliveryId + 1) throw new Error("Delivery gap; reconnecting for current state");
             lastDeliveryId = message.deliveryId;
-            handlers.current.onMessage(message);
+            if (message._tag === "pong") {
+              if (nonce !== null && message.nonce === nonce) {
+                nonce = null;
+                clearTimeout(heartbeat);
+                heartbeat = setTimeout(probe, 5000);
+              }
+            } else handlers.current.onMessage(message);
           }
           ws.send(encodeClientMessage({ _tag: "ack", deliveryId: message.deliveryId }));
         } catch (err) {
           console.warn("bad server message", err);
           // A frame we cannot project cannot be silently skipped.
-          ws.close();
+          lost();
         }
       };
     };
+    const offline = () => recover.current();
+    const online = () => {
+      if (!socket.current) { clearTimeout(timer); connect(); }
+    };
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", online);
     connect();
     return () => {
       closed = true;
       clearTimeout(timer);
+      clearTimeout(heartbeat);
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("online", online);
+      recover.current = () => {};
       socket.current?.close();
+      socket.current = null;
     };
   }, []);
 

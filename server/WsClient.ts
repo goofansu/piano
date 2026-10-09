@@ -222,6 +222,8 @@ export const handleSocket = (socket: Socket.Socket) =>
             // Failure may have left a checkout behind. Refresh rather than retrying a mutation.
             return yield* publishProjects;
           }
+          case "ping":
+            return yield* send({ _tag: "pong", nonce: msg.nonce });
           case "ack": {
             if (!pending.has(msg.deliveryId)) return;
             for (const [id, item] of pending) if (id <= msg.deliveryId) {

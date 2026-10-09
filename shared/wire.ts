@@ -574,6 +574,8 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, outcomeProjectId: Schema.optional(Schema.String), options: StartOptions, text: Schema.optional(Schema.String), attachments: attachmentInput }),
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
   Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
+  /** Round-trip liveness, independent of incoming session activity. */
+  Schema.TaggedStruct("ping", { nonce: Schema.String }),
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),
   /** Name a session through Pi (starting it when not running); the registry title follows Pi's name. */
   Schema.TaggedStruct("rename_session", { cwd: Schema.String, sessionId: Schema.String, title: Schema.String }),
@@ -594,6 +596,7 @@ export const WorktreeResult = Schema.Union([
 export type WorktreeResult = typeof WorktreeResult.Type;
 
 export const ServerMessage = Schema.Union([
+  Schema.TaggedStruct("pong", { nonce: Schema.String }),
   Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView), outcomeProjects: Schema.optional(Schema.Array(OutcomeProject)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
   Schema.TaggedStruct("catalogs_invalidated", {}),
