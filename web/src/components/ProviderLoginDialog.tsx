@@ -1,4 +1,4 @@
-import type { ProviderLoginState } from "@shared/wire";
+import type { OAuthProvider, ProviderLoginState } from "@shared/wire";
 import { CheckCircleIcon, CopyIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -20,11 +20,12 @@ function safeUrl(raw?: string) {
   try { const url = new URL(raw!); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : undefined; } catch { return undefined; }
 }
 
-/** Global operation: closing the window does not cancel server-owned sign-in. */
-export function ProviderLoginDialog({ initialProvider, close, signedIn }: { initialProvider: string; close: () => void; signedIn: () => void }) {
+/** Explicit dismissal cancels pending sign-in; browser disconnect still preserves it. */
+export function ProviderLoginDialog({ initialProvider, providers, close, signedIn }: { initialProvider: string; providers: OAuthProvider[]; close: () => void; signedIn: () => void }) {
   const [state, setState] = useState<ProviderLoginState | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
+  const [connectionError, setConnectionError] = useState("");
   const epoch = useRef(0);
   // StrictMode must not submit login twice. Re-attach to the same initialization.
   const initialization = useRef<Promise<{ state: ProviderLoginState | null }> | null>(null);
@@ -46,8 +47,11 @@ export function ProviderLoginDialog({ initialProvider, close, signedIn }: { init
       const version = epoch.current;
       try {
         const result = await request();
-        if (alive && version === epoch.current) { setState(result.state); setError(""); }
-      } catch { if (alive && version === epoch.current) setError("Connection lost. Sign-in will resume when Piano reconnects."); }
+        if (alive && version === epoch.current) {
+          setState(result.state); setConnectionError("");
+          if (result.state?.status !== "running") setError("");
+        }
+      } catch { if (alive && version === epoch.current) setConnectionError("Connection lost. Sign-in will resume when Piano reconnects."); }
       if (alive) timer = setTimeout(poll, 750);
     };
     timer = setTimeout(poll, 750);
@@ -63,20 +67,45 @@ export function ProviderLoginDialog({ initialProvider, close, signedIn }: { init
   useEffect(() => {
     if (state?.status === "success" && notified.current !== state.id) { notified.current = state.id; signedIn(); }
   }, [state?.status, state?.id, signedIn]);
-  const prompt = state?.prompt;
-  const url = safeUrl(state?.url);
-  return <Dialog open onOpenChange={open => { if (!open) close(); }}>
-    <DialogContent className="max-h-[85dvh] overflow-y-auto">
+  const dismissing = useRef(false);
+  const dismiss = async () => {
+    // Do not abandon an initialization/answer whose resulting attempt is not known yet.
+    if (busy || dismissing.current) return;
+    dismissing.current = true;
+    if (state?.status !== "running") { close(); return; }
+    epoch.current++;
+    setBusy(true); setError("");
+    try {
+      const result = await request("DELETE", { id: state.id });
+      // Authorization may have completed before cancellation reached the server.
+      if (result.state?.status === "success") signedIn();
+      close();
+    } catch {
+      setError("Could not cancel sign-in. Check your connection and try again.");
+    } finally {
+      epoch.current++;
+      dismissing.current = false;
+      setBusy(false);
+    }
+  };
+  const running = state?.status === "running";
+  const prompt = running ? state.prompt : undefined;
+  const url = running ? safeUrl(state.url) : undefined;
+  const providerId = state?.provider ?? initialProvider;
+  const providerName = providers.find(provider => provider.id === providerId)?.name ?? providerId;
+  const dismissLabel = state?.status === "success" ? "Done" : running || busy ? "Cancel" : "Close";
+  return <Dialog open onOpenChange={open => { if (!open) void dismiss(); }}>
+    <DialogContent className="max-h-[85dvh] overflow-y-auto" showCloseButton={!busy} onInteractOutside={event => event.preventDefault()}>
       <DialogHeader>
-        <DialogTitle>Sign in{state ? ` · ${state.provider}` : ""}</DialogTitle>
-        <DialogDescription>Connect an OAuth provider through Pi.</DialogDescription>
+        <DialogTitle>Sign in to {providerName}</DialogTitle>
+        <DialogDescription>{prompt?.type === "select" ? "Choose a sign-in method." : running && url && !prompt ? "Waiting for authorization…" : "Follow the steps to connect your account."}</DialogDescription>
       </DialogHeader>
       {state?.status === "success" ? <Alert role="status">
         <CheckCircleIcon />
-        <AlertTitle>Sign-in complete</AlertTitle>
+        <AlertTitle>You’re signed in.</AlertTitle>
         <AlertDescription>{state.message}</AlertDescription>
       </Alert> : state?.message && <p role="status" className="text-sm text-muted-foreground">{state.message}</p>}
-      {state?.status === "running" && url && <Button asChild variant="outline"><a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Open sign-in page</a></Button>}
+      {prompt && url && <Button asChild variant="outline"><a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Open sign-in page</a></Button>}
       {state?.userCode && <FieldGroup><Field>
         <FieldLabel htmlFor="login-device-code">Device code</FieldLabel>
         <InputGroup>
@@ -89,18 +118,18 @@ export function ProviderLoginDialog({ initialProvider, close, signedIn }: { init
           </InputGroupAddon>
         </InputGroup>
       </Field></FieldGroup>}
-      {prompt && <LoginPromptForm key={prompt.id} state={state!} busy={busy} answer={value => void change("PUT", { id: state!.id, promptId: prompt.id, value })} />}
+      {prompt && <LoginPromptForm key={prompt.id} state={state!} busy={busy} cancel={() => void dismiss()} answer={value => void change("PUT", { id: state!.id, promptId: prompt.id, value })} />}
       {busy && !prompt && <p role="status" className="text-sm text-muted-foreground">Loading…</p>}
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-      <DialogFooter>
-        {state?.status === "running" && <Button variant="outline" disabled={busy} onClick={() => void change("DELETE", { id: state.id })}>Cancel sign-in</Button>}
+      {(error || connectionError) && <Alert variant="destructive"><AlertDescription>{error || connectionError}</AlertDescription></Alert>}
+      {!prompt && <DialogFooter>
+        <Button variant={state?.status === "success" ? "default" : "outline"} disabled={busy} onClick={() => void dismiss()}>{dismissLabel}</Button>
         {(state?.status === "error" || state?.status === "cancelled") && <Button disabled={busy} onClick={() => void change("POST", { provider: state.provider })}>Try again</Button>}
-        <Button variant={state?.status === "success" ? "default" : "ghost"} onClick={close}>{state?.status === "running" ? "Hide" : "Close"}</Button>
-      </DialogFooter>
+        {url && <Button asChild><a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Open sign-in page</a></Button>}
+      </DialogFooter>}
     </DialogContent>
   </Dialog>;
 }
-function LoginPromptForm({ state, busy, answer }: { state: ProviderLoginState; busy: boolean; answer: (value: string) => void }) {
+function LoginPromptForm({ state, busy, answer, cancel }: { state: ProviderLoginState; busy: boolean; answer: (value: string) => void; cancel: () => void }) {
   const prompt = state.prompt!;
   const [value, setValue] = useState("");
   return <form onSubmit={event => { event.preventDefault(); if (!busy) { answer(value); setValue(""); } }}>
@@ -109,8 +138,12 @@ function LoginPromptForm({ state, busy, answer }: { state: ProviderLoginState; b
         <SelectTrigger id="login-answer"><SelectValue placeholder="Choose a sign-in method" /></SelectTrigger>
         <SelectContent><SelectGroup>{prompt.options?.map(option => <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>)}</SelectGroup></SelectContent>
       </Select> : <Input id="login-answer" type={prompt.type === "text" ? "text" : "password"} value={value} onChange={event => setValue(event.target.value)} placeholder={prompt.placeholder} autoComplete="off" spellCheck={false} disabled={busy} />}
-      </Field><Button type="submit" disabled={busy || (prompt.type === "select" && !value)}>Continue</Button>
-      {prompt.type === "select" && <p className="text-sm text-muted-foreground">If Piano runs on another machine, choose a device-code or copy-code method when offered.</p>}
+      </Field>
+      {prompt.type === "select" && prompt.options && prompt.options.length > 1 && <p className="text-sm text-muted-foreground">If Piano runs on another machine, choose a device-code or copy-code method when offered.</p>}
+      <DialogFooter>
+        <Button type="button" variant="outline" disabled={busy} onClick={cancel}>Cancel</Button>
+        <Button type="submit" disabled={busy || (prompt.type === "select" && !value)}>Continue</Button>
+      </DialogFooter>
     </FieldGroup>
   </form>;
 }

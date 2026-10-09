@@ -104,6 +104,6 @@ export function SettingsPage({ close, onMenu, providersChanged }: { close: () =>
             </Item>)}</ItemGroup>}
         </section>
       </div>
-    {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} close={() => setLogin(undefined)} signedIn={refreshProviders} />}
+    {login && <ProviderLoginDialog key={login.key} initialProvider={login.provider} providers={providers ?? []} close={() => setLogin(undefined)} signedIn={refreshProviders} />}
   </section>;
 }
