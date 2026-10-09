@@ -102,6 +102,7 @@ try {
   await ab('hover', badge(42));
   await ab('wait', '--fn', `!!document.querySelector('[role="tooltip"]')`);
   assert.equal(await evaluate(`document.querySelector('[role="tooltip"]').textContent`), 'The session deliverable', 'Hover shows only the title, not status/checks/review');
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('[role="tooltip"] p')).textWrapStyle`), 'auto', 'PR title uses normal wrapping, not balanced lines');
   await ab('mouse', 'move', '0', '0');
   const refreshGate = { operation: 'view', started: join(root, 'refresh-started'), release: join(root, 'refresh-release') };
   control({ prs, gate: refreshGate });

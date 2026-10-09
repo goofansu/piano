@@ -35,7 +35,7 @@ function SessionPullRequestTrigger({ value }: { value: SessionPullRequest | unde
       </TooltipTrigger>
     </PopoverTrigger>
     <TooltipContent className="max-w-80">
-      <p>{pr?.title ?? (value?.link ? "View pull request" : "Link pull request")}</p>
+      <p className="text-wrap">{pr?.title ?? (value?.link ? "View pull request" : "Link pull request")}</p>
     </TooltipContent>
   </Tooltip>;
 }
