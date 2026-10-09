@@ -132,9 +132,31 @@ try {
   await ab('find', 'role', 'button', 'click', '--name', 'echo duplicate-tool');
   check((await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`)).includes('Command aborted'), 'Tool retains Command aborted detail');
   await capture('tool-aborted');
+  // Conversation detail is display-only, persists across reload, and is reversible.
+  await ab('press', 'Control+k');
+  await ab('find', 'role', 'option', 'click', '--name', 'Appearance', '--exact');
+  await ab('find', 'role', 'radio', 'click', '--name', 'Messages only', '--exact');
+  await capture('appearance-messages-only');
+  await ab('press', 'Control+k');
+  await ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
+  await ab('wait', '--text', 'Partial answer before provider failure.');
+  const messagesOnly = await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`);
+  check(!messagesOnly.includes('echo duplicate-tool') && !messagesOnly.includes('Command aborted'), 'Messages only hides tool calls and results');
+  check(messagesOnly.includes('Partial answer before provider failure.') && messagesOnly.includes('This operation was aborted'), 'Messages and actionable errors remain');
+  await ab('reload');
+  await ab('wait', '--text', 'Partial answer before provider failure.');
+  check(!(await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`)).includes('echo duplicate-tool'), 'Preference survives reload');
+  await ab('press', 'Control+k');
+  await ab('find', 'role', 'option', 'click', '--name', 'Appearance', '--exact');
+  await ab('find', 'role', 'radio', 'click', '--name', 'Show everything', '--exact');
+  await ab('press', 'Control+k');
+  await ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
+  await ab('wait', '--text', 'echo duplicate-tool');
+  check((await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`)).includes('echo duplicate-tool'), 'Show everything restores authoritative tool history');
+  await capture('everything-restored');
   check((await ab('errors')) === '', 'No browser errors');
   assert.deepEqual(failures, [], failures.join('\n'));
-  console.log('PASS: concise standalone provider errors, on-demand raw diagnostics, duplicate abort suppression, and desktop/mobile containment');
+  console.log('PASS: concise standalone provider errors, on-demand raw diagnostics, duplicate abort suppression, desktop/mobile containment, and persistent reversible conversation detail');
 } finally {
   try { await ab('close'); } catch {}
   for (const proc of [backend, frontend]) if (proc.exitCode === null) { const stopped = new Promise(resolve => proc.once('exit', resolve)); proc.kill('SIGTERM'); await stopped; }

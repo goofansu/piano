@@ -11,10 +11,10 @@ import { messageError } from "../web/src/lib/messageError.ts";
 const vite = await createServer({ root: path.resolve("web"), server: { middlewareMode: true, watch: null }, appType: "custom" });
 after(() => vite.close());
 const { MessageList } = await vite.ssrLoadModule("/src/components/MessageList.tsx") as {
-  MessageList: ComponentType<{ messages: RenderMsg[]; pending: RenderMsg | null; tools: Record<string, ToolExecution> }>;
+  MessageList: ComponentType<{ messages: RenderMsg[]; pending: RenderMsg | null; tools: Record<string, ToolExecution>; showTools?: boolean }>;
 };
-const render = (messages: RenderMsg[], tools: Record<string, ToolExecution> = {}, pending: RenderMsg | null = null) =>
-  renderToStaticMarkup(createElement(MessageList, { messages, tools, pending }));
+const render = (messages: RenderMsg[], tools: Record<string, ToolExecution> = {}, pending: RenderMsg | null = null, showTools = true) =>
+  renderToStaticMarkup(createElement(MessageList, { messages, tools, pending, showTools }));
 const apiError = 'exe-dev-openai API error (429): {"type":"usage_limit_reached","message":"The usage limit has been reached","retry_after":123}';
 const failure = (errorMessage = apiError): RenderMsg => ({ id: "error", role: "assistant", text: "", stopReason: "error", errorMessage });
 const call: RenderMsg = { id: "call", role: "assistant", text: "", toolCalls: [{ id: "sleep", name: "bash", args: '{"command":"sleep 30"}' }] };
@@ -53,6 +53,21 @@ test("unrelated genuine errors and unrepresented aborts remain visible", () => {
   assert.match(render([call, result, { id: "reply", role: "assistant", text: "Continuing" }, abort]), /This operation was aborted/);
   assert.match(render([call, result, failure("The operation was aborted because credentials expired")]), /credentials expired/);
   assert.match(render([call, { ...result, toolCallId: "unrelated" }, abort]), /This operation was aborted/);
+});
+
+test("messages-only hides historical, orphan and streaming tools but retains prose and errors", () => {
+  const history: RenderMsg[] = [
+    { id: "user", role: "user", text: "My question" },
+    { ...call, text: "Partial reply" }, result,
+    { id: "orphan", role: "tool_result", toolName: "read", text: "Hidden tool output" },
+    abort, failure(),
+  ];
+  const pending = { ...call, id: "pending", text: "Streaming reply" };
+  const html = render(history, {}, pending, false);
+  for (const text of ["My question", "Partial reply", "Streaming reply", "This operation was aborted", "The usage limit has been reached"]) assert.ok(html.includes(text), text);
+  assert.doesNotMatch(html, /sleep 30|Hidden tool output|data-tools-only=""|data-ends-with-tools=""|>Failed</);
+  assert.doesNotMatch(render([call], {}, call, false), /<article/);
+  assert.match(render(history, {}, pending), /sleep 30/);
 });
 
 test("summarization retains exact raw details and safely falls back for unknown payloads", () => {

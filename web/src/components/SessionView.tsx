@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { useConversationDetail } from "@/lib/useConversationDetail";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { type AppState, sessionKey } from "@/store";
 
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, changesOpen, onChangesOpenChange, pullRequestOpen, onPullRequestOpenChange }: Props) {
+  const [detail] = useConversationDetail();
   const t = state.session;
   const input = state.pendingCreate;
   const checkoutMissing = !!t?.state.checkoutMissing;
@@ -139,6 +141,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         {(t || input) && (
           <MessageList
             className="transcript-enter"
+            showTools={detail === "everything"}
             messages={t?.messages ?? []}
             pending={t?.pending ?? null}
             submittedInput={input}

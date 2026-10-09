@@ -30,6 +30,8 @@ interface Props {
   /** Shown while the transcript is empty; omitted while something is on its way. */
   placeholder?: string;
   className?: string;
+  /** Hide activity rows without removing any authoritative history. */
+  showTools?: boolean;
 }
 
 /**
@@ -37,7 +39,7 @@ interface Props {
  * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
  * Tool results are folded under the call that produced them.
  */
-export function MessageList({ messages, pending, submittedInput, tools, activity, placeholder, className }: Props) {
+export function MessageList({ messages, pending, submittedInput, tools, activity, placeholder, className, showTools = true }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -46,7 +48,7 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [messages, pending, submittedInput, tools, activity]);
+  }, [messages, pending, submittedInput, tools, activity, showTools]);
   // Content can grow without a scroll event (a prompt opens, output expands). That only
   // changes whether the bottom is in view; it never moves the reader. The container itself
   // shrinking (a banner appears below, the composer grows) is not the reader's
@@ -114,9 +116,9 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            return <Message key={m.id} msg={m} error={m.errorMessage ? messageError(m, messages.slice(0, index), results, tools) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
+            return <Message key={m.id} msg={m} showTools={showTools} error={m.errorMessage ? messageError(m, showTools ? messages.slice(0, index) : [], showTools ? results : new Map(), showTools ? tools : {}) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
           })}
-          {pending && <Message msg={pending} error={messageError(pending, messages, results, tools)} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
+          {pending && <Message msg={pending} showTools={showTools} error={messageError(pending, showTools ? messages : [], showTools ? results : new Map(), showTools ? tools : {})} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
           {activity && (
             <Row glyph={<Keys playing className="text-brand" />}>
               <span className="sr-only">{activity === "starting" ? "Starting" : "Pi is working"}</span>
@@ -154,36 +156,38 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, error, results, tools, active, terminalRuns, streaming }: { msg: RenderMsg; error?: MessageError; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
+function Message({ msg, error, results, tools, active, terminalRuns, streaming, showTools }: { showTools: boolean; msg: RenderMsg; error?: MessageError; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
+  if (!showTools && (msg.subagent || msg.role === "tool_result" || msg.role === "context")) return null;
   if (msg.subagent) return <SubagentCardView card={msg.subagent} content={msg.text} markdown={msg.role === "context"} terminalStatus={msg.subagent.kind === "delegation" && msg.subagent.runId ? terminalRuns.get(msg.subagent.runId) : undefined} />;
   if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
   if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} />;
   if (msg.role === "assistant") {
+    const hasTools = showTools && !!msg.toolCalls?.length;
     // Pi starts a message before its first visible text or tool block arrives.
     // An empty article would still consume the transcript's flex gap.
-    if (!msg.text && !error && !msg.toolCalls?.length) return null;
+    if (!msg.text && !error && !hasTools) return null;
     return (
       <>
-      {(msg.text || !!msg.toolCalls?.length) && <article
+      {(msg.text || hasTools) && <article
         id={streaming ? undefined : messageAnchorId(msg.id)}
-        data-tools-only={!msg.text && msg.toolCalls?.length ? "" : undefined}
-        data-ends-with-tools={msg.toolCalls?.length ? "" : undefined}
+        data-tools-only={!msg.text && hasTools ? "" : undefined}
+        data-ends-with-tools={hasTools ? "" : undefined}
         className="group/reply flex flex-col gap-6 rounded-2xl"
       >
         {msg.text && (
           <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
             <span className="sr-only">Pi said</span>
             <Markdown text={msg.text} className={cn("prose-chat", streaming && "streaming-caret")} />
-            {!streaming && !msg.toolCalls?.length && <CopyResponse text={msg.text} />}
+            {!streaming && !hasTools && <CopyResponse text={msg.text} />}
           </Row>
         )}
-        {!!msg.toolCalls?.length && (
+        {hasTools && (
           <div className="flex flex-col gap-3">
-            {msg.toolCalls.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} terminalRuns={terminalRuns} running={active.has(tc.id) || (!!streaming && !results.has(tc.id) && !tools[tc.id])} />)}
+            {msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} terminalRuns={terminalRuns} running={active.has(tc.id) || (!!streaming && !results.has(tc.id) && !tools[tc.id])} />)}
           </div>
         )}
       </article>}
-      {error && <ErrorMessage error={error} id={!streaming && !msg.text && !msg.toolCalls?.length ? messageAnchorId(msg.id) : undefined} />}
+      {error && <ErrorMessage error={error} id={!streaming && !msg.text && !hasTools ? messageAnchorId(msg.id) : undefined} />}
       </>
     );
   }
