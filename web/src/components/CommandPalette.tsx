@@ -27,6 +27,7 @@ interface Props {
   send: (command: ClientCommand) => void;
   openChanges: () => void;
   openPullRequest: () => void;
+  hasPullRequest: boolean;
   /** The New session composer's directory, while that page is open. */
   composerCwd?: string;
 }
@@ -35,7 +36,7 @@ interface Props {
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, openSettings, closeSettings, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
+export function CommandPalette({ open, onOpenChange, state, select, openNew, openSettings, closeSettings, toggleSidebar, send, openChanges, openPullRequest, hasPullRequest, composerCwd }: Props) {
   const { setTheme } = useTheme();
   const { view, setView } = useSidebarView();
   const [search, setSearch] = useState("");
@@ -146,7 +147,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
             <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
             <CommandItem value="Copy all" onSelect={() => run(() => { void copyAllSessionDetails(state); })}><CopyIcon /> Copy all</CommandItem>
             <CommandItem value="Changes" keywords={["diff", "review", "working tree"]} disabled={!sessionWorkspace(state) || state.session?.state.checkoutMissing} onSelect={() => run(openChanges)}><FileDiffIcon /> Changes</CommandItem>
-            <CommandItem value="PR" keywords={["github", "link", "pull request"]} disabled={!target} onSelect={() => run(openPullRequest)}><GitPullRequestIcon /> PR</CommandItem>
+            <CommandItem value={hasPullRequest ? "Pull request" : "Link pull request"} keywords={["github", "link", "pr"]} disabled={!target} onSelect={() => run(openPullRequest)}><GitPullRequestIcon />{hasPullRequest ? "Pull request" : "Link pull request"}</CommandItem>
             <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><TextCursorInputIcon /> Rename</CommandItem>
             <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
             <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>

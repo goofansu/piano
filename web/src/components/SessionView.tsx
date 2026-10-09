@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
-import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
+import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { type AppState, sessionKey } from "@/store";
 
 interface Props {
@@ -28,11 +28,12 @@ interface Props {
   openProject: (id: string) => void;
   changesOpen: boolean;
   onChangesOpenChange: (open: boolean) => void;
+  pullRequest: ReturnType<typeof useSessionPullRequest>;
   pullRequestOpen: boolean;
   onPullRequestOpenChange: (open: boolean) => void;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, changesOpen, onChangesOpenChange, pullRequestOpen, onPullRequestOpenChange }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, changesOpen, onChangesOpenChange, pullRequest, pullRequestOpen, onPullRequestOpenChange }: Props) {
   const [display] = useSessionDisplay();
   const t = state.session;
   const input = state.pendingCreate;
@@ -90,10 +91,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
     uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
   }[submission.outcome] : undefined);
 
-  // Use the registered session reference, including non-Git or removed checkouts.
-  const workspaceId = state.projects.flatMap(p => p.sessions).find(s => s.cwd === t?.cwd && s.sessionId === t?.sessionId)?.workspaceId;
-  const pullRequest = useSessionPullRequest(workspaceId, t?.sessionId, streaming);
-
   const status = starting ? "Starting"
     : !t && input ? "Delivery uncertain"
     : !state.connected || (t !== null && !ready) ? "Reconnecting"
@@ -105,6 +102,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   return (
     <>
       <SessionHeader state={state} send={send} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)}
+        hasPullRequest={!!pullRequest.value?.link} openPullRequest={() => onPullRequestOpenChange(true)}
         pullRequest={t?.sessionId && <SessionPullRequestControl key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />} />
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={sessionWorkspace(state)} session={t}
         onAsk={text => {

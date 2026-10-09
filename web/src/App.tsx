@@ -16,6 +16,7 @@ import { hasMod } from "@/lib/keys";
 import { invalidateModelDefaults } from "@/lib/modelDefaults";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
 import { readJson, writeJson } from "@/lib/storage";
+import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { useConnection } from "@/lib/ws";
 import { type Action, type AppState, initialState, reduce, sessionDelivery } from "@/store";
 
@@ -117,6 +118,10 @@ export default function App() {
   // One Changes sheet per selected session; the header menu and the palette both open it.
   const [changesOpen, setChangesOpen] = useState(false);
   const [pullRequestOpen, setPullRequestOpen] = useState(false);
+  // One PR projection feeds the header, menu, and palette for the selected session.
+  const prSession = state.view.kind === "session" ? state.session : null;
+  const prWorkspaceId = state.projects.flatMap(p => p.sessions).find(s => s.cwd === prSession?.cwd && s.sessionId === prSession?.sessionId)?.workspaceId;
+  const pullRequest = useSessionPullRequest(prWorkspaceId, prSession?.sessionId, !!(prSession?.state.isStreaming || prSession?.state.isCompacting || prSession?.state.isRetrying));
   useEffect(() => { setChangesOpen(false); setPullRequestOpen(false); }, [state.session?.cwd, state.session?.sessionId]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -221,7 +226,7 @@ export default function App() {
               </EmptyContent>
             </Empty>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={!settingsOpen && changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={!settingsOpen && pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={!settingsOpen && changesOpen} onChangesOpenChange={setChangesOpen} pullRequest={pullRequest} pullRequestOpen={!settingsOpen && pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}
         </LayoutView>
         {settingsOpen && <LayoutView><SettingsPage section={settingsSection} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
@@ -237,7 +242,7 @@ export default function App() {
         toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
       />
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette openSettings={openSettingsSection} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette openSettings={openSettingsSection} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} hasPullRequest={!!pullRequest.value?.link} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </AppLayout>
   );

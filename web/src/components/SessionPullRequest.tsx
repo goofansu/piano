@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
@@ -70,6 +71,7 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
   open: boolean; onOpenChange: (open: boolean) => void; pr: PullRequestControl;
 }) {
   const [editing, setEditing] = useState(false);
+  const [linking, setLinking] = useState(false);
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const link = pr.value?.link;
@@ -78,43 +80,61 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
   const status = pullRequest ? states[pullRequest.state] : undefined;
   const repo = pullRequest?.repo ?? (link ? new URL(link.url).pathname.split("/").slice(1, 3).join("/") : "");
   const number = pullRequest?.number ?? link?.url.split("/").pop();
-  useEffect(() => { if (!open) setEditing(false); }, [open]);
+  useEffect(() => {
+    if (!open) { setEditing(false); setLinking(false); }
+    else if (!link) setLinking(true);
+  }, [open]);
+  // A discovered or manually linked PR reveals the header, not a second overlay.
+  useEffect(() => { if (open && linking && link) onOpenChange(false); }, [open, linking, link]);
   // Cancel and successful discovery replace the focused form controls.
   useEffect(() => { if (open && showingDetails) closeRef.current?.focus(); }, [open, showingDetails]);
   // Opening may refresh an existing link, but must not discover or associate one.
   useEffect(() => { if (open && link) void pr.refresh(); }, [open]);
   const close = () => onOpenChange(false);
-  return <Popover open={open} onOpenChange={onOpenChange}>
-    <SessionPullRequestTrigger value={pr.value} />
-    <PopoverContent align="start" sideOffset={8} collisionPadding={16} aria-labelledby={titleId} className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto">
-      <PopoverHeader className="flex-row items-center justify-between gap-2">
-        {showingDetails ? <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
-          <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
-          <span className="min-w-0 break-all">{repo}</span>
-        </p> : <PopoverTitle id={titleId}>{editing ? "Change pull request" : "Link pull request"}</PopoverTitle>}
-        <Button ref={closeRef} variant="ghost" size="icon-xs" aria-label="Close pull request" onClick={close}><XIcon /></Button>
-      </PopoverHeader>
-      {link && showingDetails ? <>
-        {/* Plain PR facts, not a second card inside the popover. */}
-        <div className="flex min-w-0 flex-col gap-3">
-          <PopoverTitle id={titleId}>
-            <a href={link.url} target="_blank" rel="noreferrer" className="break-words hover:underline">{pullRequest?.title ?? "View pull request"}</a>
-          </PopoverTitle>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">#{number}</span>
-            {status ? <Badge variant={status.variant}><status.Icon data-icon="inline-start" aria-hidden />{status.label}</Badge>
-              : <Badge variant="secondary">Status unavailable</Badge>}
+  const restoreFocus = (event: Event) => {
+    event.preventDefault();
+    const selector = pr.value?.link ? 'header [data-slot="popover-trigger"]' : 'header [aria-label="Session information and actions"]';
+    document.querySelector<HTMLButtonElement>(selector)?.focus();
+  };
+  return <>
+    <Dialog open={open && (!link || linking)} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm" aria-describedby={undefined} onCloseAutoFocus={restoreFocus}>
+        <DialogHeader><DialogTitle>Link pull request</DialogTitle></DialogHeader>
+        <PullRequestForm pr={pr} editing={false} onCancel={close} onSave={close} />
+      </DialogContent>
+    </Dialog>
+    <Popover open={open && !!link && !linking} onOpenChange={onOpenChange}>
+      {link && <SessionPullRequestTrigger value={pr.value} />}
+      <PopoverContent onCloseAutoFocus={restoreFocus} align="start" sideOffset={8} collisionPadding={16} aria-labelledby={titleId} className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto">
+        <PopoverHeader className="flex-row items-center justify-between gap-2">
+          {showingDetails ? <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
+            <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
+            <span className="min-w-0 break-all">{repo}</span>
+          </p> : <PopoverTitle id={titleId}>{editing ? "Change pull request" : "Link pull request"}</PopoverTitle>}
+          <Button ref={closeRef} variant="ghost" size="icon-xs" aria-label="Close pull request" onClick={close}><XIcon /></Button>
+        </PopoverHeader>
+        {link && showingDetails ? <>
+          {/* Plain PR facts, not a second card inside the popover. */}
+          <div className="flex min-w-0 flex-col gap-3">
+            <PopoverTitle id={titleId}>
+              <a href={link.url} target="_blank" rel="noreferrer" className="break-words hover:underline">{pullRequest?.title ?? "View pull request"}</a>
+            </PopoverTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">#{number}</span>
+              {status ? <Badge variant={status.variant}><status.Icon data-icon="inline-start" aria-hidden />{status.label}</Badge>
+                : <Badge variant="secondary">Status unavailable</Badge>}
+            </div>
+            {pullRequest && <PullRequestSignals pr={pullRequest} />}
           </div>
-          {pullRequest && <PullRequestSignals pr={pullRequest} />}
-        </div>
-        <Separator />
-        <div className="flex justify-between gap-2">
-          <Button variant="ghost" size="sm" disabled={pr.busy} onClick={() => setEditing(true)}>Change link</Button>
-          <Button variant="ghost" size="sm" disabled={pr.busy} onClick={async () => { if (await pr.change({ action: "remove" })) close(); }}>Remove link</Button>
-        </div>
-      </> : <PullRequestForm pr={pr} editing={editing} onCancel={() => link ? setEditing(false) : close()} onSave={close} />}
-    </PopoverContent>
-  </Popover>;
+          <Separator />
+          <div className="flex justify-between gap-2">
+            <Button variant="ghost" size="sm" disabled={pr.busy} onClick={() => setEditing(true)}>Change link</Button>
+            <Button variant="ghost" size="sm" disabled={pr.busy} onClick={async () => { if (await pr.change({ action: "remove" })) close(); }}>Remove link</Button>
+          </div>
+        </> : <PullRequestForm pr={pr} editing={editing} onCancel={() => link ? setEditing(false) : close()} onSave={close} />}
+      </PopoverContent>
+    </Popover>
+  </>;
 }
 
 /** Mount a draft only when editing; background refreshes must not replace typed input. */
@@ -128,7 +148,8 @@ function PullRequestForm({ pr, editing, onCancel, onSave }: {
     try {
       const result = await pr.change({ action: "discover" });
       // Only the explicit search reports absence; polling stays silent.
-      if (result && !result.link && !result.error) toast("No open PR found for this branch.");
+      if (result && result.link) onSave();
+      else if (result && !result.error) toast("No open PR found for this branch.");
     } finally { setFinding(false); }
   };
   const inputRef = useRef<HTMLInputElement>(null);
@@ -141,9 +162,9 @@ function PullRequestForm({ pr, editing, onCancel, onSave }: {
       </Field>
     </FieldGroup>
     <div className="flex flex-col gap-2">
-      <Button type="submit" disabled={pr.busy || finding || !url.trim()}>{editing ? "Save link" : "Link PR"}</Button>
+      <Button type="submit" disabled={pr.busy || finding || !url.trim()}>{editing ? "Save link" : "Link"}</Button>
       {editing ? <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-        : <Button type="button" variant="outline" disabled={pr.busy || finding} onClick={() => { void find(); }}><GitBranchIcon data-icon="inline-start" />{finding ? "Finding PR…" : "Find PR from branch"}</Button>}
+        : <Button type="button" variant="outline" disabled={pr.busy || finding} onClick={() => { void find(); }}><GitBranchIcon data-icon="inline-start" />{finding ? "Finding…" : "Find from branch"}</Button>}
     </div>
   </form>;
 }

@@ -1,5 +1,5 @@
 import type { ClientCommand } from "@shared/wire";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
 import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevPath } from "@/lib/format";
 import type { AppState } from "@/store";
 
-export function SessionHeader({ state, send, onMenu, openNew, openProject, status, openChanges, pullRequest }: {
+export function SessionHeader({ state, send, onMenu, openNew, openProject, status, openChanges, pullRequest, hasPullRequest, openPullRequest }: {
   state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; openProject: (id: string) => void;
-  status: string; openChanges: () => void; pullRequest: React.ReactNode;
+  status: string; openChanges: () => void; pullRequest: React.ReactNode; hasPullRequest: boolean; openPullRequest: () => void;
 }) {
   const session = state.session;
   const { title, branch, sessionId, project } = currentSessionDetails(state);
@@ -72,6 +72,7 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={!workspace || session?.state.checkoutMissing} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
+            <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon />{hasPullRequest ? "Pull request" : "Link pull request"}</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

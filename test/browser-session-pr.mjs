@@ -49,9 +49,16 @@ const badge = number => `header button[aria-label="Pull request #${number}"]`;
 const waitBadge = number => ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(badge(number))})`);
 const noBadge = () => ab('wait', '--fn', `!document.querySelector('header button[aria-label^="Pull request #"]')`);
 const button = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
-const popover = '[data-slot="popover-content"][aria-labelledby]';
+const popover = ':is([data-slot="popover-content"], [data-slot="dialog-content"])[aria-labelledby]';
 const waitDetails = () => ab('wait', '--fn', `!!document.querySelector('${popover}[data-state="open"]')`);
-const openDetails = async () => { await ab('click', 'header [data-slot="popover-trigger"]'); await waitDetails(); };
+const openDetails = async () => {
+  if (await evaluate(`!!document.querySelector('header [data-slot="popover-trigger"]')`)) await ab('click', 'header [data-slot="popover-trigger"]');
+  else {
+    await ab('click', '[aria-label="Session information and actions"]');
+    await ab('find', 'role', 'menuitem', 'click', '--name', 'Link pull request', '--exact');
+  }
+  await waitDetails();
+};
 const closeDetails = async () => { await ab('press', 'Escape'); await ab('wait', '--fn', `!document.querySelector('${popover}')`); };
 const editLink = async () => { await button('Change link'); await ab('wait', '--fn', `document.activeElement?.id === 'session-pr-url'`); };
 const palette = async search => { await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k'); await ab('fill', '[aria-label="Search sessions and commands"]', search); };
@@ -135,7 +142,7 @@ try {
   await closeDetails();
   assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger');
   await ab('click', '[aria-label="Session information and actions"]');
-  assert.equal(await evaluate(`[...document.querySelectorAll('[role="menuitem"]')].some(n => n.textContent === 'Pull request')`), false);
+  assert.equal(await evaluate(`[...document.querySelectorAll('[role="menuitem"]')].some(n => n.textContent === 'Pull request')`), true);
   await ab('find', 'role', 'menuitem', 'click', '--name', 'Rename', '--exact');
   await ab('wait', '--fn', `!!document.querySelector('input[aria-label="Session name"]')`);
   observations.renameFocus = await evaluate(`(() => { const input = document.querySelector('input[aria-label="Session name"]'); return { focused: document.activeElement === input, selected: input.selectionStart === 0 && input.selectionEnd === input.value.length }; })()`);
@@ -156,16 +163,16 @@ try {
   // Removal is a durable per-session preference, not a temporary hide.
   await openDetails(); await button('Remove link'); await noBadge(); await ab('reload');
   await ab('wait', '--text', 'These are not session deliverables.'); await noBadge();
-  assert.equal(await evaluate(`document.querySelector('header [data-slot="popover-trigger"]').textContent.trim()`), 'PR');
+  assert.equal(await evaluate(`!!document.querySelector('header [data-slot="popover-trigger"]')`), false, 'No PR means no header control');
   assert.equal(await evaluate(`document.querySelector('header').textContent.includes('No PR')`), false);
   await openDetails();
   await ab('wait', '--fn', `!!document.querySelector('#session-pr-url')`);
-  await button('Find PR from branch'); await waitBadge(42);
-  assert.equal(await evaluate(`!!document.querySelector('#session-pr-url')`), false, 'Discovery shows details without a form');
-  assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true, 'Discovery keeps keyboard focus in details');
-  await closeDetails();
+  assert.equal(await evaluate(`!!document.querySelector('[data-slot="dialog-content"]') && document.activeElement?.id === 'session-pr-url'`), true, 'Menu opens a dialog focused on the URL');
+  await button('Find from branch'); await waitBadge(42);
+  await ab('wait', '--fn', `!document.querySelector('${popover}')`);
+  assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger', 'Discovery closes the dialog and focuses the revealed header button');
   // Header and palette reach the same control. Invalid URLs fail without changing identity.
-  await palette('Pull request'); await ab('click', '[cmdk-item][data-value="PR"]');
+  await palette('Pull request'); await ab('click', '[cmdk-item][data-value="Pull request"]');
   await waitDetails();
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true, 'Palette moves focus into the popover');
   await editLink();
@@ -179,15 +186,16 @@ try {
   assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger');
   await palette('Other work'); await ab('click', '[cmdk-item][data-value$=" other"]');
   await ab('wait', '--fn', `location.pathname === '/s/other'`); await noBadge();
-  await palette('Pull request'); await ab('click', '[cmdk-item][data-value="PR"]'); await waitDetails();
+  await palette('Link pull request'); await ab('click', '[cmdk-item][data-value="Link pull request"]'); await waitDetails();
+  assert.equal(await evaluate(`!!document.querySelector('[data-slot="dialog-content"]') && document.activeElement?.id === 'session-pr-url'`), true, 'Palette opens the same focused dialog');
   await ab('wait', '--fn', `!!document.querySelector('#session-pr-url')`);
   assert.equal(await evaluate(`document.querySelector('${popover}').textContent.includes('No matching') || !!document.querySelector('[data-sonner-toast]')`), false, 'Opening shows no absence message');
   const gate = { started: join(root, 'discovery-started'), release: join(root, 'discovery-release') };
   control({ prs: [], gate });
   await ab('fill', '#session-pr-url', prs[0].url);
-  await button('Find PR from branch');
-  await ab('wait', '--text', 'Finding PR…');
-  assert.equal(await evaluate(`[...document.querySelectorAll('${popover} button')].find(b => b.textContent.includes('Finding PR'))?.disabled`), true);
+  await button('Find from branch');
+  await ab('wait', '--text', 'Finding…');
+  assert.equal(await evaluate(`[...document.querySelectorAll('${popover} button')].find(b => b.textContent.includes('Finding'))?.disabled`), true);
   for (let n = 0; !existsSync(gate.started); n++) { assert.ok(n < 100, 'Discovery started'); await delay(50); }
   writeFileSync(gate.release, 'release');
   await ab('wait', '--fn', `document.querySelector('[data-sonner-toast]')?.textContent.includes('No open PR found for this branch.')`);
@@ -198,7 +206,7 @@ try {
   await ab('screenshot', join(evidence, 'manual-search-empty-toast-mobile.png'));
   await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast]')`);
   control({ error: 'offline' });
-  await button('Find PR from branch');
+  await button('Find from branch');
   await ab('wait', '--fn', `document.querySelector('[data-sonner-toast][data-type="error"]')?.textContent.includes('Could not read GitHub')`);
   assert.equal(await evaluate(`document.querySelector('${popover}').textContent.includes('Could not read GitHub') || document.querySelector('${popover}').textContent.includes('Retry')`), false, 'Discovery errors use a toast without Retry');
   await ab('screenshot', join(evidence, 'manual-search-error-toast-mobile.png'));
@@ -208,6 +216,7 @@ try {
   await ab('wait', '--fn', `!document.querySelector('${popover} button[type="submit"]').disabled`);
   assert.equal(await evaluate(`!!document.querySelector('[data-sonner-toast]')`), false, 'Background-style refresh does not toast absence');
   await closeDetails();
+  assert.equal(await evaluate(`document.activeElement?.getAttribute('aria-label')`), 'Session information and actions', 'Dismissing an unlinked dialog restores focus to the session menu');
   control({ prs });
   // A newly available branch PR must not be discovered just by opening the control.
   await evaluate(`window.prRequests = 0; window.originalFetch = window.fetch; window.fetch = (...args) => { if (String(args[0]).includes('/api/session/pull-request')) window.prRequests++; return window.originalFetch(...args); }; true`);
