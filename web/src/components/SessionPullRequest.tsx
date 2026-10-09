@@ -122,7 +122,7 @@ function PullRequestForm({ pr, editing, errorId, onCancel, onSave }: {
   return <form onSubmit={async event => { event.preventDefault(); if (await pr.change({ action: "link", url })) onSave(); }} className="flex flex-col gap-4">
     <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="session-pr-url">PR URL</FieldLabel>
+        <FieldLabel htmlFor="session-pr-url" className="sr-only">PR URL</FieldLabel>
         <Input ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} aria-describedby={pr.value?.error ? errorId : undefined} placeholder="https://github.com/…" />
       </Field>
     </FieldGroup>
