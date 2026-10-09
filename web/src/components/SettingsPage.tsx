@@ -76,7 +76,6 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
             <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
             <h1 id="settings-section-title" className="text-xl font-semibold">{section === "appearance" ? "Appearance" : "Models"}</h1>
           </div>
-          <p className="text-sm text-muted-foreground">{section === "appearance" ? "Customize how Piano looks in this browser." : "Defaults for new sessions on this machine. Folder and per-model settings take precedence."}</p>
         </header>
         {section === "appearance" ? <AppearanceSettings /> : <ModelSettings />}
       </section>
@@ -90,7 +89,6 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
               <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
               <h1 id="settings-providers-title" className="text-xl font-semibold">Providers</h1>
             </div>
-            <p className="text-sm text-muted-foreground">Connect your AI subscriptions through Pi.</p>
           </header>
           {error ? <Alert variant="destructive">
             <AlertCircleIcon />
