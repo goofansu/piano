@@ -121,10 +121,14 @@ try {
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [repo, branch, sessionId]);
     assert.ok(await evaluate(`(() => {
       const menu = document.querySelector('[role="menu"]');
-      const path = menu.querySelector('dd').getBoundingClientRect();
+      const pathNode = menu.querySelector('dd');
+      const path = pathNode.getBoundingClientRect();
       const copy = menu.querySelector('[aria-label="Copy all"]').getBoundingClientRect();
-      return !menu.querySelector('[data-slot="dropdown-menu-label"]') && path.right <= copy.left && Math.abs(path.top - copy.top) <= 4;
-    })()`), 'Copy icon sits at the top-right beside the directory without a heading');
+      const icon = menu.querySelector('[aria-label="Copy all"] svg').getBoundingClientRect();
+      const firstLineCenter = path.top + parseFloat(getComputedStyle(pathNode).lineHeight) / 2;
+      return !menu.querySelector('[data-slot="dropdown-menu-label"]') && path.right <= copy.left &&
+        copy.width >= 44 && copy.height >= 44 && Math.abs(firstLineCenter - icon.top - icon.height / 2) <= 1;
+    })()`), 'Copy icon centers on the first directory line with a mobile-sized touch target');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
     assert.ok(await evaluate(`(() => {
       const menu = document.querySelector('[role="menu"]');

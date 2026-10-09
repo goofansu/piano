@@ -58,7 +58,7 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
                 <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
               </div>
             </dl>
-            <DropdownMenuItem className="mt-1 shrink-0" aria-label="Copy all" title="Copy all" onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /></DropdownMenuItem>
+            <DropdownMenuItem className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5" aria-label="Copy all" title="Copy all" onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /></DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
