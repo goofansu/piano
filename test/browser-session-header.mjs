@@ -65,7 +65,7 @@ const menu = async () => {
 };
 const item = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
 const closed = () => ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
-const allDetails = `Working directory: ${repo}\nGit branch: ${branch}\nSession ID: ${sessionId}`;
+const allDetails = `Working directory: ${repo}\nSession ID: ${sessionId}`;
 let copies = 0;
 async function assertCopy() {
   // One browser round trip: a short-lived toast must not expire while launching CLI checks.
@@ -117,8 +117,8 @@ try {
     assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().top`), top);
     await menu();
     await ab('snapshot');
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['', 'Changes', 'Conversation tree', 'Pull request', 'Rename', 'Archive', 'Delete']);
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [repo, branch, sessionId]);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['', 'Changes', 'Pull request', 'Rename', 'Archive', 'Delete']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [repo, sessionId]);
     assert.ok(await evaluate(`(() => {
       const menu = document.querySelector('[role="menu"]');
       const pathNode = menu.querySelector('dd');
@@ -141,7 +141,7 @@ try {
     if (width === 320) assert.ok(await evaluate(`(() => {
       const values = [...document.querySelectorAll('[role="menu"] dd')];
       return values.every(node => node.getBoundingClientRect().height > parseFloat(getComputedStyle(node).lineHeight));
-    })()`), 'Long path, branch and session ID all wrap on narrow screens');
+    })()`), 'Long path and session ID both wrap on narrow screens');
     await ab('screenshot', join(evidence, `menu-${width}.png`));
     await item('Copy all');
     await assertCopy();
@@ -193,6 +193,7 @@ try {
   await ab('wait', '--fn', `!!document.querySelector('[role="dialog"]')`);
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('[cmdk-group-heading]')].map(node => node.textContent)`), ['Recent sessions', 'Global commands', 'Session commands']);
   assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item][data-value="Copy all"]').length`), 1);
+  assert.equal(await evaluate(`document.querySelectorAll('[cmdk-item][data-value="Conversation tree"], [cmdk-item][data-value="Bookmark"]').length`), 0);
   await ab('fill', '[aria-label="Search sessions and commands"]', 'copy all');
   await ab('wait', '--fn', `document.querySelector('[cmdk-item][aria-selected="true"]')?.getAttribute('data-value') === 'Copy all'`);
   assert.ok(await evaluate(`[...document.querySelectorAll('[cmdk-item]')].some(node => node.textContent.includes('Header verification'))`), 'exact command outranks the competing session');

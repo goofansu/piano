@@ -159,8 +159,7 @@ export default function App() {
   // One Changes sheet per selected session; the header menu and the palette both open it.
   const [changesOpen, setChangesOpen] = useState(false);
   const [pullRequestOpen, setPullRequestOpen] = useState(false);
-  const [treeOpen, setTreeOpen] = useState(false);
-  useEffect(() => { setChangesOpen(false); setPullRequestOpen(false); setTreeOpen(false); }, [state.session?.cwd, state.session?.sessionId]);
+  useEffect(() => { setChangesOpen(false); setPullRequestOpen(false); }, [state.session?.cwd, state.session?.sessionId]);
   const toggleSidebar = useCallback(() => {
     if (wide()) setCollapsed(!collapsed);
     else setMenuOpen((open) => !open);
@@ -306,7 +305,7 @@ export default function App() {
               </EmptyContent>
             </Empty>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} treeOpen={treeOpen} onTreeOpenChange={setTreeOpen} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={changesOpen} onChangesOpenChange={setChangesOpen} pullRequestOpen={pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}
         </div>
         <Toaster
@@ -321,7 +320,7 @@ export default function App() {
         />
       </main>
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} openTree={() => setTreeOpen(true)} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => setChangesOpen(true)} openPullRequest={() => setPullRequestOpen(true)} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
     </div>
   );

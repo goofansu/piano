@@ -29,10 +29,6 @@ from the risk and acceptance claim, and add regression tests only where they pro
 The [2026-10-02 research note](research/2026-10-02-harness-direction.md) retains the original
 Pi 1.0.0 findings and citations. Its implementation audit is dated, and its phase ordering and
 registry-based evidence proposal and broad Worktrunk ownership wording are superseded by the documents above.
-The [Pi 1.1.0 tree/fork research](research/2026-10-08-pi-tree-fork-workflows.md) recommends conversation
-navigation, summaries, bookmarks and independent-session workflows; it is not an implementation claim
-or a change to the architectural decision. The [tree/fork stack plan](pi-tree-fork-plan.md) breaks
-implementation into five browser-verifiable feature PRs; its checklist is not a completion claim.
 The [MCP management research](research/2026-10-09-mcp-management.md) documents setup through Pi,
 current RPC/browser limitations and a proposed management surface; it does not claim that surface exists.
 

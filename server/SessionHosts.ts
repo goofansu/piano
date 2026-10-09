@@ -5,11 +5,11 @@
 import { realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
-import type { HostInfo, SessionActionResult, Snapshot } from "../shared/wire.ts";
+import type { HostInfo, Snapshot } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, PiSessions } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
-import { emptySnapshot, listSessions, peekSession, readConversation } from "./SessionFiles.ts";
+import { emptySnapshot, listSessions, peekSession } from "./SessionFiles.ts";
 
 export interface OpenSpec {
   readonly cwd: string;
@@ -22,7 +22,6 @@ export interface OpenSpec {
 }
 interface Host {
   session: PiSession;
-  readonly raw: PiSession;
   readonly scope: Scope.Closeable;
   lastActivity: number;
   actions: number;
@@ -40,7 +39,6 @@ export class SessionHosts extends Context.Service<SessionHosts, {
   readonly open: (spec: OpenSpec) => Effect.Effect<PiSession, PiSessionError>;
   /** Release keeps history and registration; it is not abort-current or archive. */
   readonly release: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
-  readonly history: (cwd: string, sessionId: string, entryId?: string) => Effect.Effect<SessionActionResult, PiSessionError>;
   readonly peek: (cwd: string, sessionId: string) => Effect.Effect<{ cwd: string; snapshot: Snapshot }, PiSessionError>;
   /** Stop, then change retention under the same ownership lock. Stale opens fail. */
   readonly archive: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
@@ -181,7 +179,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       yield* Scope.close(scope, Exit.void);
       return yield* rejected("Piano is shutting down.");
     }
-    const host: Host = { session: raw, raw, scope, lastActivity: yield* Clock.currentTimeMillis, actions: 0, closing: false };
+    const host: Host = { session: raw, scope, lastActivity: yield* Clock.currentTimeMillis, actions: 0, closing: false };
     const session: PiSession = { ...raw, act: action => Effect.gen(function* () {
       if (host.closing) return yield* rejected("Pi is closing. Wait for shutdown before reopening history.");
       const lock = yield* lockFor(key);
@@ -269,21 +267,6 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       }
       return host?.session;
     })),
-    history: (cwd, id, entryId) => keyed(cwd, id, (key, physical) => Effect.gen(function* () {
-      const ref = yield* reference(cwd, id, physical);
-      const host = hosts.get(key);
-      // Claim against retirement, but never hold ownership while awaiting Pi:
-      // abort/dialog responses must still be admitted during a slow history read.
-      if (host && !(yield* host.session.state).closedReason) {
-        host.actions++;
-        return yield* host.raw.act(entryId === undefined ? { _tag: "conversation_tree" } : { _tag: "conversation_detail", entryId }).pipe(
-          Effect.flatMap(result => result ? Effect.succeed(result) : Effect.fail(rejected("Pi history is unavailable."))),
-          Effect.ensuring(Effect.sync(() => { host.actions--; })), Effect.forkIn(host.scope),
-        );
-      }
-      if (!ref.file) return yield* rejected("No saved Pi history is available for this session.");
-      return yield* readConversation(ref.file, id, entryId).pipe(Effect.mapError(error => rejected(error.message)), Effect.forkIn(layerScope));
-    })).pipe(Effect.flatMap(Fiber.join)),
     peek: (cwd, id) => keyed(cwd, id, (key, physical) => Effect.gen(function* () {
       let ref = yield* reference(cwd, id, physical);
       const { missing } = yield* checkout(ref.cwd);

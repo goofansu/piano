@@ -143,21 +143,6 @@ export const AppRouter = HttpRouter.use((router) =>
       })));
     }
 
-    yield* router.add("GET", "/api/session/history", Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      const params = new URL(request.url, "http://localhost").searchParams;
-      const workspaceId = params.get("workspaceId"), sessionId = params.get("sessionId");
-      const registry = yield* (yield* Registry).get;
-      const workspace = registry.workspaces.find(w => w.id === workspaceId);
-      if (!workspace || !sessionId || !registry.sessions.some(s => s.cwd === workspace.path && s.sessionId === sessionId && !s.archived)) {
-        return json({ error: "Session is not registered in this workspace." }, 404);
-      }
-      return json(yield* (yield* SessionHosts).history(workspace.path, sessionId, params.get("entryId") ?? undefined));
-    }).pipe(Effect.catchCause(cause => {
-      const error = Cause.squash(cause);
-      return Effect.succeed(json({ error: error instanceof Error && "detail" in error ? String(error.detail) : "Could not load conversation history." }, 400));
-    })));
-
     yield* router.add("POST", "/api/workspace/capture", Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
       const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId");

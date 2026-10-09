@@ -281,24 +281,6 @@ export const SlashCommand = Schema.Struct({
 });
 export type SlashCommand = typeof SlashCommand.Type;
 
-/** Bounded history inspection. IDs are Pi IDs scoped by session, not render IDs. */
-export const ConversationEntry = Schema.Struct({
-  id: Schema.String, parentId: Schema.NullOr(Schema.String), kind: Schema.String,
-  preview: Schema.String, label: Schema.optional(Schema.String), technical: Schema.Boolean,
-  onCurrentPath: Schema.Boolean,
-});
-export type ConversationEntry = typeof ConversationEntry.Type;
-export const ConversationTree = Schema.Struct({
-  sessionId: Schema.String, leafId: Schema.NullOr(Schema.String),
-  entries: Schema.Array(ConversationEntry), total: Schema.Number, truncated: Schema.Boolean,
-});
-export type ConversationTree = typeof ConversationTree.Type;
-export const ConversationDetail = Schema.Struct({
-  sessionId: Schema.String, entryId: Schema.String, text: Schema.String,
-  truncated: Schema.Boolean, omittedImages: Schema.Number,
-});
-export type ConversationDetail = typeof ConversationDetail.Type;
-
 /** Everything a browser client may do to a running session. */
 export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", { text: Schema.String, attachments: attachmentInput }),
@@ -306,8 +288,6 @@ export const SessionAction = Schema.Union([
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("restore_queue", {}),
   Schema.TaggedStruct("commands", {}),
-  Schema.TaggedStruct("conversation_tree", {}),
-  Schema.TaggedStruct("conversation_detail", { entryId: Schema.String }),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
   Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
   /** Name the session in Pi's own history, as `/name` does. */
@@ -324,8 +304,6 @@ export type SessionAction = typeof SessionAction.Type;
 
 /** A command result for its caller, not a broadcast session event. */
 export const SessionActionResult = Schema.Union([
-  Schema.TaggedStruct("conversation_tree", { tree: ConversationTree }),
-  Schema.TaggedStruct("conversation_detail", { detail: ConversationDetail }),
   Schema.TaggedStruct("queue_restored", { messages: Schema.Array(QueuedMessage) }),
   Schema.TaggedStruct("commands", { commands: Schema.Array(SlashCommand) }),
 ]);
