@@ -1,5 +1,5 @@
 import type { SessionDefaults, ThinkingLevel } from "@shared/wire";
-import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
+import { AlertCircleIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
@@ -80,15 +80,12 @@ export function ModelSettings() {
         <Field data-disabled={saving} aria-labelledby="default-model-label">
           <FieldTitle id="default-model-label">Model and effort</FieldTitle>
           <FieldContent className="items-start">
-            <ModelSelect variant="outline" catalog={catalog} value={draft.model} onChange={chooseModel} effort={effort} onEffortChange={chooseEffort} disabled={saving} />
+            <ModelSelect variant="outline" catalog={catalog} value={draft.model} onChange={chooseModel} effort={effort} onEffortChange={chooseEffort} disabled={saving} onRefresh={() => setRevision(value => value + 1)} isRefreshing={refreshing} />
           </FieldContent>
         </Field>
         {!catalog?.models.length && <FieldDescription>Sign in to a provider to choose a model.</FieldDescription>}
         <Field orientation="horizontal">
           <Button type="submit" disabled={!changed || saving || refreshing}>{saving && <Spinner data-icon="inline-start" />}Save</Button>
-          <Button type="button" variant="outline" aria-label="Refresh" disabled={saving || refreshing} onClick={() => setRevision(value => value + 1)}>
-            {refreshing ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}Refresh
-          </Button>
         </Field>
       </FieldGroup>
     </form>}

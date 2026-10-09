@@ -22,15 +22,18 @@ interface Props {
   variant?: "ghost" | "outline";
   /** Re-probe Pi for models, e.g. after adding a provider or logging in. */
   onRefresh?: () => void;
+  /** HTTP-backed catalogs can finish a refresh without replacing the snapshot on failure. */
+  isRefreshing?: boolean;
   /** No directory is chosen yet, so there is no catalog to wait for. */
   noDirectory?: boolean;
 }
 
 /** One settings trigger: the model label yields space before the effort or primary action does. */
-export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled, variant = "ghost", onRefresh, noDirectory }: Props) {
+export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, disabled, variant = "ghost", onRefresh, isRefreshing, noDirectory }: Props) {
   const [open, setOpen] = useState(false);
   // A refresh ends when a newer catalog arrives for this directory.
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const refreshPending = isRefreshing ?? (refreshing !== null);
   useEffect(() => { if (refreshing !== null && catalog?.fetchedAt !== refreshing) setRefreshing(null); }, [catalog?.fetchedAt, refreshing]);
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -83,10 +86,10 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
             {onRefresh && (
               <Button
                 variant="ghost" size="icon-sm" aria-label="Refresh models" title="Refresh models"
-                disabled={refreshing !== null}
-                onClick={() => { setRefreshing(catalog?.fetchedAt ?? ""); onRefresh(); }}
+                disabled={disabled || refreshPending}
+                onClick={() => { if (isRefreshing === undefined) setRefreshing(catalog?.fetchedAt ?? ""); onRefresh(); }}
               >
-                {refreshing !== null ? <Spinner /> : <RefreshCwIcon aria-hidden />}
+                {refreshPending ? <Spinner /> : <RefreshCwIcon aria-hidden />}
               </Button>
             )}
           </PickerSearch>
