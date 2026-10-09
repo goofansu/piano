@@ -32,6 +32,9 @@ const call = id => assistant([{ type: 'toolCall', id, name: 'bash', arguments: {
 const failed = id => ({ role: 'toolResult', toolCallId: id, toolName: 'bash', isError: true, content: [{ type: 'text', text: 'Command aborted' }] });
 const messages = [
   user('Provider limit case'),
+  assistant([{ type: 'text', text: 'Intermediate commentary before tool activity.' }]),
+  call('commentary-tool'),
+  { role: 'toolResult', toolCallId: 'commentary-tool', toolName: 'bash', content: [{ type: 'text', text: 'Tool complete' }] },
   assistant([{ type: 'text', text: 'Partial answer before provider failure.' }], { stopReason: 'error', errorMessage: raw }),
   user('Duplicate cancellation case'), call('duplicate-tool'), failed('duplicate-tool'),
   assistant([], { stopReason: 'aborted', errorMessage: 'This operation was aborted' }),
@@ -142,7 +145,17 @@ try {
   await ab('wait', '--text', 'Partial answer before provider failure.');
   const messagesOnly = await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`);
   check(!messagesOnly.includes('echo duplicate-tool') && !messagesOnly.includes('Command aborted'), 'Messages only hides tool calls and results');
-  check(messagesOnly.includes('Partial answer before provider failure.') && messagesOnly.includes('This operation was aborted'), 'Messages and actionable errors remain');
+  check(messagesOnly.includes('Partial answer before provider failure.') && messagesOnly.includes('This operation was aborted'), 'Final messages and actionable errors remain');
+  check(!messagesOnly.includes('Intermediate commentary before tool activity.'), 'Messages only hides intermediate assistant commentary');
+  await ab('find', 'role', 'button', 'click', '--name', 'Jump to message', '--exact');
+  const jumpIds = await evaluate(`[...document.querySelectorAll('[aria-label="Jump to message"][role="dialog"] li button')].map(b => b.innerText)`);
+  observations.push({ name: 'messages-only-jump-list', entries: jumpIds });
+  check(!jumpIds.some(t => t.includes('Intermediate commentary')), 'Jump list also excludes intermediate commentary');
+  const articles = await evaluate(`[...document.querySelectorAll('[data-slot="transcript"] article[id]')].map(e => e.id)`);
+  check(articles.length === 5, 'Messages only contains four prompts and the final partial answer');
+  const destinations = await evaluate(`[...document.querySelectorAll('[aria-label="Jump to message"][role="dialog"] [data-entry]')].map(e => e.dataset.entry).filter(id => id !== 'top' && id !== 'bottom').map(id => 'msg-' + id)`);
+  check(JSON.stringify(articles) === JSON.stringify(destinations), 'Visible message articles exactly match Jump to destinations');
+  await ab('press', 'Escape');
   await ab('reload');
   await ab('wait', '--text', 'Partial answer before provider failure.');
   check(!(await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`)).includes('echo duplicate-tool'), 'Preference survives reload');
@@ -152,7 +165,8 @@ try {
   await ab('press', 'Control+k');
   await ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
   await ab('wait', '--text', 'echo duplicate-tool');
-  check((await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`)).includes('echo duplicate-tool'), 'Show everything restores authoritative tool history');
+  const restored = await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`);
+  check(restored.includes('echo duplicate-tool') && restored.includes('Intermediate commentary before tool activity.'), 'Show everything restores tool history and intermediate commentary');
   await capture('everything-restored');
   check((await ab('errors')) === '', 'No browser errors');
   assert.deepEqual(failures, [], failures.join('\n'));

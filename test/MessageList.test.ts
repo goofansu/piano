@@ -55,7 +55,7 @@ test("unrelated genuine errors and unrepresented aborts remain visible", () => {
   assert.match(render([call, { ...result, toolCallId: "unrelated" }, abort]), /This operation was aborted/);
 });
 
-test("messages-only hides historical, orphan and streaming tools but retains prose and errors", () => {
+test("messages-only hides activity and intermediate prose but retains final replies and errors", () => {
   const history: RenderMsg[] = [
     { id: "user", role: "user", text: "My question" },
     { ...call, text: "Partial reply" }, result,
@@ -64,10 +64,26 @@ test("messages-only hides historical, orphan and streaming tools but retains pro
   ];
   const pending = { ...call, id: "pending", text: "Streaming reply" };
   const html = render(history, {}, pending, false);
-  for (const text of ["My question", "Partial reply", "Streaming reply", "This operation was aborted", "The usage limit has been reached"]) assert.ok(html.includes(text), text);
+  for (const text of ["My question", "This operation was aborted", "The usage limit has been reached"]) assert.ok(html.includes(text), text);
+  assert.doesNotMatch(html, /Partial reply|Streaming reply/);
   assert.doesNotMatch(html, /sleep 30|Hidden tool output|data-tools-only=""|data-ends-with-tools=""|>Failed</);
   assert.doesNotMatch(render([call], {}, call, false), /<article/);
   assert.match(render(history, {}, pending), /sleep 30/);
+});
+
+test("messages-only shows the same prompts and final replies as Jump to", () => {
+  const history: RenderMsg[] = [
+    { id: "user", role: "user", text: "My question" },
+    { id: "commentary", role: "assistant", text: "Intermediate commentary" },
+    call, result,
+    { id: "final", role: "assistant", text: "Final answer" },
+    { id: "image", role: "user", text: "", attachments: [{ kind: "image", url: "data:image/png;base64,abc" }] },
+    { id: "next", role: "assistant", text: "Next final answer" },
+  ];
+  const html = render(history, {}, null, false);
+  assert.doesNotMatch(html, /Intermediate commentary|sleep 30/);
+  for (const id of ["user", "final", "image", "next"]) assert.ok(html.includes(`id="msg-${id}"`), id);
+  assert.match(render(history), /Intermediate commentary/);
 });
 
 test("summarization retains exact raw details and safely falls back for unknown payloads", () => {

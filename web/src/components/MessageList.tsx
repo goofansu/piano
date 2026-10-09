@@ -17,7 +17,7 @@ import { Markdown } from "@/components/Markdown";
 import { abbrevHome, clamp } from "@/lib/format";
 import { type MessageError, messageError } from "@/lib/messageError";
 import { disclosureRow } from "@/lib/styles";
-import { messageAnchorId, STICK_EVENT } from "@/lib/transcript";
+import { jumpEntries, messageAnchorId, STICK_EVENT } from "@/lib/transcript";
 
 interface Props {
   messages: RenderMsg[];
@@ -30,7 +30,7 @@ interface Props {
   /** Shown while the transcript is empty; omitted while something is on its way. */
   placeholder?: string;
   className?: string;
-  /** Hide activity rows without removing any authoritative history. */
+  /** Show only jump-list messages and errors without changing authoritative history. */
   showTools?: boolean;
 }
 
@@ -76,6 +76,7 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
     el.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };
 
+  const messageIds = showTools ? null : new Set(jumpEntries(messages).flatMap(entry => "messageId" in entry ? [entry.messageId] : []));
   const results = new Map<string, RenderMsg>();
   const terminalRuns = new Map<string, "completed" | "failed" | "cancelled">();
   for (const m of messages) {
@@ -116,9 +117,11 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
               // A result that found its call is rendered under the call; an orphan is rendered on its own.
               return null;
             }
-            return <Message key={m.id} msg={m} showTools={showTools} error={m.errorMessage ? messageError(m, showTools ? messages.slice(0, index) : [], showTools ? results : new Map(), showTools ? tools : {}) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
+            if (messageIds && !messageIds.has(m.id) && !m.errorMessage) return null;
+            const displayed = messageIds && !messageIds.has(m.id) ? { ...m, text: "" } : m;
+            return <Message key={m.id} msg={displayed} showTools={showTools} error={m.errorMessage ? messageError(m, showTools ? messages.slice(0, index) : [], showTools ? results : new Map(), showTools ? tools : {}) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
           })}
-          {pending && <Message msg={pending} showTools={showTools} error={messageError(pending, showTools ? messages : [], showTools ? results : new Map(), showTools ? tools : {})} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
+          {pending && <Message msg={showTools ? pending : { ...pending, text: "" }} showTools={showTools} error={messageError(pending, showTools ? messages : [], showTools ? results : new Map(), showTools ? tools : {})} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
           {activity && (
             <Row glyph={<Keys playing className="text-brand" />}>
               <span className="sr-only">{activity === "starting" ? "Starting" : "Pi is working"}</span>
