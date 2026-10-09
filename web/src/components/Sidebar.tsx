@@ -166,11 +166,11 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       </LayoutHeader>
       <div className="px-3 pb-3">
         <Button
-          variant="outline"
-          className={cn("h-10 w-full justify-start rounded-xl border-line bg-conversation shadow-none transition-[background-color,border-color,color] duration-(--dur-hover)", state.view.kind === "new" && !state.view.cwd && !state.view.outcomeProjectId && "border-brand/25 bg-brand-soft text-brand hover:bg-brand-soft")}
+          variant="rail-action"
+          className="h-10 w-full justify-start rounded-xl pointer-coarse:h-11"
           onClick={() => openNew()}
         >
-          <PlusIcon /> New session
+          <PlusIcon data-icon="inline-start" /> New session
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
