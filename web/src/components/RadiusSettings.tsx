@@ -22,13 +22,14 @@ async function setupRequest(action?: "configure-mcp" | "install-web-search", sig
   return result.state;
 }
 
-export function RadiusSettings({ onMenu, openProviders, providersChanged }: { onMenu: () => void; openProviders: () => void; providersChanged: () => void }) {
+export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => void; providersChanged: () => void }) {
   const [state, setState] = useState<RadiusSetupState>();
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [refreshing, setRefreshing] = useState(true);
   const [login, setLogin] = useState<string>();
   useEffect(() => {
@@ -51,7 +52,20 @@ export function RadiusSettings({ onMenu, openProviders, providersChanged }: { on
     void load();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [revision]);
-  const signedIn = useCallback(() => { setRevision(value => value + 1); providersChanged(); }, [providersChanged]);
+  const refreshProviders = useCallback(() => { setRevision(value => value + 1); providersChanged(); }, [providersChanged]);
+  const signOut = async () => {
+    setSigningOut(true); setActionError("");
+    try {
+      const response = await fetch("/api/provider-logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "radius" }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not sign out. Try again.");
+      // Only acknowledge sign-out after Pi confirms credential removal.
+      setProviders(current => current.map(provider => provider.id === "radius" ? { ...provider, signedIn: false } : provider));
+      refreshProviders();
+      toast.success("Signed out of Radius.");
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not sign out. Try again."); }
+    finally { setSigningOut(false); }
+  };
   const act = async (action: "configure-mcp" | "install-web-search") => {
     setBusy(true); setActionError("");
     try {
@@ -62,7 +76,7 @@ export function RadiusSettings({ onMenu, openProviders, providersChanged }: { on
   };
   const radius = providers.find(provider => provider.id === "radius");
   const installing = state?.installation.status === "running";
-  const disabled = busy || installing || !!error;
+  const disabled = busy || signingOut || refreshing || installing || !!error;
   const configured = radius?.signedIn && state?.mcp.status === "ready" && state.webSearch.status === "ready"
     && !disabled && !refreshing && !actionError && state.installation.status !== "error";
   return <>
@@ -73,7 +87,7 @@ export function RadiusSettings({ onMenu, openProviders, providersChanged }: { on
         <TooltipTrigger asChild><CheckCircleIcon className="size-4 text-brand" role="img" aria-label="Radius setup configured" tabIndex={0} /></TooltipTrigger>
         <TooltipContent>All three setup steps are configured.</TooltipContent>
       </Tooltip>}
-      <IconButton className="ml-auto" label="Refresh setup" disabled={busy || refreshing} onClick={() => { setActionError(""); setRevision(value => value + 1); }}>
+      <IconButton className="ml-auto" label="Refresh setup" disabled={busy || signingOut || refreshing} onClick={() => { setActionError(""); setRevision(value => value + 1); }}>
         {refreshing ? <Spinner /> : <RefreshCwIcon />}
       </IconButton>
     </header>
@@ -87,9 +101,12 @@ export function RadiusSettings({ onMenu, openProviders, providersChanged }: { on
             {!radius && <p className="text-sm text-muted-foreground">Radius OAuth is unavailable in this Pi installation.</p>}
           </ItemContent>
           <ItemActions className="flex-wrap">
-            <Button variant="link" size="sm" onClick={openProviders}>Manage providers</Button>
-            {radius?.signedIn ? <Badge variant="secondary">Signed in</Badge>
-              : <Button variant="outline" size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
+            {radius?.signedIn ? <>
+              <Badge variant="secondary">Signed in</Badge>
+              <Button variant="outline" size="sm" disabled={disabled} aria-label="Sign out of Radius" onClick={() => void signOut()}>
+                {signingOut && <Spinner data-icon="inline-start" />}{signingOut ? "Signing out…" : "Sign out"}
+              </Button>
+            </> : <Button variant="outline" size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
           </ItemActions>
         </Item>
         <Item variant="outline" role="listitem" className="flex-col items-start sm:flex-row sm:items-center">
@@ -117,6 +134,6 @@ export function RadiusSettings({ onMenu, openProviders, providersChanged }: { on
     <div className="flex flex-wrap items-center gap-2">
       <Button asChild variant="link" size="sm"><a href="https://radius.earendil.com/docs/extensions" target="_blank" rel="noopener noreferrer">Radius setup guide<ExternalLinkIcon data-icon="inline-end" /></a></Button>
     </div>
-    {login && <ProviderLoginDialog key={login} initialProvider="radius" providers={providers} close={() => { setLogin(undefined); setRevision(value => value + 1); }} signedIn={signedIn} />}
+    {login && <ProviderLoginDialog key={login} initialProvider="radius" providers={providers} close={() => { setLogin(undefined); setRevision(value => value + 1); }} signedIn={refreshProviders} />}
   </>;
 }

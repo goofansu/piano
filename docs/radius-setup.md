@@ -26,8 +26,9 @@ apply configuration to them. Do not send `/reload` as a Piano prompt: stock Pi
 
 ## Boundaries and recovery
 
-- Provider OAuth continues to use `ProviderLogin`. Provider management/sign-out
-  remains in **Settings → Providers**.
+- Provider OAuth continues to use `ProviderLogin`. Sign-in and sign-out are both
+  available directly in step 1; switching accounts does not require leaving Radius.
+  Signing out removes the provider credential, not the saved MCP or extension setup.
 - `server/RadiusSetup.ts` owns the narrow setup policy. No MCP client, token store,
   registry records or session-history entries are added (INV-01/02/11/12).
 - Pi 1.1.0's standalone `pi mcp list` does not pass the provider-token callback,

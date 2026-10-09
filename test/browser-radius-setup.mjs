@@ -70,12 +70,18 @@ try {
   await ab('set','viewport','1280','900');await ab('open',frontendUrl);
   await ab('eval',`(() => {
     const original=window.fetch.bind(window);
-    const f=window.radiusFixture={signedIn:false,state:null,unavailable:false};
+    const f=window.radiusFixture={signedIn:false,state:null,unavailable:false,failLogout:false,logoutCalls:0};
     window.fetch=async(input,init={})=>{
       const path=new URL(typeof input==='string'?input:input.url,location.href).pathname;
       const json=(data,status=200)=>Promise.resolve(new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}}));
       if(path==='/api/oauth-providers')return json({providers:[{id:'radius',name:'Radius',signedIn:f.signedIn}]});
       if(path==='/api/settings/radius'&&f.unavailable)return json({error:'Unavailable'},503);
+      if(path==='/api/provider-logout') {
+        if(init.method!=='POST'||JSON.parse(init.body).provider!=='radius')return json({error:'Invalid sign-out'},400);
+        f.logoutCalls++;
+        if(f.failLogout)return json({error:'Could not sign out. Try again.'},503);
+        f.signedIn=false;f.state=null;return json({});
+      }
       if(path!=='/api/provider-login')return original(input,init);
       switch(init.method??'GET') {
         case 'POST':f.state={id:'radius-login',provider:'radius',status:'running',prompt:{id:'method',type:'select',message:'Choose sign-in method',options:[{id:'device',label:'Device code'}]}};break;
@@ -90,9 +96,7 @@ try {
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false);
   assert.equal(await evaluate(`document.querySelector('main').textContent.includes('Connect your Radius account and tools on this machine.')`),false);
   assert.equal(await evaluate(`!!document.querySelector('header button[aria-label="Refresh setup"]')`),true);
-  await button('Manage providers');
-  await ab('wait','#settings-providers-title');
-  await button('Radius');await ab('wait','--text','Set up Radius MCP');
+  assert.equal(await evaluate(`[...document.querySelectorAll('main button')].some(button => button.textContent === 'Manage providers')`),false);
   await capture('01-signed-out');
   assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Set up MCP')?.disabled`),true);
   await button('Sign in to Radius');await ab('wait','--text','Choose sign-in method');
@@ -134,9 +138,26 @@ try {
   await capture('07-refresh-error');await ab('eval','window.radiusFixture.unavailable=false');await button('Refresh setup');
   await ab('wait','--fn',`!document.querySelector('[role="alert"]')`);
   await ab('wait','[aria-label="Radius setup configured"]');
-  await ab('eval','window.radiusFixture.signedIn=false');await button('Refresh setup');
-  await ab('wait','--fn',`!document.querySelector('[aria-label="Radius setup configured"]') && !document.querySelector('[aria-label="Refresh setup"]').disabled`);
+  // Both account actions stay on Radius. A failed logout must preserve sign-in;
+  // successful logout must remove the completion claim but keep saved tool setup.
+  await ab('eval','window.radiusFixture.failLogout=true');await button('Sign out of Radius');
+  await ab('wait','--text','Could not sign out. Try again.');
+  assert.equal(await evaluate('window.radiusFixture.signedIn'),true);
+  assert.equal(await evaluate(`document.querySelector('#settings-section-title')?.textContent`),'Radius');
+  await capture('08-sign-out-error');
+  await ab('eval','window.radiusFixture.failLogout=false');await button('Sign out of Radius');
+  await ab('wait','--fn',`[...document.querySelectorAll('button')].some(button => button.textContent === 'Sign in to Radius' && !button.disabled)`);
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false, 'installed tools alone are not complete without sign-in');
+  assert.equal(await evaluate('window.radiusFixture.logoutCalls'),2);
+  await capture('09-signed-out-in-place');
+  await button('Sign in to Radius');await ab('wait','--text','Choose sign-in method');
+  await ab('click','#login-answer');await ab('find','role','option','click','--name','Device code','--exact');await button('Continue');
+  await ab('wait','--text','You’re signed in.');await button('Done');
+  await ab('wait','[aria-label="Radius setup configured"]');
+  assert.equal(await evaluate(`document.querySelector('#settings-section-title')?.textContent`),'Radius');
+  assert.deepEqual(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')),config);
+  assert.equal(readFileSync(audit,'utf8').trim().split('\n').length,2,'signing back in must not reinstall tools');
+  await capture('10-signed-back-in');
   // Persistence readback after a full browser reload, with no mock signed-in claim.
   await ab('reload');await button('Show sidebar');await button('Radius');await ab('wait','--text','Configured');
   assert.match(await ab('snapshot'),/Installed/);

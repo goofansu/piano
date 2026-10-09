@@ -36,7 +36,7 @@ export function SettingsNavigation({ compact, section, onShow, onHide, onSelect,
   </div>;
 }
 
-export function SettingsPage({ section, onMenu, onSelect, providersChanged }: { section: SettingsSection; onMenu: () => void; onSelect: (section: SettingsSection) => void; providersChanged: () => void }) {
+export function SettingsPage({ section, onMenu, providersChanged }: { section: SettingsSection; onMenu: () => void; providersChanged: () => void }) {
   const [providers, setProviders] = useState<OAuthProvider[]>();
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
@@ -78,7 +78,7 @@ export function SettingsPage({ section, onMenu, onSelect, providersChanged }: { 
             <h1 id="settings-section-title" className="text-xl font-semibold">{SECTIONS.find(item => item.id === section)?.label}</h1>
           </div>
         </header>}
-        {section === "appearance" ? <AppearanceSettings /> : section === "radius" ? <RadiusSettings onMenu={onMenu} openProviders={() => onSelect("providers")} providersChanged={providersChanged} /> : <ModelSettings />}
+        {section === "appearance" ? <AppearanceSettings /> : section === "radius" ? <RadiusSettings onMenu={onMenu} providersChanged={providersChanged} /> : <ModelSettings />}
       </section>
     </div>
   </section>;
