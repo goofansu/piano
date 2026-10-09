@@ -133,3 +133,25 @@ test("an empty native queue result does not erase editor text", () => {
   } });
   assert.equal(restored.drafts[sessionKey(identity)], "keep this");
 });
+
+test("a session created with a first message is starting until Pi reports its submission or the request fails", () => {
+  const created = (selectionId: string): Extract<ServerMessage, { _tag: "selected" }> => ({
+    _tag: "selected", cwd: "/scratch", sessionId: "new", selectionId, hosted: true,
+    cursor: { cwd: "/scratch", sessionId: "new", generation: "child", sequence: 0 },
+    snapshot: { state: { sessionId: "new", isStreaming: false }, messages: [], dialogs: [] },
+  });
+  const open = (selectionId: string, firstMessage?: boolean) => reduce(
+    reduce({ ...initialState, connected: true }, { type: "selecting", cwd: "/scratch", sessionId: null, selectionId, firstMessage }),
+    { type: "server", message: created(selectionId) });
+
+  assert.equal(open("empty").session?.starting, false, "a session created without a message is settled");
+  let state = open("sent", true);
+  assert.equal(state.session?.starting, true);
+  state = reduce(state, { type: "server", message: {
+    _tag: "session", selectionId: "sent", cursor: { cwd: "/scratch", sessionId: "new", generation: "child", sequence: 1 },
+    event: { _tag: "submission", submission: { id: 1, outcome: "rejected" } },
+  } });
+  assert.equal(state.session?.starting, false, "the submission outcome now describes the message");
+  state = reduce(open("failed", true), { type: "server", message: { _tag: "error", message: "prompt failed" } });
+  assert.equal(state.session?.starting, false, "a failed request leaves nothing on its way");
+});

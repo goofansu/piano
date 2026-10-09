@@ -12,6 +12,8 @@ export interface SessionView {
   dialogs: Dialog[];
   tools: Record<string, ToolExecution>;
   closedReason?: string;
+  /** Created with a first message that Pi has not yet reported a submission for. */
+  starting?: boolean;
 }
 
 export interface AppState {
@@ -36,7 +38,7 @@ export interface AppState {
   /** The picker's latest discovery per project; requested by this client, never broadcast. */
   worktrees: Record<string, WorktreeDiscovery>;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
-  selecting: { cwd: string; sessionId: string | null } | null;
+  selecting: { cwd: string; sessionId: string | null; firstMessage?: boolean } | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
   /** Unsent editor text belongs to this browser, keyed by session identity. */
@@ -69,7 +71,7 @@ export const initialState: AppState = {
 export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
-  | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null }
+  | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null; firstMessage?: boolean }
   | { type: "new"; cwd?: string; outcomeProjectId?: string }
   | { type: "missing-session"; sessionId: string }
   | { type: "draft_changed"; key: string; text: string }
@@ -81,7 +83,7 @@ export function reduce(s: AppState, a: Action): AppState {
       // A reopened socket is not attached until it receives a new selection snapshot.
       return { ...s, connected: a.connected, selectionId: a.connected ? s.selectionId : null };
     case "selecting":
-      return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId },
+      return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId, ...(a.firstMessage && { firstMessage: true }) },
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)) };
     case "new":
@@ -154,12 +156,16 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           cursor: m.cursor,
           state: m.snapshot.state,
           closedReason: m.snapshot.state.closedReason,
+          starting: !!s.selecting?.firstMessage && !m.snapshot.state.submission,
           messages: [...m.snapshot.messages],
           pending: m.snapshot.pending ?? null,
           dialogs: [...m.snapshot.dialogs],
           tools: Object.fromEntries((m.snapshot.tools ?? []).map(tool => [tool.id, tool])),
         },
       };
+    case "error":
+      // A first message that failed before reaching Pi is no longer on its way.
+      return s.session?.starting ? { ...s, session: { ...s.session, starting: false } } : s;
     case "action_result": {
       if (m.result._tag !== "queue_restored") return s;
       const restored = m.result.messages.map((message) => message.text).join("\n\n");
@@ -185,7 +191,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           return { ...s, session: { ...t, state: { ...t.state, queuedMessages: [...e.messages] } } };
         case "submission":
           if (t.state.submission && e.submission.id < t.state.submission.id) return s;
-          return { ...s, session: { ...t, state: { ...t.state, submission: e.submission } } };
+          return { ...s, session: { ...t, starting: false, state: { ...t.state, submission: e.submission } } };
         case "message_update":
           return { ...s, session: { ...t, pending: e.message } };
         case "message_end":
@@ -199,7 +205,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         case "dialog_resolved":
           return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.resolution.id || d.generation !== e.resolution.generation) } };
         case "closed":
-          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }, pending: null, dialogs: [], closedReason: e.reason } };
+          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, queuedMessages: [] }, pending: null, dialogs: [], closedReason: e.reason, starting: false } };
         case "notice":
           return s;
       }

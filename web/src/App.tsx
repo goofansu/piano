@@ -114,7 +114,8 @@ export default function App() {
   const send = useCallback((m: ClientCommand) => {
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = crypto.randomUUID();
-      dispatch({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null });
+      dispatch({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null,
+        firstMessage: m._tag === "create_session" && !!(m.text?.trim() || m.attachments?.length) });
       conn.send({ ...m, selectionId });
     } else if (m._tag === "act") {
       const s = latest.current;
