@@ -1,5 +1,6 @@
 import type { SessionPullRequest, SessionPullRequestAction } from "@shared/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 /** Only the selected session is polled. Identity and request order fence late responses. */
 export function useSessionPullRequest(workspaceId: string | undefined, sessionId: string | null | undefined, working: boolean) {
@@ -20,15 +21,18 @@ export function useSessionPullRequest(workspaceId: string | undefined, sessionId
       if (!response.ok) throw new Error(body.error || "Could not load the pull request.");
       if (active.current !== current) return false;
       setSnapshot({ url, value: body as SessionPullRequest });
+      if (action && body.error) toast.error(body.error);
       // A saved association can succeed even when its live GitHub status is unavailable.
       return body as SessionPullRequest;
     } catch (error) {
       if (current.controller.signal.aborted || active.current !== current) return false;
+      const message = error instanceof Error ? error.message : "Could not load the pull request.";
+      if (action) toast.error(message);
       setSnapshot(previous => ({ url, value: {
         link: previous?.url === url ? previous.value.link : null,
         pullRequest: null,
         discovery: previous?.url === url ? previous.value.discovery : true,
-        error: error instanceof Error ? error.message : "Could not load the pull request.",
+        error: message,
       } }));
       return false;
     } finally {

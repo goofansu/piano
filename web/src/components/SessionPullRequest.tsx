@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
@@ -52,7 +52,7 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
   open: boolean; onOpenChange: (open: boolean) => void; pr: PullRequestControl;
 }) {
   const [editing, setEditing] = useState(false);
-  const titleId = useId(), errorId = useId();
+  const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const link = pr.value?.link;
   const pullRequest = pr.value?.pullRequest;
@@ -94,18 +94,14 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
           <Button variant="ghost" size="sm" disabled={pr.busy} onClick={() => setEditing(true)}>Change link</Button>
           <Button variant="ghost" size="sm" disabled={pr.busy} onClick={async () => { if (await pr.change({ action: "remove" })) close(); }}>Remove link</Button>
         </div>
-      </> : <PullRequestForm pr={pr} editing={editing} errorId={errorId} onCancel={() => link ? setEditing(false) : close()} onSave={close} />}
-      {pr.value?.error && <div className="flex flex-col items-start gap-2">
-        <FieldError id={errorId}>{pr.value.error}</FieldError>
-        <Button variant="ghost" size="sm" disabled={pr.busy} onClick={() => { void pr.refresh(); }}>Retry</Button>
-      </div>}
+      </> : <PullRequestForm pr={pr} editing={editing} onCancel={() => link ? setEditing(false) : close()} onSave={close} />}
     </PopoverContent>
   </Popover>;
 }
 
 /** Mount a draft only when editing; background refreshes must not replace typed input. */
-function PullRequestForm({ pr, editing, errorId, onCancel, onSave }: {
-  pr: PullRequestControl; editing: boolean; errorId: string; onCancel: () => void; onSave: () => void;
+function PullRequestForm({ pr, editing, onCancel, onSave }: {
+  pr: PullRequestControl; editing: boolean; onCancel: () => void; onSave: () => void;
 }) {
   const [url, setUrl] = useState(pr.value?.link?.url ?? "");
   const [finding, setFinding] = useState(false);
@@ -113,7 +109,7 @@ function PullRequestForm({ pr, editing, errorId, onCancel, onSave }: {
     setFinding(true);
     try {
       const result = await pr.change({ action: "discover" });
-      // Only the explicit search reports absence; polling stays silent, errors stay inline.
+      // Only the explicit search reports absence; polling stays silent.
       if (result && !result.link && !result.error) toast("No open PR found for this branch.");
     } finally { setFinding(false); }
   };
@@ -123,7 +119,7 @@ function PullRequestForm({ pr, editing, errorId, onCancel, onSave }: {
     <FieldGroup>
       <Field>
         <FieldLabel htmlFor="session-pr-url" className="sr-only">PR URL</FieldLabel>
-        <Input ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} aria-describedby={pr.value?.error ? errorId : undefined} placeholder="https://github.com/…" />
+        <Input ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} placeholder="https://github.com/…" />
       </Field>
     </FieldGroup>
     <div className="flex flex-col gap-2">

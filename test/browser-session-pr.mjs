@@ -142,7 +142,10 @@ try {
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true, 'Palette moves focus into the popover');
   await editLink();
   await ab('fill', '#session-pr-url', 'https://github.com/example/repo/issues/1'); await button('Save link');
-  await ab('wait', '--text', 'Enter a GitHub pull request URL.'); await waitBadge(42);
+  await ab('wait', '--fn', `document.querySelector('[data-sonner-toast][data-type="error"]')?.textContent.includes('Enter a GitHub pull request URL.')`); await waitBadge(42);
+  assert.equal(await evaluate(`document.querySelector('#session-pr-url').value`), 'https://github.com/example/repo/issues/1', 'Invalid input stays editable');
+  assert.equal(await evaluate(`document.querySelector('${popover}').textContent.includes('Enter a GitHub') || document.querySelector('${popover}').textContent.includes('Retry')`), false, 'No inline error or Retry');
+  await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast]')`);
   await ab('fill', '#session-pr-url', prs[1].url + '/files?diff=split#abc'); await button('Save link'); await waitBadge(43);
   await ab('wait', '--fn', `!document.querySelector('${popover}')`);
   assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger');
@@ -168,12 +171,13 @@ try {
   await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast]')`);
   control({ error: 'offline' });
   await button('Find PR from branch');
-  await ab('wait', '--fn', `!!document.querySelector('${popover} [data-slot="field-error"]')`);
-  assert.equal(await evaluate(`!!document.querySelector('[data-sonner-toast]')`), false, 'Discovery failure is not an absence toast');
-  await ab('screenshot', join(evidence, 'manual-search-error-inline-mobile.png'));
+  await ab('wait', '--fn', `document.querySelector('[data-sonner-toast][data-type="error"]')?.textContent.includes('Could not read GitHub')`);
+  assert.equal(await evaluate(`document.querySelector('${popover}').textContent.includes('Could not read GitHub') || document.querySelector('${popover}').textContent.includes('Retry')`), false, 'Discovery errors use a toast without Retry');
+  await ab('screenshot', join(evidence, 'manual-search-error-toast-mobile.png'));
+  await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast]')`);
   control({ prs: [] });
-  await button('Retry');
-  await ab('wait', '--fn', `!document.querySelector('${popover} [data-slot="field-error"]') && !document.querySelector('${popover} button[type="submit"]').disabled`);
+  await evaluate(`window.dispatchEvent(new Event('focus')); true`);
+  await ab('wait', '--fn', `!document.querySelector('${popover} button[type="submit"]').disabled`);
   assert.equal(await evaluate(`!!document.querySelector('[data-sonner-toast]')`), false, 'Background-style refresh does not toast absence');
   await closeDetails();
   control({ prs });
@@ -216,13 +220,14 @@ try {
   assert.equal(new Set(observations.prStates.map(s => s.color)).size, 4);
   assert.equal(new Set(observations.prStates.map(s => s.shape)).size, 4);
   // A failed refresh keeps identity but does not display old approval/check success.
-  control({ error: 'offline' }); await openDetails(); await ab('wait', '--text', githubHost === 'github.com' ? 'Could not read GitHub.' : 'Could not read GitHub through exe.dev.');
+  control({ error: 'offline' }); await openDetails(); await ab('wait', '--text', 'Status unavailable');
+  assert.equal(await evaluate(`!!document.querySelector('[data-sonner-toast]')`), false, 'Automatic status failures stay silent');
   assert.equal(await evaluate(`document.querySelector('[role="dialog"]').textContent.includes('Approved')`), false);
   await closeDetails(); await waitBadge(43);
   await openDetails();
-  await ab('wait', '--text', githubHost === 'github.com' ? 'Could not read GitHub.' : 'Could not read GitHub through exe.dev.');
+  await ab('wait', '--text', 'Status unavailable');
   control({ prs });
-  await button('Retry'); await ab('wait', '--text', 'Explicitly linked work'); await closeDetails();
+  await closeDetails(); await openDetails(); await ab('wait', '--text', 'Explicitly linked work'); await closeDetails();
   await ab('set', 'viewport', '390', '844'); await openDetails();
   await ab('wait', '--text', 'Explicitly linked work');
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true);
