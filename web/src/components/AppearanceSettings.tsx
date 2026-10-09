@@ -1,6 +1,6 @@
 import { ListIcon, MessageSquareIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 import { useConversationDetail } from "@/lib/useConversationDetail";
@@ -23,11 +23,10 @@ export function AppearanceSettings() {
     </Field>
     <Field>
       <FieldLabel id="appearance-detail-label">Conversation detail</FieldLabel>
-      <ToggleGroup type="single" variant="outline" value={detail} onValueChange={value => { if (value === "everything" || value === "messages") setDetail(value); }} aria-labelledby="appearance-detail-label" aria-describedby="appearance-detail-description">
+      <ToggleGroup type="single" variant="outline" value={detail} onValueChange={value => { if (value === "everything" || value === "messages") setDetail(value); }} aria-labelledby="appearance-detail-label">
         <ToggleGroupItem value="everything"><ListIcon />Show everything</ToggleGroupItem>
         <ToggleGroupItem value="messages"><MessageSquareIcon />Messages only</ToggleGroupItem>
       </ToggleGroup>
-      <FieldDescription id="appearance-detail-description">Show tool activity alongside messages, or keep the conversation to just your messages and replies.</FieldDescription>
     </Field>
   </FieldGroup>;
 }
