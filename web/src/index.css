@@ -149,18 +149,7 @@
   }
 }
 
-:root {
-  --interface-font: var(--font-sans);
-}
-:root[data-interface-font="serif"] {
-  --interface-font: var(--font-serif);
-}
-:root[data-interface-font="mono"] {
-  --interface-font: var(--font-mono);
-}
-
 @theme inline {
-  --font-interface: var(--interface-font);
   /* Shared responsive UI layers; body and display sizes stay stable. */
   --text-xs: var(--type-caption);
   --text-sm: var(--type-label);
@@ -263,7 +252,7 @@
     -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-background text-foreground font-interface text-base;
+    @apply bg-background text-foreground font-sans text-base;
     text-rendering: optimizeLegibility;
   }
   code,

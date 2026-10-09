@@ -98,7 +98,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
           </CommandItem> : <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
           </CommandItem>}
-          <CommandItem value="Appearance" keywords={["settings", "theme", "font"]} onSelect={() => run(() => openSettings("appearance"))}>
+          <CommandItem value="Appearance" keywords={["settings", "theme"]} onSelect={() => run(() => openSettings("appearance"))}>
             <PaletteIcon /> Appearance
           </CommandItem>
           <CommandItem value="Models" keywords={["settings", "default", "effort", "thinking"]} onSelect={() => run(() => openSettings("models"))}>
