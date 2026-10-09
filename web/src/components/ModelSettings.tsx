@@ -6,7 +6,7 @@ import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { ModelSelect } from "@/components/ModelSelect";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldTitle } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -63,9 +63,11 @@ export function ModelSettings() {
       <span className="sr-only">Loading defaults…</span><Skeleton className="h-10 w-full" />
     </div> : <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <FieldGroup>
-        <Field orientation="responsive" data-disabled={saving} aria-labelledby="default-model-label">
+        <Field data-disabled={saving} aria-labelledby="default-model-label">
           <FieldTitle id="default-model-label">Model and effort</FieldTitle>
-          <ModelSelect catalog={catalog} value={draft.model} onChange={chooseModel} effort={effort} onEffortChange={chooseEffort} disabled={saving} />
+          <FieldContent className="items-start">
+            <ModelSelect catalog={catalog} value={draft.model} onChange={chooseModel} effort={effort} onEffortChange={chooseEffort} disabled={saving} />
+          </FieldContent>
         </Field>
         {catalog?.error ? <FieldDescription>Could not load models. <Button type="button" variant="link" size="sm" onClick={() => setRevision(value => value + 1)}>Retry</Button></FieldDescription>
           : !catalog?.models.length && <FieldDescription>Sign in to a provider to choose a model.</FieldDescription>}

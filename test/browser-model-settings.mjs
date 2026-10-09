@@ -36,7 +36,16 @@ async function ab(...args) {
 const evaluate = async code => JSON.parse(await ab('eval', code));
 const button = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
 const stored = () => JSON.parse(readFileSync(settingsPath, 'utf8'));
-const picker = 'section[aria-labelledby="settings-models-title"] button[aria-label^="Model:"]';
+const picker = '[role="group"][aria-labelledby="default-model-label"] button[aria-label^="Model:"]';
+const assertStackedPicker = async () => {
+  const geometry = await evaluate(`(() => {
+    const label = document.getElementById('default-model-label').getBoundingClientRect();
+    const control = document.querySelector(${JSON.stringify(picker)}).getBoundingClientRect();
+    return { labelBottom: label.bottom, labelLeft: label.left, controlTop: control.top, controlLeft: control.left };
+  })()`);
+  assert.ok(geometry.controlTop > geometry.labelBottom, 'model picker sits below its heading');
+  assert.ok(Math.abs(geometry.controlLeft - geometry.labelLeft) < 1, 'model picker is left-aligned with its heading');
+};
 const pickerLabel = () => evaluate(`document.querySelector(${JSON.stringify(picker)}).getAttribute('aria-label')`);
 const efforts = () => evaluate(`[...document.querySelectorAll('[aria-label="Model and effort"] [role="radio"]')].map(button => button.textContent.trim())`);
 const chooseModel = async ref => {
@@ -71,9 +80,10 @@ try {
   await ab('wait', '--fn', `!!document.querySelector('button[aria-label^="Model: piano-phase0/"]')`);
   // Warm the ordinary cwd catalog before saving a different default.
   await button('Settings');
-  await ab('wait', '--fn', `!!document.querySelector('section[aria-labelledby="settings-models-title"] button:not(:disabled)')`);
+  await button('Models');
   assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent === 'Save defaults')`), false, 'the button is simply Save');
   await ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(picker + ':not(:disabled)')})`);
+  await assertStackedPicker();
   assert.match(await pickerLabel(), /effort: medium$/);
   assert.equal(stored().defaultModel, undefined, 'resolved automatic selection is not persisted by loading');
   await ab('click', picker);
@@ -113,6 +123,7 @@ try {
   assert.match(await pickerLabel(), /effort: low$/);
   await ab('set', 'viewport', '390', '844'); await ab('screenshot', join(evidence, '02-save-error-mobile.png'));
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+  await assertStackedPicker();
   chmodSync(settingsPath, 0o600);
   await button('Save'); await ab('wait', '--text', 'Defaults saved for new sessions.');
   assert.equal(stored().defaultThinkingLevel, 'low');
