@@ -2,7 +2,7 @@
 // node test/browser-session-pr.mjs <evidence-directory>
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -132,7 +132,7 @@ try {
   assert.equal(await evaluate(`document.querySelector('header').textContent.includes('No PR')`), false);
   await openDetails();
   await ab('wait', '--fn', `!!document.querySelector('#session-pr-url')`);
-  await button('Find from branch'); await waitBadge(42);
+  await button('Find PR from branch'); await waitBadge(42);
   assert.equal(await evaluate(`!!document.querySelector('#session-pr-url')`), false, 'Discovery shows details without a form');
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true, 'Discovery keeps keyboard focus in details');
   await closeDetails();
@@ -150,9 +150,31 @@ try {
   await ab('wait', '--fn', `location.pathname === '/s/other'`); await noBadge();
   await palette('Pull request'); await ab('click', '[cmdk-item][data-value="PR"]'); await waitDetails();
   await ab('wait', '--fn', `!!document.querySelector('#session-pr-url')`);
-  control({ prs: [] });
-  await button('Find from branch'); await ab('wait', '--text', 'No matching open pull request.');
+  assert.equal(await evaluate(`document.querySelector('${popover}').textContent.includes('No matching') || !!document.querySelector('[data-sonner-toast]')`), false, 'Opening shows no absence message');
+  const gate = { started: join(root, 'discovery-started'), release: join(root, 'discovery-release') };
+  control({ prs: [], gate });
+  await ab('fill', '#session-pr-url', prs[0].url);
+  await button('Find PR from branch');
+  await ab('wait', '--text', 'Finding PR…');
+  assert.equal(await evaluate(`[...document.querySelectorAll('${popover} button')].find(b => b.textContent.includes('Finding PR'))?.disabled`), true);
+  for (let n = 0; !existsSync(gate.started); n++) { assert.ok(n < 100, 'Discovery started'); await delay(50); }
+  writeFileSync(gate.release, 'release');
+  await ab('wait', '--fn', `document.querySelector('[data-sonner-toast]')?.textContent.includes('No open PR found for this branch.')`);
+  assert.equal(await evaluate(`document.querySelector('${popover}').textContent.includes('No open PR')`), false, 'Absence is a toast, not inline');
+  assert.equal(await evaluate(`document.querySelector('#session-pr-url').value`), prs[0].url, 'Search preserves the draft and keeps the form open');
   await noBadge();
+  await ab('set', 'viewport', '390', '844');
+  await ab('screenshot', join(evidence, 'manual-search-empty-toast-mobile.png'));
+  await ab('wait', '--fn', `!document.querySelector('[data-sonner-toast]')`);
+  control({ error: 'offline' });
+  await button('Find PR from branch');
+  await ab('wait', '--fn', `!!document.querySelector('${popover} [data-slot="field-error"]')`);
+  assert.equal(await evaluate(`!!document.querySelector('[data-sonner-toast]')`), false, 'Discovery failure is not an absence toast');
+  await ab('screenshot', join(evidence, 'manual-search-error-inline-mobile.png'));
+  control({ prs: [] });
+  await button('Retry');
+  await ab('wait', '--fn', `!document.querySelector('${popover} [data-slot="field-error"]') && !document.querySelector('${popover} button[type="submit"]').disabled`);
+  assert.equal(await evaluate(`!!document.querySelector('[data-sonner-toast]')`), false, 'Background-style refresh does not toast absence');
   await closeDetails();
   control({ prs });
   // A newly available branch PR must not be discovered just by opening the control.

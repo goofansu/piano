@@ -1,10 +1,11 @@
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
 import { ChevronDownIcon, ExternalLinkIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -75,7 +76,7 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
     </PopoverAnchor>
     <PopoverContent align="start" sideOffset={8} collisionPadding={16} aria-labelledby={titleId} className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto">
       <PopoverHeader className="flex-row items-center justify-between gap-2">
-        <PopoverTitle id={titleId}>{editing ? "Change pull request" : "Pull request"}</PopoverTitle>
+        <PopoverTitle id={titleId}>{editing ? "Change pull request" : link ? "Pull request" : "Link pull request"}</PopoverTitle>
         <Button ref={closeRef} variant="ghost" size="icon-xs" aria-label="Close pull request" onClick={close}><XIcon /></Button>
       </PopoverHeader>
       {link && showingDetails ? <>
@@ -107,24 +108,28 @@ function PullRequestForm({ pr, editing, errorId, onCancel, onSave }: {
   pr: PullRequestControl; editing: boolean; errorId: string; onCancel: () => void; onSave: () => void;
 }) {
   const [url, setUrl] = useState(pr.value?.link?.url ?? "");
+  const [finding, setFinding] = useState(false);
+  const find = async () => {
+    setFinding(true);
+    try {
+      const result = await pr.change({ action: "discover" });
+      // Only the explicit search reports absence; polling stays silent, errors stay inline.
+      if (result && !result.link && !result.error) toast("No open PR found for this branch.");
+    } finally { setFinding(false); }
+  };
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
   return <form onSubmit={async event => { event.preventDefault(); if (await pr.change({ action: "link", url })) onSave(); }} className="flex flex-col gap-4">
     <FieldGroup>
-      {!editing && <>
-        <Button type="button" variant="ghost" className="self-start" disabled={pr.busy} onClick={() => { void pr.change({ action: "discover" }); }}><GitBranchIcon data-icon="inline-start" /> Find from branch</Button>
-        {!pr.busy && pr.value?.discovery && !pr.value.error && !pr.value.link && <p role="status" className="text-sm text-muted-foreground">No matching open pull request.</p>}
-      </>}
       <Field>
-        <FieldLabel htmlFor="session-pr-url" className="sr-only">GitHub pull request URL</FieldLabel>
-        <InputGroup>
-          <InputGroupInput ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} aria-describedby={pr.value?.error ? errorId : undefined} placeholder="Paste GitHub PR URL…" />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton type="submit" variant="default" disabled={pr.busy || !url.trim()}>{editing ? "Save link" : "Link"}</InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
+        <FieldLabel htmlFor="session-pr-url">PR URL</FieldLabel>
+        <Input ref={inputRef} id="session-pr-url" value={url} onChange={event => setUrl(event.target.value)} aria-describedby={pr.value?.error ? errorId : undefined} placeholder="https://github.com/…" />
       </Field>
     </FieldGroup>
-    {editing && <Button type="button" variant="ghost" className="self-end" onClick={onCancel}>Cancel</Button>}
+    <div className="flex flex-col gap-2">
+      <Button type="submit" disabled={pr.busy || finding || !url.trim()}>{editing ? "Save link" : "Link PR"}</Button>
+      {editing ? <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        : <Button type="button" variant="outline" disabled={pr.busy || finding} onClick={() => { void find(); }}><GitBranchIcon data-icon="inline-start" />{finding ? "Finding PR…" : "Find PR from branch"}</Button>}
+    </div>
   </form>;
 }

@@ -21,7 +21,7 @@ export function useSessionPullRequest(workspaceId: string | undefined, sessionId
       if (active.current !== current) return false;
       setSnapshot({ url, value: body as SessionPullRequest });
       // A saved association can succeed even when its live GitHub status is unavailable.
-      return true;
+      return body as SessionPullRequest;
     } catch (error) {
       if (current.controller.signal.aborted || active.current !== current) return false;
       setSnapshot(previous => ({ url, value: {
