@@ -103,9 +103,9 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
       : <ItemGroup className="gap-3">
         <Item variant="outline" role="listitem" className="flex-col items-start sm:flex-row sm:items-center">
           <ItemContent className="w-full min-w-0 sm:w-auto">
-            <ItemTitle>1. Sign in to Radius</ItemTitle>
-            <ItemDescription className="line-clamp-none">Use OAuth to connect your account. Pi stores and refreshes the credentials.</ItemDescription>
-            {!radius && <p className="text-sm text-muted-foreground">Radius OAuth is unavailable in this Pi installation.</p>}
+            <ItemTitle>1. Account</ItemTitle>
+            <ItemDescription className="line-clamp-none">Connect your Radius account to Pi.</ItemDescription>
+            {!radius && <p className="text-sm text-muted-foreground">Radius sign-in is unavailable in this Pi installation.</p>}
           </ItemContent>
           <ItemActions className="flex-wrap">
             {radius?.signedIn ?
@@ -117,8 +117,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         </Item>
         <Item variant="outline" role="listitem" className="flex-col items-start sm:flex-row sm:items-center">
           <ItemContent className="w-full min-w-0 sm:w-auto">
-            <ItemTitle>2. Set up Radius MCP</ItemTitle>
-            <ItemDescription className="line-clamp-none">Give Pi access to Radius tools using the same sign-in, without a second OAuth flow.</ItemDescription>
+            <ItemTitle>2. Radius tools</ItemTitle>
+            <ItemDescription className="line-clamp-none">Let Pi use Radius tools through MCP with your connected account.</ItemDescription>
             {state.mcp.detail && <p className="text-sm text-muted-foreground">{state.mcp.detail}</p>}
           </ItemContent>
           <ItemActions className="flex-wrap">{state.mcp.status !== "ready" && <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !radius?.signedIn} onClick={() => void act("configure-mcp")}>Set up MCP</Button>}
@@ -127,9 +127,9 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         </Item>
         <Item variant="outline" role="listitem" className="flex-col items-start sm:flex-row sm:items-center">
           <ItemContent className="w-full min-w-0 sm:w-auto">
-            <ItemTitle>3. Install web search</ItemTitle>
-            <ItemDescription className="line-clamp-none">Install the official Radius web-search extension for Pi.</ItemDescription>
-            <p className="text-sm text-muted-foreground">An organization owner or admin must enable Web search separately in Radius.</p>
+            <ItemTitle>3. Web search</ItemTitle>
+            <ItemDescription className="line-clamp-none">Search the web in Pi with the Radius extension.</ItemDescription>
+            <p className="text-sm text-muted-foreground">Your organization owner or admin must also enable Web search in Radius.</p>
             {state.webSearch.detail && <p className="text-sm text-muted-foreground">{state.webSearch.detail}</p>}
           </ItemContent>
           <ItemActions className="flex-wrap">{installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
