@@ -157,21 +157,22 @@ export function renderMarkdown(src: string): string {
       out += `<li>${inline(um[1])}</li>`;
       continue;
     }
-    const om = ln.match(/^\d+\. (.*)/);
+    const om = ln.match(/^(\d+)\. (.*)/);
     if (om) {
       fp();
       if (ltag !== "ol") {
         fL();
-        out += "<ol>";
+        out += om[1] === "1" ? "<ol>" : `<ol start="${om[1]}">`;
         inList = true;
         ltag = "ol";
       }
-      out += `<li>${inline(om[1])}</li>`;
+      out += `<li>${inline(om[2])}</li>`;
       continue;
     }
     if (!ln.trim()) {
       fp();
-      fL();
+      // Blank-separated ordered items are one list; the next block closes it if needed.
+      if (ltag !== "ol") fL();
       continue;
     }
     fL();

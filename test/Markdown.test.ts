@@ -31,6 +31,18 @@ test("GitHub rendering leaves code and unrelated URLs alone and escapes untruste
   assert.ok(!renderMarkdown(`[javascript](javascript:alert(1))`).includes('<a'));
 });
 
+test("ordered lists continue across blank lines and retain their starting number", () => {
+  assert.equal(renderMarkdown('1. **Yes**\n\n2. Link is accurate\n\n3. Hide the control\n\nFollowing paragraph.'),
+    '<ol><li><strong>Yes</strong></li><li>Link is accurate</li><li>Hide the control</li></ol><p>Following paragraph.</p>');
+  assert.equal(renderMarkdown('4. Fourth\n\n5. Fifth'), '<ol start="4"><li>Fourth</li><li>Fifth</li></ol>');
+  // Markdown takes the first marker as the start; repeated 1s still form a numbered list.
+  assert.equal(renderMarkdown('1. First\n\n1. Second'), '<ol><li>First</li><li>Second</li></ol>');
+  assert.equal(renderMarkdown('1. First\n\nSeparate paragraph\n\n3. Third'),
+    '<ol><li>First</li></ol><p>Separate paragraph</p><ol start="3"><li>Third</li></ol>');
+  assert.equal(renderMarkdown('1. First\n\n- Bullet\n\n2. Second'),
+    '<ol><li>First</li></ol><ul><li>Bullet</li></ul><ol start="2"><li>Second</li></ol>');
+});
+
 test("only closed Mermaid fences are eligible for diagram rendering", () => {
   assert.equal(renderMarkdown("```mermaid\ngraph LR\nA-->B"), "<pre><code>graph LR\nA--&gt;B</code></pre>");
   assert.equal(renderMarkdown("```mermaid\ngraph LR\nA-->B\n```"), '<pre data-mermaid=""><code>graph LR\nA--&gt;B</code></pre>');
