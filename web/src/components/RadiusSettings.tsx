@@ -112,7 +112,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
           <ItemContent className="min-w-0">
             <ItemTitle>Radius account<ReadyMark ready={signedIn} label="Signed in" /></ItemTitle>
             <ItemDescription className="line-clamp-none">
-              {!radius ? "Radius sign-in is unavailable in this Pi installation." : signedIn ? "Signed in. Pi keeps the sign-in fresh for you." : "Sign in to set up Radius tools and web search."}
+              {!radius ? "Radius sign-in is unavailable in this Pi installation." : signedIn ? "Signed in. You stay signed in until you sign out." : "Sign in to set up Radius tools and web search."}
             </ItemDescription>
           </ItemContent>
           <ItemActions className="max-sm:basis-full max-sm:pl-12">
