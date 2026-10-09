@@ -8,7 +8,7 @@ const repo = args.includes('--repo') ? args[args.indexOf('--repo') + 1] : undefi
 if ((fixture.expectedHost && process.env.GH_HOST !== fixture.expectedHost) || (fixture.expectedRepo && repo !== fixture.expectedRepo)) {
   console.error('Incorrect GitHub API routing'); process.exit(1);
 }
-if (fixture.gate && list) {
+if (fixture.gate && args[1] === (fixture.gate.operation ?? 'list')) {
   writeFileSync(fixture.gate.started, 'started');
   for (let n = 0; !existsSync(fixture.gate.release); n++) {
     if (n > 500) process.exit(1);

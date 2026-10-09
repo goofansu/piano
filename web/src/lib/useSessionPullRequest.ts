@@ -13,7 +13,8 @@ export function useSessionPullRequest(workspaceId: string | undefined, sessionId
     active.current?.controller.abort();
     const current = { controller: new AbortController(), mutation: !!action };
     active.current = current;
-    setBusy(true);
+    // Reads refresh facts silently; only explicit changes block the controls.
+    setBusy(current.mutation);
     try {
       const response = await fetch(url, { signal: current.controller.signal, cache: "no-store",
         ...(action ? { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(action) } : {}) });

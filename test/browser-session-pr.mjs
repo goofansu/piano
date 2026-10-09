@@ -99,7 +99,17 @@ try {
   assert.ok(observations.metadataLayout.pathWidth <= 192 && observations.metadataLayout.branchWidth <= 192, 'Metadata has capped widths');
   assert.equal(observations.metadataLayout.gap, 12, 'Path and branch stay grouped with their original spacing');
   assert.equal(observations.metadataLayout.truncated, true, 'Long branch is truncated');
+  const refreshGate = { operation: 'view', started: join(root, 'refresh-started'), release: join(root, 'refresh-release') };
+  control({ prs, gate: refreshGate });
   await openDetails();
+  for (let n = 0; !existsSync(refreshGate.started); n++) { assert.ok(n < 100, 'Status refresh started'); await delay(50); }
+  assert.equal(await evaluate(`[...document.querySelectorAll('${popover} button')].filter(b => ['Change link', 'Remove link'].includes(b.textContent)).every(b => !b.disabled)`), true, 'Background status refresh must not disable link actions');
+  writeFileSync(refreshGate.release, 'release');
+  control({ prs });
+  await editLink();
+  assert.equal(await evaluate(`document.querySelector('#session-pr-url').value`), prs[0].url, 'Editing remains available after a background refresh');
+  await button('Cancel');
+  observations.backgroundRefreshActions = 'pass';
   assert.equal(await evaluate(`!!document.querySelector('#session-pr-url')`), false, 'Linked PR opens details, not a form');
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true);
   await ab('wait', '--text', 'The session deliverable');
