@@ -196,7 +196,10 @@ export const AppRouter = HttpRouter.use((router) =>
 
     yield* router.add("GET", "/api/settings/defaults", Effect.gen(function* () {
       const defaults = yield* (yield* PiSettings).defaults;
-      const catalog = yield* (yield* Catalog).global;
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const refresh = new URL(request.url, "http://localhost").searchParams.get("refresh") === "true";
+      const catalogs = yield* Catalog;
+      const catalog = yield* refresh ? catalogs.refreshGlobal : catalogs.global;
       return json({ defaults, catalog });
     }).pipe(Effect.catchTag("PiSettingsError", error => Effect.succeed(json({ error: error.detail }, 500)))));
 

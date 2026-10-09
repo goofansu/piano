@@ -102,6 +102,63 @@ try {
   assert.deepEqual({ provider: stored().defaultProvider, model: stored().defaultModel, effort: stored().defaultThinkingLevel, theme: stored().theme }, { provider: 'piano-phase0', model: 'project', effort: 'high', theme: 'dark' });
   assert.ok(invalidations > 0, 'other clients receive catalog invalidation');
   await ab('screenshot', join(evidence, '01-saved-desktop.png'));
+  await button('Appearance');
+  // First revisit may reload after the save's catalog invalidation. Warm that snapshot.
+  await button('Models');
+  await ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(picker + ':not(:disabled)')})`);
+  await button('Appearance');
+  await evaluate(`(() => {
+    window.defaultsRequests = 0;
+    const original = window.fetch;
+    window.fetch = (...args) => {
+      if (String(args[0]).startsWith('/api/settings/defaults')) window.defaultsRequests++;
+      return original(...args);
+    };
+    return true;
+  })()`);
+  await button('Models');
+  assert.equal(await evaluate(`!!document.querySelector(${JSON.stringify(picker)})`), true, 'returning to Models shows the cached picker');
+  assert.equal(await evaluate('window.defaultsRequests'), 0, 'returning does not refresh automatically');
+  assert.match(await pickerLabel(), /project; effort: high$/, 'the cache contains the saved defaults');
+  const modelsPath = join(fixture.agentDir, 'models.json');
+  const modelConfig = JSON.parse(readFileSync(modelsPath, 'utf8'));
+  const configuredModels = modelConfig.providers['piano-phase0'].models;
+  configuredModels.push({ ...configuredModels[0], id: 'manual-refresh', name: 'Manual refresh' });
+  writeFileSync(modelsPath, JSON.stringify(modelConfig));
+  await ab('click', picker);
+  await ab('find', 'role', 'radio', 'click', '--name', 'low', '--exact');
+  await ab('press', 'Escape');
+  await button('Refresh');
+  await ab('wait', '--fn', `!document.querySelector('button[aria-label="Refresh"]').disabled`);
+  assert.equal(await evaluate('window.defaultsRequests'), 1, 'manual Refresh loads once');
+  assert.match(await pickerLabel(), /project; effort: low$/, 'manual refresh preserves unsaved edits');
+  assert.equal(stored().defaultThinkingLevel, 'high', 'refresh does not save the draft');
+  await ab('click', picker);
+  await ab('fill', 'input[aria-label="Search models"]', 'piano-phase0/manual-refresh');
+  assert.match(await ab('snapshot'), /piano-phase0\/manual-refresh/, 'manual refresh re-probes Pi rather than reusing the server catalog');
+  await ab('press', 'Escape');
+  await evaluate(`(() => {
+    const original = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await original(...args);
+      if (args[0] !== '/api/settings/defaults?refresh=true') return response;
+      window.fetch = original;
+      const result = await response.json();
+      result.catalog = { ...result.catalog, models: [], error: 'probe failed' };
+      return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    return true;
+  })()`);
+  await button('Refresh');
+  await ab('wait', '--text', 'Could not load defaults');
+  assert.match(await pickerLabel(), /project; effort: low$/, 'a failed refresh retains the model, effort and draft');
+  await button('Retry');
+  await ab('wait', '--fn', `!document.querySelector('button[aria-label="Refresh"]').disabled`);
+  assert.match(await pickerLabel(), /project; effort: low$/, 'retry preserves the draft too');
+  await button('Home');
+  await button('Settings'); await button('Models');
+  assert.equal(await evaluate('window.defaultsRequests'), 3, 'leaving Settings and returning also uses the cache');
+  assert.match(await pickerLabel(), /project; effort: high$/, 'unsaved edits are not cached as defaults');
   await button('Home');
   await ab('wait', '--fn', `!!document.querySelector('button[aria-label="Model: piano-phase0/project; effort: high"]')`);
   assert.match(await ab('snapshot'), /Model: piano-phase0\/project; effort: high/);

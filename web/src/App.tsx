@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Toaster } from "@/components/ui/sonner";
 import { hasMod } from "@/lib/keys";
+import { invalidateModelDefaults } from "@/lib/modelDefaults";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
 import { readJson, writeJson } from "@/lib/storage";
 import { useConnection } from "@/lib/ws";
@@ -42,6 +43,7 @@ export default function App() {
   }, []);
 
   const onMessage = useCallback((m: ServerMessage) => {
+    if (m._tag === "catalogs_invalidated") invalidateModelDefaults();
     const notifySession = m._tag === "session" && sessionDelivery(latest.current, m) === "apply";
     dispatch({ type: "server", message: m });
     const notify = (message: string, level?: "success" | "info" | "warning" | "error") =>
