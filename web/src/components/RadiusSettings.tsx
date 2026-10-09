@@ -1,8 +1,7 @@
 import type { RadiusSetupState } from "@shared/radius";
 import type { OAuthProvider } from "@shared/wire";
-import { cn } from "cn";
-import { CheckIcon, ExternalLinkIcon, PanelLeftOpenIcon, RefreshCwIcon } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { CheckCircle2Icon, ExternalLinkIcon, GlobeIcon, PanelLeftOpenIcon, RefreshCwIcon, UserRoundIcon, WrenchIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
@@ -10,6 +9,7 @@ import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -88,7 +88,6 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const signedIn = !!radius?.signedIn;
   const mcpReady = state?.mcp.status === "ready";
   const webSearchReady = state?.webSearch.status === "ready";
-  const current = !signedIn ? 1 : !mcpReady ? 2 : !webSearchReady ? 3 : 0;
   return <>
     <header className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
@@ -99,40 +98,66 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         </IconButton>
       </div>
       <p className="max-w-prose text-sm text-muted-foreground">
-        {configured ? "All set. New Pi sessions can use Radius tools and web search." : "Connect Pi to your Radius account, tools and web search in three steps."}{" "}
+        {configured ? "All set. New Pi sessions can use Radius tools and web search." : "Sign in once, then choose what Pi can use from Radius."}{" "}
         <a className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline" href="https://radius.earendil.com/docs/extensions" target="_blank" rel="noopener noreferrer">
           Setup guide<ExternalLinkIcon className="size-3.5" aria-hidden />
         </a>
       </p>
     </header>
     {(error || actionError) && <Alert variant="destructive"><AlertTitle>Radius setup needs attention</AlertTitle><AlertDescription>{error || actionError}</AlertDescription></Alert>}
-    {!state ? <div role="status" className="flex flex-col gap-3"><span className="sr-only">Loading Radius setup…</span><Skeleton className="h-72 w-full rounded-xl" /></div>
-      : <ol aria-label="Radius setup steps" className="rounded-xl border px-4 sm:px-6">
-        <SetupStep number={1} done={signedIn} current={current === 1} title="Sign in"
-          description="Connect your Radius account. Pi keeps the sign-in fresh for you."
-          notes={!radius ? ["Radius sign-in is unavailable in this Pi installation."] : []}>
-          {signedIn
-            ? <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} aria-label="Sign out of Radius" onClick={() => setConfirmSignOut(true)}>
-              {signingOut && <Spinner data-icon="inline-start" />}{signingOut ? "Signing out…" : "Sign out"}
-            </Button>
-            : <Button variant={current === 1 ? "default" : "outline"} size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
-        </SetupStep>
-        <SetupStep number={2} done={mcpReady} current={current === 2} title="Set up Radius MCP"
-          description="Give Pi your Radius tools, using the same sign-in."
-          notes={[!signedIn && !mcpReady ? "Available after you sign in." : "", state.mcp.detail ?? ""]}>
-          {!mcpReady && <Button variant={current === 2 ? "default" : "outline"} size="sm" disabled={disabled || state.mcp.status === "blocked" || !signedIn} onClick={() => void act("configure-mcp")}>Set up MCP</Button>}
-          {state.mcp.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })}>Remove MCP</Button>}
-        </SetupStep>
-        <SetupStep number={3} done={webSearchReady} current={current === 3} title="Install web search"
-          description="Install the Radius web-search extension so Pi can search the web."
-          notes={[!signedIn && !webSearchReady ? "Available after you sign in." : "", state.webSearch.detail ?? "", "An organization owner or admin must enable Web search separately in Radius."]}>
-          {installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
-            : <>
-              {!webSearchReady && <Button variant={current === 3 ? "default" : "outline"} size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} onClick={() => void act("install-web-search")}>Install web search</Button>}
-              {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })}>Uninstall extension</Button>}
-            </>}
-        </SetupStep>
-      </ol>}
+    {!state ? <div role="status" className="flex flex-col gap-3"><span className="sr-only">Loading Radius setup…</span><Skeleton className="h-20 w-full rounded-xl" /><Skeleton className="h-44 w-full rounded-xl" /></div>
+      : <>
+        <Item variant="outline" className="rounded-xl px-4 sm:px-5">
+          <ItemMedia variant="icon"><UserRoundIcon /></ItemMedia>
+          <ItemContent className="min-w-0">
+            <ItemTitle>Radius account<ReadyMark ready={signedIn} label="Signed in" /></ItemTitle>
+            <ItemDescription className="line-clamp-none">
+              {!radius ? "Radius sign-in is unavailable in this Pi installation." : signedIn ? "Signed in. Pi keeps the sign-in fresh for you." : "Sign in to set up Radius tools and web search."}
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions className="max-sm:basis-full max-sm:pl-12">
+            {signedIn
+              ? <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} aria-label="Sign out of Radius" onClick={() => setConfirmSignOut(true)}>
+                {signingOut && <Spinner data-icon="inline-start" />}{signingOut ? "Signing out…" : "Sign out"}
+              </Button>
+              : <Button size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
+          </ItemActions>
+        </Item>
+        <section aria-labelledby="radius-features" className="flex flex-col gap-3">
+          <h2 id="radius-features" className="text-sm font-medium">Use in Pi</h2>
+          <ItemGroup className="rounded-xl border">
+            <Item className="rounded-none px-4 sm:px-5">
+              <ItemMedia variant="icon"><WrenchIcon /></ItemMedia>
+              <ItemContent className="min-w-0">
+                <ItemTitle>Radius MCP<ReadyMark ready={mcpReady} label="Set up" /></ItemTitle>
+                <ItemDescription className="line-clamp-none">Give Pi your Radius tools, using the same sign-in.</ItemDescription>
+                {state.mcp.detail && <p className="text-xs text-muted-foreground">{state.mcp.detail}</p>}
+              </ItemContent>
+              <ItemActions className="max-sm:basis-full max-sm:pl-12">
+                {!mcpReady && <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !signedIn} onClick={() => void act("configure-mcp")}>Set up MCP</Button>}
+                {state.mcp.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })}>Remove MCP</Button>}
+              </ItemActions>
+            </Item>
+            <ItemSeparator />
+            <Item className="rounded-none px-4 sm:px-5">
+              <ItemMedia variant="icon"><GlobeIcon /></ItemMedia>
+              <ItemContent className="min-w-0">
+                <ItemTitle>Web search<ReadyMark ready={webSearchReady} label="Installed" /></ItemTitle>
+                <ItemDescription className="line-clamp-none">Let Pi search the web with the Radius extension.</ItemDescription>
+                {state.webSearch.detail && <p className="text-xs text-muted-foreground">{state.webSearch.detail}</p>}
+                <p className="text-xs text-muted-foreground">An organization owner or admin must enable Web search separately in Radius.</p>
+              </ItemContent>
+              <ItemActions className="max-sm:basis-full max-sm:pl-12">
+                {installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
+                  : <>
+                    {!webSearchReady && <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} onClick={() => void act("install-web-search")}>Install web search</Button>}
+                    {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })}>Uninstall extension</Button>}
+                  </>}
+              </ItemActions>
+            </Item>
+          </ItemGroup>
+        </section>
+      </>}
     {state?.installation.status === "error" && <Alert variant="destructive"><AlertTitle>{state.installation.action === "uninstall" ? "Extension was not uninstalled" : "Web search was not installed"}</AlertTitle><AlertDescription>{state.installation.detail}</AlertDescription></Alert>}
     <Dialog open={!!removal} onOpenChange={open => { if (!open && !busy) setRemoval(undefined); }}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onInteractOutside={event => event.preventDefault()}>
@@ -157,28 +182,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   </>;
 }
 
-/**
- * One step of the setup checklist. Hand-written: shadcn/ui has no stepper, and a numbered rail
- * shows the order and progress that separate cards hid.
- */
-function SetupStep({ number, done, current, title, description, notes, children }: {
-  number: number; done: boolean; current: boolean; title: string; description: string; notes: string[]; children: ReactNode;
-}) {
-  return <li className="group/step relative flex gap-4 py-5" aria-current={current ? "step" : undefined}>
-    <span aria-hidden className="absolute top-[3.375rem] -bottom-[1.125rem] left-3.5 w-px -translate-x-1/2 bg-border group-last/step:hidden" />
-    <span aria-hidden className={cn("relative mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium tabular-nums transition-colors",
-      done ? "border-transparent bg-brand text-brand-ink" : current ? "border-brand bg-brand-soft text-brand" : "bg-background text-muted-foreground")}>
-      {done ? <CheckIcon className="size-4" strokeWidth={2.5} /> : number}
-    </span>
-    <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-      <div className="flex min-w-0 flex-col gap-1">
-        <h2 className={cn("text-sm font-medium leading-7", !done && !current && "text-muted-foreground")}>
-          {title}<span className="sr-only">{done ? " (done)" : current ? " (next step)" : ""}</span>
-        </h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
-        {notes.filter(Boolean).map(note => <p key={note} className="text-xs text-muted-foreground/80">{note}</p>)}
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 empty:hidden">{children}</div>
-    </div>
-  </li>;
+/** A quiet check beside a title once that part is ready; screen readers hear the label. */
+function ReadyMark({ ready, label }: { ready: boolean; label: string }) {
+  if (!ready) return null;
+  return <><CheckCircle2Icon className="size-3.5 text-brand" aria-hidden /><span className="sr-only">({label})</span></>;
 }
