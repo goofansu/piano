@@ -7,7 +7,6 @@ import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
@@ -109,12 +108,11 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
             {!radius && <p className="text-sm text-muted-foreground">Radius OAuth is unavailable in this Pi installation.</p>}
           </ItemContent>
           <ItemActions className="flex-wrap">
-            {radius?.signedIn ? <>
-              <Badge variant="secondary">Signed in</Badge>
+            {radius?.signedIn ?
               <Button variant="outline" size="sm" disabled={disabled} aria-label="Sign out of Radius" onClick={() => setConfirmSignOut(true)}>
                 {signingOut && <Spinner data-icon="inline-start" />}{signingOut ? "Signing out…" : "Sign out"}
               </Button>
-            </> : <Button variant="outline" size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
+            : <Button variant="outline" size="sm" disabled={disabled || !radius} onClick={() => setLogin(crypto.randomUUID())}>Sign in to Radius</Button>}
           </ItemActions>
         </Item>
         <Item variant="outline" role="listitem" className="flex-col items-start sm:flex-row sm:items-center">
@@ -123,8 +121,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
             <ItemDescription className="line-clamp-none">Give Pi access to Radius tools using the same sign-in, without a second OAuth flow.</ItemDescription>
             {state.mcp.detail && <p className="text-sm text-muted-foreground">{state.mcp.detail}</p>}
           </ItemContent>
-          <ItemActions className="flex-wrap">{state.mcp.status === "ready" ? <Badge variant="secondary">Configured</Badge>
-            : <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !radius?.signedIn} onClick={() => void act("configure-mcp")}>Set up MCP</Button>}
+          <ItemActions className="flex-wrap">{state.mcp.status !== "ready" && <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !radius?.signedIn} onClick={() => void act("configure-mcp")}>Set up MCP</Button>}
             {state.mcp.removalKey && <Button variant="outline" size="sm" disabled={disabled} onClick={() => setRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })}>Remove MCP</Button>}
           </ItemActions>
         </Item>
@@ -137,8 +134,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
           </ItemContent>
           <ItemActions className="flex-wrap">{installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
             : <>
-              {state.webSearch.status === "ready" ? <Badge variant="secondary" role="status">Installed</Badge>
-                : <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !radius?.signedIn} onClick={() => void act("install-web-search")}>Install web search</Button>}
+              {state.webSearch.status !== "ready" && <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !radius?.signedIn} onClick={() => void act("install-web-search")}>Install web search</Button>}
               {state.webSearch.removalKey && <Button variant="outline" size="sm" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })}>Uninstall extension</Button>}
             </>}
           </ItemActions>
