@@ -69,7 +69,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const submission = t?.state.submission;
   const starting = input?.outcome === "starting";
   let replyActivity: "starting" | "working" | undefined;
-  if (!t?.pending?.text) {
+  // Messages only hides pending text, so it cannot replace the working indicator.
+  if (display === "messages" || !t?.pending?.text) {
     if (starting) replyActivity = "starting";
     else if (streaming) replyActivity = "working";
   }

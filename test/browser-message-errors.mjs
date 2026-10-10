@@ -173,6 +173,26 @@ try {
   observations.push({ name: 'final-message-copy-buttons', messages: copyMessages });
   check(copyMessages.length === 1 && copyMessages[0].includes('Partial answer before provider failure.'), 'Only the final assistant message offers Copy in Show everything');
   await capture('everything-restored');
+  // A pending reply is hidden in Messages only, but must not hide work feedback.
+  await ab('fill', '[aria-label="Message"]', '/partial');
+  await ab('find', 'role', 'button', 'click', '--name', 'Send', '--exact');
+  await ab('wait', '--text', 'Partial message-errors');
+  await ab('press', 'Control+k');
+  await ab('find', 'role', 'option', 'click', '--name', 'Appearance', '--exact');
+  await ab('find', 'role', 'radio', 'click', '--name', 'Messages only', '--exact');
+  await ab('press', 'Control+k');
+  await ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
+  const working = await evaluate(`(() => {
+    const t = document.querySelector('[data-slot="transcript"]');
+    const label = [...t.querySelectorAll('span')].find(e => e.textContent === 'Pi is working');
+    return { hiddenReply: !t.textContent.includes('Partial message-errors'), indicator: !!label && label.parentElement.getBoundingClientRect().height > 0 };
+  })()`);
+  observations.push({ name: 'messages-only-working', ...working });
+  check(working.hiddenReply, 'Messages only hides pending reply text');
+  check(working.indicator, 'Messages only retains a working indicator while pending reply text exists');
+  await capture('messages-only-working');
+  await ab('find', 'role', 'button', 'click', '--name', 'Stop', '--exact');
+  await ab('wait', '--fn', `!document.querySelector('[data-slot="transcript"]').textContent.includes('Pi is working')`);
   check((await ab('errors')) === '', 'No browser errors');
   assert.deepEqual(failures, [], failures.join('\n'));
   console.log('PASS: concise standalone provider errors, on-demand raw diagnostics, duplicate abort suppression, desktop/mobile containment, and persistent reversible session display');
