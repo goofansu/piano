@@ -45,6 +45,13 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const [login, setLogin] = useState<string>();
   const [removal, setRemoval] = useState<Removal>();
   const manualRefresh = useRef(false);
+  // Web search changes finish in the background; remember one seen to finish here until it can be announced.
+  const lastInstallation = useRef<RadiusSetupState["installation"]["status"]>(undefined);
+  const finished = useRef<"install" | "uninstall">(undefined);
+  const observe = useCallback((next: RadiusSetupState) => {
+    if (lastInstallation.current === "running" && next.installation.status === "success") finished.current = next.installation.action;
+    lastInstallation.current = next.installation.status;
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -61,16 +68,17 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         if (!response.ok) throw new Error("Could not load Radius sign-in status.");
         const result = await response.json();
         if (controller.signal.aborted) return;
-        setProviders(result.providers); setState(next); setError("");
+        observe(next); setProviders(result.providers); setState(next); setError("");
         installing = next.installation.status === "running";
-        if (manual) toast.success("Radius setup is up to date.", { id: SETUP_TOAST });
+        // A running or just-finished web-search change gets its own toast once it settles.
+        if (manual && !installing && !finished.current) toast.success("Radius setup is up to date.", { id: SETUP_TOAST });
       } catch { if (!controller.signal.aborted) setError("Could not refresh Radius setup. Check your connection and try again."); }
       finally { if (!controller.signal.aborted) setRefreshing(false); }
       if (!controller.signal.aborted && installing) timer = setTimeout(load, 1500);
     };
     void load();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [revision]);
+  }, [revision, observe]);
   const refreshProviders = useCallback(() => { setRevision(value => value + 1); providersChanged(); }, [providersChanged]);
   const signOut = async () => {
     setSigningOut(true); setActionError("");
@@ -88,7 +96,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const act = async (action: SetupAction, removalKey?: string) => {
     setBusy(true); setActionError("");
     try {
-      setState(await setupRequest(action, undefined, removalKey));
+      const next = await setupRequest(action, undefined, removalKey);
+      observe(next); setState(next);
       if (action === "configure-mcp") toast.success("Radius MCP added. Start a new session to use it.", { id: SETUP_TOAST });
       if (action === "remove-mcp") toast.success("Radius MCP removed for new sessions.", { id: SETUP_TOAST });
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not complete setup. Refresh before retrying."); }
@@ -104,7 +113,12 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const wasConfigured = useRef<boolean | undefined>(undefined);
   useEffect(() => {
     if (!settled) return;
+    const change = finished.current;
+    finished.current = undefined;
+    // One toast per change: completing setup outranks the install that completed it.
     if (wasConfigured.current === false && configured) toast.success("All set. New Pi sessions can use Radius tools and web search.", { id: SETUP_TOAST });
+    else if (change === "install") toast.success("Web search installed. Start a new session to use it.", { id: SETUP_TOAST });
+    else if (change === "uninstall") toast.success("Web search uninstalled for new sessions.", { id: SETUP_TOAST });
     wasConfigured.current = configured;
   }, [settled, configured]);
   const signedIn = !!radius?.signedIn;
