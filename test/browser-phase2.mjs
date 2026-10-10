@@ -73,6 +73,8 @@ try {
   }
   await ab('--init-script', init, 'open', 'http://127.0.0.1:7172/new');
   await ab('fill', '[aria-label="First message"]', fake ? '/hold-abort' : '/phase0-dialog');
+  // Send stays disabled until the directory's model catalog arrives.
+  await ab('wait', '--fn', `document.querySelector('[aria-label="Send"]')?.disabled === false`);
   await ab('click', '[aria-label="Send"]');
   if (fake) {
     await ab('wait', '--text', 'Command handled.');

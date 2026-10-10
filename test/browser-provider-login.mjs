@@ -42,7 +42,7 @@ try {
   }
   await ab('set', 'viewport', '1280', '900'); await ab('open', frontendUrl);
   // Only the provider HTTP boundary is simulated. The real settings/dialog components run in Vite.
-  await ab('eval', `(() => {
+  const installFixture = () => ab('eval', `(() => {
     const original = window.fetch.bind(window);
     const fixture = window.loginFixture = { state: null, deletes: 0, failCancel: false, completeOnCancel: false, signedIn: false, providerReads: 0, polls: 0, logoutCalls: 0, failLogout: false, holdLogout: false };
     window.fetch = async (input, init = {}) => {
@@ -75,6 +75,7 @@ try {
       return json({ state: fixture.state });
     };
   })()`);
+  await installFixture();
   await button('Settings'); await button('Providers');
   await open();
   assert.match(await ab('snapshot'), /Sign in to OpenAI Codex/);
@@ -93,6 +94,8 @@ try {
   assert.equal(await evaluate('window.loginFixture.deletes'), 3);
   await open();
   await ab('click', '#login-answer'); await ab('find', 'role', 'option', 'click', '--name', 'Device code login', '--exact');
+  // The closing listbox keeps the dialog hidden from the accessibility tree until it unmounts.
+  await ab('wait', '--fn', `!document.querySelector('[role="listbox"]')`);
   await button('Continue'); await ab('wait', '--text', 'Waiting for authorization…');
   assert.equal(await evaluate(`document.querySelector('#login-device-code').value`), 'TEST-CODE');
   assert.equal(await evaluate(`document.querySelector('[role="dialog"] a').textContent`), 'Open sign-in page');
@@ -121,10 +124,12 @@ try {
   await button('Done'); await waitClosed();
   assert.equal(await evaluate('window.loginFixture.deletes'), deletes);
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Sign out of OpenAI Codex"]')`);
+  // Submitting the masked manual-code field makes Chrome offer to save a password, and that prompt
+  // takes mouse input from the page. Continue in a fresh browser with the same simulated boundary.
+  await ab('close');
+  await ab('set', 'viewport', '1280', '900'); await ab('open', frontendUrl); await installFixture();
   // Completion winning the cancellation race must also refresh the provider list.
-  await ab('eval', 'window.loginFixture.signedIn = false');
-  await ab('set', 'viewport', '1280', '900');
-  await button('Home'); await button('Settings'); await button('Providers'); await open();
+  await button('Settings'); await button('Providers'); await open();
   const reads = await evaluate('window.loginFixture.providerReads');
   await ab('eval', 'window.loginFixture.completeOnCancel = true'); await button('Cancel'); await waitClosed();
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Sign out of OpenAI Codex"]')`);

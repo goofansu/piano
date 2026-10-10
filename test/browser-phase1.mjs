@@ -76,7 +76,7 @@ try {
   ab('click', '[aria-label="Send"]');
   ab('wait', '--text', 'Command handled.');
   assert.equal(header(), 'Ready');
-  assert.equal(evaluate(`document.querySelectorAll('article').length`), 0, 'handled input is not finalized history');
+  assert.equal(evaluate(`document.querySelectorAll('[data-slot="transcript"] article[id]').length`), 0, 'handled input is not finalized history');
   assert.equal(evaluate(`document.querySelector('[aria-label="Message"]').disabled`), false);
   capture('handled');
 

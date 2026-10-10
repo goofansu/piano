@@ -3,14 +3,15 @@
 // node test/browser-phase6.mjs /tmp/piano-phase6-evidence/browser
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readRegistry as readPersistedRegistry, registryEnv } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-phase6-evidence/browser'); mkdirSync(evidence, { recursive: true });
-const root = mkdtempSync(join(tmpdir(), 'piano-browser-phase6-')), repo = join(root, 'repo'), config = join(root, 'config'), sessions = join(root, 'sessions');
+// Canonical (macOS /var → /private/var) so paths match what Git reports.
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'piano-browser-phase6-'))), repo = join(root, 'repo'), config = join(root, 'config'), sessions = join(root, 'sessions');
 for (const path of [repo, sessions, join(root, 'home'), join(root, 'agent'), join(config, 'worktrunk')]) mkdirSync(path, { recursive: true });
 const env = { ...process.env, HOME: join(root, 'home'), XDG_CONFIG_HOME: config, XDG_CACHE_HOME: join(root, 'cache'), XDG_STATE_HOME: join(root, 'state'), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', WORKTRUNK_CONFIG_PATH: join(config, 'worktrunk/config.toml') };
 const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();

@@ -58,12 +58,22 @@ async function ab(...args) {
   return result.stdout.trim();
 }
 const evaluate = async code => JSON.parse(await ab('eval', code));
+/** A viewport change animates the sidebar off-canvas; click only once nothing covers the target. */
+const uncovered = selector => ab('wait', '--fn', `(() => { const b = document.querySelector(${JSON.stringify(selector)}), r = b.getBoundingClientRect(); return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)); })()`);
 const menu = async () => {
   await ab('wait', '--fn', `!document.querySelector('[data-slot="dialog-overlay"]')`);
+  await uncovered('[aria-label="Session information and actions"]');
   await ab('click', '[aria-label="Session information and actions"]');
   await ab('wait', '--fn', `!!document.querySelector('[role="menu"][data-state="open"]')`);
 };
 const item = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
+// Rename/Archive/Delete live in the sidebar row menu and the palette; the palette reaches them at every width.
+const palette = async name => {
+  await ab('wait', '--fn', `!document.querySelector('[data-slot="dialog-overlay"]')`);
+  await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
+  await ab('fill', '[aria-label="Search sessions and commands"]', name);
+  await ab('find', 'role', 'option', 'click', '--name', name, '--exact');
+};
 const closed = () => ab('wait', '--fn', `!document.querySelector('[role="menu"][data-state="open"]')`);
 const allDetails = `Working directory: ${repo}\nSession ID: ${sessionId}`;
 let copies = 0;
@@ -71,14 +81,17 @@ async function assertCopy() {
   // One browser round trip: a short-lived toast must not expire while launching CLI checks.
   await ab('wait', '--fn', `window.copies.length === ${++copies} && window.copies.at(-1) === ${JSON.stringify(allDetails)} && !document.querySelector('[role="menu"][data-state="open"]')`);
 }
-async function assertToastCentered(text, label) {
+/** Toasts sit top-right in the main pane, below the header's content, so they never cover a title or its controls.
+ *  The vertical check uses the toaster's settled offset; the toast itself may still be sliding in. */
+async function assertToastPlaced(text, label) {
   // Observe in-page when the toast appears, not after several npx launches: under load
   // those launches can outlast the notification's display duration.
   await ab('wait', '--fn', `window.lastToast?.text.includes(${JSON.stringify(text)})`);
   const bounds = await evaluate('window.lastToast');
   assert.ok(bounds, `${label}: toast was visible`);
-  assert.ok(Math.abs(bounds.toastCenter - bounds.mainCenter) <= 2, `${label}: toast is centered in main`);
   assert.ok(bounds.toastLeft >= bounds.mainLeft && bounds.toastRight <= bounds.mainRight, `${label}: toast stays within main`);
+  assert.ok(bounds.mainRight - bounds.toastRight <= 32, `${label}: toast is aligned to the right of main`);
+  assert.ok(bounds.toastTop >= bounds.headerBottom, `${label}: toast stays below the header's title and controls`);
   await ab('screenshot', join(evidence, `toast-${label}.png`));
 }
 try {
@@ -92,12 +105,12 @@ try {
   // Observe clipboard arguments while allowing the actual browser write to run.
   await evaluate(`window.copies = []; window.nativeWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = async value => { window.lastToast = null; window.copies.push(value); await window.nativeWrite(value); };
     new MutationObserver(() => requestAnimationFrame(() => {
-      const node = [...document.querySelectorAll('[data-sonner-toast]')].at(-1);
+      const node = document.querySelector('[data-sonner-toast][data-front="true"]'); // The newest toast; older ones may still be visible.
       if (!node) return;
       const main = document.querySelector('main').getBoundingClientRect();
       const toast = node.getBoundingClientRect();
       if (!toast.width || !toast.height) return;
-      window.lastToast = { text: node.textContent, mainLeft: main.left, mainRight: main.right, mainCenter: main.left + main.width / 2, toastLeft: toast.left, toastRight: toast.right, toastCenter: toast.left + toast.width / 2 };
+      window.lastToast = { text: node.textContent, mainLeft: main.left, mainRight: main.right, mainCenter: main.left + main.width / 2, toastLeft: toast.left, toastRight: toast.right, toastCenter: toast.left + toast.width / 2, toastTop: node.closest('[data-sonner-toaster]').getBoundingClientRect().top, headerBottom: Math.max(...[...document.querySelectorAll('main header *')].filter(e => !e.children.length).map(e => e.getBoundingClientRect()).filter(r => r.width && r.height).map(r => r.bottom)) };
     })).observe(document.body, { childList: true, subtree: true }); true`);
   for (const [width, height] of [[1280, 900], [390, 844], [320, 700]]) {
     await ab('set', 'viewport', String(width), String(height));
@@ -107,6 +120,7 @@ try {
       const menu = document.querySelector('[aria-label="Session information and actions"]').getBoundingClientRect();
       return create.width > 0 && create.right <= menu.left && menu.right <= innerWidth;
     })()`), 'Quick action remains visible');
+    await uncovered('main header [aria-label="New session here"]');
     await ab('click', 'main header [aria-label="New session here"]');
     await ab('wait', '--fn', `location.pathname === '/new' && !!document.querySelector('[aria-label="First message"]')`);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Directory"]').title`), repo);
@@ -117,7 +131,7 @@ try {
     assert.equal(await evaluate(`document.querySelector('main header').getBoundingClientRect().top`), top);
     await menu();
     await ab('snapshot');
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['', 'Changes', 'Rename', 'Archive', 'Delete']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(item => item.textContent.trim())`), ['', 'Changes', 'Pull request']);
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="menu"] dd')].map(node => node.textContent)`), [repo, sessionId]);
     assert.ok(await evaluate(`(() => {
       const menu = document.querySelector('[role="menu"]');
@@ -126,7 +140,7 @@ try {
       const copy = menu.querySelector('[aria-label="Copy all"]').getBoundingClientRect();
       const icon = menu.querySelector('[aria-label="Copy all"] svg').getBoundingClientRect();
       const firstLineCenter = path.top + parseFloat(getComputedStyle(pathNode).lineHeight) / 2;
-      return !menu.querySelector('[data-slot="dropdown-menu-label"]') && path.right <= copy.left &&
+      return !pathNode.closest('[role="group"]').querySelector('[data-slot="dropdown-menu-label"]') && path.right <= copy.left &&
         copy.width >= 44 && copy.height >= 44 && Math.abs(firstLineCenter - icon.top - icon.height / 2) <= 1;
     })()`), 'Copy icon centers on the first directory line with a mobile-sized touch target');
     assert.equal(await evaluate(`document.querySelector('[role="menu"]').textContent.includes(${JSON.stringify(sessionFile)})`), false);
@@ -145,12 +159,12 @@ try {
     await ab('screenshot', join(evidence, `menu-${width}.png`));
     await item('Copy all');
     await assertCopy();
-    await assertToastCentered('Session details copied', `width-${width}`);
-    await menu(); await item('Rename');
+    await assertToastPlaced('Session details copied', `width-${width}`);
+    await palette('Rename');
     await ab('wait', '--text', 'Rename session');
     await ab('fill', '[aria-label="Session name"]', 'Do not save');
     await ab('find', 'role', 'button', 'click', '--name', 'Cancel', '--exact');
-    await menu(); await item('Delete');
+    await palette('Delete');
     await ab('wait', '--text', 'Delete this session?');
     await ab('find', 'role', 'button', 'click', '--name', 'Cancel', '--exact');
   }
@@ -158,14 +172,16 @@ try {
   await ab('set', 'viewport', '1280', '900');
   await evaluate(`(() => {
     const handle = document.querySelector('[aria-label="Resize sidebar"]');
-    handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: handle.getBoundingClientRect().left }));
-    dispatchEvent(new PointerEvent('pointermove', { clientX: 420 }));
-    dispatchEvent(new PointerEvent('pointerup', { clientX: 420 }));
+    // Drag by the distance that takes the sidebar itself to 420px, wherever the handle sits on its edge.
+    const start = handle.getBoundingClientRect().left, target = start + 420 - handle.parentElement.getBoundingClientRect().width;
+    handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: start }));
+    dispatchEvent(new PointerEvent('pointermove', { clientX: target }));
+    dispatchEvent(new PointerEvent('pointerup', { clientX: target }));
     return true;
   })()`);
   await ab('wait', '--fn', `document.querySelector('[aria-label="Resize sidebar"]')?.getAttribute('aria-valuenow') === '420'`);
   await menu(); await item('Copy all'); await assertCopy();
-  await assertToastCentered('Session details copied', 'desktop-resized');
+  await assertToastPlaced('Session details copied', 'desktop-resized');
   // Moving focus and clicking outside dismiss the non-modal menu; the trigger reopens it.
   await menu();
   await ab('focus', 'main header [aria-label="New session here"]'); await closed();
@@ -176,7 +192,7 @@ try {
   await ab('click', '[aria-label="Hide sidebar"]');
   await ab('wait', '--fn', `!!document.querySelector('[aria-label="Show sidebar"]') && !document.querySelector('[aria-label="Resize sidebar"]')`);
   await menu(); await item('Copy all'); await assertCopy();
-  await assertToastCentered('Session details copied', 'desktop-collapsed');
+  await assertToastPlaced('Session details copied', 'desktop-collapsed');
   await ab('click', '[aria-label="Show sidebar"]');
   await ab('wait', '--fn', `document.querySelector('[aria-label="Resize sidebar"]')?.getAttribute('aria-valuenow') === '420'`);
   // Metadata is not a keyboard stop; Enter reaches the single copy action.
@@ -186,7 +202,7 @@ try {
   await ab('press', 'Enter'); await assertCopy();
   await evaluate(`navigator.clipboard.writeText = async () => { window.lastToast = null; throw new Error('Denied'); }; true`);
   await menu(); await item('Copy all'); await closed();
-  await assertToastCentered('Couldn’t copy session details.', 'desktop-error');
+  await assertToastPlaced('Couldn’t copy session details.', 'desktop-error');
   await evaluate(`navigator.clipboard.writeText = async value => { window.lastToast = null; window.copies.push(value); await window.nativeWrite(value); }; true`);
 
   await ab('click', '[aria-label="Search sessions"]');
@@ -219,9 +235,9 @@ try {
   await ab('wait', '--text', 'Rename session');
   await ab('find', 'role', 'button', 'click', '--name', 'Cancel', '--exact');
   await ab('wait', '--fn', `!document.querySelector('[role="dialog"]')`);
-  await menu(); await item('Archive');
+  await ab('click', '[aria-label="Session menu for Renamed from palette"]'); await item('Archive');
   await ab('wait', '--fn', `!document.querySelector('[aria-label="Session menu for Renamed from palette"]')`);
-  console.log('PASS: desktop/390px/320px full selectable metadata; single pointer/keyboard copy action; copy error; palette parity/ranking; sticky header, confirmations, rename/archive, outside dismissal and centered toasts');
+  console.log('PASS: desktop/390px/320px full selectable metadata; single pointer/keyboard copy action; copy error; palette parity/ranking; sticky header, confirmations, rename/archive, outside dismissal and top-right toasts');
 } catch (error) {
   await ab('snapshot').catch(() => {});
   await ab('screenshot', join(evidence, 'failure.png')).catch(() => {});

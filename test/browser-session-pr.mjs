@@ -143,6 +143,9 @@ try {
   assert.equal(await evaluate(`document.activeElement?.getAttribute('data-slot')`), 'popover-trigger');
   await ab('click', '[aria-label="Session information and actions"]');
   assert.equal(await evaluate(`[...document.querySelectorAll('[role="menuitem"]')].some(n => n.textContent.trim() === 'Pull request')`), true);
+  await ab('press', 'Escape');
+  // Rename lives in the sidebar row's session menu.
+  await ab('click', '[aria-label="Session menu for Current work"]');
   await ab('find', 'role', 'menuitem', 'click', '--name', 'Rename', '--exact');
   await ab('wait', '--fn', `!!document.querySelector('input[aria-label="Session name"]')`);
   observations.renameFocus = await evaluate(`(() => { const input = document.querySelector('input[aria-label="Session name"]'); return { focused: document.activeElement === input, selected: input.selectionStart === 0 && input.selectionEnd === input.value.length }; })()`);

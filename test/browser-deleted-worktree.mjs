@@ -46,7 +46,8 @@ async function ab(...args) {
   return result.stdout.trim();
 }
 const evaluate = async code => JSON.parse(await ab('eval', code));
-const menu = () => ab('click', '[aria-label="Session information and actions"]');
+// Rename, Archive and Delete live in the sidebar row's session menu.
+const menu = id => ab('click', `[aria-label="Session menu for ${id}"]`);
 const item = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
 try {
   for (let n = 0; ; n++) {
@@ -63,28 +64,32 @@ try {
     assert.equal(await evaluate(`document.querySelector('main [aria-label="New session here"]').disabled`), true);
     assert.equal(await evaluate(`document.querySelectorAll('[data-sonner-toast]').length`), 0);
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth`), true);
-    await menu();
-    assert.equal(await evaluate(`Array.from(document.querySelectorAll('[role="menuitem"]')).find(e => e.textContent.trim() === 'Rename').getAttribute('aria-disabled')`), 'true');
-    for (const name of ['Archive', 'Delete']) assert.notEqual(await evaluate(`Array.from(document.querySelectorAll('[role="menuitem"]')).find(e => e.textContent.trim() === '${name}').getAttribute('aria-disabled')`), 'true');
-    await ab('press', 'Escape');
+    // The sidebar, and with it the session menu, is off-canvas on mobile.
+    if (width > 768) {
+      await menu('kept');
+      assert.equal(await evaluate(`Array.from(document.querySelectorAll('[role="menuitem"]')).find(e => e.textContent.trim() === 'Rename').getAttribute('aria-disabled')`), 'true');
+      for (const name of ['Archive', 'Delete']) assert.notEqual(await evaluate(`Array.from(document.querySelectorAll('[role="menuitem"]')).find(e => e.textContent.trim() === '${name}').getAttribute('aria-disabled')`), 'true');
+      await ab('press', 'Escape');
+    }
     await ab('snapshot');
     await ab('screenshot', join(evidence, `readonly-${width}.png`));
     await ab('reload');
     await ab('wait', '--text', 'Saved conversation kept');
   }
+  await ab('set', 'viewport', '1280', '900');
   await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
   await ab('fill', '[aria-label="Search sessions and commands"]', 'Rename');
   assert.equal(await evaluate(`document.querySelector('[role="option"][data-value="Rename"]').getAttribute('aria-disabled')`), 'true');
   await ab('press', 'Escape');
   await ab('open', 'http://127.0.0.1:7172/s/archived');
   await ab('wait', '--text', 'Saved conversation archived');
-  await menu(); await item('Archive');
+  await menu('archived'); await item('Archive');
   await ab('wait', '--fn', `!location.pathname.endsWith('/archived')`);
   assert.equal(readRegistry(registry).sessions.find(s => s.sessionId === 'archived').archived, true);
   assert.ok(existsSync(join(sessions, 'archived.jsonl')));
   await ab('open', 'http://127.0.0.1:7172/s/deleted');
   await ab('wait', '--text', 'Saved conversation deleted');
-  await menu(); await item('Delete');
+  await menu('deleted'); await item('Delete');
   await ab('wait', '--text', 'Delete this session?');
   await ab('find', 'role', 'button', 'click', '--name', 'Delete', '--exact');
   await ab('wait', '--text', 'Session deleted');

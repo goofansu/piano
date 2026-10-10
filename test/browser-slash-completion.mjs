@@ -130,7 +130,7 @@ try {
   evaluate('layoutMotion.widths = []; true');
   ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('wait', '--text', 'Providers');
-  assert.equal(evaluate('location.pathname'), '/settings');
+  assert.equal(evaluate('location.pathname'), '/settings/providers');
   await assertSettingsCard(288, sessionStyle);
   assert.ok(evaluate('layoutCard === document.querySelector("main") && layoutDraft === document.querySelector("textarea")'), 'Settings does not replace the content card or session composer');
   assert.deepEqual(navigationButtonBox('Home'), settingsFooter, 'Home mirrors Settings in the expanded sidebar footer');
@@ -182,7 +182,7 @@ try {
   ab('wait', '--text', 'Sign in with device code (when signing in from another device)');
   capture('settings-radius'); ab('press', 'Escape'); // Close the method menu; reload preserves the running sign-in.
   ab('reload'); ab('wait', '--text', 'Providers');
-  assert.equal(evaluate('location.pathname'), '/settings');
+  assert.equal(evaluate('location.pathname'), '/settings/providers');
   await assertSettingsCard(400, sessionStyle);
   ab('dblclick', '[aria-label="Resize sidebar"]');
   await assertSettingsCard(288, sessionStyle);
@@ -193,14 +193,15 @@ try {
   assert.ok(evaluate(`fetch('/api/provider-login').then(response => response.json()).then(result => result.state?.status === 'cancelled')`), 'Cancel resolves the running sign-in');
   ab('find', 'role', 'button', 'click', '--name', 'Home', '--exact');
   await fill('Keep this draft');
-  ab('press', 'Control+k'); ab('fill', '[placeholder="Search sessions and commands…"]', 'Settings');
+  ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k'); ab('fill', '[placeholder="Search sessions and commands…"]', 'Settings');
   ab('click', '[role="option"]'); ab('wait', '--text', 'Providers');
-  ab('press', 'x');
+  // `keyboard type` sends one complete keystroke; `press` can replay the key after navigation.
+  ab('keyboard', 'type', 'x');
   evaluate('history.back(); true');
   await until(`location.pathname === '/new'`);
   evaluate('history.forward(); true');
-  await until(`location.pathname === '/settings'`);
-  ab('press', 'Control+k'); ab('fill', '[placeholder="Search sessions and commands…"]', 'Home');
+  await until(`location.pathname === '/settings/providers'`);
+  ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k'); ab('fill', '[placeholder="Search sessions and commands…"]', 'Home');
   ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
   assert.equal(draft(), 'Keep this draft', 'Home command preserves the new-session draft');
   await fill('/login rad'); assert.equal(evaluate(`!!document.querySelector('${menu}')`), false, 'no provider completion remains');
@@ -290,18 +291,18 @@ try {
   ab('wait', '--text', 'Providers'); capture('settings-mobile');
   assertFullPageSettings();
   assert.equal(evaluate(`!!document.querySelector('[role="dialog"]')`), false, 'mobile settings closes the sidebar');
-  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('wait', '[role="dialog"]');
   assert.deepEqual(cardStyle('[role="dialog"]'), mobileSheetStyle, 'both pages use the same mobile sheet style');
   assert.equal(evaluate(`document.querySelector('[role="dialog"]').getBoundingClientRect().width`), 320, 'Settings uses the same full-width mobile sheet');
   ab('press', 'Escape');
-  await until(`document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
-  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  await until(`document.activeElement?.getAttribute('aria-label') === 'Settings'`);
+  ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   assert.ok(evaluate(`document.querySelector('[role="dialog"] nav[aria-label="Settings sections"]').checkVisibility()`), 'mobile Settings exposes its own navigation');
   ab('find', 'role', 'button', 'click', '--name', 'Providers', '--exact');
   await until(`!document.querySelector('[role="dialog"]')`);
   assertFullPageSettings();
-  ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');
+  ab('find', 'role', 'button', 'click', '--name', 'Settings', '--exact');
   ab('find', 'role', 'button', 'click', '--name', 'Home', '--exact');
   await until(`location.pathname === '/new' && !document.querySelector('[role="dialog"]')`);
   ab('find', 'role', 'button', 'click', '--name', 'Show sidebar', '--exact');

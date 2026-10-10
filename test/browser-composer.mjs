@@ -73,12 +73,13 @@ const geometry = `(() => {
   const c = rect(card);
   const usage = document.querySelector('[aria-label="Session usage"]');
   const usageRect = usage ? rect(usage) : null;
-  const fonts = [...card.querySelectorAll('textarea, button, span, label, input')].map(el=>({tag:el.tagName,family:getComputedStyle(el).fontFamily}));
+  // Composer content (the draft and queued messages) is sans-serif; the controls around it stay monospace.
+  const fonts = [...card.querySelectorAll('textarea, button, span, label, input')].map(el=>({content:!!el.closest('textarea, [aria-label="Queued messages"]'),family:getComputedStyle(el).fontFamily}));
   const problems = controls.filter(r => r.x < c.x || r.right > c.right + 1 || r.right > innerWidth || r.bottom > innerHeight || r.width < 24).map(r => r.label);
   if (usageRect && (usageRect.y < c.bottom || Math.abs(usageRect.right - c.right) > 1 || usageRect.bottom > innerHeight)) problems.push('Usage footer is not below and aligned with the composer inside the viewport');
   if (card.querySelector('[aria-label="Context usage"]')) problems.push('Context usage still occupies the action toolbar');
   if (usage && usage.scrollWidth > usage.clientWidth + 1) problems.push('Usage controls overflow');
-  if (fonts.some(font=>!font.family.includes(font.tag === 'TEXTAREA' ? 'sans-serif' : 'monospace'))) problems.push('Message input must use sans-serif while composer controls stay monospace');
+  if (fonts.some(font=>!font.family.includes(font.content ? 'sans-serif' : 'monospace'))) problems.push('Composer content must use sans-serif while composer controls stay monospace');
   const action = controls.find(r => ['Send', 'Stop', 'Queue message'].includes(r.label));
   if (action && controls.some(r => Math.abs(r.y + r.height/2 - action.y - action.height/2) > 2)) problems.push('Composer toolbar wraps instead of reserving the action row');
   const steer = card.querySelector('[aria-label="Steer"]');
@@ -314,34 +315,28 @@ async function run() {
   // Headless Chromium on macOS ignores select-all shortcuts, so the draft is cleared the way React observes it.
   evaluate(`(() => { const t = document.querySelector('[aria-label="Message"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ''); t.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
   expectAction('Stop');
-  ab('click', '[aria-label="Stop"]');
-  await until(`!document.querySelector('[aria-label="Stop"]')`);
-  expectAction('Send');
-  ab('wait', '--text', 'Paused queue (3)');
-  if (JSON.stringify(queueText()) !== JSON.stringify(mixedQueue)) throw new Error('Stop consumed the queue instead of pausing it');
-  if (evaluate(`[...document.querySelectorAll('article')].some(article=>article.textContent.includes('queued draft'))`)) throw new Error('Stop automatically resent a pending message');
-  ab('screenshot', join(evidence, 'paused-queue.png'));
+  // Stop takes Pi's queue back into the editor that pressed it; another tab's draft stays its own.
   const originalTab = JSON.parse(ab('tab', 'list', '--json')).data.tabs.find(tab => tab.active).tabId;
   ab('tab', 'new', '--label', 'peer', ab('get', 'url'));
-  ab('wait', '--text', 'Paused queue (3)');
+  ab('wait', '--text', 'Queued messages (3)');
   ab('fill', '[aria-label="Message"]', 'other tab draft');
   ab('tab', originalTab);
-  ab('fill', '[aria-label="Message"]', 'my unsent draft');
-  const promptsBeforeRestore = evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`);
-  ab('click', '[aria-label="Edit all queued messages"]');
-  const restoredText = `my unsent draft\n\nqueued draft\n\nqueued second ${'x'.repeat(80)}\n\nmobile follow-up`;
-  await until(`document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(restoredText)} && !document.querySelector('[aria-label="Queued messages"]')`);
+  const promptsBeforeStop = evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`);
+  ab('click', '[aria-label="Stop"]');
+  const restoredText = mixedQueue.join('\n\n');
+  await until(`!document.querySelector('[aria-label="Stop"]') && document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(restoredText)} && !document.querySelector('[aria-label="Queued messages"]')`);
   expectAction('Send');
-  if (evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`) !== promptsBeforeRestore) throw new Error('Restore automatically sent a prompt');
+  if (evaluate(`sent.filter(m=>m._tag==='create_session'||m.action?._tag==='prompt').length`) !== promptsBeforeStop) throw new Error('Stop automatically sent a prompt');
+  if (evaluate(`[...document.querySelectorAll('article')].some(article=>article.textContent.includes('queued draft'))`)) throw new Error('Stop automatically resent a pending message');
   ab('screenshot', join(evidence, 'restored-draft.png'));
   ab('tab', 'peer');
   await until(`!document.querySelector('[aria-label="Queued messages"]')`);
-  if (evaluate(`document.querySelector('[aria-label="Message"]').value`) !== 'other tab draft') throw new Error('Restoring in one tab changed another tab draft');
+  if (evaluate(`document.querySelector('[aria-label="Message"]').value`) !== 'other tab draft') throw new Error('Stopping in one tab changed another tab draft');
   ab('tab', 'close', 'peer');
   ab('tab', originalTab);
   // Explicit Send, not restore, starts the next prompt; the mobile control remains reachable.
   ab('click', '[aria-label="Send"]');
-  ab('wait', '--text', 'echo: my unsent draft');
+  ab('wait', '--text', 'echo: queued draft');
   if (evaluate(`sent.filter(m=>m.action?._tag==='prompt').at(-1).action.text`) !== restoredText) throw new Error('Manual Send did not submit the recovered draft');
   if (evaluate(`document.querySelector('[aria-label="Context usage"]').textContent.trim()`) !== '21%/200k') throw new Error('Context percentage disappeared after settlement');
   ab('click', '[aria-label="Context usage"]');
@@ -424,10 +419,11 @@ async function run() {
   if (evaluate(`sent.filter(m=>m.action?._tag==='steer').length`) !== 2) throw new Error('Alt+Enter did not submit exactly once per use (idle and busy)');
   ab('screenshot', join(evidence, 'desktop-steering.png'));
   ab('click', '[aria-label="Stop"]');
-  ab('wait', '--text', 'Paused queue (2)');
+  // Stop restores the queue to the draft in Pi's order: steering before follow-up.
+  await until(`document.querySelector('[aria-label="Message"]').value === 'desktop steering\\n\\ndesktop follow-up' && !document.querySelector('[aria-label="Queued messages"]')`);
   ab('errors');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ failures }, null, 2));
-  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: single-row toolbars and full accessible model names; model/effort selection, no mobile autofocus, stable actions, context, queue/reload/pause/native restore, peer-tab isolation, keyboard and in-place mobile reconnect');
+  console.log(failures.length ? `FAIL\n${failures.join('\n')}` : 'PASS: single-row toolbars and full accessible model names; model/effort selection, no mobile autofocus, stable actions, context, queue/reload/Stop restores the draft, peer-tab isolation, keyboard and in-place mobile reconnect');
   process.exitCode = failures.length ? 1 : 0;
 }
 try { await run(); }

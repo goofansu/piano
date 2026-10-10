@@ -61,6 +61,11 @@ async function ab(...args) {
 }
 const evaluate=async code=>JSON.parse(await ab('eval',code));
 const button=name=>ab('find','role','button','click','--name',name,'--exact');
+// Each ready part shows a check whose screen-reader label names it, e.g. "(Added)".
+const dialogClosed=()=>ab('wait','--fn',`!document.querySelector('[role="dialog"]')`);
+const readyMark=label=>`[...document.querySelectorAll('.sr-only')].some(element => element.textContent === '(${label})')`;
+// The closing listbox keeps the dialog hidden from the accessibility tree until it unmounts.
+const chooseDeviceCode=async()=>{await ab('click','#login-answer');await ab('find','role','option','click','--name','Device code','--exact');await ab('wait','--fn',`!document.querySelector('[role="listbox"]')`);await button('Continue');};
 const capture=async name=>{await ab('screenshot',join(evidence,`${name}.png`));writeFileSync(join(evidence,`${name}.txt`),await ab('snapshot'));};
 try {
   for(let n=0;;n++) {
@@ -94,16 +99,16 @@ try {
   })()`);
   await button('Settings');await button('Radius');await ab('wait','--text','Radius MCP');
   assert.equal(await evaluate(`document.querySelector('main').textContent.includes('Configured')`),false);
-  assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false);
+  assert.equal(await evaluate(readyMark('Signed in')),false);
   assert.equal(await evaluate(`document.querySelector('main').textContent.includes('Connect your Radius account and tools on this machine.')`),false);
   assert.equal(await evaluate(`!!document.querySelector('header button[aria-label="Refresh setup"]')`),true);
   assert.equal(await evaluate(`[...document.querySelectorAll('main button')].some(button => button.textContent === 'Manage providers')`),false);
   await capture('01-signed-out');
-  assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Set up MCP')?.disabled`),true);
-  await button('Sign in to Radius');await ab('wait','--text','Choose sign-in method');
-  await ab('click','#login-answer');await ab('find','role','option','click','--name','Device code','--exact');await button('Continue');
-  await ab('wait','--text','You’re signed in.');await button('Done');await ab('wait','--text','Signed in');
-  await button('Set up MCP');await ab('wait','--text','Configured');
+  assert.equal(await evaluate(`document.querySelector('[aria-label="Add Radius MCP"]')?.disabled`),true);
+  await button('Sign in to Radius');await ab('wait','--text','Choose a sign-in method');
+  await chooseDeviceCode();
+  await ab('wait','--text','You’re signed in.');await button('Done');await ab('wait','--fn',readyMark('Signed in'));
+  await button('Add Radius MCP');await ab('wait','--fn',readyMark('Added'));
   const config=JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8'));
   assert.deepEqual(config,{custom:'preserve',mcpServers:{radius:{url:'https://radius.pi.dev/mcp',auth:{provider:'radius'}},other:{command:'do-not-start'}}});
   await capture('02-mcp-configured');
@@ -112,38 +117,38 @@ try {
   writeFileSync(hold,'');writeFileSync(fail,'');
   await button('Install web search');await ab('wait','--text','Installing…');
   await fetch(`${backendUrl}/api/settings/radius`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'install-web-search'})});
-  await button('Appearance');await button('Radius');await ab('wait','--text','Installing…');
+  await button('Providers');await button('Radius');await ab('wait','--text','Installing…');
   await capture('03-installing');rmSync(hold);
   await ab('wait','--text','Web search was not installed');await capture('04-install-error');
   assert(!await ab('snapshot').then(text=>text.includes('private-installer-token')));
   assert.equal(readFileSync(audit,'utf8').trim().split('\n').length,1);
-  rmSync(fail);await button('Install web search');await ab('wait','--fn',`[...document.querySelectorAll('[role="status"]')].some(element => element.textContent === 'Installed')`);
+  rmSync(fail);await button('Install web search');await ab('wait','--fn',readyMark('Installed'));
   const settings=JSON.parse(readFileSync(join(agent,'settings.json'),'utf8'));
   assert(settings.packages.includes(packageSource));assert.equal(settings.defaultThinkingLevel,'high');
   assert.equal(readFileSync(audit,'utf8').trim().split('\n').length,2);
-  await ab('wait','[aria-label="Radius setup configured"]');
-  await ab('focus','[aria-label="Radius setup configured"]');
-  await ab('wait','--text','All three setup steps are configured.');
-  await ab('press','Escape');
+  // Completing the last step announces it once.
+  await ab('wait','--text','All set. New Pi sessions can use Radius tools and web search.');
   await capture('05-complete');
   assert.match(await ab('snapshot'),/must enable Web search separately in Radius/);
   // Mod+K is the same navigation surface as the settings sidebar.
-  await button('Home');await ab('press','Control+k');await ab('fill','[aria-label="Search sessions and commands"]','Radius');
-  await ab('find','role','option','click','--name','Radius','--exact');await ab('wait','--text','Set up Radius MCP');
+  await button('Home');await ab('press',process.platform==='darwin'?'Meta+k':'Control+k');await ab('fill','[aria-label="Search sessions and commands"]','Radius');
+  await ab('find','role','option','click','--name','Radius','--exact');await ab('wait','--text','Give Pi your Radius tools');
   await ab('set','viewport','390','844');await ab('eval','localStorage.setItem("theme","dark");document.documentElement.classList.add("dark")');
   await capture('06-mobile-dark');
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true);
   assert.equal(await evaluate(`[...document.querySelectorAll('[data-slot="item-description"]')].every(element => element.scrollHeight <= element.clientHeight)`),true, 'setup descriptions must not be clamped on mobile');
+  // Toasts slide in under the mobile header; let them clear before tapping its Refresh button.
+  await ab('wait','--fn',`!document.querySelector('[data-sonner-toast]')`);
   await ab('eval','window.radiusFixture.unavailable=true');await button('Refresh setup');await ab('wait','--text','Radius setup needs attention');
-  assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false, 'a failed refresh must not keep a completion claim');
+  assert.equal(await evaluate(`document.body.textContent.includes('Radius setup refreshed.')`),false, 'a failed refresh must not confirm a refresh');
   await capture('07-refresh-error');await ab('eval','window.radiusFixture.unavailable=false');await button('Refresh setup');
   await ab('wait','--fn',`!document.querySelector('[role="alert"]')`);
-  await ab('wait','[aria-label="Radius setup configured"]');
+  await ab('wait','--text','Radius setup refreshed.');
   // Both account actions stay on Radius. A failed logout must preserve sign-in;
   // successful logout must remove the completion claim but keep saved tool setup.
   await button('Sign out of Radius');await ab('wait','--text','Sign out of Radius?');
   assert.equal(await evaluate('window.radiusFixture.logoutCalls'),0,'opening confirmation must not sign out');
-  await capture('08-sign-out-confirm-mobile');await button('Cancel');
+  await capture('08-sign-out-confirm-mobile');await button('Cancel');await dialogClosed();
   assert.equal(await evaluate('window.radiusFixture.logoutCalls'),0,'cancelling must not sign out');
   await ab('eval','window.radiusFixture.failLogout=true');await button('Sign out of Radius');await button('Sign out');
   await ab('wait','--text','Could not sign out. Try again.');
@@ -151,56 +156,57 @@ try {
   assert.equal(await evaluate(`document.querySelector('#settings-section-title')?.textContent`),'Radius');
   await capture('08-sign-out-error');
   await ab('eval','window.radiusFixture.failLogout=false');await button('Sign out of Radius');await button('Sign out');
-  await ab('wait','--fn',`[...document.querySelectorAll('button')].some(button => button.textContent === 'Sign in to Radius' && !button.disabled)`);
-  assert.equal(await evaluate(`!!document.querySelector('[aria-label="Radius setup configured"]')`),false, 'installed tools alone are not complete without sign-in');
+  await ab('wait','--fn',`!!document.querySelector('[aria-label="Sign in to Radius"]:not(:disabled)')`);
+  assert.equal(await evaluate(readyMark('Signed in')),false, 'installed tools alone are not complete without sign-in');
+  assert.equal(await evaluate(readyMark('Added')),true, 'signing out keeps saved tool setup');
   assert.equal(await evaluate('window.radiusFixture.logoutCalls'),2);
   await capture('09-signed-out-in-place');
-  await button('Sign in to Radius');await ab('wait','--text','Choose sign-in method');
-  await ab('click','#login-answer');await ab('find','role','option','click','--name','Device code','--exact');await button('Continue');
+  await button('Sign in to Radius');await ab('wait','--text','Choose a sign-in method');
+  await chooseDeviceCode();
   await ab('wait','--text','You’re signed in.');await button('Done');
-  await ab('wait','[aria-label="Radius setup configured"]');
+  await ab('wait','--fn',readyMark('Signed in'));
   assert.equal(await evaluate(`document.querySelector('#settings-section-title')?.textContent`),'Radius');
   assert.deepEqual(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')),config);
   assert.equal(readFileSync(audit,'utf8').trim().split('\n').length,2,'signing back in must not reinstall tools');
   await capture('10-signed-back-in');
   // Persistence readback after a full browser reload, with no mock signed-in claim.
-  await ab('reload');await button('Show sidebar');await button('Radius');await ab('wait','--text','Configured');
-  assert.match(await ab('snapshot'),/Installed/);
+  await ab('reload');await button('Settings');await button('Radius');await ab('wait','--fn',readyMark('Added'));
+  assert.equal(await evaluate(readyMark('Installed')),true);
   // Removal works while signed out, requires confirmation, and never removes
   // unrelated configuration. A changed target invalidates an open confirmation.
   await ab('set','viewport','1280','900');
-  await button('Remove MCP');await ab('wait','--text','Remove Radius MCP?');
+  await button('Remove Radius MCP');await ab('wait','--text','Remove Radius MCP?');
   assert.equal(await evaluate(`document.querySelector('[role="dialog"] [data-slot="dialog-description"]').textContent`),'Removes Radius MCP from Pi on this machine.');
-  await capture('11-remove-mcp-confirm');await button('Cancel');
+  await capture('11-remove-mcp-confirm');await button('Cancel');await dialogClosed();
   assert.deepEqual(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')),config);
-  await button('Remove MCP');await ab('wait','--text','Remove Radius MCP?');
+  await button('Remove Radius MCP');await ab('wait','--text','Remove Radius MCP?');
   config.mcpServers.radius.timeout=45;
   writeFileSync(join(agent,'mcp.json'),JSON.stringify(config));
   await ab('click','[role="dialog"] button:last-child');
   await ab('wait','--text','Could not remove Radius MCP.');
   assert(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')).mcpServers.radius);
   await ab('wait','--fn',`!document.querySelector('[aria-label="Refresh setup"]').disabled`);
-  await button('Remove MCP');await ab('wait','--text','Remove Radius MCP?');await ab('click','[role="dialog"] button:last-child');
-  await ab('wait','--fn',`![...document.querySelectorAll('button')].some(button => button.textContent === 'Remove MCP')`);
+  await button('Remove Radius MCP');await ab('wait','--text','Remove Radius MCP?');await ab('click','[role="dialog"] button:last-child');
+  await ab('wait','--fn',`!document.querySelector('[aria-label="Remove Radius MCP"]')`);
   assert.deepEqual(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')),{custom:'preserve',mcpServers:{other:{command:'do-not-start'}}});
-  assert.match(await ab('snapshot'),/Installed/);
-  await button('Uninstall extension');await ab('wait','--text','Uninstall web-search extension?');await button('Cancel');
+  assert.equal(await evaluate(readyMark('Installed')),true);
+  await button('Uninstall web search');await ab('wait','--text','Uninstall web search?');await button('Cancel');await dialogClosed();
   assert.equal(readFileSync(audit,'utf8').trim().split('\n').length,2);
   const beforeRemoval=await (await fetch(`${backendUrl}/api/settings/radius`)).json();
   writeFileSync(hold,'');writeFileSync(fail,'');
-  await button('Uninstall extension');await ab('wait','--text','Uninstall web-search extension?');
-  assert.equal(await evaluate(`document.querySelector('[role="dialog"] [data-slot="dialog-description"]').textContent`),'Removes the web-search extension from Pi on this machine.');
+  await button('Uninstall web search');await ab('wait','--text','Uninstall web search?');
+  assert.equal(await evaluate(`document.querySelector('[role="dialog"] [data-slot="dialog-description"]').textContent`),'Removes the Radius web-search extension from Pi on this machine.');
   await ab('set','viewport','390','844');await capture('12-uninstall-confirm-mobile');await ab('click','[role="dialog"] button:last-child');
   await ab('wait','--text','Uninstalling…');
   const action=body=>fetch(`${backendUrl}/api/settings/radius`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   assert.equal((await action({action:'install-web-search'})).status,409);
   assert.equal((await action({action:'uninstall-web-search',removalKey:beforeRemoval.state.webSearch.removalKey})).status,200);
   await capture('13-uninstalling');rmSync(hold);
-  await ab('wait','--text','Extension was not uninstalled');
+  await ab('wait','--text','Web search was not uninstalled');
   assert(JSON.parse(readFileSync(join(agent,'settings.json'),'utf8')).packages.includes(packageSource));
   assert(!await ab('snapshot').then(text=>text.includes('private-installer-token')));
-  rmSync(fail);await button('Uninstall extension');await ab('wait','--text','Uninstall web-search extension?');await ab('click','[role="dialog"] button:last-child');
-  await ab('wait','--fn',`![...document.querySelectorAll('button')].some(button => button.textContent.includes('Uninstall'))`);
+  rmSync(fail);await button('Uninstall web search');await ab('wait','--text','Uninstall web search?');await ab('click','[role="dialog"] button:last-child');
+  await ab('wait','--fn',`!document.querySelector('[aria-label="Uninstall web search"]') && !document.body.textContent.includes('Uninstalling…')`);
   const removedSettings=JSON.parse(readFileSync(join(agent,'settings.json'),'utf8'));
   assert(!(removedSettings.packages??[]).includes(packageSource));assert.equal(removedSettings.defaultThinkingLevel,'high');
   assert(!existsSync(join(agent,'npm/node_modules',packageName)));

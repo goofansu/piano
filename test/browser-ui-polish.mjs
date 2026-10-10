@@ -208,7 +208,8 @@ try {
       if (expanded) {
         await ab('click', tool);
         await ab('click', '[aria-label="bash tool call"] > div button[aria-expanded]');
-        assert.equal(await evaluate(`document.querySelector('[aria-label="bash tool call"]').textContent.includes('fixture error details')`), false, 'failed output folds away again');
+        // Failed output folds away again once its exit animation finishes.
+        await ab('wait', '--fn', `!document.querySelector('[aria-label="bash tool call"]').textContent.includes('fixture error details')`);
       }
     }
   }
@@ -239,6 +240,12 @@ try {
   await ab('press', 'Enter'); await ab('wait', '--fn', `!(${argVisible})`);
   assert.ok(await evaluate(`document.activeElement.matches('${tool}')`));
   assert.equal(await evaluate(`document.querySelector('[aria-label="read tool call"]').textContent.includes('return <Workspace />;')`), false);
+  // The sidebar groups by date by default; folder groups are the ones with a disclosure trigger.
+  await ab('find', 'role', 'button', 'click', '--name', 'View options', '--exact');
+  await ab('find', 'role', 'menuitem', 'hover', '--name', 'Group by');
+  await ab('wait', '--fn', `[...document.querySelectorAll('[role="menuitemradio"]')].some(item => item.textContent.trim() === 'Folder')`);
+  await ab('find', 'role', 'menuitemradio', 'click', '--name', 'Folder', '--exact');
+  await ab('wait', '--fn', `!document.querySelector('[role="menu"]')`);
   await ab('focus', project); await ab('press', 'Enter');
   await ab('wait', '--fn', `!document.querySelector('aside button[title="A calmer workspace"]')`);
   assert.ok(await evaluate(`document.activeElement.matches('${project}')`));

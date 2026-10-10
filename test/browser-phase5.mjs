@@ -115,8 +115,9 @@ try {
   const delayed = await client('delayed');
   delayed.ws.send(JSON.stringify({ _tag: 'act', selectionId: delayed.selectionId, action: { _tag: 'set_thinking_level', level: 'low' }, start: {} }));
   await waitFor(() => spawns('delayed').length === 1);
-  await ab('find', 'role', 'button', 'click', '--name', 'delayed', '--exact');
-  await ab('find', 'role', 'button', 'click', '--name', 'ordered-b', '--exact'); await ab('wait', '--text', 'Saved ordered-b');
+  // Sidebar rows name the session plus its location, so select them by their title.
+  await ab('click', 'li > button[title="delayed"]');
+  await ab('click', 'li > button[title="ordered-b"]'); await ab('wait', '--text', 'Saved ordered-b');
   process.kill(spawns('delayed')[0].pid, 'SIGCONT');
   await waitFor(() => delayed.seen.some(m => m._tag === 'selected' && m.hosted));
   assert.equal(await evaluate('location.pathname'), '/s/ordered-b');
