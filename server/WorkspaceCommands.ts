@@ -1,8 +1,8 @@
 /**
  * Workspace and session commands: the domain steps behind the browser's create, rename,
  * archive and delete requests. Registry holds references only (INV-01); SessionHosts owns
- * the single child per session (INV-02); Worktrees owns Git and Worktrunk. The browser
- * connection keeps selection, attachment and fan-out, and joins in through `SessionClient`.
+ * the single child per session (INV-02); Worktrees owns Git and Worktrunk. The requesting
+ * client's SessionViewer attaches what it opens, through `SessionClient`.
  */
 import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer } from "effect";
@@ -24,6 +24,7 @@ export interface CreateSessionRequest {
 
 /** How the requesting connection takes part: it attaches the opened session and signals that the sidebar changed. */
 export interface SessionClient<E, R> {
+  /** Opens the session and shows it if the client still has this new session selected. */
   readonly attach: (open: Effect.Effect<PiSession, PiSessionError>) => Effect.Effect<PiSession, E | PiSessionError, R>;
   readonly published: Effect.Effect<void, E, R>;
 }
@@ -76,10 +77,8 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
       const { model, thinkingLevel, name } = request.options;
       // Only a fresh server-generated ID may create a reference; SessionHosts keeps one child per ID.
       const session = yield* client.attach(hosts.open({ cwd, sessionId: randomUUID(), create: true, model, thinkingLevel, name }));
-      if (request.projectId) {
-        yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, request.projectId);
-        yield* client.published;
-      }
+      if (request.projectId) yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, request.projectId);
+      yield* client.published;
       const text = request.text?.trim() ?? "";
       if (!text && !request.attachments?.length) return session;
       yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, text);
