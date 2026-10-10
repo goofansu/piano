@@ -3,7 +3,7 @@
  *
  * Type, four roles:
  *   sans   interface and body: the transcript, controls, menus (Tailwind's default stack)
- *   serif  the voice: headlines, empty states, project names (Newsreader, often italic)
+ *   serif  the voice: headlines, page and dialog titles, empty states (Newsreader, often italic)
  *   label  small uppercase chrome with 0.05-0.08em tracking (Departure Mono)
  *   mono   machine output verbatim: code, commands, paths, branches (Tailwind's default stack)
  * Body stays 16px; labels are 16px on phones / 14px on desktop, captions 14px / 12px.
@@ -315,6 +315,71 @@
   }
 }
 
+/* Type roles, applied. Accents, not a font swap: sans stays the interface and body, mono stays
+ * machine output. The serif is the human voice (the welcome headline, empty states, page and
+ * dialog titles); the label face marks small uppercase chrome (group headings, the model chip,
+ * the usage meta, key hints). Rules here are unlayered on purpose: they replace the size, weight
+ * and family shadcn's slots set with utilities. User-provided names (folders, projects, session
+ * titles) never take the label face, because uppercasing them changes what they say. */
+:root {
+  /* Departure Mono is drawn on an 11px grid; phones follow the caption size so chrome stays legible. */
+  --type-chrome: var(--type-caption);
+  --tracking-chrome: 0.06em;
+  /* A selected row: parchment by day, so it reads warm and distinct from the driftwood hover. */
+  --selected: oklch(0.88 0.021 53);
+}
+.dark {
+  --selected: oklch(0.84 0.04 55 / 14%);
+}
+@media (min-width: 48rem) {
+  :root { --type-chrome: 0.6875rem; }
+}
+.chrome-label,
+[cmdk-group-heading],
+[data-slot="kbd"] {
+  font-family: var(--font-label);
+  font-size: var(--type-chrome);
+  font-weight: 400;
+  font-synthesis: none;
+  letter-spacing: var(--tracking-chrome);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+.chrome-label,
+[cmdk-group-heading] {
+  line-height: 1.4;
+}
+[cmdk-group-heading] {
+  color: var(--ink-3);
+}
+/* The voice. Newsreader's optical size follows the font size, so headlines tighten and small
+ * empty-state text opens up on its own. */
+.voice,
+[data-slot="dialog-title"],
+[data-slot="empty-title"],
+[data-slot="empty-description"] {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+}
+[data-slot="dialog-title"],
+[data-slot="empty-title"] {
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+[data-slot="dialog-title"] {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+[data-slot="empty-title"] { font-size: 1.25rem; }
+/* Empty states speak in italic, scaled to the sans's x-height so they keep the size the slot sets. */
+[data-slot="empty-description"] {
+  font-style: italic;
+  font-size-adjust: 0.5;
+}
+[data-slot="sidebar-menu-button"][data-active="true"] {
+  background: var(--selected);
+}
+
 /* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */
 .prose-chat {
   overflow-wrap: anywhere;
@@ -349,13 +414,20 @@
 .prose-chat li + li { margin-top: 0.25em; }
 .prose-chat li::marker { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .prose-chat strong { font-weight: 600; }
+/* The brand sits close to ink (1.67:1 by day, 1.26:1 by night), so a link is told by its underline,
+ * drawn solid in the brand and thickening on hover, not by its colour. */
 .prose-chat a {
   color: var(--brand);
   text-decoration: underline;
-  text-decoration-color: color-mix(in oklab, var(--brand) 35%, transparent);
-  text-underline-offset: 0.15em;
+  text-decoration-color: color-mix(in oklab, var(--brand) 70%, transparent);
+  text-decoration-thickness: max(1px, 0.075em);
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color var(--dur-hover), text-decoration-thickness var(--dur-hover);
 }
-.prose-chat a:hover { text-decoration-color: var(--brand); }
+.prose-chat a:hover {
+  text-decoration-color: var(--brand);
+  text-decoration-thickness: max(2px, 0.12em);
+}
 .prose-chat .github-link {
   display: inline-block;
   max-width: 100%;

@@ -161,7 +161,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
           </ItemActions>
         </Item>
         <section aria-labelledby="radius-features" className="flex flex-col gap-3">
-          <h2 id="radius-features" className="text-sm font-medium">Use in Pi</h2>
+          <h2 id="radius-features" className="chrome-label text-ink-2">Use in Pi</h2>
           <ItemGroup className="rounded-xl border">
             <Item className="rounded-none px-4 sm:px-5">
               <ItemMedia variant="icon"><WrenchIcon /></ItemMedia>

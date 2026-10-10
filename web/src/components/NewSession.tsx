@@ -110,9 +110,9 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex [&>span]:w-1 [&>span]:scale-y-125" />
-            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{project?.name ?? "What should we work on?"}</h1>
+            <h1 className="voice text-[1.75rem] leading-tight font-normal tracking-[-0.01em] text-balance md:text-[2.5rem]">{project?.name ?? "What should we work on?"}</h1>
             {/* A project's goal is its only standing text, so it shows at every width; the tagline stays desktop-only. */}
-            <p className={cn("mt-2 text-base text-ink-2", !project?.goal && "hidden md:block")}>{project?.goal || "A little progress starts with an idea."}</p>
+            <p className={cn("voice mt-2 text-lg text-ink-2 italic", !project?.goal && "hidden md:block")}>{project?.goal || "A little progress starts with an idea."}</p>
           </div>
           <div className="shrink-0">
             {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}

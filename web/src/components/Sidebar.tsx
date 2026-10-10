@@ -146,7 +146,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       return groups(dated.map(g => (
         <section key={g.label} aria-label={g.label}>
           {/* No standalone shadcn heading fits this noninteractive list section. */}
-          <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">{g.label}</h2>
+          <h2 className="chrome-label px-2 pt-4 pb-2 text-ink-3">{g.label}</h2>
           <SessionList sessions={g.sessions} {...groupProps} />
         </section>
       )));
@@ -307,7 +307,7 @@ function SessionRow({ t, metadata, showProject = true, selected, disabled, hint,
   return (
     <li
       style={reveal()}
-      className={cn(project || metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-brand-soft hover:bg-brand-soft")}
+      className={cn(project || metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-(--selected) hover:bg-(--selected)")}
     >
       <button
         type="button"

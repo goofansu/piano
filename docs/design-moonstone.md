@@ -114,13 +114,65 @@ Four roles, as tokens in `index.css`:
 | Role | Token | Family | Use |
 | --- | --- | --- | --- |
 | sans | `--font-sans` | Tailwind's default system stack | interface and body: transcript, controls, menus |
-| serif | `--font-serif` | Newsreader Variable (`@fontsource-variable/newsreader`, opsz + wght, roman and italic), Georgia fallback | the voice: headlines, empty states, project names |
+| serif | `--font-serif` | Newsreader Variable (`@fontsource-variable/newsreader`, opsz + wght, roman and italic), Georgia fallback | the voice: headlines, page and dialog titles, empty states |
 | label | `--font-label` | Departure Mono, self-hosted in `web/src/assets/fonts/departure-mono/` with its OFL licence, `ui-monospace` fallback | small uppercase chrome, 0.05–0.08em tracking |
 | mono | `--font-mono` | Tailwind's default mono stack | machine output verbatim: code, commands, paths, branches |
 
-Both new faces are OFL and load with `font-display: swap`. The foundation only defines them; the
-`static` theme block emits the variables so plain CSS can use them before any utility does.
-Earendil's PlantinNow is licensed and is not used.
+Both new faces are OFL and load with `font-display: swap`. The `static` theme block emits the
+variables so plain CSS can use them. Earendil's PlantinNow is licensed and is not used.
+
+### Where each role lives
+
+The serif and the label face are accents, not a font swap: session titles, chat prose, menu
+items, buttons and inputs stay sans; code, tool rows, paths and branches stay in the code mono.
+The rules sit in the "Type roles, applied" section of `index.css`, unlayered so they replace the
+family, size and weight that shadcn's slots set with utilities; no file under `ui/` changed.
+
+| Role | Where | How |
+| --- | --- | --- |
+| serif, roman | New session headline ("What should we work on?" or the project name): 28px phone / 40px desktop, weight 400, -0.01em, balanced | `voice` class in `NewSession.tsx` |
+| serif, italic | New session subtitle (tagline or project goal), 18px, ink-2 | `voice italic` in `NewSession.tsx` |
+| serif, 500 | Settings page titles (`SettingsHeader`), 22px | `voice` class |
+| serif, 500 | Dialog titles, 20px / 1.25 | `[data-slot="dialog-title"]` |
+| serif, 500 / italic | Empty states: `EmptyTitle` 20px; `EmptyDescription` italic at the slot's own size, with `font-size-adjust: 0.5` so Newsreader's smaller x-height matches the sans (sidebar "No sessions yet", Session not found, No changes, folder picker) | `[data-slot="empty-title"]`, `[data-slot="empty-description"]` |
+| label | Sidebar date headings (Today, Yesterday…), ink-3 | `chrome-label` class in `Sidebar.tsx` |
+| label | Command palette and picker group headings, ink-3 | `[cmdk-group-heading]` |
+| label | Settings section labels ("Use in Pi"), ink-2 | `chrome-label` in `RadiusSettings.tsx` |
+| label | The composer's model · effort chip and the usage meta ("2 messages", "1k"), ink-2 | `chrome-label` in `ModelSelect.tsx`, `JumpTo.tsx`, `Composer.tsx` |
+| label | Keyboard hints (`Kbd`, `Shortcut`); ⌘ and ⇧ fall back to the system mono | `[data-slot="kbd"]` |
+
+The label face is uppercase with `--tracking-chrome` 0.06em, weight 400 with `font-synthesis:
+none` (Departure Mono has one weight; no faux bold), tabular figures, at `--type-chrome`: 11px on
+desktop, Departure Mono's native grid, and the caption size (14px) on phones. Its colours pass
+4.5:1 as text: ink-3 on canvas 5.33 / 8.13 (day / night) and on surface-2 6.28 / 6.11; ink-2 on
+the sheet 6.97 / 8.54 and on surface-1 7.31 / 7.66.
+
+Not given the label face, by judgement:
+
+- **User-provided names.** Folder and project group headers in the sidebar stay sans in their
+  own case. Uppercasing a name changes what it says (`piano` vs `Piano`, a project called
+  "iOS"), and a name truncates better in a proportional face.
+- **The Settings and Piano titles** at the top of the sidebar stay sans as the app's wordmark.
+- **The delivery chip** beside the model chip stays sans: it only appears while Pi works, and
+  it names a mode rather than a value.
+
+The model chip uppercases the model id for display only (`ALPHA · OFF`); its title and
+accessible name keep the id verbatim, and the model list itself stays in the code mono.
+
+### Links and the selected row
+
+The brand is close to ink (1.67:1 by day, 1.26:1 by night), so prose links are told by their
+underline: a solid underline at 70% brand, `max(1px, 0.075em)` thick and 0.2em below the
+baseline, thickening to `max(2px, 0.12em)` at full brand on hover.
+
+A selected row is no longer a brand tint (evening blue at 12% read as cool grey on the warm
+canvas). `--selected` is parchment: solid `oklch(0.88 0.021 53)` ≈ `#E3D4CB` by day and the night
+brand (parchment) at 14% by night. Selected sidebar sessions and the active Settings section use
+it, with the title at weight 500. Text on it: ink 12.56 / 9.84, ink-2 5.40 / 6.87, ink-3 4.55 /
+5.98, brand 7.53 / 7.81 (day / night, over the canvas). It separates from the canvas by 1.17 /
+1.36 against the hover fill's 1.11 / 1.14, and by hue: warm parchment beside driftwood grey.
+Limitation: over surface-3 at night, ink-3 on the selection drops to 4.13; the sidebar never sits
+on surface-3, so no shipped pairing uses it.
 
 Body text stays 16px, as does the mobile composer.
 Shared UI labels (`text-sm`) are 16px below the shell's 48rem desktop breakpoint and 14px
@@ -149,8 +201,8 @@ font, and narrowing the column would cramp the composer. The 16px body stays.
 ```
 
 Left-aligned throughout. The transcript column is centred at max 48rem; the composer lines up
-with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. One accent
-bar in the sidebar marks the selected session and slides between rows. Rows are 36px with a
+with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. A parchment
+fill marks the selected session. Rows are 36px with a
 pointer and 44px on touch screens.
 
 ## The one memorable element: the keys play
