@@ -45,12 +45,9 @@ chroma is capped so status hues stay earthy, following Earendil's theming princi
   every status passes 4.5:1 as text on canvas and sheet (busy, used only as a glyph, passes 3:1);
   dark-mode lightness keeps them well above that on every layer. `--warning-foreground` is now
   `--brand-ink` in both modes.
-- **Theme switch.** Changing appearance fades the shells' background, text and border colours
-  (body, sidebar, conversation sheet, composer) over `--dur-theme` 350ms with Earendil's
-  `cubic-bezier(0.333, 0, 0.667, 1)`, shorter than Earendil's 900ms so the app never makes you
-  wait. next-themes no longer sets `disableTransitionOnChange`, so controls with their own colour
-  transitions follow at their own tempo; everything else switches at once. Reduced motion disables
-  the fade with every other transition.
+- **Theme switch.** Changing appearance swaps every colour in one frame: next-themes sets
+  `disableTransitionOnChange`. A fade was tried and dropped: inherited text and controls with
+  their own colour transitions faded on different clocks, so text washed out and faded twice.
 
 ### Contrast
 
@@ -97,8 +94,6 @@ Motion tokens, also in `index.css`:
 | `--ease-layout` | `cubic-bezier(0.32, 0.72, 0, 1)` | shared desktop sidebar width |
 | `--ease-enter` | `cubic-bezier(0.22, 1, 0.36, 1)` | every entrance |
 | `--ease-exit` | `ease-out` | every exit |
-| `--dur-theme` | 350ms | light/dark colour fade on the shells |
-| `--ease-theme` | `cubic-bezier(0.333, 0, 0.667, 1)` | light/dark colour fade |
 
 The shared layout refactor promotes the session sidebar's actual 300ms easing to layout tokens.
 The previous 320ms token/documentation did not drive either sidebar: Settings used 200ms linear.
@@ -185,8 +180,9 @@ favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it i
   fallboard, so a pressed key visibly drops away from it. (It began as pixel blocks with 45%
   seams; next to Pi's favicon the seams and thinner keys read too light, so the bars are solid.)
 - **Grid.** The logo glyph is 16×16: a 16×4 fallboard, keys 4 wide and 2 apart, white keys 11
-  long, the black key 7. The `Keys` glyph for rows and the transcript gutter halves it: keys 2 wide
-  and 2 apart, a 2-unit fallboard, white keys 8, black key 5, a 10×11 glyph in a 10×12 box. Boxes
+  long, the black key 7. The `Keys` glyph for rows and the transcript gutter is about 3/4 of it: keys 3
+  wide and 2 apart, a 3-unit fallboard, white keys 8, black key 5, a 13×12 glyph in a 14×12 box.
+  (Halving it to 2-wide keys read too thin beside 14px text.) Boxes
   are rounded up to even sides so a centred glyph never lands on half pixels; the tile sizes the
   glyph to a whole multiple of 16px (`round(57.15%, 16px)`): 1× in the 24px rail and 28px header
   tiles, 2× in the 48px empty-state tile. `shape-rendering: crispEdges` keeps edges sharp.
@@ -202,13 +198,14 @@ favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it i
   16 of 28 units, as in the app, in fixed earth tones: a terracotta `#b86b52` fallboard, sunkissed
   `#e1b06e` white keys and a sage `#a3a473` black key. The apple-touch and maskable icons are
   full-bleed squares; the 192 and 512 icons have a 6/28 corner radius.
-- **Animation.** See the next section. The press steps rather than eases.
+- **Animation.** See the next section. The press eases in and out rather than stepping.
 
 ## The one memorable element: the keys play
 
 The three-key mark is the instrument's live signal. Wherever Pi is working the keys play a scale:
-each key in turn drops 1px below the fallboard and dims to 55% for 360ms, 0.4s apart on a 1.2s
-cycle, stepping rather than easing, and the keys snap back under the fallboard when Pi finishes.
+each key in turn eases 1px below the fallboard, dimming to 55%, and back up, 0.4s apart on a 1.2s
+cycle, so the keys pulse rather than blink, and they rest under the fallboard when Pi finishes.
+(A stepped press was tried and dropped: the hard jumps read as flashing.)
 
 - In the sidebar row, the keys replace the yellow dot while that session streams.
 - In the transcript, the keys are the glyph of the pending reply, with a caret blinking beside

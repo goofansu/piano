@@ -59,7 +59,8 @@ export function PianoMark({ className, playing = false }: Props) {
   );
 }
 
-/** The same keys without the tile, in the current text colour, sized for a glyph gutter or a row. */
+/** The same keys without the tile, in the current text colour, sized for a glyph gutter or a row:
+ * about 3/4 of the mark's 16px glyph, so the keys keep its weight beside 14px text. */
 export function Keys({ className, playing = false }: Props) {
-  return <KeyBars keyWidth={2} gap={2} board={2} white={8} black={5} playing={playing} className={className} />;
+  return <KeyBars keyWidth={3} gap={2} board={3} white={8} black={5} playing={playing} className={className} />;
 }

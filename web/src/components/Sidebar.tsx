@@ -47,7 +47,7 @@ const projectKey = (id: string) => `project:${id}`;
 const row = "h-9 pointer-coarse:h-11";
 /** Row actions live in a fixed slot on the right and appear on hover, so nothing shifts. */
 const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
-const groupRow = cn(row, "reveal-row group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
+const groupRow = cn(row, "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
 const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette, openSettings }: Props) {
@@ -101,16 +101,11 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.registryLoaded, state.projects]);
 
-  // First load is one orchestrated sequence: skeleton rows at once, then the real rows a beat
-  // apart. The stagger applies only to that first reveal, not to every later list change.
-  const [revealing, setRevealing] = useState(true);
-  useEffect(() => {
-    if (!state.registryLoaded) return;
-    const timer = setTimeout(() => setRevealing(false), 700);
-    return () => clearTimeout(timer);
-  }, [state.registryLoaded]);
-  const order = { i: 0 };
-  const reveal = () => (revealing ? ({ "--i": String(order.i++) } as React.CSSProperties) : undefined);
+  // Rows already there when the list first loads appear at once, so a reload does not flash;
+  // a row added later enters. Each row decides when it mounts (`useState(reveal)`).
+  const [settled, setSettled] = useState(false);
+  useEffect(() => { if (state.registryLoaded) setSettled(true); }, [state.registryLoaded]);
+  const reveal = () => (settled ? "reveal-row" : undefined);
 
   const groupProps = { state, send, select, openNew, reveal, onProjectDialog, current };
   const empty = (text: string) => (
@@ -254,7 +249,7 @@ function ListEmpty({ children }: { children: React.ReactNode }) {
 /** Skeleton rows in the real row geometry: a folder line, two session lines, another folder. */
 function SidebarSkeleton() {
   return (
-    <div aria-hidden className="flex flex-col gap-1">
+    <div aria-hidden className="late-enter flex flex-col gap-1">
       {[0, 1].map((group) => (
         <div key={group} className="flex flex-col">
           <div className={cn(row, "flex items-center gap-1.5 pl-1.5")}>
@@ -286,7 +281,7 @@ interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew"
   current: { cwd: string; sessionId: string | null } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  reveal: () => React.CSSProperties | undefined;
+  reveal: () => string | undefined;
 }
 
 type SessionTarget = { cwd: string; sessionId: string; title?: string };
@@ -296,6 +291,7 @@ type SessionActions = ReturnType<typeof useSessionActions>;
 function SessionRow({ t, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
   t: SessionTarget; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
+  const [enter] = useState(reveal);
   const checkoutMissing = state.session?.cwd === t.cwd && state.session.state.checkoutMissing;
   // Live host state comes from the `hosts` broadcast, which changes more often than the folder list.
   const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
@@ -304,8 +300,7 @@ function SessionRow({ t, selected, disabled, hint, state, send, select, actions,
   const dot = done ? "bg-done" : host ? "border border-ok" : null;
   return (
     <li
-      style={reveal()}
-      className={cn(row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-(--selected) hover:bg-(--selected)")}
+      className={cn(row, enter, "group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-(--selected) hover:bg-(--selected)")}
     >
       <button
         type="button"
@@ -368,11 +363,12 @@ function SessionList({ sessions, current, state, send, select, reveal, onProject
 
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
 function ProjectGroup({ project, sessions, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: Project | null; sessions: readonly Member[] }) {
+  const [enter] = useState(reveal);
   const actions = useSessionActions(send, state.connected);
   const members = sessions;
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className={groupRow} style={reveal()}>
+      <div className={cn(groupRow, enter)}>
         <CollapsibleTrigger asChild>
           <button type="button" className={groupTrigger}>
             <Chevron open={open} />
@@ -415,12 +411,13 @@ function ProjectGroup({ project, sessions, current, open, onOpenChange, state, s
 }
 
 function FolderGroup({ folder, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { folder: FolderView }) {
+  const [enter] = useState(reveal);
   const actions = useSessionActions(send, state.connected);
   const [closing, setClosing] = useState(false);
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className={groupRow} style={reveal()}>
+      <div className={cn(groupRow, enter)}>
         <CollapsibleTrigger asChild>
           <button type="button" className={groupTrigger} title={folder.path}>
             <Chevron open={open} />

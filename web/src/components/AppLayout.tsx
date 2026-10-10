@@ -142,7 +142,7 @@ export function AppLayout({ layout, navigation, navigationTitle, content, childr
         </SheetContent>
       </Sheet>
       {/* A viewport landmark, not a shadcn content Card with header/footer padding. */}
-      <main data-slot="layout-main" className="sheet-enter relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">{content}</main>
+      <main data-slot="layout-main" className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1">{content}</main>
       {children}
     </TooltipProvider>
   </SidebarProvider>;

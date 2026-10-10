@@ -238,7 +238,8 @@ function TranscriptSkeleton({ hidden }: { hidden: boolean }) {
   if (hidden && !lingering) return null;
   return (
     <div aria-hidden data-hidden={hidden} className="skeleton-layer absolute inset-0 overflow-hidden bg-conversation px-4 md:px-6">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 py-6 md:py-8">
+      {/* The lines wait like the sidebar's, so a quick load shows the transcript without them. */}
+      <div className="late-enter mx-auto flex w-full max-w-3xl flex-col gap-6 py-6 md:py-8">
         <div className="rounded-2xl border border-line bg-fill px-4 py-3.5">
           <div className="flex gap-3">
             <span className="flex h-[1lh] w-4 items-center justify-center"><Skeleton className="h-3 w-1.5 rounded-sm" /></span>

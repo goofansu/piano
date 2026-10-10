@@ -10,6 +10,18 @@
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a24" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Piano</title>
+    <!-- next-themes applies the theme only once React runs, after the first paint; a page painted
+         light would then fade to dark on every load. Apply its stored choice before that paint. -->
+    <script>
+      // Entrance motion is for changes after load; main.tsx clears this a beat after startup.
+      document.documentElement.dataset.loading = "";
+      try {
+        const stored = localStorage.getItem("theme");
+        const dark = stored === "dark" || (stored !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.add(dark ? "dark" : "light");
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

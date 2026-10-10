@@ -441,26 +441,13 @@
   --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-exit: ease-out;
   --ease-out: var(--ease-enter);
-  /* Switching light and dark fades the shells' colours (Earendil's easing, at an app's tempo). */
-  --dur-theme: 350ms;
-  --ease-theme: cubic-bezier(0.333, 0, 0.667, 1);
-}
-@layer base {
-  body,
-  [data-slot="sidebar-wrapper"],
-  [data-slot="sidebar-inner"],
-  [data-slot="layout-main"] {
-    transition-property: background-color, color, border-color;
-    transition-duration: var(--dur-theme);
-    transition-timing-function: var(--ease-theme);
-  }
 }
 .composer-card {
   border-radius: 1.25rem;
   border: 1px solid var(--line-strong);
   background: var(--surface-1);
   box-shadow: var(--shadow-1);
-  transition: border-color 180ms ease, box-shadow 180ms ease, background-color var(--dur-theme) var(--ease-theme);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 .composer-card[data-dragging="true"] {
   border-color: var(--brand);
@@ -474,6 +461,9 @@
   animation: welcome-enter 420ms var(--ease-enter) both;
 }
 .welcome-composer { animation-delay: 65ms; }
+/* A reload shows the page as it is: no entrance replay while it starts. Zero duration rather than
+ * none, so clearing data-loading later does not start the animation afresh. */
+[data-loading] :is(.welcome-enter, .view-enter) { animation-duration: 0s; animation-delay: 0s; }
 .control-enter { animation: control-enter 180ms var(--ease-enter); }
 /* A jumped-to message announces itself, then settles. */
 .message-highlight { animation: message-highlight 2.2s var(--ease-enter) both; }
@@ -481,15 +471,11 @@
 .disclosure-content[data-state="open"] { animation: disclosure-open 220ms var(--ease-enter); }
 .disclosure-content[data-state="closed"] { animation: disclosure-close 160ms var(--ease-exit); }
 
-/* The main sheet's content fades and rises when the view changes (New ↔ Session, first load). */
+/* The main sheet's content fades and rises when the view changes (New ↔ Session). */
 .view-enter { animation: view-enter var(--dur-enter) var(--ease-enter) both; }
-.sheet-enter { animation: sheet-enter 360ms var(--ease-enter) both; }
-/* Sidebar rows on first load: each one a beat after the last, capped so a long list never waits. */
-.reveal-row {
-  animation: row-enter var(--dur-enter) var(--ease-enter) both;
-  animation-delay: calc(min(var(--i, 0), 8) * 20ms);
-}
-/* A reconnecting notice waits a moment before showing, so a blink of the socket never flashes it. */
+/* A sidebar row added after the list loaded; rows present at load appear at once. */
+.reveal-row { animation: row-enter var(--dur-enter) var(--ease-enter) both; }
+/* A reconnecting notice or loading placeholder waits a moment before showing, so a quick load never flashes it. */
 .late-enter { animation: fade-enter var(--dur-enter) var(--ease-enter) 600ms both; }
 /* A transcript fades in over its skeleton as the skeleton fades out. */
 .transcript-enter { animation: fade-enter var(--dur-enter) var(--ease-enter) both; }
@@ -504,10 +490,6 @@
 }
 @keyframes view-enter {
   from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes sheet-enter {
-  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes row-enter {
@@ -536,18 +518,18 @@
 }
 
 /* The keys. The three-key mark is the instrument's live signal: while Pi works the three keys
- * play a scale, each dropping one pixel below the fallboard and dimming for 360ms in turn, on a
- * 1.2s cycle. The press steps rather than eases. When Pi finishes the
- * animation stops and the keys snap back under the fallboard. In reduced motion the global reset
- * below stops the scale, so the keys hold a still pressed state instead: dropped and dimmed. */
+ * play a scale, each easing one pixel below the fallboard and dimming in turn, on a 1.2s cycle.
+ * The press eases in and out rather than stepping, so the keys pulse instead of blinking. When Pi
+ * finishes the animation stops and the keys rest under the fallboard. In reduced motion the global
+ * reset below stops the scale, so the keys hold a still pressed state instead: dropped and dimmed. */
 .keys[data-playing="true"] [data-key] {
-  animation: key-press 1.2s steps(1, end) infinite;
+  animation: key-press 1.2s ease-in-out infinite;
 }
 .keys[data-playing="true"] [data-key="1"] { animation-delay: 0.4s; }
 .keys[data-playing="true"] [data-key="2"] { animation-delay: 0.8s; }
 @keyframes key-press {
-  0% { transform: translateY(1px); opacity: 0.55; }
-  30%, 100% { transform: translateY(0); opacity: 1; }
+  0%, 60%, 100% { transform: translateY(0); opacity: 1; }
+  25% { transform: translateY(1px); opacity: 0.55; }
 }
 @media (prefers-reduced-motion: reduce) {
   .keys[data-playing="true"] [data-key] { transform: translateY(1px); opacity: 0.6; }
