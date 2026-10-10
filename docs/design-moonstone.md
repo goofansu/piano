@@ -160,11 +160,41 @@ with it. The conversation is an inset sheet with a 1px line and the layer-1 shad
 fill marks the selected session. Rows are 36px with a
 pointer and 44px on touch screens.
 
+## Mark
+
+One mark everywhere: the app's logo tile, the small keys in sidebar rows and the transcript, the
+favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it in the app.
+
+- **Construction.** Solid bars, like Pi's mark: a fallboard across the top and three keys hanging
+  from it, left to right white, black, white, with the black key shorter. Read together it is a
+  keyboard seen from above and a π with one more leg. A 1-unit gap separates the keys from the
+  fallboard, so a pressed key visibly drops away from it. (It began as pixel blocks with 45%
+  seams; next to Pi's favicon the seams and thinner keys read too light, so the bars are solid.)
+- **Grid.** The logo glyph is 16×16: a 16×4 fallboard, keys 4 wide and 2 apart, white keys 11
+  long, the black key 7. The `Keys` glyph for rows and the transcript gutter halves it: keys 2 wide
+  and 2 apart, a 2-unit fallboard, white keys 8, black key 5, a 10×11 glyph in a 10×12 box. Boxes
+  are rounded up to even sides so a centred glyph never lands on half pixels; the tile sizes the
+  glyph to a whole multiple of 16px (`round(57.15%, 16px)`): 1× in the 24px rail and 28px header
+  tiles, 2× in the 48px empty-state tile. `shape-rendering: crispEdges` keeps edges sharp.
+- **Colour.** In the app the mark is one colour from tokens: `currentColor` for the glyph (rows
+  pass `text-brand`), `text-brand-ink` on `bg-brand` for the tile.
+- **Favicon.** `favicon.svg` and `favicon-working.svg` are the 16×16 glyph alone, edge to edge with
+  no tile, as Pi's and Radius's favicons are bare marks (a padded tile left it about half their
+  size in a tab strip). One colour follows the system theme: `#111`, or `#f6f6f6` under
+  `prefers-color-scheme: dark`. A 16px favicon draws one unit per pixel. Working presses the white
+  keys 1 unit (and 1 unit shorter, to stay in the square) at 60%.
+- **App icons.** The home-screen icons (`apple-touch-icon.png` 180, `icon-192.png`, `icon-512.png`,
+  `icon-maskable-512.png`) need a background, so the glyph sits on a warm-black `#2c2825` tile at
+  16 of 28 units, as in the app, in fixed earth tones: a terracotta `#b86b52` fallboard, sunkissed
+  `#e1b06e` white keys and a sage `#a3a473` black key. The apple-touch and maskable icons are
+  full-bleed squares; the 192 and 512 icons have a 6/28 corner radius.
+- **Animation.** See the next section. The press steps rather than eases.
+
 ## The one memorable element: the keys play
 
-The three-key mark is the instrument's live signal. Wherever Pi is working the keys play: a
-staggered, gentle press and release (each key dips 2px and dims, 1.2s cycle, eased), stopping on
-a clean rest when Pi finishes.
+The three-key mark is the instrument's live signal. Wherever Pi is working the keys play a scale:
+each key in turn drops 1px below the fallboard and dims to 55% for 360ms, 0.4s apart on a 1.2s
+cycle, stepping rather than easing, and the keys snap back under the fallboard when Pi finishes.
 
 - In the sidebar row, the keys replace the yellow dot while that session streams.
 - In the transcript, the keys are the glyph of the pending reply, with a caret blinking beside
@@ -172,7 +202,7 @@ a clean rest when Pi finishes.
 - In the collapsed rail, where no rows are visible, the mark plays when any session is working.
 - The browser tab icon switches to a pressed-keys variant while the session on screen works.
 
-In reduced motion the keys hold a static pressed state. This is the only ornament; everything
+In reduced motion the keys hold a static pressed state: dropped 1px and dimmed to 60%. This is the only ornament; everything
 else is structure.
 
 Considered and rejected: playing the header mark whenever any session works while the sidebar is
