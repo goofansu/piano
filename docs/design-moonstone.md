@@ -118,6 +118,17 @@ Mono: Newsreader for headlines, titles and empty states, and Departure Mono in u
 small labels. Four typefaces, two of them monospace, read as busy rather than warm, so both were
 removed; the warmth now comes from the palette alone.
 
+### The selected row
+
+A selected row is no longer a brand tint (evening blue at 12% read as cool grey on the warm
+canvas). `--selected` is parchment: solid `oklch(0.88 0.021 53)` ≈ `#E3D4CB` in light mode and the dark
+brand (parchment) at 14% in dark mode. Selected sidebar sessions and the active Settings section use
+it, with the title at weight 500. Text on it: ink 12.56 / 9.84, ink-2 5.40 / 6.87, ink-3 4.55 /
+5.98, brand 7.53 / 7.81 (light / dark, over the canvas). It separates from the canvas by 1.17 /
+1.36 against the hover fill's 1.11 / 1.14, and by hue: warm parchment beside driftwood grey.
+Limitation: over surface-3 in dark mode, ink-3 on the selection drops to 4.13; the sidebar never sits
+on surface-3, so no shipped pairing uses it.
+
 Body text stays 16px, as does the mobile composer.
 Shared UI labels (`text-sm`) are 16px below the shell's 48rem desktop breakpoint and 14px
 at or above it; captions (`text-xs`)
@@ -145,8 +156,8 @@ font, and narrowing the column would cramp the composer. The 16px body stays.
 ```
 
 Left-aligned throughout. The transcript column is centred at max 48rem; the composer lines up
-with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. One accent
-bar in the sidebar marks the selected session and slides between rows. Rows are 36px with a
+with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. A parchment
+fill marks the selected session. Rows are 36px with a
 pointer and 44px on touch screens.
 
 ## The one memorable element: the keys play
