@@ -229,11 +229,12 @@ export default function App() {
         </LayoutView>
         {settingsOpen && <LayoutView><SettingsPage section={settingsSection} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
       </>}>
+      {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls. */}
       <Toaster
-        position="top-center"
+        position="top-right"
         className="toaster group !absolute"
-        offset={{ top: 16 }}
-        mobileOffset={{ top: 12, left: 16, right: 16 }}
+        offset={{ top: 88, right: 24 }}
+        mobileOffset={{ top: 68, left: 16, right: 16 }}
         visibleToasts={4}
         duration={4000}
         closeButton

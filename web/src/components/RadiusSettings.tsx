@@ -1,11 +1,13 @@
 import type { RadiusSetupState } from "@shared/radius";
 import type { OAuthProvider } from "@shared/wire";
-import { CheckCircle2Icon, ChevronLeftIcon, ExternalLinkIcon, GlobeIcon, RefreshCwIcon, UserRoundIcon, WrenchIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { cn } from "cn";
+import { CheckCircle2Icon, ExternalLinkIcon, GlobeIcon, RefreshCwIcon, UserRoundIcon, WrenchIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
+import { SettingsHeader } from "@/components/SettingsHeader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,6 +17,11 @@ import { Spinner } from "@/components/ui/spinner";
 
 type SetupAction = "configure-mcp" | "install-web-search" | "remove-mcp" | "uninstall-web-search";
 type Removal = { action: "remove-mcp" | "uninstall-web-search"; key: string };
+
+/** One turn of the refresh icon, so a fast refresh still reads as a refresh instead of a flicker. */
+const REFRESH_SPIN_MS = 600;
+/** Setup toasts share an id, so finishing setup replaces the step's toast instead of stacking. */
+const SETUP_TOAST = "radius-setup";
 
 async function setupRequest(action?: SetupAction, signal?: AbortSignal, removalKey?: string): Promise<RadiusSetupState> {
   const response = await fetch("/api/settings/radius", { signal, ...(action ? {
@@ -37,19 +44,26 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const [refreshing, setRefreshing] = useState(true);
   const [login, setLogin] = useState<string>();
   const [removal, setRemoval] = useState<Removal>();
+  const manualRefresh = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     let installing = false;
     const load = async () => {
       setRefreshing(true);
+      const manual = manualRefresh.current;
+      manualRefresh.current = false;
       try {
-        const [next, response] = await Promise.all([setupRequest(undefined, controller.signal), fetch("/api/oauth-providers", { signal: controller.signal })]);
+        const [next, response] = await Promise.all([
+          setupRequest(undefined, controller.signal), fetch("/api/oauth-providers", { signal: controller.signal }),
+          manual && new Promise(resolve => setTimeout(resolve, REFRESH_SPIN_MS)),
+        ]);
         if (!response.ok) throw new Error("Could not load Radius sign-in status.");
         const result = await response.json();
         if (controller.signal.aborted) return;
         setProviders(result.providers); setState(next); setError("");
         installing = next.installation.status === "running";
+        if (manual) toast.success("Radius setup is up to date.", { id: SETUP_TOAST });
       } catch { if (!controller.signal.aborted) setError("Could not refresh Radius setup. Check your connection and try again."); }
       finally { if (!controller.signal.aborted) setRefreshing(false); }
       if (!controller.signal.aborted && installing) timer = setTimeout(load, 1500);
@@ -75,35 +89,41 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
     setBusy(true); setActionError("");
     try {
       setState(await setupRequest(action, undefined, removalKey));
-      if (action === "configure-mcp") toast.success("Radius MCP added. Start a new session to use it.");
-      if (action === "remove-mcp") toast.success("Radius MCP removed for new sessions.");
+      if (action === "configure-mcp") toast.success("Radius MCP added. Start a new session to use it.", { id: SETUP_TOAST });
+      if (action === "remove-mcp") toast.success("Radius MCP removed for new sessions.", { id: SETUP_TOAST });
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not complete setup. Refresh before retrying."); }
     finally { setBusy(false); setRemoval(undefined); setRevision(value => value + 1); }
   };
   const radius = providers.find(provider => provider.id === "radius");
   const installing = state?.installation.status === "running";
   const disabled = busy || signingOut || refreshing || installing || !!error;
-  const configured = radius?.signedIn && state?.mcp.status === "ready" && state.webSearch.status === "ready"
-    && !disabled && !refreshing && !actionError && state.installation.status !== "error";
+  const configured = !!radius?.signedIn && state?.mcp.status === "ready" && state.webSearch.status === "ready"
+    && state.installation.status !== "error";
+  const settled = !!state && !busy && !signingOut && !refreshing && !installing && !error && !actionError;
+  // Announce completion only when setup turns complete here, not each time a complete setup is opened.
+  const wasConfigured = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (!settled) return;
+    if (wasConfigured.current === false && configured) toast.success("All set. New Pi sessions can use Radius tools and web search.", { id: SETUP_TOAST });
+    wasConfigured.current = configured;
+  }, [settled, configured]);
   const signedIn = !!radius?.signedIn;
   const mcpReady = state?.mcp.status === "ready";
   const webSearchReady = state?.webSearch.status === "ready";
-  return <>
-    <header className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="size-11 md:hidden [&_svg:not([class*='size-'])]:size-5" aria-label="Settings" onClick={onMenu}><ChevronLeftIcon /></Button>
-        <h1 id="settings-section-title" className="text-xl font-semibold">Radius</h1>
-        <IconButton className="ml-auto" label="Refresh setup" disabled={busy || signingOut || refreshing} onClick={() => { setActionError(""); setRevision(value => value + 1); }}>
-          {refreshing ? <Spinner /> : <RefreshCwIcon />}
-        </IconButton>
-      </div>
+  return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
+    <SettingsHeader title="Radius" titleId="settings-section-title" onMenu={onMenu}>
+      <IconButton label="Refresh setup" disabled={busy || signingOut || refreshing} onClick={() => { setActionError(""); manualRefresh.current = true; setRevision(value => value + 1); }}>
+          <RefreshCwIcon className={cn(refreshing && "animate-spin [animation-duration:600ms] motion-reduce:animate-none")} />
+      </IconButton>
+    </SettingsHeader>
+    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
+     <section aria-labelledby="settings-section-title" className="mx-auto flex max-w-2xl flex-col gap-6">
       <p className="max-w-prose text-sm text-muted-foreground">
-        {configured ? "All set. New Pi sessions can use Radius tools and web search." : "Sign in once, then choose what Pi can use from Radius."}{" "}
+        Sign in once, then choose what Pi can use from Radius.{" "}
         <a className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline" href="https://radius.earendil.com/docs/extensions" target="_blank" rel="noopener noreferrer">
           Setup guide<ExternalLinkIcon className="size-3.5" aria-hidden />
         </a>
       </p>
-    </header>
     {(error || actionError) && <Alert variant="destructive"><AlertTitle>Radius setup needs attention</AlertTitle><AlertDescription>{error || actionError}</AlertDescription></Alert>}
     {!state ? <div role="status" className="flex flex-col gap-3"><span className="sr-only">Loading Radius setup…</span><Skeleton className="h-20 w-full rounded-xl" /><Skeleton className="h-44 w-full rounded-xl" /></div>
       : <>
@@ -159,6 +179,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         </section>
       </>}
     {state?.installation.status === "error" && <Alert variant="destructive"><AlertTitle>{state.installation.action === "uninstall" ? "Web search was not uninstalled" : "Web search was not installed"}</AlertTitle><AlertDescription>{state.installation.detail}</AlertDescription></Alert>}
+     </section>
+    </div>
     <Dialog open={!!removal} onOpenChange={open => { if (!open && !busy) setRemoval(undefined); }}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onInteractOutside={event => event.preventDefault()}>
         <DialogHeader>
@@ -179,7 +201,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
     </Dialog>
     {confirmSignOut && <ProviderSignOutDialog name="Radius" busy={signingOut} cancel={() => setConfirmSignOut(false)} confirm={() => void signOut()} />}
     {login && <ProviderLoginDialog key={login} initialProvider="radius" providers={providers} close={() => { setLogin(undefined); setRevision(value => value + 1); }} signedIn={refreshProviders} />}
-  </>;
+  </section>;
 }
 
 /** A quiet check beside a title once that part is ready; screen readers hear the label. */

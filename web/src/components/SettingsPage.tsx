@@ -1,5 +1,5 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, ChevronLeftIcon, HomeIcon, PlugIcon, RadiusIcon } from "lucide-react";
+import { AlertCircleIcon, HomeIcon, PlugIcon, RadiusIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
@@ -7,6 +7,7 @@ import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RadiusSettings } from "@/components/RadiusSettings";
+import { SettingsHeader } from "@/components/SettingsHeader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -71,22 +72,11 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
     } finally { setSigningOut(undefined); setSignOutTarget(undefined); }
   };
-  if (section !== "providers") return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
-    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
-      <section aria-labelledby="settings-section-title" className="mx-auto flex max-w-2xl flex-col gap-6">
-        <RadiusSettings onMenu={onMenu} providersChanged={providersChanged} />
-      </section>
-    </div>
-  </section>;
+  if (section !== "providers") return <RadiusSettings onMenu={onMenu} providersChanged={providersChanged} />;
   return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
+      <SettingsHeader title="Providers" titleId="settings-providers-title" onMenu={onMenu} />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
         <section id="settings-providers" aria-labelledby="settings-providers-title" className="mx-auto flex max-w-2xl flex-col gap-6">
-          <header className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="size-11 md:hidden [&_svg:not([class*='size-'])]:size-5" aria-label="Settings" onClick={onMenu}><ChevronLeftIcon /></Button>
-              <h1 id="settings-providers-title" className="text-xl font-semibold">Providers</h1>
-            </div>
-          </header>
           {error ? <Alert variant="destructive">
             <AlertCircleIcon />
             <AlertTitle>Could not load providers</AlertTitle>
