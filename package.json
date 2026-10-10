@@ -8,7 +8,7 @@
     "start": "node server/main.ts",
     "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "node --watch server/main.ts",
-    "dev:web": "npm --prefix web run dev",
+    "dev:web": "npm --prefix web run dev --",
     "build": "npm --prefix web run build",
     "test": "node --test --import ./test/setup.ts 'test/**/*.test.ts'",
     "typecheck": "tsc -p tsconfig.json && npm --prefix web run typecheck",
