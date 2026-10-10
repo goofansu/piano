@@ -17,11 +17,11 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
   const target = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title } : undefined;
   const workspace = sessionWorkspace(state);
   const cwd = session?.cwd ?? state.pendingCreate?.cwd;
-  // Zed's form: `folder ⇄ worktree / ⑂ branch`; a session in the folder itself has no worktree segment.
+  // Zed's form: `folder ⇄ worktree / ⑂ branch`; the folder's own checkout is the `main` worktree.
   const owner = state.folders.find(f => f.worktrees.some(w => w.path === cwd));
   const checkout = owner?.worktrees.find(w => w.path === cwd);
   const folder = owner?.name ?? cwd?.split("/").pop() ?? "";
-  const worktree = checkout && !checkout.root ? worktreeName(folder, checkout.path) : undefined;
+  const worktree = checkout && (checkout.root ? "main" : worktreeName(folder, checkout.path));
   return <>
     {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
     <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 md:px-6">
