@@ -130,12 +130,9 @@ export const AppRouter = HttpRouter.use((router) =>
         const params = new URL(request.url, "http://localhost").searchParams;
         const workspaceId = params.get("workspaceId"), sessionId = params.get("sessionId");
         if (!workspaceId || !sessionId) return json({ error: "Workspace and session IDs are required." }, 400);
-        const registry = yield* (yield* Registry).get;
-        const workspace = registry.workspaces.find(w => w.id === workspaceId);
-        if (!workspace || !registry.sessions.some(s => s.cwd === workspace.path && s.sessionId === sessionId)) {
-          return json({ error: "Session is not registered in this workspace. Refresh the session list." }, 404);
-        }
-        const cwd = workspace.path;
+        const found = yield* (yield* Registry).sessionIn(workspaceId, sessionId).pipe(Effect.result);
+        if (found._tag === "Failure") return json({ error: found.failure.detail }, 404);
+        const cwd = found.success.workspace.path;
         const prs = yield* SessionPullRequests;
         if (method === "GET") return json(yield* prs.get(cwd, sessionId));
         const body = yield* request.text;
@@ -151,9 +148,10 @@ export const AppRouter = HttpRouter.use((router) =>
     for (const endpoint of ["changes", "changes/file"] as const) {
       yield* router.add("POST", `/api/workspace/${endpoint}`, Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId");
-        const workspace = (yield* (yield* Registry).get).workspaces.find(w => w.id === id);
-        if (!workspace) return json({ error: "Workspace is not registered. Refresh the folder list." }, 404);
+        const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId") ?? "";
+        const found = yield* (yield* Registry).workspace(id).pipe(Effect.result);
+        if (found._tag === "Failure") return json({ error: found.failure.detail }, 404);
+        const workspace = found.success;
         const body = endpoint === "changes/file" ? yield* readBody : undefined;
         if (body && typeof body.path !== "string") return json({ error: "File path is required in the request body." }, 400);
         return json(yield* (yield* WorkspaceChanges).preview(workspace, body?.path as string | undefined));
@@ -162,10 +160,10 @@ export const AppRouter = HttpRouter.use((router) =>
 
     yield* router.add("POST", "/api/workspace/capture", Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
-      const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId");
-      const workspace = (yield* (yield* Registry).get).workspaces.find(w => w.id === id);
-      if (!workspace) return json({ error: "Workspace is not registered. Refresh the folder list." }, 404);
-      return json(yield* (yield* WorkspaceRevisions).capture(workspace));
+      const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId") ?? "";
+      const found = yield* (yield* Registry).workspace(id).pipe(Effect.result);
+      if (found._tag === "Failure") return json({ error: found.failure.detail }, 404);
+      return json(yield* (yield* WorkspaceRevisions).capture(found.success));
     }));
 
     yield* router.add("GET", "/api/image-previews/:id", Effect.gen(function* () {

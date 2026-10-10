@@ -20,6 +20,7 @@ import { AppRouter } from "./Router.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
 import { WorkspaceChangesLive } from "./WorkspaceChanges.ts";
+import { WorkspaceCommandsLive } from "./WorkspaceCommands.ts";
 import { WorkspaceRevisionsLive } from "./WorkspaceRevisions.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
@@ -46,12 +47,13 @@ process.once("SIGTERM", drain);
 const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds" });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive, BroadcastLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
+const Services = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive, BroadcastLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
   Layer.provideMerge(CatalogLive),
   Layer.provideMerge(RegistryLive),
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),
 );
+const Core = WorkspaceCommandsLive.pipe(Layer.provideMerge(Services));
 
 const Routes = Layer.mergeAll(AppRouter, HttpStaticServer.layer({ root: WEB_DIST, index: "index.html", spa: true }), Drain);
 

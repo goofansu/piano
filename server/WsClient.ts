@@ -2,7 +2,7 @@
  * One browser client. Decodes ClientMessages from the socket, keeps the
  * client's selected session, and forwards SessionEvents from the attached
  * PiSession as ServerMessages. The session module already speaks the wire
- * vocabulary, so this is mostly routing.
+ * vocabulary, so this is mostly routing; domain steps live in WorkspaceCommands.
  */
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
@@ -27,7 +27,8 @@ import { Registry } from "./Registry.ts";
 import { emptySnapshot } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { buildFolders, buildSessionReferences } from "./Views.ts";
-import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
+import { WorkspaceCommands } from "./WorkspaceCommands.ts";
+import { listWorktrees } from "./Worktrees.ts";
 
 const describe = (e: unknown): string => {
   if (e && typeof e === "object") {
@@ -43,6 +44,7 @@ export const handleSocket = (socket: Socket.Socket) =>
     const catalog = yield* Catalog;
     const broadcast = yield* Broadcast;
     const registry = yield* Registry;
+    const commands = yield* WorkspaceCommands;
     const reader = yield* socket.reader;
     const writer = yield* socket.writer;
 
@@ -118,19 +120,28 @@ export const handleSocket = (socket: Socket.Socket) =>
       }));
     });
 
-    const start = (selection: Selection, options: StartOptions) =>
+    // Caller holds navigation.
+    const attachOpened = <E>(selectionId: string, open: Effect.Effect<PiSession, E>) =>
       Effect.gen(function* () {
-        const create = selection.sessionId === null;
-        const { cwd } = selection;
-        const sessionId = selection.sessionId ?? randomUUID();
-        const session = yield* hosts.open({ cwd, sessionId, create, model: options.model, thinkingLevel: options.thinkingLevel, name: options.name });
+        const session = yield* open;
+        const selection = { cwd: session.spec.cwd, sessionId: session.spec.sessionId, selectionId };
         if (current(selection)) {
-          selected = { cwd: session.spec.cwd, sessionId, selectionId: selection.selectionId };
+          selected = selection;
           yield* attachTo(session, selection);
         }
         yield* publishRegistry;
         return session;
       });
+    const start = (selection: Selection, options: StartOptions) => attachOpened(selection.selectionId, hosts.open({
+      cwd: selection.cwd, sessionId: selection.sessionId ?? randomUUID(), create: selection.sessionId === null,
+      model: options.model, thinkingLevel: options.thinkingLevel, name: options.name,
+    }));
+    const deselect = (cwd: string, sessionId: string) => Effect.suspend(() => {
+      if (selected?.cwd !== cwd || selected.sessionId !== sessionId) return Effect.void;
+      const selectionId = selected.selectionId;
+      selected = null;
+      return send({ _tag: "selected", selectionId, cursor: null, cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
+    });
 
     const handle = (msg: ClientMessage) =>
       Effect.gen(function* () {
@@ -138,8 +149,9 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "registry":
             return yield* publishRegistry;
           case "worktrees": {
-            const discovery = (yield* registry.get).folders.includes(msg.folder) ? yield* listWorktrees(msg.folder)
-              : { status: "error" as const, observedAt: new Date().toISOString(), detail: "Select a registered folder first." };
+            const discovery = yield* registry.requireFolder(msg.folder).pipe(
+              Effect.andThen(listWorktrees(msg.folder)),
+              Effect.catchTag("RegistryLookupError", e => Effect.succeed({ status: "error" as const, observedAt: new Date().toISOString(), detail: e.detail })));
             return yield* send({ _tag: "worktrees", folder: msg.folder, discovery });
           }
           case "models": {
@@ -176,23 +188,12 @@ export const handleSocket = (socket: Socket.Socket) =>
           }
           case "create_worktree":
           case "add_worktree": {
-            yield* Effect.gen(function* () {
-              if (!(yield* registry.get).folders.includes(msg.folder)) return yield* new WorktreeError({ detail: "Select a registered folder first." });
-              const result = msg._tag === "create_worktree"
-                ? yield* createWorktree(msg.folder, msg.branch.trim(), { hooks: msg.hooks }).pipe(Effect.map(w => ({
-                    status: "ready" as const, folder: msg.folder, path: w.path, branch: w.branch,
-                    creation: { baseBranch: w.baseBranch, hooks: w.hooks },
-                  })))
-                : yield* Effect.gen(function* () {
-                    const discovery = yield* listWorktrees(msg.folder);
-                    if (discovery.status !== "ready") return yield* new WorktreeError({ detail: discovery.status === "error" ? discovery.detail : "This folder is non-Git." });
-                    const w = discovery.worktrees.find(w => w.path === msg.path);
-                    if (!w || w.prunable) return yield* new WorktreeError({ detail: "This checkout is absent or unavailable. Refresh discovery and inspect it before selecting." });
-                    return { status: "ready" as const, folder: msg.folder, path: w.path, branch: w.branch };
-                  });
-              if (result.path !== msg.folder) yield* registry.addWorktree({ folder: msg.folder, path: result.path, branch: result.branch ?? "" });
-              yield* send({ _tag: "worktree_result", requestId: msg.requestId, result });
-            }).pipe(Effect.catchTag("WorktreeError", e => send({ _tag: "worktree_result", requestId: msg.requestId, result: { status: "error", detail: e.detail } })));
+            yield* (msg._tag === "create_worktree"
+              ? commands.createWorktree(msg.folder, msg.branch, { hooks: msg.hooks })
+              : commands.addWorktree(msg.folder, msg.path)
+            ).pipe(
+              Effect.flatMap(result => send({ _tag: "worktree_result", requestId: msg.requestId, result })),
+              Effect.catchTag("WorktreeError", e => send({ _tag: "worktree_result", requestId: msg.requestId, result: { status: "error", detail: e.detail } })));
             // Failure may have left a checkout behind. Refresh rather than retrying a mutation.
             return yield* publishRegistry;
           }
@@ -202,20 +203,11 @@ export const handleSocket = (socket: Socket.Socket) =>
             return yield* delivery.ack(msg.deliveryId);
           case "select":
             return yield* show(msg);
-          case "create_session": {
-            if (msg.projectId && !(yield* registry.get).projects.some(p => p.id === msg.projectId && !p.archived)) return yield* Effect.fail(new Error("Project is unavailable or archived. Choose a current project before starting."));
-            const cwd = yield* registry.ensureFolder(msg.cwd);
-            const session = yield* Semaphore.withPermits(navigation, 1)(start({ cwd, sessionId: null, selectionId: msg.selectionId }, msg.options));
-            if (msg.projectId) {
-              yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, msg.projectId);
-              yield* publishRegistry;
-            }
-            const text = msg.text?.trim() ?? "";
-            if (!text && !msg.attachments?.length) return;
-            yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, text);
-            yield* publishRegistry;
-            return yield* session.act({ _tag: "prompt", text, attachments: msg.attachments });
-          }
+          case "create_session":
+            return yield* commands.createSession(
+              { cwd: msg.cwd, projectId: msg.projectId, options: msg.options, text: msg.text, attachments: msg.attachments },
+              { attach: open => Semaphore.withPermits(navigation, 1)(attachOpened(msg.selectionId, open)), published: publishRegistry },
+            );
           case "act": {
             const session = yield* Semaphore.withPermits(navigation, 1)(Effect.gen(function* () {
               if (!selected || selected.selectionId !== msg.selectionId) return yield* Effect.fail(new Error("Selection changed; inspect the current session before acting."));
@@ -231,34 +223,16 @@ export const handleSocket = (socket: Socket.Socket) =>
             if (result) yield* send({ _tag: "action_result", cwd: session.spec.cwd, sessionId: session.spec.sessionId, result });
             return;
           }
+          case "rename_session":
+            yield* commands.renameSession(msg.cwd, msg.sessionId, msg.title);
+            return yield* publishRegistry;
+          case "archive_session":
           case "delete_session": {
+            const mode = msg._tag === "delete_session" ? "delete" : "archive";
             yield* detachSession(msg.cwd, msg.sessionId);
-            yield* hosts.delete(msg.cwd, msg.sessionId);
-            if (selected?.cwd === msg.cwd && selected.sessionId === msg.sessionId) {
-              const selectionId = selected.selectionId;
-              selected = null;
-              yield* send({ _tag: "selected", selectionId, cursor: null, cwd: msg.cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
-            }
-            yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
-            return yield* publishRegistry;
-          }
-          case "rename_session": {
-            // The name belongs to Pi's history, so a stopped session is started for it; the host
-            // releases it again when idle. The registry title follows what Pi recorded.
-            const session = (yield* hosts.get(msg.cwd, msg.sessionId)) ?? (yield* hosts.open({ cwd: msg.cwd, sessionId: msg.sessionId }));
-            yield* session.act({ _tag: "set_name", name: msg.title });
-            const state = yield* session.state;
-            yield* registry.renameSession(session.spec.cwd, session.spec.sessionId, state.sessionName ?? msg.title);
-            return yield* publishRegistry;
-          }
-          case "archive_session": {
-            yield* detachSession(msg.cwd, msg.sessionId);
-            yield* hosts.archive(msg.cwd, msg.sessionId);
-            if (selected?.cwd === msg.cwd && selected.sessionId === msg.sessionId) {
-              const selectionId = selected.selectionId;
-              selected = null;
-              yield* send({ _tag: "selected", selectionId, cursor: null, cwd: msg.cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
-            }
+            yield* commands.retireSession(msg.cwd, msg.sessionId, mode);
+            yield* deselect(msg.cwd, msg.sessionId);
+            if (mode === "delete") yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
             return yield* publishRegistry;
           }
         }
