@@ -98,9 +98,9 @@ try {
   await ab('set', 'viewport', '1280', '900'); await ab('open', `${frontendUrl}/s/work`);
   await ab('wait', '--text', 'These are not session deliverables.'); await waitBadge(42);
   observations.metadataLayout = await evaluate(`(() => {
-    const [path, branch] = document.querySelectorAll('header p[title]');
+    const [path, branch] = document.querySelectorAll('main header p');
     const pr = document.querySelector(${JSON.stringify(badge(42))}).getBoundingClientRect();
-    return { folder: path.textContent.replace('Working directory: ', ''), branch: branch.title,
+    return { folder: path.textContent.replace('Working directory: ', ''), branch: branch.textContent.replace('Git branch: ', ''),
       truncated: [...branch.querySelectorAll('span')].some(s => s.scrollWidth > s.clientWidth),
       readable: path.getBoundingClientRect().width >= 48 && branch.getBoundingClientRect().width >= 48,
       clearOfPR: branch.getBoundingClientRect().right <= pr.left };
@@ -158,7 +158,7 @@ try {
   observations.desktopPR = await evaluate(`(() => {
     const button = document.querySelector(${JSON.stringify(badge(42))}), r = button.getBoundingClientRect();
     const title = document.querySelector('header h1').getBoundingClientRect();
-    const metadata = document.querySelector('header p[title]').getBoundingClientRect();
+    const metadata = document.querySelector('main header p').getBoundingClientRect();
     return { height: r.height, center: r.top + r.height / 2, rowsCenter: (title.top + metadata.bottom) / 2, icons: button.querySelectorAll('svg').length };
   })()`);
   assert.equal(observations.desktopPR.height, 40);
@@ -280,7 +280,7 @@ try {
   await closeDetails(); await openDetails(); await ab('wait', '--text', 'Explicitly linked work'); await closeDetails();
   await ab('set', 'viewport', '390', '844');
   await ab('wait', '--fn', `document.querySelector('header [data-slot="popover-trigger"]').getBoundingClientRect().height === 24`);
-  assert.ok(await evaluate(`(() => { const r = document.querySelector('header [data-slot="popover-trigger"]').getBoundingClientRect(), m = document.querySelector('header p[title]').getBoundingClientRect(); return Math.abs((r.top + r.bottom) / 2 - (m.top + m.bottom) / 2) < 2; })()`), 'Mobile PR remains compact beside metadata');
+  assert.ok(await evaluate(`(() => { const r = document.querySelector('header [data-slot="popover-trigger"]').getBoundingClientRect(), m = document.querySelector('main header p').getBoundingClientRect(); return Math.abs((r.top + r.bottom) / 2 - (m.top + m.bottom) / 2) < 2; })()`), 'Mobile PR remains compact beside metadata');
   await openDetails();
   await ab('wait', '--text', 'Explicitly linked work');
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true);

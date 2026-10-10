@@ -114,7 +114,7 @@ try {
     })).observe(document.body, { childList: true, subtree: true }); true`);
   for (const [width, height] of [[1280, 900], [390, 844], [320, 700]]) {
     await ab('set', 'viewport', String(width), String(height));
-    assert.equal(await evaluate(`document.querySelector('main header p[title]').textContent.startsWith('Working directory: ')`), true);
+    assert.equal(await evaluate(`document.querySelector('main header p').textContent.startsWith('Working directory: ')`), true);
     assert.ok(await evaluate(`(() => {
       const create = document.querySelector('main header [aria-label="New session here"]').getBoundingClientRect();
       const menu = document.querySelector('[aria-label="Session information and actions"]').getBoundingClientRect();

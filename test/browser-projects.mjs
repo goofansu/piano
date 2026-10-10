@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readRegistry, seedRegistry } from './fixtures/registry.ts';
 
@@ -156,7 +156,7 @@ try {
   for (const [title, cwd, id, marker, other] of [['API session', api, 'one', 'API CHANGE', 'WEB CHANGE'], ['Web session', web, 'two', 'WEB CHANGE', 'API CHANGE']]) {
     await button(title);
     await ab('wait', '--text', `History ${id}`);
-    assert.equal(await evaluate(`[...document.querySelectorAll('header p[title]')].find(p => p.textContent.startsWith('Working directory'))?.title`), cwd);
+    assert.equal(await evaluate(`[...document.querySelectorAll('main header p')].find(p => p.textContent.startsWith('Working directory'))?.textContent`), `Working directory: ${basename(cwd)}`);
     assert.equal(await evaluate(`document.querySelector('header button.text-brand')?.textContent`), 'Launch subscriptions');
     await palette('Changes'); await ab('click', '[cmdk-item][data-value="Changes"]'); await ab('wait', '--text', marker);
     assert.equal(await evaluate(`document.querySelector('[role="dialog"]').textContent.includes(${JSON.stringify(other)})`), false);
@@ -215,7 +215,7 @@ try {
   assert.equal(member('one').projectId, project('Subscriptions').id);
   await groupBy('Project'); await ab('wait', '--text', 'No project');
   await button('API session'); await ab('wait', '--text', 'History one');
-  assert.equal(await evaluate(`[...document.querySelectorAll('header p[title]')].find(p => p.textContent.startsWith('Working directory'))?.title`), api);
+  assert.equal(await evaluate(`[...document.querySelectorAll('main header p')].find(p => p.textContent.startsWith('Working directory'))?.textContent`), `Working directory: ${basename(api)}`);
   await ab('reload'); await ab('wait', '--text', 'History one');
   // Explicit unavailable members, never silently removed or recreated.
   rmSync(join(sessions, 'two.jsonl'));
