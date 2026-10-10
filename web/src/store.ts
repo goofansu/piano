@@ -170,7 +170,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "models":
       return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
     case "catalogs_invalidated":
-      return { ...s, catalogs: {}, catalogRevision: s.catalogRevision + 1 };
+      // Views re-probe on the revision; the old catalog stays until its replacement arrives, so open pickers do not flash empty.
+      return { ...s, catalogRevision: s.catalogRevision + 1 };
     case "trust":
       return { ...s, trusts: { ...s.trusts, [m.cwd]: m.trust } };
     case "worktree_result":

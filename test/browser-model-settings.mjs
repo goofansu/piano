@@ -88,10 +88,17 @@ try {
   await ab('find', 'role', 'radio', 'click', '--name', 'high', '--exact');
   assert.deepEqual(await defaultButton(), { text: 'Use for new sessions', disabled: false });
   assert.equal(stored().defaultModel, undefined, 'choosing does not save');
+  await evaluate(`(() => {
+    window.pickerFlashes = [];
+    const check = () => { for (const text of ['Loading models', 'No model matches.']) if (document.body.innerText.includes(text)) window.pickerFlashes.push(text); };
+    new MutationObserver(check).observe(document.body, { subtree: true, childList: true, characterData: true });
+    return true;
+  })()`);
   await button('Use for new sessions'); await ab('wait', '--text', 'Defaults saved for new sessions.');
   assert.deepEqual({ provider: stored().defaultProvider, model: stored().defaultModel, effort: stored().defaultThinkingLevel, theme: stored().theme }, { provider: 'piano-phase0', model: 'project', effort: 'high', theme: 'dark' });
   assert.ok(invalidations > 0, 'other clients receive catalog invalidation');
   await ab('wait', '--fn', `[...document.querySelectorAll('[aria-label="Model and effort"] button')].some(b => b.textContent === 'Default for new sessions' && b.disabled)`);
+  assert.deepEqual(await evaluate('window.pickerFlashes'), [], 'saving a default keeps the open picker populated while catalogs re-probe');
   await ab('screenshot', join(evidence, '01-saved-desktop.png'));
   await ab('press', 'Escape');
   // The saved default survives reload as the new-session selection.
