@@ -17,6 +17,14 @@ export class RegistryError extends Data.TaggedError("RegistryError")<{ readonly 
   override get message() { return this.detail; }
 }
 
+/** A typed lookup miss. `detail` is the text shown to the person. */
+export class RegistryLookupError extends Data.TaggedError("RegistryLookupError")<{
+  readonly subject: "workspace" | "session" | "folder" | "project";
+  readonly detail: string;
+}> {
+  override get message() { return this.detail; }
+}
+
 export interface WorktreeEntry {
   readonly folder: string;
   readonly path: string;
@@ -90,6 +98,14 @@ export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
+    /** The registered workspace with this ID. */
+    readonly workspace: (id: string) => Effect.Effect<Workspace, RegistryLookupError>;
+    /** A session reference registered at this workspace's exact path. */
+    readonly sessionIn: (workspaceId: string, sessionId: string) => Effect.Effect<{ readonly workspace: Workspace; readonly session: SessionEntry }, RegistryLookupError>;
+    /** Succeeds only for a folder the person added (exact path spelling). */
+    readonly requireFolder: (path: string) => Effect.Effect<void, RegistryLookupError>;
+    /** A known project that is not archived. */
+    readonly requireActiveProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
     readonly saveProject: (project: Omit<Project, "archived">) => Effect.Effect<void, RegistryError>;
     readonly archiveProject: (id: string, archived: boolean) => Effect.Effect<void, RegistryError>;
     readonly assignProject: (cwd: string, sessionId: string, projectId: string | null) => Effect.Effect<void, RegistryError>;
@@ -136,8 +152,27 @@ export const RegistryLive = Layer.effect(
     const now = () => new Date().toISOString();
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) => t.cwd === cwd && t.sessionId === sessionId;
 
+    const workspace = (id: string) => Effect.flatMap(Ref.get(state), d => {
+      const found = d.workspaces.find(w => w.id === id);
+      return found ? Effect.succeed(found) : Effect.fail(new RegistryLookupError({ subject: "workspace", detail: "Workspace is not registered. Refresh the folder list." }));
+    });
+
     return Registry.of({
       get: Ref.get(state),
+      workspace,
+      sessionIn: (workspaceId, sessionId) => Effect.flatMap(Ref.get(state), d => {
+        const found = d.workspaces.find(w => w.id === workspaceId);
+        const session = found && d.sessions.find(isSession(found.path, sessionId));
+        return found && session ? Effect.succeed({ workspace: found, session })
+          : Effect.fail(new RegistryLookupError({ subject: "session", detail: "Session is not registered in this workspace. Refresh the session list." }));
+      }),
+      requireFolder: path => Effect.flatMap(Ref.get(state), d => d.folders.includes(path) ? Effect.void
+        : Effect.fail(new RegistryLookupError({ subject: "folder", detail: "Select a registered folder first." }))),
+      requireActiveProject: id => Effect.flatMap(Ref.get(state), d => {
+        const project = d.projects.find(p => p.id === id && !p.archived);
+        return project ? Effect.succeed(project)
+          : Effect.fail(new RegistryLookupError({ subject: "project", detail: "Project is unavailable or archived. Choose a current project before starting." }));
+      }),
       saveProject: project => update(d => {
         const parsed = Schema.decodeUnknownSync(Project)({ ...project, archived: d.projects.find(p => p.id === project.id)?.archived ?? false });
         if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
