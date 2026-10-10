@@ -302,7 +302,7 @@ function SessionRow({ t, metadata, showProject = true, selected, disabled, hint,
   // Live host state comes from the `hosts` broadcast, which changes more often than the folder list.
   const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
   const done = state.done.includes(sessionKey(t));
-  // The keys play while the session works; afterwards Herdr's dots: teal done, hollow green idle, nothing when no process.
+  // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
   const dot = done ? "bg-done" : host ? "border border-ok" : null;
   return (
     <li

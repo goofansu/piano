@@ -1,41 +1,90 @@
-# Theme "Felt": Linear's motion discipline on Piano's ivory and warm charcoal
+# Theme "Moonstone": Lefos's warm palette on Felt's motion discipline
 
-Branch `design/felt`. Reference product: Linear. The theme keeps Piano's palette family and
-wins on motion, hierarchy and keyboard flow. Every state change is answered by motion that
-explains what changed, at a tempo that never makes you wait.
+Moonstone makes Piano warm, cozy and friendly in the manner of Earendil's products (earendil.com,
+lefos.com, pi.dev) while keeping the quiet UI. It replaces the earlier "Felt" palette (ivory, warm
+charcoal and a felt-green accent) and keeps Felt's motion, hierarchy and keyboard flow, described
+below. Colours derive from the Lefos palette; `web/src/index.css` is authoritative.
 
-## Tokens
+## Palette
 
-Colour stays in the existing family; `web/src/index.css` is authoritative. The light palette
-is unchanged. Night's sRGB approximations below describe the warm-charcoal refinement, not
-an inversion of the light theme.
+Lightness is set by contrast (WCAG 4.5:1 for text, 3:1 for glyphs and meaningful edges) and
+chroma is capped so status hues stay earthy, following Earendil's theming principle.
 
 | Token | Day | Night | Role |
 | --- | --- | --- | --- |
-| `--surface-0` canvas | `oklch(0.967 0.006 85)` | `oklch(0.195 0.004 75)` ≈ `#161513` | sidebar and shell |
-| `--conversation` sheet | `oklch(0.995 0.002 85)` | `oklch(0.225 0.005 75)` ≈ `#1D1B19` | the inset conversation sheet |
-| `--surface-1` | `#FFFFFF` | `oklch(0.255 0.006 75)` ≈ `#252220` | composer and card surfaces |
-| `--surface-2` | `#FFFFFF` | `oklch(0.28 0.007 75)` ≈ `#2B2825` | menus, popovers, the palette |
-| `--surface-3` | `#FFFFFF` | `oklch(0.3 0.007 75)` ≈ `#302D2A` | dialogs and mobile navigation |
-| `--ink` | `oklch(0.22 0.01 85)` | `oklch(0.91 0.012 85)` ≈ `#E5E1D9` | soft ivory text |
-| `--ink-2` | `oklch(0.5 0.012 85)` | `oklch(0.78 0.012 85)` ≈ `#BBB7AF` | secondary text |
-| `--ink-3` | `oklch(0.6 0.012 85)` | `oklch(0.725 0.012 85)` ≈ `#A9A69E` | tertiary text, glyphs |
-| `--brand` felt green | `oklch(0.52 0.1 160)` | `oklch(0.75 0.09 160)` ≈ `#79C09A` | focus ring, send key, live state, selection and keys |
+| `--surface-0` canvas | moonstone `oklch(0.93 0.006 60)` ≈ `#EBE7E4` | midnight `oklch(0.215 0.022 257)` ≈ `#131A24` | sidebar and shell |
+| `--conversation` sheet | warm white `oklch(0.962 0.004 75)` ≈ `#F4F2EF` | `oklch(0.25 0.022 257)` ≈ `#1B222C` | the inset conversation sheet |
+| `--surface-1` | `oklch(0.978 0.004 75)` ≈ `#F9F7F5` | `oklch(0.285 0.024 257)` ≈ `#232B36` | composer, inputs, user prompts |
+| `--surface-2` | `oklch(0.985 0.004 75)` ≈ `#FCFAF7` | evening blue `oklch(0.31 0.024 257)` ≈ `#29313D` | menus, popovers, the palette |
+| `--surface-3` | `oklch(0.99 0.003 75)` ≈ `#FDFBFA` | `oklch(0.33 0.024 257)` ≈ `#2E3642` | dialogs and mobile navigation |
+| `--line` / `--line-strong` | driftwood at 14% / 24% | parchment at 10% / 18% | edges |
+| `--fill` / `-hover` / `-active` | driftwood at 6% / 8% / 10% | parchment at 4% / 6% / 8% | quiet fills, selected rows |
+| `--ink` | warm black `oklch(0.2 0.007 60)` ≈ `#181513` | warm-10 `oklch(0.91 0.006 68)` ≈ `#E4E1DD` | text |
+| `--ink-2` | warm-40 `oklch(0.44 0.012 62)` ≈ `#58514C` | `oklch(0.8 0.012 62)` ≈ `#C4BCB6` | secondary text |
+| `--ink-3` | warm-30, darkened: `oklch(0.48 0.012 62)` ≈ `#635C57` | `oklch(0.76 0.014 60)` ≈ `#B8AFA8` | tertiary text, glyphs |
+| `--brand` the one colour | evening blue `oklch(0.36 0.05 257)` ≈ `#2C3E57` | parchment `oklch(0.84 0.04 55)` ≈ `#E0C4B2` | focus ring, send key, live state, selection |
+| `--busy` working | sunkissed `oklch(0.58 0.105 75)` ≈ `#9E7027` | `oklch(0.8 0.1 76)` ≈ `#E3B572` | working session |
+| `--done` | tidal blue `oklch(0.5 0.06 232)` ≈ `#3E6980` | `oklch(0.75 0.06 232)` ≈ `#88B5CE` | finished, unseen |
+| `--ok` idle/success | sage `oklch(0.5 0.07 118)` ≈ `#606939` | `oklch(0.76 0.07 112)` ≈ `#B2B682` | idle, success |
+| `--warn` | ochre `oklch(0.52 0.11 62)` ≈ `#955816` | `oklch(0.78 0.11 62)` ≈ `#EAA76B` | warnings |
+| `--err` | terracotta `oklch(0.48 0.12 33)` ≈ `#953F2E` | `oklch(0.74 0.11 33)` ≈ `#E7907D` | errors, destructive |
+| `--merged` | dusk lilac `oklch(0.5 0.07 320)` ≈ `#75567C` | `oklch(0.76 0.07 320)` ≈ `#C5A3CD` | merged pull requests |
+| `--scrim` | umber at 38% | midnight at 62% | behind dialogs and the phone sheet |
 
-### Dark palette rationale
+- **Day.** A moonstone canvas holds a warm-white sheet; layers 1–3 are warm near-whites that
+  lighten as they rise, never pure white, so the composer and menus still separate from the
+  sheet. Lines and fills are driftwood; shadows are umber-tinted rather than neutral grey.
+- **Night.** Lefos's night: a midnight canvas, evening-blue layers and warm parchment ink.
+  Elevation still adds lightness. Shadows deepen toward midnight; inset highlights are parchment.
+- **The one colour.** Felt green is retired. The accent is Lefos's own day/night pair: evening
+  blue by day (lifted one step from `#252F3D` so it reads as blue beside warm-black ink) and
+  parchment by night (the warm light Lefos sets on evening blue). It still means "live": the send
+  key, focus ring, selection, links and the streaming caret. `--brand-ink` is the opposite
+  surface, so the send key reads in both modes (9.96:1 by day, 10.63:1 by night).
+- **States** keep Herdr's meanings with Lefos's earth accents. Day lightness is dropped until
+  every status passes 4.5:1 as text on canvas and sheet (busy, used only as a glyph, passes 3:1);
+  night lightness keeps them well above that on every layer. `--warning-foreground` is now
+  `--brand-ink` in both modes.
+- **Theme switch.** Changing appearance fades the shells' background, text and border colours
+  (body, sidebar, conversation sheet, composer) over `--dur-theme` 350ms with Earendil's
+  `cubic-bezier(0.333, 0, 0.667, 1)`, shorter than Earendil's 900ms so the app never makes you
+  wait. next-themes no longer sets `disableTransitionOnChange`, so controls with their own colour
+  transitions follow at their own tempo; everything else switches at once. Reduced motion disables
+  the fade with every other transition.
 
-- **Warm, not sepia.** Very low-chroma charcoal replaces the blue-black foundation. Each
-  elevated layer gets a little lighter, so the composer, menus and dialogs remain distinct
-  without glaring borders. Lines, fills and inset highlights share the ivory hue.
-- **Less glare, not less legibility.** Main text is softer than white. Secondary and tertiary
-  inks are lifted to stay readable on raised and selected surfaces; hierarchy is deliberately
-  gentler than by day. Hover/active fills are restrained rather than washing out small labels.
-- **Colour stays purposeful.** Felt green is slightly desaturated. Status hues keep their
-  established meanings with muted amber (working/warning), teal (done), sage (success), coral
-  (error) and lilac (merged). Soft selection/error tints do not compete with the conversation.
-  Filled warning surfaces use dark ink rather than light text on amber.
-- **Shared tokens, not component exceptions.** The refinement lives in `.dark`; the light
-  palette, component composition, layout and motion remain unchanged.
+### Contrast
+
+WCAG ratios, computed from the tokens (alpha fills composited in sRGB). "Fill" is the lowest
+ratio over any layer with `--fill-active` beneath the glyph, as in a selected row.
+
+| Day | canvas | sheet | surface-1 | surface-2 | surface-3 | fill |
+| --- | --- | --- | --- | --- | --- | --- |
+| ink | 14.73 | 16.22 | 17.00 | 17.35 | 17.60 | 12.86 |
+| ink-2 | 6.33 | 6.97 | 7.31 | 7.46 | 7.57 | 5.53 |
+| ink-3 | 5.33 | 5.87 | 6.15 | 6.28 | 6.37 | 4.65 |
+| brand | 8.83 | 9.73 | 10.19 | 10.40 | 10.56 | 7.71 |
+| busy | 3.54 | 3.90 | 4.09 | 4.17 | 4.23 | 3.09 |
+| done | 4.80 | 5.29 | 5.55 | 5.66 | 5.74 | 4.19 |
+| ok | 4.79 | 5.28 | 5.53 | 5.64 | 5.73 | 4.18 |
+| warn | 4.62 | 5.09 | 5.33 | 5.44 | 5.52 | 4.04 |
+| err | 5.63 | 6.20 | 6.50 | 6.63 | 6.73 | 4.91 |
+| merged | 5.05 | 5.56 | 5.82 | 5.94 | 6.03 | 4.41 |
+
+| Night | canvas | sheet | surface-1 | surface-2 | surface-3 | fill |
+| --- | --- | --- | --- | --- | --- | --- |
+| ink | 13.39 | 12.23 | 10.97 | 10.06 | 9.34 | 7.76 |
+| ink-2 | 9.36 | 8.54 | 7.66 | 7.02 | 6.52 | 5.42 |
+| ink-3 | 8.13 | 7.43 | 6.66 | 6.11 | 5.67 | 4.72 |
+| brand | 10.63 | 9.70 | 8.71 | 7.98 | 7.41 | 6.16 |
+| busy | 9.27 | 8.47 | 7.60 | 6.96 | 6.46 | 5.38 |
+| done | 7.98 | 7.28 | 6.53 | 5.99 | 5.56 | 4.62 |
+| ok | 8.26 | 7.54 | 6.77 | 6.20 | 5.76 | 4.79 |
+| warn | 8.55 | 7.80 | 7.00 | 6.42 | 5.96 | 4.95 |
+| err | 7.28 | 6.65 | 5.96 | 5.46 | 5.07 | 4.22 |
+| merged | 7.93 | 7.25 | 6.50 | 5.96 | 5.53 | 4.60 |
+
+Limitation: day status colours drop below 4.5:1 as text over a selected (`--fill-active`) row;
+they stay above 3:1 there, which is what their glyph use needs.
 
 Motion tokens, also in `index.css`:
 
@@ -48,6 +97,8 @@ Motion tokens, also in `index.css`:
 | `--ease-layout` | `cubic-bezier(0.32, 0.72, 0, 1)` | shared desktop sidebar width |
 | `--ease-enter` | `cubic-bezier(0.22, 1, 0.36, 1)` | every entrance |
 | `--ease-exit` | `ease-out` | every exit |
+| `--dur-theme` | 350ms | light/dark colour fade on the shells |
+| `--ease-theme` | `cubic-bezier(0.333, 0, 0.667, 1)` | light/dark colour fade |
 
 The shared layout refactor promotes the session sidebar's actual 300ms easing to layout tokens.
 The previous 320ms token/documentation did not drive either sidebar: Settings used 200ms linear.
@@ -58,8 +109,15 @@ navigation retains the shared Sheet's 300ms entrance / 200ms exit and focus poli
 
 ## Type
 
-Tailwind's default `font-sans` for the interface and `font-mono` for anything verbatim
-(commands, paths, branches, usage figures), without bundled fonts or custom family overrides.
+Two system faces and no web fonts: Tailwind's default sans stack for the interface and body
+(the transcript, controls, menus, titles), and its default mono stack for anything the machine
+produced verbatim (code, commands, paths, branches, the model chip and the usage meta).
+
+Moonstone first added two web fonts, after Earendil's pairing of an italic serif with Departure
+Mono: Newsreader for headlines, titles and empty states, and Departure Mono in uppercase for
+small labels. Four typefaces, two of them monospace, read as busy rather than warm, so both were
+removed; the warmth now comes from the palette alone.
+
 Body text stays 16px, as does the mobile composer.
 Shared UI labels (`text-sm`) are 16px below the shell's 48rem desktop breakpoint and 14px
 at or above it; captions (`text-xs`)
@@ -87,7 +145,7 @@ font, and narrowing the column would cramp the composer. The 16px body stays.
 ```
 
 Left-aligned throughout. The transcript column is centred at max 48rem; the composer lines up
-with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. One felt-green
+with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. One accent
 bar in the sidebar marks the selected session and slides between rows. Rows are 36px with a
 pointer and 44px on touch screens.
 
@@ -147,7 +205,7 @@ The palette shortcut appears as a `Kbd` hint on the sidebar search button. The p
 offers New session, per project, and the sidebar toggle without shortcuts of their own. `⌘B`,
 `⌘⇧N`, `⌘[` / `⌘]` and `Alt+↑/↓` were tried and removed as too easy to hit by accident.
 
-## What changed and why
+## What Felt changed and why
 
 - **Motion tokens** (`--dur-*`, `--ease-enter`, `--ease-exit`) replace scattered durations so
   every control answers at the same tempo. Popovers, menus, tooltips and dialogs scale from
@@ -197,7 +255,21 @@ Considered and rejected:
   environment, and `PiSessions` "catalog observations" failed once in a full run on a macOS
   `/private/var` vs `/var` path comparison and passed on three isolated reruns.
 
-## Dark palette verification
+## Moonstone verification
+
+Observed on branch `warm/1-foundation` with a scratch backend/UI on loopback 7191/7192, a scratch
+SQLite registry seeded with a throwaway repository and two fixture sessions, and
+`test/fake-host-pi.mjs` (no model calls; INV-07/09/11 untouched). agent-browser screenshots cover
+a conversation, New session, Settings, the View options menu, the command palette and a sign-in
+dialog, light and dark, at 1440×900 and 390×844. Switching Appearance from
+the menu sampled the body background through intermediate oklab values for about 350ms; with
+reduced motion the switch was immediate. Contrast figures above are computed, not measured from
+pixels.
+
+## Felt-era dark palette verification
+
+This records the previous warm-charcoal night palette, since replaced by Moonstone.
+
 
 Verified on base `71698de` plus the dark-token changes, with Node 24.21.0 and headless
 Chromium 154 on Linux. Scratch backend/UI: loopback 7171/7172, separate SQLite registry,
@@ -220,7 +292,7 @@ These are bounded colour checks, not a whole-app accessibility certification. Th
 scan had incomplete contrast checks, so it is not used as proof. Actual displays, other browser
 engines, diagram-library palettes and every possible stacked transparency were not verified.
 
-## Original Felt evidence
+## Felt-era evidence
 
 Observed against the scratch fixture on backend 7181 and Vite 7182 with agent-browser session
 `piano-felt`. Everything is kept under the session scratchpad
