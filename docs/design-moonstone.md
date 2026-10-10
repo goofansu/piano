@@ -188,11 +188,11 @@ favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it i
   tiles, 2× in the 48px empty-state tile. `shape-rendering: crispEdges` keeps edges sharp.
 - **Colour.** In the app the mark is one colour from tokens: `currentColor` for the glyph (rows
   pass `text-brand`), `text-brand-ink` on `bg-brand` for the tile.
-- **Favicon.** `favicon.svg` and `favicon-working.svg` are the 16×16 glyph alone, edge to edge with
+- **Favicon.** `favicon.svg` is the 16×16 glyph alone, edge to edge with
   no tile, as Pi's and Radius's favicons are bare marks (a padded tile left it about half their
   size in a tab strip). One colour follows the system theme: `#111`, or `#f6f6f6` under
-  `prefers-color-scheme: dark`. A 16px favicon draws one unit per pixel. Working presses the white
-  keys 1 unit (and 1 unit shorter, to stay in the square) at 60%.
+  `prefers-color-scheme: dark`. A 16px favicon draws one unit per pixel. It stays the same while a
+  session works; progress shows in the app, not the tab icon.
 - **App icons.** The home-screen icons (`apple-touch-icon.png` 180, `icon-192.png`, `icon-512.png`,
   `icon-maskable-512.png`) need a background, so the glyph sits on a warm-black `#2c2825` tile at
   16 of 28 units, as in the app, in fixed earth tones: a terracotta `#b86b52` fallboard, sunkissed

@@ -194,13 +194,7 @@ export default function App() {
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
   const sidebarProps = { state, send, select, openNew, openSettings, onProjectDialog: setProjectDialog, onPalette: () => setPaletteOpen(true) };
-  const working = !!(state.session?.state.isStreaming || state.session?.state.isCompacting || state.session?.state.isRetrying);
   const anyWorking = state.hosts.some((h) => h.streaming);
-  // The tab icon presses the keys while the session on screen works.
-  useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (link) link.href = working ? "/favicon-working.svg" : "/favicon.svg";
-  }, [working]);
   // An installed app has no tab icon, so its dock or taskbar badge shows that any session works.
   useEffect(() => {
     if (!("setAppBadge" in navigator)) return;
