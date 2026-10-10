@@ -234,10 +234,11 @@ export default function App() {
         </LayoutView>
         {settingsOpen && <LayoutView><SettingsPage section={settingsSection} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
       </>}>
-      {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls. */}
+      {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls.
+          Above dialogs and sheets (z-50) but below menus, popovers and tooltips (z-[60]), so an open menu is never covered. */}
       <Toaster
         position="top-right"
-        className="toaster group !absolute"
+        className="toaster group !absolute !z-[55]"
         offset={{ top: 88, right: 24 }}
         mobileOffset={{ top: 68, left: 16, right: 16 }}
         visibleToasts={4}

@@ -92,7 +92,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
     uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
   }[submission.outcome] : undefined);
 
-  const status = starting ? "Starting"
+  // A dialog the first input opened needs the user, so it outranks startup.
+  const status = starting && !t?.dialogs.length ? "Starting"
     : !t && input ? "Delivery uncertain"
     : !state.connected || (t !== null && !ready) ? "Reconnecting"
     : !t ? "Loading"
