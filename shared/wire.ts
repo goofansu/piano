@@ -384,7 +384,6 @@ export type WorkspaceChanges = typeof WorkspaceChanges.Type;
 export const Project = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)),
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
-  goal: Schema.optional(Schema.String.check(Schema.isMaxLength(1000))),
   archived: Schema.Boolean,
 });
 export type Project = typeof Project.Type;
@@ -566,7 +565,7 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("worktrees", { folder: Schema.String }),
   /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
   Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String), refresh: Schema.optional(Schema.Boolean) }),
-  Schema.TaggedStruct("save_project", { project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name, goal: Project.fields.goal }) }),
+  Schema.TaggedStruct("save_project", { project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }) }),
   Schema.TaggedStruct("archive_project", { id: Schema.String, archived: Schema.Boolean }),
   Schema.TaggedStruct("assign_project", { cwd: Schema.String, sessionId: Schema.String, projectId: Schema.NullOr(Schema.String) }),
   Schema.TaggedStruct("add_folder", { path: Schema.String }),

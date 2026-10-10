@@ -27,7 +27,7 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, arc
     assert.deepEqual(seeded.sessions, sessions);
     assert.deepEqual(seeded.folders, old.folders);
     assert.deepEqual(seeded.projects, []);
-    const first = { id: "launch", name: "Launch subscriptions", goal: "An organizational goal", archived: false };
+    const first = { id: "launch", name: "Launch subscriptions", archived: false };
     yield* r.saveProject(first);
     yield* r.saveProject({ id: "accessibility", name: "Improve accessibility" });
     yield* r.saveProject({ id: "empty", name: "Empty project" });

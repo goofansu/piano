@@ -22,10 +22,10 @@ The [staged plan](outcome-projects.md) and [ADR 0002](adr/0002-outcome-projects.
 sessions around bounded goals independently of repository/directory boundaries. This is a daily-use
 improvement, not a prerequisite for or resumption of the deferred deeper workflow phases.
 
-1. **Grouping first:** create/name a project with an optional goal, associate sessions across
+1. **Grouping first:** create/name a project, associate sessions across
    repositories, and archive/reopen the grouping. Keep ungrouped sessions usable, preserve each
    session's actual workspace, and migrate existing references without creating one project
-   per directory. The goal is metadata, not instructions delivered to Pi.
+   per directory. (An optional goal field shipped first and was later removed.)
 2. **Shared context and instructions later:** explicitly supply versioned project material to member
    sessions, with defined precedence, application boundaries and delivery outcomes. Preserve Pi's
    normal checkout configuration/trust; do not bundle this into the grouping slice.

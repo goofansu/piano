@@ -374,7 +374,7 @@ function ProjectGroup({ project, sessions, current, open, onOpenChange, state, s
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={groupRow} style={reveal()}>
         <CollapsibleTrigger asChild>
-          <button type="button" className={groupTrigger} title={project?.goal || undefined}>
+          <button type="button" className={groupTrigger}>
             <Chevron open={open} />
             <span className={cn("min-w-0 flex-1 truncate text-sm font-medium", !project || project.archived ? "text-ink-3" : "text-ink-2")}>{project?.name ?? "No project"}</span>
           </button>

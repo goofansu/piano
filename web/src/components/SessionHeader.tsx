@@ -30,7 +30,7 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
         {cwd ? <>
           <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-1">
             {/* The project is the way back to where this session was opened from. */}
-            {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal} onClick={() => openProject(project.id)}>{project.name}</button>}
+            {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" onClick={() => openProject(project.id)}>{project.name}</button>}
             <h1 className="truncate text-sm font-medium">{session ? title : "New session"}</h1>
           </div>
           {/* Plain workspace metadata has no dedicated UI primitive. */}

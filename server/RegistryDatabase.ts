@@ -8,6 +8,7 @@ const schema = `
   CREATE TABLE registry_meta (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL);
   INSERT INTO registry_meta VALUES (1, 0);
   CREATE TABLE projects (
+    -- goal: retired; kept so existing version-1 databases need no migration. Never read or written.
     id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL CHECK (length(trim(name)) > 0), goal TEXT,
     archived INTEGER NOT NULL CHECK (archived IN (0, 1)), position INTEGER NOT NULL
   ) STRICT;
@@ -41,8 +42,8 @@ const schema = `
 type Row = SQLInputValue[];
 /** Ordered parent-first; deletions run in reverse. Column names never come from user input. */
 const tables = [
-  { name: "projects", columns: ["id", "name", "goal", "archived", "position"], keys: 1,
-    rows: (d: RegistryData): Row[] => d.projects.map((p, i) => [p.id, p.name, p.goal ?? null, Number(p.archived), i]) },
+  { name: "projects", columns: ["id", "name", "archived", "position"], keys: 1,
+    rows: (d: RegistryData): Row[] => d.projects.map((p, i) => [p.id, p.name, Number(p.archived), i]) },
   { name: "workspaces", columns: ["path", "id", "folder_path", "position"], keys: 1,
     rows: (d: RegistryData): Row[] => d.workspaces.map((w, i) => [w.path, w.id, w.folder, i]) },
   { name: "folders", columns: ["path", "position"], keys: 1,
@@ -76,7 +77,7 @@ function snapshot(db: DatabaseSync): RegistryData {
   return {
     version: 2,
     folders: rows("folders").map(r => r.path as string),
-    projects: rows("projects").map(r => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived), ...(r.goal === null ? {} : { goal: r.goal as string }) })),
+    projects: rows("projects").map(r => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived) })),
     workspaces: rows("workspaces").map(r => ({ id: r.id as string, path: r.path as string, folder: r.folder_path as string })),
     worktrees: rows("worktrees").map(r => ({ path: r.path as string, folder: r.folder_path as string, branch: r.branch as string })),
     sessions: rows("sessions").map(r => ({ cwd: r.cwd as string, sessionId: r.session_id as string, createdAt: r.created_at as string, updatedAt: r.updated_at as string, archived: Boolean(r.archived),

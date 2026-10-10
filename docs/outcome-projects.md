@@ -38,7 +38,7 @@ Code uses the same words: `folders` for locations and `projects`/`projectId` for
 
 ### User journey
 
-1. Create **Launch subscriptions** with a name and optional short goal, without choosing a directory.
+1. Create **Launch subscriptions** with a name, without choosing a directory.
 2. Add existing API and web sessions, or start a new session from the project by explicitly choosing
    its working directory/worktree. Starting outside a project remains supported.
 3. Return to the project and find those sessions together. Opening one still identifies its actual
@@ -54,12 +54,14 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 
 ### Scope and boundaries
 
-- Persist a stable project identity, name, optional goal, archive state and explicit session
+- Persist a stable project identity, name, archive state and explicit session
   associations in the registry. Reuse existing session/workspace references; no transcript copies,
   evidence bundles, synthesized Pi sessions or required project directory.
 - Derive the participating locations from member sessions initially. Do not add a separate repository
   ownership hierarchy or infer membership for every session in a selected repository.
-- The goal is organizational metadata in this slice: it is **not automatically sent to Pi**.
+- A project has no goal or description field. An optional goal shipped at first and was removed to
+  keep a project to its name. Registries keep the retired `goal` column so
+  version-1 databases open without a migration; it is never read or written.
 - Archiving affects project visibility only. It is not session archive, abort, process release,
   checkout removal, verification, approval or proof that the outcome was achieved. Unarchiving restores
   the grouping; running work and direct session access remain available.
@@ -67,7 +69,7 @@ instruction selection. Separate concurrent writing tasks still need separate wor
   project or its associations. A missing checkout/history is an explicit unavailable state, not
   a reason to silently recreate or drop the reference. Explicit session-reference removal must also
   remove its association without deleting the project or other members.
-- Keep the view quiet: project name, useful goal text, sessions and essential actions. No synthetic
+- Keep the view quiet: project name, sessions and essential actions. No synthetic
   progress percentages, mandatory task board or permanent implementation-status banners.
 - Provide equivalent command-palette entries for new sidebar/header actions, under the existing
   command groups and with matching names. Mod+K remains the only global shortcut.
@@ -109,7 +111,7 @@ archived-session references remain reachable from the group and from session sea
 
 ## Step 2 — Shared context and instructions, later
 
-Make project goals, background and working instructions available consistently to member sessions,
+Make project background and working instructions available consistently to member sessions,
 without replacing the selected checkout's normal Pi configuration or treating another conversation's
 entire history as shared context. This is a separate slice after grouping proves useful.
 

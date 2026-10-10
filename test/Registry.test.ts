@@ -24,7 +24,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
     tokens: { input: 1074786, output: 14967, cacheRead: 6729984, cacheWrite: 0, total: 7819737 }, statsUpdatedAt: 1791430502567 };
   const original: RegistryData = { version: 2, folders: [folder], worktrees: [{ folder: folder, path: hidden, branch: "feature" }],
     workspaces: [{ id: "hidden-id", folder: folder, path: hidden }, { id: "root-id", folder: folder, path: folder }, { id: "alias-id", folder: alias, path: alias }],
-    projects: [{ id: "project-1", name: "Launch", goal: "Goal", archived: false }, { id: "project-2", name: "Old", archived: true }],
+    projects: [{ id: "project-1", name: "Launch", archived: false }, { id: "project-2", name: "Old", archived: true }],
     sessions: [
       { cwd: hidden, sessionId: "same", title: "Closed folder session", createdAt: "then", updatedAt: "now", archived: false, projectId: "project-1", stats,
         pullRequest: { url: "https://github.com/example/repo/pull/1", source: "branch", apiHost: "github.int.exe.xyz" } },
@@ -33,6 +33,9 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
     ],
   };
   seedRegistry(f.dbPath, original);
+  // Project goals were retired without a migration: one an older Piano stored is ignored, not an error.
+  const legacy = new DatabaseSync(f.dbPath);
+  try { legacy.prepare("UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'").run(); } finally { legacy.close(); }
   assert.deepEqual(await f.get(), original);
   assert.equal(statSync(f.dbPath).mode & 0o777, 0o600);
   const db = new DatabaseSync(f.dbPath, { readOnly: true });

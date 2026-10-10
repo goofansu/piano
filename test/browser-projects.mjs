@@ -75,7 +75,7 @@ async function create(name) {
   await ab('click', '[aria-label="Project"]'); await wait(`!!document.querySelector('[role="dialog"][aria-label="Choose a project"]')`);
   // The first project is offered by the picker's empty state; later ones by the button beside its search.
   await button('New project');
-  await ab('fill', '#project-name', name); await ab('fill', '#project-goal', `Goal for ${name}`); await button('Create project');
+  await ab('fill', '#project-name', name); await button('Create project');
   await wait(`document.querySelector('main h1')?.textContent === ${JSON.stringify(name)}`);
   assert.equal(await evaluate(`document.querySelector('[aria-label="Project"]').textContent.trim()`), name);
 }
@@ -85,7 +85,7 @@ async function createWithSession(name, sessionMenu) {
   await ab('hover', '[role="menuitem"][aria-haspopup="menu"]');
   await wait(`[...document.querySelectorAll('[role="menuitem"]')].some(i => i.textContent.trim() === 'New project…')`); await settle();
   await menuitem('New project…');
-  await ab('fill', '#project-name', name); await ab('fill', '#project-goal', `Goal for ${name}`); await button('Create and add session');
+  await ab('fill', '#project-name', name); await button('Create and add session');
   await wait(`!document.querySelector('[role="dialog"]')`); await settle();
 }
 /** Membership is the Project submenu of a session's own menu. `None` leaves the project. */
