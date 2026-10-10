@@ -275,7 +275,7 @@ interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew"
 type SessionTarget = { cwd: string; sessionId: string; title?: string };
 type SessionActions = ReturnType<typeof useSessionActions>;
 
-/** Project identity above the title unless the group already names it; location stays below. */
+/** Location and project share one metadata line; project groups already name the project. */
 function SessionRow({ t, metadata, showProject = true, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
   t: SessionTarget; metadata?: React.ReactNode; showProject?: boolean; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
@@ -289,7 +289,7 @@ function SessionRow({ t, metadata, showProject = true, selected, disabled, hint,
   return (
     <li
       style={reveal()}
-      className={cn(project && metadata ? "h-16" : project || metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-brand-soft hover:bg-brand-soft")}
+      className={cn(project || metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-brand-soft hover:bg-brand-soft")}
     >
       <button
         type="button"
@@ -304,9 +304,12 @@ function SessionRow({ t, metadata, showProject = true, selected, disabled, hint,
         </span>
         {/* No standalone shadcn primitive fits the title and metadata inside this existing navigation button. */}
         <span className="flex min-w-0 flex-1 flex-col">
-          {project && <span className="-mb-0.5 truncate text-xs text-brand" title={project.goal || project.name}>{project.name}</span>}
           <span className={cn("truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
-          {metadata && <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">{metadata}</span>}
+          {(metadata || project) && <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+            {metadata}
+            {metadata && project && <span aria-hidden>·</span>}
+            {project && <span className="min-w-0 truncate text-brand" title={project.goal || project.name}>{project.name}</span>}
+          </span>}
         </span>
         {host?.streaming ? <span className="sr-only">working</span> : done ? <span className="sr-only">done</span> : null}
         {hint && <span className="sr-only">{hint}</span>}

@@ -131,13 +131,13 @@ try {
   await file('API session', 'Launch subscriptions'); await file('Web session', 'Launch subscriptions');
   assert.equal(member('one').outcomeProjectId, project('Launch subscriptions').id);
   assert.equal(member('two').outcomeProjectId, project('Launch subscriptions').id);
-  // Non-project groupings show registry membership above the session title, not a folder label.
+  // Non-project groupings share one metadata line for location and registry membership.
   for (const grouping of ['Date', 'None', 'Folder']) {
     await groupBy(grouping);
     if (grouping === 'Folder') { await openGroup('api'); await openGroup('web'); }
     await wait(`document.querySelector('nav li:has([aria-label="Session menu for API session"]) .text-brand')?.textContent === 'Launch subscriptions'`);
-    const label = await evaluate(`(() => { const row = document.querySelector('nav li:has([aria-label="Session menu for API session"])'); const label = row.querySelector('.text-brand'); const title = row.querySelector('button[title="API session"]'); return { text: label.textContent, tooltip: label.title, small: label.classList.contains('text-xs'), above: label.getBoundingClientRect().top < [...title.querySelectorAll('span')].find(s => s.textContent === 'API session').getBoundingClientRect().top }; })()`);
-    assert.deepEqual(label, { text: 'Launch subscriptions', tooltip: 'Goal for Launch subscriptions', small: true, above: true });
+    const label = await evaluate(`(() => { const row = document.querySelector('nav li:has([aria-label="Session menu for API session"])'); const label = row.querySelector('.text-brand'); const title = [...row.querySelectorAll('span')].find(s => s.textContent === 'API session'); const folder = [...row.querySelectorAll('span')].find(s => s.textContent === 'api'); return { text: label.textContent, tooltip: label.title, small: label.parentElement.classList.contains('text-xs'), below: label.getBoundingClientRect().top > title.getBoundingClientRect().top, sameLine: !folder || Math.abs(label.getBoundingClientRect().top - folder.getBoundingClientRect().top) < 2, height: row.getBoundingClientRect().height };  })()`);
+    assert.deepEqual(label, { text: 'Launch subscriptions', tooltip: 'Goal for Launch subscriptions', small: true, below: true, sameLine: true, height: 48 });
     assert.equal(await evaluate(`!!document.querySelector('nav li:has([aria-label="Session menu for Accessibility session"]) .text-brand')`), false);
     await ab('screenshot', join(evidence, `session-project-${grouping.toLowerCase()}.png`));
   }
