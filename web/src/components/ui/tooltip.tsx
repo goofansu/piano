@@ -23,10 +23,29 @@ function Tooltip({
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
+// Menus, popovers and dialogs return focus to their trigger when they close. After a pointer
+// interaction that restored focus should not open a tooltip; hover already serves pointer users.
+let pointerModality = false
+if (typeof document !== "undefined") {
+  document.addEventListener("pointerdown", () => { pointerModality = true }, true)
+  document.addEventListener("keydown", () => { pointerModality = false }, true)
+}
+
 function TooltipTrigger({
+  onFocus,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      onFocus={event => {
+        onFocus?.(event)
+        // Radix skips its focus-open handler for a default-prevented event.
+        if (pointerModality) event.preventDefault()
+      }}
+      {...props}
+    />
+  )
 }
 
 function TooltipContent({
