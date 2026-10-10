@@ -71,7 +71,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
         observe(next); setProviders(result.providers); setState(next); setError("");
         installing = next.installation.status === "running";
         // A running or just-finished web-search change gets its own toast once it settles.
-        if (manual && !installing && !finished.current) toast.success("Radius setup is up to date.", { id: SETUP_TOAST });
+        if (manual && !installing && !finished.current) toast.success("Radius setup refreshed.",{ id: SETUP_TOAST });
       } catch { if (!controller.signal.aborted) setError("Could not refresh Radius setup. Check your connection and try again."); }
       finally { if (!controller.signal.aborted) setRefreshing(false); }
       if (!controller.signal.aborted && installing) timer = setTimeout(load, 1500);
