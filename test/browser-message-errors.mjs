@@ -173,11 +173,8 @@ try {
   await ab('fill', '[aria-label="Message"]', '/partial');
   await ab('find', 'role', 'button', 'click', '--name', 'Send', '--exact');
   await ab('wait', '--text', 'Partial message-errors');
-  await ab('press', 'Control+k');
-  await ab('find', 'role', 'option', 'click', '--name', 'Appearance', '--exact');
-  await ab('find', 'role', 'radio', 'click', '--name', 'Messages only', '--exact');
-  await ab('press', 'Control+k');
-  await ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
+  await ab('press', paletteKey);
+  await ab('find', 'role', 'option', 'click', '--name', 'Messages only');
   const working = await evaluate(`(() => {
     const t = document.querySelector('[data-slot="transcript"]');
     const label = [...t.querySelectorAll('span')].find(e => e.textContent === 'Pi is working');
