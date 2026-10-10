@@ -1,9 +1,13 @@
 /*
- * piano design system.
+ * piano design system: "Moonstone", after Lefos's palette (docs/design-moonstone.md).
  *
- * Type: default sans-serif for the interface and monospace for anything the
- * machine produced verbatim. Body stays 16px; labels are 16px on
- * phones / 14px on desktop, captions 14px / 12px. Weights 400/500/600.
+ * Type, four roles:
+ *   sans   interface and body: the transcript, controls, menus (Tailwind's default stack)
+ *   serif  the voice: headlines, empty states, project names (Newsreader, often italic)
+ *   label  small uppercase chrome with 0.05-0.08em tracking (Departure Mono)
+ *   mono   machine output verbatim: code, commands, paths, branches (Tailwind's default stack)
+ * Body stays 16px; labels are 16px on phones / 14px on desktop, captions 14px / 12px.
+ * Weights 400/500/600.
  *
  * Layers: every surface belongs to one of four layers, and a layer decides its
  * background, its edge and its shadow. Nothing borrows an edge from another layer.
@@ -12,8 +16,10 @@
  *   2 raised   things that float over the canvas: menus, popovers, tooltips
  *   3 overlay  things that take over: dialogs, the mobile sidebar sheet
  *
- * Colour: an ivory canvas by day, warm charcoal by night, one felt-green accent
- * that means "live": the focus ring, the send key, the working session.
+ * Colour: a moonstone canvas and warm-white sheet by day, midnight and evening blue with
+ * parchment ink by night. One accent means "live" (the focus ring, the send key, the
+ * selection): evening blue by day, parchment by night. Status hues are Lefos's earth
+ * accents. Contrast sets lightness (4.5:1 text, 3:1 glyphs); chroma stays capped.
  */
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -29,6 +35,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@font-face {
+  font-family: "Departure Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/departure-mono/DepartureMono-Regular.woff2") format("woff2");
+}
+
 :root {
   --radius: 0.625rem;
 
@@ -36,39 +50,45 @@
   --type-label: 1rem;
   --type-caption: 0.875rem;
 
-  /* layers */
-  --surface-0: oklch(0.967 0.006 85);
-  --conversation: oklch(0.995 0.002 85);
-  --surface-1: oklch(1 0 0);
-  --surface-2: oklch(1 0 0);
-  --surface-3: oklch(1 0 0);
-  --line: oklch(0.2 0.01 85 / 10%);
-  --line-strong: oklch(0.2 0.01 85 / 18%);
-  --fill: oklch(0.2 0.01 85 / 5%);
-  --fill-hover: oklch(0.2 0.01 85 / 7%);
-  --fill-active: oklch(0.2 0.01 85 / 10%);
-  --shadow-1: 0 1px 2px oklch(0.2 0.01 85 / 6%), 0 8px 24px -16px oklch(0.2 0.01 85 / 25%);
-  --shadow-2: 0 2px 6px oklch(0.2 0.01 85 / 8%), 0 16px 40px -18px oklch(0.2 0.01 85 / 40%);
-  --shadow-3: 0 8px 20px oklch(0.2 0.01 85 / 10%), 0 32px 80px -24px oklch(0.2 0.01 85 / 55%);
+  /* layers: a moonstone canvas, a warm-white sheet, and warm near-whites that lighten as they rise */
+  --surface-0: oklch(0.93 0.006 60);
+  --conversation: oklch(0.962 0.004 75);
+  --surface-1: oklch(0.978 0.004 75);
+  --surface-2: oklch(0.985 0.004 75);
+  --surface-3: oklch(0.99 0.003 75);
+  /* driftwood lines and fills */
+  --line: oklch(0.46 0.01 68 / 14%);
+  --line-strong: oklch(0.46 0.01 68 / 24%);
+  --fill: oklch(0.46 0.01 68 / 6%);
+  --fill-hover: oklch(0.46 0.01 68 / 8%);
+  --fill-active: oklch(0.46 0.01 68 / 10%);
+  /* umber-tinted shadows */
+  --shadow-1: 0 1px 2px oklch(0.32 0.035 55 / 7%), 0 8px 24px -16px oklch(0.32 0.035 55 / 26%);
+  --shadow-2: 0 2px 6px oklch(0.32 0.035 55 / 9%), 0 16px 40px -18px oklch(0.32 0.035 55 / 40%);
+  --shadow-3: 0 8px 20px oklch(0.32 0.035 55 / 11%), 0 32px 80px -24px oklch(0.32 0.035 55 / 55%);
+  /* the dim behind dialogs and the phone sheet */
+  --scrim: oklch(0.25 0.03 55 / 38%);
 
-  /* ink */
-  --ink: oklch(0.22 0.01 85);
-  --ink-2: oklch(0.5 0.012 85);
-  --ink-3: oklch(0.6 0.012 85);
+  /* ink: warm-black, warm-40, and warm-30 darkened until it reads on every layer and fill */
+  --ink: oklch(0.2 0.007 60);
+  --ink-2: oklch(0.44 0.012 62);
+  --ink-3: oklch(0.48 0.012 62);
 
-  /* the one colour */
-  --brand: oklch(0.52 0.1 160);
-  --brand-ink: oklch(0.99 0 0);
-  --brand-soft: oklch(0.52 0.1 160 / 12%);
+  /* the one colour: evening blue, a step lighter than Lefos's so it reads as blue beside warm-black ink */
+  --brand: oklch(0.36 0.05 257);
+  --brand-ink: oklch(0.97 0.004 75);
+  --brand-soft: oklch(0.36 0.05 257 / 12%);
 
-  /* states, in Herdr's vocabulary (src/client/shell.rs): working yellow, done teal, idle green, blocked red */
-  --busy: oklch(0.72 0.15 80);
-  --done: oklch(0.66 0.1 195);
-  --ok: oklch(0.6 0.13 155);
-  --warn: oklch(0.7 0.14 70);
-  --err: oklch(0.58 0.2 27);
-  --err-soft: oklch(0.58 0.2 27 / 10%);
-  --merged: oklch(0.55 0.18 300);
+  /* States, in Herdr's vocabulary (src/client/shell.rs), drawn from Lefos's earth accents:
+   * working sunkissed, done tidal blue, idle sage, blocked terracotta, merged dusk lilac. Lightness
+   * set so glyphs pass 3:1 and text 4.5:1 on canvas and sheet; chroma capped so they stay earthy. */
+  --busy: oklch(0.58 0.105 75);
+  --done: oklch(0.5 0.06 232);
+  --ok: oklch(0.5 0.07 118);
+  --warn: oklch(0.52 0.11 62);
+  --err: oklch(0.48 0.12 33);
+  --err-soft: oklch(0.48 0.12 33 / 10%);
+  --merged: oklch(0.5 0.07 320);
 
   /* shadcn vocabulary, mapped onto the layers */
   --background: var(--surface-0);
@@ -90,7 +110,7 @@
   --success: var(--ok);
   --success-foreground: var(--brand-ink);
   --warning: var(--warn);
-  --warning-foreground: var(--ink);
+  --warning-foreground: var(--brand-ink);
   --border: var(--line);
   --input: var(--line-strong);
   --ring: var(--brand);
@@ -110,40 +130,40 @@
 }
 
 .dark {
-  /* The ivory palette after dusk: warm neutrals, not blue-black. Elevation adds
+  /* Lefos after dusk: midnight canvas, evening-blue layers and warm parchment ink. Elevation adds
    * lightness so menus and dialogs separate without bright outlines. */
-  --surface-0: oklch(0.195 0.004 75);
-  --conversation: oklch(0.225 0.005 75);
-  --surface-1: oklch(0.255 0.006 75);
-  --surface-2: oklch(0.28 0.007 75);
-  --surface-3: oklch(0.3 0.007 75);
-  --line: oklch(0.93 0.012 85 / 9%);
-  --line-strong: oklch(0.93 0.012 85 / 17%);
-  --fill: oklch(0.93 0.012 85 / 4%);
-  --fill-hover: oklch(0.93 0.012 85 / 6%);
-  --fill-active: oklch(0.93 0.012 85 / 8%);
-  --shadow-1: 0 1px 2px oklch(0 0 0 / 25%), 0 8px 24px -16px oklch(0 0 0 / 50%);
-  --shadow-2: 0 2px 6px oklch(0 0 0 / 30%), 0 16px 40px -18px oklch(0 0 0 / 60%), inset 0 1px oklch(0.93 0.012 85 / 5%);
-  --shadow-3: 0 8px 20px oklch(0 0 0 / 35%), 0 32px 80px -24px oklch(0 0 0 / 70%), inset 0 1px oklch(0.93 0.012 85 / 6%);
+  --surface-0: oklch(0.215 0.022 257);
+  --conversation: oklch(0.25 0.022 257);
+  --surface-1: oklch(0.285 0.024 257);
+  --surface-2: oklch(0.31 0.024 257);
+  --surface-3: oklch(0.33 0.024 257);
+  --line: oklch(0.85 0.021 53 / 10%);
+  --line-strong: oklch(0.85 0.021 53 / 18%);
+  --fill: oklch(0.85 0.021 53 / 4%);
+  --fill-hover: oklch(0.85 0.021 53 / 6%);
+  --fill-active: oklch(0.85 0.021 53 / 8%);
+  --shadow-1: 0 1px 2px oklch(0.1 0.02 257 / 30%), 0 8px 24px -16px oklch(0.1 0.02 257 / 55%);
+  --shadow-2: 0 2px 6px oklch(0.1 0.02 257 / 35%), 0 16px 40px -18px oklch(0.1 0.02 257 / 65%), inset 0 1px oklch(0.85 0.021 53 / 5%);
+  --shadow-3: 0 8px 20px oklch(0.1 0.02 257 / 40%), 0 32px 80px -24px oklch(0.1 0.02 257 / 75%), inset 0 1px oklch(0.85 0.021 53 / 6%);
+  --scrim: oklch(0.1 0.02 257 / 62%);
 
-  /* Soft ivory, with readable secondary and tertiary text on raised surfaces. */
-  --ink: oklch(0.91 0.012 85);
-  --ink-2: oklch(0.78 0.012 85);
-  --ink-3: oklch(0.725 0.012 85);
+  /* warm-10 ink, softer than white; secondary and tertiary stay readable on raised, filled layers */
+  --ink: oklch(0.91 0.006 68);
+  --ink-2: oklch(0.8 0.012 62);
+  --ink-3: oklch(0.76 0.014 60);
 
-  --brand: oklch(0.75 0.09 160);
-  --brand-ink: oklch(0.195 0.004 75);
-  --brand-soft: oklch(0.75 0.09 160 / 11%);
+  /* By night the one colour turns to parchment, the warm light Lefos sets on evening blue. */
+  --brand: oklch(0.84 0.04 55);
+  --brand-ink: oklch(0.215 0.022 257);
+  --brand-soft: oklch(0.84 0.04 55 / 12%);
 
-  /* Muted amber, teal, sage, coral and lilac retain the existing state meanings. */
-  --busy: oklch(0.8 0.11 85);
-  --done: oklch(0.77 0.075 195);
-  --ok: oklch(0.75 0.1 155);
-  --warn: oklch(0.8 0.115 75);
-  --err: oklch(0.74 0.135 25);
-  --err-soft: oklch(0.74 0.135 25 / 12%);
-  --merged: oklch(0.77 0.105 300);
-  --warning-foreground: var(--brand-ink);
+  --busy: oklch(0.8 0.1 76);
+  --done: oklch(0.75 0.06 232);
+  --ok: oklch(0.76 0.07 112);
+  --warn: oklch(0.78 0.11 62);
+  --err: oklch(0.74 0.11 33);
+  --err-soft: oklch(0.74 0.11 33 / 12%);
+  --merged: oklch(0.76 0.07 320);
 }
 
 /* Match the shell's md breakpoint; preserve desktop information density. */
@@ -152,6 +172,13 @@
     --type-label: 0.875rem;
     --type-caption: 0.75rem;
   }
+}
+
+/* Type roles (see the header). sans and mono keep Tailwind's defaults. `static` emits the
+ * variables even before a utility uses them, so plain CSS can say var(--font-label). */
+@theme static {
+  --font-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-label: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @theme inline {
@@ -196,6 +223,7 @@
   --color-err: var(--err);
   --color-err-soft: var(--err-soft);
   --color-merged: var(--merged);
+  --color-scrim: var(--scrim);
   --shadow-1: var(--shadow-1);
   --shadow-2: var(--shadow-2);
   --shadow-3: var(--shadow-3);
@@ -418,13 +446,26 @@
   --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-exit: ease-out;
   --ease-out: var(--ease-enter);
+  /* Switching light and dark fades the shells' colours (Earendil's easing, at an app's tempo). */
+  --dur-theme: 350ms;
+  --ease-theme: cubic-bezier(0.333, 0, 0.667, 1);
+}
+@layer base {
+  body,
+  [data-slot="sidebar-wrapper"],
+  [data-slot="sidebar-inner"],
+  [data-slot="layout-main"] {
+    transition-property: background-color, color, border-color;
+    transition-duration: var(--dur-theme);
+    transition-timing-function: var(--ease-theme);
+  }
 }
 .composer-card {
   border-radius: 1.25rem;
   border: 1px solid var(--line-strong);
   background: var(--surface-1);
   box-shadow: var(--shadow-1);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color var(--dur-theme) var(--ease-theme);
 }
 .composer-card[data-dragging="true"] {
   border-color: var(--brand);
