@@ -4,13 +4,12 @@ import { ArchiveIcon, ArrowUpDownIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPul
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
-import { directoryTrust } from "@/components/NewSession";
-import { sessionProject } from "@/components/Projects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
-import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
+import { copyAllSessionDetails, copySessionValue, useSessionActions } from "@/components/SessionActions";
 import type { SettingsSection } from "@/components/SettingsPage";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
+import { directoryTrust, sessionContext, sessionProject } from "@/lib/sessionContext";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
 import { SESSION_DISPLAYS, useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -50,8 +49,8 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
     return () => cancelAnimationFrame(frame);
   }, [open, search]);
   const current = state.session ?? state.selecting;
-  const details = currentSessionDetails(state);
-  const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
+  const details = sessionContext(state);
+  const { ready } = details;
   const actions = useSessionActions(send, ready);
   const target = state.session?.sessionId ? { cwd: state.session.cwd, sessionId: state.session.sessionId, title: details.title } : undefined;
   const sessions = useMemo(() => {
@@ -141,7 +140,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
             {details.branch && <CommandItem value="Copy git branch" onSelect={() => run(() => { if (details.branch) void copySessionValue(details.branch, "Git branch"); })}><CopyIcon /> Copy git branch</CommandItem>}
             <CommandItem value="Copy session ID" disabled={!details.sessionId} onSelect={() => run(() => { if (details.sessionId) void copySessionValue(details.sessionId, "Session ID"); })}><CopyIcon /> Copy session ID</CommandItem>
             <CommandItem value="Copy all" onSelect={() => run(() => { void copyAllSessionDetails(state); })}><CopyIcon /> Copy all</CommandItem>
-            <CommandItem value="Changes" keywords={["diff", "review", "working tree"]} disabled={!sessionWorkspace(state) || state.session?.state.checkoutMissing} onSelect={() => run(openChanges)}><FileDiffIcon /> Changes</CommandItem>
+            <CommandItem value="Changes" keywords={["diff", "review", "working tree"]} disabled={!details.canOpenChanges} onSelect={() => run(openChanges)}><FileDiffIcon /> Changes</CommandItem>
             <CommandItem value="Pull request" keywords={["github", "link", "pr"]} disabled={!target} onSelect={() => run(openPullRequest)}><GitPullRequestIcon /> Pull request</CommandItem>
             {/* The session menu's Display choices, by the same names. */}
             {SESSION_DISPLAYS.map(d => (

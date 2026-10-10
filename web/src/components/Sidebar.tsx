@@ -19,6 +19,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { folderFor, sessionReference } from "@/lib/sessionContext";
 import { dateGroups, flatSessions, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy } from "@/lib/sidebarView";
 import { readJson, writeJson } from "@/lib/storage";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -84,8 +85,8 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   // The group holding the selected session is always open: its folder, or its project.
   useEffect(() => {
     if (!current) return;
-    const owner = state.folders.find((p) => p.worktrees.some((w) => w.path === current.cwd));
-    const member = state.sessionReferences.find(s => s.cwd === current.cwd && s.sessionId === current.sessionId);
+    const owner = folderFor(state, current.cwd);
+    const member = current.sessionId ? sessionReference(state, { cwd: current.cwd, sessionId: current.sessionId }) : undefined;
     const key = view.groupBy === "folder" ? owner?.path : view.groupBy === "project" ? projectKey(member?.projectId ?? "") : undefined;
     if (key && !openGroups.has(key)) setOpen(key, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps

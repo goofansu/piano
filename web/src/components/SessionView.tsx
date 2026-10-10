@@ -7,13 +7,13 @@ import { ChangesSheet } from "@/components/Changes";
 import { Composer } from "@/components/Composer";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList } from "@/components/MessageList";
-import { sessionWorkspace } from "@/components/SessionActions";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { sessionActivity, sessionContext } from "@/lib/sessionContext";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { type AppState, sessionKey } from "@/store";
@@ -37,10 +37,10 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const [display] = useSessionDisplay();
   const t = state.session;
   const input = state.pendingCreate;
-  const checkoutMissing = !!t?.state.checkoutMissing;
-  const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
+  const { ready, checkoutMissing, folder: located, changesWorkspace } = sessionContext(state);
+  const folder = t ? located : undefined;
+  const { status, streaming, replyActivity, firstMessageOnItsWay, submissionText } = sessionActivity(state, display);
   const draftKey = t ? sessionKey(t) : undefined;
-  const folder = t ? state.folders.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
   const [model, setModel] = useState<string | undefined>(undefined);
   // Follow the session's own model and effort when known; otherwise Pi's defaults.
   useEffect(() => setModel(t?.state.model), [t?.cwd, t?.sessionId, t?.state.model]);
@@ -60,53 +60,14 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   // Continuing a file lets Pi restore/check its own selection. Only deliberate
   // offline picker changes override that, not a read-only recorded-model hint.
   const startOptions = () => overrides;
-  const streaming = !!(t?.state.isStreaming || t?.state.isCompacting || t?.state.isRetrying);
-  const activity = [
-    t?.dialogs.length ? "Waiting for input" : null,
-    t?.state.isCompacting ? "Compacting" : null,
-    t?.state.isRetrying ? "Retrying" : null,
-  ].filter(Boolean).join(" · ");
   const submission = t?.state.submission;
-  const starting = input?.outcome === "starting";
-  let replyActivity: "starting" | "working" | undefined;
-  // Messages only hides pending text, so it cannot replace the working indicator.
-  if (display === "messages" || !t?.pending?.text) {
-    if (starting) replyActivity = "starting";
-    else if (streaming) replyActivity = "working";
-  }
-  // Sent but not yet in the transcript: created with a first message, submitting, or running.
-  const firstMessageOnItsWay = !!t && (submission?.outcome === "submitting" || streaming);
-  const inputText = input ? {
-    starting: undefined, // The reply area's Piano keys provide startup feedback.
-    submitted: undefined,
-    handled: "Command handled.",
-    rejected: "Message rejected.",
-    uncertain: "Delivery uncertain — inspect the session list before deciding whether to send again. Piano will not resend automatically.",
-  }[input.outcome] : undefined;
-  const submissionText = input ? inputText : (submission ? {
-    submitting: "Submitting — waiting for Pi.",
-    started: undefined, // Running/ready state already describes the work.
-    queued: undefined, // The queue itself shows pending input.
-    handled: "Command handled.",
-    rejected: "Message rejected.",
-    uncertain: "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
-  }[submission.outcome] : undefined);
-
-  // A dialog the first input opened needs the user, so it outranks startup.
-  const status = starting && !t?.dialogs.length ? "Starting"
-    : !t && input ? "Delivery uncertain"
-    : !state.connected || (t !== null && !ready) ? "Reconnecting"
-    : !t ? "Loading"
-    : checkoutMissing ? "Read-only"
-    : t.closedReason ? "Exited"
-    : activity || (streaming ? "Working" : t.hosted ? "Ready" : "Not running");
 
   return (
     <>
       <SessionHeader state={state} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)}
         openPullRequest={() => onPullRequestOpenChange(true)}
         pullRequest={t?.sessionId && <SessionPullRequestControl key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />} />
-      {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={sessionWorkspace(state)} session={t}
+      {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={changesWorkspace} session={t}
         onAsk={text => {
           if (!draftKey) return;
           onDraftAppend(draftKey, `${state.drafts[draftKey]?.trim() ? "\n\n" : ""}${text}`);

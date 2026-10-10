@@ -11,6 +11,7 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { folderFor } from "@/lib/sessionContext";
 import type { AppState } from "@/store";
 
 const label = (worktree: WorktreeFacts) => worktree.branch ?? worktree.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD";
@@ -20,7 +21,7 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
   onOpenChange: (o: boolean) => void; onPendingChange: (pending: boolean) => void; state: AppState; currentCwd: string;
   send: (m: ClientCommand) => void; onSelect: (cwd: string) => void;
 }) {
-  const folder = state.folders.find(p => p.worktrees.some(w => w.path === currentCwd));
+  const folder = folderFor(state, currentCwd);
   // The sidebar snapshot stands in only until this picker's own discovery answers.
   const discovery = folder && (state.worktrees[folder.path] ?? folder.discovery);
   const [query, setQuery] = useState("");

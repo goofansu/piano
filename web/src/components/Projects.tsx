@@ -1,4 +1,4 @@
-import type { ClientCommand, Project, SessionReference } from "@shared/wire";
+import type { ClientCommand, Project } from "@shared/wire";
 import { PlusIcon, TargetIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -6,22 +6,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { sessionProject } from "@/lib/sessionContext";
 import type { AppState } from "@/store";
 
 type SessionRef = { cwd: string; sessionId: string };
 
 /** The one project dialog: create or rename a project. With `assign`, the saved project also takes that session. */
 export type ProjectDialog = { project?: Project; assign?: SessionRef };
-
-/** The registry reference behind a session row, so membership is read from one place. */
-export function sessionReference(state: AppState, session: SessionRef): SessionReference | undefined {
-  return state.sessionReferences.find(s => s.cwd === session.cwd && s.sessionId === session.sessionId);
-}
-
-export function sessionProject(state: AppState, session: SessionRef | null | undefined): Project | undefined {
-  const id = session && sessionReference(state, session)?.projectId;
-  return id ? state.projects.find(p => p.id === id) : undefined;
-}
 
 export const activeProjects = (state: AppState) => state.projects.filter(p => !p.archived);
 

@@ -1,0 +1,100 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
+import { directoryTrust, sessionActivity, sessionContext } from "../web/src/lib/sessionContext.ts";
+import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
+
+const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
+const worktree = (path: string, branch: string | null, extra: Partial<WorktreeView> = {}): WorktreeView => ({
+  workspace: ws(path), trust: { required: true, trusted: false }, branch, path, root: path === "/repo", status: "current", ...extra,
+});
+const folder: FolderView = {
+  path: "/repo", name: "repo",
+  worktrees: [worktree("/repo", "main"), worktree("/work/repo.feature", "feature")],
+  discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
+  sessions: [{ sessionId: "s1", workspaceId: "ws:/work/repo.feature", cwd: "/work/repo.feature", branch: "feature", title: "Folder title", createdAt: "", updatedAt: "", hosted: true, streaming: false }],
+};
+const session = (cwd: string, state: Partial<SessionState> = {}, extra: Partial<SessionView> = {}): SessionView => ({
+  cwd, sessionId: "s1", hosted: true, cursor: null, state: { sessionId: "s1", ...state } as SessionState, messages: [], pending: null, dialogs: [], tools: {}, ...extra,
+});
+const base: AppState = {
+  ...initialState, connected: true, selectionId: "sel", view: { kind: "session" },
+  folders: [folder], workspaces: [ws("/repo"), ws("/work/repo.feature"), ws("/closed")],
+  projects: [{ id: "p1", name: "Launch", archived: false }],
+  sessionReferences: [{ cwd: "/work/repo.feature", sessionId: "s1", projectId: "p1", archived: false }],
+};
+
+test("a worktree session reads its folder, worktree, branch, project and workspace from one place", () => {
+  const ctx = sessionContext({ ...base, session: session("/work/repo.feature") });
+  assert.equal(ctx.ready, true);
+  assert.equal(ctx.folderName, "repo");
+  assert.equal(ctx.worktreeName, "feature");
+  assert.equal(ctx.branch, "feature");
+  assert.equal(ctx.project?.name, "Launch");
+  assert.equal(ctx.workspace?.id, "ws:/work/repo.feature");
+  assert.equal(ctx.canOpenChanges, true);
+  assert.equal(sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).worktreeName, "main");
+  assert.equal(sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).title, "Named");
+});
+
+test("a session whose folder was closed keeps its registry workspace for Changes and its pull request", () => {
+  const ctx = sessionContext({ ...base, session: session("/closed") });
+  assert.equal(ctx.folder, undefined);
+  assert.equal(ctx.folderName, "closed");
+  assert.equal(ctx.worktreeName, undefined);
+  assert.equal(ctx.branch, undefined);
+  assert.equal(ctx.workspace?.id, "ws:/closed");
+  assert.equal(ctx.changesWorkspace?.id, "ws:/closed");
+  assert.equal(ctx.canOpenChanges, true);
+});
+
+test("a removed checkout keeps its workspace identity but cannot open Changes; a non-Git folder has no Changes workspace", () => {
+  const missing = sessionContext({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) });
+  assert.equal(missing.checkoutMissing, true);
+  assert.equal(missing.workspace?.id, "ws:/work/repo.feature");
+  assert.equal(missing.canOpenChanges, false);
+  const plain: FolderView = { ...folder, worktrees: [worktree("/repo", null, { status: "non-git" })], discovery: { status: "non-git", observedAt: "" }, sessions: [] };
+  const nonGit = sessionContext({ ...base, folders: [plain], session: session("/repo") });
+  assert.equal(nonGit.workspace?.id, "ws:/repo");
+  assert.equal(nonGit.changesWorkspace, undefined);
+  assert.equal(nonGit.canOpenChanges, false);
+  assert.equal(nonGit.branch, undefined);
+});
+
+test("readiness needs a connected, settled attachment", () => {
+  const current = { ...base, session: session("/repo") };
+  assert.equal(sessionContext(current).ready, true);
+  for (const state of [{ ...current, connected: false }, { ...current, resync: true }, { ...current, selecting: { cwd: "/repo", sessionId: "s2" } }, { ...current, selectionId: null }]) {
+    assert.equal(sessionContext(state).ready, false);
+    assert.equal(sessionActivity(state, "everything").status, "Reconnecting");
+  }
+});
+
+test("status precedence: startup, delivery, reconnecting, read-only, exited, then activity", () => {
+  const status = (state: AppState) => sessionActivity(state, "everything").status;
+  const pending = { cwd: "/repo", text: "hi", outcome: "starting" as const };
+  assert.equal(status({ ...base, pendingCreate: pending }), "Starting");
+  assert.equal(status({ ...base, pendingCreate: pending, session: session("/repo", {}, { dialogs: [{ id: "d", method: "confirm", title: "Q" } as never] }) }), "Waiting for input", "a dialog outranks startup");
+  assert.equal(status({ ...base, pendingCreate: { ...pending, outcome: "uncertain" } }), "Delivery uncertain");
+  assert.equal(status({ ...base }), "Loading");
+  assert.equal(status({ ...base, session: session("/repo", { checkoutMissing: true }, { closedReason: "x" }) }), "Read-only");
+  assert.equal(status({ ...base, session: session("/repo", {}, { closedReason: "x" }) }), "Exited");
+  assert.equal(status({ ...base, session: session("/repo", { isCompacting: true, isRetrying: true }) }), "Compacting · Retrying");
+  assert.equal(status({ ...base, session: session("/repo", { isStreaming: true }) }), "Working");
+  assert.equal(status({ ...base, session: session("/repo") }), "Ready");
+  assert.equal(status({ ...base, session: session("/repo", {}, { hosted: false }) }), "Not running");
+});
+
+test("reply activity yields to visible pending text, except in Messages display", () => {
+  const streaming = { ...base, session: session("/repo", { isStreaming: true }, { pending: { id: "p", role: "assistant", text: "partial" } }) };
+  assert.equal(sessionActivity(streaming, "everything").replyActivity, undefined);
+  assert.equal(sessionActivity(streaming, "messages").replyActivity, "working");
+  assert.equal(sessionActivity({ ...base, pendingCreate: { cwd: "/repo", text: "", outcome: "starting" } }, "everything").replyActivity, "starting");
+  assert.equal(sessionActivity({ ...base, session: session("/repo", { submission: { id: 1, outcome: "submitting" } as never }) }, "everything").submissionText, "Submitting — waiting for Pi.");
+});
+
+test("directory trust prefers the latest probe over discovery", () => {
+  assert.deepEqual(directoryTrust(base, "/repo"), { required: true, trusted: false });
+  assert.deepEqual(directoryTrust({ ...base, trusts: { "/repo": { required: true, trusted: true } } }, "/repo"), { required: true, trusted: true });
+  assert.equal(directoryTrust(base, "/elsewhere"), undefined);
+});
