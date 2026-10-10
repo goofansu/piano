@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
-import { BroadcastLive } from "./Broadcast.ts";
 import { CatalogLive } from "./Catalog.ts";
 import { agentDir } from "./PiEnv.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
@@ -19,6 +18,7 @@ import { RegistryDatabasePath, RegistryLive } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
+import { SidebarViewLive } from "./SidebarView.ts";
 import { WorkspaceChangesLive } from "./WorkspaceChanges.ts";
 import { WorkspaceCommandsLive } from "./WorkspaceCommands.ts";
 import { WorkspaceRevisionsLive } from "./WorkspaceRevisions.ts";
@@ -47,13 +47,13 @@ process.once("SIGTERM", drain);
 const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds" });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-const Services = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive, BroadcastLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
+const Services = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
   Layer.provideMerge(CatalogLive),
   Layer.provideMerge(RegistryLive),
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),
 );
-const Core = WorkspaceCommandsLive.pipe(Layer.provideMerge(Services));
+const Core = Layer.mergeAll(WorkspaceCommandsLive, SidebarViewLive()).pipe(Layer.provideMerge(Services));
 
 const Routes = Layer.mergeAll(AppRouter, HttpStaticServer.layer({ root: WEB_DIST, index: "index.html", spa: true }), Drain);
 

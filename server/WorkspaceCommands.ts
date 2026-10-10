@@ -22,7 +22,7 @@ export interface CreateSessionRequest {
   readonly attachments?: ReadonlyArray<Attachment>;
 }
 
-/** How the requesting connection takes part: it attaches the opened session and republishes the registry. */
+/** How the requesting connection takes part: it attaches the opened session and signals that the sidebar changed. */
 export interface SessionClient<E, R> {
   readonly attach: (open: Effect.Effect<PiSession, PiSessionError>) => Effect.Effect<PiSession, E | PiSessionError, R>;
   readonly published: Effect.Effect<void, E, R>;

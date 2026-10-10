@@ -17,7 +17,6 @@ import {
   type StartOptions,
 } from "../shared/wire.ts";
 import { makeSocketDelivery } from "./BoundedDelivery.ts";
-import { Broadcast } from "./Broadcast.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { expandHome } from "./PiEnv.ts";
@@ -26,7 +25,7 @@ import { projectTrust, setProjectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
 import { emptySnapshot } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
-import { buildFolders, buildSessionReferences } from "./Views.ts";
+import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceCommands } from "./WorkspaceCommands.ts";
 import { listWorktrees } from "./Worktrees.ts";
 
@@ -42,7 +41,7 @@ export const handleSocket = (socket: Socket.Socket) =>
   Effect.gen(function* () {
     const hosts = yield* SessionHosts;
     const catalog = yield* Catalog;
-    const broadcast = yield* Broadcast;
+    const sidebar = yield* SidebarView;
     const registry = yield* Registry;
     const commands = yield* WorkspaceCommands;
     const reader = yield* socket.reader;
@@ -54,14 +53,8 @@ export const handleSocket = (socket: Socket.Socket) =>
     const send = delivery.offer;
     const sendError = (e: unknown, selectionId?: string) =>
       Effect.logWarning(`client error: ${describe(e)}`).pipe(Effect.andThen(send({ _tag: "error", message: describe(e), selectionId })));
-    const publishRegistry = buildFolders.pipe(Effect.flatMap(folders => Effect.gen(function* () {
-      const observed = yield* buildSessionReferences;
-      // Filesystem reads may overlap a membership edit. Publish the latest metadata,
-      // never a grouping snapshot captured before those asynchronous observations.
-      const data = yield* registry.get;
-      const sessionReferences = data.sessions.map(s => ({ ...s, unavailable: observed.find(o => o.cwd === s.cwd && o.sessionId === s.sessionId)?.unavailable }));
-      yield* broadcast.publish({ _tag: "registry", folders, projects: data.projects, sessionReferences, workspaces: data.workspaces });
-    })));
+    // Signals only: the sidebar view publishes registry edits promptly and rediscovers Git in the background.
+    const publishRegistry = sidebar.changed;
 
     // ── selection / attachment ──
     type Selection = { cwd: string; sessionId: string | null; selectionId: string };
@@ -241,15 +234,13 @@ export const handleSocket = (socket: Socket.Socket) =>
     // ── initial state and global updates ──
     // Worktree discovery can take seconds in a large repository. Show the last observation at
     // once and let a fresh one follow, so it never holds up the page or this socket's requests.
-    const updates = yield* broadcast.subscribe;
-    const last = yield* broadcast.latest;
-    if (last) yield* send(last);
+    const updates = yield* sidebar.subscribe;
     yield* send({ _tag: "hosts", hosts: yield* hosts.list });
     // The browser requests models for its selected cwd; home cannot establish
     // project-local providers/resources and must not stand in for that catalog.
     yield* updates.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
     yield* catalog.changes.pipe(Stream.runForEach(() => send({ _tag: "catalogs_invalidated" })), Effect.ignore, Effect.forkScoped);
-    yield* publishRegistry.pipe(Effect.forkScoped);
+    yield* sidebar.refresh;
     yield* hosts.changes.pipe(
       Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),
       Effect.ignore,
