@@ -177,7 +177,11 @@ try {
   await ab('set','viewport','1280','900');
   await button('Remove Radius MCP');await ab('wait','--text','Remove Radius MCP?');
   assert.equal(await evaluate(`document.querySelector('[role="dialog"] [data-slot="dialog-description"]').textContent`),'Removes Radius MCP from Pi on this machine.');
-  await capture('11-remove-mcp-confirm');await button('Cancel');await dialogClosed();
+  await capture('11-remove-mcp-confirm');
+  // Record every title the dialog shows while it animates closed; the wording must not switch.
+  await evaluate(`(() => { window.closingTitles = []; const seen = () => { const t = document.querySelector('[role="dialog"] [data-slot="dialog-title"]'); if (t) window.closingTitles.push(t.textContent); }; window.closingObserver = new MutationObserver(seen); window.closingObserver.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true }); return true; })()`);
+  await button('Cancel');await dialogClosed();
+  assert.deepEqual(await evaluate(`(() => { window.closingObserver.disconnect(); return [...new Set(window.closingTitles)]; })()`),['Remove Radius MCP?'],'closing dialog keeps its wording');
   assert.deepEqual(JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')),config);
   await button('Remove Radius MCP');await ab('wait','--text','Remove Radius MCP?');
   config.mcpServers.radius.timeout=45;

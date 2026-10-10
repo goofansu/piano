@@ -43,7 +43,10 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [refreshing, setRefreshing] = useState(true);
   const [login, setLogin] = useState<string>();
+  // The dialog keeps the last removal's wording while it animates closed.
   const [removal, setRemoval] = useState<Removal>();
+  const [removalOpen, setRemovalOpen] = useState(false);
+  const confirmRemoval = (next: Removal) => { setRemoval(next); setRemovalOpen(true); };
   const manualRefresh = useRef(false);
   // Web search changes finish in the background; remember one seen to finish here until it can be announced.
   const lastInstallation = useRef<RadiusSetupState["installation"]["status"]>(undefined);
@@ -101,7 +104,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
       if (action === "configure-mcp") toast.success("Radius MCP added. Start a new session to use it.", { id: SETUP_TOAST });
       if (action === "remove-mcp") toast.success("Radius MCP removed for new sessions.", { id: SETUP_TOAST });
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not complete setup. Refresh before retrying."); }
-    finally { setBusy(false); setRemoval(undefined); setRevision(value => value + 1); }
+    finally { setBusy(false); setRemovalOpen(false); setRevision(value => value + 1); }
   };
   const radius = providers.find(provider => provider.id === "radius");
   const installing = state?.installation.status === "running";
@@ -169,7 +172,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
               </ItemContent>
               <ItemActions className="max-sm:basis-full max-sm:pl-12">
                 {!mcpReady && <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !signedIn} aria-label="Add Radius MCP" onClick={() => void act("configure-mcp")}>Add</Button>}
-                {state.mcp.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })} aria-label="Remove Radius MCP">Remove</Button>}
+                {state.mcp.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => confirmRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })} aria-label="Remove Radius MCP">Remove</Button>}
               </ItemActions>
             </Item>
             <ItemSeparator />
@@ -185,7 +188,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
                 {installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
                   : <>
                     {!webSearchReady && <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} aria-label="Install web search" onClick={() => void act("install-web-search")}>Install</Button>}
-                    {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => setRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })} aria-label="Uninstall web search">Uninstall</Button>}
+                    {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => confirmRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })} aria-label="Uninstall web search">Uninstall</Button>}
                   </>}
               </ItemActions>
             </Item>
@@ -195,7 +198,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
     {state?.installation.status === "error" && <Alert variant="destructive"><AlertTitle>{state.installation.action === "uninstall" ? "Web search was not uninstalled" : "Web search was not installed"}</AlertTitle><AlertDescription>{state.installation.detail}</AlertDescription></Alert>}
      </section>
     </div>
-    <Dialog open={!!removal} onOpenChange={open => { if (!open && !busy) setRemoval(undefined); }}>
+    <Dialog open={removalOpen} onOpenChange={open => { if (!open && !busy) setRemovalOpen(false); }}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onInteractOutside={event => event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{removal?.action === "remove-mcp" ? "Remove Radius MCP?" : "Uninstall web search?"}</DialogTitle>
@@ -206,8 +209,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" disabled={busy} onClick={() => setRemoval(undefined)}>Cancel</Button>
-          <Button variant="destructive" disabled={disabled} onClick={() => { if (removal) void act(removal.action, removal.key); }}>
+          <Button variant="outline" disabled={busy} onClick={() => setRemovalOpen(false)}>Cancel</Button>
+          <Button variant="destructive" disabled={disabled} onClick={() => { if (removal && removalOpen) void act(removal.action, removal.key); }}>
             {busy && <Spinner data-icon="inline-start" />}{removal?.action === "remove-mcp" ? "Remove" : "Uninstall"}
           </Button>
         </DialogFooter>
