@@ -9,13 +9,8 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { type ProviderLoginRequest, providerLogin } from "@/lib/api";
 
-async function request(method = "GET", body?: unknown): Promise<{ state: ProviderLoginState | null }> {
-  const response = await fetch("/api/provider-login", { method, headers: { "content-type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? "Could not complete sign-in.");
-  return result;
-}
 function safeUrl(raw?: string) {
   try { const url = new URL(raw!); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : undefined; } catch { return undefined; }
 }
@@ -28,15 +23,14 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
   const [connectionError, setConnectionError] = useState("");
   const epoch = useRef(0);
   // StrictMode must not submit login twice. Re-attach to the same initialization.
-  const initialization = useRef<Promise<{ state: ProviderLoginState | null }> | null>(null);
+  const initialization = useRef<Promise<ProviderLoginState | null> | null>(null);
   useEffect(() => {
     let alive = true;
     initialization.current ??= (async () => {
-      let { state } = await request();
-      if (initialProvider && state?.status !== "running") ({ state } = await request("POST", { provider: initialProvider }));
-      return { state };
+      const state = await providerLogin();
+      return initialProvider && state?.status !== "running" ? providerLogin({ method: "POST", body: { provider: initialProvider } }) : state;
     })();
-    void initialization.current.then(result => { if (alive) { setState(result.state); } }).catch(error => { if (alive) setError(error.message); }).finally(() => { if (alive) setBusy(false); });
+    void initialization.current.then(state => { if (alive) { setState(state); } }).catch(error => { if (alive) setError(error.message); }).finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
   }, [initialProvider]);
   useEffect(() => {
@@ -46,10 +40,10 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
     const poll = async () => {
       const version = epoch.current;
       try {
-        const result = await request();
+        const next = await providerLogin();
         if (alive && version === epoch.current) {
-          setState(result.state); setConnectionError("");
-          if (result.state?.status !== "running") setError("");
+          setState(next); setConnectionError("");
+          if (next?.status !== "running") setError("");
         }
       } catch { if (alive && version === epoch.current) setConnectionError("Connection lost. Sign-in will resume when Piano reconnects."); }
       if (alive) timer = setTimeout(poll, 750);
@@ -57,10 +51,10 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
     timer = setTimeout(poll, 750);
     return () => { alive = false; clearTimeout(timer); };
   }, [state?.status, busy]);
-  const change = async (method: string, body: unknown) => {
+  const change = async (request: ProviderLoginRequest) => {
     epoch.current++;
     setBusy(true); setError("");
-    try { setState((await request(method, body)).state); } catch (error) { setError(error instanceof Error ? error.message : "Could not complete sign-in."); }
+    try { setState(await providerLogin(request)); } catch (error) { setError(error instanceof Error ? error.message : "Could not complete sign-in."); }
     finally { epoch.current++; setBusy(false); }
   };
   const notified = useRef<string | undefined>(undefined);
@@ -76,9 +70,9 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
     epoch.current++;
     setBusy(true); setError("");
     try {
-      const result = await request("DELETE", { id: state.id });
+      const result = await providerLogin({ method: "DELETE", body: { id: state.id } });
       // Authorization may have completed before cancellation reached the server.
-      if (result.state?.status === "success") signedIn();
+      if (result?.status === "success") signedIn();
       close();
     } catch {
       setError("Could not cancel sign-in. Check your connection and try again.");
@@ -118,12 +112,12 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
           </InputGroupAddon>
         </InputGroup>
       </Field></FieldGroup>}
-      {prompt && <LoginPromptForm key={prompt.id} state={state!} busy={busy} cancel={() => void dismiss()} answer={value => void change("PUT", { id: state!.id, promptId: prompt.id, value })} />}
+      {prompt && <LoginPromptForm key={prompt.id} state={state!} busy={busy} cancel={() => void dismiss()} answer={value => void change({ method: "PUT", body: { id: state!.id, promptId: prompt.id, value } })} />}
       {busy && !prompt && <p role="status" className="text-sm text-muted-foreground">Loading…</p>}
       {(error || connectionError) && <Alert variant="destructive"><AlertDescription>{error || connectionError}</AlertDescription></Alert>}
       {!prompt && <DialogFooter>
         <Button variant={state?.status === "success" ? "default" : "outline"} disabled={busy} onClick={() => void dismiss()}>{dismissLabel}</Button>
-        {(state?.status === "error" || state?.status === "cancelled") && <Button disabled={busy} onClick={() => void change("POST", { provider: state.provider })}>Try again</Button>}
+        {(state?.status === "error" || state?.status === "cancelled") && <Button disabled={busy} onClick={() => void change({ method: "POST", body: { provider: state.provider } })}>Try again</Button>}
         {url && <Button asChild><a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Open sign-in page</a></Button>}
       </DialogFooter>}
     </DialogContent>

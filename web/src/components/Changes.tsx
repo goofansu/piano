@@ -1,6 +1,5 @@
-import { CHANGES_FILE_PATCH_BYTES, CHANGES_INITIAL_PATCH_BYTES, type ChangeFile, type Workspace, WorkspaceChanges } from "@shared/wire";
+import { CHANGES_FILE_PATCH_BYTES, CHANGES_INITIAL_PATCH_BYTES, type ChangeFile, type Workspace, type WorkspaceChanges } from "@shared/wire";
 import { cn } from "cn";
-import { Schema } from "effect";
 import { FileDiffIcon, FileMinusIcon, FilePlusIcon, MessageSquarePlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -14,6 +13,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
+import { workspaceChangedFile, workspaceChanges } from "@/lib/api";
 import { type DiffFile, parseUnifiedDiff } from "@/lib/diff";
 import { abbrevHome } from "@/lib/format";
 import type { SessionView } from "@/store";
@@ -37,9 +37,7 @@ function useWorkspaceChanges(workspace: Workspace | undefined, active: boolean, 
     const mine = ++sequence.current;
     setBusy(true); setError(undefined);
     (async () => {
-      const response = await fetch(`/api/workspace/changes?workspaceId=${encodeURIComponent(workspaceId)}`, { method: "POST", signal: request.signal });
-      if (!response.ok) throw new Error(`Changes request failed (${response.status}). Refresh folders or inspect the server.`);
-      const value = Schema.decodeUnknownSync(WorkspaceChanges)(await response.json());
+      const value = await workspaceChanges(workspaceId, { signal: request.signal });
       if (value.workspace.id !== workspaceId || value.workspace.path !== workspacePath) throw new Error("Changes returned a different workspace. Refresh before inspecting changes.");
       if (value.result.status === "error") throw new Error(value.result.detail);
       if (mine === sequence.current) setObservation(value);
@@ -199,11 +197,7 @@ function LiveFile({ metadata, initial, workspace, observedAt, open, onOpenChange
     const controller = new AbortController();
     setBusy(true); setError(undefined);
     (async () => {
-      const response = await fetch(`/api/workspace/changes/file?workspaceId=${encodeURIComponent(workspace.id)}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: metadata.path }), signal: controller.signal,
-      });
-      if (!response.ok) throw new Error(`File request failed (${response.status}).`);
-      const value = Schema.decodeUnknownSync(WorkspaceChanges)(await response.json());
+      const value = await workspaceChangedFile(workspace.id, metadata.path, { signal: controller.signal });
       if (value.workspace.id !== workspace.id || value.workspace.path !== workspace.path) throw new Error("File response belongs to another workspace.");
       if (value.result.status === "error") throw new Error(value.result.detail);
       const file = parseUnifiedDiff(value.result.diff).find(f => f.path === metadata.path);

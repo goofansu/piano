@@ -14,23 +14,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { oauthProviders, providerLogout, type RadiusSetupAction, radiusSetup } from "@/lib/api";
 
-type SetupAction = "configure-mcp" | "install-web-search" | "remove-mcp" | "uninstall-web-search";
 type Removal = { action: "remove-mcp" | "uninstall-web-search"; key: string };
 
 /** One turn of the refresh icon, so a fast refresh still reads as a refresh instead of a flicker. */
 const REFRESH_SPIN_MS = 600;
 /** Setup toasts share an id, so finishing setup replaces the step's toast instead of stacking. */
 const SETUP_TOAST = "radius-setup";
-
-async function setupRequest(action?: SetupAction, signal?: AbortSignal, removalKey?: string): Promise<RadiusSetupState> {
-  const response = await fetch("/api/settings/radius", { signal, ...(action ? {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, removalKey }),
-  } : {}) });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? "Could not load Radius setup.");
-  return result.state;
-}
 
 export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => void; providersChanged: () => void }) {
   const [state, setState] = useState<RadiusSetupState>();
@@ -64,14 +55,12 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
       const manual = manualRefresh.current;
       manualRefresh.current = false;
       try {
-        const [next, response] = await Promise.all([
-          setupRequest(undefined, controller.signal), fetch("/api/oauth-providers", { signal: controller.signal }),
+        const [next, signIns] = await Promise.all([
+          radiusSetup(undefined, { signal: controller.signal }), oauthProviders({ signal: controller.signal }),
           manual && new Promise(resolve => setTimeout(resolve, REFRESH_SPIN_MS)),
         ]);
-        if (!response.ok) throw new Error("Could not load Radius sign-in status.");
-        const result = await response.json();
         if (controller.signal.aborted) return;
-        observe(next); setProviders(result.providers); setState(next); setError("");
+        observe(next); setProviders([...signIns]); setState(next); setError("");
         installing = next.installation.status === "running";
         // A running or just-finished web-search change gets its own toast once it settles.
         if (manual && !installing && !finished.current) toast.success("Radius setup refreshed.",{ id: SETUP_TOAST });
@@ -86,9 +75,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const signOut = async () => {
     setSigningOut(true); setActionError("");
     try {
-      const response = await fetch("/api/provider-logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "radius" }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Could not sign out. Try again.");
+      await providerLogout("radius");
       // Only acknowledge sign-out after Pi confirms credential removal.
       setProviders(current => current.map(provider => provider.id === "radius" ? { ...provider, signedIn: false } : provider));
       refreshProviders();
@@ -96,10 +83,10 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not sign out. Try again."); }
     finally { setSigningOut(false); setConfirmSignOut(false); }
   };
-  const act = async (action: SetupAction, removalKey?: string) => {
+  const act = async (action: RadiusSetupAction, removalKey?: string) => {
     setBusy(true); setActionError("");
     try {
-      const next = await setupRequest(action, undefined, removalKey);
+      const next = await radiusSetup({ action, removalKey });
       observe(next); setState(next);
       if (action === "configure-mcp") toast.success("Radius MCP added. Start a new session to use it.", { id: SETUP_TOAST });
       if (action === "remove-mcp") toast.success("Radius MCP removed for new sessions.", { id: SETUP_TOAST });

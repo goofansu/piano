@@ -1,13 +1,21 @@
+import { Schema } from "effect";
+
 /** Machine-wide Radius setup observations, not live session connectivity or tool authorization. */
-export interface RadiusSetupStep {
-  status: "missing" | "ready" | "blocked";
-  detail?: string;
+export const RadiusSetupStep = Schema.Struct({
+  status: Schema.Literals(["missing", "ready", "blocked"]),
+  detail: Schema.optional(Schema.String),
   /** Opaque identity of the configuration reviewed before confirming removal. */
-  removalKey?: string;
-}
-export interface RadiusSetupState {
-  mcp: RadiusSetupStep;
-  webSearch: RadiusSetupStep;
+  removalKey: Schema.optional(Schema.String),
+});
+export type RadiusSetupStep = typeof RadiusSetupStep.Type;
+export const RadiusSetupState = Schema.Struct({
+  mcp: RadiusSetupStep,
+  webSearch: RadiusSetupStep,
   /** One server-owned package operation; navigation never cancels it. */
-  installation: { status: "idle" | "running" | "success" | "error"; action?: "install" | "uninstall"; detail?: string };
-}
+  installation: Schema.Struct({
+    status: Schema.Literals(["idle", "running", "success", "error"]),
+    action: Schema.optional(Schema.Literals(["install", "uninstall"])),
+    detail: Schema.optional(Schema.String),
+  }),
+});
+export type RadiusSetupState = typeof RadiusSetupState.Type;

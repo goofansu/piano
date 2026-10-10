@@ -11,6 +11,7 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { saveDefaults } from "@/lib/api";
 import { picker } from "@/lib/styles";
 
 interface Props {
@@ -56,9 +57,7 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
   const saveDefault = async () => {
     setSaving(true);
     try {
-      const response = await fetch("/api/settings/defaults", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: want, thinkingLevel: effort }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Could not save defaults. Try again.");
+      await saveDefaults(want, effort);
       toast.success("Defaults saved for new sessions.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save defaults. Try again.");
