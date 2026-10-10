@@ -78,7 +78,7 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
       <section aria-labelledby="settings-section-title" className="mx-auto flex max-w-2xl flex-col gap-6">
         {section !== "radius" && <header className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" className="md:hidden" onClick={onMenu}><ChevronLeftIcon data-icon="inline-start" />Settings</Button>
+            <Button variant="ghost" size="icon" className="size-11 md:hidden" aria-label="Settings" onClick={onMenu}><ChevronLeftIcon /></Button>
             <h1 id="settings-section-title" className="text-xl font-semibold">{SECTIONS.find(item => item.id === section)?.label}</h1>
           </div>
         </header>}
@@ -91,7 +91,7 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
         <section id="settings-providers" aria-labelledby="settings-providers-title" className="mx-auto flex max-w-2xl flex-col gap-6">
           <header className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <Button variant="ghost" className="md:hidden" onClick={onMenu}><ChevronLeftIcon data-icon="inline-start" />Settings</Button>
+              <Button variant="ghost" size="icon" className="size-11 md:hidden" aria-label="Settings" onClick={onMenu}><ChevronLeftIcon /></Button>
               <h1 id="settings-providers-title" className="text-xl font-semibold">Providers</h1>
             </div>
           </header>

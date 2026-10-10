@@ -91,7 +91,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   return <>
     <header className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" className="md:hidden" onClick={onMenu}><ChevronLeftIcon data-icon="inline-start" />Settings</Button>
+        <Button variant="ghost" size="icon" className="size-11 md:hidden" aria-label="Settings" onClick={onMenu}><ChevronLeftIcon /></Button>
         <h1 id="settings-section-title" className="text-xl font-semibold">Radius</h1>
         <IconButton className="ml-auto" label="Refresh setup" disabled={busy || signingOut || refreshing} onClick={() => { setActionError(""); setRevision(value => value + 1); }}>
           {refreshing ? <Spinner /> : <RefreshCwIcon />}
