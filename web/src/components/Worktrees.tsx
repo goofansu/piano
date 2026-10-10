@@ -19,9 +19,9 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
   onOpenChange: (o: boolean) => void; onPendingChange: (pending: boolean) => void; state: AppState; currentCwd: string;
   send: (m: ClientCommand) => void; onSelect: (cwd: string) => void;
 }) {
-  const project = state.projects.find(p => p.worktrees.some(w => w.path === currentCwd));
+  const folder = state.folders.find(p => p.worktrees.some(w => w.path === currentCwd));
   // The sidebar snapshot stands in only until this picker's own discovery answers.
-  const discovery = project && (state.worktrees[project.path] ?? project.discovery);
+  const discovery = folder && (state.worktrees[folder.path] ?? folder.discovery);
   const [query, setQuery] = useState("");
   const [branch, setBranch] = useState("");
   const [hooks, setHooks] = useState(false);
@@ -33,14 +33,14 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => { if (error) errorRef.current?.scrollIntoView({ block: "nearest" }); }, [error]);
   const [refreshing, setRefreshing] = useState(false);
-  const target = discovery?.status === "ready" ? project : undefined;
+  const target = discovery?.status === "ready" ? folder : undefined;
   const pending = request !== null;
   useEffect(() => { onPendingChange(pending); }, [pending, onPendingChange]);
-  const rediscover = useCallback(() => { if (project) { setRefreshing(true); send({ _tag: "worktrees", project: project.path }); } }, [project?.path, send]);
+  const rediscover = useCallback(() => { if (folder) { setRefreshing(true); send({ _tag: "worktrees", folder: folder.path }); } }, [folder?.path, send]);
   useEffect(() => {
     setError(null); setRequest(null); setCreating(false); rediscover();
   }, [rediscover]);
-  const answered = project && state.worktrees[project.path];
+  const answered = folder && state.worktrees[folder.path];
   useEffect(() => { if (answered) setRefreshing(false); }, [answered]);
   useEffect(() => {
     if (!request || state.worktreeResult?.requestId !== request) return;
@@ -59,7 +59,7 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
   const submit = () => {
     if (pending || !state.connected || !branch.trim() || !target) return;
     const requestId = crypto.randomUUID(); setRequest(requestId); setError(null);
-    send({ _tag: "create_worktree", requestId, project: target.path, branch: branch.trim(), hooks });
+    send({ _tag: "create_worktree", requestId, folder: target.path, branch: branch.trim(), hooks });
   };
   const startCreating = (initialBranch = "") => { setError(null); setBranch(initialBranch); setCreating(true); };
   const showList = () => { setCreating(false); setError(null); };
@@ -125,7 +125,7 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
             {visible.map(worktree => (
               <CommandItem key={worktree.path} value={worktree.path} disabled={busy || worktree.prunable} onSelect={() => {
                 const requestId = crypto.randomUUID(); setRequest(requestId); setError(null);
-                send({ _tag: "add_worktree", requestId, project: target.path, path: worktree.path });
+                send({ _tag: "add_worktree", requestId, folder: target.path, path: worktree.path });
               }}>
                 <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">{label(worktree)}</span>
                 <PickerCheck selected={worktree.path === currentCwd} />

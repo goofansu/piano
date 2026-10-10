@@ -53,7 +53,7 @@ for (const [id, , messages] of stories) {
   }))];
   writeFileSync(join(sessions, `${id}.jsonl`), entries.map(JSON.stringify).join('\n') + '\n');
 }
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: stories.map(([sessionId, title]) => ({
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: stories.map(([sessionId, title]) => ({
   cwd: repo, sessionId, title, createdAt: timestamp, updatedAt: timestamp, archived: false,
 })) }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: BACKEND_PORT,
@@ -107,7 +107,7 @@ async function checkGeometry(name) {
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${BACKEND_PORT}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${WEB_PORT}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${BACKEND_PORT}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${WEB_PORT}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   await ab('set', 'viewport', '1440', '1000');

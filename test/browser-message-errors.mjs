@@ -46,7 +46,7 @@ const entries = [{ type: 'session', version: 3, id: 'message-errors', cwd: repo,
   type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp, message: { ...message, timestamp: n },
 }))];
 writeFileSync(join(sessions, 'message-errors.jsonl'), entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: [
   { cwd: repo, sessionId: 'message-errors', title: 'Message errors', createdAt: timestamp, updatedAt: timestamp, archived: false },
 ] }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: backendPort,
@@ -95,7 +95,7 @@ try {
   writeFileSync(join(evidence, 'revision.txt'), execFileSync('git', ['rev-parse', 'HEAD']).toString() + execFileSync('git', ['status', '--short']).toString());
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   await ab('set', 'viewport', '1440', '1100');

@@ -38,7 +38,7 @@ function useWorkspaceChanges(workspace: Workspace | undefined, active: boolean, 
     setBusy(true); setError(undefined);
     (async () => {
       const response = await fetch(`/api/workspace/changes?workspaceId=${encodeURIComponent(workspaceId)}`, { method: "POST", signal: request.signal });
-      if (!response.ok) throw new Error(`Changes request failed (${response.status}). Refresh projects or inspect the server.`);
+      if (!response.ok) throw new Error(`Changes request failed (${response.status}). Refresh folders or inspect the server.`);
       const value = Schema.decodeUnknownSync(WorkspaceChanges)(await response.json());
       if (value.workspace.id !== workspaceId || value.workspace.path !== workspacePath) throw new Error("Changes returned a different workspace. Refresh before inspecting changes.");
       if (value.result.status === "error") throw new Error(value.result.detail);

@@ -22,7 +22,7 @@ for (const dir of ['repo', 'agent', 'sessions', 'home', 'config']) mkdirSync(joi
 const repo = join(root, 'repo'), release = join(root, 'release'), audit = join(root, 'audit.jsonl');
 const env = { ...process.env, HOME: join(root, 'home'), XDG_CONFIG_HOME: join(root, 'config'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
 execFileSync('git', ['init', '-q', '-b', 'main', repo], { env });
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [] }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: [] }));
 const pixel = join(root, 'pixel.png');
 writeFileSync(pixel, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==', 'base64'));
 const fake = join(root, 'fake.mjs');
@@ -76,7 +76,7 @@ try {
   writeFileSync(join(evidence, 'revision.txt'), execFileSync('git', ['rev-parse', 'HEAD']).toString() + execFileSync('git', ['status', '--short']).toString());
   for (let n = 0; n < 150; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
     if (n === 149) throw new Error('Scratch startup deadline'); await delay(100);
   }
   await ab('open', `http://127.0.0.1:${webPort}/new`);

@@ -2,7 +2,7 @@
  * Routes, kept in the address bar so refresh, back and forward work:
  *   /new             the New page (which directory it starts in is not part of the address)
  *   /projects/<id>   the New page for one project: a session started there joins it
- *   /s/<sessionId>   one session; its directory is looked up in the project list
+ *   /s/<sessionId>   one session; its directory is looked up in the folder list
  *   /settings/<section> one settings page; /settings aliases Providers
  */
 export type SettingsSection = "providers" | "radius";

@@ -118,7 +118,7 @@ export default function App() {
   const [pullRequestOpen, setPullRequestOpen] = useState(false);
   // One PR projection feeds the header, menu, and palette for the selected session.
   const prSession = state.view.kind === "session" ? state.session : null;
-  const prWorkspaceId = state.projects.flatMap(p => p.sessions).find(s => s.cwd === prSession?.cwd && s.sessionId === prSession?.sessionId)?.workspaceId;
+  const prWorkspaceId = state.folders.flatMap(p => p.sessions).find(s => s.cwd === prSession?.cwd && s.sessionId === prSession?.sessionId)?.workspaceId;
   const pullRequest = useSessionPullRequest(prWorkspaceId, prSession?.sessionId, !!(prSession?.state.isStreaming || prSession?.state.isCompacting || prSession?.state.isRetrying));
   useEffect(() => { setChangesOpen(false); setPullRequestOpen(false); }, [state.session?.cwd, state.session?.sessionId]);
   useEffect(() => {
@@ -149,15 +149,15 @@ export default function App() {
       if (s.view.kind !== "new" || s.view.outcomeProjectId !== r.projectId) dispatch({ type: "new", outcomeProjectId: r.projectId });
       return;
     }
-    // A session needs its directory, which only the project list knows.
-    if (!s.projectsLoaded) return;
+    // A session needs its directory, which only the folder list knows.
+    if (!s.registryLoaded) return;
     wanted.current = null;
-    const owner = s.projects.find((p) => p.sessions.some((t) => t.sessionId === r.sessionId));
+    const owner = s.folders.find((p) => p.sessions.some((t) => t.sessionId === r.sessionId));
     const session = s.sessionReferences.find(t => t.sessionId === r.sessionId) ?? owner?.sessions.find((t) => t.sessionId === r.sessionId);
     if (session) select(session.cwd, session.sessionId);
     else dispatch({ type: "missing-session", sessionId: r.sessionId });
   }, [select]);
-  useEffect(applyRoute, [applyRoute, state.projectsLoaded, state.projects, state.sessionReferences]);
+  useEffect(applyRoute, [applyRoute, state.registryLoaded, state.folders, state.sessionReferences]);
   useEffect(() => {
     const onPop = () => {
       closeMobile();
@@ -189,7 +189,7 @@ export default function App() {
       : route.kind === "new" ? (route.projectId && state.outcomeProjects.find(p => p.id === route.projectId)?.name) || "New session"
       : state.sessionReferences.find(t => t.sessionId === route.sessionId)?.title || "Session";
     document.title = `${settingsOpen ? "Settings" : title} - Piano`;
-  }, [settingsOpen, settingsSection, state.view, state.session, state.selecting, state.projects, state.outcomeProjects, state.sessionReferences]);
+  }, [settingsOpen, settingsSection, state.view, state.session, state.selecting, state.folders, state.outcomeProjects, state.sessionReferences]);
 
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
@@ -208,7 +208,7 @@ export default function App() {
   }, [anyWorking]);
 
   return (
-    <AppLayout layout={layout} navigationTitle={settingsOpen ? "Settings navigation" : "Projects and sessions"}
+    <AppLayout layout={layout} navigationTitle={settingsOpen ? "Settings navigation" : "Folders and sessions"}
       navigation={compact => settingsOpen
         ? <SettingsNavigation compact={compact} section={settingsSection} onShow={layout.show} onHide={layout.hide} onSelect={openSettingsSection} onHome={closeSettings} />
         : compact ? <SidebarRail openSettings={openSettings} onShow={layout.show} working={anyWorking} />

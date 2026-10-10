@@ -22,8 +22,8 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const f = fixture(t), folder = join(f.root, "folder"), hidden = join(f.root, "hidden"), alias = `${folder}/../folder`;
   const stats = { context: { tokens: 153139, contextWindow: 272000, percent: 56.301102941176474 }, cost: 7.290477599999999,
     tokens: { input: 1074786, output: 14967, cacheRead: 6729984, cacheWrite: 0, total: 7819737 }, statsUpdatedAt: 1791430502567 };
-  const original: RegistryData = { version: 2, projects: [folder], worktrees: [{ project: folder, path: hidden, branch: "feature" }],
-    workspaces: [{ id: "hidden-id", project: folder, path: hidden }, { id: "root-id", project: folder, path: folder }, { id: "alias-id", project: alias, path: alias }],
+  const original: RegistryData = { version: 2, folders: [folder], worktrees: [{ folder: folder, path: hidden, branch: "feature" }],
+    workspaces: [{ id: "hidden-id", folder: folder, path: hidden }, { id: "root-id", folder: folder, path: folder }, { id: "alias-id", folder: alias, path: alias }],
     outcomeProjects: [{ id: "project-1", name: "Launch", goal: "Goal", archived: false }, { id: "project-2", name: "Old", archived: true }],
     sessions: [
       { cwd: hidden, sessionId: "same", title: "Closed folder session", createdAt: "then", updatedAt: "now", archived: false, outcomeProjectId: "project-1", stats,
@@ -48,10 +48,10 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
     const r = yield* Registry;
     yield* r.renameSession(hidden, "same", "Renamed");
     yield* r.assignProject(hidden, "same", "project-2");
-    yield* r.removeProject(folder);
+    yield* r.removeFolder(folder);
   }));
   const reopened = await f.get();
-  assert.deepEqual(reopened.projects, []);
+  assert.deepEqual(reopened.folders, []);
   assert.deepEqual(reopened.workspaces, original.workspaces);
   assert.deepEqual(reopened.sessions[0], { ...original.sessions[0], title: "Renamed", outcomeProjectId: "project-2" });
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
@@ -78,7 +78,7 @@ test("INV-01: a failed transaction publishes neither partial rows nor in-memory 
 
 test("INV-01: newer or damaged databases are never reset", async t => {
   const f = fixture(t);
-  assert.deepEqual((await f.get()).projects, []);
+  assert.deepEqual((await f.get()).folders, []);
   const db = new DatabaseSync(f.dbPath);
   try { db.exec("PRAGMA user_version = 99"); } finally { db.close(); }
   await assert.rejects(f.get(), /Unsupported registry database version 99/);

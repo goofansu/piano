@@ -12,7 +12,7 @@ const evidence = resolve(process.argv[2] ?? '/tmp/piano-slash-evidence');
 mkdirSync(evidence, { recursive: true });
 const root = mkdtempSync(join(tmpdir(), 'piano-slash-'));
 const cwd = join(root, 'project'); mkdirSync(cwd); spawnSync('git', ['init', '-q', cwd]);
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: 'not-running', title: 'Saved session', createdAt: '2026-10-07T00:00:00Z', updatedAt: '2026-10-07T00:00:00Z', archived: false }] }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [cwd], worktrees: [], sessions: [{ cwd, sessionId: 'not-running', title: 'Saved session', createdAt: '2026-10-07T00:00:00Z', updatedAt: '2026-10-07T00:00:00Z', archived: false }] }));
 writeFileSync(join(root, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replace(
   'out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });',
   '// Hold the run without a modal over the composer.'
@@ -86,7 +86,7 @@ async function assertSettingsCard(sidebarWidth, sessionStyle) {
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   assert.equal((await fetch(`http://127.0.0.1:${backendPort}/api/commands`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, sessionId: 'not-running' }) })).status, 409, 'discovery does not open stopped sessions');

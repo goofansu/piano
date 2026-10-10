@@ -14,7 +14,7 @@ const root = mkdtempSync(join(tmpdir(), 'piano-queue-edit-'));
 const cwd = join(root, 'project');
 mkdirSync(cwd);
 spawnSync('git', ['init', '-q', cwd]);
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [] }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [cwd], worktrees: [], sessions: [] }));
 // Hold the fake run open without covering the composer with a dialog.
 const releaseStop = join(root, 'release-stop');
 writeFileSync(releaseStop, '');
@@ -65,7 +65,7 @@ function capture(name) {
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   ab('set', 'device', 'iPhone 16');

@@ -15,7 +15,7 @@ import { RadiusSetup } from "./RadiusSetup.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
-import { buildProjects } from "./Views.ts";
+import { buildFolders } from "./Views.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
@@ -153,7 +153,7 @@ export const AppRouter = HttpRouter.use((router) =>
         const request = yield* HttpServerRequest.HttpServerRequest;
         const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId");
         const workspace = (yield* (yield* Registry).get).workspaces.find(w => w.id === id);
-        if (!workspace) return json({ error: "Workspace is not registered. Refresh the project list." }, 404);
+        if (!workspace) return json({ error: "Workspace is not registered. Refresh the folder list." }, 404);
         const body = endpoint === "changes/file" ? yield* readBody : undefined;
         if (body && typeof body.path !== "string") return json({ error: "File path is required in the request body." }, 400);
         return json(yield* (yield* WorkspaceChanges).preview(workspace, body?.path as string | undefined));
@@ -164,7 +164,7 @@ export const AppRouter = HttpRouter.use((router) =>
       const request = yield* HttpServerRequest.HttpServerRequest;
       const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId");
       const workspace = (yield* (yield* Registry).get).workspaces.find(w => w.id === id);
-      if (!workspace) return json({ error: "Workspace is not registered. Refresh the project list." }, 404);
+      if (!workspace) return json({ error: "Workspace is not registered. Refresh the folder list." }, 404);
       return json(yield* (yield* WorkspaceRevisions).capture(workspace));
     }));
 
@@ -257,6 +257,6 @@ export const AppRouter = HttpRouter.use((router) =>
       }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Sign-in request could not be completed. Resume the current sign-in or try again." }, 409)))));
     }
 
-    yield* router.add("GET", "/api/projects", buildProjects.pipe(Effect.map((projects) => json({ projects }))));
+    yield* router.add("GET", "/api/folders", buildFolders.pipe(Effect.map((folders) => json({ folders }))));
   }),
 );

@@ -14,7 +14,7 @@ mkdirSync(evidence, { recursive: true });
 const fixture = await createPiCompatibilityFixture();
 const cwd = fixture.project('dialog-browser', true);
 const registry = join(fixture.root, 'registry.json');
-writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: [] }));
+writeFileSync(registry, JSON.stringify({ folders: [cwd], worktrees: [], sessions: [] }));
 const cli = fake ? { cli: resolve('test/fake-dialog-pi.mjs'), extraArgs: [] } : fixture.cli();
 const server = spawn(process.execPath, ['server/main.ts'], {
   env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),

@@ -29,7 +29,7 @@ for (const id of ['work', 'other', 'notes']) writeFileSync(join(sessions, `${id}
   { type: 'session', version: 3, id, cwd: id === 'notes' ? plain : repo, timestamp },
   { type: 'message', id: 'm0', parentId: null, timestamp, message: { role: 'user', content: 'Research references: https://github.com/unrelated/project/pull/999 and https://github.com/example/repo/issues/1 and http://localhost:9999. These are not session deliverables.', timestamp: 0 } },
 ].map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo, plain], worktrees: [], sessions: ['work', 'other', 'notes'].map(id => ({ cwd: id === 'notes' ? plain : repo, sessionId: id, title: id === 'work' ? 'Current work' : id === 'other' ? 'Other work' : 'Notes', createdAt: timestamp, updatedAt: timestamp, archived: false, ...(id === 'other' ? { pullRequest: null } : {}) })) }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo, plain], worktrees: [], sessions: ['work', 'other', 'notes'].map(id => ({ cwd: id === 'notes' ? plain : repo, sessionId: id, title: id === 'work' ? 'Current work' : id === 'other' ? 'Other work' : 'Notes', createdAt: timestamp, updatedAt: timestamp, archived: false, ...(id === 'other' ? { pullRequest: null } : {}) })) }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PIANO_TEST_GH_FIXTURE: forge, HOST: '127.0.0.1', PORT: backendPort, ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', frontendPort, '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: backendUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';
@@ -66,15 +66,15 @@ try {
   for (let n = 0; ; n++) {
     if (backend.exitCode !== null || frontend.exitCode !== null) throw new Error(`Scratch startup failed (possibly occupied ports): ${processLog}`);
     try {
-      const projects = await (await fetch(`${backendUrl}/api/projects`)).json();
-      if (projects.projects?.some(p => p.path === repo) && (await fetch(frontendUrl)).ok) break;
+      const registered = await (await fetch(`${backendUrl}/api/folders`)).json();
+      if (registered.folders?.some(p => p.path === repo) && (await fetch(frontendUrl)).ok) break;
     } catch {}
     if (n > 150) throw new Error(`Scratch startup deadline: ${processLog}`); await delay(100);
   }
   // HTTP boundary: only a registered workspace/session pair can be read or changed.
-  const projects = (await (await fetch(`${backendUrl}/api/projects`)).json()).projects;
-  const workspaceId = projects.flatMap(p => p.sessions).find(s => s.sessionId === 'work').workspaceId;
-  const plainId = projects.flatMap(p => p.sessions).find(s => s.sessionId === 'notes').workspaceId;
+  const folders = (await (await fetch(`${backendUrl}/api/folders`)).json()).folders;
+  const workspaceId = folders.flatMap(p => p.sessions).find(s => s.sessionId === 'work').workspaceId;
+  const plainId = folders.flatMap(p => p.sessions).find(s => s.sessionId === 'notes').workspaceId;
   const endpoint = params => `${backendUrl}/api/session/pull-request?${new URLSearchParams(params)}`;
   observations.identityChecks = [];
   for (const method of ['GET', 'PUT']) {

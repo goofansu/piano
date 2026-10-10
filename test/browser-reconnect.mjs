@@ -19,7 +19,7 @@ const entries = [{ type: 'session', version: 3, id, cwd: repo, timestamp }];
 for (let n = 0; n < 60; n++) entries.push({ type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp,
   message: { role: 'user', content: `Saved message ${n}: read this conversation without losing your position.`, timestamp: n } });
 writeFileSync(join(sessions, `${id}.jsonl`), entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: [{
   cwd: repo, sessionId: id, title: 'Reconnect example', createdAt: timestamp, updatedAt: timestamp, archived: false,
 }] }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: root, HOST: '127.0.0.1', PORT: String(port),
@@ -64,7 +64,7 @@ async function capture(name) { writeFileSync(join(evidence, `${name}.txt`), awai
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${port}/api/projects`)).ok && (await fetch(appUrl)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${port}/api/folders`)).ok && (await fetch(appUrl)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   await ab('--init-script', init, 'open', `${appUrl}/s/${id}`); await ab('wait', '--text', 'Saved message 59');

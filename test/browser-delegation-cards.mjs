@@ -54,7 +54,7 @@ const entries = [{ type: 'session', version: 3, id: 'delegations', cwd: repo, ti
   type: 'message', id: `m${index}`, parentId: index ? `m${index - 1}` : null, timestamp, message: { ...message, timestamp: index },
 }))];
 writeFileSync(sessionFile, entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: [
   { cwd: repo, sessionId: 'delegations', title: 'Delegation cards', createdAt: timestamp, updatedAt: timestamp, archived: false },
 ] }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: backendPort,
@@ -101,7 +101,7 @@ async function assertDotAlignment(stage) {
 try {
   for (let attempt = 0; attempt < 100; attempt++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
     if (attempt === 99) throw new Error('Scratch startup deadline');
     await delay(100);
   }

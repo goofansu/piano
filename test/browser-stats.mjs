@@ -17,7 +17,7 @@ const env = { ...process.env, HOME: join(root, 'home'), HOST: '127.0.0.1', PORT:
   PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(root, 'sessions') };
 const baseArgs = `--audit ${audit} --stats-file ${statsFile}`;
 writeFileSync(statsFile, JSON.stringify({ cost: 1.23, tokens: { input: 100, output: 20, cacheRead: 30, cacheWrite: 0, total: 150 }, contextUsage: { tokens: 50, contextWindow: 1000, percent: 5 } }));
-writeFileSync(registry, JSON.stringify({ projects: [repo], worktrees: [], sessions: ['cached', 'unknown'].map(sessionId => ({
+writeFileSync(registry, JSON.stringify({ folders: [repo], worktrees: [], sessions: ['cached', 'unknown'].map(sessionId => ({
   cwd: repo, sessionId, title: sessionId, archived: false, createdAt: '2026-10-05T00:00:00Z', updatedAt: '2026-10-05T00:00:00Z',
 })) }));
 let processLog = '';
@@ -60,7 +60,7 @@ async function send(text) { await ab('fill', 'textarea[aria-label="Message"]', t
 async function ready() {
   for (let n = 0; n < 100; n++) {
     assert.equal(server.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch('http://127.0.0.1:7172')).ok && (await fetch('http://127.0.0.1:7171/api/projects')).ok) return; } catch {}
+    try { if ((await fetch('http://127.0.0.1:7172')).ok && (await fetch('http://127.0.0.1:7171/api/folders')).ok) return; } catch {}
     await delay(100);
   }
   throw new Error('Scratch startup deadline');

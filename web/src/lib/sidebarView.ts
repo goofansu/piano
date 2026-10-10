@@ -1,4 +1,4 @@
-import type { OutcomeProject, ProjectView, SessionInfo, SessionReference } from "@shared/wire";
+import type { FolderView, OutcomeProject, SessionInfo, SessionReference } from "@shared/wire";
 
 /** How the sidebar lists sessions: by folder, project, date, or as one list. */
 export type GroupBy = "folder" | "project" | "date" | "none";
@@ -40,7 +40,7 @@ export function sortSessions<T extends SessionLike>(sessions: readonly T[], sort
 }
 
 /** Folders in the chosen order, each with its sessions in that order. A folder's activity is its latest session. */
-export function folderGroups<T extends Pick<ProjectView, "name" | "sessions">>(folders: readonly T[], sort: SortBy): T[] {
+export function folderGroups<T extends Pick<FolderView, "name" | "sessions">>(folders: readonly T[], sort: SortBy): T[] {
   return order(folders.map(f => ({ ...f, sessions: sortSessions(f.sessions, sort) })), sort, f => f.name, f => latest(f.sessions.map(s => s.updatedAt)));
 }
 

@@ -21,7 +21,7 @@ writeFileSync(fake, readFileSync('test/fake-pi.mjs', 'utf8').replace(
   '// Browser gate: active work without a blocking modal.',
 ));
 const registry = join(scratch, 'registry.json');
-writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: [] }));
+writeFileSync(registry, JSON.stringify({ folders: [cwd], worktrees: [], sessions: [] }));
 const server = spawn(process.execPath, ['server/main.ts'], {
   env: { ...process.env, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry), PIANO_PI_CLI: fake, PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(scratch, 'agent'), PI_CODING_AGENT_SESSION_DIR: join(scratch, 'sessions') },
   stdio: ['ignore', 'pipe', 'pipe'],

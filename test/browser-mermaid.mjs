@@ -37,7 +37,7 @@ const timestamp = new Date().toISOString();
 const entries = [{ type: 'session', version: 3, id: 'mermaid', cwd: repo, timestamp },
   { type: 'message', id: 'm0', parentId: null, timestamp, message: { role: 'assistant', api: 'openai-completions', provider: 'fake', model: 'alpha', stopReason: 'stop', timestamp: 0, content: [{ type: 'text', text }] } }];
 writeFileSync(join(sessions, 'mermaid.jsonl'), entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId: 'mermaid', title: 'Mermaid check', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId: 'mermaid', title: 'Mermaid check', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';
@@ -89,7 +89,7 @@ async function checkWideDiagram(width) {
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch('http://127.0.0.1:7171/api/projects')).ok && (await fetch('http://127.0.0.1:7172')).ok) break; } catch {}
+    try { if ((await fetch('http://127.0.0.1:7171/api/folders')).ok && (await fetch('http://127.0.0.1:7172')).ok) break; } catch {}
     if (n === 99) throw new Error('Startup deadline'); await delay(100);
   }
   await ab('set', 'viewport', '1440', '1000');

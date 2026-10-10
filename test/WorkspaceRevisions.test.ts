@@ -18,7 +18,7 @@ function fixture(t: TestContext) {
   writeFileSync(join(repo, "source.txt"), "base\n"); writeFileSync(join(repo, ".gitignore"), "ignored/\n");
   git(repo, "add", "."); git(repo, "commit", "-qm", "base");
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const workspace = { id: "test-workspace", project: repo, path: repo };
+  const workspace = { id: "test-workspace", folder: repo, path: repo };
   const capture = (cli = "git") => Effect.runPromise(Effect.gen(function* () { return yield* (yield* WorkspaceRevisions).capture(workspace); }).pipe(
     Effect.provide(WorkspaceRevisionsLive), Effect.provideService(RevisionStorePath, store), Effect.provideService(RevisionGitCommand, cli)));
   return { root, repo, store, workspace, capture };
@@ -32,8 +32,8 @@ function ready(capture: WorkspaceCapture) {
 test("INV-01/07: a folder keeps its workspace identity when closed and reopened", async t => {
   const { root, repo } = fixture(t), path = join(root, "registry.db");
   const run = <A, E>(e: Effect.Effect<A, E, Registry>) => Effect.runPromise(e.pipe(Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, path)));
-  const id = (await run(Effect.gen(function* () { const r = yield* Registry; yield* r.addProject(repo); return yield* r.get; }))).workspaces.find(w => w.path === repo)!.id;
-  await run(Effect.gen(function* () { const r = yield* Registry; yield* r.removeProject(repo); yield* r.addProject(repo); }));
+  const id = (await run(Effect.gen(function* () { const r = yield* Registry; yield* r.addFolder(repo); return yield* r.get; }))).workspaces.find(w => w.path === repo)!.id;
+  await run(Effect.gen(function* () { const r = yield* Registry; yield* r.removeFolder(repo); yield* r.addFolder(repo); }));
   assert.equal((await run(Effect.gen(function* () { return yield* (yield* Registry).get; }))).workspaces.find(w => w.path === repo)!.id, id);
 });
 

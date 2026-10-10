@@ -9,11 +9,11 @@ type Seed = Partial<Omit<RegistryData, "sessions">> & { sessions?: ReadonlyArray
 
 /** Populate a new database; fills defaults and missing workspace identities like a fresh registry would. */
 export function seedRegistry(database: string, seed: Seed) {
-  const data: RegistryData = { version: 2, outcomeProjects: seed.outcomeProjects ?? [], projects: seed.projects ?? [], worktrees: seed.worktrees ?? [],
+  const data: RegistryData = { version: 2, outcomeProjects: seed.outcomeProjects ?? [], folders: seed.folders ?? [], worktrees: seed.worktrees ?? [],
     workspaces: [...seed.workspaces ?? []], sessions: (seed.sessions ?? []).map(s => ({ ...s, archived: s.archived ?? false })) };
   const workspaces = data.workspaces as RegistryData["workspaces"][number][];
-  for (const path of [...data.projects, ...data.worktrees.map(w => w.path), ...data.sessions.map(s => s.cwd)]) {
-    if (!workspaces.some(w => w.path === path)) workspaces.push({ id: randomUUID(), path, project: data.worktrees.find(w => w.path === path)?.project ?? path });
+  for (const path of [...data.folders, ...data.worktrees.map(w => w.path), ...data.sessions.map(s => s.cwd)]) {
+    if (!workspaces.some(w => w.path === path)) workspaces.push({ id: randomUUID(), path, folder: data.worktrees.find(w => w.path === path)?.folder ?? path });
   }
   openRegistryDatabase(database, data).close();
 }

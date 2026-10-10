@@ -15,7 +15,7 @@ function fixture(t: TestContext) {
   const gitInput = (input: string | undefined, ...args: string[]) => execFileSync("git", ["-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args], { input, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
   const git = (...args: string[]) => gitInput(undefined, ...args);
   git("init", "-q");
-  const workspace = { id: "scratch", project: repo, path: repo };
+  const workspace = { id: "scratch", folder: repo, path: repo };
   const preview = (path?: string) => Effect.runPromise(Effect.gen(function* () { return yield* (yield* WorkspaceChanges).preview(workspace, path); }).pipe(Effect.provide(WorkspaceChangesLive)));
   return { repo, git, gitInput, preview };
 }

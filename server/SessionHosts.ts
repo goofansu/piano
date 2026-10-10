@@ -103,7 +103,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     if (matching.length > 1) return yield* rejected(`Conflicting session references for ${sessionId}: ${matching.map(s => s.cwd).join(", ")}. Keep the original references and resolve the duplicate explicitly; Piano has not merged or moved history.`);
     const entry = matching[0];
     if (entry?.archived) return yield* rejected("This session is archived. Start a new session instead.");
-    if (!entry && !create) return yield* rejected("This session is no longer registered. Refresh the project list; deleted sessions cannot be restarted.");
+    if (!entry && !create) return yield* rejected("This session is no longer registered. Refresh the folder list; deleted sessions cannot be restarted.");
     if (entry && create) return yield* rejected("This session ID is already registered.");
     const owner = entry?.cwd ?? resolve(expandHome(cwd));
     const files = new Map<string, string>();

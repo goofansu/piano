@@ -13,7 +13,7 @@ const evidence = resolve(process.argv[2] ?? '/tmp/piano-attachments-evidence');
 mkdirSync(evidence, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), 'piano-attachments-'));
 const cwd = join(scratch, 'project'); mkdirSync(cwd); spawnSync('git', ['init', cwd]);
-writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [] }));
+writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ folders: [cwd], worktrees: [], sessions: [] }));
 const data = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGZkAAAAASUVORK5CYII=';
 const image = join(scratch, 'pixel.png'); writeFileSync(image, Buffer.from(data, 'base64'));
 const invalid = join(scratch, 'notes.txt'); writeFileSync(invalid, 'Not an image');
@@ -55,7 +55,7 @@ const transcriptImages = `document.querySelectorAll('img[alt="Attachment preview
 try {
   for (let i = 0; i < 60; i++) {
     if (server.exitCode !== null || frontend.exitCode !== null) throw new Error(serverLog);
-    try { if ((await fetch(`${backendUrl}/api/projects`)).ok && (await fetch(appUrl)).ok) break; } catch {}
+    try { if ((await fetch(`${backendUrl}/api/folders`)).ok && (await fetch(appUrl)).ok) break; } catch {}
     if (i === 59) throw new Error('Scratch startup failed'); await delay(100);
   }
   ab('open', `${appUrl}/new`);

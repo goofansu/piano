@@ -23,9 +23,9 @@ const run = (cmd: string, args: string[], timeout = 20_000): Effect.Effect<strin
     }),
     catch: (e) => new WorktreeError({ detail: e instanceof Error ? e.message : String(e) }),
   });
-const wt = (project: string, args: string[], timeout?: number) => Effect.gen(function* () {
+const wt = (folder: string, args: string[], timeout?: number) => Effect.gen(function* () {
   const command = yield* WorktrunkCommand;
-  return yield* run(command, ["-C", project, ...args], timeout);
+  return yield* run(command, ["-C", folder, ...args], timeout);
 });
 const compatible = Effect.gen(function* () {
   const command = yield* WorktrunkCommand;
@@ -103,13 +103,13 @@ function parseWorktrees(out: string): WorktreeFacts[] | undefined {
 }
 
 /** No healthy fallback and no registry writes. Each call is a fresh point-in-time observation. */
-export const listWorktrees = (project: string): Effect.Effect<WorktreeDiscovery> => Effect.gen(function* () {
+export const listWorktrees = (folder: string): Effect.Effect<WorktreeDiscovery> => Effect.gen(function* () {
   const observedAt = new Date().toISOString();
   return yield* Effect.gen(function* () {
-    if (!(yield* isGit(project))) return { status: "non-git" as const, observedAt };
+    if (!(yield* isGit(folder))) return { status: "non-git" as const, observedAt };
     const [top, out] = yield* Effect.all([
-      run("git", ["-C", project, "rev-parse", "--show-toplevel"]),
-      run("git", ["-C", project, "worktree", "list", "--porcelain", "-z"]),
+      run("git", ["-C", folder, "rev-parse", "--show-toplevel"]),
+      run("git", ["-C", folder, "worktree", "list", "--porcelain", "-z"]),
     ], { concurrency: 2 });
     const worktrees = parseWorktrees(out);
     if (!worktrees) return yield* new WorktreeError({ detail: "Invalid git worktree list output. Refresh after checking the repository with git worktree list." });
@@ -121,15 +121,15 @@ export const listWorktrees = (project: string): Effect.Effect<WorktreeDiscovery>
 });
 
 /** New branches only. No prose-based retry of a possibly partially completed operation. */
-export const createWorktree = (project: string, branch: string, options: { hooks?: boolean } = {}) => Effect.gen(function* () {
+export const createWorktree = (folder: string, branch: string, options: { hooks?: boolean } = {}) => Effect.gen(function* () {
   yield* compatible;
-  if (!(yield* isGit(project))) return yield* new WorktreeError({ detail: "This project is non-Git. Create a Git repository before creating a worktree." });
+  if (!(yield* isGit(folder))) return yield* new WorktreeError({ detail: "This folder is non-Git. Create a Git repository before creating a worktree." });
   // Reject shortcuts/options before passing a branch name to Worktrunk.
   if (!branch || branch.startsWith("-") || branch !== branch.trim()) return yield* new WorktreeError({ detail: "Enter a valid new branch name." });
   if ((yield* run("git", ["check-ref-format", "--branch", branch])).trim() !== branch || branch === "@") {
     return yield* new WorktreeError({ detail: "Enter a literal new branch name, not a checkout shortcut." });
   }
-  const result = yield* json(Created, yield* wt(project, ["switch", "--create", branch, "--format=json", "--no-cd", ...(options.hooks ? [] : ["--no-hooks"])], 60_000));
+  const result = yield* json(Created, yield* wt(folder, ["switch", "--create", branch, "--format=json", "--no-cd", ...(options.hooks ? [] : ["--no-hooks"])], 60_000));
   if (!isAbsolute(result.path) || result.branch !== branch || !result.base_branch) return yield* new WorktreeError({ detail: "Worktrunk returned an unexpected creation identity. Inspect discovery before retrying." });
   return { path: result.path, branch: result.branch, baseBranch: result.base_branch, hooks: options.hooks ? "enabled" as const : "skipped" as const };
 }).pipe(Effect.mapError((e) => new WorktreeError({ detail: `${e.detail}\nCreation was not confirmed; a checkout may remain after a hook or transport failure. Refresh discovery before retrying. For unapproved hooks, review and approve them with wt config approvals in a terminal, or explicitly leave hooks off.` })));

@@ -65,7 +65,7 @@ const capture=async name=>{await ab('screenshot',join(evidence,`${name}.png`));w
 try {
   for(let n=0;;n++) {
     if(backend.exitCode!==null||frontend.exitCode!==null)throw new Error(processLog);
-    try {if((await fetch(`${backendUrl}/api/projects`)).ok&&(await fetch(frontendUrl)).ok)break;}catch{}
+    try {if((await fetch(`${backendUrl}/api/folders`)).ok&&(await fetch(frontendUrl)).ok)break;}catch{}
     if(n>150)throw new Error('Scratch startup deadline');await delay(100);
   }
   await ab('set','viewport','1280','900');await ab('open',frontendUrl);

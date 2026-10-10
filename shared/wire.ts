@@ -333,7 +333,7 @@ export type SessionActionResult = typeof SessionActionResult.Type;
 
 // ── Workspace captures ──────────────────────────────────────────────────────
 
-export const Workspace = Schema.Struct({ id: Schema.String, project: Schema.String, path: Schema.String });
+export const Workspace = Schema.Struct({ id: Schema.String, folder: Schema.String, path: Schema.String });
 export type Workspace = typeof Workspace.Type;
 export const RevisionFile = Schema.Struct({
   path: Schema.String, mode: Schema.Literals(["100644", "100755", "120000"]),
@@ -400,9 +400,9 @@ export type SessionReference = typeof SessionReference.Type;
 export const SessionInfo = Schema.Struct({
   sessionId: Schema.String,
   workspaceId: Schema.String,
-  /** Directory the session runs in: the project root or one of its worktrees. */
+  /** Directory the session runs in: the folder root or one of its worktrees. */
   cwd: Schema.String,
-  /** Branch of that worktree; empty for the project root. */
+  /** Branch of that worktree; empty for the folder root. */
   branch: Schema.String,
   title: Schema.optional(Schema.String),
   createdAt: Schema.String,
@@ -436,23 +436,23 @@ export const WorktreeView = Schema.Struct({
   workspace: Workspace,
   trust: ProjectTrust,
   branch: Schema.NullOr(Schema.String), path: Schema.String,
-  /** Registry project root, not necessarily Git's primary worktree. */
+  /** Registry folder root, not necessarily Git's primary worktree. */
   root: Schema.Boolean,
   status: Schema.Literals(["current", "missing", "unknown", "non-git"]),
   facts: Schema.optional(WorktreeFacts),
 });
 export type WorktreeView = typeof WorktreeView.Type;
 
-export const ProjectView = Schema.Struct({
+export const FolderView = Schema.Struct({
   path: Schema.String,
   name: Schema.String,
   /** Explicitly selected directories only; discovery does not register anything. */
   worktrees: Schema.Array(WorktreeView),
   discovery: WorktreeDiscovery,
-  /** All of the project's sessions across its worktrees, most recent first. */
+  /** All of the folder's sessions across its worktrees, most recent first. */
   sessions: Schema.Array(SessionInfo),
 });
-export type ProjectView = typeof ProjectView.Type;
+export type FolderView = typeof FolderView.Type;
 
 export const ModelChoice = Schema.Struct({
   ref: Schema.String,
@@ -561,24 +561,24 @@ export const StartOptions = Schema.Struct({
 export type StartOptions = typeof StartOptions.Type;
 
 export const ClientMessage = Schema.Union([
-  Schema.TaggedStruct("projects", {}),
-  /** Rediscover one registered project's worktrees; only the requesting client gets the answer. */
-  Schema.TaggedStruct("worktrees", { project: Schema.String }),
+  Schema.TaggedStruct("registry", {}),
+  /** Rediscover one registered folder's worktrees; only the requesting client gets the answer. */
+  Schema.TaggedStruct("worktrees", { folder: Schema.String }),
   /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
   Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String), refresh: Schema.optional(Schema.Boolean) }),
   Schema.TaggedStruct("save_outcome_project", { project: Schema.Struct({ id: OutcomeProject.fields.id, name: OutcomeProject.fields.name, goal: OutcomeProject.fields.goal }) }),
   Schema.TaggedStruct("archive_outcome_project", { id: Schema.String, archived: Schema.Boolean }),
   Schema.TaggedStruct("assign_project", { cwd: Schema.String, sessionId: Schema.String, projectId: Schema.NullOr(Schema.String) }),
-  Schema.TaggedStruct("add_project", { path: Schema.String }),
-  Schema.TaggedStruct("remove_project", { path: Schema.String }),
+  Schema.TaggedStruct("add_folder", { path: Schema.String }),
+  Schema.TaggedStruct("remove_folder", { path: Schema.String }),
   /** Save Pi's project-trust decision for a directory; Pi applies it when a session starts there. */
   Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),
   /** Pi's trust outcome for any directory, registered or not. */
   Schema.TaggedStruct("trust", { cwd: Schema.String }),
-  Schema.TaggedStruct("create_worktree", { requestId: Schema.String, project: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
-  Schema.TaggedStruct("add_worktree", { requestId: Schema.String, project: Schema.String, path: Schema.String }),
+  Schema.TaggedStruct("create_worktree", { requestId: Schema.String, folder: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
+  Schema.TaggedStruct("add_worktree", { requestId: Schema.String, folder: Schema.String, path: Schema.String }),
   Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
-  /** Create and start a session in a directory (registering it as a project when needed) and send its first prompt. */
+  /** Create and start a session in a directory (registering it as a folder when needed) and send its first prompt. */
   Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, outcomeProjectId: Schema.optional(Schema.String), options: StartOptions, text: Schema.optional(Schema.String), attachments: attachmentInput }),
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
   Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
@@ -597,7 +597,7 @@ export type ClientMessage = typeof ClientMessage.Type;
 export type ClientCommand = ClientMessage extends infer M ? M extends ClientMessage ? Omit<M, "selectionId"> : never : never;
 
 export const WorktreeResult = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("ready"), project: Schema.String, path: Schema.String, branch: Schema.NullOr(Schema.String),
+  Schema.Struct({ status: Schema.Literal("ready"), folder: Schema.String, path: Schema.String, branch: Schema.NullOr(Schema.String),
     creation: Schema.optional(Schema.Struct({ baseBranch: Schema.String, hooks: Schema.Literals(["enabled", "skipped"]) })) }),
   Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
 ]);
@@ -605,10 +605,10 @@ export type WorktreeResult = typeof WorktreeResult.Type;
 
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("pong", { nonce: Schema.String }),
-  Schema.TaggedStruct("projects", { projects: Schema.Array(ProjectView), outcomeProjects: Schema.optional(Schema.Array(OutcomeProject)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
+  Schema.TaggedStruct("registry", { folders: Schema.Array(FolderView), outcomeProjects: Schema.optional(Schema.Array(OutcomeProject)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
   Schema.TaggedStruct("catalogs_invalidated", {}),
-  Schema.TaggedStruct("worktrees", { project: Schema.String, discovery: WorktreeDiscovery }),
+  Schema.TaggedStruct("worktrees", { folder: Schema.String, discovery: WorktreeDiscovery }),
   Schema.TaggedStruct("trust", { cwd: Schema.String, trust: ProjectTrust }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
   /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */

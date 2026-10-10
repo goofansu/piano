@@ -36,7 +36,7 @@ const dialogButtons = () => evaluate(`[...document.querySelectorAll('[role="dial
 try {
   for (let n = 0; ; n++) {
     if (backend.exitCode !== null || frontend.exitCode !== null) throw new Error(processLog);
-    try { if ((await fetch(`${backendUrl}/api/projects`)).ok && (await fetch(frontendUrl)).ok) break; } catch {}
+    try { if ((await fetch(`${backendUrl}/api/folders`)).ok && (await fetch(frontendUrl)).ok) break; } catch {}
     if (n > 150) throw new Error(`Scratch startup deadline: ${processLog}`);
     await delay(100);
   }

@@ -10,7 +10,7 @@ import { PiSessionsLive } from "../server/PiSessions.ts";
 import { setProjectTrust } from "../server/ProjectTrust.ts";
 import { RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
-import { buildProjects } from "../server/Views.ts";
+import { buildFolders } from "../server/Views.ts";
 import { WorktrunkCommand } from "../server/Worktrees.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
@@ -28,7 +28,7 @@ function fixture(t: TestContext) {
   mkdirSync(agent);
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agent;
-  seedRegistry(join(root, "registry.db"), { projects: [skilled, plain] });
+  seedRegistry(join(root, "registry.db"), { folders: [skilled, plain] });
   t.after(() => {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
     rmSync(root, { recursive: true, force: true });
@@ -40,7 +40,7 @@ test("INV-01: project trust is read from and written to Pi's trust file, per dir
   const { root, skilled, plain, agent } = fixture(t);
   const layer = SessionHostsLive({ idleMs: 0 }).pipe(Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   await Effect.runPromise(Effect.gen(function* () {
-    const trustOf = (path: string) => Effect.map(buildProjects, projects => projects.flatMap(p => p.worktrees).find(w => w.path === path)!.trust);
+    const trustOf = (path: string) => Effect.map(buildFolders, projects => projects.flatMap(p => p.worktrees).find(w => w.path === path)!.trust);
 
     // Headless Pi skips protected resources until a decision is saved; a plain checkout needs no decision.
     assert.deepEqual(yield* trustOf(skilled), { required: true, trusted: false });

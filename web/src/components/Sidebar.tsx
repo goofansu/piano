@@ -1,4 +1,4 @@
-import type { ClientCommand as ClientMessage, OutcomeProject, ProjectView, SessionReference } from "@shared/wire";
+import type { ClientCommand as ClientMessage, FolderView, OutcomeProject, SessionReference } from "@shared/wire";
 import { cn } from "cn";
 import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -52,7 +52,7 @@ const groupRow = cn(row, "reveal-row group flex items-center gap-1 rounded-lg pr
 const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette, openSettings }: Props) {
-  const [openProjects, setOpenProjects] = useState<Set<string>>(loadOpen);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(loadOpen);
   const { view, setView } = useSidebarView();
   const current = state.session ?? state.selecting;
   const [dateNow, setDateNow] = useState(() => new Date());
@@ -74,7 +74,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   }, [view.groupBy]);
 
   const setOpen = (key: string, open: boolean) =>
-    setOpenProjects((prev) => {
+    setOpenGroups((prev) => {
       const next = new Set(prev);
       if (open) next.add(key);
       else next.delete(key);
@@ -85,31 +85,31 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   // The group holding the selected session is always open: its folder, or its project.
   useEffect(() => {
     if (!current) return;
-    const owner = state.projects.find((p) => p.worktrees.some((w) => w.path === current.cwd));
+    const owner = state.folders.find((p) => p.worktrees.some((w) => w.path === current.cwd));
     const member = state.sessionReferences.find(s => s.cwd === current.cwd && s.sessionId === current.sessionId);
     const key = view.groupBy === "folder" ? owner?.path : view.groupBy === "project" ? projectKey(member?.outcomeProjectId ?? "") : undefined;
-    if (key && !openProjects.has(key)) setOpen(key, true);
+    if (key && !openGroups.has(key)) setOpen(key, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.cwd, current?.sessionId, state.projects, state.sessionReferences, view.groupBy]);
+  }, [current?.cwd, current?.sessionId, state.folders, state.sessionReferences, view.groupBy]);
 
   // A project created in this view opens at once, so the session just filed in it is in sight.
   const known = useRef<Set<string> | null>(null);
   useEffect(() => {
-    if (!state.projectsLoaded) return;
+    if (!state.registryLoaded) return;
     const ids = state.outcomeProjects.map(p => p.id);
     if (known.current) for (const id of ids) if (!known.current.has(id)) setOpen(projectKey(id), true);
     known.current = new Set(ids);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.projectsLoaded, state.outcomeProjects]);
+  }, [state.registryLoaded, state.outcomeProjects]);
 
   // First load is one orchestrated sequence: skeleton rows at once, then the real rows a beat
   // apart. The stagger applies only to that first reveal, not to every later list change.
   const [revealing, setRevealing] = useState(true);
   useEffect(() => {
-    if (!state.projectsLoaded) return;
+    if (!state.registryLoaded) return;
     const timer = setTimeout(() => setRevealing(false), 700);
     return () => clearTimeout(timer);
-  }, [state.projectsLoaded]);
+  }, [state.registryLoaded]);
   const order = { i: 0 };
   const reveal = () => (revealing ? ({ "--i": String(order.i++) } as React.CSSProperties) : undefined);
 
@@ -123,25 +123,25 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   );
   const groups = (children: React.ReactNode) => <div className="flex flex-col gap-1">{children}</div>;
   const list = () => {
-    if (!state.projectsLoaded) return <SidebarSkeleton />;
+    if (!state.registryLoaded) return <SidebarSkeleton />;
     if (view.groupBy === "folder") {
-      if (state.projects.length === 0) return empty("No folders yet. Start a session in any folder and it appears here.");
-      return groups(folderGroups(state.projects, view.sortBy).map((p) => (
-        <Project key={p.path} project={p} open={openProjects.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
+      if (state.folders.length === 0) return empty("No folders yet. Start a session in any folder and it appears here.");
+      return groups(folderGroups(state.folders, view.sortBy).map((p) => (
+        <FolderGroup key={p.path} folder={p} open={openGroups.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
       )));
     }
     if (view.groupBy === "project") {
       // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
       const active = state.outcomeProjects.filter(p => !p.archived);
-      const all = projectGroups(active, state.sessionReferences.filter(s => !s.archived), state.projects.flatMap(p => p.sessions), view.sortBy);
+      const all = projectGroups(active, state.sessionReferences.filter(s => !s.archived), state.folders.flatMap(p => p.sessions), view.sortBy);
       if (active.length === 0 && all.every(g => g.sessions.length === 0)) return empty("No sessions yet. Start one and it appears here.");
       return groups(all.map(g => {
         const key = projectKey(g.project?.id ?? "");
-        return <OutcomeGroup key={key} project={g.project} sessions={g.sessions} open={openProjects.has(key)} onOpenChange={open => setOpen(key, open)} {...groupProps} />;
+        return <OutcomeGroup key={key} project={g.project} sessions={g.sessions} open={openGroups.has(key)} onOpenChange={open => setOpen(key, open)} {...groupProps} />;
       }));
     }
     if (view.groupBy === "date") {
-      const dated = dateGroups(state.projects, view.sortBy, dateNow);
+      const dated = dateGroups(state.folders, view.sortBy, dateNow);
       if (dated.length === 0) return empty("No sessions yet. Start one and it appears here.");
       return groups(dated.map(g => (
         <section key={g.label} aria-label={g.label}>
@@ -151,7 +151,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         </section>
       )));
     }
-    const sessions = flatSessions(state.projects, view.sortBy);
+    const sessions = flatSessions(state.folders, view.sortBy);
     if (sessions.length === 0) return empty("No sessions yet. Start one and it appears here.");
     return <SessionList sessions={sessions} {...groupProps} />;
   };
@@ -252,7 +252,7 @@ function ListEmpty({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Skeleton rows in the real row geometry: a project line, two session lines, another project. */
+/** Skeleton rows in the real row geometry: a folder line, two session lines, another folder. */
 function SidebarSkeleton() {
   return (
     <div aria-hidden className="flex flex-col gap-1">
@@ -299,7 +299,7 @@ function SessionRow({ t, metadata, showProject = true, selected, disabled, hint,
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
   const project = showProject ? sessionProject(state, t) : undefined;
   const checkoutMissing = state.session?.cwd === t.cwd && state.session.state.checkoutMissing;
-  // Live host state comes from the `hosts` broadcast, which changes more often than the project list.
+  // Live host state comes from the `hosts` broadcast, which changes more often than the folder list.
   const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
   const done = state.done.includes(sessionKey(t));
   // The keys play while the session works; afterwards Herdr's dots: teal done, hollow green idle, nothing when no process.
@@ -358,7 +358,7 @@ const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} 
 
 /** Away from Folder grouping, keep the owning folder alongside any worktree branch. */
 function Location({ state, cwd }: { state: AppState; cwd: string }) {
-  const owner = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
+  const owner = state.folders.find(p => p.worktrees.some(w => w.path === cwd));
   const worktree = owner?.worktrees.find(w => w.path === cwd);
   const branch = worktree && !worktree.root ? worktree.branch : null;
   return <>
@@ -435,7 +435,7 @@ function OutcomeGroup({ project, sessions, current, open, onOpenChange, state, s
   );
 }
 
-function Project({ project, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: ProjectView }) {
+function FolderGroup({ folder, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { folder: FolderView }) {
   const actions = useSessionActions(send, state.connected);
   const [closing, setClosing] = useState(false);
 
@@ -443,17 +443,17 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={groupRow} style={reveal()}>
         <CollapsibleTrigger asChild>
-          <button type="button" className={groupTrigger} title={project.path}>
+          <button type="button" className={groupTrigger} title={folder.path}>
             <Chevron open={open} />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{project.name}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{folder.name}</span>
           </button>
         </CollapsibleTrigger>
-        <IconButton size="icon-xs" className={hoverSlot} label={`New session in ${project.name}`} tooltip="New session here" onClick={() => openNew(project.path)}>
+        <IconButton size="icon-xs" className={hoverSlot} label={`New session in ${folder.name}`} tooltip="New session here" onClick={() => openNew(folder.path)}>
           <PlusIcon />
         </IconButton>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Folder menu for ${project.name}`}>
+            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Folder menu for ${folder.name}`}>
               <MoreHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -466,13 +466,13 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {project.discovery.status === "error" && <Badge variant="destructive" className="ml-7 animate-in fade-in-0" title={project.discovery.detail}>Git status unavailable</Badge>}
-      {project.discovery.status === "non-git" && <Badge variant="secondary" className="ml-7">Non-Git</Badge>}
+      {folder.discovery.status === "error" && <Badge variant="destructive" className="ml-7 animate-in fade-in-0" title={folder.discovery.detail}>Git status unavailable</Badge>}
+      {folder.discovery.status === "non-git" && <Badge variant="secondary" className="ml-7">Non-Git</Badge>}
       <CollapsibleContent className="disclosure-content">
-        {project.sessions.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
-          {project.sessions.map((t) => {
-            // The branch is only news when the session runs somewhere other than the project root.
-            const inWorktree = !project.worktrees.some((w) => w.root && w.path === t.cwd);
+        {folder.sessions.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
+          {folder.sessions.map((t) => {
+            // The branch is only news when the session runs somewhere other than the folder root.
+            const inWorktree = !folder.worktrees.some((w) => w.root && w.path === t.cwd);
             const metadata = t.branch && inWorktree ? <BranchLabel branch={t.branch} /> : undefined;
             return (
               <SessionRow key={t.sessionId} t={t} metadata={metadata} selected={current?.cwd === t.cwd && current.sessionId === t.sessionId}
@@ -486,13 +486,13 @@ function Project({ project, current, open, onOpenChange, state, send, select, op
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Close this folder?</DialogTitle>
-            <DialogDescription>"{project.name}" will be removed from the sidebar. Files and session history will not be deleted.</DialogDescription>
+            <DialogDescription>"{folder.name}" will be removed from the sidebar. Files and session history will not be deleted.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setClosing(false)}>Cancel</Button>
             <Button disabled={!state.connected} onClick={() => {
               if (!state.connected) return;
-              send({ _tag: "remove_project", path: project.path });
+              send({ _tag: "remove_folder", path: folder.path });
               setClosing(false);
             }}>Close</Button>
           </DialogFooter>

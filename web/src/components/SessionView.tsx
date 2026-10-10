@@ -40,7 +40,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const checkoutMissing = !!t?.state.checkoutMissing;
   const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
   const draftKey = t ? sessionKey(t) : undefined;
-  const project = t ? state.projects.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
+  const folder = t ? state.folders.find((p) => p.worktrees.some((w) => w.path === t.cwd)) : undefined;
   const [model, setModel] = useState<string | undefined>(undefined);
   // Follow the session's own model and effort when known; otherwise Pi's defaults.
   useEffect(() => setModel(t?.state.model), [t?.cwd, t?.sessionId, t?.state.model]);
@@ -113,9 +113,9 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           toast.success("Added to your message");
         }} />}
 
-      {project?.discovery.status === "error" && (
-        <Banner variant="destructive" title="Git status unavailable." action={<Button variant="ghost" size="sm" onClick={() => send({ _tag: "projects" })}>Refresh</Button>}>
-          <p className="whitespace-pre-wrap break-words">{project.discovery.detail}</p>
+      {folder?.discovery.status === "error" && (
+        <Banner variant="destructive" title="Git status unavailable." action={<Button variant="ghost" size="sm" onClick={() => send({ _tag: "registry" })}>Refresh</Button>}>
+          <p className="whitespace-pre-wrap break-words">{folder.discovery.detail}</p>
         </Banner>
       )}
       {t?.closedReason && t.closedReason !== "released" && (

@@ -29,7 +29,7 @@ for (const entry of entries) writeFileSync(join(sessions, `${entry.sessionId}.js
   { type: 'session', version: 3, id: entry.sessionId, cwd: entry.cwd, timestamp: entry.createdAt },
   { type: 'message', id: 'm1', parentId: null, timestamp: entry.createdAt, message: { role: 'user', content: `History for ${entry.title}`, timestamp: 0 } },
 ].map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: repos, worktrees: [], sessions: entries }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: repos, worktrees: [], sessions: entries }));
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171', webPort = process.env.PIANO_TEST_WEB_PORT ?? '7172';
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: backendPort,
   ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '',
@@ -66,7 +66,7 @@ async function capture(name) {
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   await ab('set', 'viewport', '1440', '1000');

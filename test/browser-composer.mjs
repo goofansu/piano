@@ -17,7 +17,7 @@ spawnSync('git', ['init', cwd]);
 const longModel = 'alpha-with-a-very-long-model-name-for-responsive-verification';
 // Keep the existing fake untouched. Adapt only its external protocol labels.
 writeFileSync(join(scratch, 'fake.mjs'), readFileSync('test/fake-pi.mjs', 'utf8').replaceAll('"alpha"', JSON.stringify(longModel)).replaceAll('fake/alpha', `fake/${longModel}`).replaceAll('timestamp: Date.now()', 'usage: { input: 120, output: 30, cacheRead: 50, cacheWrite: 10, totalTokens: 210, cost: { input: 0.001, output: 0.002, cacheRead: 0.0001, cacheWrite: 0.0002, total: 0.0033 } }, timestamp: Date.now()').replace('contextWindow: 2000 } ]', 'contextWindow: 2000 }, { provider: "fake", id: "claude-sonnet", name: "Claude Sonnet", reasoning: true, contextWindow: 2000 }, { provider: "fake", id: "sol", name: "Sol Online Network", reasoning: false, contextWindow: 2000 } ]').replace('out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });', '// Browser fixture: pause without a modal covering the composer.'));
-writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: 'saved-without-context', title: 'Saved session', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z', archived: false }] }));
+writeFileSync(join(scratch, 'registry.json'), JSON.stringify({ folders: [cwd], worktrees: [], sessions: [{ cwd, sessionId: 'saved-without-context', title: 'Saved session', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z', archived: false }] }));
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171';
 const frontendPort = process.env.PIANO_TEST_FRONTEND_PORT ?? '7172';
 const backendUrl = `http://127.0.0.1:${backendPort}`;
@@ -112,7 +112,7 @@ async function run() {
   for (let i=0;i<50;i++) {
     if (server.exitCode !== null || frontend.exitCode !== null) throw new Error(`Scratch process exited during startup: ${serverLog}`);
     try {
-      const [backend, ui] = await Promise.all([fetch(`${backendUrl}/api/projects`), fetch(appUrl)]);
+      const [backend, ui] = await Promise.all([fetch(`${backendUrl}/api/folders`), fetch(appUrl)]);
       if (backend.ok && ui.ok) break;
     } catch {}
     if (i===49) throw new Error('Scratch server did not start');

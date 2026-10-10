@@ -17,7 +17,7 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, arc
     { cwd: b, sessionId: "two", createdAt: "then", updatedAt: "now", archived: false },
     { cwd: a, sessionId: "three", createdAt: "then", updatedAt: "now", archived: false },
   ];
-  const old = { projects: [a, b], sessions, workspaces: [{ id: "api-id", path: a, project: a }, { id: "web-id", path: b, project: b }] };
+  const old = { folders: [a, b], sessions, workspaces: [{ id: "api-id", path: a, folder: a }, { id: "web-id", path: b, folder: b }] };
   seedRegistry(path, old);
   const run = <A, E>(effect: Effect.Effect<A, E, Registry>) => Effect.runPromise(effect.pipe(Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, path)));
   await run(Effect.gen(function* () {
@@ -25,7 +25,7 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, arc
     const seeded = yield* r.get;
     assert.deepEqual(seeded.workspaces, old.workspaces);
     assert.deepEqual(seeded.sessions, sessions);
-    assert.deepEqual(seeded.projects, old.projects);
+    assert.deepEqual(seeded.folders, old.folders);
     assert.deepEqual(seeded.outcomeProjects, []);
     const first = { id: "launch", name: "Launch subscriptions", goal: "An organizational goal", archived: false };
     yield* r.saveOutcomeProject(first);
@@ -34,7 +34,7 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, arc
     yield* r.assignProject(a, "one", "launch");
     yield* r.assignProject(b, "two", "launch");
     yield* r.assignProject(a, "three", "accessibility");
-    yield* r.removeProject(a);
+    yield* r.removeFolder(a);
     yield* r.archiveOutcomeProject(first.id, true);
     // An editor opened before archive cannot implicitly reopen the grouping.
     yield* r.saveOutcomeProject({ ...first, name: "Subscriptions" });

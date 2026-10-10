@@ -18,7 +18,7 @@ const saved = SessionManager.create(cwd, fixture.sessionDir);
 saved.appendModelChange('router', 'auto'); saved.appendThinkingLevelChange('low');
 saved.appendMessage({ role: 'user', content: 'Saved prompt', timestamp: 1 });
 saved.appendMessage({ role: 'assistant', api: 'openai-completions', provider: 'physical', model: 'answer', thinkingLevel: 'high', content: [{ type: 'text', text: 'Saved answer' }], usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'stop', timestamp: 2 });
-writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: saved.getSessionId(), title: 'Saved session', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false }] }));
+writeFileSync(registry, JSON.stringify({ folders: [cwd], worktrees: [], sessions: [{ cwd, sessionId: saved.getSessionId(), title: 'Saved session', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false }] }));
 const canary = 'P3BrowserSecret-123456789';
 const server = spawn(process.execPath, ['server/main.ts'], {
   env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),

@@ -24,7 +24,7 @@ git(repo, 'switch', 'main'); writeFileSync(join(repo, 'source.txt'), 'ours\n'); 
 const detached = join(root, 'external-detached'); git(repo, 'worktree', 'add', '--detach', detached);
 writeFileSync(env.WORKTRUNK_CONFIG_PATH, 'worktree-path = "../custom/{{ branch | sanitize }}"\n');
 const notes = join(root, 'notes'); mkdirSync(notes);
-const registry = join(root, 'registry.json'); writeFileSync(registry, JSON.stringify({ projects: [repo, notes], worktrees: [], sessions: [] }));
+const registry = join(root, 'registry.json'); writeFileSync(registry, JSON.stringify({ folders: [repo, notes], worktrees: [], sessions: [] }));
 const wtPath = execFileSync('which', ['wt'], { encoding: 'utf8' }).trim(), wrapper = join(root, 'wt'), failure = join(root, 'backend-failure'), metadataBackup = join(root, 'git-metadata-backup');
 writeFileSync(wrapper, `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import{existsSync}from'node:fs';
 if(existsSync(${JSON.stringify(failure)})){console.error('Worktrunk unavailable: controlled fixture outage');process.exit(1);}
@@ -55,7 +55,7 @@ async function refresh() { await click('Refresh worktrees'); await ab('wait', '-
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(server.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${webPort}`)).ok && (await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${webPort}`)).ok && (await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok) break; } catch {}
     if (n === 99) throw new Error('scratch startup deadline'); await delay(100);
   }
   await ab('open', `http://127.0.0.1:${webPort}`); await ab('wait', '--text', 'What should we work on?');
@@ -96,8 +96,8 @@ try {
   // Picker refresh is repository-local; reload reconciles the registry snapshot.
   await ab('reload');
   await ab('wait', '--text', 'What should we work on?');
-  const { projects } = await (await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).json();
-  assert.equal(projects.find(p => p.path === repo).worktrees.find(w => w.path === created).status, 'missing', 'reconciliation retains the explicitly registered missing checkout');
+  const { folders } = await (await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).json();
+  assert.equal(folders.find(p => p.path === repo).worktrees.find(w => w.path === created).status, 'missing', 'reconciliation retains the explicitly registered missing checkout');
   await openWorktrees();
   assert.equal(await evaluate(`!!document.querySelector('[role="dialog"] [role="option"][data-value=${JSON.stringify(created)}]')`), false, 'a removed checkout cannot be selected');
   await capture('missing-checkout-not-selectable'); await ab('press', 'Escape');

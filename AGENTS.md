@@ -51,7 +51,7 @@ cd /home/exedev/piano
 npm run build && sudo systemd-run --collect /bin/bash -c '
   exec > /tmp/piano-deploy.log 2>&1
   systemctl restart piano.service &&
-  curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/projects -o /dev/null &&
+  curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/folders -o /dev/null &&
   curl -fsS http://127.0.0.1:8000/ -o /dev/null && echo "DEPLOY OK"
 '
 ```

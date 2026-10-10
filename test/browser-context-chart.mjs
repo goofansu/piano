@@ -21,7 +21,7 @@ const sessions = [3, 98].map(count => {
   return { cwd, sessionId: saved.getSessionId(), title: `${count} responses`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false };
 });
 const registry = join(root, 'registry.json');
-writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions }));
+writeFileSync(registry, JSON.stringify({ folders: [cwd], worktrees: [], sessions }));
 const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry), PI_CODING_AGENT_SESSION_DIR: sessionDir }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';

@@ -19,7 +19,7 @@ for (const id of ids) writeFileSync(join(sessions, `${id}.jsonl`), [
   { type: 'session', version: 3, id, cwd, timestamp: new Date().toISOString() },
   { type: 'message', id: 'saved', parentId: null, timestamp: new Date().toISOString(), message: { role: 'user', content: `Saved ${id}`, timestamp: 1 } },
 ].map(v => JSON.stringify(v)).join('\n') + '\n');
-writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: ids.map(sessionId => ({ cwd, sessionId, title: sessionId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false })) }));
+writeFileSync(registry, JSON.stringify({ folders: [cwd], worktrees: [], sessions: ids.map(sessionId => ({ cwd, sessionId, title: sessionId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false })) }));
 const canary = 'sk-phase5-browser-canary-123456789';
 const server = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),
   PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: `--audit ${audit} --hold-session delayed --burst-delay 10`,
@@ -83,7 +83,7 @@ async function client(id) {
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(server.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch('http://127.0.0.1:7172')).ok && (await fetch('http://127.0.0.1:7171/api/projects')).ok) break; } catch {}
+    try { if ((await fetch('http://127.0.0.1:7172')).ok && (await fetch('http://127.0.0.1:7171/api/folders')).ok) break; } catch {}
     if (n === 99) throw new Error('scratch startup timeout'); await delay(100);
   }
   const url = id => `http://127.0.0.1:7172/s/${id}`;

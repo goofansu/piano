@@ -1,5 +1,5 @@
 /** Client state: one reducer over ServerMessages plus local UI actions. */
-import type { Dialog, HostInfo, ModelCatalog, OutcomeProject, ProjectTrust, ProjectView, RenderMsg, ServerMessage, SessionCursor, SessionReference, SessionState, ToolExecution, Workspace, WorktreeDiscovery } from "@shared/wire";
+import type { Dialog, FolderView, HostInfo, ModelCatalog, OutcomeProject, ProjectTrust, RenderMsg, ServerMessage, SessionCursor, SessionReference, SessionState, ToolExecution, Workspace, WorktreeDiscovery } from "@shared/wire";
 
 export interface SessionView {
   cwd: string;
@@ -31,12 +31,12 @@ export interface AppState {
   resync: boolean;
   /** What the main pane shows. */
   view: { kind: "session" } | { kind: "new"; cwd?: string; outcomeProjectId?: string } | { kind: "missing-session"; sessionId: string };
-  projects: ProjectView[];
+  folders: FolderView[];
   outcomeProjects: OutcomeProject[];
   sessionReferences: SessionReference[];
   workspaces: Workspace[];
-  /** The server has sent the project list at least once since connecting. */
-  projectsLoaded: boolean;
+  /** The server has sent the registry at least once since connecting. */
+  registryLoaded: boolean;
   hosts: HostInfo[];
   catalogs: Record<string, ModelCatalog>;
   catalogRevision: number;
@@ -45,7 +45,7 @@ export interface AppState {
   session: SessionView | null;
   /** Correlated result; only the requesting directory picker may change its selection. */
   worktreeResult: Extract<ServerMessage, { _tag: "worktree_result" }> | null;
-  /** The picker's latest discovery per project; requested by this client, never broadcast. */
+  /** The picker's latest discovery per folder; requested by this client, never broadcast. */
   worktrees: Record<string, WorktreeDiscovery>;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
@@ -63,11 +63,11 @@ export const initialState: AppState = {
   selectionId: null,
   resync: false,
   view: { kind: "new" },
-  projects: [],
+  folders: [],
   outcomeProjects: [],
   sessionReferences: [],
   workspaces: [],
-  projectsLoaded: false,
+  registryLoaded: false,
   hosts: [],
   catalogs: {},
   catalogRevision: 0,
@@ -153,8 +153,8 @@ export function sessionDelivery(s: AppState, m: Extract<ServerMessage, { _tag: "
 
 function applyServer(s: AppState, m: ServerMessage): AppState {
   switch (m._tag) {
-    case "projects":
-      return { ...s, projects: [...m.projects], outcomeProjects: [...m.outcomeProjects ?? []], sessionReferences: [...m.sessionReferences ?? []], workspaces: [...m.workspaces ?? []], projectsLoaded: true };
+    case "registry":
+      return { ...s, folders: [...m.folders], outcomeProjects: [...m.outcomeProjects ?? []], sessionReferences: [...m.sessionReferences ?? []], workspaces: [...m.workspaces ?? []], registryLoaded: true };
     case "hosts": {
       // A host that was working and no longer is has finished a turn. Unless it is on screen, remember that.
       const viewing = s.session ? sessionKey(s.session) : s.selecting ? sessionKey(s.selecting) : null;
@@ -177,7 +177,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "worktree_result":
       return { ...s, worktreeResult: m };
     case "worktrees":
-      return { ...s, worktrees: { ...s.worktrees, [m.project]: m.discovery } };
+      return { ...s, worktrees: { ...s.worktrees, [m.folder]: m.discovery } };
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
       if (m.cursor && (m.cursor.cwd !== m.cwd || m.cursor.sessionId !== m.sessionId || m.snapshot.state.sessionId !== m.sessionId)) return { ...s, resync: true };

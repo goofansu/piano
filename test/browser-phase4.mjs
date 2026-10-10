@@ -19,7 +19,7 @@ writeFileSync(join(fixture.sessionDir, `${id}.jsonl`), [
   { type: 'session', version: 3, id, cwd, timestamp: '2026-10-05T00:00:00Z' },
   { type: 'message', id: 'saved', parentId: null, timestamp: '2026-10-05T00:00:01Z', message: { role: 'user', content: 'Saved history', timestamp: 1 } },
 ].map(x => JSON.stringify(x)).join('\n') + '\n');
-writeFileSync(registry, JSON.stringify({ projects: [cwd], worktrees: [], sessions: [{ cwd, sessionId: id, title: 'Ownership journey', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false }] }));
+writeFileSync(registry, JSON.stringify({ folders: [cwd], worktrees: [], sessions: [{ cwd, sessionId: id, title: 'Ownership journey', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false }] }));
 const server = spawn(process.execPath, ['server/main.ts'], {
   env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),
     PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: `--audit ${audit}`,
@@ -82,7 +82,7 @@ async function connect(path) {
 try {
   for (let i = 0; i < 100; i++) {
     assert.equal(server.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch('http://127.0.0.1:7172')).ok && (await fetch('http://127.0.0.1:7171/api/projects')).ok) break; } catch {}
+    try { if ((await fetch('http://127.0.0.1:7172')).ok && (await fetch('http://127.0.0.1:7171/api/folders')).ok) break; } catch {}
     if (i === 99) throw new Error('scratch UI did not start'); await delay(100);
   }
   // Public WebSocket opens, not a private hosts-map assertion. No model prompts.
@@ -129,7 +129,7 @@ try {
   // Archive through the normal pointer menu, then prove a stale tab cannot start it.
   await ab('click', '[aria-label="Session menu for Ownership journey"]');
   await ab('find', 'role', 'menuitem', 'click', '--name', 'Archive', '--exact');
-  await ab('wait', '--fn', `received.some(m=>m._tag==='projects'&&m.projects.every(p=>p.sessions.every(s=>s.sessionId!==${JSON.stringify(id)})))`);
+  await ab('wait', '--fn', `received.some(m=>m._tag==='registry'&&m.folders.every(p=>p.sessions.every(s=>s.sessionId!==${JSON.stringify(id)})))`);
   await ab('tab', 'second');
   await evaluate(`control.send(JSON.stringify({ _tag:'act', selectionId:received.filter(m=>m._tag==='selected').at(-1).selectionId, action:{_tag:'prompt',text:'STALE_REOPEN'}, start:{} })); true`);
   await ab('wait', '--text', 'This session is archived');

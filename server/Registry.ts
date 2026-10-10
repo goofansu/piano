@@ -1,5 +1,5 @@
 /**
- * What piano knows about: projects, the worktrees created through piano, and
+ * What piano knows about: folders, projects, the worktrees created through piano, and
  * the sessions started through piano. SQLite owns persistence. Pi's own session store is only consulted to
  * load a session's history; it is never scanned to populate the sidebar.
  */
@@ -18,7 +18,7 @@ export class RegistryError extends Data.TaggedError("RegistryError")<{ readonly 
 }
 
 export interface WorktreeEntry {
-  readonly project: string;
+  readonly folder: string;
   readonly path: string;
   readonly branch: string;
 }
@@ -41,7 +41,7 @@ export interface RegistryData {
   readonly version: 2;
   readonly outcomeProjects: ReadonlyArray<OutcomeProject>;
   readonly workspaces: ReadonlyArray<Workspace>;
-  readonly projects: ReadonlyArray<string>;
+  readonly folders: ReadonlyArray<string>;
   readonly worktrees: ReadonlyArray<WorktreeEntry>;
   readonly sessions: ReadonlyArray<SessionEntry>;
 }
@@ -52,8 +52,8 @@ export const RegistryDatabasePath = Context.Reference<string>("piano/RegistryDat
 
 const currentSchema = Schema.Struct({
   version: Schema.Literal(2),
-  projects: Schema.Array(Schema.String),
-  worktrees: Schema.Array(Schema.Struct({ project: Schema.String, path: Schema.String, branch: Schema.String })),
+  folders: Schema.Array(Schema.String),
+  worktrees: Schema.Array(Schema.Struct({ folder: Schema.String, path: Schema.String, branch: Schema.String })),
   workspaces: Schema.Array(Workspace),
   outcomeProjects: Schema.Array(OutcomeProject),
   sessions: Schema.Array(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
@@ -64,20 +64,20 @@ const currentSchema = Schema.Struct({
 /** Path references keep their spelling: never move or merge Pi's alias-based history. */
 function withWorkspaces(data: RegistryData): RegistryData {
   const workspaces = [...data.workspaces];
-  for (const path of [...data.projects, ...data.worktrees.map(w => w.path), ...data.sessions.map(s => s.cwd)]) {
-    if (!workspaces.some(w => w.path === path)) workspaces.push({ id: randomUUID(), path, project: data.worktrees.find(w => w.path === path)?.project ?? path });
+  for (const path of [...data.folders, ...data.worktrees.map(w => w.path), ...data.sessions.map(s => s.cwd)]) {
+    if (!workspaces.some(w => w.path === path)) workspaces.push({ id: randomUUID(), path, folder: data.worktrees.find(w => w.path === path)?.folder ?? path });
   }
   return { ...data, workspaces };
 }
 function decode(value: unknown): RegistryData {
   const initial: RegistryData = Schema.decodeUnknownSync(currentSchema)(value);
-  if (new Set(initial.projects).size !== initial.projects.length) throw new Error("Duplicate selected folders.");
+  if (new Set(initial.folders).size !== initial.folders.length) throw new Error("Duplicate selected folders.");
   if (new Set(initial.worktrees.map(w => w.path)).size !== initial.worktrees.length) throw new Error("Duplicate worktree references.");
   const ids = new Set(initial.outcomeProjects.map(p => p.id));
   if (ids.size !== initial.outcomeProjects.length || initial.outcomeProjects.some(p => !p.name.trim())) throw new Error("Duplicate project identities or blank project name.");
   if (new Set(initial.sessions.map(s => JSON.stringify([s.cwd, s.sessionId]))).size !== initial.sessions.length) throw new Error("Duplicate session references.");
   if (initial.sessions.some(s => s.outcomeProjectId !== undefined && !ids.has(s.outcomeProjectId))) throw new Error("Session references an unknown outcome project.");
-  for (const p of [...initial.projects, ...initial.worktrees.flatMap(w => [w.path, w.project]), ...initial.sessions.map(s => s.cwd), ...initial.workspaces.flatMap(w => [w.path, w.project])]) {
+  for (const p of [...initial.folders, ...initial.worktrees.flatMap(w => [w.path, w.folder]), ...initial.sessions.map(s => s.cwd), ...initial.workspaces.flatMap(w => [w.path, w.folder])]) {
     if (!isAbsolute(p)) throw new Error(`Registry path is not absolute: ${p}`);
   }
   if (new Set(initial.workspaces.map(w => w.id)).size !== initial.workspaces.length || new Set(initial.workspaces.map(w => w.path)).size !== initial.workspaces.length || initial.workspaces.some(w => !w.id)) throw new Error("Duplicate or empty workspace identities.");
@@ -93,10 +93,10 @@ export class Registry extends Context.Service<
     readonly saveOutcomeProject: (project: Omit<OutcomeProject, "archived">) => Effect.Effect<void, RegistryError>;
     readonly archiveOutcomeProject: (id: string, archived: boolean) => Effect.Effect<void, RegistryError>;
     readonly assignProject: (cwd: string, sessionId: string, projectId: string | null) => Effect.Effect<void, RegistryError>;
-    readonly addProject: (path: string) => Effect.Effect<void, RegistryError>;
-    /** Make sure a directory is usable as a session cwd: a project root or a registered worktree. Adds it as a project otherwise. */
-    readonly ensureProject: (path: string) => Effect.Effect<string, RegistryError>;
-    readonly removeProject: (path: string) => Effect.Effect<void, RegistryError>;
+    readonly addFolder: (path: string) => Effect.Effect<void, RegistryError>;
+    /** Make sure a directory is usable as a session cwd: a folder root or a registered worktree. Adds it as a folder otherwise. */
+    readonly ensureFolder: (path: string) => Effect.Effect<string, RegistryError>;
+    readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
     readonly addWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
     /** Register a session started through piano. Idempotent. */
     readonly addSession: (cwd: string, sessionId: string, title?: string) => Effect.Effect<void, RegistryError>;
@@ -154,24 +154,24 @@ export const RegistryLive = Layer.effect(
         if (projectId !== null && !d.outcomeProjects.some(p => p.id === projectId)) throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
         return { ...d, sessions: d.sessions.map(s => isSession(cwd, sessionId)(s) ? { ...s, outcomeProjectId: projectId ?? undefined } : s) };
       }),
-      addProject: (raw) =>
+      addFolder: (raw) =>
         Effect.gen(function* () {
           const path = resolve(expandHome(raw));
           if (!existsSync(path) || !statSync(path).isDirectory()) return yield* new RegistryError({ detail: `Not a directory: ${path}` });
-          yield* update((d) => (d.projects.includes(path) ? d : { ...d, projects: [...d.projects, path] }));
+          yield* update((d) => (d.folders.includes(path) ? d : { ...d, folders: [...d.folders, path] }));
         }),
-      ensureProject: (raw) =>
+      ensureFolder: (raw) =>
         Effect.gen(function* () {
           const path = resolve(expandHome(raw));
           const d = yield* Ref.get(state);
-          if (d.projects.includes(path) || d.worktrees.some((w) => w.path === path)) return path;
+          if (d.folders.includes(path) || d.worktrees.some((w) => w.path === path)) return path;
           if (!existsSync(path) || !statSync(path).isDirectory()) return yield* new RegistryError({ detail: `Not a directory: ${path}` });
-          yield* update((x) => x.projects.includes(path) ? x : { ...x, projects: [...x.projects, path] });
+          yield* update((x) => x.folders.includes(path) ? x : { ...x, folders: [...x.folders, path] });
           return path;
         }),
-      // Closing a project only hides it; its worktrees and sessions stay registered so
+      // Closing a folder only hides it; its worktrees and sessions stay registered so
       // starting a session in that directory again brings everything back.
-      removeProject: (path) => update((d) => ({ ...d, projects: d.projects.filter((p) => p !== path) })),
+      removeFolder: (path) => update((d) => ({ ...d, folders: d.folders.filter((p) => p !== path) })),
       addWorktree: (entry) =>
         update((d) => (d.worktrees.some((w) => w.path === entry.path) ? d : { ...d, worktrees: [...d.worktrees, entry] })),
       addSession: (cwd, sessionId, title) =>

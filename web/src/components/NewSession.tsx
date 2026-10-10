@@ -67,18 +67,18 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
 
   useAutoGrow(textarea, text, 288);
   useTypeToFocus(textarea, useCallback((s: string) => onDraftChange("new-session", text + s), [onDraftChange, text]));
-  // Fall back to the first known project when nothing is remembered.
+  // Fall back to the first known folder when nothing is remembered.
   useEffect(() => {
-    if (!outcomeProjectId && !cwd && state.projects[0]) setCwd(state.projects[0].path);
+    if (!outcomeProjectId && !cwd && state.folders[0]) setCwd(state.folders[0].path);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.projects.length]);
+  }, [state.folders.length]);
   useEffect(() => {
     if (!creating) return;
     const t = setTimeout(() => setCreating(false), 15000);
     return () => clearTimeout(t);
   }, [creating]);
 
-  const project = state.projects.find(p => p.worktrees.some(w => w.path === cwd));
+  const folder = state.folders.find(p => p.worktrees.some(w => w.path === cwd));
   const outcome = outcomeProjectId ? state.outcomeProjects.find(p => p.id === outcomeProjectId) : undefined;
   const trust = directoryTrust(state, cwd);
   const catalog = state.catalogs[cwd] ?? null;
@@ -151,7 +151,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
                 </Button>
               </div>
             </div>
-            {project?.discovery.status === "error" && (
+            {folder?.discovery.status === "error" && (
               <Alert variant="destructive" className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
                 <AlertDescription>Git status unavailable. Open Worktrees to inspect and refresh.</AlertDescription>
               </Alert>
@@ -236,7 +236,7 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
 /** Shown only for directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted. */
 /** Pi's trust outcome for a directory: the latest probe, else what discovery recorded for a known worktree. */
 export function directoryTrust(state: AppState, cwd: string) {
-  return state.trusts[cwd] ?? state.projects.flatMap(p => p.worktrees).find(w => w.path === cwd)?.trust;
+  return state.trusts[cwd] ?? state.folders.flatMap(p => p.worktrees).find(w => w.path === cwd)?.trust;
 }
 
 function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trusted: boolean) => void }) {
@@ -253,13 +253,13 @@ function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trust
   );
 }
 
-/** Project roots plus Browse and Worktrees escape hatches; a selected worktree is still named by project and branch. */
+/** Folder roots plus Browse and Worktrees escape hatches; a selected worktree is still named by folder and branch. */
 function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: AppState; value: string; onChange: (cwd: string) => void; onBrowse: () => void; send: (m: ClientMessage) => void }) {
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
   const [wtPending, setWtPending] = useState(false);
   const search = useRef<HTMLInputElement>(null);
-  const known = state.projects.flatMap((p) => p.worktrees.map((w) => ({ project: p.name, ...w })));
+  const known = state.folders.flatMap((p) => p.worktrees.map((w) => ({ folder: p.name, ...w })));
   const current = known.find((k) => k.path === value);
   const roots = known.filter((k) => k.root);
   return (
@@ -275,7 +275,7 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
             <span>Choose a folder</span>
           ) : current ? (
             <>
-              <span className="truncate font-mono">{current.project}</span>
+              <span className="truncate font-mono">{current.folder}</span>
               {!current.root && <BranchLabel branch={current.branch ?? (current.facts?.detached ? "Detached" : "Unknown branch")} className="text-ink-3" />}
             </>
           ) : (
@@ -300,14 +300,14 @@ function DirectorySelect({ state, value, onChange, onBrowse, send }: { state: Ap
                   <CommandItem
                     key={k.path}
                     value={k.path}
-                    keywords={[k.project]}
+                    keywords={[k.folder]}
                     disabled={k.status === "missing"}
                     onSelect={() => {
                       onChange(k.path);
                       setOpen(false);
                     }}
                   >
-                    <span className="min-w-0 flex-1 truncate">{k.project}</span>
+                    <span className="min-w-0 flex-1 truncate">{k.folder}</span>
                     <PickerCheck selected={k.path === value} />
                   </CommandItem>
                 ))}

@@ -40,7 +40,7 @@ writeFileSync(join(sessions, 'changes.jsonl'), [
   { type: 'session', version: 3, id: 'changes', cwd: repo, timestamp },
   { type: 'message', id: 'm0', parentId: null, timestamp, message: { role: 'user', content: 'Edit app.ts', timestamp: 0 } },
 ].map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId: 'changes', title: 'Changes verification', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId: 'changes', title: 'Changes verification', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
 const fake = join(root, 'fake.mjs');
 writeFileSync(fake, readFileSync('test/fake-pi.mjs', 'utf8').replace('const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";', 'const sessionId = args.includes("--session") ? "changes" : args[args.indexOf("--session-id") + 1] || "nosession";'));
 const backendPort = await freePort(), frontendPort = await freePort();
@@ -71,7 +71,7 @@ const sheetText = () => evaluate(`${sheet}.textContent`);
 const filePaths = () => evaluate(`[...${sheet}.querySelectorAll('[data-path]')].map(n => n.dataset.path)`);
 try {
   for (let n = 0; ; n++) {
-    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${frontendPort}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${frontendPort}`)).ok) break; } catch {}
     if (n === 100) throw new Error('Startup deadline');
     await delay(100);
   }

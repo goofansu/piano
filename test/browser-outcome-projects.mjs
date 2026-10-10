@@ -29,7 +29,7 @@ const references = [['one', api, 'API session'], ['two', web, 'Web session'], ['
   ].map(JSON.stringify).join('\n') + '\n');
   return { sessionId, cwd, title, createdAt: timestamp, updatedAt: timestamp, archived: false };
 });
-seedRegistry(database, { projects: [api, web], sessions: references, workspaces: [{ id: 'api-id', path: api, project: api }, { id: 'web-id', path: web, project: web }] });
+seedRegistry(database, { folders: [api, web], sessions: references, workspaces: [{ id: 'api-id', path: api, folder: api }, { id: 'web-id', path: web, folder: web }] });
 // The backend finds the seeded default database with no DB override.
 const env = { ...process.env, HOME: join(root, 'home'), XDG_DATA_HOME: join(root, 'data'), PIANO_DB_PATH: undefined, HOST: '127.0.0.1', PORT: '7171', PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: `--audit ${audit}`, PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions };
 let processLog = '';
@@ -61,7 +61,7 @@ const project = name => registry().outcomeProjects.find(p => p.name === name);
 const member = sessionId => registry().sessions.find(s => s.sessionId === sessionId);
 async function ready() {
   for (let i = 0; i < 100; i++) {
-    try { if ((await fetch('http://127.0.0.1:7171/api/projects')).ok && (await fetch('http://127.0.0.1:7172')).ok) return; } catch {}
+    try { if ((await fetch('http://127.0.0.1:7171/api/folders')).ok && (await fetch('http://127.0.0.1:7172')).ok) return; } catch {}
     await delay(100);
   }
   throw new Error('Scratch startup deadline');
@@ -212,7 +212,7 @@ try {
   // Closing a folder leaves project references, histories and workspace identity intact.
   await groupBy('Folder'); await wait(`!!document.querySelector('[aria-label="Folder menu for api"]')`);
   await ab('click', '[aria-label="Folder menu for api"]'); await menuitem('Close'); await button('Close'); await settle();
-  assert.equal(registry().projects.includes(api), false);
+  assert.equal(registry().folders.includes(api), false);
   assert.equal(member('one').outcomeProjectId, project('Subscriptions').id);
   await groupBy('Project'); await ab('wait', '--text', 'No project');
   await button('API session api'); await ab('wait', '--text', 'History one');

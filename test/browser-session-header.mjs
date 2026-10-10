@@ -35,7 +35,7 @@ const sessionFile = join(sessions, 'header.jsonl');
 const entries = [{ type: 'session', version: 3, id: sessionId, cwd: repo, timestamp }];
 for (let n = 0; n < 40; n++) entries.push({ type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp, message: { role: 'user', content: `Message ${n}\n\nTranscript scrolling check.`, timestamp: n } });
 writeFileSync(sessionFile, entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId, title: 'Header verification: copy all with a long session title to truncate on mobile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: [{ cwd: repo, sessionId, title: 'Header verification: copy all with a long session title to truncate on mobile', createdAt: timestamp, updatedAt: timestamp, archived: false }] }));
 const fake = join(root, 'fake.mjs');
 writeFileSync(fake, readFileSync('test/fake-pi.mjs', 'utf8').replace('const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";', `const sessionId = args.includes("--session") ? ${JSON.stringify(sessionId)} : args[args.indexOf("--session-id") + 1] || "nosession";`));
 const backendPort = await freePort();
@@ -83,7 +83,7 @@ async function assertToastCentered(text, label) {
 }
 try {
   for (let n = 0; ; n++) {
-    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${frontendPort}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${frontendPort}`)).ok) break; } catch {}
     if (n === 100) throw new Error('Startup deadline');
     await delay(100);
   }

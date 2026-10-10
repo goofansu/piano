@@ -55,12 +55,12 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
   const actions = useSessionActions(send, ready);
   const target = state.session?.sessionId ? { cwd: state.session.cwd, sessionId: state.session.sessionId, title: details.title } : undefined;
   const sessions = useMemo(() => {
-    const visible = state.projects.flatMap(p => p.sessions.map(t => ({ ...t, project: p.name, inWorktree: !p.worktrees.some(w => w.root && w.path === t.cwd) })));
+    const visible = state.folders.flatMap(p => p.sessions.map(t => ({ ...t, folder: p.name, inWorktree: !p.worktrees.some(w => w.root && w.path === t.cwd) })));
     // Sessions whose directory was closed still belong to their project; they are reachable here by name. Archived ones are not.
-    return [...visible, ...state.sessionReferences.filter(s => !s.archived && !visible.some(t => t.cwd === s.cwd && t.sessionId === s.sessionId)).map(s => ({ ...s, project: s.cwd.split("/").pop() ?? s.cwd, branch: "", inWorktree: false, createdAt: "" }))]
+    return [...visible, ...state.sessionReferences.filter(s => !s.archived && !visible.some(t => t.cwd === s.cwd && t.sessionId === s.sessionId)).map(s => ({ ...s, folder: s.cwd.split("/").pop() ?? s.cwd, branch: "", inWorktree: false, createdAt: "" }))]
       .map(t => ({ ...t, outcome: sessionProject(state, t)?.name ?? "" }))
       .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
-  }, [state.projects, state.sessionReferences, state.outcomeProjects]);
+  }, [state.folders, state.sessionReferences, state.outcomeProjects]);
   const composerTrust = composerCwd ? directoryTrust(state, composerCwd) : undefined;
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
@@ -79,14 +79,14 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
               return (
                 <CommandItem
                   key={`${t.cwd}\n${t.sessionId}`}
-                  value={`${t.title || "Untitled"} ${t.project} ${t.branch ?? ""} ${t.outcome} ${t.sessionId}`}
-                  keywords={[t.project, t.branch ?? "", t.outcome]}
+                  value={`${t.title || "Untitled"} ${t.folder} ${t.branch ?? ""} ${t.outcome} ${t.sessionId}`}
+                  keywords={[t.folder, t.branch ?? "", t.outcome]}
                   onSelect={() => run(() => select(t.cwd, t.sessionId))}
                   className="gap-3"
                 >
                   <span className={cn("min-w-0 flex-1 truncate", !t.title && "text-ink-3", selected && "font-medium")}>{t.title || "Untitled"}</span>
                   <span className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 text-xs text-ink-3">
-                    <span className="truncate">{t.project}</span>
+                    <span className="truncate">{t.folder}</span>
                     {t.branch && t.inWorktree && <BranchLabel branch={t.branch} />}
                   </span>
                 </CommandItem>

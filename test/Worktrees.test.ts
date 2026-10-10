@@ -9,7 +9,7 @@ import { Effect, Layer } from "effect";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
-import { buildProjects } from "../server/Views.ts";
+import { buildFolders } from "../server/Views.ts";
 import { createWorktree, listWorktrees, WorktrunkCommand } from "../server/Worktrees.ts";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } }).trim();
@@ -111,19 +111,19 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
   const layer = SessionHostsLive({ idleMs: 0 }).pipe(Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   await Effect.runPromise(Effect.gen(function* () {
     const registry = yield* Registry;
-    yield* registry.addProject(repo);
-    yield* registry.addWorktree({ project: repo, path: created.path, branch: "old-registry-branch" });
+    yield* registry.addFolder(repo);
+    yield* registry.addWorktree({ folder: repo, path: created.path, branch: "old-registry-branch" });
     yield* registry.addSession(created.path, "saved-history");
-    let view = (yield* buildProjects)[0];
+    let view = (yield* buildFolders)[0];
     assert.equal(view.worktrees.length, 2); // the unselected partial checkout is discovery only
     assert.equal(view.sessions.length, 1);
     assert.equal(view.worktrees[1].branch, null); assert.equal(view.worktrees[1].facts?.detached, true);
     git(repo, "worktree", "remove", "--force", created.path);
-    view = (yield* buildProjects)[0];
+    view = (yield* buildFolders)[0];
     assert.equal(view.worktrees[1].status, "missing"); assert.equal(view.sessions[0].sessionId, "saved-history");
     // Unreadable repository metadata: Git fails, and nothing pretends the project is healthy.
     chmodSync(join(repo, ".git"), 0o000);
-    try { view = (yield* buildProjects)[0]; } finally { chmodSync(join(repo, ".git"), 0o755); }
+    try { view = (yield* buildFolders)[0]; } finally { chmodSync(join(repo, ".git"), 0o755); }
     assert.equal(view.discovery.status, "error"); assert.equal(view.worktrees[0].status, "unknown");
     assert.equal(view.worktrees[0].branch, null); assert.equal(view.sessions.length, 1);
     const data = yield* registry.get;

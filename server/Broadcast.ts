@@ -2,24 +2,24 @@
 import { Context, Effect, Layer, PubSub, type Scope, Stream } from "effect";
 import type { ServerMessage } from "../shared/wire.ts";
 
-type Projects = Extract<ServerMessage, { _tag: "projects" }>;
+type RegistryMessage = Extract<ServerMessage, { _tag: "registry" }>;
 
 export class Broadcast extends Context.Service<
   Broadcast,
   {
-    readonly publish: (message: Projects) => Effect.Effect<void>;
-    /** The last published projects, so a new connection can show them before discovery finishes. */
-    readonly latest: Effect.Effect<Projects | undefined>;
+    readonly publish: (message: RegistryMessage) => Effect.Effect<void>;
+    /** The last published registry view, so a new connection can show them before discovery finishes. */
+    readonly latest: Effect.Effect<RegistryMessage | undefined>;
     /** Subscribes now, so nothing published after this returns is missed. */
-    readonly subscribe: Effect.Effect<Stream.Stream<Projects>, never, Scope.Scope>;
+    readonly subscribe: Effect.Effect<Stream.Stream<RegistryMessage>, never, Scope.Scope>;
   }
 >()("piano/Broadcast") {}
 
 export const BroadcastLive = Layer.effect(
   Broadcast,
   Effect.gen(function* () {
-    const pubsub = yield* PubSub.sliding<Projects>(1);
-    let latest: Projects | undefined;
+    const pubsub = yield* PubSub.sliding<RegistryMessage>(1);
+    let latest: RegistryMessage | undefined;
     return Broadcast.of({
       publish: (message) => Effect.suspend(() => {
         latest = message;

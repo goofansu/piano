@@ -82,7 +82,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
     if (relativeStore !== ".." && !relativeStore.startsWith(`..${sep}`) && !isAbsolute(relativeStore)) unsupported("Revision storage must be outside the workspace. Set PIANO_REVISION_STORE to a private external directory.");
     const git = (...args: string[]) => command(cli, cwd, args, signal);
     const top = (await git("rev-parse", "--show-toplevel")).toString().trim();
-    if (await realpath(top) !== cwd) unsupported("Capture requires the Git checkout root, not a project subdirectory.");
+    if (await realpath(top) !== cwd) unsupported("Capture requires the Git checkout root, not a subdirectory.");
     const gitDir = (await git("rev-parse", "--absolute-git-dir")).toString().trim();
     let changes = 0, watchError: Error | undefined;
     const watchers: FSWatcher[] = [];

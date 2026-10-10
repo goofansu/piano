@@ -14,7 +14,7 @@ const fixture = await createPiCompatibilityFixture();
 const cwd = fixture.project('browser-project', true);
 const startup = fixture.project('browser-startup', true, true);
 const registry = join(fixture.root, 'registry.json');
-writeFileSync(registry, JSON.stringify({ projects: [cwd, startup], worktrees: [], sessions: [] }));
+writeFileSync(registry, JSON.stringify({ folders: [cwd, startup], worktrees: [], sessions: [] }));
 const cli = fixture.cli();
 const server = spawn(process.execPath, ['server/main.ts'], {
   env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry),

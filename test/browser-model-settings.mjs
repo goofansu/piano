@@ -49,7 +49,7 @@ let socket;
 try {
   for (let n = 0; ; n++) {
     if (backend.exitCode !== null || frontend.exitCode !== null) throw new Error(processLog);
-    try { if ((await fetch(`${backendUrl}/api/projects`)).ok && (await fetch(frontendUrl)).ok) break; } catch {}
+    try { if ((await fetch(`${backendUrl}/api/folders`)).ok && (await fetch(frontendUrl)).ok) break; } catch {}
     if (n > 150) throw new Error(`Scratch startup deadline: ${processLog}`);
     await delay(100);
   }
@@ -62,10 +62,10 @@ try {
     if (message._tag === 'catalogs_invalidated') invalidations++;
   });
   await new Promise((res, rej) => { socket.addEventListener('open', res, { once: true }); socket.addEventListener('error', rej, { once: true }); });
-  socket.send(JSON.stringify({ _tag: 'add_project', path: cwd }));
+  socket.send(JSON.stringify({ _tag: 'add_folder', path: cwd }));
   for (let n = 0; ; n++) {
-    const result = await (await fetch(`${backendUrl}/api/projects`)).json();
-    if (result.projects.some(project => project.path === cwd)) break;
+    const result = await (await fetch(`${backendUrl}/api/folders`)).json();
+    if (result.folders.some(folder => folder.path === cwd)) break;
     if (n > 100) throw new Error('Scratch registration deadline');
     await delay(50);
   }

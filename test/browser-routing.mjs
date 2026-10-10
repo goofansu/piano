@@ -14,7 +14,7 @@ const scratch = mkdtempSync(join(tmpdir(), "piano-routing-"));
 const repo = join(scratch, "repo");
 mkdirSync(repo);
 spawnSync("git", ["init", repo]);
-writeFileSync(join(scratch, "registry.json"), JSON.stringify({ projects: [repo], worktrees: [], sessions: [] }));
+writeFileSync(join(scratch, "registry.json"), JSON.stringify({ folders: [repo], worktrees: [], sessions: [] }));
 const backend = spawn(process.execPath, ["server/main.ts"], {
   env: { ...process.env, HOST: "127.0.0.1", PORT: "7171", ...registryEnv(join(scratch, "registry.json")), PIANO_PI_CLI: resolve("test/fake-pi.mjs"), PI_CODING_AGENT_DIR: join(scratch, "agent") },
   stdio: ["ignore", "pipe", "pipe"],
@@ -37,15 +37,15 @@ function ab(...args) {
 }
 const evaluate = js => JSON.parse(ab("eval", js));
 const observe = join(scratch, "observe.js");
-// Hold only the external projects response so the initial route is observable, without sleeps.
-writeFileSync(observe, `window.projectsReady = !location.pathname.startsWith('/s/');
-window.projectMessages = []; window.newPageRenders = 0;
-window.releaseProjects = () => {window.projectsReady=true; window.projectMessages.splice(0).forEach(deliver=>deliver());};
+// Hold only the external registry message so the initial route is observable, without sleeps.
+writeFileSync(observe, `window.registryReady = !location.pathname.startsWith('/s/');
+window.registryMessages = []; window.newPageRenders = 0;
+window.releaseRegistry = () => {window.registryReady=true; window.registryMessages.splice(0).forEach(deliver=>deliver());};
 const NativeWebSocket = WebSocket;
 window.WebSocket = class extends NativeWebSocket {
   set onmessage(handler) { super.onmessage = event => {
-    if(JSON.parse(event.data)._tag==='projects' && !window.projectsReady) {
-      window.projectMessages.push(()=>{if(this.readyState===1)handler(event);});
+    if(JSON.parse(event.data)._tag==='registry' && !window.registryReady) {
+      window.registryMessages.push(()=>{if(this.readyState===1)handler(event);});
     } else handler(event);
   }; }
 };
@@ -67,20 +67,20 @@ try {
   const url = ab("get", "url");
   for (const mode of ["reload", "direct"]) {
     if (mode === "reload") ab("reload"); else ab("open", url);
-    ab("wait", "--fn", "window.projectMessages.length > 0 && !!document.querySelector('main')");
+    ab("wait", "--fn", "window.registryMessages.length > 0 && !!document.querySelector('main')");
     const loading = evaluate(`({path:location.pathname, newPageRenders, newComposer:!!document.querySelector('[aria-label="First message"]'), main:document.querySelector('main').innerText})`);
     writeFileSync(join(evidence, `${mode}-loading.json`), JSON.stringify(loading, null, 2));
     ab("screenshot", join(evidence, `${mode}-loading.png`));
     assert.equal(loading.path, new URL(url).pathname);
-    assert.equal(loading.newComposer, false, "Session URL rendered the NewSession composer before projects arrived");
+    assert.equal(loading.newComposer, false, "Session URL rendered the NewSession composer before the registry arrived");
     assert.equal(loading.newPageRenders, 0, "NewSession flashed on the session URL");
-    evaluate("releaseProjects(); true");
+    evaluate("releaseRegistry(); true");
     ab("wait", "--text", "echo: route fixture");
     assert.equal(ab("get", "url"), url);
   }
   ab("open", "http://127.0.0.1:7172/s/missing-session");
-  ab("wait", "--fn", "window.projectMessages.length > 0 && !!document.querySelector('main')");
-  evaluate("releaseProjects(); true");
+  ab("wait", "--fn", "window.registryMessages.length > 0 && !!document.querySelector('main')");
+  evaluate("releaseRegistry(); true");
   ab("wait", "--text", "Session not found");
   assert.equal(new URL(ab("get", "url")).pathname, "/s/missing-session");
   assert.equal(evaluate("newPageRenders"), 0);

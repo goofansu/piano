@@ -26,7 +26,7 @@ for (const id of ids) writeFileSync(join(sessions, `${id}.jsonl`), [
 ].map(JSON.stringify).join('\n') + '\n');
 const original = readFileSync(join(sessions, 'kept.jsonl'), 'utf8');
 const registry = join(root, 'registry.json');
-writeFileSync(registry, JSON.stringify({ projects: [repo], worktrees: [{ project: repo, path: worktree, branch: 'feature' }], sessions: ids.map(sessionId => ({ cwd: worktree, sessionId, title: sessionId, createdAt: timestamp, updatedAt: timestamp, archived: false })) }));
+writeFileSync(registry, JSON.stringify({ folders: [repo], worktrees: [{ folder: repo, path: worktree, branch: 'feature' }], sessions: ids.map(sessionId => ({ cwd: worktree, sessionId, title: sessionId, createdAt: timestamp, updatedAt: timestamp, archived: false })) }));
 execFileSync('wt', ['-C', repo, 'remove', '--foreground', '--no-hooks', '--no-delete-branch', worktree]);
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: '7171', ...registryEnv(registry), PIANO_PI_CLI: resolve('test/fake-pi.mjs'), PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -50,7 +50,7 @@ const menu = () => ab('click', '[aria-label="Session information and actions"]')
 const item = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
 try {
   for (let n = 0; ; n++) {
-    try { if ((await fetch('http://127.0.0.1:7171/api/projects')).ok && (await fetch('http://127.0.0.1:7172')).ok) break; } catch {}
+    try { if ((await fetch('http://127.0.0.1:7171/api/folders')).ok && (await fetch('http://127.0.0.1:7172')).ok) break; } catch {}
     if (n === 100) throw new Error('Startup deadline');
     await delay(100);
   }

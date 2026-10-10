@@ -21,7 +21,7 @@ writeFileSync(join(repo, 'source.txt'), 'base\n'); git(repo, 'add', '.'); git(re
 git(repo, 'worktree', 'add', '-b', 'second', checkout);
 writeFileSync(join(repo, 'source.txt'), 'WORKSPACE_A\n'); git(repo, 'add', 'source.txt');
 writeFileSync(join(checkout, 'source.txt'), 'WORKSPACE_B\n');
-const original = { projects: [repo], worktrees: [{ project: repo, path: checkout, branch: 'old-name' }], sessions: [
+const original = { folders: [repo], worktrees: [{ folder: repo, path: checkout, branch: 'old-name' }], sessions: [
   { cwd: repo, sessionId: 'workspace-a', title: 'Session A', createdAt: '2026-10-05T00:00:00Z', updatedAt: '2026-10-05T00:00:00Z', archived: false },
   { cwd: checkout, sessionId: 'workspace-b', title: 'Session B', createdAt: '2026-10-05T00:00:00Z', updatedAt: '2026-10-05T00:00:00Z', archived: false },
 ] };
@@ -51,7 +51,7 @@ async function captured(workspace) {
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(server.exitCode, null);
-    try { if ((await fetch('http://127.0.0.1:7171/api/projects')).ok) break; } catch {}
+    try { if ((await fetch('http://127.0.0.1:7171/api/folders')).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   const workspaces = readRegistry(registry).workspaces;

@@ -36,7 +36,7 @@ const entries = [{ type: 'session', version: 3, id: 'skills', cwd: repo, timesta
   type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, timestamp, message: { ...message, timestamp: n },
 }))];
 writeFileSync(join(sessions, 'skills.jsonl'), entries.map(JSON.stringify).join('\n') + '\n');
-writeFileSync(join(root, 'registry.json'), JSON.stringify({ projects: [repo], worktrees: [], sessions: [
+writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo], worktrees: [], sessions: [
   { cwd: repo, sessionId: 'skills', title: 'Skill prompts', createdAt: timestamp, updatedAt: timestamp, archived: false },
 ] }));
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: BACKEND_PORT,
@@ -72,7 +72,7 @@ const trigger = `${group} button[aria-expanded]`;
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null); assert.equal(frontend.exitCode, null);
-    try { if ((await fetch(`http://127.0.0.1:${BACKEND_PORT}/api/projects`)).ok && (await fetch(`http://127.0.0.1:${WEB_PORT}`)).ok) break; } catch {}
+    try { if ((await fetch(`http://127.0.0.1:${BACKEND_PORT}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${WEB_PORT}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
   await ab('set', 'viewport', '1440', '1000');
