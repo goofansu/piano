@@ -342,10 +342,12 @@
 .prose-chat li + li { margin-top: 0.25em; }
 .prose-chat li::marker { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .prose-chat strong { font-weight: 600; }
+/* A continuous underline: skipping descenders left gaps under p and g. */
 .prose-chat a {
   color: var(--brand);
   text-decoration: underline;
   text-decoration-color: color-mix(in oklab, var(--brand) 35%, transparent);
+  text-decoration-skip-ink: none;
   text-underline-offset: 0.15em;
 }
 .prose-chat a:hover { text-decoration-color: var(--brand); }

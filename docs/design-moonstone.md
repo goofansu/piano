@@ -118,7 +118,11 @@ Mono: Newsreader for headlines, titles and empty states, and Departure Mono in u
 small labels. Four typefaces, two of them monospace, read as busy rather than warm, so both were
 removed; the warmth now comes from the palette alone.
 
-### The selected row
+### Links and the selected row
+
+Prose links keep the original style: brand colour with an underline at 35% brand, 0.15em below the
+baseline, full brand on hover. The underline is continuous (`text-decoration-skip-ink: none`); the
+browser's default skipped descenders and left gaps under p and g.
 
 A selected row is no longer a brand tint (evening blue at 12% read as cool grey on the warm
 canvas). `--selected` is parchment: solid `oklch(0.88 0.021 53)` ≈ `#E3D4CB` in light mode and the dark
