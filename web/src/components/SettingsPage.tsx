@@ -15,6 +15,7 @@ import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/componen
 import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { oauthProviders, providerLogout } from "@/lib/api";
 import type { SettingsSection } from "@/lib/routes";
 
 export type { SettingsSection } from "@/lib/routes";
@@ -49,10 +50,8 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
     if (section !== "providers") return;
     const controller = new AbortController();
     setError("");
-    void fetch("/api/oauth-providers", { signal: controller.signal }).then(async response => {
-      if (!response.ok) throw new Error("Could not load providers.");
-      const result = await response.json();
-      if (!controller.signal.aborted) setProviders(result.providers);
+    void oauthProviders({ signal: controller.signal }).then(result => {
+      if (!controller.signal.aborted) setProviders([...result]);
     }).catch(() => { if (!controller.signal.aborted) setError("Could not load providers."); });
     return () => controller.abort();
   }, [revision, section]);
@@ -63,9 +62,7 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
   const signOut = async (provider: OAuthProvider) => {
     setSigningOut(provider.id);
     try {
-      const response = await fetch("/api/provider-logout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: provider.id }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Could not sign out. Try again.");
+      await providerLogout(provider.id);
       refreshProviders();
       toast.success(`Signed out of ${provider.name}.`);
     } catch (error) {

@@ -3,6 +3,7 @@ import { cn } from "cn";
 import { type ComponentProps, type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { slashCommands } from "@/lib/api";
 
 export interface CompletionContext {
   cwd: string;
@@ -52,10 +53,8 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
     if (!open || !cwd) return;
     const controller = new AbortController();
     setCatalog(undefined);
-    void fetch("/api/commands", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cwd, sessionId }), signal: controller.signal }).then(async response => {
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Could not load commands.");
-      if (!controller.signal.aborted) setCatalog({ key, commands: result.commands });
+    void slashCommands(cwd, sessionId, { signal: controller.signal }).then(commands => {
+      if (!controller.signal.aborted) setCatalog({ key, commands });
     }).catch(error => {
       if (!controller.signal.aborted) setCatalog({ key, commands: [], error: error.message });
     });

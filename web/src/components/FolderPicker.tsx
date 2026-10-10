@@ -10,6 +10,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { listDirectory, makeDirectory } from "@/lib/api";
 import { abbrevHome } from "@/lib/format";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { listRow } from "@/lib/styles";
@@ -63,21 +64,19 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
     }
     const mine = ++seq.current;
     setLoading(true);
-    fetch("/api/ls", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: key }) })
-      .then((r) => r.json() as Promise<DirListing | { error: string }>)
+    listDirectory(key)
       .then((d) => {
         if (mine !== seq.current) return;
-        if ("error" in d) {
-          setError(d.error);
-          setDir(null);
-        } else {
-          cache.current.set(key, d);
-          cache.current.set(d.path, d);
-          setDir(d);
-          setError(null);
-        }
+        cache.current.set(key, d);
+        cache.current.set(d.path, d);
+        setDir(d);
+        setError(null);
       })
-      .catch((e) => mine === seq.current && setError(String(e)))
+      .catch((e) => {
+        if (mine !== seq.current) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setDir(null);
+      })
       .finally(() => mine === seq.current && setLoading(false));
   }, [open, dirPath]);
 
@@ -106,17 +105,18 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
       toast.error("Folder name cannot contain slashes");
       return;
     }
-    const r = await fetch("/api/mkdir", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: `${dir.path}/${name}` }) });
-    const d = (await r.json()) as { path?: string; error?: string };
-    if (d.error || !d.path) {
-      toast.error(d.error ?? "Could not create folder");
+    let created: string;
+    try {
+      created = await makeDirectory(`${dir.path}/${name}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not create folder");
       return;
     }
     cache.current.delete(dir.path);
     cache.current.delete(dirPath || "~");
     setCreating(false);
     setNewName("");
-    goTo(d.path);
+    goTo(created);
   };
 
   return (

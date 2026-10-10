@@ -6,7 +6,7 @@
  * WebSocket layer is a pass-through. Everything is an effect Schema so both
  * sides decode with the same definitions.
  */
-import { Schema } from "effect";
+import { Schema, type Types } from "effect";
 import { base64Bytes, IMAGE_TYPES, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES } from "./attachments.ts";
 
 /** Browser input, not a Pi protocol block. Future files get a distinct kind. */
@@ -284,23 +284,27 @@ export const SlashCommand = Schema.Struct({
 export type SlashCommand = typeof SlashCommand.Type;
 
 /** Global provider sign-in; never part of a session transcript or registry. */
-export interface OAuthProvider { id: string; name: string; signedIn: boolean }
-export interface LoginPrompt {
-  id: string;
-  type: "text" | "secret" | "select" | "manual_code";
-  message: string;
-  placeholder?: string;
-  options?: readonly { id: string; label: string; description?: string }[];
-}
-export interface ProviderLoginState {
-  id: string;
-  provider: string;
-  status: "running" | "success" | "error" | "cancelled";
-  message?: string;
-  url?: string;
-  userCode?: string;
-  prompt?: LoginPrompt;
-}
+export const OAuthProvider = Schema.Struct({ id: Schema.String, name: Schema.String, signedIn: Schema.Boolean });
+export type OAuthProvider = typeof OAuthProvider.Type;
+export const LoginPrompt = Schema.Struct({
+  id: Schema.String,
+  type: Schema.Literals(["text", "secret", "select", "manual_code"]),
+  message: Schema.String,
+  placeholder: Schema.optional(Schema.String),
+  options: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String, description: Schema.optional(Schema.String) }))),
+});
+export type LoginPrompt = typeof LoginPrompt.Type;
+export const ProviderLoginState = Schema.Struct({
+  id: Schema.String,
+  provider: Schema.String,
+  status: Schema.Literals(["running", "success", "error", "cancelled"]),
+  message: Schema.optional(Schema.String),
+  url: Schema.optional(Schema.String),
+  userCode: Schema.optional(Schema.String),
+  prompt: Schema.optional(LoginPrompt),
+});
+/** The server updates one attempt in place while it runs. */
+export type ProviderLoginState = Types.Mutable<typeof ProviderLoginState.Type>;
 
 /** Everything a browser client may do to a running session. */
 export const SessionAction = Schema.Union([
