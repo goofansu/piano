@@ -10,7 +10,7 @@ import { PiSessionsLive } from "../server/PiSessions.ts";
 import { setProjectTrust } from "../server/ProjectTrust.ts";
 import { RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
-import { buildFolders } from "../server/Views.ts";
+import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
 import { WorktrunkCommand } from "../server/Worktrees.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
@@ -38,8 +38,9 @@ function fixture(t: TestContext) {
 
 test("INV-01: project trust is read from and written to Pi's trust file, per directory", async t => {
   const { root, skilled, plain, agent } = fixture(t);
-  const layer = SessionHostsLive({ idleMs: 0 }).pipe(Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
+  const layer = SidebarViewLive().pipe(Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   await Effect.runPromise(Effect.gen(function* () {
+    const buildFolders = Effect.map((yield* SidebarView).fresh, view => view.folders);
     const trustOf = (path: string) => Effect.map(buildFolders, projects => projects.flatMap(p => p.worktrees).find(w => w.path === path)!.trust);
 
     // Headless Pi skips protected resources until a decision is saved; a plain checkout needs no decision.

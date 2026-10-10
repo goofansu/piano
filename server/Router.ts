@@ -15,7 +15,7 @@ import { RadiusSetup } from "./RadiusSetup.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
-import { buildFolders } from "./Views.ts";
+import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
@@ -247,6 +247,9 @@ export const AppRouter = HttpRouter.use((router) =>
       }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Sign-in request could not be completed. Resume the current sign-in or try again." }, 409)))));
     }
 
-    yield* router.add("GET", "/api/folders", buildFolders.pipe(Effect.map((folders) => json({ folders }))));
+    yield* router.add("GET", "/api/folders", Effect.gen(function* () {
+      const { folders } = yield* (yield* SidebarView).fresh;
+      return json({ folders });
+    }));
   }),
 );

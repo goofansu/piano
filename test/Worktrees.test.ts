@@ -9,7 +9,7 @@ import { Effect, Layer } from "effect";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
-import { buildFolders } from "../server/Views.ts";
+import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
 import { createWorktree, listWorktrees, WorktrunkCommand } from "../server/Worktrees.ts";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } }).trim();
@@ -108,8 +108,9 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
 
   // Through the actual view caller: registry names never become Git facts and
   // external deletion/failure must not hide registered session references.
-  const layer = SessionHostsLive({ idleMs: 0 }).pipe(Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
+  const layer = SidebarViewLive().pipe(Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   await Effect.runPromise(Effect.gen(function* () {
+    const buildFolders = Effect.map((yield* SidebarView).fresh, view => view.folders);
     const registry = yield* Registry;
     yield* registry.addFolder(repo);
     yield* registry.addWorktree({ folder: repo, path: created.path, branch: "old-registry-branch" });
