@@ -1,23 +1,20 @@
 import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
+import { cn } from "cn";
 import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, SparklesIcon } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { DisclosureChevron } from "@/components/Disclosure";
+import { Markdown } from "@/components/Markdown";
 import { Keys } from "@/components/PianoMark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-
-type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
-
-import { cn } from "cn";
-import { Markdown } from "@/components/Markdown";
 import { abbrevHome, clamp } from "@/lib/format";
-import { type MessageError, messageError } from "@/lib/messageError";
+import type { MessageError } from "@/lib/messageError";
 import { disclosureRow } from "@/lib/styles";
-import { jumpEntries, messageAnchorId, STICK_EVENT } from "@/lib/transcript";
+import { messageAnchorId, STICK_EVENT, type ToolRow, type TranscriptRow, transcriptRows } from "@/lib/transcript";
 
 interface Props {
   messages: RenderMsg[];
@@ -76,17 +73,7 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
     el.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };
 
-  const finalMessageIds = new Set(jumpEntries(messages).flatMap(entry => "messageId" in entry ? [entry.messageId] : []));
-  const results = new Map<string, RenderMsg>();
-  const terminalRuns = new Map<string, "completed" | "failed" | "cancelled">();
-  for (const m of messages) {
-    if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
-    const card = m.subagent;
-    if (card?.kind === "result" && card.runId && card.terminalStatus) terminalRuns.set(card.runId, card.terminalStatus);
-    if (card?.kind === "collection") for (const run of card.runs) terminalRuns.set(run.runId, run.status);
-    if (card?.kind === "cancellation") for (const outcome of card.outcomes) if (outcome.kind === "already terminal") terminalRuns.set(outcome.runId, outcome.phase);
-  }
-  const active = new Set(Object.values(tools).filter(t => t.status === "running").map(t => t.id));
+  const rows = useMemo(() => transcriptRows(messages, { pending, tools, showTools }), [messages, pending, tools, showTools]);
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
@@ -112,17 +99,7 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
         {/* Adjacent tool rows keep one gap, even when the previous message also had text. */}
         <div className="flex flex-col gap-6 [&>[data-ends-with-tools]+[data-tools-only]]:-mt-3">
           {submittedInput && <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />}
-          {messages.map((m, index) => {
-            if (m.role === "tool_result" && m.toolCallId && messages.some((x) => x.toolCalls?.some((c) => c.id === m.toolCallId))) {
-              // A result that found its call is rendered under the call; an orphan is rendered on its own.
-              return null;
-            }
-            const isFinalMessage = finalMessageIds.has(m.id);
-            if (!showTools && !isFinalMessage && !m.errorMessage) return null;
-            const displayed = !showTools && !isFinalMessage ? { ...m, text: "" } : m;
-            return <Message key={m.id} msg={displayed} canCopy={isFinalMessage} showTools={showTools} error={m.errorMessage ? messageError(m, showTools ? messages.slice(0, index) : [], showTools ? results : new Map(), showTools ? tools : {}) : undefined} results={results} tools={tools} active={active} terminalRuns={terminalRuns} />;
-          })}
-          {pending && <Message msg={showTools ? pending : { ...pending, text: "" }} showTools={showTools} error={messageError(pending, showTools ? messages : [], showTools ? results : new Map(), showTools ? tools : {})} results={results} tools={tools} active={active} terminalRuns={terminalRuns} streaming />}
+          {rows.map(row => <TranscriptRowView key={row.key} row={row} tools={tools} />)}
           {activity && (
             <Row glyph={<Keys playing className="text-brand" />}>
               <span className="sr-only">{activity === "starting" ? "Starting" : "Pi is working"}</span>
@@ -160,43 +137,37 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function Message({ msg, error, results, tools, active, terminalRuns, streaming, showTools, canCopy = false }: { canCopy?: boolean; showTools: boolean; msg: RenderMsg; error?: MessageError; results: Map<string, RenderMsg>; tools: Record<string, ToolExecution>; active: Set<string>; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; streaming?: boolean }) {
-  if (!showTools && (msg.subagent || msg.role === "tool_result" || msg.role === "context")) return null;
-  if (msg.subagent) return <SubagentCardView card={msg.subagent} content={msg.text} markdown={msg.role === "context"} terminalStatus={msg.subagent.kind === "delegation" && msg.subagent.runId ? terminalRuns.get(msg.subagent.runId) : undefined} />;
-  if (msg.role === "context") return <article><p className="text-xs text-ink-3">{msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{msg.text}</pre></article>;
-  if (msg.role === "user") return <UserMessage id={msg.id} text={msg.text} skill={msg.skill} attachments={msg.attachments} />;
-  if (msg.role === "assistant") {
-    const hasTools = showTools && !!msg.toolCalls?.length;
-    // Pi starts a message before its first visible text or tool block arrives.
-    // An empty article would still consume the transcript's flex gap.
-    if (!msg.text && !error && !hasTools) return null;
-    return (
-      <>
-      {(msg.text || hasTools) && <article
-        id={streaming ? undefined : messageAnchorId(msg.id)}
-        data-tools-only={!msg.text && hasTools ? "" : undefined}
-        data-ends-with-tools={hasTools ? "" : undefined}
-        className="group/reply flex flex-col gap-6 rounded-2xl"
-      >
-        {msg.text && (
-          <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
-            <span className="sr-only">Pi said</span>
-            <Markdown text={msg.text} className={cn("prose-chat", streaming && "streaming-caret")} />
-            {canCopy && !streaming && <CopyResponse text={msg.text} />}
-          </Row>
-        )}
-        {hasTools && (
-          <div className="flex flex-col gap-3">
-            {msg.toolCalls?.map((tc) => <Tool key={tc.id} call={tc} result={results.get(tc.id)} executions={tools} terminalRuns={terminalRuns} running={active.has(tc.id) || (!!streaming && !results.has(tc.id) && !tools[tc.id])} />)}
-          </div>
-        )}
-      </article>}
-      {error && <ErrorMessage error={error} id={!streaming && !msg.text && !hasTools ? messageAnchorId(msg.id) : undefined} />}
-      </>
-    );
-  }
-  // An orphan result: its call never reached us.
-  return <Tool call={{ id: msg.toolCallId ?? msg.id, name: msg.toolName ?? "tool", args: "" }} result={msg} executions={tools} terminalRuns={terminalRuns} running={false} />;
+function TranscriptRowView({ row, tools }: { row: TranscriptRow; tools: Record<string, ToolExecution> }) {
+  if (row.kind === "subagent") return <SubagentCardView card={row.card} content={row.msg.text} markdown={row.msg.role === "context"} terminalStatus={row.terminalStatus} />;
+  if (row.kind === "context") return <article><p className="text-xs text-ink-3">{row.msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{row.msg.text}</pre></article>;
+  if (row.kind === "user") return <UserMessage id={row.msg.id} text={row.text} skill={row.msg.skill} attachments={row.msg.attachments} />;
+  if (row.kind === "orphan") return <Tool {...row.tool} executions={tools} />;
+  const { msg, text, error, streaming } = row;
+  const hasTools = row.tools.length > 0;
+  return (
+    <>
+    {(text || hasTools) && <article
+      id={streaming ? undefined : messageAnchorId(msg.id)}
+      data-tools-only={!text && hasTools ? "" : undefined}
+      data-ends-with-tools={hasTools ? "" : undefined}
+      className="group/reply flex flex-col gap-6 rounded-2xl"
+    >
+      {text && (
+        <Row glyph={streaming ? <Keys playing className="text-brand" /> : <span className="text-ink-3">•</span>}>
+          <span className="sr-only">Pi said</span>
+          <Markdown text={text} className={cn("prose-chat", streaming && "streaming-caret")} />
+          {row.jump && <CopyResponse text={text} />}
+        </Row>
+      )}
+      {hasTools && (
+        <div className="flex flex-col gap-3">
+          {row.tools.map(tool => <Tool key={tool.call.id} {...tool} executions={tools} />)}
+        </div>
+      )}
+    </article>}
+    {error && <ErrorMessage error={error} id={!streaming && !text && !hasTools ? messageAnchorId(msg.id) : undefined} />}
+    </>
+  );
 }
 
 function ErrorMessage({ error, id }: { error: MessageError; id?: string }) {
@@ -439,12 +410,12 @@ function summarize(args: string): string {
 
 const PREVIEW_LINES = 5;
 
-function Tool({ call, result, running, terminalRuns, executions = {} }: { call: ToolCall; result: RenderMsg | undefined; running: boolean; terminalRuns: Map<string, "completed" | "failed" | "cancelled">; executions?: Record<string, ToolExecution> }) {
+function Tool({ call, result, running, terminalStatus, executions = {} }: ToolRow & { executions?: Record<string, ToolExecution> }) {
   const execution = executions[call.id];
   const subagent = result?.subagent ?? execution?.subagent;
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
-  if (subagent) return <SubagentCardView card={subagent} content={result?.text ?? execution?.text} failed={!!result?.isError || execution?.status === "error"} terminalStatus={subagent.kind === "delegation" && subagent.runId ? terminalRuns.get(subagent.runId) : undefined} />;
+  if (subagent) return <SubagentCardView card={subagent} content={result?.text ?? execution?.text} failed={!!result?.isError || execution?.status === "error"} terminalStatus={terminalStatus} />;
   const nested = new Map((result?.nestedCalls ?? []).map(c => [c.id, c]));
   for (const child of Object.values(executions)) if (child.parentId === call.id || child.id.startsWith(`${call.id}/`)) nested.set(child.id, child);
   const output = result?.text ?? execution?.text;
