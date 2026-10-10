@@ -163,6 +163,11 @@ pointer and 44px on touch screens.
 A session row is its title alone. Where it runs and which project it belongs to live in the session
 header and the sidebar's groupings, not on every row.
 
+The session header shows where the session runs in Zed's form, `folder ⇄ worktree / ⑂ branch`
+(worktree in mono, without Worktrunk's `folder.` prefix; no worktree segment for the folder itself).
+It runs at full length while it fits. When space runs out the branch gives way first, then the
+worktree; the folder keeps up to 40%. The full path is in the folder's tooltip and the session menu.
+
 ## Mark
 
 One mark everywhere: the app's logo tile, the small keys in sidebar rows and the transcript, the

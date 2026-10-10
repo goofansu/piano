@@ -1,10 +1,9 @@
-import { CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, ListIcon, MessageSquareIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon } from "lucide-react";
+import { CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, ListIcon, MessageSquareIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, SplitIcon } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
 import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { abbrevPath } from "@/lib/format";
 import { SESSION_DISPLAYS, useSessionDisplay } from "@/lib/useSessionDisplay";
 import type { AppState } from "@/store";
 
@@ -18,8 +17,11 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
   const target = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title } : undefined;
   const workspace = sessionWorkspace(state);
   const cwd = session?.cwd ?? state.pendingCreate?.cwd;
-  const short = cwd ? abbrevPath(cwd) : "";
-  const slash = short.lastIndexOf("/");
+  // Zed's form: `folder ⇄ worktree / ⑂ branch`; a session in the folder itself has no worktree segment.
+  const owner = state.folders.find(f => f.worktrees.some(w => w.path === cwd));
+  const checkout = owner?.worktrees.find(w => w.path === cwd);
+  const folder = owner?.name ?? cwd?.split("/").pop() ?? "";
+  const worktree = checkout && !checkout.root ? worktreeName(folder, checkout.path) : undefined;
   return <>
     {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
     <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 md:px-6">
@@ -33,13 +35,18 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
           </div>
           {/* Plain workspace metadata has no dedicated UI primitive. */}
           <div className="col-start-1 row-start-2 flex min-w-0 items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <p title={cwd} className="flex min-w-0 max-w-48 font-mono text-xs text-muted-foreground">
-                <span className="sr-only">Working directory: </span>
-                {slash >= 0 && <span dir="rtl" className="min-w-0 shrink-[999] truncate"><span dir="ltr">{short.slice(0, slash + 1)}</span></span>}
-                <span className="min-w-0 truncate">{short.slice(slash + 1)}</span>
+            {/* Full length while it fits; on narrow screens the branch gives way first, then the worktree. */}
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-muted-foreground">
+              <p title={cwd} className="max-w-2/5 shrink-0 truncate">
+                <span className="sr-only">Working directory: </span>{folder}
               </p>
-              {branch && <p title={branch} className="flex min-w-0 max-w-48 items-center gap-1 font-mono text-xs text-muted-foreground">
+              {worktree && <p title={checkout?.path} className="flex min-w-0 items-center gap-1 font-mono">
+                <SplitIcon aria-hidden="true" className="size-3 shrink-0 rotate-90" />
+                <span className="sr-only">Worktree: </span>
+                <span className="truncate">{worktree}</span>
+              </p>}
+              {branch && <span aria-hidden="true" className="text-ink-3/60">/</span>}
+              {branch && <p title={branch} className="flex min-w-12 flex-1 items-center gap-1 font-mono">
                 <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
                 <span className="sr-only">Git branch: </span>
                 <span className="truncate">{branch}</span>
@@ -85,4 +92,10 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
       </DropdownMenu>
     </header>
   </>;
+}
+
+/** A worktree's directory without the `folder.` prefix Worktrunk gives it, since the folder is named beside it. */
+function worktreeName(folder: string, path: string) {
+  const base = path.split("/").pop() ?? path;
+  return base.startsWith(`${folder}.`) ? base.slice(folder.length + 1) : base;
 }

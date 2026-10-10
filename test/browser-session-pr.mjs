@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { registryEnv } from './fixtures/registry.ts';
 
@@ -99,13 +99,15 @@ try {
   await ab('wait', '--text', 'These are not session deliverables.'); await waitBadge(42);
   observations.metadataLayout = await evaluate(`(() => {
     const [path, branch] = document.querySelectorAll('header p[title]');
-    const p = path.getBoundingClientRect(), b = branch.getBoundingClientRect();
-    return { pathWidth: p.width, branchWidth: b.width, gap: b.left - p.right,
-      truncated: [...branch.querySelectorAll('span')].some(s => s.scrollWidth > s.clientWidth) };
+    const pr = document.querySelector(${JSON.stringify(badge(42))}).getBoundingClientRect();
+    return { folder: path.textContent.replace('Working directory: ', ''), branch: branch.title,
+      truncated: [...branch.querySelectorAll('span')].some(s => s.scrollWidth > s.clientWidth),
+      readable: path.getBoundingClientRect().width >= 48 && branch.getBoundingClientRect().width >= 48,
+      clearOfPR: branch.getBoundingClientRect().right <= pr.left };
   })()`);
-  assert.ok(observations.metadataLayout.pathWidth <= 192 && observations.metadataLayout.branchWidth <= 192, 'Metadata has capped widths');
-  assert.equal(observations.metadataLayout.gap, 12, 'Path and branch stay grouped with their original spacing');
-  assert.equal(observations.metadataLayout.truncated, true, 'Long branch is truncated');
+  // Zed's form, `folder / ⑂ branch`, uncapped: names this long still truncate at 1280px, but both stay readable
+  // and never push the PR control away.
+  assert.deepEqual(observations.metadataLayout, { folder: basename(repo), branch, truncated: true, readable: true, clearOfPR: true });
   await ab('hover', badge(42));
   await ab('wait', '--fn', `!!document.querySelector('[role="tooltip"]')`);
   assert.equal(await evaluate(`document.querySelector('[role="tooltip"]').textContent`), 'The session deliverable', 'Hover shows only the title, not status/checks/review');
