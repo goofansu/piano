@@ -1,8 +1,8 @@
-import type { ClientCommand as ClientMessage, FolderView, Project, SessionReference } from "@shared/wire";
+import type { ClientCommand as ClientMessage, FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
 import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
@@ -19,9 +19,10 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { type SessionEntry, sessionCatalog } from "@/lib/sessionCatalog";
 import { pickCommands, SESSION_ROW_COMMANDS } from "@/lib/sessionCommands";
 import { folderFor, sessionReference } from "@/lib/sessionContext";
-import { dateGroups, flatSessions, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy } from "@/lib/sidebarView";
+import { dateGroups, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy, sortSessions } from "@/lib/sidebarView";
 import { readJson, writeJson } from "@/lib/storage";
 import { useSidebarView } from "@/lib/useSidebarView";
 import { type AppState, sessionKey } from "@/store";
@@ -109,7 +110,11 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   useEffect(() => { if (state.registryLoaded) setSettled(true); }, [state.registryLoaded]);
   const reveal = () => (settled ? "reveal-row" : undefined);
 
-  const groupProps = { state, send, select, openNew, reveal, onProjectDialog, current };
+  // One catalog for every grouping, so switching the grouping never changes which sessions are listed.
+  const listed = useMemo(() => sessionCatalog(state).filter(s => s.listed),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, current?.cwd, current?.sessionId]);
+  const groupProps = { state, send, select, openNew, reveal, onProjectDialog };
   const empty = (text: string) => (
     <Empty className="view-enter py-8">
       <EmptyHeader>
@@ -122,14 +127,14 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
     if (!state.registryLoaded) return <SidebarSkeleton />;
     if (view.groupBy === "folder") {
       if (state.folders.length === 0) return empty("No folders yet. Start a session in any folder and it appears here.");
-      return groups(folderGroups(state.folders, view.sortBy).map((p) => (
-        <FolderGroup key={p.path} folder={p} open={openGroups.has(p.path)} onOpenChange={(open) => setOpen(p.path, open)} {...groupProps} />
+      return groups(folderGroups(state.folders, listed, view.sortBy).map(({ folder, sessions }) => (
+        <FolderGroup key={folder.path} folder={folder} sessions={sessions} open={openGroups.has(folder.path)} onOpenChange={(open) => setOpen(folder.path, open)} {...groupProps} />
       )));
     }
     if (view.groupBy === "project") {
       // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
       const active = state.projects.filter(p => !p.archived);
-      const all = projectGroups(active, state.sessionReferences.filter(s => !s.archived), state.folders.flatMap(p => p.sessions), view.sortBy);
+      const all = projectGroups(active, listed, view.sortBy);
       if (active.length === 0 && all.every(g => g.sessions.length === 0)) return empty("No sessions yet. Start one and it appears here.");
       return groups(all.map(g => {
         const key = projectKey(g.project?.id ?? "");
@@ -137,7 +142,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       }));
     }
     if (view.groupBy === "date") {
-      const dated = dateGroups(state.folders, view.sortBy, dateNow);
+      const dated = dateGroups(listed, view.sortBy, dateNow);
       if (dated.length === 0) return empty("No sessions yet. Start one and it appears here.");
       return groups(dated.map(g => (
         <section key={g.label} aria-label={g.label}>
@@ -147,7 +152,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
         </section>
       )));
     }
-    const sessions = flatSessions(state.folders, view.sortBy);
+    const sessions = sortSessions(listed, view.sortBy);
     if (sessions.length === 0) return empty("No sessions yet. Start one and it appears here.");
     return <SessionList sessions={sessions} {...groupProps} />;
   };
@@ -280,27 +285,23 @@ export function SidebarRail({ onShow, working, openSettings }: { onShow: () => v
 }
 
 interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew" | "onProjectDialog"> {
-  current: { cwd: string; sessionId: string | null } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reveal: () => string | undefined;
 }
 
-type SessionTarget = { cwd: string; sessionId: string; title?: string };
-
 /** One line per session: the title alone. Location and project live in the session header and the groupings. */
-function SessionRow({ t, selected, disabled, hint, state, send, select, onProjectDialog, reveal }: {
-  t: SessionTarget; selected: boolean; disabled?: boolean; hint?: string;
+function SessionRow({ t, state, send, select, onProjectDialog, reveal }: {
+  t: SessionEntry;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
   const [enter] = useState(reveal);
-  const { commands, run } = useSessionCommands(t);
+  const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
+  const { commands, run } = useSessionCommands(target);
   const menu = pickCommands(commands, SESSION_ROW_COMMANDS);
   const item = (c: (typeof menu)[number]) => <SessionCommandMenuItem key={c.id} command={c} run={run} />;
-  // Live host state comes from the `hosts` broadcast, which changes more often than the folder list.
-  const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
-  const done = state.done.includes(sessionKey(t));
+  const { selected, disabled, hint, activity } = t;
   // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
-  const dot = done ? "bg-done" : host ? "border border-ok" : null;
+  const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
   return (
     <li
       className={cn(row, enter, "group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-(--selected) hover:bg-(--selected)")}
@@ -314,10 +315,10 @@ function SessionRow({ t, selected, disabled, hint, state, send, select, onProjec
         className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
       >
         <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-          {host?.streaming ? <Keys playing className="text-brand" /> : dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
+          {activity === "working" ? <Keys playing className="text-brand" /> : dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
         </span>
         <span className={cn("min-w-0 flex-1 truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
-        {host?.streaming ? <span className="sr-only">working</span> : done ? <span className="sr-only">done</span> : null}
+        {activity === "working" ? <span className="sr-only">working</span> : activity === "done" ? <span className="sr-only">done</span> : null}
         {hint && <span className="sr-only">{hint}</span>}
       </button>
       <DropdownMenu>
@@ -328,7 +329,7 @@ function SessionRow({ t, selected, disabled, hint, state, send, select, onProjec
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
-            <ProjectMenu state={state} send={send} session={t} onDialog={onProjectDialog} />
+            <ProjectMenu state={state} send={send} session={target} onDialog={onProjectDialog} />
             {menu.filter(c => c.group !== "destructive").map(item)}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
@@ -343,26 +344,22 @@ function SessionRow({ t, selected, disabled, hint, state, send, select, onProjec
 
 const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} className="size-4" />;
 
-const unavailableHint = (s: Pick<SessionReference, "unavailable">) => s.unavailable === "history" ? "History unavailable. Restore the Pi session file to open it."
-  : s.unavailable === "checkout" ? "Folder missing. History can be read; restore the folder to continue." : undefined;
-
-type Member = Pick<SessionReference, "cwd" | "sessionId" | "title" | "unavailable">;
-
-/** Every listed session in one list, each with its location. */
-function SessionList({ sessions, current, state, send, select, reveal, onProjectDialog }: Omit<GroupProps, "open" | "onOpenChange" | "openNew"> & { sessions: readonly Member[] }) {
+/** Session rows from the catalog; each entry already says how it appears. */
+function SessionRows({ sessions, className, ...row }: Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal"> & { sessions: readonly SessionEntry[]; className: string }) {
   return (
-    <ul className="flex flex-col gap-1">
-      {sessions.map(s => (
-        <SessionRow key={sessionKey(s)} t={s} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
-          selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
-          state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />
-      ))}
+    <ul className={className}>
+      {sessions.map(s => <SessionRow key={sessionKey(s)} t={s} {...row} />)}
     </ul>
   );
 }
 
+/** Every listed session in one list. */
+function SessionList({ sessions, state, send, select, reveal, onProjectDialog }: Omit<GroupProps, "open" | "onOpenChange" | "openNew"> & { sessions: readonly SessionEntry[] }) {
+  return <SessionRows className="flex flex-col gap-1" sessions={sessions} state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />;
+}
+
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
-function ProjectGroup({ project, sessions, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: Project | null; sessions: readonly Member[] }) {
+function ProjectGroup({ project, sessions, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
   const [enter] = useState(reveal);
   const members = sessions;
   return (
@@ -396,19 +393,14 @@ function ProjectGroup({ project, sessions, current, open, onOpenChange, state, s
         </DropdownMenu>}
       </div>
       <CollapsibleContent className="disclosure-content">
-        {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
-          {members.map(s => (
-            <SessionRow key={sessionKey(s)} t={s} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
-              selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
-              state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />
-          ))}
-        </ul>}
+        {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty>
+          : <SessionRows className="flex flex-col gap-1 py-1" sessions={members} state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function FolderGroup({ folder, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { folder: FolderView }) {
+function FolderGroup({ folder, sessions, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const [enter] = useState(reveal);
   const [closing, setClosing] = useState(false);
 
@@ -442,14 +434,8 @@ function FolderGroup({ folder, current, open, onOpenChange, state, send, select,
       {folder.discovery.status === "error" && <Badge variant="destructive" className="ml-7 animate-in fade-in-0" title={folder.discovery.detail}>Git status unavailable</Badge>}
       {folder.discovery.status === "non-git" && <Badge variant="secondary" className="ml-7">Non-Git</Badge>}
       <CollapsibleContent className="disclosure-content">
-        {folder.sessions.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
-          {folder.sessions.map((t) => {
-            return (
-              <SessionRow key={t.sessionId} t={t} selected={current?.cwd === t.cwd && current.sessionId === t.sessionId}
-                state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />
-            );
-          })}
-        </ul>}
+        {sessions.length === 0 ? <ListEmpty>No sessions yet</ListEmpty>
+          : <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />}
       </CollapsibleContent>
       <Dialog open={closing} onOpenChange={setClosing}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>

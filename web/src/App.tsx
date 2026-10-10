@@ -15,6 +15,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { Toaster } from "@/components/ui/sonner";
 import { hasMod } from "@/lib/keys";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
+import { catalogEntry } from "@/lib/sessionCatalog";
 import { sessionReady, workspaceFor } from "@/lib/sessionContext";
 import { readJson, writeJson } from "@/lib/storage";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
@@ -155,8 +156,7 @@ export default function App() {
     // A session needs its directory, which only the folder list knows.
     if (!s.registryLoaded) return;
     wanted.current = null;
-    const owner = s.folders.find((p) => p.sessions.some((t) => t.sessionId === r.sessionId));
-    const session = s.sessionReferences.find(t => t.sessionId === r.sessionId) ?? owner?.sessions.find((t) => t.sessionId === r.sessionId);
+    const session = catalogEntry(s, r.sessionId);
     if (session) select(session.cwd, session.sessionId);
     else dispatch({ type: "missing-session", sessionId: r.sessionId });
   }, [select]);
@@ -190,7 +190,7 @@ export default function App() {
     }
     const title = state.view.kind === "missing-session" ? "Session not found"
       : route.kind === "new" ? (route.projectId && state.projects.find(p => p.id === route.projectId)?.name) || "New session"
-      : state.sessionReferences.find(t => t.sessionId === route.sessionId)?.title || "Session";
+      : catalogEntry(state, route.sessionId)?.title || "Session";
     document.title = `${settingsOpen ? "Settings" : title} - Piano`;
   }, [settingsOpen, settingsSection, state.view, state.session, state.selecting, state.folders, state.projects, state.sessionReferences]);
 
