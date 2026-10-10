@@ -16,7 +16,7 @@ import {
   type ServerMessage,
   type StartOptions,
 } from "../shared/wire.ts";
-import { makeDelivery } from "./BoundedDelivery.ts";
+import { makeSocketDelivery } from "./BoundedDelivery.ts";
 import { Broadcast } from "./Broadcast.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
@@ -46,36 +46,10 @@ export const handleSocket = (socket: Socket.Socket) =>
     const reader = yield* socket.reader;
     const writer = yield* socket.writer;
 
-    // Bound both host queues and the transport: ws.send itself has no backpressure.
-    // Up to 32 frames / 8 MiB in flight, plus 256 queued frames / 8 MiB
-    // and one staging frame (at most 8 MiB) waiting for credit.
-    // Cumulative browser acknowledgements avoid stop-and-wait RTT per token.
-    const disconnected = yield* Deferred.make<{ reason: string; code: number }>();
-    const disconnect = (reason: string, code = 1013) => Deferred.succeed(disconnected, { reason, code }).pipe(Effect.asVoid);
-    const outbox = yield* makeDelivery<ServerMessage>();
-    let deliveryId = 0;
-    const pending = new Map<number, { bytes: number; done: Deferred.Deferred<void> }>();
-    let pendingBytes = 0;
-    let credit = yield* Deferred.make<void>();
-    yield* outbox.stream.pipe(
-      Stream.runForEach(m => Effect.gen(function* () {
-        const text = encodeServerMessage(projectDisplay(m), ++deliveryId);
-        const bytes = Buffer.byteLength(text);
-        if (bytes > 8 * 1024 * 1024) return yield* disconnect("Session view exceeds the 8 MiB delivery limit. Reduce the context before reconnecting.", 1009);
-        while (pending.size >= 32 || pendingBytes + bytes > 8 * 1024 * 1024) yield* Deferred.await(credit);
-        const done = yield* Deferred.make<void>();
-        pending.set(deliveryId, { bytes, done }); pendingBytes += bytes;
-        yield* writer.write(text);
-        // A tail shorter than the window also has a deadline; never retain it forever.
-        yield* Deferred.await(done).pipe(Effect.timeout("10 seconds"),
-          Effect.catchCause(() => disconnect("Delivery acknowledgement timed out; reconnect for a current snapshot.")), Effect.forkScoped);
-      })),
-      Effect.raceFirst(outbox.failure),
-      Effect.catchTag("DeliveryOverflow", error => disconnect(error.detail, error.oversized ? 1009 : 1013)),
-      Effect.catchCause(() => disconnect("Delivery interrupted; reconnect for a current snapshot.")),
-      Effect.forkScoped,
-    );
-    const send = outbox.offer;
+    // Bound both host queues and the transport; the window and close codes live in BoundedDelivery.
+    const delivery = yield* makeSocketDelivery((text: string) => writer.write(text), (m: ServerMessage, id) => encodeServerMessage(projectDisplay(m), id));
+    const disconnect = (reason: string, code = 1013) => delivery.close(reason, code);
+    const send = delivery.offer;
     const sendError = (e: unknown, selectionId?: string) =>
       Effect.logWarning(`client error: ${describe(e)}`).pipe(Effect.andThen(send({ _tag: "error", message: describe(e), selectionId })));
     const publishRegistry = buildFolders.pipe(Effect.flatMap(folders => Effect.gen(function* () {
@@ -224,17 +198,8 @@ export const handleSocket = (socket: Socket.Socket) =>
           }
           case "ping":
             return yield* send({ _tag: "pong", nonce: msg.nonce });
-          case "ack": {
-            if (!pending.has(msg.deliveryId)) return;
-            for (const [id, item] of pending) if (id <= msg.deliveryId) {
-              pending.delete(id); pendingBytes -= item.bytes;
-              yield* Deferred.succeed(item.done, undefined);
-            }
-            const available = credit;
-            credit = yield* Deferred.make<void>();
-            yield* Deferred.succeed(available, undefined);
-            return;
-          }
+          case "ack":
+            return yield* delivery.ack(msg.deliveryId);
           case "select":
             return yield* show(msg);
           case "create_session": {
@@ -342,6 +307,6 @@ export const handleSocket = (socket: Socket.Socket) =>
         );
       }
     }).pipe(Effect.forever, Effect.catchCause(() => Effect.void), Effect.raceFirst(
-      Deferred.await(disconnected).pipe(Effect.flatMap(({ reason, code }) => writer.write(new Socket.CloseEvent(code, reason)).pipe(Effect.ignore))),
+      delivery.closed.pipe(Effect.flatMap(({ reason, code }) => writer.write(new Socket.CloseEvent(code, reason)).pipe(Effect.ignore))),
     ));
   }).pipe(Effect.scoped);
