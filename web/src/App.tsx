@@ -195,11 +195,6 @@ export default function App() {
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
   const sidebarProps = { state, send, select, openNew, openSettings, onProjectDialog: setProjectDialog, onPalette: () => setPaletteOpen(true) };
   const anyWorking = state.hosts.some((h) => h.streaming);
-  // An installed app has no tab icon, so its dock or taskbar badge shows that any session works.
-  useEffect(() => {
-    if (!("setAppBadge" in navigator)) return;
-    (anyWorking ? navigator.setAppBadge() : navigator.clearAppBadge()).catch(() => {});
-  }, [anyWorking]);
 
   return (
     <AppLayout layout={layout} navigationTitle={settingsOpen ? "Settings navigation" : "Folders and sessions"}
