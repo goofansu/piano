@@ -104,9 +104,11 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
 
   return (
     <>
+      {/* Decorative foliage shadows (index.css, Texture and light); this page only. */}
+      <div aria-hidden="true" className="dappled-light" />
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
-      <Button variant="ghost" size="icon-sm" className="absolute top-2 left-2 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
-      <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
+      <Button variant="ghost" size="icon-sm" className="absolute top-2 left-2 z-10 md:hidden" aria-label="Show sidebar" onClick={onMenu}><PanelLeftOpenIcon /></Button>
+      <div className="new-session-layout relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex [&>span]:w-1 [&>span]:scale-y-125" />

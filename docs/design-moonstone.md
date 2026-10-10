@@ -205,6 +205,83 @@ with it. The conversation is an inset sheet with a 1px line and the layer-1 shad
 fill marks the selected session. Rows are 36px with a
 pointer and 44px on touch screens.
 
+## Texture and light
+
+Lefos prints its pages on grainy paper and, on its landing page, lets blurred leaf shadows fall
+across it. Piano borrows both, sized for an app: grain everywhere, leaves only where there is
+nothing yet to read. They are atmosphere, not signal, so there is no setting for them (quiet UI);
+reduced motion stills the leaves and nothing else about them needs a choice.
+
+**Paper grain.** One `body::after` layer, `position: fixed` over the viewport, tiled with a
+200px SVG `feTurbulence` (fractal noise, `baseFrequency .8`, 3 octaves, stitched) whose
+`feColorMatrix` makes pre-coloured specks: alpha is `6r - 3` of the noise, so only the denser
+half of it shows and the specks are sparse.
+
+| | Speck colour | `--grain-opacity` | Measured on the sheet |
+| --- | --- | --- | --- |
+| Day | umber `rgb(0.17 0.13 0.10)`, darkening only | 0.06 | pixel σ 4.2/255 (Lefos day 4.0), mean shift −3.2/255 |
+| Night | parchment `rgb(0.92 0.86 0.80)`, lightening only | 0.05 | pixel σ 3.3/255 (Lefos night 3.9), mean shift +2.4/255 |
+
+- **Stacking.** z-index 40: above the shell and its own z-10/20 controls, below everything at
+  z-50 and up (menus, popovers, the command palette, dialogs and their scrim, the phone sheet,
+  toasts). Raised layers are clean sheets lifted off the paper; grain over their small text read
+  as dirt. The scrim dims the grain with the page behind a dialog. Consequence: the phone
+  navigation sheet, an overlay, has no grain.
+- **No blend mode.** The specks are coloured in the image, so the layer composites with plain
+  alpha. `mix-blend-mode: multiply`/`soft-light` would make the compositor blend the whole
+  viewport every frame and isolate the page; it bought nothing visible over pre-coloured specks.
+- **Pointer events** none; the grain never takes a hit test.
+
+**Dappled light.** A `.dappled-light` element, the first child of the New session view only
+(not conversations, not Settings), fills the conversation sheet (`inset: -1.5rem`, so the sway
+never shows an edge) and paints `--leaf-shadow` through two masks:
+`web/src/assets/light/leaves-top.svg` at the top right and `leaves-bottom.svg` at the bottom left,
+each `min(62%, 56rem)` wide. The SVGs are branch silhouettes (stems with alternating pointed
+leaves that shrink toward the tip, occasional twigs) drawn by the seeded
+`web/scripts/dappled-leaves.mjs`, in two depths: near leaves blurred `stdDeviation 10`, far
+leaves `20` at 70%, the blur baked into the image so the browser rasterises it once.
+
+| | `--leaf-shadow` |
+| --- | --- |
+| Day | umber `oklch(0.32 0.035 55 / 13%)` |
+| Night | deep midnight `oklch(0.12 0.025 257 / 45%)` |
+
+- **Placement.** The masks keep the leaves to the corners: the headline, picker row and composer
+  sit in the clear middle, and the composer card is opaque anyway. Below the 48rem shell
+  breakpoint only the top bough shows, 120% wide at 75% opacity, so the phone headline and
+  composer stay clear.
+- **Sway.** With `prefers-reduced-motion: no-preference`, `leaf-sway` runs 16s `ease-in-out`
+  alternate between rest and `translate(-8px, 5px) rotate(0.5deg)` about the top-right corner: a
+  transform only, so it stays on the compositor, and CSS animations pause in a hidden tab. With
+  reduced motion the leaves are static (no animation is declared, and the global reset applies).
+- The layout above it is `relative` so it paints over the leaves; the phone "Show sidebar"
+  button is `z-10` to stay above that layout.
+
+**Cost and legibility**, measured with a scratch instance in headless Chromium at 1440×900:
+
+- Scrolling a 9,400px transcript 37px per frame for 360 frames: mean 16.6ms, p95 18.3ms, max
+  18.7ms, no frame over 20ms, identical with the grain on and hidden. A trace of 120 scrolled
+  frames recorded the same 18 Paint events with and without the grain.
+- A 3s trace of the swaying New session page recorded no Paint or raster work.
+- Tertiary ink against grained backgrounds (`--ink-3`, pixel-sampled, treating the speck under
+  the text as background only, which overstates the loss):
+
+| Surface | No grain | Mean | Darkest/lightest 1% speck |
+| --- | --- | --- | --- |
+| Day sheet | 5.87 | 5.71 | 5.28 |
+| Day canvas | 5.34 | 5.19 | 4.78 |
+| Night sheet | 7.42 | 7.19 | 6.59 |
+| Night canvas | 8.11 | 7.88 | 7.24 |
+| Day leaf shadow (no text placed there) | — | 4.91 | 4.23 |
+| Night leaf shadow (no text placed there) | — | 7.88 | 6.90 |
+
+Observed on `warm/3-texture` with a scratch backend/UI on loopback 7211/7212, a scratch registry,
+`test/fake-host-pi.mjs` and no model calls: agent-browser screenshots of New session, a
+conversation (grain, no leaves), the View options menu and a sign-in dialog, light and dark, at
+1440×900 and 390×844; hit tests at the leaves land on the page, not the overlays; the leaves are
+visible only on New session; emulated reduced motion leaves no running animation on them. Frame
+timing in headless Chromium on a fast Mac is not a low-end device measurement.
+
 ## The one memorable element: the keys play
 
 The three-key mark is the instrument's live signal. Wherever Pi is working the keys play: a
@@ -226,7 +303,8 @@ expanded. The row already says so; two instruments playing at once is noise.
 ## Motion principles
 
 - **Answer the action.** Motion exists to show what changed. Nothing animates on its own except
-  the keys while Pi works and the caret while text streams.
+  the keys while Pi works, the caret while text streams, and the New session's leaf shadows,
+  which sway too slowly to read as a signal (§Texture and light).
 - **Never wait.** Enter 200ms, exit 150ms, hover 120ms, layout 300ms. Interruptible CSS
   transitions and `animate-in/out`, no JS timelines.
 - **One orchestrated first load.** Sidebar skeleton rows (glyph + line, the real row geometry)

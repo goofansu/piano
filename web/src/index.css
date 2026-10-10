@@ -684,3 +684,68 @@
   }
   /* biome-ignore-end lint/complexity/noImportantStyles: range closes */
 }
+
+/* ── Texture and light (docs/design-moonstone.md §Texture and light) ──────────────────────────
+ * Paper grain over the whole app, and dappled leaf shadows on the New session screen only.
+ * Both are pre-coloured images at low alpha, never mix-blend-mode, so the compositor treats them
+ * as ordinary layers: the grain is one fixed layer rasterised once, the leaves one masked layer
+ * whose sway is a transform. */
+:root {
+  /* Umber specks by day: fractal noise whose red channel sets a sparse alpha (6r - 3), so the specks
+   * only darken and the sheet's mean shifts by about 1%. */
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.13 0 0 0 0 0.1 6 0 0 0 -3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23g)'/%3E%3C/svg%3E");
+  --grain-opacity: 0.06;
+  /* Leaf shadows: umber by day, deep midnight by night (Lefos's FX layer). */
+  --leaf-shadow: oklch(0.32 0.035 55 / 13%);
+}
+.dark {
+  /* Parchment specks by night: light grain reads as film on a dark sheet; dark grain vanishes. */
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.92 0 0 0 0 0.86 0 0 0 0 0.8 6 0 0 0 -3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23g)'/%3E%3C/svg%3E");
+  --grain-opacity: 0.05;
+  --leaf-shadow: oklch(0.12 0.025 257 / 45%);
+}
+/* The grain is the paper the app is printed on: over every page (z 40, above the shell's z-10/20
+ * controls) but under menus, dialogs, the phone sheet and toasts (z 50+). Raised layers are fresh
+ * clean sheets lifted off the paper; grain over their small text would read as dirt. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background-image: var(--grain-image);
+  background-size: 200px 200px;
+  opacity: var(--grain-opacity);
+}
+/* Foliage shadows at two corners of the New session sheet. The composer card is opaque, and the
+ * masks keep the leaves to the edges, so they never sit behind text at full strength. */
+.dappled-light {
+  position: absolute;
+  inset: -1.5rem;
+  pointer-events: none;
+  background-color: var(--leaf-shadow);
+  mask-image: url("./assets/light/leaves-top.svg"), url("./assets/light/leaves-bottom.svg");
+  mask-position: top right, bottom left;
+  mask-size: min(62%, 56rem) auto;
+  mask-repeat: no-repeat;
+  transform-origin: 100% 0;
+  transition: background-color var(--dur-theme) var(--ease-theme);
+}
+/* Phones: only the top bough, smaller, so the headline and composer stay clear. */
+@media (max-width: 47.99rem) {
+  .dappled-light {
+    mask-image: url("./assets/light/leaves-top.svg");
+    mask-position: top right;
+    mask-size: 120% auto;
+    opacity: 0.75;
+  }
+}
+/* A breeze: a 16s sway of a few pixels, a transform only, so it stays on the compositor.
+ * Reduced motion holds the leaves still (and the global reset above removes it anyway). */
+@media (prefers-reduced-motion: no-preference) {
+  .dappled-light { animation: leaf-sway 16s ease-in-out infinite alternate; }
+}
+@keyframes leaf-sway {
+  from { transform: translate3d(0, 0, 0) rotate(0deg); }
+  to { transform: translate3d(-8px, 5px, 0) rotate(0.5deg); }
+}
