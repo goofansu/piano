@@ -201,6 +201,11 @@ export default function App() {
     const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (link) link.href = working ? "/favicon-working.svg" : "/favicon.svg";
   }, [working]);
+  // An installed app has no tab icon, so its dock or taskbar badge shows that any session works.
+  useEffect(() => {
+    if (!("setAppBadge" in navigator)) return;
+    (anyWorking ? navigator.setAppBadge() : navigator.clearAppBadge()).catch(() => {});
+  }, [anyWorking]);
 
   return (
     <AppLayout layout={layout} navigationTitle={settingsOpen ? "Settings navigation" : "Projects and sessions"}

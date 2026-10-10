@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Behind private access the manifest fetch needs cookies, or it lands on the login redirect. -->
+    <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f4f0" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#161513" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Piano</title>
   </head>
