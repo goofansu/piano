@@ -1,34 +1,14 @@
 import type { ClientCommand } from "@shared/wire";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { sessionProject } from "@/components/Projects";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { sessionContext } from "@/lib/sessionContext";
 import type { AppState } from "@/store";
 
 type Target = { cwd: string; sessionId: string; title?: string };
-
-/** Use the selected Pi projection and Git discovery for session identity and details. */
-export function currentSessionDetails(state: AppState) {
-  const session = state.session;
-  const folder = state.folders.find(p => p.worktrees.some(w => w.path === session?.cwd));
-  const info = state.sessionReferences.find(s => s.cwd === session?.cwd && s.sessionId === session?.sessionId) ?? folder?.sessions.find(s => s.cwd === session?.cwd && s.sessionId === session?.sessionId);
-  return {
-    title: session?.state.sessionName || info?.title || "Untitled",
-    branch: folder?.discovery.status === "ready" ? folder.worktrees.find(w => w.path === session?.cwd)?.branch : undefined,
-    sessionId: session?.sessionId,
-    project: session?.sessionId ? sessionProject(state, { cwd: session.cwd, sessionId: session.sessionId }) : undefined,
-  };
-}
-
-/** The registered workspace behind the selected session; undefined when its directory is not registered or not a Git checkout. */
-export function sessionWorkspace(state: AppState) {
-  const session = state.session;
-  const worktree = state.folders.flatMap(p => p.worktrees).find(w => w.path === session?.cwd);
-  return worktree ? (worktree.status !== "non-git" ? worktree.workspace : undefined) : state.workspaces.find(w => w.path === session?.cwd);
-}
 
 export async function copySessionValue(value: string, label: string) {
   try {
@@ -42,7 +22,7 @@ export async function copySessionValue(value: string, label: string) {
 /** Copy the working directory and available session ID shown in the details menu. */
 export function copyAllSessionDetails(state: AppState) {
   if (!state.session) return;
-  const { sessionId } = currentSessionDetails(state);
+  const { sessionId } = sessionContext(state);
   const lines = [
     `Working directory: ${state.session.cwd}`,
     ...(sessionId ? [`Session ID: ${sessionId}`] : []),

@@ -21,6 +21,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
 import { isSendKey } from "@/lib/keys";
+import { directoryTrust, folderFor } from "@/lib/sessionContext";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
@@ -79,7 +80,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
     return () => clearTimeout(t);
   }, [creating]);
 
-  const folder = state.folders.find(p => p.worktrees.some(w => w.path === cwd));
+  const folder = folderFor(state, cwd);
   const project = projectId ? state.projects.find(p => p.id === projectId) : undefined;
   const trust = directoryTrust(state, cwd);
   const catalog = state.catalogs[cwd] ?? null;
@@ -234,10 +235,6 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
 }
 
 /** Shown only for directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted. */
-/** Pi's trust outcome for a directory: the latest probe, else what discovery recorded for a known worktree. */
-export function directoryTrust(state: AppState, cwd: string) {
-  return state.trusts[cwd] ?? state.folders.flatMap(p => p.worktrees).find(w => w.path === cwd)?.trust;
-}
 
 function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trusted: boolean) => void }) {
   return (

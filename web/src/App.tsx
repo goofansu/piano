@@ -14,6 +14,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { Toaster } from "@/components/ui/sonner";
 import { hasMod } from "@/lib/keys";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
+import { sessionReady } from "@/lib/sessionContext";
 import { readJson, writeJson } from "@/lib/storage";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { useConnection } from "@/lib/ws";
@@ -74,7 +75,7 @@ export default function App() {
       conn.send({ ...m, selectionId });
     } else if (m._tag === "act") {
       const s = latest.current;
-      if (s.connected && !s.resync && !s.selecting && s.selectionId) conn.send({ ...m, selectionId: s.selectionId });
+      if (sessionReady(s) && s.selectionId) conn.send({ ...m, selectionId: s.selectionId });
     } else conn.send(m);
   }, [conn, dispatch]);
   const select = useCallback(
@@ -237,7 +238,7 @@ export default function App() {
       />
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
       <CommandPalette openSettings={openSettingsSection} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
-      <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={state.connected && !state.resync && !state.selecting && state.selectionId !== null} />
+      <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={sessionReady(state)} />
     </AppLayout>
   );
 }
