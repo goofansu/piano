@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { Effect } from "effect";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { RevisionGitCommand, RevisionStorePath, WorkspaceRevisions, WorkspaceRevisionsLive } from "../server/WorkspaceRevisions.ts";
+import { GitCommand } from "../server/Subprocess.ts";
+import { RevisionStorePath, WorkspaceRevisions, WorkspaceRevisionsLive } from "../server/WorkspaceRevisions.ts";
 import type { WorkspaceCapture } from "../shared/wire.ts";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args], {
@@ -20,7 +21,7 @@ function fixture(t: TestContext) {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const workspace = { id: "test-workspace", folder: repo, path: repo };
   const capture = (cli = "git") => Effect.runPromise(Effect.gen(function* () { return yield* (yield* WorkspaceRevisions).capture(workspace); }).pipe(
-    Effect.provide(WorkspaceRevisionsLive), Effect.provideService(RevisionStorePath, store), Effect.provideService(RevisionGitCommand, cli)));
+    Effect.provide(WorkspaceRevisionsLive), Effect.provideService(RevisionStorePath, store), Effect.provideService(GitCommand, cli)));
   return { root, repo, store, workspace, capture };
 }
 function ready(capture: WorkspaceCapture) {
