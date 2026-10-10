@@ -46,7 +46,8 @@ process.once("SIGTERM", drain);
 const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds" });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive.pipe(Layer.provideMerge(CatalogLive)), BroadcastLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
+const Core = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive, BroadcastLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
+  Layer.provideMerge(CatalogLive),
   Layer.provideMerge(RegistryLive),
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),
