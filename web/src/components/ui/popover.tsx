@@ -1,5 +1,7 @@
 import * as React from "react"
 import { cn } from "cn"
+// piano: see returnFocusForKeyboard
+import { returnFocusForKeyboard } from "@/lib/pointerClose"
 import { Popover as PopoverPrimitive } from "radix-ui"
 
 function Popover({
@@ -18,6 +20,7 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
@@ -32,6 +35,11 @@ function PopoverContent({
           className
         )}
         {...props}
+        // piano: a click that closes the overlay leaves focus alone instead of ringing the trigger
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event)
+          if (!event.defaultPrevented) returnFocusForKeyboard(event)
+        }}
       />
     </PopoverPrimitive.Portal>
   )

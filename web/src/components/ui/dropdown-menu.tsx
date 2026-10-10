@@ -1,5 +1,7 @@
 import * as React from "react"
 import { cn } from "cn"
+// piano: see returnFocusForKeyboard
+import { returnFocusForKeyboard } from "@/lib/pointerClose"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
@@ -31,6 +33,7 @@ function DropdownMenuTrigger({
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -44,6 +47,11 @@ function DropdownMenuContent({
           className
         )}
         {...props}
+        // piano: a click that closes the overlay leaves focus alone instead of ringing the trigger
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event)
+          if (!event.defaultPrevented) returnFocusForKeyboard(event)
+        }}
       />
     </DropdownMenuPrimitive.Portal>
   )
