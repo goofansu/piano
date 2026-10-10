@@ -16,6 +16,7 @@ const badgeVariants = cva(
         outline:
           "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+        // piano: status badges in Piano's state tokens (success, merged, error, warning)
         success: "border-success/20 bg-success/12 text-success",
         merged: "border-merged/20 bg-merged/12 text-merged",
         error: "border-err/20 bg-err/12 text-err",

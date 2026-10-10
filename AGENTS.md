@@ -117,6 +117,12 @@ Build UI from shadcn/ui components: search the registry first, add with `npx sha
 and compose as the `shadcn` skill describes. Hand-written markup is for the case where no
 standard component exists, and says so in a comment.
 
+`npx shadcn@latest add` rewrites `web/src/components/ui/`, so keep Piano's decisions outside it
+where possible: tokens in `web/src/index.css`, rules keyed to `[data-slot=…]` for properties a
+component does not set itself, and wrappers in `web/src/components/`. Tag each edit that must stay
+in `ui/` with a `piano:` comment. Update a component with `add <name> --dry-run --diff <file>`,
+keep the tagged hunks and take the rest from upstream; never `--overwrite` unreviewed.
+
 The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands,
 and Session commands (only with a selected session). A feature that adds an action the sidebar or
