@@ -7,7 +7,7 @@ import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { PiSessionsLive } from "../server/PiSessions.ts";
-import { Registry, RegistryLive, RegistryPath } from "../server/Registry.ts";
+import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
 import { buildProjects } from "../server/Views.ts";
 import { createWorktree, listWorktrees, WorktrunkCommand } from "../server/Worktrees.ts";
@@ -129,5 +129,5 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
     const data = yield* registry.get;
     assert.equal(data.worktrees[0].branch, "old-registry-branch"); // no silent migration
     assert.equal(data.worktrees.length, 1); assert.equal(data.sessions.length, 1);
-  }).pipe(Effect.scoped, Effect.provide(layer), Effect.provideService(RegistryPath, join(root, "registry.json")), Effect.provideService(WorktrunkCommand, cli)));
+  }).pipe(Effect.scoped, Effect.provide(layer), Effect.provideService(RegistryDatabasePath, join(root, "registry.db")), Effect.provideService(WorktrunkCommand, cli)));
 });

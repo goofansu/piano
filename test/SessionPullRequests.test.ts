@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { type TestContext, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { Registry, RegistryLive, RegistryPath } from "../server/Registry.ts";
+import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionPullRequests, SessionPullRequestsLive } from "../server/SessionPullRequests.ts";
 
 const candidate = (number: number, branch = "feature", owner = "example") => ({
@@ -20,12 +20,12 @@ async function fixture(t: TestContext) {
   const git = (...args: string[]) => execFileSync("git", ["-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } }).trim();
   git("init", "-q", "-b", "feature"); git("commit", "--allow-empty", "-qm", "base"); git("remote", "add", "origin", "git@github.com:example/repo.git");
   writeFileSync(join(bin, "gh"), `#!${process.execPath}\nimport ${JSON.stringify(resolve("test/fixtures/fake-gh.mjs"))};\n`, { mode: 0o755 });
-  const path = join(root, "registry.json"), forge = join(root, "forge.json");
+  const path = join(root, "registry.db"), forge = join(root, "forge.json");
   const previous = { PATH: process.env.PATH, PIANO_TEST_GH_FIXTURE: process.env.PIANO_TEST_GH_FIXTURE };
   process.env.PATH = `${bin}:${process.env.PATH}`; process.env.PIANO_TEST_GH_FIXTURE = forge;
   const control = (data: object) => writeFileSync(forge, JSON.stringify(data));
   control({ prs: [candidate(42), candidate(99, "feature", "unrelated-fork")] });
-  const layer = SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryPath, path)));
+  const layer = SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryDatabasePath, path)));
   const runtime = ManagedRuntime.make(layer);
   const registry = await runtime.runPromise(Registry), prs = await runtime.runPromise(SessionPullRequests);
   await runtime.runPromise(registry.addSession(repo, "one"));
@@ -56,10 +56,10 @@ test("INV-01/07: discovers by branch AND head repository, pins identity across b
   assert.equal((await f.get("two")).pullRequest?.number, 43);
   // Preference is durable metadata, not forge facts or history.
   const persisted = await Effect.runPromise(Effect.gen(function* () { return yield* (yield* Registry).get; }).pipe(
-    Effect.provide(RegistryLive), Effect.provideService(RegistryPath, f.path)));
+    Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, f.path)));
   assert.equal(persisted.sessions[0].pullRequest, null);
   assert.deepEqual(persisted.sessions[1].pullRequest, { url: "https://github.com/example/repo/pull/43", source: "branch" });
-  const restarted = ManagedRuntime.make(SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryPath, f.path))));
+  const restarted = ManagedRuntime.make(SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryDatabasePath, f.path))));
   try {
     assert.equal((await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "one"); }))).discovery, false);
     assert.equal((await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "two"); }))).pullRequest?.number, 43);
@@ -125,7 +125,7 @@ test("exe.dev integration routes discovery and saved/manual PR reads through gh 
   await assert.rejects(f.change({ action: "link", url: "https://github.int.exe.xyz.evil/example/repo/pull/42" }), /GitHub pull request URL/);
   f.control({ ...proxy, prs: [{ ...candidate(42), url: `https://${host}/example/repo/pull/42`, state: "MERGED" }] });
   rmSync(f.repo, { recursive: true });
-  const restarted = ManagedRuntime.make(SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryPath, f.path))));
+  const restarted = ManagedRuntime.make(SessionPullRequestsLive.pipe(Layer.provideMerge(RegistryLive), Layer.provide(Layer.succeed(RegistryDatabasePath, f.path))));
   try {
     const pr = await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "one"); }));
     assert.equal(pr.pullRequest?.state, "merged"); assert.equal(pr.pullRequest?.url, candidate(42).url);

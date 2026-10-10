@@ -1,12 +1,11 @@
 /**
  * What piano knows about: projects, the worktrees created through piano, and
- * the sessions started through piano. SQLite owns persistence; the old JSON is
- * imported once and retained unchanged. Pi's own session store is only consulted to
+ * the sessions started through piano. SQLite owns persistence. Pi's own session store is only consulted to
  * load a session's history; it is never scanned to populate the sidebar.
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, Semaphore } from "effect";
@@ -47,29 +46,19 @@ export interface RegistryData {
   readonly sessions: ReadonlyArray<SessionEntry>;
 }
 
-export const CONFIG_PATH = join(homedir(), ".config", "piano", "config.json");
 export const DEFAULT_DB_PATH = resolve(join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "piano", "piano.db"));
+/** `PIANO_DB_PATH` selects a scratch database; tests inject one directly. */
+export const RegistryDatabasePath = Context.Reference<string>("piano/RegistryDatabasePath", { defaultValue: () => resolve(process.env.PIANO_DB_PATH ?? DEFAULT_DB_PATH) });
 
-/** Internal legacy-import seam for fixtures; production always uses the standard config path. */
-export const RegistryPath = Context.Reference<string>("piano/RegistryPath", { defaultValue: () => CONFIG_PATH });
-export const RegistryDatabasePath = Context.Reference<string | undefined>("piano/RegistryDatabasePath", { defaultValue: () => undefined });
-export function registryDatabasePath(config: string, override?: string): string {
-  // An injected fixture source stays isolated from the developer's environment/database.
-  return resolve(override ?? (config === CONFIG_PATH ? process.env.PIANO_DB_PATH ?? DEFAULT_DB_PATH : `${config}.sqlite`));
-}
-
-const empty: RegistryData = { version: 2, outcomeProjects: [], projects: [], worktrees: [], sessions: [], workspaces: [] };
-const legacySchema = Schema.Struct({
+const currentSchema = Schema.Struct({
+  version: Schema.Literal(2),
   projects: Schema.Array(Schema.String),
   worktrees: Schema.Array(Schema.Struct({ project: Schema.String, path: Schema.String, branch: Schema.String })),
-  sessions: Schema.Array(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
-    createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.optional(Schema.Boolean), stats: Schema.optional(SessionStats),
-    pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)) })),
-});
-const v1Schema = Schema.Struct({ ...legacySchema.fields, version: Schema.Literal(1), workspaces: Schema.Array(Workspace) });
-const currentSchema = Schema.Struct({ ...v1Schema.fields, version: Schema.Literal(2),
+  workspaces: Schema.Array(Workspace),
   outcomeProjects: Schema.Array(OutcomeProject),
-  sessions: Schema.Array(Schema.Struct({ ...legacySchema.fields.sessions.value.fields, outcomeProjectId: Schema.optional(Schema.String) })),
+  sessions: Schema.Array(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
+    createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.Boolean, stats: Schema.optional(SessionStats),
+    pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)), outcomeProjectId: Schema.optional(Schema.String) })),
 });
 
 /** Path references keep their spelling: never move or merge Pi's alias-based history. */
@@ -80,28 +69,8 @@ function withWorkspaces(data: RegistryData): RegistryData {
   }
   return { ...data, workspaces };
 }
-function read(path: string): RegistryData {
-  let bytes: Buffer;
-  try {
-    if (lstatSync(path).isSymbolicLink()) throw new Error("Registry symlinks are not supported for migration. Restore the JSON as a regular file at the standard config path.");
-    bytes = readFileSync(path);
-  } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return empty; throw error; }
-  const data = decode(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
-  // The source remains untouched; retain an explicit private, byte-exact migration backup too.
-  writeFileSync(`${path}.pre-sqlite-${randomUUID()}.bak`, bytes, { flag: "wx", mode: 0o600 });
-  return data;
-}
 function decode(value: unknown): RegistryData {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("Registry must be an object.");
-  const raw = value as Record<string, unknown>;
-  const legacy = raw.version === undefined;
-  const migrating = legacy || raw.version === 1;
-  if (raw.sessions && raw.threads) throw new Error("Both sessions and legacy threads are present; resolve the ambiguity manually.");
-  const data = Schema.decodeUnknownSync(legacy ? legacySchema : raw.version === 1 ? v1Schema : currentSchema)({ ...raw, sessions: raw.sessions ?? raw.threads });
-  const initial: RegistryData = { ...data, version: 2,
-    outcomeProjects: migrating ? [] : Schema.decodeUnknownSync(Schema.Array(OutcomeProject))(raw.outcomeProjects),
-    sessions: data.sessions.map(s => ({ ...s, archived: s.archived ?? false })),
-    workspaces: legacy ? [] : Schema.decodeUnknownSync(Schema.Array(Workspace))(raw.workspaces) };
+  const initial: RegistryData = Schema.decodeUnknownSync(currentSchema)(value);
   if (new Set(initial.projects).size !== initial.projects.length) throw new Error("Duplicate selected folders.");
   if (new Set(initial.worktrees.map(w => w.path)).size !== initial.worktrees.length) throw new Error("Duplicate worktree references.");
   const ids = new Set(initial.outcomeProjects.map(p => p.id));
@@ -112,11 +81,10 @@ function decode(value: unknown): RegistryData {
     if (!isAbsolute(p)) throw new Error(`Registry path is not absolute: ${p}`);
   }
   if (new Set(initial.workspaces.map(w => w.id)).size !== initial.workspaces.length || new Set(initial.workspaces.map(w => w.path)).size !== initial.workspaces.length || initial.workspaces.some(w => !w.id)) throw new Error("Duplicate or empty workspace identities.");
-  const complete = withWorkspaces(initial);
-  if (!legacy && complete.workspaces.length !== initial.workspaces.length) throw new Error("Missing workspace identities in versioned registry.");
-  return complete;
+  if (withWorkspaces(initial).workspaces.length !== initial.workspaces.length) throw new Error("Missing workspace identities in registry.");
+  return initial;
 }
-const recovery = (path: string, error: unknown) => new RegistryError({ detail: `Cannot read or persist registry ${path}. It has not been reset. Restore a known-good backup or repair the file before restarting. ${String(error)}` });
+const recovery = (path: string, error: unknown) => new RegistryError({ detail: `Cannot read or persist registry ${path}. It has not been reset. Restore a known-good backup or repair the database before restarting. ${String(error)}` });
 
 export class Registry extends Context.Service<
   Registry,
@@ -148,14 +116,9 @@ export class Registry extends Context.Service<
 export const RegistryLive = Layer.effect(
   Registry,
   Effect.gen(function* () {
-    const config = yield* RegistryPath;
-    const path = registryDatabasePath(config, yield* RegistryDatabasePath);
+    const path = resolve(yield* RegistryDatabasePath);
     const database = yield* Effect.acquireRelease(
-      Effect.try({ try: () => {
-        if (resolve(config) === path) throw new Error("PIANO_DB_PATH must differ from the legacy JSON path.");
-        // Custom databases start empty, never importing the user's selections into a scratch instance.
-        return openRegistryDatabase(path, () => config !== CONFIG_PATH || path === DEFAULT_DB_PATH ? read(config) : empty);
-      }, catch: e => recovery(path, e) }),
+      Effect.try({ try: () => openRegistryDatabase(path), catch: e => recovery(path, e) }),
       db => Effect.sync(() => db.close()),
     );
     const state = yield* Ref.make(yield* Effect.try({ try: () => decode(database.data), catch: e => recovery(path, e) }));

@@ -87,7 +87,10 @@ function snapshot(db: DatabaseSync): RegistryData {
   };
 }
 
-export function openRegistryDatabase(path: string, legacy: () => RegistryData) {
+const empty: RegistryData = { version: 2, projects: [], worktrees: [], workspaces: [], sessions: [], outcomeProjects: [] };
+
+/** `initial` populates a new database only; test fixtures use it to seed scratch registries. */
+export function openRegistryDatabase(path: string, initial: RegistryData = empty) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   // Create privately before SQLite can create journal files. Never follow a DB symlink.
   try { closeSync(openSync(path, "wx", 0o600)); }
@@ -102,9 +105,8 @@ export function openRegistryDatabase(path: string, legacy: () => RegistryData) {
       const version = db.prepare("PRAGMA user_version").get()!.user_version;
       if (version === 0) {
         if (db.prepare("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").all().length) throw new Error("Unrecognized registry database; refusing to initialize it.");
-        const data = legacy(); // Validation/backup must succeed before publishing the import.
         db.exec(schema);
-        persist(db, { version: 2, projects: [], worktrees: [], workspaces: [], sessions: [], outcomeProjects: [] }, data);
+        persist(db, empty, initial);
       } else if (version !== 1) throw new Error(`Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`);
       db.exec("COMMIT");
     } catch (error) { db.exec("ROLLBACK"); throw error; }

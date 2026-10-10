@@ -46,7 +46,7 @@ the test now uses the existing sidebar membership action. Failure output is reta
 The registry still serves cached full snapshots and computes row differences in memory. No measured
 UI-speed claim is made, and multiple backend writers are not supported. SQLite's indexes do not
 change conversation loading or Pi persistence. Direct database edits should be made with Piano stopped.
-See [migration, location and backup guidance](../../README.md#registry-storage-and-migration).
+See [migration, location and backup guidance](../../README.md#registry-storage).
 Rolling back to the old JSON-based application does not recover post-migration metadata edits.
 
 ## Follow-up: remove the legacy configuration environment variable

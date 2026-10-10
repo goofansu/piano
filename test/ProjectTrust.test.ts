@@ -8,10 +8,11 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { setProjectTrust } from "../server/ProjectTrust.ts";
-import { RegistryLive, RegistryPath } from "../server/Registry.ts";
+import { RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
 import { buildProjects } from "../server/Views.ts";
 import { WorktrunkCommand } from "../server/Worktrees.ts";
+import { seedRegistry } from "./fixtures/registry.ts";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } }).trim();
 
@@ -27,7 +28,7 @@ function fixture(t: TestContext) {
   mkdirSync(agent);
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agent;
-  writeFileSync(join(root, "registry.json"), JSON.stringify({ projects: [skilled, plain], worktrees: [], sessions: [] }));
+  seedRegistry(join(root, "registry.db"), { projects: [skilled, plain] });
   t.after(() => {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
     rmSync(root, { recursive: true, force: true });
@@ -55,5 +56,5 @@ test("INV-01: project trust is read from and written to Pi's trust file, per dir
     yield* setProjectTrust(skilled, false);
     assert.deepEqual(yield* trustOf(skilled), { required: true, trusted: false });
     assert.deepEqual(JSON.parse(readFileSync(join(agent, "trust.json"), "utf8")), { [root]: true, [skilled]: false });
-  }).pipe(Effect.scoped, Effect.provide(layer), Effect.provideService(RegistryPath, join(root, "registry.json")), Effect.provideService(WorktrunkCommand, join(root, "unavailable"))));
+  }).pipe(Effect.scoped, Effect.provide(layer), Effect.provideService(RegistryDatabasePath, join(root, "registry.db")), Effect.provideService(WorktrunkCommand, join(root, "unavailable"))));
 });

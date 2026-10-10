@@ -2,18 +2,17 @@
 // node test/browser-outcome-projects.mjs <evidence-directory>
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { readRegistry } from './fixtures/registry.ts';
+import { readRegistry, seedRegistry } from './fixtures/registry.ts';
 
 const evidence = resolve(process.argv[2] ?? '/tmp/piano-outcome-evidence');
 mkdirSync(evidence, { recursive: true });
 const root = mkdtempSync(join(tmpdir(), 'piano-outcome-browser-'));
-const api = join(root, 'api'), web = join(root, 'web'), sessions = join(root, 'sessions'), config = join(root, 'home', '.config', 'piano', 'config.json'), audit = join(root, 'audit.jsonl');
+const api = join(root, 'api'), web = join(root, 'web'), sessions = join(root, 'sessions'), audit = join(root, 'audit.jsonl');
 const database = join(root, 'data', 'piano', 'piano.db');
-mkdirSync(dirname(config), { recursive: true });
 for (const dir of [api, web, sessions, join(root, 'agent')]) mkdirSync(dir);
 for (const dir of [api, web]) {
   execFileSync('git', ['init', '-q', '-b', 'main', dir]);
@@ -30,9 +29,8 @@ const references = [['one', api, 'API session'], ['two', web, 'Web session'], ['
   ].map(JSON.stringify).join('\n') + '\n');
   return { sessionId, cwd, title, createdAt: timestamp, updatedAt: timestamp, archived: false };
 });
-const original = JSON.stringify({ version: 1, projects: [api, web], worktrees: [], sessions: references, workspaces: [{ id: 'api-id', path: api, project: api }, { id: 'web-id', path: web, project: web }] });
-writeFileSync(config, original);
-// Exercise automatic migration from the standard home path, with no config or DB override.
+seedRegistry(database, { projects: [api, web], sessions: references, workspaces: [{ id: 'api-id', path: api, project: api }, { id: 'web-id', path: web, project: web }] });
+// The backend finds the seeded default database with no DB override.
 const env = { ...process.env, HOME: join(root, 'home'), XDG_DATA_HOME: join(root, 'data'), PIANO_DB_PATH: undefined, HOST: '127.0.0.1', PORT: '7171', PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: `--audit ${audit}`, PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions };
 let processLog = '';
 const capture = p => { p.stdout.on('data', d => processLog += d); p.stderr.on('data', d => processLog += d); return p; };
@@ -58,7 +56,7 @@ const button = name => ab('find', 'role', 'button', 'click', '--name', name, '--
 const menuitem = name => ab('find', 'role', 'menuitem', 'click', '--name', name, '--exact');
 const wait = code => ab('wait', '--fn', code);
 const settle = () => ab('wait', '300');
-const registry = () => readRegistry(config, database);
+const registry = () => readRegistry(join(root, 'registry.json'), database);
 const project = name => registry().outcomeProjects.find(p => p.name === name);
 const member = sessionId => registry().sessions.find(s => s.sessionId === sessionId);
 async function ready() {
@@ -122,7 +120,6 @@ try {
   await ready(); await ab('open', 'http://127.0.0.1:7172/new'); await ab('set', 'viewport', '1440', '1000');
   await ab('wait', '--text', 'api');
   assert.deepEqual(registry().sessions, references);
-  assert.equal(readFileSync(join(dirname(config), readdirSync(dirname(config)).find(f => f.endsWith('.bak'))), 'utf8'), original);
   // Grouped by folder, the sidebar shows no project rows; the chip on the New page creates the first project.
   await create('Launch subscriptions');
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Project menu for Launch subscriptions"]')`), false);
@@ -240,7 +237,7 @@ try {
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   await button('Show sidebar'); await settle(); await ab('screenshot', join(evidence, 'mobile-sidebar.png'));
   assert.ok(await evaluate(`[...document.querySelectorAll('nav li')].every(row => { const [session, menu] = row.querySelectorAll('button'); return session.getBoundingClientRect().right <= menu.getBoundingClientRect().left; })`), 'session content and actions do not overlap');
-  writeFileSync(join(evidence, 'result.json'), JSON.stringify({ status: 'passed', registry: saved, original, node: process.version, audit: readFileSync(audit, 'utf8') }, null, 2));
+  writeFileSync(join(evidence, 'result.json'), JSON.stringify({ status: 'passed', registry: saved, node: process.version, audit: readFileSync(audit, 'utf8') }, null, 2));
   console.log('PASS: grouping, empty/ungrouped, workspace diffs, rename/move/leave, running archive/unarchive, closed directory, unavailable members, migration backup and restart');
 } finally {
   try { await ab('snapshot'); await ab('screenshot', join(evidence, 'last-view.png')); } catch {}

@@ -7,7 +7,7 @@ import { NodeServices } from '@effect/platform-node';
 import { Effect, Layer, Stream } from 'effect';
 import { PiCli } from '../server/PiCli.ts';
 import { PiSessionsLive } from '../server/PiSessions.ts';
-import { Registry, RegistryLive, RegistryPath } from '../server/Registry.ts';
+import { Registry, RegistryDatabasePath, RegistryLive } from '../server/Registry.ts';
 import { SessionHosts, SessionHostsLive } from '../server/SessionHosts.ts';
 import { createPiCompatibilityFixture } from './fixtures/PiCompatibility.ts';
 
@@ -42,7 +42,7 @@ test('real Pi reopens the exact legacy alias file without moving history or invo
       assert.equal((yield* registry.get).sessions[0].cwd, alias);
     }).pipe(Effect.timeout('15 seconds'), Effect.scoped,
       Effect.provide(SessionHostsLive({ idleMs: 0 }).pipe(Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer))),
-      Effect.provideService(RegistryPath, join(fixture.root, 'registry.json')), Effect.provideService(PiCli, fixture.cli()),
+      Effect.provideService(RegistryDatabasePath, join(fixture.root, 'registry.db')), Effect.provideService(PiCli, fixture.cli()),
     ));
     assert.equal(fixture.observe().requests.length, 0);
   } finally {

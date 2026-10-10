@@ -63,9 +63,8 @@ Stop only the process you started, by its pid. Register only scratch directories
 repo in the scratchpad) in the scratch registry. When a check creates worktrees or pi session files,
 remove them afterwards: `git worktree remove --force` plus `git branch -D` in the scratch repo, and
 the session directory under `~/.pi/agent/sessions` whose name encodes the scratch path.
-Use a scratch-local `PIANO_DB_PATH`; custom database paths start empty and do not import the user's
-legacy JSON. Default startup automatically migrates `~/.config/piano/config.json`.
-See [registry migration and backup guidance](README.md#registry-storage-and-migration).
+Use a scratch-local `PIANO_DB_PATH`; a new database starts empty.
+See [registry storage and backup guidance](README.md#registry-storage).
 
 ## Verification
 

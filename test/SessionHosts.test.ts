@@ -9,7 +9,7 @@ import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { PiCli } from '../server/PiCli.ts';
 import { PiRequestTimeoutMs, type PiSession, PiSessionsLive } from '../server/PiSessions.ts';
-import { Registry, RegistryLive, RegistryPath } from '../server/Registry.ts';
+import { Registry, RegistryDatabasePath, RegistryLive } from '../server/Registry.ts';
 import { SessionHosts, SessionHostsLive } from '../server/SessionHosts.ts';
 import type { SessionEvent } from '../shared/wire.ts';
 
@@ -35,7 +35,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, SessionHosts | Registry>, options
   const work = effect.pipe(Effect.scoped, Effect.provide(layer),
     Effect.provideService(PiCli, { ...cli, extraArgs: [...cli.extraArgs, ...(options.holdShutdown ? ['--hold-shutdown'] : []), ...(options.holdReadiness ? ['--hold-readiness'] : []), ...(options.holdStats ? ['--hold-stats'] : []), ...(options.statsFile ? ['--stats-file', options.statsFile] : [])] }),
     Effect.provideService(PiRequestTimeoutMs, options.timeoutMs ?? 30000),
-    Effect.provideService(RegistryPath, join(root, 'registry.json')));
+    Effect.provideService(RegistryDatabasePath, join(root, 'registry.db')));
   return Effect.runPromise(options.clock ? work.pipe(Effect.provide(TestClock.layer())) : work);
 };
 const observe = (session: PiSession, until: (e: SessionEvent) => boolean) => Effect.gen(function* () {

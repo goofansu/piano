@@ -15,7 +15,7 @@ import { PiSessionsLive } from "./PiSessions.ts";
 import { PiSettingsLive } from "./PiSettings.ts";
 import { ProviderLoginLive } from "./ProviderLogin.ts";
 import { RadiusSetupLive } from "./RadiusSetup.ts";
-import { CONFIG_PATH, RegistryLive, registryDatabasePath } from "./Registry.ts";
+import { RegistryDatabasePath, RegistryLive } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
@@ -64,5 +64,5 @@ const main = Layer.launch(Server).pipe(
 );
 
 console.log(`[piano] http://${HOST}:${PORT}`);
-console.log(`[piano] database ${registryDatabasePath(CONFIG_PATH, process.env.PIANO_DB_PATH)}; legacy config ${CONFIG_PATH}; Pi agent dir ${agentDir()}; web ${WEB_DIST}`);
+console.log(`[piano] database ${RegistryDatabasePath.defaultValue()}; Pi agent dir ${agentDir()}; web ${WEB_DIST}`);
 NodeRuntime.runMain(main);

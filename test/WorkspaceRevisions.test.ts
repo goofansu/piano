@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { Effect } from "effect";
-import { Registry, RegistryLive, RegistryPath } from "../server/Registry.ts";
+import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { RevisionGitCommand, RevisionStorePath, WorkspaceRevisions, WorkspaceRevisionsLive } from "../server/WorkspaceRevisions.ts";
 import type { WorkspaceCapture } from "../shared/wire.ts";
 
@@ -29,33 +29,12 @@ function ready(capture: WorkspaceCapture) {
   return capture.result;
 }
 
-test("INV-01/07: migration backs up exact bytes, preserves references and workspace identity; malformed data never resets", async t => {
-  const { root, repo } = fixture(t), path = join(root, "registry.json"), worktree = join(root, "selected"), hidden = join(root, "hidden");
-  const original = JSON.stringify({ projects: [repo], worktrees: [{ project: repo, path: worktree, branch: "old-name" }], threads: [
-    { cwd: worktree, sessionId: "saved", createdAt: "then", updatedAt: "now" },
-    { cwd: hidden, sessionId: "hidden", archived: true, createdAt: "then", updatedAt: "now" },
-  ] });
-  writeFileSync(path, original);
-  const run = <A, E>(e: Effect.Effect<A, E, Registry>) => Effect.runPromise(e.pipe(Effect.provide(RegistryLive), Effect.provideService(RegistryPath, path)));
-  const migrated = await run(Effect.gen(function* () { return yield* (yield* Registry).get; }));
-  assert.equal(migrated.version, 2); assert.equal(migrated.workspaces.length, 3);
-  assert.equal(migrated.sessions[0].cwd, worktree); assert.equal(migrated.sessions[0].archived, false);
-  assert.equal(migrated.sessions[1].archived, true); assert.equal(migrated.worktrees[0].branch, "old-name");
-  const backup = readdirSync(root).find(p => p.endsWith(".bak"))!;
-  assert.equal(readFileSync(join(root, backup), "utf8"), original);
-  const id = migrated.workspaces.find(w => w.path === repo)!.id;
+test("INV-01/07: a folder keeps its workspace identity when closed and reopened", async t => {
+  const { root, repo } = fixture(t), path = join(root, "registry.db");
+  const run = <A, E>(e: Effect.Effect<A, E, Registry>) => Effect.runPromise(e.pipe(Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, path)));
+  const id = (await run(Effect.gen(function* () { const r = yield* Registry; yield* r.addProject(repo); return yield* r.get; }))).workspaces.find(w => w.path === repo)!.id;
   await run(Effect.gen(function* () { const r = yield* Registry; yield* r.removeProject(repo); yield* r.addProject(repo); }));
   assert.equal((await run(Effect.gen(function* () { return yield* (yield* Registry).get; }))).workspaces.find(w => w.path === repo)!.id, id);
-  for (const damaged of ["{broken", JSON.stringify({ projects: [123], worktrees: [], sessions: [] }), JSON.stringify({ ...migrated, version: 3 }), JSON.stringify({ ...migrated, workspaces: [] })]) {
-    rmSync(`${path}.sqlite`);
-    writeFileSync(path, damaged);
-    await assert.rejects(run(Effect.gen(function* () { yield* (yield* Registry).addProject(repo); })), /has not been reset/);
-    assert.equal(readFileSync(path, "utf8"), damaged);
-  }
-  unlinkSync(path); symlinkSync(join(root, "missing-config"), path);
-  await assert.rejects(run(Effect.gen(function* () { return yield* (yield* Registry).get; })), /Registry symlinks/);
-  assert.equal(existsSync(join(root, "missing-config")), false);
-  assert.equal(readdirSync(root).filter(p => p.endsWith(".bak")).length, 1);
 });
 
 test("INV-07/08: raw content, stage, untracked, deletion, modes, symlinks and rebased HEAD bind an immutable manifest and diff", async t => {

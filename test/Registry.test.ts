@@ -1,23 +1,24 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { type TestContext, test } from "node:test";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { Registry, type RegistryData, RegistryDatabasePath, RegistryLive, RegistryPath } from "../server/Registry.ts";
+import { Registry, type RegistryData, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
+import { seedRegistry } from "./fixtures/registry.ts";
 
 function fixture(t: TestContext) {
-  const root = mkdtempSync(join(tmpdir(), "piano-sqlite-")), config = join(root, "registry.json"), dbPath = `${config}.sqlite`;
+  const root = mkdtempSync(join(tmpdir(), "piano-sqlite-")), dbPath = join(root, "registry.db");
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const layer = RegistryLive.pipe(Layer.provide(Layer.succeed(RegistryPath, config)), Layer.provide(Layer.succeed(RegistryDatabasePath, dbPath)));
+  const layer = RegistryLive.pipe(Layer.provide(Layer.succeed(RegistryDatabasePath, dbPath)));
   const run = <A, E>(effect: Effect.Effect<A, E, Registry>) => Effect.runPromise(effect.pipe(Effect.provide(layer)));
   const get = () => run(Effect.gen(function* () { return yield* (yield* Registry).get; }));
-  return { root, config, dbPath, layer, run, get };
+  return { root, dbPath, layer, run, get };
 }
 
-test("INV-01/07: v2 import preserves all metadata, order, hidden folders and path aliases; SQLite alone owns subsequent writes", async t => {
+test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path aliases across writes and restart", async t => {
   const f = fixture(t), folder = join(f.root, "folder"), hidden = join(f.root, "hidden"), alias = `${folder}/../folder`;
   const stats = { context: { tokens: 153139, contextWindow: 272000, percent: 56.301102941176474 }, cost: 7.290477599999999,
     tokens: { input: 1074786, output: 14967, cacheRead: 6729984, cacheWrite: 0, total: 7819737 }, statsUpdatedAt: 1791430502567 };
@@ -31,14 +32,8 @@ test("INV-01/07: v2 import preserves all metadata, order, hidden folders and pat
       { cwd: alias, sessionId: "other", createdAt: "then", updatedAt: "now", archived: false },
     ],
   };
-  const bytes = `${JSON.stringify(original, null, 2)}\n`;
-  writeFileSync(f.config, bytes);
+  seedRegistry(f.dbPath, original);
   assert.deepEqual(await f.get(), original);
-  assert.equal(readFileSync(f.config, "utf8"), bytes);
-  const backups = readdirSync(f.root).filter(p => p.endsWith(".bak"));
-  assert.equal(backups.length, 1);
-  assert.equal(readFileSync(join(f.root, backups[0]), "utf8"), bytes);
-  assert.equal(statSync(join(f.root, backups[0])).mode & 0o777, 0o600);
   assert.equal(statSync(f.dbPath).mode & 0o777, 0o600);
   const db = new DatabaseSync(f.dbPath, { readOnly: true });
   try {
@@ -55,14 +50,11 @@ test("INV-01/07: v2 import preserves all metadata, order, hidden folders and pat
     yield* r.assignProject(hidden, "same", "project-2");
     yield* r.removeProject(folder);
   }));
-  assert.equal(readFileSync(f.config, "utf8"), bytes, "no dual writes");
-  writeFileSync(f.config, "{broken"); // A completed import never reads this file again.
   const reopened = await f.get();
   assert.deepEqual(reopened.projects, []);
   assert.deepEqual(reopened.workspaces, original.workspaces);
   assert.deepEqual(reopened.sessions[0], { ...original.sessions[0], title: "Renamed", outcomeProjectId: "project-2" });
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
-  assert.equal(readdirSync(f.root).filter(p => p.endsWith(".bak")).length, 1);
 });
 
 test("INV-01: a failed transaction publishes neither partial rows nor in-memory changes; retry succeeds", async t => {
@@ -81,18 +73,11 @@ test("INV-01: a failed transaction publishes neither partial rows nor in-memory 
     await runtime.runPromise(r.addSession(join(f.root, "hidden"), "new"));
     const saved = await f.get();
     assert.equal(saved.sessions.length, 1); assert.equal(saved.workspaces.length, 1);
-    assert.equal(existsSync(f.config), false, "new installs need no JSON file");
   } finally { await runtime.dispose(); }
 });
 
-test("INV-01: failed import can retry atomically; newer or damaged databases never fall back to stale JSON", async t => {
+test("INV-01: newer or damaged databases are never reset", async t => {
   const f = fixture(t);
-  writeFileSync(f.config, '{"version":99}');
-  await assert.rejects(f.get(), /has not been reset/);
-  assert.equal(readFileSync(f.config, "utf8"), '{"version":99}');
-  assert.equal(readdirSync(f.root).filter(p => p.endsWith(".bak")).length, 0);
-  const legacy = { projects: [], worktrees: [], sessions: [] };
-  writeFileSync(f.config, JSON.stringify(legacy));
   assert.deepEqual((await f.get()).projects, []);
   const db = new DatabaseSync(f.dbPath);
   try { db.exec("PRAGMA user_version = 99"); } finally { db.close(); }
@@ -114,38 +99,13 @@ test("INV-01: competing backends cannot overwrite each other's committed metadat
   } finally { await first.dispose(); await second.dispose(); }
 });
 
-test("database location honors data home and DB override, ignoring the retired config environment variable", () => {
+test("database location honors data home and DB override", () => {
   const env = { ...process.env };
-  delete env.PIANO_CONFIG; delete env.PIANO_DB_PATH;
+  delete env.PIANO_DB_PATH;
   const location = (extra: Record<string, string>) => execFileSync(process.execPath, ["--input-type=module", "-e",
-    "import { CONFIG_PATH, registryDatabasePath } from './server/Registry.ts'; console.log(registryDatabasePath(CONFIG_PATH, process.env.PIANO_DB_PATH));"],
+    "import { RegistryDatabasePath } from './server/Registry.ts'; console.log(RegistryDatabasePath.defaultValue());"],
   { cwd: resolve("."), env: { ...env, ...extra }, encoding: "utf8" }).trim();
   assert.equal(location({ HOME: "/tmp/piano-home", XDG_DATA_HOME: "" }), "/tmp/piano-home/.local/share/piano/piano.db");
   assert.equal(location({ XDG_DATA_HOME: "/tmp/piano-data" }), "/tmp/piano-data/piano/piano.db");
-  assert.equal(location({ XDG_DATA_HOME: "/tmp/piano-data", PIANO_CONFIG: "/tmp/scratch/config.json" }), "/tmp/piano-data/piano/piano.db");
-  assert.equal(location({ PIANO_CONFIG: "/tmp/scratch/config.json", PIANO_DB_PATH: "/tmp/explicit/piano.db" }), "/tmp/explicit/piano.db");
-});
-
-test("INV-01: default startup imports standard home JSON without configuration; custom databases start isolated", async t => {
-  const f = fixture(t), configDir = join(f.root, ".config", "piano"), config = join(configDir, "config.json");
-  mkdirSync(configDir, { recursive: true });
-  const bytes = JSON.stringify({ projects: [join(f.root, "selected")], worktrees: [], sessions: [] });
-  writeFileSync(config, bytes);
-  writeFileSync(f.config, "{broken retired config override");
-  const inspect = (override?: string) => JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", `
-    import { Effect } from 'effect';
-    import { CONFIG_PATH, Registry, RegistryLive, registryDatabasePath } from './server/Registry.ts';
-    const data = await Effect.runPromise(Effect.gen(function* () { return yield* (yield* Registry).get; }).pipe(Effect.provide(RegistryLive)));
-    console.log(JSON.stringify({ path: registryDatabasePath(CONFIG_PATH), data }));
-  `], { env: { ...process.env, HOME: f.root, XDG_DATA_HOME: join(f.root, "data"), PIANO_DB_PATH: override, PIANO_CONFIG: f.config }, encoding: "utf8" }));
-  const isolated = inspect(f.dbPath);
-  assert.equal(isolated.path, f.dbPath);
-  assert.deepEqual(isolated.data.projects, []);
-  assert.deepEqual(readdirSync(configDir), ["config.json"], "custom database never reads or backs up the user's JSON");
-  const migrated = inspect();
-  assert.equal(migrated.path, join(f.root, "data", "piano", "piano.db"));
-  assert.deepEqual(migrated.data.projects, [join(f.root, "selected")]);
-  assert.equal(readFileSync(config, "utf8"), bytes);
-  assert.equal(readdirSync(configDir).filter(p => p.endsWith(".bak")).length, 1);
-  assert.deepEqual(inspect(), migrated, "restart uses the same database and identities");
+  assert.equal(location({ XDG_DATA_HOME: "/tmp/piano-data", PIANO_DB_PATH: "/tmp/explicit/piano.db" }), "/tmp/explicit/piano.db");
 });

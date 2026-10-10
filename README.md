@@ -80,36 +80,21 @@ logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credent
 - `PIANO_PI_ARGS`: extra Pi arguments, such as `-e ./ext.ts`.
 - `PIANO_IDLE_MINUTES`: idle time before retiring a session's Pi process; defaults to `30`, or `0` to disable.
 
-## Registry storage and migration
+## Registry storage
 
-Piano uses Node's built-in SQLite support (no database server or extra native dependency). SQL tables
-`folders` contain the selected directories formerly called `projects` in JSON, while `projects`
-contain the named session groupings formerly called `outcomeProjects`. Workspaces, worktree references
-and session metadata are separate tables. Pi still owns conversation files; Git owns repository facts;
-the default revision/evidence storage is unchanged. Existing TypeScript and wire names remain compatible.
+Piano keeps its registry in SQLite at `$XDG_DATA_HOME/piano/piano.db` (default
+`~/.local/share/piano/piano.db`), using Node's built-in SQLite support. SQL tables `folders` hold the
+selected directories and `projects` hold the named session groupings (`outcomeProjects` in code).
+Workspaces, worktree references and session metadata are separate tables. Pi still owns conversation
+files; Git owns repository facts. Unsupported or corrupt databases fail startup rather than being reset.
 
-On first startup with an uninitialized default database, Piano automatically validates and imports
-`~/.config/piano/config.json` in one transaction. No environment variable is needed for migration. Unversioned, v1 and v2 registries are supported. IDs, exact path spelling, array order,
-closed-folder references, cached statistics and PR preferences are preserved. The source JSON stays
-unchanged, with an additional private `<config>.pre-sqlite-<id>.bak` copy. Subsequent launches use only
-SQLite: editing the old JSON no longer changes Piano. Invalid imports or unsupported/corrupt databases
-fail startup rather than resetting data or falling back to stale JSON.
+Run one backend per database; stale writes from a second backend fail explicitly and require a
+restart. SQLite transactions commit before the in-memory view changes.
 
-Stop the old Piano backend before upgrading. Run one backend per database; stale writes from a second
-backend fail explicitly and require a restart. SQLite transactions commit before the in-memory view
-changes. The registry still serves a cached full snapshot; this migration targets safer persistence
-and row-level writes, not a claim of faster conversation loading.
+The database uses mode `0600`. SQLite uses WAL, so `-wal` and `-shm` files may appear beside the
+database. For a file-copy backup, stop Piano cleanly first; for live backups use SQLite's backup
+facility rather than copying only the main file.
 
-The database and migration backups use mode `0600`. SQLite uses WAL, so `-wal` and `-shm` files may
-appear beside the database. For a file-copy backup, stop Piano cleanly first; for live backups use
-SQLite's backup facility rather than copying only the main file. Restoring an old JSON backup requires
-stopping Piano, setting aside the current default database (including any WAL files), and restoring
-the JSON at `~/.config/piano/config.json` before restarting with the default database location. This
-loses metadata changes made since the backup, so retain the current database before recovery. Rolling back the application
-to the JSON-based version likewise sees only pre-migration metadata, not subsequent SQLite writes.
-
-For scratch development, set `PIANO_DB_PATH` to a file in your scratch directory. New databases at
-non-default paths start empty rather than importing your normal JSON registry; their revision captures default to
-`<database>.revisions` unless `PIANO_REVISION_STORE` overrides it. Browser fixtures explicitly seed
-scratch databases through Registry. The retired `PIANO_CONFIG` environment variable is ignored;
-if you previously used a custom SQLite location, select that existing file with `PIANO_DB_PATH`.
+For scratch development, set `PIANO_DB_PATH` to a file in your scratch directory; a new database
+starts empty. Workspace revision captures live in `<database>.revisions` unless
+`PIANO_REVISION_STORE` overrides it. Browser fixtures seed scratch databases directly.
