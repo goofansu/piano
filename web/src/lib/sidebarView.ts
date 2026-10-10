@@ -1,4 +1,4 @@
-import type { FolderView, Project, SessionInfo, SessionReference } from "@shared/wire";
+import type { FolderView, Project } from "@shared/wire";
 
 /** How the sidebar lists sessions: by folder, project, date, or as one list. */
 export type GroupBy = "folder" | "project" | "date" | "none";
@@ -39,40 +39,37 @@ export function sortSessions<T extends SessionLike>(sessions: readonly T[], sort
   return order(sessions, sort, s => s.title ?? "￿", s => s.updatedAt ?? "");
 }
 
-/** Folders in the chosen order, each with its sessions in that order. A folder's activity is its latest session. */
-export function folderGroups<T extends Pick<FolderView, "name" | "sessions">>(folders: readonly T[], sort: SortBy): T[] {
-  return order(folders.map(f => ({ ...f, sessions: sortSessions(f.sessions, sort) })), sort, f => f.name, f => latest(f.sessions.map(s => s.updatedAt)));
+/** Folders in the chosen order, each with its listed sessions in that order. A folder's activity is its latest session. */
+export function folderGroups<F extends Pick<FolderView, "path" | "name">, S extends SessionLike & { folderPath?: string }>(
+  folders: readonly F[], sessions: readonly S[], sort: SortBy,
+): Array<{ folder: F; sessions: S[] }> {
+  const groups = folders.map(folder => ({ folder, sessions: sortSessions(sessions.filter(s => s.folderPath === folder.path), sort) }));
+  return order(groups, sort, g => g.folder.name, g => latest(g.sessions.map(s => s.updatedAt)));
 }
 
 export interface SessionGroup<P, S> { project: P | null; sessions: S[] }
 /**
  * Projects in the chosen order, then one group for the listed sessions that belong to no project.
- * Members come from the registry references, so a member whose folder was closed still appears.
+ * A member whose folder was closed is still listed (see the session catalog), so it still appears.
  */
-export function projectGroups<P extends Pick<Project, "id" | "name">, R extends Pick<SessionReference, "cwd" | "sessionId" | "projectId" | "title" | "updatedAt">, S extends Pick<SessionInfo, "cwd" | "sessionId" | "title" | "updatedAt">>(
-  projects: readonly P[], references: readonly R[], listed: readonly S[], sort: SortBy,
-): Array<SessionGroup<P, R> | SessionGroup<P, S>> {
-  const groups = projects.map((project): SessionGroup<P, R> => ({ project, sessions: sortSessions(references.filter(s => s.projectId === project.id), sort) }));
-  const filed = new Set(references.filter(s => s.projectId).map(s => `${s.cwd}\n${s.sessionId}`));
-  const ungrouped: SessionGroup<P, S> = { project: null, sessions: sortSessions(listed.filter(s => !filed.has(`${s.cwd}\n${s.sessionId}`)), sort) };
+export function projectGroups<P extends Pick<Project, "id" | "name">, S extends SessionLike & { projectId?: string }>(
+  projects: readonly P[], sessions: readonly S[], sort: SortBy,
+): Array<SessionGroup<P, S>> {
+  const groups = projects.map((project): SessionGroup<P, S> => ({ project, sessions: sortSessions(sessions.filter(s => s.projectId === project.id), sort) }));
+  const ungrouped: SessionGroup<P, S> = { project: null, sessions: sortSessions(sessions.filter(s => !s.projectId), sort) };
   return [...order(groups, sort, g => g.project?.name ?? "", g => latest(g.sessions.map(s => s.updatedAt))), ungrouped];
 }
 
-/** Listed sessions across folders, by local calendar date; unknown times stay visible last. */
-export function dateGroups<S extends SessionLike>(folders: ReadonlyArray<{ sessions: readonly S[] }>, sort: SortBy, now = new Date()): Array<{ label: string; sessions: S[] }> {
+/** Listed sessions by local calendar date; unknown times stay visible last. */
+export function dateGroups<S extends SessionLike>(sessions: readonly S[], sort: SortBy, now = new Date()): Array<{ label: string; sessions: S[] }> {
   const labels = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older", "Unknown date"];
   const groups = labels.map(label => ({ label, sessions: [] as S[] }));
   // Local midnights, not elapsed 24-hour periods: DST days can be shorter or longer.
   const boundaries = [0, 1, 7, 30].map(days => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days).getTime());
-  for (const session of folders.flatMap(f => f.sessions)) {
+  for (const session of sessions) {
     const time = session.updatedAt ? Date.parse(session.updatedAt) : Number.NaN;
     const bucket = Number.isNaN(time) ? 5 : boundaries.findIndex(boundary => time >= boundary);
     groups[bucket === -1 ? 4 : bucket]!.sessions.push(session);
   }
   return groups.filter(g => g.sessions.length > 0).map(g => ({ ...g, sessions: sortSessions(g.sessions, sort) }));
-}
-
-/** Every listed session as one list. */
-export function flatSessions<S extends SessionLike>(folders: ReadonlyArray<{ sessions: readonly S[] }>, sort: SortBy): S[] {
-  return sortSessions(folders.flatMap(f => f.sessions), sort);
 }
