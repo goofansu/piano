@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Toaster } from "@/components/ui/sonner";
 import { hasMod } from "@/lib/keys";
-import { invalidateModelDefaults } from "@/lib/modelDefaults";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
 import { readJson, writeJson } from "@/lib/storage";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
@@ -44,7 +43,6 @@ export default function App() {
   }, []);
 
   const onMessage = useCallback((m: ServerMessage) => {
-    if (m._tag === "catalogs_invalidated") invalidateModelDefaults();
     const notifySession = m._tag === "session" && sessionDelivery(latest.current, m) === "apply";
     dispatch({ type: "server", message: m });
     const notify = (message: string, level?: "success" | "info" | "warning" | "error") =>
@@ -62,10 +60,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(() => parseRoute(location).kind === "settings");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(() => {
     const route = parseRoute(location);
-    return route.kind === "settings" ? route.section : "models";
+    return route.kind === "settings" ? route.section : "providers";
   });
-  const openSettingsSection = useCallback((section: SettingsSection = "models") => { setSettingsSection(section); setSettingsOpen(true); closeMobile(); }, [closeMobile]);
-  const openSettings = useCallback(() => openSettingsSection("models"), [openSettingsSection]);
+  const openSettingsSection = useCallback((section: SettingsSection = "providers") => { setSettingsSection(section); setSettingsOpen(true); closeMobile(); }, [closeMobile]);
+  const openSettings = useCallback(() => openSettingsSection("providers"), [openSettingsSection]);
   const closeSettings = useCallback(() => { setSettingsOpen(false); closeMobile(); }, [closeMobile]);
   const send = useCallback((m: ClientCommand) => {
     if (m._tag === "select" || m._tag === "create_session") {

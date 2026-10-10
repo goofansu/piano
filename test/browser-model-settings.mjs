@@ -15,9 +15,10 @@ const settingsPath = join(fixture.agentDir, 'settings.json');
 writeFileSync(settingsPath, JSON.stringify({ theme: 'dark', cacheWarming: 'off' }));
 const cwd = join(fixture.root, 'plain');
 mkdirSync(cwd); assert.equal(spawnSync('git', ['init', '--quiet', cwd]).status, 0);
-const backendUrl = 'http://127.0.0.1:7171', frontendUrl = 'http://127.0.0.1:7172';
-const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: '7171', PIANO_DB_PATH: join(fixture.root, 'piano.db'), PI_CODING_AGENT_DIR: fixture.agentDir, PI_CODING_AGENT_SESSION_DIR: fixture.sessionDir, PIANO_PI_CLI: fixture.cli().cli, PI_OFFLINE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: backendUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
+const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171', frontendPort = process.env.PIANO_TEST_FRONTEND_PORT ?? '7172';
+const backendUrl = `http://127.0.0.1:${backendPort}`, frontendUrl = `http://127.0.0.1:${frontendPort}`;
+const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOME: fixture.root, HOST: '127.0.0.1', PORT: backendPort, PIANO_DB_PATH: join(fixture.root, 'piano.db'), PI_CODING_AGENT_DIR: fixture.agentDir, PI_CODING_AGENT_SESSION_DIR: fixture.sessionDir, PIANO_PI_CLI: fixture.cli().cli, PI_OFFLINE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', frontendPort, '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: backendUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';
 for (const p of [backend, frontend]) { p.stdout.on('data', d => processLog += d); p.stderr.on('data', d => processLog += d); }
 const browser = `model-settings-${process.pid}`, commands = [];
@@ -36,18 +37,10 @@ async function ab(...args) {
 const evaluate = async code => JSON.parse(await ab('eval', code));
 const button = name => ab('find', 'role', 'button', 'click', '--name', name, '--exact');
 const stored = () => JSON.parse(readFileSync(settingsPath, 'utf8'));
-const picker = '[role="group"][aria-labelledby="default-model-label"] button[aria-label^="Model:"]';
-const assertStackedPicker = async () => {
-  const geometry = await evaluate(`(() => {
-    const label = document.getElementById('default-model-label').getBoundingClientRect();
-    const control = document.querySelector(${JSON.stringify(picker)}).getBoundingClientRect();
-    return { labelBottom: label.bottom, labelLeft: label.left, controlTop: control.top, controlLeft: control.left };
-  })()`);
-  assert.ok(geometry.controlTop > geometry.labelBottom, 'model picker sits below its heading');
-  assert.ok(Math.abs(geometry.controlLeft - geometry.labelLeft) < 1, 'model picker is left-aligned with its heading');
-};
+const picker = 'button[aria-label^="Model:"]';
 const pickerLabel = () => evaluate(`document.querySelector(${JSON.stringify(picker)}).getAttribute('aria-label')`);
 const efforts = () => evaluate(`[...document.querySelectorAll('[aria-label="Model and effort"] [role="radio"]')].map(button => button.textContent.trim())`);
+const defaultButton = () => evaluate(`(() => { const b = [...document.querySelectorAll('[aria-label="Model and effort"] button')].find(b => /for new sessions$/.test(b.textContent)); return b ? { text: b.textContent, disabled: b.disabled } : null; })()`);
 const chooseModel = async ref => {
   await ab('fill', 'input[aria-label="Search models"]', ref);
   await ab('find', 'role', 'option', 'click', '--name', ref, '--exact');
@@ -77,119 +70,53 @@ try {
     await delay(50);
   }
   await ab('set', 'viewport', '1280', '900'); await ab('open', frontendUrl);
-  await ab('wait', '--fn', `!!document.querySelector('button[aria-label^="Model: piano-phase0/"]')`);
-  // Warm the ordinary cwd catalog before saving a different default.
-  await button('Settings');
-  await button('Models');
-  assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent === 'Save defaults')`), false, 'the button is simply Save');
-  await ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(picker + ':not(:disabled)')})`);
-  await assertStackedPicker();
+  await ab('wait', '--fn', `!!document.querySelector('button[aria-label^="Model: piano-phase0/"]:not(:disabled)')`);
   assert.match(await pickerLabel(), /effort: medium$/);
-  assert.equal(stored().defaultModel, undefined, 'resolved automatic selection is not persisted by loading');
-  await ab('click', picker);
-  await chooseModel('piano-phase0/project');
-  assert.deepEqual(await efforts(), ['off', 'minimal', 'low', 'medium', 'high']);
-  await ab('find', 'role', 'radio', 'click', '--name', 'high', '--exact');
-  await chooseModel('piano-phase0/plain');
-  assert.deepEqual(await efforts(), ['off'], 'non-reasoning model only offers off');
-  assert.match(await pickerLabel(), /plain; effort: off$/);
-  await chooseModel('piano-phase0/project');
-  assert.deepEqual(await efforts(), ['off', 'minimal', 'low', 'medium', 'high']);
-  await ab('find', 'role', 'radio', 'click', '--name', 'high', '--exact');
+  assert.equal(stored().defaultModel, undefined, 'loading does not persist the automatic selection');
+  // The Models settings section is gone.
+  await button('Settings');
+  assert.equal(await evaluate(`!!document.querySelector('button[aria-label="Models"]')`), false, 'no Models settings section');
+  await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k'); await ab('fill', 'input[aria-label="Search sessions and commands"]', 'Models');
+  assert.equal(await evaluate(`[...document.querySelectorAll('[cmdk-item]')].some(e => e.getAttribute('data-value') === 'Models')`), false, 'no Models palette row');
   await ab('press', 'Escape');
-  assert.equal(stored().defaultModel, undefined, 'edits remain pending until Save');
-  await button('Save'); await ab('wait', '--text', 'Defaults saved for new sessions.');
+  await button('Home');
+  await ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(picker + ':not(:disabled)')})`);
+  await ab('click', picker);
+  assert.deepEqual(await defaultButton(), { text: 'Default for new sessions', disabled: true }, 'the resolved default is already the default');
+  await chooseModel('piano-phase0/project');
+  assert.deepEqual(await efforts(), ['off', 'minimal', 'low', 'medium', 'high']);
+  await ab('find', 'role', 'radio', 'click', '--name', 'high', '--exact');
+  assert.deepEqual(await defaultButton(), { text: 'Use for new sessions', disabled: false });
+  assert.equal(stored().defaultModel, undefined, 'choosing does not save');
+  await button('Use for new sessions'); await ab('wait', '--text', 'Defaults saved for new sessions.');
   assert.deepEqual({ provider: stored().defaultProvider, model: stored().defaultModel, effort: stored().defaultThinkingLevel, theme: stored().theme }, { provider: 'piano-phase0', model: 'project', effort: 'high', theme: 'dark' });
   assert.ok(invalidations > 0, 'other clients receive catalog invalidation');
+  await ab('wait', '--fn', `[...document.querySelectorAll('[aria-label="Model and effort"] button')].some(b => b.textContent === 'Default for new sessions' && b.disabled)`);
   await ab('screenshot', join(evidence, '01-saved-desktop.png'));
-  await button('Providers');
-  // First revisit may reload after the save's catalog invalidation. Warm that snapshot.
-  await button('Models');
-  await ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(picker + ':not(:disabled)')})`);
-  await button('Providers');
-  await evaluate(`(() => {
-    window.defaultsRequests = 0;
-    const original = window.fetch;
-    window.fetch = (...args) => {
-      if (String(args[0]).startsWith('/api/settings/defaults')) window.defaultsRequests++;
-      return original(...args);
-    };
-    return true;
-  })()`);
-  await button('Models');
-  assert.equal(await evaluate(`!!document.querySelector(${JSON.stringify(picker)})`), true, 'returning to Models shows the cached picker');
-  assert.equal(await evaluate('window.defaultsRequests'), 0, 'returning does not refresh automatically');
-  assert.match(await pickerLabel(), /project; effort: high$/, 'the cache contains the saved defaults');
-  const modelsPath = join(fixture.agentDir, 'models.json');
-  const modelConfig = JSON.parse(readFileSync(modelsPath, 'utf8'));
-  const configuredModels = modelConfig.providers['piano-phase0'].models;
-  configuredModels.push({ ...configuredModels[0], id: 'manual-refresh', name: 'Manual refresh' });
-  writeFileSync(modelsPath, JSON.stringify(modelConfig));
-  await ab('click', picker);
-  await ab('find', 'role', 'radio', 'click', '--name', 'low', '--exact');
-  await button('Refresh models');
-  await ab('wait', '--fn', `!document.querySelector('button[aria-label="Refresh models"]').disabled`);
-  assert.equal(await evaluate('window.defaultsRequests'), 1, 'manual Refresh loads once');
-  assert.match(await pickerLabel(), /project; effort: low$/, 'manual refresh preserves unsaved edits');
-  assert.equal(stored().defaultThinkingLevel, 'high', 'refresh does not save the draft');
-  await ab('fill', 'input[aria-label="Search models"]', 'piano-phase0/manual-refresh');
-  assert.match(await ab('snapshot'), /piano-phase0\/manual-refresh/, 'manual refresh re-probes Pi rather than reusing the server catalog');
   await ab('press', 'Escape');
-  await evaluate(`(() => {
-    const original = window.fetch;
-    window.fetch = async (...args) => {
-      const response = await original(...args);
-      if (args[0] !== '/api/settings/defaults?refresh=true') return response;
-      window.fetch = original;
-      const result = await response.json();
-      result.catalog = { ...result.catalog, models: [], error: 'probe failed' };
-      return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json' } });
-    };
-    return true;
-  })()`);
-  await ab('click', picker);
-  await button('Refresh models');
-  await ab('wait', '--text', 'Could not load defaults');
-  await ab('wait', '--fn', `!document.querySelector('button[aria-label="Refresh models"]').disabled`);
-  assert.match(await pickerLabel(), /project; effort: low$/, 'a failed refresh retains the model, effort and draft');
-  await button('Refresh models');
-  await ab('wait', '--fn', `!document.querySelector('button[aria-label="Refresh models"]').disabled`);
-  assert.match(await pickerLabel(), /project; effort: low$/, 'retry preserves the draft too');
-  await ab('press', 'Escape');
-  await button('Home');
-  await button('Settings'); await button('Models');
-  assert.equal(await evaluate('window.defaultsRequests'), 3, 'leaving Settings and returning also uses the cache');
-  assert.match(await pickerLabel(), /project; effort: high$/, 'unsaved edits are not cached as defaults');
-  await button('Home');
-  await ab('wait', '--fn', `!!document.querySelector('button[aria-label="Model: piano-phase0/project; effort: high"]')`);
-  assert.match(await ab('snapshot'), /Model: piano-phase0\/project; effort: high/);
-  // Both defaults survive reload; command-palette navigation reaches Models.
+  // The saved default survives reload as the new-session selection.
   await ab('reload');
   await ab('wait', '--fn', `!!document.querySelector('button[aria-label="Model: piano-phase0/project; effort: high"]')`);
-  await ab('press', 'Control+k'); await ab('fill', 'input[aria-label="Search sessions and commands"]', 'Models');
-  await ab('find', 'role', 'option', 'click', '--name', 'Models', '--exact');
-  await ab('wait', '--fn', `document.querySelector(${JSON.stringify(picker)})?.getAttribute('aria-label').includes('piano-phase0/project; effort: high')`);
   const invalid = await fetch(`${backendUrl}/api/settings/defaults`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ thinkingLevel: 'bogus' }) });
   assert.equal(invalid.status, 400);
   assert.equal(stored().defaultThinkingLevel, 'high');
-  // A failed durability boundary stays visible, retains the draft, and never claims success.
+  // A failed durability boundary is reported and never claims success.
   chmodSync(settingsPath, 0o400);
+  await ab('set', 'viewport', '390', '844');
   await ab('click', picker);
-  await ab('find', 'role', 'radio', 'click', '--name', 'low', '--exact'); await ab('press', 'Escape'); await button('Save');
-  await ab('wait', '--text', 'Could not save defaults');
+  await ab('find', 'role', 'radio', 'click', '--name', 'low', '--exact');
+  await button('Use for new sessions');
+  await ab('wait', '--text', 'Could not save Pi settings');
   assert.equal(stored().defaultThinkingLevel, 'high');
   assert.match(await pickerLabel(), /effort: low$/);
-  await ab('set', 'viewport', '390', '844'); await ab('screenshot', join(evidence, '02-save-error-mobile.png'));
+  await ab('screenshot', join(evidence, '02-save-error-mobile.png'));
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
-  await assertStackedPicker();
   chmodSync(settingsPath, 0o600);
-  await button('Save'); await ab('wait', '--text', 'Defaults saved for new sessions.');
+  await button('Use for new sessions'); await ab('wait', '--text', 'Defaults saved for new sessions.');
   assert.equal(stored().defaultThinkingLevel, 'low');
   await ab('screenshot', join(evidence, '03-saved-mobile.png'));
-  await ab('set', 'viewport', '1280', '900'); await button('Providers');
-  await ab('wait', '--fn', `!!document.querySelector('#settings-providers-title')`);
   assert.equal(fixture.observe().requests.length, 0);
-  console.log('PASS: shared model/effort picker, model-aware effort choices and clamping, explicit Save, persistence, catalog invalidation, new-session readback, reload, palette, validation, save failure/retry, mobile layout, Providers navigation; zero model requests.');
+  console.log('PASS: Models settings and palette row removed; picker saves model and effort as Pi defaults, marks the current default, invalidates catalogs, survives reload, validates input, reports save failure and retries, fits mobile; zero model requests.');
 } finally {
   socket?.close();
   try { await ab('close'); } catch {}

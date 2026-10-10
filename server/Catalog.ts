@@ -16,7 +16,6 @@ export class Catalog extends Context.Service<
     readonly get: (cwd: string) => Effect.Effect<ModelCatalog>;
     /** Global resources only, for machine-wide settings. */
     readonly global: Effect.Effect<ModelCatalog>;
-    readonly refreshGlobal: Effect.Effect<ModelCatalog>;
     readonly changes: Stream.Stream<void>;
     /** Credentials or defaults changed; every client's pickers must re-probe. */
     readonly invalidate: Effect.Effect<void>;
@@ -112,7 +111,6 @@ export const CatalogLive = Layer.effect(
       invalidate: Effect.sync(() => { epoch++; cache.clear(); }).pipe(Effect.andThen(PubSub.publish(changes, undefined)), Effect.asVoid),
       changes: Stream.fromPubSub(changes),
       global: locked(null),
-      refreshGlobal: locked(null, true),
       get: cwd => locked(cwd),
       refresh: cwd => locked(cwd, true),
     });

@@ -2,6 +2,7 @@ import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { EffortSelect, levelsFor } from "@/components/EffortSelect";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,20 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
   // Literal matching avoids unrelated fuzzy hits and preserves catalog order.
   const needle = query.trim().toLowerCase();
   const visibleModels = needle ? models.filter(m => [m.ref, m.id, m.provider, m.name ?? ""].some(text => text.toLowerCase().includes(needle))) : models;
+  const [saving, setSaving] = useState(false);
+  const isDefault = !!want && want === catalog?.defaultModel && effort === catalog.defaultThinkingLevel;
+  // Pi owns the saved defaults; its catalog invalidation updates every picker's default.
+  const saveDefault = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/settings/defaults", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: want, thinkingLevel: effort }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not save defaults. Try again.");
+      toast.success("Defaults saved for new sessions.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save defaults. Try again.");
+    } finally { setSaving(false); }
+  };
   const label = !catalog ? (noDirectory ? "Model" : "Loading models") : catalog.error ? "No models" : want ? want.split("/").pop() : "Model";
 
   const item = (m: ModelChoice) => (
@@ -99,8 +114,11 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
           </CommandList>
         </Command>
         <Separator />
-        <div className="p-3">
+        <div className="flex flex-col gap-3 p-3">
           <EffortSelect value={effort} onChange={onEffortChange} levels={levelsFor(catalog, want)} defaultLevel={catalog?.defaultThinkingLevel} disabled={disabled} />
+          <Button variant="outline" size="sm" disabled={disabled || saving || isDefault || !want || !!catalog?.error} onClick={() => void saveDefault()}>
+            {saving && <Spinner data-icon="inline-start" />}{isDefault ? "Default for new sessions" : "Use for new sessions"}
+          </Button>
         </div>
       </PickerContent>
     </Popover>

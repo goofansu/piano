@@ -196,15 +196,6 @@ export const AppRouter = HttpRouter.use((router) =>
       return catalog.error ? json({ error: catalog.error }, 502) : json({ commands: catalog.commands ?? [] });
     }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load commands. Reopen the suggestions to retry." }, 502)))));
 
-    yield* router.add("GET", "/api/settings/defaults", Effect.gen(function* () {
-      const defaults = yield* (yield* PiSettings).defaults;
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      const refresh = new URL(request.url, "http://localhost").searchParams.get("refresh") === "true";
-      const catalogs = yield* Catalog;
-      const catalog = yield* refresh ? catalogs.refreshGlobal : catalogs.global;
-      return json({ defaults, catalog });
-    }).pipe(Effect.catchTag("PiSettingsError", error => Effect.succeed(json({ error: error.detail }, 500)))));
-
     yield* router.add("PUT", "/api/settings/defaults", Effect.gen(function* () {
       const body = yield* readBody;
       const parsed = Schema.decodeUnknownExit(SessionDefaults)(body);
