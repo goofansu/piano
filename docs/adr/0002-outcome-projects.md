@@ -2,8 +2,9 @@
 
 - Status: Accepted for Step 1 by the user's implementation request. Grouping is implemented;
   shared context/instructions remain deferred. See [evidence](../research/outcome-projects-step1.md).
-- Related: [staged plan](../outcome-projects.md), [glossary](../glossary.md#planned-outcome-projects),
+- Related: [staged plan](../outcome-projects.md), [glossary](../glossary.md#projects),
   [ADR 0001](0001-pi-rpc-workspace-workbench.md).
+- Naming: code now calls added directories folders and outcome projects simply projects.
 
 Piano currently calls an added directory a project, but a bounded initiative can span repositories,
 and one repository can support several initiatives. Add an optional outcome-project grouping above

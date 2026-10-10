@@ -84,7 +84,8 @@ logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credent
 
 Piano keeps its registry in SQLite at `$XDG_DATA_HOME/piano/piano.db` (default
 `~/.local/share/piano/piano.db`), using Node's built-in SQLite support. SQL tables `folders` hold the
-selected directories and `projects` hold the named session groupings (`outcomeProjects` in code).
+selected directories and `projects` hold the named session groupings, matching `folders` and
+`projects` in code.
 Workspaces, worktree references and session metadata are separate tables. Pi still owns conversation
 files; Git owns repository facts. Unsupported or corrupt databases fail startup rather than being reset.
 

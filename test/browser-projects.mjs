@@ -238,7 +238,7 @@ try {
   await button('Show sidebar'); await settle(); await ab('screenshot', join(evidence, 'mobile-sidebar.png'));
   assert.ok(await evaluate(`[...document.querySelectorAll('nav li')].every(row => { const [session, menu] = row.querySelectorAll('button'); return session.getBoundingClientRect().right <= menu.getBoundingClientRect().left; })`), 'session content and actions do not overlap');
   writeFileSync(join(evidence, 'result.json'), JSON.stringify({ status: 'passed', registry: saved, node: process.version, audit: readFileSync(audit, 'utf8') }, null, 2));
-  console.log('PASS: grouping, empty/ungrouped, workspace diffs, rename/move/leave, running archive/unarchive, closed directory, unavailable members, migration backup and restart');
+  console.log('PASS: grouping, empty/ungrouped, workspace diffs, rename/move/leave, running archive/unarchive, closed directory, unavailable members and restart');
 } finally {
   try { await ab('snapshot'); await ab('screenshot', join(evidence, 'last-view.png')); } catch {}
   try { await ab('close'); } catch {}

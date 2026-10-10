@@ -1,9 +1,9 @@
-# Outcome-based projects
+# Projects
 
 Status: Step 1 implemented; Step 2 remains deferred. See the
 [implementation evidence](research/outcome-projects-step1.md) for verification and limitations.
 [ADR 0002](adr/0002-outcome-projects.md) records the boundary decision. The
-[glossary](glossary.md#planned-outcome-projects) distinguishes UI terminology from existing path fields.
+[glossary](glossary.md#projects) defines the vocabulary. Earlier revisions called these "outcome projects".
 
 ## Goal
 
@@ -18,9 +18,9 @@ it does not resume the deferred evidence/integration phases.
 
 ## Model and terminology
 
-- **Outcome project:** a named, bounded initiative that groups related work independently of where
+- **Project:** a named, bounded initiative that groups related work independently of where
   it runs. It has an identity independent of its name or any filesystem path and can start empty.
-- **Folder/directory:** a code or working location, potentially used by many outcome projects.
+- **Folder/directory:** a code or working location, potentially used by many projects.
   Non-Git directories remain supported; do not rename every existing directory a repository.
 - **Workspace:** the execution context around one selected root or worktree. Grouping must not
   change its identity, path, revision, processes or evidence.
@@ -32,8 +32,7 @@ it does not resume the deferred evidence/integration phases.
 The UI now uses **Project** for outcomes and **Folders** for the sidebar's location groups, each
 a root with its worktrees; a non-Git directory is listed the same way with a Non-Git badge. The
 sidebar's view menu groups sessions by folder, by project (with a No project group) or not at all.
-Existing `project` path fields retain their directory meaning; `outcomeProjects` and
-`outcomeProjectId` hold organization separately. This is not a repository-wide code rename.
+Code uses the same words: `folders` for locations and `projects`/`projectId` for organization.
 
 ## Step 1 — Organize sessions across repositories
 
@@ -47,7 +46,7 @@ Existing `project` path fields retain their directory meaning; `outcomeProjects`
 4. Rename, move/remove a session association, or archive/reopen the project without moving code,
    changing session history or stopping running work.
 
-The initial membership rule is **zero or one outcome project per session**. This is a
+The initial membership rule is **zero or one project per session**. This is a
 simplicity trade-off, not a limitation on repository reuse: different sessions in the same repository
 can belong to different projects. Moving a session is explicit and changes only its association.
 Multi-project session membership can wait for a concrete need; it would also complicate future
@@ -77,13 +76,13 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 
 Extend/version the registry with a backup and validated migration. Preserve current directory
 selections, workspace IDs, `(cwd, sessionId)` references and Pi history paths. Existing sessions begin
-ungrouped; do not turn each existing directory into an outcome project automatically. Reject malformed
+ungrouped; do not turn each existing directory into a project automatically. Reject malformed
 or incompatible data with recovery guidance rather than resetting it.
 
 Registry owns the grouping metadata and references. Pi remains authoritative for conversations and
 configuration; Git owns repository facts; Worktrunk remains behind checkout lifecycle operations.
 Grouping does not change host acquisition or create another Pi child for an already open session.
-A directory's existing trust decision does not change when its sessions join an outcome project.
+A directory's existing trust decision does not change when its sessions join a project.
 
 ### Exit gate
 

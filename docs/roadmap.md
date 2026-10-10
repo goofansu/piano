@@ -24,14 +24,14 @@ improvement, not a prerequisite for or resumption of the deferred deeper workflo
 
 1. **Grouping first:** create/name a project with an optional goal, associate sessions across
    repositories, and archive/reopen the grouping. Keep ungrouped sessions usable, preserve each
-   session's actual workspace, and migrate existing references without creating one outcome project
+   session's actual workspace, and migrate existing references without creating one project
    per directory. The goal is metadata, not instructions delivered to Pi.
 2. **Shared context and instructions later:** explicitly supply versioned project material to member
    sessions, with defined precedence, application boundaries and delivery outcomes. Preserve Pi's
    normal checkout configuration/trust; do not bundle this into the grouping slice.
 
-Step 1 is implemented with registry v2 and distinct Projects/Repositories UI labels; existing
-`project` path fields retain their meaning. [Verification evidence](research/outcome-projects-step1.md)
+Step 1 is implemented with registry v2 and distinct Projects/Folders UI labels; code now uses `folders` and `projects` to
+match. [Verification evidence](research/outcome-projects-step1.md)
 records grouping, non-destructive lifecycle, migration and scratch-browser gates. Step 2 is deferred.
 Covers INV-01–13 at their existing ownership, execution, evidence and trust boundaries.
 

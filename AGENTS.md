@@ -6,11 +6,11 @@ session is one pi session; each running session is one `pi --mode rpc` child. Se
 
 ## Words
 
-Use these in code and prose: **project** (a directory the user added; the UI labels it a
-**Folder**, grouping it with its worktrees, and reserves **Project** for an outcome project, a
-named group of sessions from any folders), **worktree** (a checkout created through piano with `wt`), **session** (one pi session;
-never "thread"), **registry** (the SQLite store that records selected projects, outcome projects,
-worktrees and session references; Pi owns session history).
+Use these in code and prose: **folder** (a directory the user added, shown with its worktrees),
+**project** (a named group of sessions from any folders, toward one outcome), **worktree** (a
+checkout created through piano with `wt`), **session** (one pi session; never "thread"),
+**registry** (the SQLite store that records folders, projects, worktrees and session references;
+Pi owns session history). Pi's own "project trust" keeps Pi's name.
 See [the glossary](docs/glossary.md) for the planned workspace, task and evidence vocabulary.
 
 ## Direction and guardrails

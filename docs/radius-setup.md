@@ -1,7 +1,7 @@
 # Radius setup in Piano
 
 Open **Settings → Radius**, or choose **Radius** from Mod+K. Setup is machine-wide
-for the OS account running Piano, not a browser account or an outcome Project.
+for the OS account running Piano, not a browser account or a Project.
 
 1. **Sign in to Radius.** Uses the existing Pi-backed provider OAuth dialog. Pi owns
    credential storage and refresh; no token is returned to the settings page.
