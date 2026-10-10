@@ -40,7 +40,7 @@ export function JumpTo({ messages }: Props) {
   return <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Jump to message" aria-description={`${total} ${total === 1 ? "message" : "messages"} in the jump list`} aria-haspopup="dialog" aria-expanded={open} title="Jump to…" className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
+        <Button variant="ghost" size="sm" aria-label="Jump to message" aria-description={`${total} ${total === 1 ? "message" : "messages"} in the jump list`} aria-haspopup="dialog" aria-expanded={open} className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink">
           {total} {total === 1 ? "message" : "messages"}
         </Button>
       </PopoverTrigger>
