@@ -196,8 +196,10 @@ function PullRequestForm({ pr, editing, onCancel, onSave }: {
     try {
       const result = await pr.change({ action: "discover" });
       // Only the explicit search reports absence; polling stays silent.
-      if (result && result.link) onSave();
-      else if (result && !result.error) toast("No open PR found for this branch.");
+      if (result) {
+        if (result.link) onSave();
+        else if (!result.error) toast("No open PR found for this branch.");
+      }
     } finally { setFinding(false); }
   };
   const inputRef = useRef<HTMLInputElement>(null);
