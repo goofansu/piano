@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { sessionContext } from "@/lib/sessionContext";
+import { sessionCheckoutMissing, sessionContext, sessionMutable } from "@/lib/sessionContext";
 import type { AppState } from "@/store";
 
 type Target = { cwd: string; sessionId: string; title?: string };
@@ -31,14 +31,15 @@ export function copyAllSessionDetails(state: AppState) {
 }
 
 /** Shared confirmations keep sidebar, header and palette actions identical. */
-export function useSessionActions(send: (command: ClientCommand) => void, enabled: boolean) {
+export function useSessionActions(send: (command: ClientCommand) => void, state: AppState) {
   const [renaming, setRenaming] = useState<Target | null>(null);
   const [deleting, setDeleting] = useState<Target | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const canRename = enabled && !!renaming && !!draftTitle.trim() && draftTitle.trim() !== (renaming.title ?? "");
+  const canRename = !!renaming && sessionMutable(state, renaming) && !sessionCheckoutMissing(state, renaming) && !!draftTitle.trim() && draftTitle.trim() !== (renaming.title ?? "");
+  const canDelete = !!deleting && sessionMutable(state, deleting);
   const rename = (target: Target) => { setDraftTitle(target.title ?? ""); setRenaming(target); };
-  const archive = (target: Target) => { if (enabled) send({ _tag: "archive_session", cwd: target.cwd, sessionId: target.sessionId }); };
+  const archive = (target: Target) => { if (sessionMutable(state, target)) send({ _tag: "archive_session", cwd: target.cwd, sessionId: target.sessionId }); };
   const dialogs = <>
     <Dialog open={!!renaming} onOpenChange={open => !open && setRenaming(null)}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); renameInputRef.current?.focus(); }}>
@@ -68,8 +69,8 @@ export function useSessionActions(send: (command: ClientCommand) => void, enable
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
-          <Button variant="destructive" disabled={!enabled} onClick={() => {
-            if (deleting && enabled) send({ _tag: "delete_session", cwd: deleting.cwd, sessionId: deleting.sessionId });
+          <Button variant="destructive" disabled={!canDelete} onClick={() => {
+            if (deleting && canDelete) send({ _tag: "delete_session", cwd: deleting.cwd, sessionId: deleting.sessionId });
             setDeleting(null);
           }}>Delete</Button>
         </DialogFooter>

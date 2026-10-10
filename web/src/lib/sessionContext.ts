@@ -47,6 +47,26 @@ export function sessionReady(state: AppState): boolean {
   return state.connected && !state.resync && !state.selecting && state.selectionId !== null;
 }
 
+/** The session is the one selected or being selected, whose attachment `sessionReady` describes. */
+export function isSelectedSession(state: AppState, target: SessionRef): boolean {
+  const current = state.session ?? state.selecting;
+  return !!current && current.cwd === target.cwd && current.sessionId === target.sessionId;
+}
+
+/**
+ * Registry mutations (rename, archive, delete) may be sent for this session: always over a live
+ * connection, and for the selected session only once its attachment is settled, so a resync or a
+ * selection in flight cannot race the change. Other sessions do not wait on the selected one.
+ */
+export function sessionMutable(state: AppState, target: SessionRef): boolean {
+  return state.connected && (!isSelectedSession(state, target) || sessionReady(state));
+}
+
+/** Pi cannot run where the checkout or history is gone, and renaming starts Pi. */
+export function sessionCheckoutMissing(state: AppState, target: SessionRef): boolean {
+  return (state.session?.cwd === target.cwd && !!state.session.state.checkoutMissing) || !!sessionReference(state, target)?.unavailable;
+}
+
 /** A worktree's directory without the `folder.` prefix Worktrunk gives it, since the folder is named beside it. */
 export function worktreeName(folder: string, path: string): string {
   const base = path.split("/").pop() ?? path;

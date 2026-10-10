@@ -19,7 +19,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { folderFor, sessionReference } from "@/lib/sessionContext";
+import { folderFor, sessionCheckoutMissing, sessionMutable, sessionReference } from "@/lib/sessionContext";
 import { dateGroups, flatSessions, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy } from "@/lib/sidebarView";
 import { readJson, writeJson } from "@/lib/storage";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -293,7 +293,7 @@ function SessionRow({ t, selected, disabled, hint, state, send, select, actions,
   t: SessionTarget; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
   const [enter] = useState(reveal);
-  const checkoutMissing = state.session?.cwd === t.cwd && state.session.state.checkoutMissing;
+  const mutable = sessionMutable(state, t);
   // Live host state comes from the `hosts` broadcast, which changes more often than the folder list.
   const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
   const done = state.done.includes(sessionKey(t));
@@ -327,12 +327,12 @@ function SessionRow({ t, selected, disabled, hint, state, send, select, actions,
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
             <ProjectMenu state={state} send={send} session={t} onDialog={onProjectDialog} />
-            <DropdownMenuItem disabled={!state.connected || checkoutMissing} onSelect={() => actions.rename(t)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
-            <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.archive(t)}><ArchiveIcon /> Archive</DropdownMenuItem>
+            <DropdownMenuItem disabled={!mutable || sessionCheckoutMissing(state, t)} onSelect={() => actions.rename(t)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
+            <DropdownMenuItem disabled={!mutable} onSelect={() => actions.archive(t)}><ArchiveIcon /> Archive</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem variant="destructive" disabled={!state.connected} onSelect={() => actions.delete(t)}><Trash2Icon /> Delete</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" disabled={!mutable} onSelect={() => actions.delete(t)}><Trash2Icon /> Delete</DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -349,7 +349,7 @@ type Member = Pick<SessionReference, "cwd" | "sessionId" | "title" | "unavailabl
 
 /** Every listed session in one list, each with its location. */
 function SessionList({ sessions, current, state, send, select, reveal, onProjectDialog }: Omit<GroupProps, "open" | "onOpenChange" | "openNew"> & { sessions: readonly Member[] }) {
-  const actions = useSessionActions(send, state.connected);
+  const actions = useSessionActions(send, state);
   return <>
     <ul className="flex flex-col gap-1">
       {sessions.map(s => (
@@ -365,7 +365,7 @@ function SessionList({ sessions, current, state, send, select, reveal, onProject
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
 function ProjectGroup({ project, sessions, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: Project | null; sessions: readonly Member[] }) {
   const [enter] = useState(reveal);
-  const actions = useSessionActions(send, state.connected);
+  const actions = useSessionActions(send, state);
   const members = sessions;
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -413,7 +413,7 @@ function ProjectGroup({ project, sessions, current, open, onOpenChange, state, s
 
 function FolderGroup({ folder, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { folder: FolderView }) {
   const [enter] = useState(reveal);
-  const actions = useSessionActions(send, state.connected);
+  const actions = useSessionActions(send, state);
   const [closing, setClosing] = useState(false);
 
   return (

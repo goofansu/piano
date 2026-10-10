@@ -9,7 +9,7 @@ import { copyAllSessionDetails, copySessionValue, useSessionActions } from "@/co
 import type { SettingsSection } from "@/components/SettingsPage";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
-import { directoryTrust, sessionContext, sessionProject } from "@/lib/sessionContext";
+import { directoryTrust, sessionCheckoutMissing, sessionContext, sessionMutable, sessionProject } from "@/lib/sessionContext";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
 import { SESSION_DISPLAYS, useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -50,8 +50,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
   }, [open, search]);
   const current = state.session ?? state.selecting;
   const details = sessionContext(state);
-  const { ready } = details;
-  const actions = useSessionActions(send, ready);
+  const actions = useSessionActions(send, state);
   const target = state.session?.sessionId ? { cwd: state.session.cwd, sessionId: state.session.sessionId, title: details.title } : undefined;
   const sessions = useMemo(() => {
     const visible = state.folders.flatMap(p => p.sessions.map(t => ({ ...t, folder: p.name, inWorktree: !p.worktrees.some(w => w.root && w.path === t.cwd) })));
@@ -149,9 +148,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
                 {display === d.value && <><CheckIcon className="ml-auto" aria-hidden /><span className="sr-only">current</span></>}
               </CommandItem>
             ))}
-            <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><TextCursorInputIcon /> Rename</CommandItem>
-            <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
-            <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
+            <CommandItem value="Rename" disabled={!target || !sessionMutable(state, target) || sessionCheckoutMissing(state, target)} onSelect={() => run(() => { if (target) actions.rename(target); })}><TextCursorInputIcon /> Rename</CommandItem>
+            <CommandItem value="Archive" disabled={!target || !sessionMutable(state, target)} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
+            <CommandItem value="Delete" disabled={!target || !sessionMutable(state, target)} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
             <CommandItem value="new session here" disabled={state.session.state.checkoutMissing} keywords={["new", "here", "directory"]} onSelect={() => run(() => { if (state.session) openNew(state.session.cwd); })}>
               <PlusIcon /> <span className="shrink-0">New session here</span> <span className="min-w-0 truncate font-mono text-xs text-ink-3">{abbrevPath(state.session.cwd)}</span>
             </CommandItem>
