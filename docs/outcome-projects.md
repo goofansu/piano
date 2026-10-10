@@ -60,8 +60,8 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 - Derive the participating locations from member sessions initially. Do not add a separate repository
   ownership hierarchy or infer membership for every session in a selected repository.
 - A project has no goal or description field. An optional goal shipped at first and was removed to
-  keep a project to its name. Registries keep the retired `goal` column so
-  version-1 databases open without a migration; it is never read or written.
+  keep a project to its name. Opening a version-1 registry drops its `goal` column after saving a
+  `<database>.v1-backup` copy (see the [README](../README.md#registry-storage)).
 - Archiving affects project visibility only. It is not session archive, abort, process release,
   checkout removal, verification, approval or proof that the outcome was achieved. Unarchiving restores
   the grouping; running work and direct session access remain available.

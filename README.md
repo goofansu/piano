@@ -89,6 +89,10 @@ selected directories and `projects` hold the named session groupings, matching `
 Workspaces, worktree references and session metadata are separate tables. Pi still owns conversation
 files; Git owns repository facts. Unsupported or corrupt databases fail startup rather than being reset.
 
+Piano upgrades an older database in place when it opens it. Upgrading from version 1 (which had a
+project goal) to version 2 first writes a private copy, `<database>.v1-backup`; an older Piano can open
+that copy, but not the upgraded file.
+
 Run one backend per database; stale writes from a second backend fail explicitly and require a
 restart. SQLite transactions commit before the in-memory view changes.
 
