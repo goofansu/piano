@@ -1,5 +1,4 @@
-import type { ClientCommand, ServerMessage } from "@shared/wire";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppLayout, LayoutView, useAppLayout } from "@/components/AppLayout";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -13,52 +12,35 @@ import { Sidebar, SidebarRail } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Toaster } from "@/components/ui/sonner";
+import type { NotifyLevel } from "@/lib/client";
 import { hasMod } from "@/lib/keys";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
 import { catalogEntry } from "@/lib/sessionCatalog";
 import { sessionReady, workspaceFor } from "@/lib/sessionContext";
 import { readJson, writeJson } from "@/lib/storage";
+import { useClient } from "@/lib/useClient";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
-import { useConnection } from "@/lib/ws";
-import { type Action, type AppState, initialState, reduce, sessionDelivery } from "@/store";
+import { type AppState, initialState } from "@/store";
 
 /** Model catalogs outlive reloads so the picker opens at once; its refresh button re-probes Pi. */
 const CATALOGS_KEY = "piano.catalogs";
 
+const notify = (message: string, level?: NotifyLevel) =>
+  level === "success" ? toast.success(message) : level === "info" ? toast.info(message) : level === "warning" ? toast.warning(message) : level === "error" ? toast.error(message) : toast(message);
+
 export default function App() {
-  const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState => {
-    const seeded = { ...s, catalogs: readJson<AppState["catalogs"]>(CATALOGS_KEY, {}) };
+  const { state, client } = useClient((): AppState => {
+    const seeded = { ...initialState, catalogs: readJson<AppState["catalogs"]>(CATALOGS_KEY, {}) };
     const route = parseRoute(location);
     return route.kind === "session" ? { ...seeded, view: { kind: "session" } } : { ...seeded, view: { kind: "new", projectId: route.kind === "new" ? route.projectId : undefined } };
-  });
+  }, notify);
+  const { dispatch, send } = client;
   useEffect(() => {
     // Without storage the server cache still answers.
     writeJson(CATALOGS_KEY, Object.fromEntries(Object.entries(state.catalogs).filter(([, c]) => !c.error)));
   }, [state.catalogs]);
   const layout = useAppLayout();
   const { closeMobile, show: showSidebar, toggle: toggleSidebar } = layout;
-  const latest = useRef(state);
-  latest.current = state;
-  // Socket frames can arrive before React renders. Keep acceptance/correlation current.
-  const dispatch = useCallback((action: Action) => {
-    latest.current = reduce(latest.current, action);
-    reactDispatch(action);
-  }, []);
-
-  const onMessage = useCallback((m: ServerMessage) => {
-    const notifySession = m._tag === "session" && sessionDelivery(latest.current, m) === "apply";
-    dispatch({ type: "server", message: m });
-    const notify = (message: string, level?: "success" | "info" | "warning" | "error") =>
-      level === "success" ? toast.success(message) : level === "info" ? toast.info(message) : level === "warning" ? toast.warning(message) : level === "error" ? toast.error(message) : toast(message);
-    if (m._tag === "error") notify(m.message, "error");
-    else if (m._tag === "toast") notify(m.message, m.level);
-    else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError) notify(m.result.stopError, "error");
-    else if (m._tag === "worktree_result" && m.result.status === "ready" && m.result.creation) notify(`Created ${m.result.branch} from ${m.result.creation.baseBranch} · hooks ${m.result.creation.hooks}`, "success");
-    else if (notifySession && m._tag === "session" && m.event._tag === "notice") notify(m.event.message, m.event.level);
-    else if (notifySession && m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) toast.warning(`Pi stopped: ${m.event.reason}`);
-  }, []);
-  const onStatus = useCallback((connected: boolean) => dispatch({ type: "connected", connected }), []);
-  const conn = useConnection(onMessage, onStatus);
 
   const [settingsOpen, setSettingsOpen] = useState(() => parseRoute(location).kind === "settings");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(() => {
@@ -68,41 +50,14 @@ export default function App() {
   const openSettingsSection = useCallback((section: SettingsSection = "providers") => { setSettingsSection(section); setSettingsOpen(true); closeMobile(); }, [closeMobile]);
   const openSettings = useCallback(() => openSettingsSection("providers"), [openSettingsSection]);
   const closeSettings = useCallback(() => { setSettingsOpen(false); closeMobile(); }, [closeMobile]);
-  const send = useCallback((m: ClientCommand) => {
-    if (m._tag === "select" || m._tag === "create_session") {
-      const selectionId = crypto.randomUUID();
-      dispatch({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null,
-        firstMessage: m._tag === "create_session" && (m.text?.trim() || m.attachments?.length)
-          ? { text: m.text ?? "", attachments: m.attachments?.map(a => ({ kind: "image" as const, url: `data:${a.mimeType};base64,${a.data}` })) } : undefined });
-      conn.send({ ...m, selectionId });
-    } else if (m._tag === "act") {
-      const s = latest.current;
-      if (sessionReady(s) && s.selectionId) conn.send({ ...m, selectionId: s.selectionId });
-    } else conn.send(m);
-  }, [conn, dispatch]);
   const select = useCallback(
     (cwd: string, sessionId: string | null) => {
       closeMobile();
       setSettingsOpen(false);
-      // Clicking the session already on screen (or already being fetched) is a no-op.
-      const current = latest.current.session ?? latest.current.selecting;
-      if (current && current.cwd === cwd && current.sessionId === sessionId && latest.current.view.kind === "session") return;
-      send({ _tag: "select", cwd, sessionId });
+      client.select(cwd, sessionId);
     },
-    [send, closeMobile],
+    [client, closeMobile],
   );
-
-  // Re-select the current session after a reconnect so the server re-attaches us.
-  useEffect(() => {
-    const current = latest.current.session ?? latest.current.selecting;
-    if (state.connected && current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.connected]);
-  useEffect(() => {
-    const current = latest.current.session;
-    // The reconnect effect above may already have started a fresh attachment.
-    if (state.connected && latest.current.resync && current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
-  }, [state.connected, state.resync, send]);
 
   const [projectDialog, setProjectDialog] = useState<ProjectDialog | null>(null);
   const openNew = useCallback((cwd?: string, projectId?: string) => {
@@ -140,7 +95,7 @@ export default function App() {
   const applyRoute = useCallback(() => {
     const r = wanted.current;
     if (!r) return;
-    const s = latest.current;
+    const s = client.getState();
     if (r.kind === "settings") {
       wanted.current = null;
       setSettingsSection(r.section);
