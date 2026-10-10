@@ -160,6 +160,9 @@ with it. The conversation is an inset sheet with a 1px line and the layer-1 shad
 fill marks the selected session. Rows are 36px with a
 pointer and 44px on touch screens.
 
+A session row is its title alone. Where it runs and which project it belongs to live in the session
+header and the sidebar's groupings, not on every row.
+
 ## Mark
 
 One mark everywhere: the app's logo tile, the small keys in sidebar rows and the transcript, the

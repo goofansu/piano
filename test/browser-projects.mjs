@@ -128,14 +128,13 @@ try {
   await file('API session', 'Launch subscriptions'); await file('Web session', 'Launch subscriptions');
   assert.equal(member('one').projectId, project('Launch subscriptions').id);
   assert.equal(member('two').projectId, project('Launch subscriptions').id);
-  // Non-project groupings share one metadata line for location and registry membership.
+  // A session row is its title alone in every grouping; project and location live in the header and the groups.
   for (const grouping of ['Date', 'None', 'Folder']) {
     await groupBy(grouping);
     if (grouping === 'Folder') { await openGroup('api'); await openGroup('web'); }
-    await wait(`document.querySelector('nav li:has([aria-label="Session menu for API session"]) .text-brand')?.textContent === 'Launch subscriptions'`);
-    const label = await evaluate(`(() => { const row = document.querySelector('nav li:has([aria-label="Session menu for API session"])'); const label = row.querySelector('.text-brand'); const title = [...row.querySelectorAll('span')].find(s => s.textContent === 'API session'); const folder = [...row.querySelectorAll('span')].find(s => s.textContent === 'api'); return { text: label.textContent, tooltip: label.title, small: label.parentElement.classList.contains('text-xs'), below: label.getBoundingClientRect().top > title.getBoundingClientRect().top, sameLine: !folder || Math.abs(label.getBoundingClientRect().top - folder.getBoundingClientRect().top) < 2, height: row.getBoundingClientRect().height };  })()`);
-    assert.deepEqual(label, { text: 'Launch subscriptions', tooltip: 'Goal for Launch subscriptions', small: true, below: true, sameLine: true, height: 48 });
-    assert.equal(await evaluate(`!!document.querySelector('nav li:has([aria-label="Session menu for Accessibility session"]) .text-brand')`), false);
+    await wait(`!!document.querySelector('nav li:has([aria-label="Session menu for API session"])')`);
+    const row = await evaluate(`(() => { const row = document.querySelector('nav li:has([aria-label="Session menu for API session"])'); return { text: row.querySelector('button').innerText.trim(), height: row.getBoundingClientRect().height }; })()`);
+    assert.deepEqual(row, { text: 'API session', height: 36 });
     await ab('screenshot', join(evidence, `session-project-${grouping.toLowerCase()}.png`));
   }
   await ab('screenshot', join(evidence, 'cross-repository.png'));
@@ -155,7 +154,7 @@ try {
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="New session in Empty project"]')`), true);
   // Opening a member from its project group shows that session's own directory and changes only.
   for (const [title, cwd, id, marker, other] of [['API session', api, 'one', 'API CHANGE', 'WEB CHANGE'], ['Web session', web, 'two', 'WEB CHANGE', 'API CHANGE']]) {
-    await button(`${title} ${cwd === api ? 'api' : 'web'}`);
+    await button(title);
     await ab('wait', '--text', `History ${id}`);
     assert.equal(await evaluate(`[...document.querySelectorAll('header p[title]')].find(p => p.textContent.startsWith('Working directory'))?.title`), cwd);
     assert.equal(await evaluate(`document.querySelector('header button.text-brand')?.textContent`), 'Launch subscriptions');
@@ -215,7 +214,7 @@ try {
   assert.equal(registry().folders.includes(api), false);
   assert.equal(member('one').projectId, project('Subscriptions').id);
   await groupBy('Project'); await ab('wait', '--text', 'No project');
-  await button('API session api'); await ab('wait', '--text', 'History one');
+  await button('API session'); await ab('wait', '--text', 'History one');
   assert.equal(await evaluate(`[...document.querySelectorAll('header p[title]')].find(p => p.textContent.startsWith('Working directory'))?.title`), api);
   await ab('reload'); await ab('wait', '--text', 'History one');
   // Explicit unavailable members, never silently removed or recreated.
