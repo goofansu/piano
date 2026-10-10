@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { listRow } from "@/lib/styles";
-import { currentEntry, type JumpEntry, jumpEntries, jumpTo, TRANSCRIPT_SELECTOR } from "@/lib/transcript";
+import { currentEntry, type JumpEntry, jumpEntries, jumpTo, TRANSCRIPT_SELECTOR, transcriptRows } from "@/lib/transcript";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
@@ -17,7 +17,8 @@ export function JumpTo({ messages }: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string>("bottom");
   const list = useRef<HTMLUListElement>(null);
-  const entries = useMemo(() => jumpEntries(messages), [messages]);
+  // Built from the rows the transcript renders, so every entry lands on a row that is there.
+  const entries = useMemo(() => jumpEntries(transcriptRows(messages)), [messages]);
   const total = entries.filter(entry => entry.kind === "user" || entry.kind === "assistant").length;
   // Opening reads where the reader is and centres that entry in the list.
   useEffect(() => {
