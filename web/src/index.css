@@ -297,6 +297,17 @@
   }
 }
 
+/* A selected row: parchment in light mode, so it reads warm and distinct from the driftwood hover. */
+:root {
+  --selected: oklch(0.88 0.021 53);
+}
+.dark {
+  --selected: oklch(0.84 0.04 55 / 14%);
+}
+[data-slot="sidebar-menu-button"][data-active="true"] {
+  background: var(--selected);
+}
+
 /* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */
 .prose-chat {
   overflow-wrap: anywhere;
