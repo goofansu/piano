@@ -165,8 +165,10 @@ header and the sidebar's groupings, not on every row.
 
 The session header shows where the session runs in Zed's form, `folder ⇄ worktree / ⑂ branch`
 (worktree in mono, without Worktrunk's `folder.` prefix; no worktree segment for the folder itself).
-It runs at full length while it fits. When space runs out the branch gives way first, then the
-worktree; the folder keeps up to 40%. The full path is in the folder's tooltip and the session menu.
+It runs at full length while it fits. When space runs out, the worktree and branch truncate down to
+about 6rem each, then drop out whole from the right, branch first: the line may wrap, but only its
+first row shows. The folder always stays. The full path is in the session menu; the segments carry
+no tooltips, since they show their own text.
 
 ## Mark
 

@@ -110,7 +110,7 @@ try {
       const main = document.querySelector('main').getBoundingClientRect();
       const toast = node.getBoundingClientRect();
       if (!toast.width || !toast.height) return;
-      window.lastToast = { text: node.textContent, mainLeft: main.left, mainRight: main.right, mainCenter: main.left + main.width / 2, toastLeft: toast.left, toastRight: toast.right, toastCenter: toast.left + toast.width / 2, toastTop: node.closest('[data-sonner-toaster]').getBoundingClientRect().top, headerBottom: Math.max(...[...document.querySelectorAll('main header *')].filter(e => !e.children.length).map(e => e.getBoundingClientRect()).filter(r => r.width && r.height).map(r => r.bottom)) };
+      window.lastToast = { text: node.textContent, mainLeft: main.left, mainRight: main.right, mainCenter: main.left + main.width / 2, toastLeft: toast.left, toastRight: toast.right, toastCenter: toast.left + toast.width / 2, toastTop: node.closest('[data-sonner-toaster]').getBoundingClientRect().top, headerBottom: Math.max(...[...document.querySelectorAll('main header *')].filter(e => !e.children.length).filter(e => { const clip = e.parentElement.closest('.overflow-hidden'); return !clip || e.getBoundingClientRect().top < clip.getBoundingClientRect().bottom; }).map(e => e.getBoundingClientRect()).filter(r => r.width && r.height).map(r => r.bottom)) };
     })).observe(document.body, { childList: true, subtree: true }); true`);
   for (const [width, height] of [[1280, 900], [390, 844], [320, 700]]) {
     await ab('set', 'viewport', String(width), String(height));

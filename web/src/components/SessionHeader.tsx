@@ -35,21 +35,24 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
           </div>
           {/* Plain workspace metadata has no dedicated UI primitive. */}
           <div className="col-start-1 row-start-2 flex min-w-0 items-center gap-2">
-            {/* Full length while it fits; on narrow screens the branch gives way first, then the worktree. */}
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-muted-foreground">
-              <p className="max-w-2/5 shrink-0 truncate">
+            {/* Full length while it fits. When space runs short each segment truncates to about 6rem, then
+                drops out whole, branch first: the line may wrap, but only its first row shows. */}
+            <div className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-center gap-x-1.5 overflow-hidden text-xs text-muted-foreground">
+              <p className="max-w-full shrink-0 truncate">
                 <span className="sr-only">{worktree ? "Folder: " : "Working directory: "}</span>{folder}
               </p>
-              {worktree && <p className="flex min-w-0 items-center gap-1 font-mono">
+              {worktree && <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1 font-mono">
                 <SplitIcon aria-hidden="true" className="size-3 shrink-0 rotate-90" />
                 <span className="sr-only">Worktree: </span>
                 <span className="truncate">{worktree}</span>
               </p>}
-              {branch && <span aria-hidden="true" className="text-ink-3/60">/</span>}
-              {branch && <p className="flex min-w-12 flex-1 items-center gap-1 font-mono">
-                <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
-                <span className="sr-only">Git branch: </span>
-                <span className="truncate">{branch}</span>
+              {branch && <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5 font-mono">
+                {(folder || worktree) && <span aria-hidden="true" className="font-sans text-ink-3/60">/</span>}
+                <span className="flex min-w-0 items-center gap-1">
+                  <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
+                  <span className="sr-only">Git branch: </span>
+                  <span className="truncate">{branch}</span>
+                </span>
               </p>}
             </div>
           </div>

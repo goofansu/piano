@@ -100,7 +100,7 @@ try {
   observations.metadataLayout = await evaluate(`(() => {
     const [path, branch] = document.querySelectorAll('main header p');
     const pr = document.querySelector(${JSON.stringify(badge(42))}).getBoundingClientRect();
-    return { folder: path.textContent.replace('Working directory: ', ''), branch: branch.textContent.replace('Git branch: ', ''),
+    return { folder: path.textContent.replace('Working directory: ', ''), branch: branch.textContent.replace('/', '').replace('Git branch: ', '').trim(),
       truncated: [...branch.querySelectorAll('span')].some(s => s.scrollWidth > s.clientWidth),
       readable: path.getBoundingClientRect().width >= 48 && branch.getBoundingClientRect().width >= 48,
       clearOfPR: branch.getBoundingClientRect().right <= pr.left };
