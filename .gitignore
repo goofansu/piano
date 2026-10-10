@@ -1,3 +1,6 @@
 node_modules
 web/node_modules
 web/dist
+
+# Claude Code worktrees carry their own biome.json
+.claude/worktrees/

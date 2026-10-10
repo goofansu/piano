@@ -40,7 +40,7 @@ sudo systemd-run --collect --unit="piano-deploy-$(date +%s)-$$" /bin/bash -c '
     esac
   done
   systemctl restart piano.service &&
-  curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/projects -o /dev/null &&
+  curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/folders -o /dev/null &&
   curl -fsS http://127.0.0.1:8000/ -o /dev/null &&
   echo "DEPLOY OK"
 '
