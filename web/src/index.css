@@ -13,9 +13,9 @@
  *   2 raised   things that float over the canvas: menus, popovers, tooltips
  *   3 overlay  things that take over: dialogs, the mobile sidebar sheet
  *
- * Colour: a moonstone canvas and warm-white sheet by day, midnight and evening blue with
- * parchment ink by night. One accent means "live" (the focus ring, the send key, the
- * selection): evening blue by day, parchment by night. Status hues are Lefos's earth
+ * Colour: a moonstone canvas and warm-white sheet in light mode, midnight and evening blue with
+ * parchment ink in dark mode. One accent means "live" (the focus ring, the send key, the
+ * selection): evening blue in light mode, parchment in dark mode. Status hues are Lefos's earth
  * accents. Contrast sets lightness (4.5:1 text, 3:1 glyphs); chroma stays capped.
  */
 @import "tailwindcss";
@@ -119,7 +119,7 @@
 }
 
 .dark {
-  /* Lefos after dusk: midnight canvas, evening-blue layers and warm parchment ink. Elevation adds
+  /* Lefos in dark mode: midnight canvas, evening-blue layers and warm parchment ink. Elevation adds
    * lightness so menus and dialogs separate without bright outlines. */
   --surface-0: oklch(0.215 0.022 257);
   --conversation: oklch(0.25 0.022 257);
@@ -141,7 +141,7 @@
   --ink-2: oklch(0.8 0.012 62);
   --ink-3: oklch(0.76 0.014 60);
 
-  /* By night the one colour turns to parchment, the warm light Lefos sets on evening blue. */
+  /* In dark mode the one colour turns to parchment, the warm light Lefos sets on evening blue. */
   --brand: oklch(0.84 0.04 55);
   --brand-ink: oklch(0.215 0.022 257);
   --brand-soft: oklch(0.84 0.04 55 / 12%);
