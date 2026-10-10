@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { NodeServices } from '@effect/platform-node';
-import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from 'effect';
-import { makeDelivery } from '../server/BoundedDelivery.ts';
+import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from 'effect';
+import { makeDelivery, makeSocketDelivery, socketLimits } from '../server/BoundedDelivery.ts';
 import { PiCli } from '../server/PiCli.ts';
 import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
 import type { SessionFrame } from '../shared/wire.ts';
@@ -19,6 +19,66 @@ test('delivery byte budgets fail oversized frames and retained backlogs without 
     }).pipe(Effect.timeout('1 second')));
   }
 });
+
+// A fake socket: `written` holds each frame the delivery wrote, as "<deliveryId>:<value>".
+const socket = (limits: Partial<typeof socketLimits> = {}) => Effect.gen(function* () {
+  const writes = yield* Queue.unbounded<string>();
+  const written: string[] = [];
+  const delivery = yield* makeSocketDelivery((text: string) => Queue.offer(writes, text).pipe(Effect.asVoid),
+    (value: string, id) => `${id}:${value}`, { ...socketLimits, ackTimeout: '1 second', ...limits });
+  // Drain what the writer could write now; anything still blocked waits for credit.
+  const settle = Effect.sleep('20 millis').pipe(Effect.andThen(Queue.clear(writes)), Effect.map(texts => { written.push(...texts); return written.map(t => t.split(':')[0]).join(','); }));
+  return { delivery, settle };
+});
+
+const scoped = <A, E>(work: Effect.Effect<A, E, Scope.Scope>) => Effect.runPromise(work.pipe(Effect.scoped, Effect.timeout('5 seconds')));
+
+test('INV-05: the socket window holds unacknowledged frames and cumulative acks release them in order', () => scoped(Effect.gen(function* () {
+  const { delivery, settle } = yield* socket({ window: { frames: 2, bytes: 1024 } });
+  for (const value of ['a', 'b', 'c', 'd', 'e', 'f']) yield* delivery.offer(value);
+  assert.equal(yield* settle, '1,2', 'a saturated window stops writing');
+  yield* delivery.ack(99); // never written: no credit
+  assert.equal(yield* settle, '1,2');
+  yield* delivery.ack(2); // out of order and cumulative: acknowledges 1 and 2
+  assert.equal(yield* settle, '1,2,3,4');
+  yield* delivery.ack(1); yield* delivery.ack(2); // stale: no extra credit
+  assert.equal(yield* settle, '1,2,3,4');
+  yield* delivery.ack(3);
+  assert.equal(yield* settle, '1,2,3,4,5');
+  yield* delivery.ack(5);
+  assert.equal(yield* settle, '1,2,3,4,5,6');
+  assert.equal(yield* delivery.closed.pipe(Effect.timeoutOption('20 millis'), Effect.map(o => o._tag)), 'None', 'acknowledged delivery stays open');
+})));
+
+test('INV-05: the socket window also bounds unacknowledged bytes', () => scoped(Effect.gen(function* () {
+  const { delivery, settle } = yield* socket({ window: { frames: 32, bytes: 12 } });
+  for (const value of ['xxxx', 'yyyy', 'zzzz']) yield* delivery.offer(value); // 6 bytes per frame
+  assert.equal(yield* settle, '1,2');
+  yield* delivery.ack(1);
+  assert.equal(yield* settle, '1,2,3');
+})));
+
+test('INV-05: a missing acknowledgement closes the socket to retry later, even below the window', () => scoped(Effect.gen(function* () {
+  const { delivery } = yield* socket({ ackTimeout: '50 millis' });
+  yield* delivery.offer('a');
+  const closed = yield* delivery.closed;
+  assert.equal(closed.code, 1013); assert.match(closed.reason, /acknowledgement timed out/);
+})));
+
+test('INV-05: an oversized frame closes as too large and a lagging consumer closes to retry later', () => scoped(Effect.gen(function* () {
+  const big = yield* socket({ frameBytes: 8, queue: { messages: 256, bytes: 1024 } });
+  yield* big.delivery.offer('123456789');
+  const tooLarge = yield* big.delivery.closed;
+  assert.equal(tooLarge.code, 1009); assert.match(tooLarge.reason, /delivery limit/);
+  assert.equal(yield* big.settle, '', 'an oversized frame is never written');
+  const lagging = yield* socket({ window: { frames: 1, bytes: 1024 }, queue: { messages: 2, bytes: 1024 } });
+  for (const value of ['a', 'b', 'c', 'd', 'e']) yield* lagging.delivery.offer(value);
+  const behind = yield* lagging.delivery.closed;
+  assert.equal(behind.code, 1013); assert.match(behind.reason, /reconnect for a current snapshot/);
+  // The first close reason wins.
+  yield* lagging.delivery.close('later', 1000);
+  assert.equal((yield* lagging.delivery.closed).code, 1013);
+})));
 
 const run = <A, E>(work: Effect.Effect<A, E, PiSessions | Scope.Scope>) => Effect.runPromise(work.pipe(
   Effect.scoped, Effect.timeout('10 seconds'),
