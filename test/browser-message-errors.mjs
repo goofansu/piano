@@ -68,6 +68,7 @@ async function ab(...args) {
   });
   commands.push({ args, ...result }); assert.equal(result.status, 0, result.stderr || result.stdout); return result.stdout.trim();
 }
+const paletteKey = process.platform === 'darwin' ? 'Meta+k' : 'Control+k';
 const evaluate = async js => JSON.parse(await ab('eval', js));
 function check(condition, message) { if (!condition) failures.push(message); }
 async function capture(name) {
@@ -136,14 +137,12 @@ try {
   check((await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`)).includes('Command aborted'), 'Tool retains Command aborted detail');
   await capture('tool-aborted');
   // Session display is display-only, persists across reload, and is reversible.
-  await ab('press', 'Control+k');
-  await ab('find', 'role', 'option', 'click', '--name', 'Appearance', '--exact');
-  await ab('find', 'role', 'radio', 'click', '--name', 'Messages only', '--exact');
+  await ab('find', 'role', 'button', 'click', '--name', 'Session information and actions', '--exact');
+  const sessionMenu = await ab('snapshot', '-i');
+  check(!/menuitem "(Rename|Archive|Delete)"/.test(sessionMenu), 'Session menu leaves Rename, Archive and Delete to the sidebar and palette');
+  await capture('display-menu');
+  await ab('find', 'role', 'menuitemradio', 'click', '--name', 'Messages only', '--exact');
   check(await evaluate(`localStorage.getItem('piano:session-display')`) === 'messages', 'Session display uses the renamed localStorage key');
-  check((await ab('snapshot')).includes('Session display'), 'Appearance labels the preference Session display');
-  await capture('appearance-messages-only');
-  await ab('press', 'Control+k');
-  await ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
   await ab('wait', '--text', 'Partial answer before provider failure.');
   const messagesOnly = await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`);
   check(!messagesOnly.includes('echo duplicate-tool') && !messagesOnly.includes('Command aborted'), 'Messages only hides tool calls and results');
@@ -161,11 +160,8 @@ try {
   await ab('reload');
   await ab('wait', '--text', 'Partial answer before provider failure.');
   check(!(await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`)).includes('echo duplicate-tool'), 'Preference survives reload');
-  await ab('press', 'Control+k');
-  await ab('find', 'role', 'option', 'click', '--name', 'Appearance', '--exact');
-  await ab('find', 'role', 'radio', 'click', '--name', 'Show everything', '--exact');
-  await ab('press', 'Control+k');
-  await ab('find', 'role', 'option', 'click', '--name', 'Home', '--exact');
+  await ab('press', paletteKey);
+  await ab('find', 'role', 'option', 'click', '--name', 'Show everything');
   await ab('wait', '--text', 'echo duplicate-tool');
   const restored = await evaluate(`document.querySelector('[data-slot="transcript"]').innerText`);
   check(restored.includes('echo duplicate-tool') && restored.includes('Intermediate commentary before tool activity.'), 'Show everything restores tool history and intermediate commentary');

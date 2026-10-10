@@ -2,6 +2,10 @@ import { useSyncExternalStore } from "react";
 import { readStorage, writeStorage } from "@/lib/storage";
 
 export type SessionDisplay = "everything" | "messages";
+export const SESSION_DISPLAYS = [
+  { value: "everything", label: "Show everything" },
+  { value: "messages", label: "Messages only" },
+] as const satisfies readonly { value: SessionDisplay; label: string }[];
 const KEY = "piano:session-display";
 const normalize = (value: string | null): SessionDisplay => value === "messages" ? "messages" : "everything";
 let display = normalize(readStorage(KEY));

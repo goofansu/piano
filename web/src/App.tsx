@@ -62,10 +62,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(() => parseRoute(location).kind === "settings");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(() => {
     const route = parseRoute(location);
-    return route.kind === "settings" ? route.section : "appearance";
+    return route.kind === "settings" ? route.section : "models";
   });
-  const openSettingsSection = useCallback((section: SettingsSection = "appearance") => { setSettingsSection(section); setSettingsOpen(true); closeMobile(); }, [closeMobile]);
-  const openSettings = useCallback(() => openSettingsSection("appearance"), [openSettingsSection]);
+  const openSettingsSection = useCallback((section: SettingsSection = "models") => { setSettingsSection(section); setSettingsOpen(true); closeMobile(); }, [closeMobile]);
+  const openSettings = useCallback(() => openSettingsSection("models"), [openSettingsSection]);
   const closeSettings = useCallback(() => { setSettingsOpen(false); closeMobile(); }, [closeMobile]);
   const send = useCallback((m: ClientCommand) => {
     if (m._tag === "select" || m._tag === "create_session") {

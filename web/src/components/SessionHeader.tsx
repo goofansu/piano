@@ -1,21 +1,20 @@
-import type { ClientCommand } from "@shared/wire";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, ListIcon, MessageSquareIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
-import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
+import { copyAllSessionDetails, currentSessionDetails, sessionWorkspace } from "@/components/SessionActions";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevPath } from "@/lib/format";
+import { SESSION_DISPLAYS, useSessionDisplay } from "@/lib/useSessionDisplay";
 import type { AppState } from "@/store";
 
-export function SessionHeader({ state, send, onMenu, openNew, openProject, status, openChanges, pullRequest, openPullRequest }: {
-  state: AppState; send: (command: ClientCommand) => void; onMenu: () => void; openNew: (cwd?: string) => void; openProject: (id: string) => void;
+export function SessionHeader({ state, onMenu, openNew, openProject, status, openChanges, pullRequest, openPullRequest }: {
+  state: AppState; onMenu: () => void; openNew: (cwd?: string) => void; openProject: (id: string) => void;
   status: string; openChanges: () => void; pullRequest: React.ReactNode; openPullRequest: () => void;
 }) {
   const session = state.session;
   const { title, branch, sessionId, project } = currentSessionDetails(state);
-  const ready = state.connected && !state.resync && !state.selecting && state.selectionId !== null;
-  const actions = useSessionActions(send, ready);
+  const [display, setDisplay] = useSessionDisplay();
   const target = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title } : undefined;
   const workspace = sessionWorkspace(state);
   const cwd = session?.cwd ?? state.pendingCreate?.cwd;
@@ -75,15 +74,15 @@ export function SessionHeader({ state, send, onMenu, openNew, openProject, statu
             <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon /> Pull request</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
+          {/* Inline rather than a submenu: the menu is nearly full width on phones, leaving a submenu no room. */}
           <DropdownMenuGroup>
-            <DropdownMenuItem disabled={!ready || !target || session?.state.checkoutMissing} onSelect={() => target && actions.rename(target)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
-            <DropdownMenuItem disabled={!ready || !target} onSelect={() => target && actions.archive(target)}><ArchiveIcon /> Archive</DropdownMenuItem>
+            <DropdownMenuLabel>Display</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={display} onValueChange={value => { if (value === "everything" || value === "messages") setDisplay(value); }}>
+              {SESSION_DISPLAYS.map(({ value, label }) => <DropdownMenuRadioItem key={value} value={value}>{value === "messages" ? <MessageSquareIcon /> : <ListIcon />} {label}</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
           </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup><DropdownMenuItem variant="destructive" disabled={!ready || !target} onSelect={() => target && actions.delete(target)}><Trash2Icon /> Delete</DropdownMenuItem></DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
-    {actions.dialogs}
   </>;
 }

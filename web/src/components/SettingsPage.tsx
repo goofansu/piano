@@ -1,8 +1,7 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, BrainCircuitIcon, ChevronLeftIcon, HomeIcon, PaletteIcon, PlugIcon, RadiusIcon } from "lucide-react";
+import { AlertCircleIcon, BrainCircuitIcon, ChevronLeftIcon, HomeIcon, PlugIcon, RadiusIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AppearanceSettings } from "@/components/AppearanceSettings";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
 import { ModelSettings } from "@/components/ModelSettings";
@@ -20,7 +19,7 @@ import type { SettingsSection } from "@/lib/routes";
 
 export type { SettingsSection } from "@/lib/routes";
 
-const SECTIONS = [{ id: "appearance", label: "Appearance", icon: PaletteIcon }, { id: "models", label: "Models", icon: BrainCircuitIcon }, { id: "providers", label: "Providers", icon: PlugIcon }, { id: "radius", label: "Radius", icon: RadiusIcon }] as const;
+const SECTIONS = [{ id: "models", label: "Models", icon: BrainCircuitIcon }, { id: "providers", label: "Providers", icon: PlugIcon }, { id: "radius", label: "Radius", icon: RadiusIcon }] as const;
 
 export function SettingsNavigation({ compact, section, onShow, onHide, onSelect, onHome }: { compact: boolean; section: SettingsSection; onShow: () => void; onHide: () => void; onSelect: (section: SettingsSection) => void; onHome: () => void }) {
   const menu = <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
@@ -82,7 +81,7 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
             <h1 id="settings-section-title" className="text-xl font-semibold">{SECTIONS.find(item => item.id === section)?.label}</h1>
           </div>
         </header>}
-        {section === "appearance" ? <AppearanceSettings /> : section === "radius" ? <RadiusSettings onMenu={onMenu} providersChanged={providersChanged} /> : <ModelSettings />}
+        {section === "radius" ? <RadiusSettings onMenu={onMenu} providersChanged={providersChanged} /> : <ModelSettings />}
       </section>
     </div>
   </section>;

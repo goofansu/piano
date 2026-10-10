@@ -102,11 +102,11 @@ try {
   assert.deepEqual({ provider: stored().defaultProvider, model: stored().defaultModel, effort: stored().defaultThinkingLevel, theme: stored().theme }, { provider: 'piano-phase0', model: 'project', effort: 'high', theme: 'dark' });
   assert.ok(invalidations > 0, 'other clients receive catalog invalidation');
   await ab('screenshot', join(evidence, '01-saved-desktop.png'));
-  await button('Appearance');
+  await button('Providers');
   // First revisit may reload after the save's catalog invalidation. Warm that snapshot.
   await button('Models');
   await ab('wait', '--fn', `!!document.querySelector(${JSON.stringify(picker + ':not(:disabled)')})`);
-  await button('Appearance');
+  await button('Providers');
   await evaluate(`(() => {
     window.defaultsRequests = 0;
     const original = window.fetch;

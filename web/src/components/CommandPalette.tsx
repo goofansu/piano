@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArrowUpDownIcon, BrainCircuitIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PaletteIcon, PanelLeftIcon, PlugIcon, PlusIcon, RadiusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowUpDownIcon, BrainCircuitIcon, CheckIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, HomeIcon, LayoutListIcon, ListIcon, MessageSquareIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, RadiusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -12,6 +12,7 @@ import type { SettingsSection } from "@/components/SettingsPage";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
+import { SESSION_DISPLAYS, useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSidebarView } from "@/lib/useSidebarView";
 import type { AppState } from "@/store";
 
@@ -38,6 +39,7 @@ interface Props {
 export function CommandPalette({ open, onOpenChange, state, select, openNew, openSettings, closeSettings, toggleSidebar, send, openChanges, openPullRequest, composerCwd }: Props) {
   const { setTheme } = useTheme();
   const { view, setView } = useSidebarView();
+  const [display, setDisplay] = useSessionDisplay();
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!open) setSearch(""); }, [open]);
@@ -98,9 +100,6 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
           </CommandItem> : <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
           </CommandItem>}
-          <CommandItem value="Appearance" keywords={["settings", "theme"]} onSelect={() => run(() => openSettings("appearance"))}>
-            <PaletteIcon /> Appearance
-          </CommandItem>
           <CommandItem value="Models" keywords={["settings", "default", "effort", "thinking"]} onSelect={() => run(() => openSettings("models"))}>
             <BrainCircuitIcon /> Models
           </CommandItem>
@@ -147,6 +146,13 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
             <CommandItem value="Copy all" onSelect={() => run(() => { void copyAllSessionDetails(state); })}><CopyIcon /> Copy all</CommandItem>
             <CommandItem value="Changes" keywords={["diff", "review", "working tree"]} disabled={!sessionWorkspace(state) || state.session?.state.checkoutMissing} onSelect={() => run(openChanges)}><FileDiffIcon /> Changes</CommandItem>
             <CommandItem value="Pull request" keywords={["github", "link", "pr"]} disabled={!target} onSelect={() => run(openPullRequest)}><GitPullRequestIcon /> Pull request</CommandItem>
+            {/* The session menu's Display choices, by the same names. */}
+            {SESSION_DISPLAYS.map(d => (
+              <CommandItem key={`display-${d.value}`} value={d.label} keywords={["display", "view", "messages", "transcript"]} onSelect={() => run(() => setDisplay(d.value))}>
+                {d.value === "messages" ? <MessageSquareIcon /> : <ListIcon />} {d.label}
+                {display === d.value && <><CheckIcon className="ml-auto" aria-hidden /><span className="sr-only">current</span></>}
+              </CommandItem>
+            ))}
             <CommandItem value="Rename" disabled={!ready || !target || state.session?.state.checkoutMissing} onSelect={() => run(() => { if (target) actions.rename(target); })}><TextCursorInputIcon /> Rename</CommandItem>
             <CommandItem value="Archive" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.archive(target); })}><ArchiveIcon /> Archive</CommandItem>
             <CommandItem value="Delete" disabled={!ready || !target} onSelect={() => run(() => { if (target) actions.delete(target); })}><Trash2Icon /> Delete</CommandItem>
