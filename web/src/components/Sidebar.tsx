@@ -1,6 +1,6 @@
 import type { ClientCommand as ClientMessage, FolderView, Project, SessionReference } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
@@ -8,7 +8,7 @@ import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { Keys } from "@/components/PianoMark";
 import { type ProjectDialog, ProjectMenu } from "@/components/Projects";
-import { useSessionActions } from "@/components/SessionActions";
+import { SessionCommandMenuItem, useSessionCommands } from "@/components/SessionCommandHost";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { pickCommands, SESSION_ROW_COMMANDS } from "@/lib/sessionCommands";
 import { folderFor, sessionReference } from "@/lib/sessionContext";
 import { dateGroups, flatSessions, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy } from "@/lib/sidebarView";
 import { readJson, writeJson } from "@/lib/storage";
@@ -286,14 +287,15 @@ interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew"
 }
 
 type SessionTarget = { cwd: string; sessionId: string; title?: string };
-type SessionActions = ReturnType<typeof useSessionActions>;
 
 /** One line per session: the title alone. Location and project live in the session header and the groupings. */
-function SessionRow({ t, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
-  t: SessionTarget; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
+function SessionRow({ t, selected, disabled, hint, state, send, select, onProjectDialog, reveal }: {
+  t: SessionTarget; selected: boolean; disabled?: boolean; hint?: string;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
   const [enter] = useState(reveal);
-  const checkoutMissing = state.session?.cwd === t.cwd && state.session.state.checkoutMissing;
+  const { commands, run } = useSessionCommands(t);
+  const menu = pickCommands(commands, SESSION_ROW_COMMANDS);
+  const item = (c: (typeof menu)[number]) => <SessionCommandMenuItem key={c.id} command={c} run={run} />;
   // Live host state comes from the `hosts` broadcast, which changes more often than the folder list.
   const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
   const done = state.done.includes(sessionKey(t));
@@ -327,12 +329,11 @@ function SessionRow({ t, selected, disabled, hint, state, send, select, actions,
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
             <ProjectMenu state={state} send={send} session={t} onDialog={onProjectDialog} />
-            <DropdownMenuItem disabled={!state.connected || checkoutMissing} onSelect={() => actions.rename(t)}><TextCursorInputIcon /> Rename</DropdownMenuItem>
-            <DropdownMenuItem disabled={!state.connected} onSelect={() => actions.archive(t)}><ArchiveIcon /> Archive</DropdownMenuItem>
+            {menu.filter(c => c.group !== "destructive").map(item)}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem variant="destructive" disabled={!state.connected} onSelect={() => actions.delete(t)}><Trash2Icon /> Delete</DropdownMenuItem>
+            {menu.filter(c => c.group === "destructive").map(item)}
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -349,23 +350,20 @@ type Member = Pick<SessionReference, "cwd" | "sessionId" | "title" | "unavailabl
 
 /** Every listed session in one list, each with its location. */
 function SessionList({ sessions, current, state, send, select, reveal, onProjectDialog }: Omit<GroupProps, "open" | "onOpenChange" | "openNew"> & { sessions: readonly Member[] }) {
-  const actions = useSessionActions(send, state.connected);
-  return <>
+  return (
     <ul className="flex flex-col gap-1">
       {sessions.map(s => (
         <SessionRow key={sessionKey(s)} t={s} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
           selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
-          state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
+          state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />
       ))}
     </ul>
-    {actions.dialogs}
-  </>;
+  );
 }
 
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
 function ProjectGroup({ project, sessions, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: Project | null; sessions: readonly Member[] }) {
   const [enter] = useState(reveal);
-  const actions = useSessionActions(send, state.connected);
   const members = sessions;
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -402,18 +400,16 @@ function ProjectGroup({ project, sessions, current, open, onOpenChange, state, s
           {members.map(s => (
             <SessionRow key={sessionKey(s)} t={s} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
               selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
-              state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
+              state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />
           ))}
         </ul>}
       </CollapsibleContent>
-      {actions.dialogs}
     </Collapsible>
   );
 }
 
 function FolderGroup({ folder, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { folder: FolderView }) {
   const [enter] = useState(reveal);
-  const actions = useSessionActions(send, state.connected);
   const [closing, setClosing] = useState(false);
 
   return (
@@ -450,12 +446,11 @@ function FolderGroup({ folder, current, open, onOpenChange, state, send, select,
           {folder.sessions.map((t) => {
             return (
               <SessionRow key={t.sessionId} t={t} selected={current?.cwd === t.cwd && current.sessionId === t.sessionId}
-                state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
+                state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />
             );
           })}
         </ul>}
       </CollapsibleContent>
-      {actions.dialogs}
       <Dialog open={closing} onOpenChange={setClosing}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>

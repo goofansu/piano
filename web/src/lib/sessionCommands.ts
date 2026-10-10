@@ -1,0 +1,108 @@
+/**
+ * The per-session commands the sidebar row menu, the session header and the command palette offer,
+ * described once: label, icon, group, whether it is available now, and what running it means.
+ * Surfaces render these descriptors and hand the intent to the one `SessionCommandHost`.
+ */
+import type { AppState } from "../store.ts";
+import { isSelectedSession, sessionCheckoutMissing, sessionContext, sessionMutable } from "./sessionContext.ts";
+
+export type SessionDisplay = "everything" | "messages";
+export const SESSION_DISPLAYS = [
+  { value: "everything", label: "Show everything" },
+  { value: "messages", label: "Messages only" },
+] as const satisfies readonly { value: SessionDisplay; label: string }[];
+
+export type SessionTarget = { cwd: string; sessionId: string; title?: string };
+
+export type SessionCommandId =
+  | "copy-working-directory" | "copy-branch" | "copy-session-id" | "copy-all"
+  | "changes" | "pull-request"
+  | "display-everything" | "display-messages"
+  | "rename" | "archive" | "delete"
+  | "new-session-here";
+
+/** Sections a menu separates; the palette lists them in this order under Session commands. */
+export type SessionCommandGroup = "copy" | "open" | "display" | "manage" | "destructive" | "create";
+
+export type SessionCommandIcon = "copy" | "changes" | "pull-request" | "everything" | "messages" | "rename" | "archive" | "delete" | "new";
+
+export type SessionCommandIntent =
+  | { kind: "copy"; value: string; label: string }
+  | { kind: "changes" }
+  | { kind: "pull-request" }
+  | { kind: "display"; display: SessionDisplay }
+  /** Without a target the selected session has no Pi session ID yet; such a command is never enabled. */
+  | { kind: "rename" | "archive" | "delete"; target: SessionTarget | undefined }
+  | { kind: "new-session"; cwd: string };
+
+export interface SessionCommand {
+  id: SessionCommandId;
+  label: string;
+  icon: SessionCommandIcon;
+  group: SessionCommandGroup;
+  enabled: boolean;
+  /** A display choice that is current. */
+  checked?: boolean;
+  /** Extra palette search words. */
+  keywords?: readonly string[];
+  /** Secondary text the palette shows after the label. */
+  detail?: string;
+  intent: SessionCommandIntent;
+}
+
+/** What the sidebar's session row menu offers, in its order. */
+export const SESSION_ROW_COMMANDS = ["rename", "archive", "delete"] as const satisfies readonly SessionCommandId[];
+/** What the session header offers: its New session here button, then its menu, in order. */
+export const SESSION_HEADER_COMMANDS = ["new-session-here", "copy-all", "changes", "pull-request", "display-everything", "display-messages"] as const satisfies readonly SessionCommandId[];
+
+export function pickCommands<Id extends SessionCommandId>(commands: readonly SessionCommand[], ids: readonly Id[]): (SessionCommand & { id: Id })[] {
+  return ids.flatMap(id => commands.filter((c): c is SessionCommand & { id: Id } => c.id === id));
+}
+
+/**
+ * Commands for `target`, or for the selected session when it is omitted. The selected session gets
+ * every command; any other session only the registry changes (rename, archive, delete).
+ *
+ * Enablement, one rule per command:
+ * - rename, archive, delete: `sessionMutable` (connected, and a settled attachment for the selected
+ *   session); rename also needs the checkout, since renaming starts Pi there.
+ * - changes: a Git workspace whose checkout is present (`canOpenChanges`).
+ * - pull request, copy session ID: the selected session has a Pi session ID.
+ * - new session here: the checkout is present.
+ * - copy and display commands: always.
+ */
+export function sessionCommands(state: AppState, target?: SessionTarget, options: { display?: SessionDisplay } = {}): SessionCommand[] {
+  const session = state.session;
+  const ctx = sessionContext(state);
+  const selected = !!session && (!target || isSelectedSession(state, target));
+  const subject = target ?? (session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title: ctx.title } : undefined);
+  const commands: SessionCommand[] = [];
+  if (selected && session) {
+    const display = options.display ?? "everything";
+    const all = [`Working directory: ${session.cwd}`, ...(ctx.sessionId ? [`Session ID: ${ctx.sessionId}`] : [])].join("\n");
+    commands.push(
+      { id: "copy-working-directory", label: "Copy working directory", icon: "copy", group: "copy", enabled: true, intent: { kind: "copy", value: session.cwd, label: "Working directory" } },
+      ...(ctx.branch ? [{ id: "copy-branch", label: "Copy git branch", icon: "copy", group: "copy", enabled: true, intent: { kind: "copy", value: ctx.branch, label: "Git branch" } } as const] : []),
+      { id: "copy-session-id", label: "Copy session ID", icon: "copy", group: "copy", enabled: !!ctx.sessionId, intent: { kind: "copy", value: ctx.sessionId ?? "", label: "Session ID" } },
+      { id: "copy-all", label: "Copy all", icon: "copy", group: "copy", enabled: true, intent: { kind: "copy", value: all, label: "Session details" } },
+      { id: "changes", label: "Changes", icon: "changes", group: "open", enabled: ctx.canOpenChanges, keywords: ["diff", "review", "working tree"], intent: { kind: "changes" } },
+      { id: "pull-request", label: "Pull request", icon: "pull-request", group: "open", enabled: !!session.sessionId, keywords: ["github", "link", "pr"], intent: { kind: "pull-request" } },
+      ...SESSION_DISPLAYS.map(d => ({
+        id: `display-${d.value}` as const, label: d.label, icon: d.value, group: "display" as const, enabled: true, checked: display === d.value,
+        keywords: ["display", "view", "messages", "transcript"], intent: { kind: "display" as const, display: d.value },
+      })),
+    );
+  }
+  if (selected || subject) {
+    const mutable = !!subject && sessionMutable(state, subject);
+    commands.push(
+      { id: "rename", label: "Rename", icon: "rename", group: "manage", enabled: mutable && !!subject && !sessionCheckoutMissing(state, subject), intent: { kind: "rename", target: subject } },
+      { id: "archive", label: "Archive", icon: "archive", group: "manage", enabled: mutable, intent: { kind: "archive", target: subject } },
+      { id: "delete", label: "Delete", icon: "delete", group: "destructive", enabled: mutable, intent: { kind: "delete", target: subject } },
+    );
+  }
+  if (selected && session) {
+    commands.push({ id: "new-session-here", label: "New session here", icon: "new", group: "create", enabled: !session.state.checkoutMissing, keywords: ["new", "here", "directory"], detail: session.cwd, intent: { kind: "new-session", cwd: session.cwd } });
+  }
+  return commands;
+}

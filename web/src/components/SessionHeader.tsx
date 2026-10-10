@@ -1,22 +1,24 @@
-import { CopyIcon, FileDiffIcon, GitBranchIcon, GitPullRequestIcon, ListIcon, MessageSquareIcon, MoreHorizontalIcon, PanelLeftOpenIcon, PlusIcon, SplitIcon } from "lucide-react";
+import { GitBranchIcon, MoreHorizontalIcon, PanelLeftOpenIcon, SplitIcon } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
-import { copyAllSessionDetails } from "@/components/SessionActions";
+import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/SessionCommandHost";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { pickCommands, SESSION_HEADER_COMMANDS } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
-import { SESSION_DISPLAYS, useSessionDisplay } from "@/lib/useSessionDisplay";
 import type { AppState } from "@/store";
 
-export function SessionHeader({ state, onMenu, openNew, openProject, status, openChanges, pullRequest, openPullRequest }: {
-  state: AppState; onMenu: () => void; openNew: (cwd?: string) => void; openProject: (id: string) => void;
-  status: string; openChanges: () => void; pullRequest: React.ReactNode; openPullRequest: () => void;
+export function SessionHeader({ state, onMenu, openProject, status, pullRequest }: {
+  state: AppState; onMenu: () => void; openProject: (id: string) => void; status: string; pullRequest: React.ReactNode;
 }) {
   const session = state.session;
   // Zed's form: `folder ⇄ worktree / ⑂ branch`; the folder's own checkout is the `main` worktree.
-  const { title, branch, sessionId, project, cwd, folderName: folder, worktreeName: worktree, canOpenChanges } = sessionContext(state);
-  const [display, setDisplay] = useSessionDisplay();
-  const target = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title } : undefined;
+  const { title, branch, sessionId, project, cwd, folderName: folder, worktreeName: worktree } = sessionContext(state);
+  const { commands, run, display } = useSessionCommands();
+  const header = pickCommands(commands, SESSION_HEADER_COMMANDS);
+  const newHere = header.find(c => c.id === "new-session-here");
+  const copyAll = header.find(c => c.id === "copy-all");
+  const displays = header.filter(c => c.group === "display");
   return <>
     {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
     <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 md:px-6">
@@ -55,7 +57,7 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
         </> : <><Skeleton className="col-span-2 h-4 w-40" /><Skeleton className="col-span-2 h-3 w-28" /></>}
       </div>
       <span role="status" className="sr-only">{status}</span>
-      <IconButton label="New session here" disabled={!session || session.state.checkoutMissing} onClick={() => { if (session) openNew(session.cwd); }}><PlusIcon /></IconButton>
+      <IconButton label={newHere?.label ?? "New session here"} disabled={!newHere?.enabled} onClick={() => { if (newHere) run(newHere); }}><CommandIcon icon="new" /></IconButton>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-96 max-w-[calc(100vw-2rem)]">
@@ -71,19 +73,18 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
                 <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
               </div>
             </dl>
-            <DropdownMenuItem className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5" aria-label="Copy all" onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /></DropdownMenuItem>
+            {copyAll && <DropdownMenuItem className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5" aria-label={copyAll.label} onSelect={() => run(copyAll)}><CommandIcon icon={copyAll.icon} /></DropdownMenuItem>}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem disabled={!canOpenChanges} onSelect={openChanges}><FileDiffIcon /> Changes</DropdownMenuItem>
-            <DropdownMenuItem disabled={!target} onSelect={openPullRequest}><GitPullRequestIcon /> Pull request</DropdownMenuItem>
+            {header.filter(c => c.group === "open").map(c => <SessionCommandMenuItem key={c.id} command={c} run={run} />)}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           {/* Inline rather than a submenu: the menu is nearly full width on phones, leaving a submenu no room. */}
           <DropdownMenuGroup>
             <DropdownMenuLabel>Display</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={display} onValueChange={value => { if (value === "everything" || value === "messages") setDisplay(value); }}>
-              {SESSION_DISPLAYS.map(({ value, label }) => <DropdownMenuRadioItem key={value} value={value}>{value === "messages" ? <MessageSquareIcon /> : <ListIcon />} {label}</DropdownMenuRadioItem>)}
+            <DropdownMenuRadioGroup value={display} onValueChange={value => { const choice = displays.find(c => c.id === `display-${value}`); if (choice) run(choice); }}>
+              {displays.map(c => <DropdownMenuRadioItem key={c.id} value={c.id.slice("display-".length)}><CommandIcon icon={c.icon} /> {c.label}</DropdownMenuRadioItem>)}
             </DropdownMenuRadioGroup>
           </DropdownMenuGroup>
         </DropdownMenuContent>

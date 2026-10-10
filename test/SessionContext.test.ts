@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
-import { directoryTrust, sessionActivity, sessionContext } from "../web/src/lib/sessionContext.ts";
+import { directoryTrust, sessionActivity, sessionCheckoutMissing, sessionContext, sessionMutable } from "../web/src/lib/sessionContext.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 
 const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
@@ -97,4 +97,19 @@ test("directory trust prefers the latest probe over discovery", () => {
   assert.deepEqual(directoryTrust(base, "/repo"), { required: true, trusted: false });
   assert.deepEqual(directoryTrust({ ...base, trusts: { "/repo": { required: true, trusted: true } } }, "/repo"), { required: true, trusted: true });
   assert.equal(directoryTrust(base, "/elsewhere"), undefined);
+});
+
+test("the selected session waits for a settled attachment before registry changes; other sessions do not", () => {
+  const selected = { cwd: "/work/repo.feature", sessionId: "s1" };
+  const other = { cwd: "/repo", sessionId: "s2" };
+  const settled = { ...base, session: session("/work/repo.feature") };
+  assert.equal(sessionMutable(settled, selected), true);
+  assert.equal(sessionMutable({ ...settled, resync: true }, selected), false);
+  assert.equal(sessionMutable({ ...settled, resync: true }, other), true);
+  assert.equal(sessionMutable({ ...settled, connected: false }, other), false);
+  // The New page has no selection; sidebar rows stay actionable there.
+  assert.equal(sessionMutable({ ...base, selectionId: null, view: { kind: "new" } }, other), true);
+  assert.equal(sessionCheckoutMissing({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) }, selected), true);
+  assert.equal(sessionCheckoutMissing({ ...base, sessionReferences: [{ ...other, archived: false, unavailable: "checkout" }] }, other), true);
+  assert.equal(sessionCheckoutMissing(settled, other), false);
 });
