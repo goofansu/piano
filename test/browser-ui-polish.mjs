@@ -216,7 +216,7 @@ try {
   await ab('set', 'viewport', '1440', '1000');
   if (!toolsOnly) {
   await appearance('Light'); await capture('session-light');
-  assert.equal(await evaluate(`document.querySelector('aside [aria-current="page"]')?.title`), 'A calmer workspace');
+  assert.equal(await evaluate(`document.querySelector('aside [aria-current="page"]')?.textContent.trim()`), 'A calmer workspace');
   // Native clipboard success: the raw Markdown reaches the clipboard API and the copy settles as copied.
   await evaluate(`window.nativeWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = text => { window.copied = text; return window.nativeWrite(text); }; true`);
   await click('Copy response'); await ab('wait', '--fn', `!!document.querySelector('[aria-label="Response copied"]')`);
@@ -247,12 +247,12 @@ try {
   await ab('find', 'role', 'menuitemradio', 'click', '--name', 'Folder', '--exact');
   await ab('wait', '--fn', `!document.querySelector('[role="menu"]')`);
   await ab('focus', project); await ab('press', 'Enter');
-  await ab('wait', '--fn', `!document.querySelector('aside button[title="A calmer workspace"]')`);
+  await ab('wait', '--fn', `![...document.querySelectorAll('aside nav button')].some(b => b.textContent.trim() === 'A calmer workspace')`);
   assert.ok(await evaluate(`document.activeElement.matches('${project}')`));
-  await ab('press', 'Enter'); await ab('wait', '--fn', `!!document.querySelector('aside button[title="A calmer workspace"]')`);
-  await ab('click', 'aside button[title="Simplify project navigation"]');
+  await ab('press', 'Enter'); await ab('wait', '--fn', `[...document.querySelectorAll('aside nav button')].some(b => b.textContent.trim() === 'A calmer workspace')`);
+  await ab('find', 'role', 'button', 'click', '--name', 'Simplify project navigation', '--exact');
   await ab('wait', '--text', 'Make the project navigation easier to scan.');
-  await ab('click', 'aside button[title="A calmer workspace"]'); await ab('wait', '--text', 'A quieter place to work');
+  await ab('find', 'role', 'button', 'click', '--name', 'A calmer workspace', '--exact'); await ab('wait', '--text', 'A quieter place to work');
   assert.equal(await evaluate(`document.querySelector('textarea').value`), 'Keep my draft');
   await ab('fill', '[aria-label="Message"]', '');
   await appearance('Dark'); await capture('session-dark');

@@ -156,7 +156,7 @@ try {
   for (const [title, cwd, id, marker, other] of [['API session', api, 'one', 'API CHANGE', 'WEB CHANGE'], ['Web session', web, 'two', 'WEB CHANGE', 'API CHANGE']]) {
     await button(title);
     await ab('wait', '--text', `History ${id}`);
-    assert.equal(await evaluate(`[...document.querySelectorAll('main header p')].find(p => p.textContent.startsWith('Working directory'))?.textContent`), `Working directory: ${basename(cwd)}`);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('main header p')].slice(0, 2).map(p => p.textContent)`), [`Folder: ${basename(cwd)}`, 'Worktree: main']);
     assert.equal(await evaluate(`document.querySelector('header button.text-brand')?.textContent`), 'Launch subscriptions');
     await palette('Changes'); await ab('click', '[cmdk-item][data-value="Changes"]'); await ab('wait', '--text', marker);
     assert.equal(await evaluate(`document.querySelector('[role="dialog"]').textContent.includes(${JSON.stringify(other)})`), false);

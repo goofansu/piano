@@ -98,9 +98,9 @@ try {
   assert.equal(facts.Context, '50 tokens'); assert.equal(facts['Session cost'], '$1.23');
   await capture('restarted-file-history-with-cached-stats'); await ab('press', 'Escape');
   await click('Context usage'); await ab('wait', '--text', 'Context: 50 tokens'); await capture('cached-context-popover'); await ab('press', 'Escape');
-  await ab('click', 'button[title="unknown"]'); await click('Context usage'); facts = await info();
+  await ab('find', 'role', 'button', 'click', '--name', 'unknown', '--exact'); await click('Context usage'); facts = await info();
   assert.equal(facts.Context, 'Unavailable'); assert.equal(facts['Session cost'], 'Unavailable'); await ab('press', 'Escape');
-  await ab('click', 'button[title="cached"]');
+  await ab('find', 'role', 'button', 'click', '--name', 'cached', '--exact');
   await send('/alive'); await ab('wait', '--fn', `document.querySelector('main header [role="status"]')?.textContent==='Ready'`);
   await click('Context usage'); facts = await info();
   assert.equal(facts.Context, '50 tokens'); assert.equal(facts['Session cost'], '$1.23');

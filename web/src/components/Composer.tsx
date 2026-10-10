@@ -97,15 +97,15 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
         <AttachmentDraftView draft={attachments} disabled={disabled} />
         {imagesWaiting && <p role="status" className="animate-in px-4 pt-2 text-sm text-ink-2 fade-in-0 slide-in-from-top-1">Images are ready. Wait for Pi to finish before sending.</p>}
         {queuedMessages.length > 0 && (
-          <section className="control-enter border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
+          <section className="control-enter flex max-h-[min(14rem,30dvh)] flex-col border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
+            <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
               <h2 className="font-medium text-ink-2">{streaming ? "Queued messages" : "Paused queue"} ({queuedMessages.length})</h2>
               <Button variant="ghost" size="sm" className="h-11 shrink-0 md:h-8" aria-label={queuedMessages.length === 1 ? "Edit queued message" : "Edit all queued messages"} title="Move queued messages back to the draft without stopping Pi (Esc)" disabled={disabled || stopping} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
                 <PencilIcon data-icon="inline-start" aria-hidden />
                 {queuedMessages.length === 1 ? "Edit" : "Edit all"}
               </Button>
             </div>
-            <ol className="flex max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
+            <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
               {queuedMessages.map((message, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: queued messages carry no id and may repeat text.
                 <li key={`${message.kind}-${index}`} className="flex min-w-0 animate-in flex-col gap-1 fade-in-0">

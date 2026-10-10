@@ -97,17 +97,32 @@ try {
   assert.equal(notes.status, 200); assert.equal((await notes.json()).link?.url, prs[1].url);
   await ab('set', 'viewport', '1280', '900'); await ab('open', `${frontendUrl}/s/work`);
   await ab('wait', '--text', 'These are not session deliverables.'); await waitBadge(42);
-  observations.metadataLayout = await evaluate(`(() => {
-    const [path, branch] = document.querySelectorAll('main header p');
-    const pr = document.querySelector(${JSON.stringify(badge(42))}).getBoundingClientRect();
-    return { folder: path.textContent.replace('Working directory: ', ''), branch: branch.textContent.replace('/', '').replace('Git branch: ', '').trim(),
-      truncated: [...branch.querySelectorAll('span')].some(s => s.scrollWidth > s.clientWidth),
-      readable: path.getBoundingClientRect().width >= 48 && branch.getBoundingClientRect().width >= 48,
-      clearOfPR: branch.getBoundingClientRect().right <= pr.left };
-  })()`);
-  // Zed's form, `folder / ⑂ branch`, uncapped: names this long still truncate at 1280px, but both stay readable
-  // and never push the PR control away.
-  assert.deepEqual(observations.metadataLayout, { folder: basename(repo), branch, truncated: true, readable: true, clearOfPR: true });
+  // The header now names the root checkout as `main` (5a869ab) and drops whole
+  // trailing segments when space is short (80ef86e), rather than squeezing all three.
+  observations.metadataLayout = [];
+  for (const width of [1920, 1280]) {
+    await ab('set', 'viewport', String(width), '900');
+    const layout = await evaluate(`(() => {
+      const parts = [...document.querySelectorAll('main header p')];
+      const clip = parts[0].parentElement.getBoundingClientRect();
+      const pr = document.querySelector(${JSON.stringify(badge(42))}).getBoundingClientRect();
+      return parts.map(p => {
+        const r = p.getBoundingClientRect();
+        const visible = r.top < clip.bottom;
+        const label = p.querySelector('span.truncate');
+        return { text: p.textContent.replace(/^\\/\\s*/, ''), visible,
+          readable: !visible || r.width >= 48 || !!label && label.clientWidth > 0 && label.scrollWidth <= label.clientWidth,
+          wholeRow: !visible || (r.top >= clip.top && r.bottom <= clip.bottom + 1),
+          clearOfPR: !visible || r.right <= pr.left };
+      });
+    })()`);
+    observations.metadataLayout.push({ width, layout });
+    assert.deepEqual(layout.map(p => p.text), [`Folder: ${basename(repo)}`, 'Worktree: main', `Git branch: ${branch}`]);
+    assert.equal(layout[0].visible, true, 'Folder remains visible');
+    assert.ok(layout.every(p => p.readable && p.wholeRow && p.clearOfPR), 'Visible segments remain readable, unclipped and clear of PR');
+    assert.ok(layout.every((p, i) => !p.visible || layout.slice(0, i).every(previous => previous.visible)), 'Segments drop from the right');
+    if (width === 1920) assert.ok(layout.every(p => p.visible), 'A wide header shows folder, worktree and branch');
+  }
   await ab('hover', badge(42));
   await ab('wait', '--fn', `!!document.querySelector('[role="tooltip"]')`);
   assert.equal(await evaluate(`document.querySelector('[role="tooltip"]').textContent`), 'The session deliverable', 'Hover shows only the title, not status/checks/review');
