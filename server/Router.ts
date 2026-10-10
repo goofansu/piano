@@ -228,25 +228,17 @@ export const AppRouter = HttpRouter.use((router) =>
       const body = yield* readBody;
       if (typeof body.provider !== "string") return json({ error: "Invalid sign-out request." }, 400);
       yield* (yield* ProviderLogin).signOut(body.provider);
-      yield* (yield* Catalog).invalidate;
       return json({ ok: true });
     }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not sign out. Finish any sign-in in progress and try again." }, 409)))));
 
     // Credential values and callback URLs travel only in POST bodies. This
     // global operation creates no session and owns no conversation history.
-    let invalidatedLogin: string | undefined;
     for (const method of ["GET", "POST", "DELETE", "PUT"] as const) {
       yield* router.add(method, "/api/provider-login", Effect.gen(function* () {
         const login = yield* ProviderLogin;
         let result: unknown;
-        if (method === "GET") {
-          const state = yield* login.state;
-          if (state?.status === "success" && state.id !== invalidatedLogin) {
-            invalidatedLogin = state.id;
-            yield* (yield* Catalog).invalidate;
-          }
-          result = { state };
-        } else {
+        if (method === "GET") result = { state: yield* login.state };
+        else {
           const body = yield* readBody;
           if (method === "POST" && typeof body.provider === "string") result = { state: yield* login.start(body.provider) };
           else if (method === "DELETE" && typeof body.id === "string") result = { state: yield* login.cancel(body.id) };

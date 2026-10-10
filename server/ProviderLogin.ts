@@ -1,8 +1,11 @@
 /** Global OAuth orchestration only. Pi's SDK owns provider configuration, token
- * exchange and locked credential persistence; no agent/session is embedded here. */
+ * exchange and locked credential persistence; no agent/session is embedded here.
+ * A completed sign-in or sign-out changes the usable models, so this service
+ * invalidates the Catalog itself rather than relying on a client to poll. */
 import { CredentialSynchronizationError, ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, Layer } from "effect";
 import type { OAuthProvider, ProviderLoginState } from "../shared/wire.ts";
+import { Catalog } from "./Catalog.ts";
 import { agentDir } from "./PiEnv.ts";
 
 type Interaction = Parameters<ModelRuntime["login"]>[2];
@@ -25,6 +28,9 @@ export class ProviderLogin extends Context.Service<ProviderLogin, {
 
 export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function* () {
   const factory = yield* ProviderLoginRuntime;
+  const catalog = yield* Catalog;
+  // Invalidate before reporting success, so a client that sees success re-probes fresh models.
+  const invalidate = () => Effect.runPromise(catalog.invalidate);
   let current: { state: ProviderLoginState; abort: AbortController; done: Promise<void>; active: boolean } | undefined;
   let pending: { id: string; resolve: (value: string) => void; reject: (error: Error) => void } | undefined;
   let signingOut = false;
@@ -96,9 +102,11 @@ export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function
           }
           if (signal.aborted) return;
           await runtime.login(provider, "oauth", interaction, { getDeviceId: factory.deviceId });
+          await invalidate();
           attempt.state = { id: attempt.state.id, provider, status: "success", message: "Signed in. Start a new session to use the updated providers." };
         } catch (cause) {
           if (cause instanceof CredentialSynchronizationError && cause.operation === "login") {
+            await invalidate();
             attempt.state = { id: attempt.state.id, provider, status: "success", message: "Credentials saved. Start a new session to reload the provider catalog." };
           } else if (!signal.aborted) {
             // Provider errors may include token response bodies. Never deliver or log them.
@@ -138,6 +146,7 @@ export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function
             // The credential was removed even if refreshing Pi's local snapshot failed.
             if (!(cause instanceof CredentialSynchronizationError && cause.operation === "logout")) throw cause;
           }
+          await invalidate();
           if (current?.state.provider === provider) current = undefined;
         } finally { signingOut = false; }
       },

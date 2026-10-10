@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { Catalog, CatalogLive } from "../server/Catalog.ts";
+import { PiSessions } from "../server/PiSessions.ts";
 import { ProviderLogin, ProviderLoginLive, ProviderLoginRuntime } from "../server/ProviderLogin.ts";
 import type { ProviderLoginState } from "../shared/wire.ts";
 
@@ -17,16 +19,23 @@ const until = (login: ProviderLogin["Service"], predicate: (state: ProviderLogin
   }
 }).pipe(Effect.timeout("3 seconds"));
 
-async function fixture(flow: Login, run: (login: ProviderLogin["Service"], authPath: string) => Effect.Effect<void, unknown>) {
+type Probes = { catalog: Catalog["Service"]; count: () => number };
+async function fixture(flow: Login, run: (login: ProviderLogin["Service"], authPath: string, probes: Probes) => Effect.Effect<void, unknown>) {
   const root = mkdtempSync(join(tmpdir(), "piano-login-"));
   const authPath = join(root, "auth.json");
   writeFileSync(authPath, JSON.stringify({ openai: { type: "api_key", key: "existing-key" } }));
   const runtime = await ModelRuntime.create({ authPath, modelsPath: null, modelsStorePath: join(root, "models-cache.json"), refreshOnCreate: false });
   const radius = runtime.getProvider("radius")!;
   runtime.registerNativeProvider({ ...radius, auth: { oauth: { ...radius.auth.oauth!, login: flow } } });
+  // The real Catalog over a counting probe: a re-probe is the observable effect of invalidation.
+  let count = 0;
+  const sessions = Layer.succeed(PiSessions, PiSessions.of({
+    open: () => Effect.die("unused"),
+    probe: () => Effect.sync(() => { count++; return { models: [], commands: [] }; }),
+  }));
   try {
-    await Effect.runPromise(Effect.gen(function* () { yield* run(yield* ProviderLogin, authPath); }).pipe(
-      Effect.provide(ProviderLoginLive), Effect.scoped,
+    await Effect.runPromise(Effect.gen(function* () { yield* run(yield* ProviderLogin, authPath, { catalog: yield* Catalog, count: () => count }); }).pipe(
+      Effect.provide(ProviderLoginLive.pipe(Layer.provideMerge(CatalogLive), Layer.provide(sessions))), Effect.scoped,
       Effect.provideService(ProviderLoginRuntime, { create: async () => runtime, deviceId: () => "f24f9f2a-a49e-46d0-99a3-402c03b548f5" }),
     ));
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -137,5 +146,26 @@ test("INV-11: unknown providers and provider failures cannot disclose token resp
     yield* login.start("radius");
     const failed = yield* until(login, s => s.status === "error");
     assert(!JSON.stringify(failed).includes("secret-response-token"));
+  }));
+});
+
+test("INV-01/02: completing sign-in or sign-out invalidates the model catalog in the server, without a client poll", async () => {
+  await fixture(async () => ({ type: "oauth", access: "private-access", refresh: "private-refresh", expires: Date.now() + 3600_000 }), (login, _authPath, { catalog, count }) => Effect.gen(function* () {
+    const cwd = "/nonexistent/piano-login-catalog";
+    yield* catalog.get(cwd);
+    yield* catalog.get(cwd);
+    assert.equal(count(), 1, "a cached catalog is not re-probed");
+    // Watch only the service state, never the HTTP route that used to invalidate on GET.
+    yield* login.start("radius");
+    yield* until(login, s => s.status === "success");
+    yield* catalog.get(cwd);
+    assert.equal(count(), 2, "sign-in completion re-probes the catalog");
+    yield* login.signOut("radius");
+    yield* catalog.get(cwd);
+    assert.equal(count(), 3, "sign-out re-probes the catalog");
+    // A failed sign-out changes no credentials and leaves the cache alone.
+    assert((yield* Effect.result(login.signOut("radius")))._tag === "Failure");
+    yield* catalog.get(cwd);
+    assert.equal(count(), 3);
   }));
 });
