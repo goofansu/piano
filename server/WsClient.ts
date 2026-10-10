@@ -1,30 +1,26 @@
 /**
- * One browser client. Decodes ClientMessages from the socket, keeps the
- * client's selected session, and forwards SessionEvents from the attached
- * PiSession as ServerMessages. The session module already speaks the wire
- * vocabulary, so this is mostly routing; domain steps live in WorkspaceCommands.
+ * One browser client. Decodes ClientMessages from the socket, dispatches them and
+ * delivers ServerMessages. SessionViewer keeps the client's selection and attachment;
+ * domain steps live in WorkspaceCommands.
  */
-import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { Cause, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
+import { Cause, Effect, Stream } from "effect";
 import { Socket } from "effect/socket";
 import {
   type ClientMessage,
   decodeClientMessage,
   encodeServerMessage,
   type ServerMessage,
-  type StartOptions,
 } from "../shared/wire.ts";
 import { makeSocketDelivery } from "./BoundedDelivery.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { expandHome } from "./PiEnv.ts";
-import type { PiSession } from "./PiSessions.ts";
 import { projectTrust, setProjectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
-import { emptySnapshot } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
+import { makeSessionViewer } from "./SessionViewer.ts";
 import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceCommands } from "./WorkspaceCommands.ts";
 import { listWorktrees } from "./Worktrees.ts";
@@ -56,85 +52,7 @@ export const handleSocket = (socket: Socket.Socket) =>
     // Signals only: the sidebar view publishes registry edits promptly and rediscovers Git in the background.
     const publishRegistry = sidebar.changed;
 
-    // ── selection / attachment ──
-    type Selection = { cwd: string; sessionId: string | null; selectionId: string };
-    let selected: Selection | null = null;
-    let attachment: { session: PiSession; scope: Scope.Closeable; selectionId: string } | null = null;
-    const navigation = yield* Semaphore.make(1);
-    const current = (selection: Selection) => selected?.selectionId === selection.selectionId;
-
-    const detach = Effect.suspend(() => {
-      const a = attachment;
-      attachment = null;
-      return a ? Scope.close(a.scope, Exit.succeed(undefined)) : Effect.void;
-    });
-    yield* Effect.addFinalizer(() => detach);
-    const detachSession = (cwd: string, sessionId: string) => Semaphore.withPermits(navigation, 1)(Effect.suspend(() =>
-      attachment?.session.spec.cwd === cwd && attachment.session.spec.sessionId === sessionId ? detach : Effect.void));
-
-    // Caller holds navigation; slow lookup/start happens before stale-result checks.
-    const attachTo = (session: PiSession, selection: Selection) =>
-      Effect.gen(function* () {
-        if (!current(selection)) return;
-        yield* detach;
-        const scope = yield* Scope.make();
-        const mine = { session, scope, selectionId: selection.selectionId };
-        attachment = mine;
-        const ready = yield* Deferred.make<void>();
-        yield* session.events.pipe(
-          Stream.runForEach((event) => Effect.gen(function* () {
-            if (current(selection)) yield* event._tag === "snapshot"
-              ? send({ _tag: "selected", selectionId: selection.selectionId, cursor: event.cursor, cwd: session.spec.cwd, sessionId: session.spec.sessionId, hosted: !event.snapshot.state.closedReason, snapshot: event.snapshot })
-              : send({ _tag: "session", selectionId: selection.selectionId, cursor: event.cursor, event });
-            if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
-          })),
-          Effect.catchTag("DeliveryOverflow", error => disconnect(error.detail, error.oversized ? 1009 : 1013)),
-          Effect.ensuring(Deferred.succeed(ready, undefined)),
-          // The stream ends when Pi is gone; the next message will start it again.
-          Effect.ensuring(Effect.sync(() => {
-            if (attachment === mine) attachment = null;
-          })),
-          Effect.ignore,
-          Effect.forkIn(scope),
-        );
-        // A fast first prompt must not complete before this client observes it.
-        yield* Deferred.await(ready);
-      });
-
-    const show = (selection: Selection) => Effect.gen(function* () {
-      const { cwd, sessionId, selectionId } = selection;
-      const running = sessionId ? yield* hosts.get(cwd, sessionId) : undefined;
-      const view = running ? undefined : sessionId ? yield* hosts.peek(cwd, sessionId) : { cwd, snapshot: emptySnapshot("") };
-      yield* Semaphore.withPermits(navigation, 1)(Effect.gen(function* () {
-        if (!current(selection)) return;
-        if (running) return yield* attachTo(running, selection);
-        yield* detach;
-        yield* send({ _tag: "selected", selectionId, cursor: null, cwd: view!.cwd, sessionId, hosted: false, snapshot: view!.snapshot });
-      }));
-    });
-
-    // Caller holds navigation.
-    const attachOpened = <E>(selectionId: string, open: Effect.Effect<PiSession, E>) =>
-      Effect.gen(function* () {
-        const session = yield* open;
-        const selection = { cwd: session.spec.cwd, sessionId: session.spec.sessionId, selectionId };
-        if (current(selection)) {
-          selected = selection;
-          yield* attachTo(session, selection);
-        }
-        yield* publishRegistry;
-        return session;
-      });
-    const start = (selection: Selection, options: StartOptions) => attachOpened(selection.selectionId, hosts.open({
-      cwd: selection.cwd, sessionId: selection.sessionId ?? randomUUID(), create: selection.sessionId === null,
-      model: options.model, thinkingLevel: options.thinkingLevel, name: options.name,
-    }));
-    const deselect = (cwd: string, sessionId: string) => Effect.suspend(() => {
-      if (selected?.cwd !== cwd || selected.sessionId !== sessionId) return Effect.void;
-      const selectionId = selected.selectionId;
-      selected = null;
-      return send({ _tag: "selected", selectionId, cursor: null, cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
-    });
+    const viewer = yield* makeSessionViewer({ deliver: send, overflow: error => disconnect(error.detail, error.oversized ? 1009 : 1013) });
 
     const handle = (msg: ClientMessage) =>
       Effect.gen(function* () {
@@ -148,7 +66,7 @@ export const handleSocket = (socket: Socket.Socket) =>
             return yield* send({ _tag: "worktrees", folder: msg.folder, discovery });
           }
           case "models": {
-            const cwd = resolve(expandHome(msg.cwd ?? selected?.cwd ?? homedir()));
+            const cwd = resolve(expandHome(msg.cwd ?? (yield* viewer.cwd) ?? homedir()));
             return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });
           }
           case "save_project":
@@ -195,19 +113,11 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "ack":
             return yield* delivery.ack(msg.deliveryId);
           case "select":
-            return yield* show(msg);
           case "create_session":
-            return yield* commands.createSession(
-              { cwd: msg.cwd, projectId: msg.projectId, options: msg.options, text: msg.text, attachments: msg.attachments },
-              { attach: open => Semaphore.withPermits(navigation, 1)(attachOpened(msg.selectionId, open)), published: publishRegistry },
-            );
+            return; // Claimed and started in receive order by the read loop.
           case "act": {
-            const session = yield* Semaphore.withPermits(navigation, 1)(Effect.gen(function* () {
-              if (!selected || selected.selectionId !== msg.selectionId) return yield* Effect.fail(new Error("Selection changed; inspect the current session before acting."));
-              if (attachment?.selectionId === msg.selectionId) return attachment.session;
-              if (!msg.start) return yield* Effect.fail(new Error("Session is not running; start it first"));
-              return yield* start(selected, msg.start);
-            }));
+            const { session, started } = yield* viewer.act(msg.selectionId, msg.start);
+            if (started) yield* publishRegistry;
             if (msg.action._tag === "prompt" || msg.action._tag === "steer") {
               yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, msg.action.text);
               yield* publishRegistry;
@@ -222,9 +132,7 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "archive_session":
           case "delete_session": {
             const mode = msg._tag === "delete_session" ? "delete" : "archive";
-            yield* detachSession(msg.cwd, msg.sessionId);
-            yield* commands.retireSession(msg.cwd, msg.sessionId, mode);
-            yield* deselect(msg.cwd, msg.sessionId);
+            yield* viewer.forget(msg.cwd, msg.sessionId, commands.retireSession(msg.cwd, msg.sessionId, mode));
             if (mode === "delete") yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
             return yield* publishRegistry;
           }
@@ -260,16 +168,20 @@ export const handleSocket = (socket: Socket.Socket) =>
           yield* sendError(e);
           continue;
         }
-        // Claim selection in receive order, before any asynchronous lookup can finish.
-        if (msg._tag === "select" || msg._tag === "create_session") {
-          selected = { cwd: msg.cwd, sessionId: msg._tag === "select" ? msg.sessionId : null, selectionId: msg.selectionId };
-        }
         // Each message runs in its own fiber: a prompt that opens an extension dialog only
         // gets its response after the dialog is answered, so handling must not serialize.
-        yield* handle(msg).pipe(
-          Effect.catchCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : sendError(Cause.squash(cause), "selectionId" in msg ? msg.selectionId : undefined))),
+        const selectionId = "selectionId" in msg ? msg.selectionId : undefined;
+        const fork = <A, E, R>(work: Effect.Effect<A, E, R>) => work.pipe(
+          Effect.catchCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : sendError(Cause.squash(cause), selectionId))),
           Effect.forkScoped,
         );
+        // Claim selection in receive order, before any asynchronous lookup can finish.
+        if (msg._tag === "select") yield* fork(yield* viewer.select(msg));
+        else if (msg._tag === "create_session") yield* fork(commands.createSession(
+          { cwd: msg.cwd, projectId: msg.projectId, options: msg.options, text: msg.text, attachments: msg.attachments },
+          { attach: yield* viewer.create(msg), published: publishRegistry },
+        ));
+        else yield* fork(handle(msg));
       }
     }).pipe(Effect.forever, Effect.catchCause(() => Effect.void), Effect.raceFirst(
       delivery.closed.pipe(Effect.flatMap(({ reason, code }) => writer.write(new Socket.CloseEvent(code, reason)).pipe(Effect.ignore))),
