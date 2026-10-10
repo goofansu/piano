@@ -6,6 +6,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
 import { type ProjectDialog, ProjectDialogView } from "@/components/Projects";
+import { SessionCommandHost } from "@/components/SessionCommandHost";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage, type SettingsSection } from "@/components/SettingsPage";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
@@ -199,6 +200,7 @@ export default function App() {
   const anyWorking = state.hosts.some((h) => h.streaming);
 
   return (
+    <SessionCommandHost state={state} send={send} openNew={openNew} openChanges={() => { closeSettings(); setChangesOpen(true); }} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }}>
     <AppLayout layout={layout} navigationTitle={settingsOpen ? "Settings navigation" : "Folders and sessions"}
       navigation={compact => settingsOpen
         ? <SettingsNavigation compact={compact} section={settingsSection} onShow={layout.show} onHide={layout.hide} onSelect={openSettingsSection} onHome={closeSettings} />
@@ -220,7 +222,7 @@ export default function App() {
               </EmptyContent>
             </Empty>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openNew={openNew} openProject={openProject} changesOpen={!settingsOpen && changesOpen} onChangesOpenChange={setChangesOpen} pullRequest={pullRequest} pullRequestOpen={!settingsOpen && pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openProject={openProject} changesOpen={!settingsOpen && changesOpen} onChangesOpenChange={setChangesOpen} pullRequest={pullRequest} pullRequestOpen={!settingsOpen && pullRequestOpen} onPullRequestOpenChange={setPullRequestOpen} />
           )}
         </LayoutView>
         {settingsOpen && <LayoutView><SettingsPage section={settingsSection} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
@@ -238,8 +240,9 @@ export default function App() {
         toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
       />
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette openSettings={openSettingsSection} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} openChanges={() => { closeSettings(); setChangesOpen(true); }} openPullRequest={() => { closeSettings(); setPullRequestOpen(true); }} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette openSettings={openSettingsSection} closeSettings={settingsOpen ? closeSettings : undefined} send={send} open={paletteOpen} onOpenChange={setPaletteOpen} state={state} select={select} openNew={openNew} toggleSidebar={toggleSidebar} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={sessionReady(state)} />
     </AppLayout>
+    </SessionCommandHost>
   );
 }

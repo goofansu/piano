@@ -24,7 +24,6 @@ interface Props {
   onMenu: () => void;
   onDraftChange: (key: string, text: string) => void;
   onDraftAppend: (key: string, text: string) => void;
-  openNew: (cwd?: string) => void;
   openProject: (id: string) => void;
   changesOpen: boolean;
   onChangesOpenChange: (open: boolean) => void;
@@ -33,7 +32,7 @@ interface Props {
   onPullRequestOpenChange: (open: boolean) => void;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openNew, openProject, changesOpen, onChangesOpenChange, pullRequest, pullRequestOpen, onPullRequestOpenChange }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openProject, changesOpen, onChangesOpenChange, pullRequest, pullRequestOpen, onPullRequestOpenChange }: Props) {
   const [display] = useSessionDisplay();
   const t = state.session;
   const input = state.pendingCreate;
@@ -64,8 +63,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   return (
     <>
-      <SessionHeader state={state} onMenu={onMenu} openNew={openNew} openProject={openProject} status={status} openChanges={() => onChangesOpenChange(true)}
-        openPullRequest={() => onPullRequestOpenChange(true)}
+      <SessionHeader state={state} onMenu={onMenu} openProject={openProject} status={status}
         pullRequest={t?.sessionId && <SessionPullRequestControl key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />} />
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={changesWorkspace} session={t}
         onAsk={text => {
