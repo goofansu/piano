@@ -3,16 +3,16 @@
  * external inputs. Unsupported/racing inputs fail closed (INV-07/08).
  */
 
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { type BigIntStats, constants, type FSWatcher, watch } from "node:fs";
 import { lstat, mkdir, mkdtemp, open, readFile, readlink, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
 import type { RevisionFile, RevisionManifest, Workspace, WorkspaceCapture } from "../shared/wire.ts";
+import { hardenedGit, isSafePath } from "./HardenedGit.ts";
 import { RegistryDatabasePath } from "./Registry.ts";
+import { GitCommand, SubprocessError } from "./Subprocess.ts";
 
-export const RevisionGitCommand = Context.Reference<string>("piano/RevisionGitCommand", { defaultValue: () => "git" });
 export const RevisionStorePath = Context.Reference<string | undefined>("piano/RevisionStorePath", { defaultValue: () => process.env.PIANO_REVISION_STORE });
 export class WorkspaceRevisions extends Context.Service<WorkspaceRevisions, {
   /** Bounded, serialized capture. The result and persisted candidate share one manifest.
@@ -35,7 +35,7 @@ const split = (bytes: Buffer) => {
   return text.split("\0").filter(Boolean);
 };
 function safePath(path: string) {
-  if (!path || isAbsolute(path) || path.split("/").some(p => !p || p === "." || p === ".." || p.toLowerCase() === ".git")) unsupported(`Unsafe or unsupported repository path: ${JSON.stringify(path)}`);
+  if (!isSafePath(path)) unsupported(`Unsafe or unsupported repository path: ${JSON.stringify(path)}`);
   return path;
 }
 function mode(value: string): RevisionFile["mode"] {
@@ -44,34 +44,20 @@ function mode(value: string): RevisionFile["mode"] {
   return value as RevisionFile["mode"];
 }
 
-/** No inherited GIT_DIR/INDEX/OBJECT overrides or user diff programs. Source local
- * repository config is still read by Git, but plumbing reads never invoke filters.
- */
-function gitEnv() {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-  return { ...env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_OPTIONAL_LOCKS: "0", GIT_NO_REPLACE_OBJECTS: "1", LC_ALL: "C" };
-}
-function command(cli: string, cwd: string, args: string[], signal: AbortSignal, input?: Buffer, diff = false): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cli, ["--no-pager", "-c", "core.fsmonitor=false", ...args], { cwd, env: gitEnv(), stdio: ["pipe", "pipe", "pipe"], signal });
-    const output: Buffer[] = [], errors: Buffer[] = []; let bytes = 0, errorBytes = 0, overflow = false;
-    child.stdout.on("data", (b: Buffer) => { bytes += b.length; if (bytes > (diff ? MAX_DIFF : MAX_BYTES)) { overflow = true; child.kill(); } else output.push(b); });
-    child.stderr.on("data", (b: Buffer) => { errorBytes += b.length; if (errorBytes < 16_384) errors.push(b); });
-    child.on("error", reject); child.stdin.on("error", () => {});
-    child.on("close", code => {
-      if (overflow) reject(new CaptureProblem("unsupported", "Capture output exceeds the supported size limit."));
-      else if (code !== 0 && !(diff && code === 1)) reject(new Error(`Git ${args[0]} failed: ${Buffer.concat(errors).toString("utf8").trim() || `exit ${code}`}`));
-      else resolve(Buffer.concat(output));
-    });
-    child.stdin.end(input);
-  });
+async function command(cli: string, cwd: string, args: string[], signal: AbortSignal, input?: Buffer, diff = false): Promise<Buffer> {
+  try {
+    return (await hardenedGit(cli, args, { cwd, input, limit: diff ? MAX_DIFF : MAX_BYTES, okCodes: diff ? [0, 1] : [0] }, signal)).stdout;
+  } catch (error) {
+    if (error instanceof SubprocessError && error.reason === "limit") throw new CaptureProblem("unsupported", "Capture output exceeds the supported size limit.");
+    throw error;
+  }
 }
 type GitEntry = { path: string; mode: RevisionFile["mode"]; oid: string };
 
 export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.gen(function* () {
   const database = resolve(yield* RegistryDatabasePath);
   const store = resolve((yield* RevisionStorePath) ?? join(dirname(database), `${basename(database)}.revisions`));
-  const cli = yield* RevisionGitCommand;
+  const cli = yield* GitCommand;
   const lock = yield* Semaphore.make(1);
 
   async function capture(workspace: Workspace, signal: AbortSignal): Promise<WorkspaceCapture["result"]> {

@@ -1,6 +1,5 @@
 /** Machine-wide Radius onboarding, not an MCP client. Pi owns auth, configuration
  * parsing and package installation. Nothing here mutates running sessions. */
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +12,7 @@ import { Context, Data, Effect, Layer } from "effect";
 import { addMcpServerConfig, loadMcpConfig, removeMcpServerConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
 import type { RadiusSetupState, RadiusSetupStep } from "../shared/radius.ts";
 import { agentDir } from "./PiEnv.ts";
+import { runAsync, SubprocessError } from "./Subprocess.ts";
 
 const RADIUS_MCP_URL = "https://radius.pi.dev/mcp";
 const PACKAGE = "npm:@earendil-works/pi-radius-web-search";
@@ -21,25 +21,13 @@ const removalKey = (value: unknown) => createHash("sha256").update(JSON.stringif
 
 /** No shell interpolation, arbitrary package input, installer output or credentials
  * cross the HTTP boundary. A disconnected browser does not cancel the install. */
-function runPackage(action: "install" | "remove", source: string, directory: string, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const cli = fileURLToPath(new URL("./bundle/cli.js", import.meta.resolve("@earendil-works/pi-coding-agent")));
-    mkdirSync(directory, { recursive: true });
-    const child = spawn(process.execPath, [cli, action, source, "--no-approve"], {
-      cwd: directory, env: { ...process.env, PI_CODING_AGENT_DIR: directory }, detached: true, stdio: "ignore",
-    });
-    const stop = () => {
-      // This process group belongs only to this installer, including npm children.
-      if (child.pid) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* already exited */ } }
-    };
-    signal.addEventListener("abort", stop, { once: true });
-    if (signal.aborted) stop();
-    child.once("error", () => { signal.removeEventListener("abort", stop); reject(new Error("Installation could not start.")); });
-    child.once("close", code => {
-      signal.removeEventListener("abort", stop);
-      if (code === 0 && !signal.aborted) resolve();
-      else reject(new Error("Installation did not complete."));
-    });
+async function runPackage(action: "install" | "remove", source: string, directory: string, signal: AbortSignal): Promise<void> {
+  const cli = fileURLToPath(new URL("./bundle/cli.js", import.meta.resolve("@earendil-works/pi-coding-agent")));
+  mkdirSync(directory, { recursive: true });
+  // Its own process group: cancellation also stops npm children.
+  await runAsync({ command: process.execPath, args: [cli, action, source, "--no-approve"], cwd: directory,
+    env: { ...process.env, PI_CODING_AGENT_DIR: directory }, group: true }, signal).catch(error => {
+    throw new Error(error instanceof SubprocessError && error.reason === "start" ? "Installation could not start." : "Installation did not complete.");
   });
 }
 
