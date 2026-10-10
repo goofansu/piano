@@ -14,7 +14,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { Toaster } from "@/components/ui/sonner";
 import { hasMod } from "@/lib/keys";
 import { parseRoute, type Route, routePath } from "@/lib/routes";
-import { sessionReady } from "@/lib/sessionContext";
+import { sessionReady, workspaceFor } from "@/lib/sessionContext";
 import { readJson, writeJson } from "@/lib/storage";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { useConnection } from "@/lib/ws";
@@ -119,7 +119,8 @@ export default function App() {
   const [pullRequestOpen, setPullRequestOpen] = useState(false);
   // One PR projection feeds the header, menu, and palette for the selected session.
   const prSession = state.view.kind === "session" ? state.session : null;
-  const prWorkspaceId = state.folders.flatMap(p => p.sessions).find(s => s.cwd === prSession?.cwd && s.sessionId === prSession?.sessionId)?.workspaceId;
+  // The registry's workspace for the directory, like Changes: it outlives a closed folder.
+  const prWorkspaceId = workspaceFor(state, prSession?.cwd)?.id;
   const pullRequest = useSessionPullRequest(prWorkspaceId, prSession?.sessionId, !!(prSession?.state.isStreaming || prSession?.state.isCompacting || prSession?.state.isRetrying));
   useEffect(() => { setChangesOpen(false); setPullRequestOpen(false); }, [state.session?.cwd, state.session?.sessionId]);
   useEffect(() => {
