@@ -533,20 +533,22 @@
   to { height: 0; opacity: 0; }
 }
 
-/* The keys. The three-key mark is the instrument's live signal: while Pi works each key dips
- * 2px and dims in turn, a 1.2s cycle, and comes to a clean rest when Pi finishes. In reduced
- * motion the keys hold a pressed state instead. */
-.keys[data-playing="true"] > span {
-  animation: key-press 1.2s var(--ease-enter) infinite;
+/* The keys. The three-key mark is the instrument's live signal: while Pi works the three keys
+ * play a scale, each dropping one pixel below the fallboard and dimming for 360ms in turn, on a
+ * 1.2s cycle. The press steps rather than eases. When Pi finishes the
+ * animation stops and the keys snap back under the fallboard. In reduced motion the global reset
+ * below stops the scale, so the keys hold a still pressed state instead: dropped and dimmed. */
+.keys[data-playing="true"] [data-key] {
+  animation: key-press 1.2s steps(1, end) infinite;
 }
-.keys[data-playing="true"] > span:nth-child(2) { animation-delay: 0.16s; }
-.keys[data-playing="true"] > span:nth-child(3) { animation-delay: 0.32s; }
+.keys[data-playing="true"] [data-key="1"] { animation-delay: 0.4s; }
+.keys[data-playing="true"] [data-key="2"] { animation-delay: 0.8s; }
 @keyframes key-press {
-  0%, 55%, 100% { transform: translateY(0); opacity: 1; }
-  22% { transform: translateY(2px); opacity: 0.55; }
+  0% { transform: translateY(1px); opacity: 0.55; }
+  30%, 100% { transform: translateY(0); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .keys[data-playing="true"] > span { transform: translateY(2px); opacity: 0.6; }
+  .keys[data-playing="true"] [data-key] { transform: translateY(1px); opacity: 0.6; }
 }
 
 /* Toasts carry a thin line that drains while they wait to leave; hovering the stack pauses it.
