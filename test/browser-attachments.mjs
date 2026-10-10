@@ -95,21 +95,22 @@ try {
   // Draft stays scoped and survives navigation without becoming a new session's upload.
   ab('upload', 'input[type="file"]', image); await until(`${attached} === 1`);
   ab('set', 'viewport', '1280', '800');
-  const sessionTitle = evaluate(`document.querySelector('button[aria-current="page"]').title`);
+  const sessionTitle = evaluate(`document.querySelector('button[aria-current="page"] > .truncate').textContent`);
+  const openSession = () => evaluate(`[...document.querySelectorAll('nav li > button')].find(b => b.querySelector(':scope > .truncate')?.textContent === ${JSON.stringify(sessionTitle)}).click()`);
   ab('find', 'role', 'button', 'click', '--name', 'New session', '--exact'); await until(`!!document.querySelector('[aria-label="First message"]')`);
   assert.equal(evaluate(attached), 0);
   ab('fill', '[aria-label="First message"]', 'unsent new session draft');
   ab('upload', 'input[type="file"]', image); await until(`${attached} === 1`);
-  ab('click', `button[title="${sessionTitle}"]`); await until(`!!document.querySelector('[aria-label="Message"]')`);
+  openSession(); await until(`!!document.querySelector('[aria-label="Message"]')`);
   ab('find', 'role', 'button', 'click', '--name', 'New session', '--exact'); await until(`!!document.querySelector('[aria-label="First message"]')`);
   assert.equal(evaluate(attached), 1, 'new-session images survive navigation');
   assert.equal(evaluate(`document.querySelector('[aria-label="First message"]').value`), 'unsent new session draft', 'new-session text survives navigation with its images');
   ab('click', '[aria-label="Remove pixel.png"]');
-  ab('click', `button[title="${sessionTitle}"]`); await until(`${attached} === 1`);
+  openSession(); await until(`${attached} === 1`);
   evaluate(`(() => {const native=FileReader.prototype.readAsDataURL;FileReader.prototype.readAsDataURL=function(file){window.finishImageRead=()=>{FileReader.prototype.readAsDataURL=native;native.call(this,file);};};return true;})()`);
   fileEvent('paste', 'slow.png'); await until(`typeof window.finishImageRead === 'function'`);
   ab('find', 'role', 'button', 'click', '--name', 'New session', '--exact'); await until(`!!document.querySelector('[aria-label="First message"]')`);
-  ab('click', `button[title="${sessionTitle}"]`); await until(`${attached} === 1`);
+  openSession(); await until(`${attached} === 1`);
   assert.equal(evaluate(`document.querySelector('[aria-label="Attach images"]').disabled`), true, 'reading state survives navigation');
   evaluate(`(() => {window.finishImageRead();return true;})()`); await until(`${attached} === 2`);
   ab('click', '[aria-label="Remove slow.png"]');

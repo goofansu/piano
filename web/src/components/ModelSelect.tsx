@@ -4,6 +4,7 @@ import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EffortSelect, levelsFor } from "@/components/EffortSelect";
+import { IconButton } from "@/components/IconButton";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
@@ -85,9 +86,9 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
         <Button
           variant={variant === "outline" ? "outline-transparent" : variant} size={variant === "outline" ? "default" : "sm"} aria-haspopup="dialog" aria-expanded={open}
           aria-label={`Model: ${want || label}; effort: ${effort}`}
+          title={want}
           disabled={disabled || (!models.length && !onRefresh) || !catalog}
           className={cn("min-w-0 shrink font-mono", variant === "outline" ? "max-w-full justify-start" : [picker, "max-w-none justify-end"])}
-          title={want}
         >
           <span className={cn("min-w-0 truncate", !catalog && !noDirectory && "shimmer")}>{label}</span>
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>·</span>
@@ -99,13 +100,13 @@ export function ModelSelect({ catalog, value, onChange, effort, onEffortChange, 
         <Command shouldFilter={false}>
           <PickerSearch ref={search} value={query} onValueChange={setQuery} aria-label="Search models" placeholder="Search models">
             {onRefresh && (
-              <Button
-                variant="ghost" size="icon-sm" aria-label="Refresh models" title="Refresh models"
+              <IconButton
+                label="Refresh models"
                 disabled={disabled || refreshPending}
                 onClick={() => { if (isRefreshing === undefined) setRefreshing(catalog?.fetchedAt ?? ""); onRefresh(); }}
               >
                 {refreshPending ? <Spinner /> : <RefreshCwIcon aria-hidden />}
-              </Button>
+              </IconButton>
             )}
           </PickerSearch>
           <CommandList className="max-h-[min(16rem,40dvh)]">

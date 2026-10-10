@@ -30,8 +30,8 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
         {cwd ? <>
           <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-1">
             {/* The project is the way back to where this session was opened from. */}
-            {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal || project.name} onClick={() => openProject(project.id)}>{project.name}</button>}
-            <h1 className="truncate text-sm font-medium" title={session ? title : undefined}>{session ? title : "New session"}</h1>
+            {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" title={project.goal} onClick={() => openProject(project.id)}>{project.name}</button>}
+            <h1 className="truncate text-sm font-medium">{session ? title : "New session"}</h1>
           </div>
           {/* Plain workspace metadata has no dedicated UI primitive. */}
           <div className="col-start-1 row-start-2 flex min-w-0 items-center gap-2">
@@ -76,7 +76,7 @@ export function SessionHeader({ state, onMenu, openNew, openProject, status, ope
                 <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
               </div>
             </dl>
-            <DropdownMenuItem className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5" aria-label="Copy all" title="Copy all" onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /></DropdownMenuItem>
+            <DropdownMenuItem className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5" aria-label="Copy all" onSelect={() => { void copyAllSessionDetails(state); }}><CopyIcon /></DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

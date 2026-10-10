@@ -149,7 +149,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
               {prefix && <span className="text-ink-3">/{prefix}*</span>}
             </span>
             {dir.gitSubject && (
-              <span className="ml-auto flex min-w-0 items-center gap-1 truncate text-ink-2" title={dir.gitSubject}>
+              <span className="ml-auto flex min-w-0 items-center gap-1 truncate text-ink-2">
                 <GitBranchIcon className="size-3 shrink-0" /> <span className="truncate">{dir.gitSubject}</span>
               </span>
             )}
@@ -197,7 +197,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
                   e.name
                 )}
               </span>
-              {e.gitSubject && <span className="max-w-[45%] truncate text-ink-3" title={e.gitSubject}>{e.gitSubject}</span>}
+              {e.gitSubject && <span className="max-w-[45%] truncate text-ink-3">{e.gitSubject}</span>}
             </button>
           ))}
           {creating && dir && (

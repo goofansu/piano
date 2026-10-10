@@ -328,7 +328,7 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
       </CollapsibleTrigger>
       <CollapsibleContent className="disclosure-content">
         <div className="mt-2 border-l-2 border-line pl-3">
-          <p className="mb-2 truncate font-mono text-xs text-ink-3" title={skill.location}>{abbrevHome(skill.location)}</p>
+          <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
           <Markdown text={skill.body} className="prose-chat text-ink-2" />
         </div>
       </CollapsibleContent>
@@ -382,7 +382,7 @@ function SubagentCardView({ card, content, markdown = false, failed = false, ter
       <Row className="items-center" glyph={<span className={cn("block size-2 rounded-full", failed || visibleTerminal === "failed" ? "bg-err" : visibleTerminal === "completed" ? "bg-ok" : "bg-ink-3")} />}>
         <CollapsibleTrigger asChild disabled={!hasDetails}>
           <button type="button" className={disclosureRow}>
-            <span className="min-w-0 flex-1 truncate font-medium text-ink" title={title}>{(card.kind === "result" || card.kind === "collection") && <span className="font-normal text-ink-3">Result · </span>}{title}</span>
+            <span className="min-w-0 flex-1 truncate font-medium text-ink">{(card.kind === "result" || card.kind === "collection") && <span className="font-normal text-ink-3">Result · </span>}{title}</span>
             {"profile" in card && card.profile && <span className="max-w-28 shrink truncate text-ink-3">{card.profile}</span>}
             <Badge variant={subagentBadge(card, terminalStatus)} className="max-w-56 truncate">{visibleStatus}</Badge>
             {hasDetails && <DisclosureChevron open={open} />}

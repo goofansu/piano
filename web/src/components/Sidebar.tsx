@@ -309,7 +309,7 @@ function SessionRow({ t, selected, disabled, hint, state, send, select, actions,
     >
       <button
         type="button"
-        title={hint ?? (t.title || t.sessionId)}
+        title={hint}
         aria-current={selected ? "page" : undefined}
         disabled={disabled}
         onClick={() => select(t.cwd, t.sessionId)}

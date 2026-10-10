@@ -6,6 +6,7 @@ import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } f
 import { BranchLabel } from "@/components/BranchLabel";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
+import { IconButton } from "@/components/IconButton";
 import { ModelSelect } from "@/components/ModelSelect";
 import { PianoMark } from "@/components/PianoMark";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
@@ -184,7 +185,7 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "ml-auto max-w-[45%] shrink-0", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "ml-auto max-w-[45%] shrink-0", current ? "text-ink-2" : "text-ink-3")} title={current?.goal}>
           <TargetIcon className="text-ink-3" />
           <span className="truncate">{current ? current.name : "Project"}</span>
         </Button>
@@ -203,9 +204,9 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
         ) : (
           <Command>
             <PickerSearch ref={search} aria-label="Search projects" placeholder="Search projects">
-              <Button variant="ghost" size="icon-sm" aria-label="New project" title="New project" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }}>
+              <IconButton label="New project" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }}>
                 <PlusIcon aria-hidden />
-              </Button>
+              </IconButton>
             </PickerSearch>
             <CommandList className="max-h-[min(18rem,60dvh)]">
               <CommandEmpty>No project matches.</CommandEmpty>
