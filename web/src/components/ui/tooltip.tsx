@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import { cn } from "cn"
 import { Tooltip as TooltipPrimitive } from "radix-ui"
@@ -23,7 +21,7 @@ function Tooltip({
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-// Menus, popovers and dialogs return focus to their trigger when they close. After a pointer
+// piano: menus, popovers and dialogs return focus to their trigger when they close. After a pointer
 // interaction that restored focus should not open a tooltip; hover already serves pointer users.
 let pointerModality = false
 if (typeof document !== "undefined") {
@@ -60,12 +58,14 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
+          // piano: z-[60] keeps tooltips above toasts; Piano's hover timing
           "z-[60] w-fit origin-(--radix-tooltip-content-transform-origin) animate-in rounded-md bg-foreground px-3 py-1.5 text-xs text-balance text-background duration-(--dur-hover) ease-(--ease-enter) fade-in-0 zoom-in-[0.96] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.96]",
           className
         )}
         {...props}
       >
         {children}
+        {/* piano: the arrow matches the content's z-[60] */}
         <TooltipPrimitive.Arrow className="z-[60] size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground" />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>

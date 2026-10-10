@@ -21,6 +21,7 @@ function Command({
     <CommandPrimitive
       data-slot="command"
       className={cn(
+        // piano: one row height for input and items, taller on touch screens
         "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground [--command-row-height:2.25rem] pointer-coarse:[--command-row-height:2.75rem]",
         className
       )}
@@ -52,6 +53,7 @@ function CommandDialog({
         className={cn("overflow-hidden p-0", className)}
         showCloseButton={showCloseButton}
       >
+        {/* piano: the palette dialog uses 3rem rows */}
         <Command className="[--command-row-height:3rem] pointer-coarse:[--command-row-height:3rem] [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-item]]:px-2 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
           {children}
         </Command>
@@ -60,6 +62,7 @@ function CommandDialog({
   )
 }
 
+// piano: the input row shares --command-row-height
 function CommandInput({
   className,
   ...props
@@ -147,6 +150,7 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
+        // piano: items share --command-row-height and Piano's hover timing
         "relative flex min-h-(--command-row-height) cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden select-none transition-colors duration-(--dur-hover) data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         className
       )}

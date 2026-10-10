@@ -1,5 +1,6 @@
 import { cn } from "cn"
 
+// piano: skeletons use the fill-active layer token
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
