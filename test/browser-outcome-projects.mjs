@@ -126,10 +126,21 @@ try {
   // Grouped by folder, the sidebar shows no project rows; the chip on the New page creates the first project.
   await create('Launch subscriptions');
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="Project menu for Launch subscriptions"]')`), false);
+  await groupBy('Folder');
   await openGroup('api'); await openGroup('web');
   await file('API session', 'Launch subscriptions'); await file('Web session', 'Launch subscriptions');
   assert.equal(member('one').outcomeProjectId, project('Launch subscriptions').id);
   assert.equal(member('two').outcomeProjectId, project('Launch subscriptions').id);
+  // Non-project groupings show registry membership above the session title, not a folder label.
+  for (const grouping of ['Date', 'None', 'Folder']) {
+    await groupBy(grouping);
+    if (grouping === 'Folder') { await openGroup('api'); await openGroup('web'); }
+    await wait(`document.querySelector('nav li:has([aria-label="Session menu for API session"]) .text-brand')?.textContent === 'Launch subscriptions'`);
+    const label = await evaluate(`(() => { const row = document.querySelector('nav li:has([aria-label="Session menu for API session"])'); const label = row.querySelector('.text-brand'); const title = row.querySelector('button[title="API session"]'); return { text: label.textContent, tooltip: label.title, small: label.classList.contains('text-xs'), above: label.getBoundingClientRect().top < [...title.querySelectorAll('span')].find(s => s.textContent === 'API session').getBoundingClientRect().top }; })()`);
+    assert.deepEqual(label, { text: 'Launch subscriptions', tooltip: 'Goal for Launch subscriptions', small: true, above: true });
+    assert.equal(await evaluate(`!!document.querySelector('nav li:has([aria-label="Session menu for Accessibility session"]) .text-brand')`), false);
+    await ab('screenshot', join(evidence, `session-project-${grouping.toLowerCase()}.png`));
+  }
   await ab('screenshot', join(evidence, 'cross-repository.png'));
   await createWithSession('Improve accessibility', 'Accessibility session');
   assert.equal(member('three').outcomeProjectId, project('Improve accessibility').id);
@@ -140,6 +151,8 @@ try {
   // Group by project lists every project plus a No project group; the grouping is remembered across reload.
   await groupBy('Project'); await ab('wait', '--text', 'No project');
   await openGroup('Empty project'); await ab('wait', '--text', 'No sessions yet');
+  await openGroup('Launch subscriptions');
+  assert.equal(await evaluate(`!!document.querySelector('nav li:has([aria-label="Session menu for API session"]) .text-brand')`), false, 'project grouping does not repeat the group name in each row');
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('nav button[aria-expanded]:not([aria-haspopup])')].map(b => b.textContent)`), ['Improve accessibility', 'Launch subscriptions', 'Empty project', 'No project'], 'by last activity: equal timestamps fall back to name, an empty project last');
   await ab('reload'); await ab('wait', '--text', 'No project');
   assert.equal(await evaluate(`!!document.querySelector('[aria-label="New session in Empty project"]')`), true);

@@ -6,7 +6,7 @@ import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { BranchLabel } from "@/components/BranchLabel";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
-import { type ProjectDialog, ProjectMenu } from "@/components/OutcomeProjects";
+import { type ProjectDialog, ProjectMenu, sessionProject } from "@/components/OutcomeProjects";
 import { Keys } from "@/components/PianoMark";
 import { useSessionActions } from "@/components/SessionActions";
 import { Hint } from "@/components/Shortcut";
@@ -275,10 +275,11 @@ interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew"
 type SessionTarget = { cwd: string; sessionId: string; title?: string };
 type SessionActions = ReturnType<typeof useSessionActions>;
 
-/** A session title, with a second line only when its grouping needs location metadata. */
-function SessionRow({ t, metadata, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
-  t: SessionTarget; metadata?: React.ReactNode; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
+/** Project identity above the title unless the group already names it; location stays below. */
+function SessionRow({ t, metadata, showProject = true, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
+  t: SessionTarget; metadata?: React.ReactNode; showProject?: boolean; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
+  const project = showProject ? sessionProject(state, t) : undefined;
   const checkoutMissing = state.session?.cwd === t.cwd && state.session.state.checkoutMissing;
   // Live host state comes from the `hosts` broadcast, which changes more often than the project list.
   const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
@@ -288,7 +289,7 @@ function SessionRow({ t, metadata, selected, disabled, hint, state, send, select
   return (
     <li
       style={reveal()}
-      className={cn(metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-brand-soft hover:bg-brand-soft")}
+      className={cn(project && metadata ? "h-16" : project || metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-brand-soft hover:bg-brand-soft")}
     >
       <button
         type="button"
@@ -303,6 +304,7 @@ function SessionRow({ t, metadata, selected, disabled, hint, state, send, select
         </span>
         {/* No standalone shadcn primitive fits the title and metadata inside this existing navigation button. */}
         <span className="flex min-w-0 flex-1 flex-col">
+          {project && <span className="-mb-0.5 truncate text-xs text-brand" title={project.goal || project.name}>{project.name}</span>}
           <span className={cn("truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
           {metadata && <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">{metadata}</span>}
         </span>
@@ -401,7 +403,7 @@ function OutcomeGroup({ project, sessions, current, open, onOpenChange, state, s
       <CollapsibleContent className="disclosure-content">
         {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
           {members.map(s => (
-            <SessionRow key={sessionKey(s)} t={s} metadata={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
+            <SessionRow key={sessionKey(s)} t={s} showProject={false} metadata={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
               selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
               state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
           ))}
