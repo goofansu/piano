@@ -1,6 +1,7 @@
 ---
 name: sync-piano
 description: Sync Piano to latest main locally and on exe.dev VMs tagged goofansu-piano, then restart remote services. Use when asked to update or sync all Piano machines.
+disable-model-invocation: true
 ---
 
 # Sync Piano
