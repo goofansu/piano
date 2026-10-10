@@ -8,7 +8,7 @@ const schema = `
   CREATE TABLE registry_meta (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL);
   INSERT INTO registry_meta VALUES (1, 0);
   CREATE TABLE projects (
-    id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL CHECK (length(trim(name)) > 0), goal TEXT,
+    id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL CHECK (length(trim(name)) > 0),
     archived INTEGER NOT NULL CHECK (archived IN (0, 1)), position INTEGER NOT NULL
   ) STRICT;
   CREATE TABLE workspaces (
@@ -35,14 +35,14 @@ const schema = `
   ) STRICT;
   CREATE INDEX sessions_activity ON sessions(archived, updated_at DESC);
   CREATE INDEX sessions_project ON sessions(project_id, updated_at DESC);
-  PRAGMA user_version = 1;
+  PRAGMA user_version = 2;
 `;
 
 type Row = SQLInputValue[];
 /** Ordered parent-first; deletions run in reverse. Column names never come from user input. */
 const tables = [
-  { name: "projects", columns: ["id", "name", "goal", "archived", "position"], keys: 1,
-    rows: (d: RegistryData): Row[] => d.projects.map((p, i) => [p.id, p.name, p.goal ?? null, Number(p.archived), i]) },
+  { name: "projects", columns: ["id", "name", "archived", "position"], keys: 1,
+    rows: (d: RegistryData): Row[] => d.projects.map((p, i) => [p.id, p.name, Number(p.archived), i]) },
   { name: "workspaces", columns: ["path", "id", "folder_path", "position"], keys: 1,
     rows: (d: RegistryData): Row[] => d.workspaces.map((w, i) => [w.path, w.id, w.folder, i]) },
   { name: "folders", columns: ["path", "position"], keys: 1,
@@ -76,7 +76,7 @@ function snapshot(db: DatabaseSync): RegistryData {
   return {
     version: 2,
     folders: rows("folders").map(r => r.path as string),
-    projects: rows("projects").map(r => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived), ...(r.goal === null ? {} : { goal: r.goal as string }) })),
+    projects: rows("projects").map(r => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived) })),
     workspaces: rows("workspaces").map(r => ({ id: r.id as string, path: r.path as string, folder: r.folder_path as string })),
     worktrees: rows("worktrees").map(r => ({ path: r.path as string, folder: r.folder_path as string, branch: r.branch as string })),
     sessions: rows("sessions").map(r => ({ cwd: r.cwd as string, sessionId: r.session_id as string, createdAt: r.created_at as string, updatedAt: r.updated_at as string, archived: Boolean(r.archived),
@@ -100,6 +100,16 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
   const db = new DatabaseSync(path);
   try {
     db.exec("PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
+    // Version 2 retired the project goal. Keep a private copy of a version-1 file before dropping the
+    // column: it is the only way back to an older Piano, and the only place old goals survive.
+    if (db.prepare("PRAGMA user_version").get()!.user_version === 1) {
+      const backup = `${path}.v1-backup`;
+      try { closeSync(openSync(backup, "wx", 0o600)); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+      if (lstatSync(backup).isSymbolicLink()) throw new Error("Registry backup symlinks are not supported.");
+      if (lstatSync(backup).size === 0) db.prepare("VACUUM INTO ?").run(backup);
+      chmodSync(backup, 0o600);
+    }
     db.exec("BEGIN IMMEDIATE");
     try {
       const version = db.prepare("PRAGMA user_version").get()!.user_version;
@@ -107,7 +117,9 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         if (db.prepare("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").all().length) throw new Error("Unrecognized registry database; refusing to initialize it.");
         db.exec(schema);
         persist(db, empty, initial);
-      } else if (version !== 1) throw new Error(`Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`);
+      } else if (version === 1) {
+        db.exec("ALTER TABLE projects DROP COLUMN goal; PRAGMA user_version = 2;");
+      } else if (version !== 2) throw new Error(`Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`);
       db.exec("COMMIT");
     } catch (error) { db.exec("ROLLBACK"); throw error; }
     db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");

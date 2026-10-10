@@ -2,6 +2,7 @@ import type { ClientCommand, WorktreeFacts } from "@shared/wire";
 import { ArrowLeftIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertDetails } from "@/components/Banner";
+import { IconButton } from "@/components/IconButton";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -83,7 +84,7 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
     {/* The list and the form trade places with a short slide, so the swap reads as one surface. */}
     {creating && target ? <form key="create" className="flex animate-in flex-col gap-3 p-2 fade-in-0 slide-in-from-right-2 duration-200" onSubmit={e => { e.preventDefault(); submit(); }}>
       <div className="flex items-center gap-1">
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Back to worktrees" title="Back" disabled={pending} onClick={showList}><ArrowLeftIcon /></Button>
+        <IconButton type="button" label="Back to worktrees" disabled={pending} onClick={showList}><ArrowLeftIcon /></IconButton>
         <p className="shrink-0 text-sm font-medium">New worktree <span className="font-normal text-ink-3">in</span></p>
         <p className="min-w-0 truncate text-sm font-medium">{target.name}</p>
       </div>
@@ -107,12 +108,12 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
     </form> : <div key="list" className="flex animate-in flex-col fade-in-0 slide-in-from-left-2 duration-200">
       <Command shouldFilter={false}>
         <PickerSearch ref={search} value={query} onValueChange={setQuery} aria-label="Search worktrees" placeholder="Search worktrees" disabled={pending}>
-          {target && <Button variant="ghost" size="icon-sm" aria-label="New worktree" title="New worktree" disabled={pending || !state.connected} onClick={() => startCreating()}>
+          {target && <IconButton label="New worktree" disabled={pending || !state.connected} onClick={() => startCreating()}>
             <PlusIcon aria-hidden />
-          </Button>}
-          <Button variant="ghost" size="icon-sm" aria-label="Refresh worktrees" title="Refresh worktrees" disabled={busy} onClick={rediscover}>
+          </IconButton>}
+          <IconButton label="Refresh worktrees" disabled={busy} onClick={rediscover}>
             {refreshing ? <Spinner /> : <RefreshCwIcon aria-hidden />}
-          </Button>
+          </IconButton>
         </PickerSearch>
         <CommandList aria-label="Discovered worktrees" className="max-h-[min(18rem,50dvh)]">
           <CommandEmpty className="flex flex-col items-center gap-2 py-6 text-center text-sm">

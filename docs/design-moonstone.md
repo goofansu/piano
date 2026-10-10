@@ -10,7 +10,7 @@ below. Colours derive from the Lefos palette; `web/src/index.css` is authoritati
 Lightness is set by contrast (WCAG 4.5:1 for text, 3:1 for glyphs and meaningful edges) and
 chroma is capped so status hues stay earthy, following Earendil's theming principle.
 
-| Token | Day | Night | Role |
+| Token | Light | Dark | Role |
 | --- | --- | --- | --- |
 | `--surface-0` canvas | moonstone `oklch(0.93 0.006 60)` ≈ `#EBE7E4` | midnight `oklch(0.215 0.022 257)` ≈ `#131A24` | sidebar and shell |
 | `--conversation` sheet | warm white `oklch(0.962 0.004 75)` ≈ `#F4F2EF` | `oklch(0.25 0.022 257)` ≈ `#1B222C` | the inset conversation sheet |
@@ -31,19 +31,19 @@ chroma is capped so status hues stay earthy, following Earendil's theming princi
 | `--merged` | dusk lilac `oklch(0.5 0.07 320)` ≈ `#75567C` | `oklch(0.76 0.07 320)` ≈ `#C5A3CD` | merged pull requests |
 | `--scrim` | umber at 38% | midnight at 62% | behind dialogs and the phone sheet |
 
-- **Day.** A moonstone canvas holds a warm-white sheet; layers 1–3 are warm near-whites that
+- **Light.** A moonstone canvas holds a warm-white sheet; layers 1–3 are warm near-whites that
   lighten as they rise, never pure white, so the composer and menus still separate from the
   sheet. Lines and fills are driftwood; shadows are umber-tinted rather than neutral grey.
-- **Night.** Lefos's night: a midnight canvas, evening-blue layers and warm parchment ink.
+- **Dark.** Lefos's dark mode: a midnight canvas, evening-blue layers and warm parchment ink.
   Elevation still adds lightness. Shadows deepen toward midnight; inset highlights are parchment.
-- **The one colour.** Felt green is retired. The accent is Lefos's own day/night pair: evening
-  blue by day (lifted one step from `#252F3D` so it reads as blue beside warm-black ink) and
-  parchment by night (the warm light Lefos sets on evening blue). It still means "live": the send
+- **The one colour.** Felt green is retired. The accent is Lefos's own light/dark pair: evening
+  blue in light mode (lifted one step from `#252F3D` so it reads as blue beside warm-black ink) and
+  parchment in dark mode (the warm light Lefos sets on evening blue). It still means "live": the send
   key, focus ring, selection, links and the streaming caret. `--brand-ink` is the opposite
-  surface, so the send key reads in both modes (9.96:1 by day, 10.63:1 by night).
-- **States** keep Herdr's meanings with Lefos's earth accents. Day lightness is dropped until
+  surface, so the send key reads in both modes (9.96:1 in light mode, 10.63:1 in dark mode).
+- **States** keep Herdr's meanings with Lefos's earth accents. Light-mode lightness is dropped until
   every status passes 4.5:1 as text on canvas and sheet (busy, used only as a glyph, passes 3:1);
-  night lightness keeps them well above that on every layer. `--warning-foreground` is now
+  dark-mode lightness keeps them well above that on every layer. `--warning-foreground` is now
   `--brand-ink` in both modes.
 - **Theme switch.** Changing appearance fades the shells' background, text and border colours
   (body, sidebar, conversation sheet, composer) over `--dur-theme` 350ms with Earendil's
@@ -57,7 +57,7 @@ chroma is capped so status hues stay earthy, following Earendil's theming princi
 WCAG ratios, computed from the tokens (alpha fills composited in sRGB). "Fill" is the lowest
 ratio over any layer with `--fill-active` beneath the glyph, as in a selected row.
 
-| Day | canvas | sheet | surface-1 | surface-2 | surface-3 | fill |
+| Light | canvas | sheet | surface-1 | surface-2 | surface-3 | fill |
 | --- | --- | --- | --- | --- | --- | --- |
 | ink | 14.73 | 16.22 | 17.00 | 17.35 | 17.60 | 12.86 |
 | ink-2 | 6.33 | 6.97 | 7.31 | 7.46 | 7.57 | 5.53 |
@@ -70,7 +70,7 @@ ratio over any layer with `--fill-active` beneath the glyph, as in a selected ro
 | err | 5.63 | 6.20 | 6.50 | 6.63 | 6.73 | 4.91 |
 | merged | 5.05 | 5.56 | 5.82 | 5.94 | 6.03 | 4.41 |
 
-| Night | canvas | sheet | surface-1 | surface-2 | surface-3 | fill |
+| Dark | canvas | sheet | surface-1 | surface-2 | surface-3 | fill |
 | --- | --- | --- | --- | --- | --- | --- |
 | ink | 13.39 | 12.23 | 10.97 | 10.06 | 9.34 | 7.76 |
 | ink-2 | 9.36 | 8.54 | 7.66 | 7.02 | 6.52 | 5.42 |
@@ -83,7 +83,7 @@ ratio over any layer with `--fill-active` beneath the glyph, as in a selected ro
 | err | 7.28 | 6.65 | 5.96 | 5.46 | 5.07 | 4.22 |
 | merged | 7.93 | 7.25 | 6.50 | 5.96 | 5.53 | 4.60 |
 
-Limitation: day status colours drop below 4.5:1 as text over a selected (`--fill-active`) row;
+Limitation: light-mode status colours drop below 4.5:1 as text over a selected (`--fill-active`) row;
 they stay above 3:1 there, which is what their glyph use needs.
 
 Motion tokens, also in `index.css`:
@@ -118,7 +118,11 @@ Mono: Newsreader for headlines, titles and empty states, and Departure Mono in u
 small labels. Four typefaces, two of them monospace, read as busy rather than warm, so both were
 removed; the warmth now comes from the palette alone.
 
-### The selected row
+### Links and the selected row
+
+Prose links keep the original style: brand colour with an underline at 35% brand, 0.15em below the
+baseline, full brand on hover. The underline is continuous (`text-decoration-skip-ink: none`); the
+browser's default skipped descenders and left gaps under p and g.
 
 A selected row is no longer a brand tint (evening blue at 12% read as cool grey on the warm
 canvas). `--selected` is parchment: solid `oklch(0.88 0.021 53)` ≈ `#E3D4CB` in light mode and the dark
@@ -159,6 +163,16 @@ Left-aligned throughout. The transcript column is centred at max 48rem; the comp
 with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. A parchment
 fill marks the selected session. Rows are 36px with a
 pointer and 44px on touch screens.
+
+A session row is its title alone. Where it runs and which project it belongs to live in the session
+header and the sidebar's groupings, not on every row.
+
+The session header shows where the session runs in Zed's form, `folder ⇄ worktree / ⑂ branch`
+(worktree in mono, without Worktrunk's `folder.` prefix; no worktree segment for the folder itself).
+It runs at full length while it fits. When space runs out, the worktree and branch truncate down to
+about 6rem each, then drop out whole from the right, branch first: the line may wrap, but only its
+first row shows. The folder always stays. The full path is in the session menu; the segments carry
+no tooltips, since they show their own text.
 
 ## Mark
 
@@ -309,7 +323,7 @@ pixels.
 
 ## Felt-era dark palette verification
 
-This records the previous warm-charcoal night palette, since replaced by Moonstone.
+This records the previous warm-charcoal dark palette, since replaced by Moonstone.
 
 
 Verified on base `71698de` plus the dark-token changes, with Node 24.21.0 and headless

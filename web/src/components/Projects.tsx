@@ -4,13 +4,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { AppState } from "@/store";
 
 type SessionRef = { cwd: string; sessionId: string };
 
-/** The one project dialog: create or edit a name and goal. With `assign`, the saved project also takes that session. */
+/** The one project dialog: create or rename a project. With `assign`, the saved project also takes that session. */
 export type ProjectDialog = { project?: Project; assign?: SessionRef };
 
 /** The registry reference behind a session row, so membership is read from one place. */
@@ -57,7 +57,6 @@ export function ProjectDialogView({ state, send, dialog, close, openProject }: {
   state: AppState; send: (command: ClientCommand) => void; dialog: ProjectDialog; close: () => void; openProject: (id: string) => void;
 }) {
   const [name, setName] = useState(dialog.project?.name ?? "");
-  const [goal, setGoal] = useState(dialog.project?.goal ?? "");
   const editing = !!dialog.project;
   const ready = state.connected && !!name.trim();
   return <Dialog open onOpenChange={open => !open && close()}><DialogContent className="sm:max-w-md">
@@ -65,22 +64,17 @@ export function ProjectDialogView({ state, send, dialog, close, openProject }: {
       event.preventDefault();
       if (!ready) return;
       const id = dialog.project?.id ?? crypto.randomUUID();
-      send({ _tag: "save_project", project: { id, name: name.trim(), goal: goal.trim() || undefined } });
+      send({ _tag: "save_project", project: { id, name: name.trim() } });
       if (dialog.assign) send({ _tag: "assign_project", cwd: dialog.assign.cwd, sessionId: dialog.assign.sessionId, projectId: id });
       close();
       if (!editing && !dialog.assign) openProject(id);
     }}>
       <DialogHeader>
         <DialogTitle>{editing ? "Edit project" : "New project"}</DialogTitle>
-        <DialogDescription>{editing ? "Rename the project or restate its goal." : "A project groups sessions from any folders around one outcome."}</DialogDescription>
+        <DialogDescription>{editing ? "Rename the project." : "A project groups sessions from any folders around one outcome."}</DialogDescription>
       </DialogHeader>
       <FieldGroup>
         <Field><FieldLabel htmlFor="project-name">Name</FieldLabel><Input id="project-name" value={name} onChange={e => setName(e.target.value)} maxLength={200} autoFocus required /></Field>
-        <Field>
-          <FieldLabel htmlFor="project-goal">Goal <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
-          <Input id="project-goal" value={goal} onChange={e => setGoal(e.target.value)} maxLength={1000} />
-          <FieldDescription>Shown when you start a session here. It is not sent to Pi.</FieldDescription>
-        </Field>
       </FieldGroup>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={close}>Cancel</Button>

@@ -31,7 +31,7 @@ Earlier documents call a project an "outcome project".
 | Term | Meaning |
 | --- | --- |
 | Project membership | An explicit association between a session and a project, independent of the session's execution location. |
-| Shared project context | Background and reference material supplied to member sessions to support the project's goal; a later capability. |
+| Shared project context | Background and reference material supplied to member sessions to support the project's outcome; a later capability. |
 | Shared project instructions | Project-scoped guidance supplied to member sessions, distinct from background material and subject to explicit application rules; a later capability. |
 
 A repository can support multiple projects, and a project can span repositories.

@@ -2,9 +2,9 @@ import { base64Bytes, IMAGE_TYPES, imageType, MAX_ATTACHMENT_BYTES, MAX_ATTACHME
 import type { Attachment as AttachmentData, RenderMsg } from "@shared/wire";
 import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState, useSyncExternalStore } from "react";
+import { IconButton } from "@/components/IconButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Attachment, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup, AttachmentMedia, AttachmentTitle, AttachmentTrigger } from "@/components/ui/attachment";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -58,7 +58,7 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
   return <>
     <Input ref={input} id={id} type="file" multiple accept={IMAGE_TYPES.join(",")} className="hidden" aria-label="Image files" disabled={disabled || draft.busy}
       onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void draft.add(files); }} />
-    <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" aria-label="Attach images" title="Attach images (PNG, JPEG, GIF, WebP)" aria-controls={id} disabled={disabled || draft.busy} onClick={() => input.current?.click()}><PaperclipIcon /></Button>
+    <IconButton type="button" className="shrink-0" label="Attach images" tooltip="Attach images (PNG, JPEG, GIF, WebP)" aria-controls={id} disabled={disabled || draft.busy} onClick={() => input.current?.click()}><PaperclipIcon /></IconButton>
   </>;
 }
 export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
@@ -67,7 +67,7 @@ export function AttachmentDraftView({ draft, disabled }: { draft: AttachmentDraf
       {draft.items.map((a, i) => /* biome-ignore lint/suspicious/noArrayIndexKey: drafts may repeat a file name and only append or clear. */ <Attachment key={`${a.name}-${i}`} orientation="vertical" className="animate-in fade-in-0 zoom-in-95">
         <AttachmentMedia variant="image"><img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} /></AttachmentMedia>
         <AttachmentContent>
-          <AttachmentTitle title={a.name}>{a.name}</AttachmentTitle>
+          <AttachmentTitle>{a.name}</AttachmentTitle>
           <AttachmentDescription>{TYPE_LABEL[a.mimeType]} · {formatBytes(base64Bytes(a.data))}</AttachmentDescription>
         </AttachmentContent>
         <AttachmentActions>

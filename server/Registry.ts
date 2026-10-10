@@ -141,7 +141,7 @@ export const RegistryLive = Layer.effect(
       saveProject: project => update(d => {
         const parsed = Schema.decodeUnknownSync(Project)({ ...project, archived: d.projects.find(p => p.id === project.id)?.archived ?? false });
         if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
-        const next = { ...parsed, name: parsed.name.trim(), goal: parsed.goal?.trim() || undefined };
+        const next = { ...parsed, name: parsed.name.trim() };
         return { ...d, projects: d.projects.some(p => p.id === next.id)
           ? d.projects.map(p => p.id === next.id ? next : p) : [...d.projects, next] };
       }),

@@ -73,19 +73,13 @@ function ago(iso: string) {
   return "just now";
 }
 
-/** GitHub's five-square diffstat: no standard component draws a proportion this small. */
+/** Size of the change, as GitHub's PR header puts it: files changed, then lines added and removed. */
 function DiffStat({ additions, deletions, changedFiles }: { additions: number; deletions: number; changedFiles: number }) {
-  const total = additions + deletions;
-  const added = total ? Math.round(additions / total * 5) : 0, removed = total ? 5 - added : 0;
-  const squares = ["a", "b", "c", "d", "e"].map((id, i) => ({ id, color: i < added ? "bg-ok" : i < added + removed ? "bg-err" : "bg-muted" }));
   return <div className="flex items-center gap-1.5 text-xs tabular-nums">
     <FileDiffIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+    <span className="mr-1.5 text-muted-foreground">{changedFiles.toLocaleString()} {changedFiles === 1 ? "file" : "files"} changed</span>
     <span className="font-medium text-ok"><span className="sr-only">Additions </span>+{additions.toLocaleString()}</span>
     <span className="font-medium text-err"><span className="sr-only">Deletions </span>−{deletions.toLocaleString()}</span>
-    <span className="flex gap-0.5" aria-hidden>
-      {squares.map(square => <span key={square.id} className={`size-2 rounded-[2px] ${square.color}`} />)}
-    </span>
-    <span className="ml-1.5 text-muted-foreground">{changedFiles} {changedFiles === 1 ? "file" : "files"}</span>
   </div>;
 }
 

@@ -6,6 +6,7 @@ import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } f
 import { BranchLabel } from "@/components/BranchLabel";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
+import { IconButton } from "@/components/IconButton";
 import { ModelSelect } from "@/components/ModelSelect";
 import { PianoMark } from "@/components/PianoMark";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
@@ -111,8 +112,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex" />
             <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{project?.name ?? "What should we work on?"}</h1>
-            {/* A project's goal is its only standing text, so it shows at every width; the tagline stays desktop-only. */}
-            <p className={cn("mt-2 text-base text-ink-2", !project?.goal && "hidden md:block")}>{project?.goal || "A little progress starts with an idea."}</p>
+            <p className="mt-2 hidden text-base text-ink-2 md:block">A little progress starts with an idea.</p>
           </div>
           <div className="shrink-0">
             {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
@@ -184,7 +184,7 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "ml-auto max-w-[45%] shrink-0", current ? "text-ink-2" : "text-ink-3")} title={current?.goal || current?.name}>
+        <Button variant="ghost" size="sm" role="combobox" aria-expanded={open} aria-label="Project" className={cn(picker, "ml-auto max-w-[45%] shrink-0", current ? "text-ink-2" : "text-ink-3")}>
           <TargetIcon className="text-ink-3" />
           <span className="truncate">{current ? current.name : "Project"}</span>
         </Button>
@@ -203,9 +203,9 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
         ) : (
           <Command>
             <PickerSearch ref={search} aria-label="Search projects" placeholder="Search projects">
-              <Button variant="ghost" size="icon-sm" aria-label="New project" title="New project" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }}>
+              <IconButton label="New project" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }}>
                 <PlusIcon aria-hidden />
-              </Button>
+              </IconButton>
             </PickerSearch>
             <CommandList className="max-h-[min(18rem,60dvh)]">
               <CommandEmpty>No project matches.</CommandEmpty>

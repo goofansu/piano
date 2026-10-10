@@ -4,11 +4,10 @@ import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalI
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
-import { BranchLabel } from "@/components/BranchLabel";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { Keys } from "@/components/PianoMark";
-import { type ProjectDialog, ProjectMenu, sessionProject } from "@/components/Projects";
+import { type ProjectDialog, ProjectMenu } from "@/components/Projects";
 import { useSessionActions } from "@/components/SessionActions";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
@@ -293,11 +292,10 @@ interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew"
 type SessionTarget = { cwd: string; sessionId: string; title?: string };
 type SessionActions = ReturnType<typeof useSessionActions>;
 
-/** Location and project share one metadata line; project groups already name the project. */
-function SessionRow({ t, metadata, showProject = true, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
-  t: SessionTarget; metadata?: React.ReactNode; showProject?: boolean; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
+/** One line per session: the title alone. Location and project live in the session header and the groupings. */
+function SessionRow({ t, selected, disabled, hint, state, send, select, actions, onProjectDialog, reveal }: {
+  t: SessionTarget; selected: boolean; disabled?: boolean; hint?: string; actions: SessionActions;
 } & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
-  const project = showProject ? sessionProject(state, t) : undefined;
   const checkoutMissing = state.session?.cwd === t.cwd && state.session.state.checkoutMissing;
   // Live host state comes from the `hosts` broadcast, which changes more often than the folder list.
   const host = state.hosts.find((h) => h.cwd === t.cwd && h.sessionId === t.sessionId);
@@ -307,11 +305,11 @@ function SessionRow({ t, metadata, showProject = true, selected, disabled, hint,
   return (
     <li
       style={reveal()}
-      className={cn(project || metadata ? "h-12" : row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-(--selected) hover:bg-(--selected)")}
+      className={cn(row, "reveal-row group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-(--selected) hover:bg-(--selected)")}
     >
       <button
         type="button"
-        title={hint ?? (t.title || t.sessionId)}
+        title={hint}
         aria-current={selected ? "page" : undefined}
         disabled={disabled}
         onClick={() => select(t.cwd, t.sessionId)}
@@ -320,15 +318,7 @@ function SessionRow({ t, metadata, showProject = true, selected, disabled, hint,
         <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
           {host?.streaming ? <Keys playing className="text-brand" /> : dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
         </span>
-        {/* No standalone shadcn primitive fits the title and metadata inside this existing navigation button. */}
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className={cn("truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
-          {(metadata || project) && <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-            {metadata}
-            {metadata && project && <span aria-hidden>·</span>}
-            {project && <span className="min-w-0 truncate text-brand" title={project.goal || project.name}>{project.name}</span>}
-          </span>}
-        </span>
+        <span className={cn("min-w-0 flex-1 truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
         {host?.streaming ? <span className="sr-only">working</span> : done ? <span className="sr-only">done</span> : null}
         {hint && <span className="sr-only">{hint}</span>}
       </button>
@@ -356,17 +346,6 @@ function SessionRow({ t, metadata, showProject = true, selected, disabled, hint,
 
 const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} className="size-4" />;
 
-/** Away from Folder grouping, keep the owning folder alongside any worktree branch. */
-function Location({ state, cwd }: { state: AppState; cwd: string }) {
-  const owner = state.folders.find(p => p.worktrees.some(w => w.path === cwd));
-  const worktree = owner?.worktrees.find(w => w.path === cwd);
-  const branch = worktree && !worktree.root ? worktree.branch : null;
-  return <>
-    <span className={cn("min-w-0 truncate", branch && "max-w-1/2 shrink-0")}>{owner?.name ?? cwd.split("/").pop()}</span>
-    {branch && <><span aria-hidden>·</span><BranchLabel branch={branch} className="shrink" /></>}
-  </>;
-}
-
 const unavailableHint = (s: Pick<SessionReference, "unavailable">) => s.unavailable === "history" ? "History unavailable. Restore the Pi session file to open it."
   : s.unavailable === "checkout" ? "Folder missing. History can be read; restore the folder to continue." : undefined;
 
@@ -378,7 +357,7 @@ function SessionList({ sessions, current, state, send, select, reveal, onProject
   return <>
     <ul className="flex flex-col gap-1">
       {sessions.map(s => (
-        <SessionRow key={sessionKey(s)} t={s} metadata={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
+        <SessionRow key={sessionKey(s)} t={s} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
           selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
           state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
       ))}
@@ -395,7 +374,7 @@ function ProjectGroup({ project, sessions, current, open, onOpenChange, state, s
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={groupRow} style={reveal()}>
         <CollapsibleTrigger asChild>
-          <button type="button" className={groupTrigger} title={project?.goal || undefined}>
+          <button type="button" className={groupTrigger}>
             <Chevron open={open} />
             <span className={cn("min-w-0 flex-1 truncate text-sm font-medium", !project || project.archived ? "text-ink-3" : "text-ink-2")}>{project?.name ?? "No project"}</span>
           </button>
@@ -424,7 +403,7 @@ function ProjectGroup({ project, sessions, current, open, onOpenChange, state, s
       <CollapsibleContent className="disclosure-content">
         {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
           {members.map(s => (
-            <SessionRow key={sessionKey(s)} t={s} showProject={false} metadata={<Location state={state} cwd={s.cwd} />} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
+            <SessionRow key={sessionKey(s)} t={s} hint={unavailableHint(s)} disabled={s.unavailable === "history"}
               selected={current?.cwd === s.cwd && current.sessionId === s.sessionId}
               state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
           ))}
@@ -471,11 +450,8 @@ function FolderGroup({ folder, current, open, onOpenChange, state, send, select,
       <CollapsibleContent className="disclosure-content">
         {folder.sessions.length === 0 ? <ListEmpty>No sessions yet</ListEmpty> : <ul className="flex flex-col gap-1 py-1">
           {folder.sessions.map((t) => {
-            // The branch is only news when the session runs somewhere other than the folder root.
-            const inWorktree = !folder.worktrees.some((w) => w.root && w.path === t.cwd);
-            const metadata = t.branch && inWorktree ? <BranchLabel branch={t.branch} /> : undefined;
             return (
-              <SessionRow key={t.sessionId} t={t} metadata={metadata} selected={current?.cwd === t.cwd && current.sessionId === t.sessionId}
+              <SessionRow key={t.sessionId} t={t} selected={current?.cwd === t.cwd && current.sessionId === t.sessionId}
                 state={state} send={send} select={select} actions={actions} onProjectDialog={onProjectDialog} reveal={reveal} />
             );
           })}

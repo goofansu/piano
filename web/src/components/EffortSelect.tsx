@@ -44,7 +44,6 @@ export function EffortSelect({ value, onChange, levels, defaultLevel, disabled }
           <ToggleGroupItem
             key={level}
             value={level}
-            title={level === defaultLevel ? "Default effort" : undefined}
             aria-description={level === defaultLevel ? "Default effort" : undefined}
             className="flex-auto px-1 text-xs"
           >
