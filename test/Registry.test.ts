@@ -24,9 +24,9 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
     tokens: { input: 1074786, output: 14967, cacheRead: 6729984, cacheWrite: 0, total: 7819737 }, statsUpdatedAt: 1791430502567 };
   const original: RegistryData = { version: 2, folders: [folder], worktrees: [{ folder: folder, path: hidden, branch: "feature" }],
     workspaces: [{ id: "hidden-id", folder: folder, path: hidden }, { id: "root-id", folder: folder, path: folder }, { id: "alias-id", folder: alias, path: alias }],
-    outcomeProjects: [{ id: "project-1", name: "Launch", goal: "Goal", archived: false }, { id: "project-2", name: "Old", archived: true }],
+    projects: [{ id: "project-1", name: "Launch", goal: "Goal", archived: false }, { id: "project-2", name: "Old", archived: true }],
     sessions: [
-      { cwd: hidden, sessionId: "same", title: "Closed folder session", createdAt: "then", updatedAt: "now", archived: false, outcomeProjectId: "project-1", stats,
+      { cwd: hidden, sessionId: "same", title: "Closed folder session", createdAt: "then", updatedAt: "now", archived: false, projectId: "project-1", stats,
         pullRequest: { url: "https://github.com/example/repo/pull/1", source: "branch", apiHost: "github.int.exe.xyz" } },
       { cwd: folder, sessionId: "same", createdAt: "then", updatedAt: "now", archived: true, pullRequest: null },
       { cwd: alias, sessionId: "other", createdAt: "then", updatedAt: "now", archived: false },
@@ -39,7 +39,6 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   try {
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(r => r.name);
     assert.ok(tables.includes("folders") && tables.includes("projects"));
-    assert.ok(!tables.includes("outcomeProjects"));
     assert.equal(db.prepare("SELECT path FROM folders").get()!.path, folder);
     assert.equal(db.prepare("SELECT name FROM projects WHERE id = 'project-1'").get()!.name, "Launch");
     assert.equal(db.prepare("PRAGMA journal_mode").get()!.journal_mode, "wal");
@@ -53,7 +52,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const reopened = await f.get();
   assert.deepEqual(reopened.folders, []);
   assert.deepEqual(reopened.workspaces, original.workspaces);
-  assert.deepEqual(reopened.sessions[0], { ...original.sessions[0], title: "Renamed", outcomeProjectId: "project-2" });
+  assert.deepEqual(reopened.sessions[0], { ...original.sessions[0], title: "Renamed", projectId: "project-2" });
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
 });
 
@@ -92,10 +91,10 @@ test("INV-01: competing backends cannot overwrite each other's committed metadat
   const f = fixture(t), first = ManagedRuntime.make(f.layer), second = ManagedRuntime.make(f.layer);
   try {
     const a = await first.runPromise(Registry), b = await second.runPromise(Registry);
-    await first.runPromise(a.saveOutcomeProject({ id: "one", name: "First" }));
-    await assert.rejects(second.runPromise(b.saveOutcomeProject({ id: "two", name: "Second" })), /another writer/);
-    assert.deepEqual((await second.runPromise(b.get)).outcomeProjects, []);
-    assert.deepEqual((await f.get()).outcomeProjects, [{ id: "one", name: "First", archived: false }]);
+    await first.runPromise(a.saveProject({ id: "one", name: "First" }));
+    await assert.rejects(second.runPromise(b.saveProject({ id: "two", name: "Second" })), /another writer/);
+    assert.deepEqual((await second.runPromise(b.get)).projects, []);
+    assert.deepEqual((await f.get()).projects, [{ id: "one", name: "First", archived: false }]);
   } finally { await first.dispose(); await second.dispose(); }
 });
 

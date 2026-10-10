@@ -83,12 +83,12 @@ test("sidebar view: folders order by name (case-insensitive, numeric-aware) or b
 test("sidebar view: project groups come from references, then a No project group holds the listed sessions filed nowhere", () => {
   const projects = [{ id: "launch", name: "Launch subscriptions" }, { id: "a11y", name: "Improve accessibility" }, { id: "empty", name: "Empty project" }];
   const references = [
-    { ...session("/zeta", "z1", "Zeta old", 1), outcomeProjectId: "launch" },
-    { ...session("/beta-10", "b2", "Beta titled", 3), outcomeProjectId: "a11y" },
-    { ...session("/zeta", "z2", "Zeta new", 7), outcomeProjectId: "launch" },
+    { ...session("/zeta", "z1", "Zeta old", 1), projectId: "launch" },
+    { ...session("/beta-10", "b2", "Beta titled", 3), projectId: "a11y" },
+    { ...session("/zeta", "z2", "Zeta new", 7), projectId: "launch" },
     // A member whose folder was closed is still a member.
-    { ...session("/closed", "gone", "Closed folder member", 9), outcomeProjectId: "a11y" },
-    { ...session("/beta-2", "c1", "Carol", 7), outcomeProjectId: undefined },
+    { ...session("/closed", "gone", "Closed folder member", 9), projectId: "a11y" },
+    { ...session("/beta-2", "c1", "Carol", 7), projectId: undefined },
   ];
   const listed = folders.flatMap(f => f.sessions);
   const recent = projectGroups(projects, references, listed, "recent");

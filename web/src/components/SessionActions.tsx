@@ -1,7 +1,7 @@
 import type { ClientCommand } from "@shared/wire";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { sessionProject } from "@/components/OutcomeProjects";
+import { sessionProject } from "@/components/Projects";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldGroup } from "@/components/ui/field";

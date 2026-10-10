@@ -5,7 +5,7 @@ import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { directoryTrust } from "@/components/NewSession";
-import { sessionProject } from "@/components/OutcomeProjects";
+import { sessionProject } from "@/components/Projects";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { copyAllSessionDetails, copySessionValue, currentSessionDetails, sessionWorkspace, useSessionActions } from "@/components/SessionActions";
 import type { SettingsSection } from "@/components/SettingsPage";
@@ -58,9 +58,9 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
     const visible = state.folders.flatMap(p => p.sessions.map(t => ({ ...t, folder: p.name, inWorktree: !p.worktrees.some(w => w.root && w.path === t.cwd) })));
     // Sessions whose directory was closed still belong to their project; they are reachable here by name. Archived ones are not.
     return [...visible, ...state.sessionReferences.filter(s => !s.archived && !visible.some(t => t.cwd === s.cwd && t.sessionId === s.sessionId)).map(s => ({ ...s, folder: s.cwd.split("/").pop() ?? s.cwd, branch: "", inWorktree: false, createdAt: "" }))]
-      .map(t => ({ ...t, outcome: sessionProject(state, t)?.name ?? "" }))
+      .map(t => ({ ...t, project: sessionProject(state, t)?.name ?? "" }))
       .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
-  }, [state.folders, state.sessionReferences, state.outcomeProjects]);
+  }, [state.folders, state.sessionReferences, state.projects]);
   const composerTrust = composerCwd ? directoryTrust(state, composerCwd) : undefined;
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
@@ -79,8 +79,8 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
               return (
                 <CommandItem
                   key={`${t.cwd}\n${t.sessionId}`}
-                  value={`${t.title || "Untitled"} ${t.folder} ${t.branch ?? ""} ${t.outcome} ${t.sessionId}`}
-                  keywords={[t.folder, t.branch ?? "", t.outcome]}
+                  value={`${t.title || "Untitled"} ${t.folder} ${t.branch ?? ""} ${t.project} ${t.sessionId}`}
+                  keywords={[t.folder, t.branch ?? "", t.project]}
                   onSelect={() => run(() => select(t.cwd, t.sessionId))}
                   className="gap-3"
                 >

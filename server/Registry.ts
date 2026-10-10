@@ -9,7 +9,7 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, Semaphore } from "effect";
-import { OutcomeProject, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
+import { Project, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
 import { openRegistryDatabase } from "./RegistryDatabase.ts";
 
@@ -24,7 +24,7 @@ export interface WorktreeEntry {
 }
 
 export interface SessionEntry {
-  readonly outcomeProjectId?: string;
+  readonly projectId?: string;
   readonly cwd: string;
   readonly sessionId: string;
   readonly title?: string;
@@ -39,7 +39,7 @@ export interface SessionEntry {
 
 export interface RegistryData {
   readonly version: 2;
-  readonly outcomeProjects: ReadonlyArray<OutcomeProject>;
+  readonly projects: ReadonlyArray<Project>;
   readonly workspaces: ReadonlyArray<Workspace>;
   readonly folders: ReadonlyArray<string>;
   readonly worktrees: ReadonlyArray<WorktreeEntry>;
@@ -55,10 +55,10 @@ const currentSchema = Schema.Struct({
   folders: Schema.Array(Schema.String),
   worktrees: Schema.Array(Schema.Struct({ folder: Schema.String, path: Schema.String, branch: Schema.String })),
   workspaces: Schema.Array(Workspace),
-  outcomeProjects: Schema.Array(OutcomeProject),
+  projects: Schema.Array(Project),
   sessions: Schema.Array(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
     createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.Boolean, stats: Schema.optional(SessionStats),
-    pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)), outcomeProjectId: Schema.optional(Schema.String) })),
+    pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)), projectId: Schema.optional(Schema.String) })),
 });
 
 /** Path references keep their spelling: never move or merge Pi's alias-based history. */
@@ -73,10 +73,10 @@ function decode(value: unknown): RegistryData {
   const initial: RegistryData = Schema.decodeUnknownSync(currentSchema)(value);
   if (new Set(initial.folders).size !== initial.folders.length) throw new Error("Duplicate selected folders.");
   if (new Set(initial.worktrees.map(w => w.path)).size !== initial.worktrees.length) throw new Error("Duplicate worktree references.");
-  const ids = new Set(initial.outcomeProjects.map(p => p.id));
-  if (ids.size !== initial.outcomeProjects.length || initial.outcomeProjects.some(p => !p.name.trim())) throw new Error("Duplicate project identities or blank project name.");
+  const ids = new Set(initial.projects.map(p => p.id));
+  if (ids.size !== initial.projects.length || initial.projects.some(p => !p.name.trim())) throw new Error("Duplicate project identities or blank project name.");
   if (new Set(initial.sessions.map(s => JSON.stringify([s.cwd, s.sessionId]))).size !== initial.sessions.length) throw new Error("Duplicate session references.");
-  if (initial.sessions.some(s => s.outcomeProjectId !== undefined && !ids.has(s.outcomeProjectId))) throw new Error("Session references an unknown outcome project.");
+  if (initial.sessions.some(s => s.projectId !== undefined && !ids.has(s.projectId))) throw new Error("Session references an unknown project.");
   for (const p of [...initial.folders, ...initial.worktrees.flatMap(w => [w.path, w.folder]), ...initial.sessions.map(s => s.cwd), ...initial.workspaces.flatMap(w => [w.path, w.folder])]) {
     if (!isAbsolute(p)) throw new Error(`Registry path is not absolute: ${p}`);
   }
@@ -90,8 +90,8 @@ export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
-    readonly saveOutcomeProject: (project: Omit<OutcomeProject, "archived">) => Effect.Effect<void, RegistryError>;
-    readonly archiveOutcomeProject: (id: string, archived: boolean) => Effect.Effect<void, RegistryError>;
+    readonly saveProject: (project: Omit<Project, "archived">) => Effect.Effect<void, RegistryError>;
+    readonly archiveProject: (id: string, archived: boolean) => Effect.Effect<void, RegistryError>;
     readonly assignProject: (cwd: string, sessionId: string, projectId: string | null) => Effect.Effect<void, RegistryError>;
     readonly addFolder: (path: string) => Effect.Effect<void, RegistryError>;
     /** Make sure a directory is usable as a session cwd: a folder root or a registered worktree. Adds it as a folder otherwise. */
@@ -138,21 +138,21 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       get: Ref.get(state),
-      saveOutcomeProject: project => update(d => {
-        const parsed = Schema.decodeUnknownSync(OutcomeProject)({ ...project, archived: d.outcomeProjects.find(p => p.id === project.id)?.archived ?? false });
+      saveProject: project => update(d => {
+        const parsed = Schema.decodeUnknownSync(Project)({ ...project, archived: d.projects.find(p => p.id === project.id)?.archived ?? false });
         if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
         const next = { ...parsed, name: parsed.name.trim(), goal: parsed.goal?.trim() || undefined };
-        return { ...d, outcomeProjects: d.outcomeProjects.some(p => p.id === next.id)
-          ? d.outcomeProjects.map(p => p.id === next.id ? next : p) : [...d.outcomeProjects, next] };
+        return { ...d, projects: d.projects.some(p => p.id === next.id)
+          ? d.projects.map(p => p.id === next.id ? next : p) : [...d.projects, next] };
       }),
-      archiveOutcomeProject: (id, archived) => update(d => {
-        if (!d.outcomeProjects.some(p => p.id === id)) throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
-        return { ...d, outcomeProjects: d.outcomeProjects.map(p => p.id === id ? { ...p, archived } : p) };
+      archiveProject: (id, archived) => update(d => {
+        if (!d.projects.some(p => p.id === id)) throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
+        return { ...d, projects: d.projects.map(p => p.id === id ? { ...p, archived } : p) };
       }),
       assignProject: (cwd, sessionId, projectId) => update(d => {
         if (!d.sessions.some(isSession(cwd, sessionId))) throw new RegistryError({ detail: "Session reference is unavailable. Refresh and try again." });
-        if (projectId !== null && !d.outcomeProjects.some(p => p.id === projectId)) throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
-        return { ...d, sessions: d.sessions.map(s => isSession(cwd, sessionId)(s) ? { ...s, outcomeProjectId: projectId ?? undefined } : s) };
+        if (projectId !== null && !d.projects.some(p => p.id === projectId)) throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
+        return { ...d, sessions: d.sessions.map(s => isSession(cwd, sessionId)(s) ? { ...s, projectId: projectId ?? undefined } : s) };
       }),
       addFolder: (raw) =>
         Effect.gen(function* () {

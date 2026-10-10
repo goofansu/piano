@@ -1,4 +1,4 @@
-import type { ClientCommand, OutcomeProject, SessionReference } from "@shared/wire";
+import type { ClientCommand, Project, SessionReference } from "@shared/wire";
 import { PlusIcon, TargetIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -11,19 +11,19 @@ import type { AppState } from "@/store";
 type SessionRef = { cwd: string; sessionId: string };
 
 /** The one project dialog: create or edit a name and goal. With `assign`, the saved project also takes that session. */
-export type ProjectDialog = { project?: OutcomeProject; assign?: SessionRef };
+export type ProjectDialog = { project?: Project; assign?: SessionRef };
 
 /** The registry reference behind a session row, so membership is read from one place. */
 export function sessionReference(state: AppState, session: SessionRef): SessionReference | undefined {
   return state.sessionReferences.find(s => s.cwd === session.cwd && s.sessionId === session.sessionId);
 }
 
-export function sessionProject(state: AppState, session: SessionRef | null | undefined): OutcomeProject | undefined {
-  const id = session && sessionReference(state, session)?.outcomeProjectId;
-  return id ? state.outcomeProjects.find(p => p.id === id) : undefined;
+export function sessionProject(state: AppState, session: SessionRef | null | undefined): Project | undefined {
+  const id = session && sessionReference(state, session)?.projectId;
+  return id ? state.projects.find(p => p.id === id) : undefined;
 }
 
-export const activeProjects = (state: AppState) => state.outcomeProjects.filter(p => !p.archived);
+export const activeProjects = (state: AppState) => state.projects.filter(p => !p.archived);
 
 /**
  * Membership lives in the session's own menu, like Rename or Archive. Choosing a project is a radio
@@ -65,7 +65,7 @@ export function ProjectDialogView({ state, send, dialog, close, openProject }: {
       event.preventDefault();
       if (!ready) return;
       const id = dialog.project?.id ?? crypto.randomUUID();
-      send({ _tag: "save_outcome_project", project: { id, name: name.trim(), goal: goal.trim() || undefined } });
+      send({ _tag: "save_project", project: { id, name: name.trim(), goal: goal.trim() || undefined } });
       if (dialog.assign) send({ _tag: "assign_project", cwd: dialog.assign.cwd, sessionId: dialog.assign.sessionId, projectId: id });
       close();
       if (!editing && !dialog.assign) openProject(id);

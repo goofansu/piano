@@ -7,9 +7,9 @@ import { BranchLabel } from "@/components/BranchLabel";
 import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { ModelSelect } from "@/components/ModelSelect";
-import { activeProjects } from "@/components/OutcomeProjects";
 import { PianoMark } from "@/components/PianoMark";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
+import { activeProjects } from "@/components/Projects";
 import { SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,8 @@ interface Props {
   onDraftChange: (key: string, text: string) => void;
   initialCwd?: string;
   /** The project a session started here joins; the page is that project's home. */
-  outcomeProjectId?: string;
-  onProjectChange: (outcomeProjectId?: string) => void;
+  projectId?: string;
+  onProjectChange: (projectId?: string) => void;
   /** Open the New project dialog; the created project becomes this page's project. */
   onNewProject: () => void;
   onMenu: () => void;
@@ -44,11 +44,11 @@ interface Props {
 const LAST_DIR = "piano.lastDir";
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProjectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
+export function NewSession({ state, send, onDraftChange, initialCwd, projectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
   const [cwd, setCwd] = useState(() => {
     if (initialCwd) return initialCwd;
     // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
-    if (outcomeProjectId) return "";
+    if (projectId) return "";
     return readStorage(LAST_DIR) ?? "";
   });
   const text = state.drafts["new-session"] ?? "";
@@ -69,7 +69,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
   useTypeToFocus(textarea, useCallback((s: string) => onDraftChange("new-session", text + s), [onDraftChange, text]));
   // Fall back to the first known folder when nothing is remembered.
   useEffect(() => {
-    if (!outcomeProjectId && !cwd && state.folders[0]) setCwd(state.folders[0].path);
+    if (!projectId && !cwd && state.folders[0]) setCwd(state.folders[0].path);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.folders.length]);
   useEffect(() => {
@@ -79,7 +79,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
   }, [creating]);
 
   const folder = state.folders.find(p => p.worktrees.some(w => w.path === cwd));
-  const outcome = outcomeProjectId ? state.outcomeProjects.find(p => p.id === outcomeProjectId) : undefined;
+  const project = projectId ? state.projects.find(p => p.id === projectId) : undefined;
   const trust = directoryTrust(state, cwd);
   const catalog = state.catalogs[cwd] ?? null;
   useEffect(() => {
@@ -91,13 +91,13 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
   const effectiveModel = model || catalog?.defaultModel;
   const levels = levelsFor(catalog, effectiveModel);
   const effectiveEffort = clampEffort(levels, effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
-  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !outcome?.archived;
+  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !project?.archived;
 
   const submit = () => {
     if (!ready) return;
     writeStorage(LAST_DIR, cwd.trim());
     setCreating(true);
-    send({ _tag: "create_session", cwd: cwd.trim(), outcomeProjectId, options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
+    send({ _tag: "create_session", cwd: cwd.trim(), projectId, options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
     setText("");
     attachments.clear();
   };
@@ -110,9 +110,9 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex [&>span]:w-1 [&>span]:scale-y-125" />
-            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{outcome?.name ?? "What should we work on?"}</h1>
+            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{project?.name ?? "What should we work on?"}</h1>
             {/* A project's goal is its only standing text, so it shows at every width; the tagline stays desktop-only. */}
-            <p className={cn("mt-2 text-base text-ink-2", !outcome?.goal && "hidden md:block")}>{outcome?.goal || "A little progress starts with an idea."}</p>
+            <p className={cn("mt-2 text-base text-ink-2", !project?.goal && "hidden md:block")}>{project?.goal || "A little progress starts with an idea."}</p>
           </div>
           <div className="shrink-0">
             {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
@@ -123,7 +123,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
               {trust?.required && (
                 <TrustToggle trusted={trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: cwd, trusted })} />
               )}
-              <ProjectSelect state={state} value={outcomeProjectId} onChange={onProjectChange} onCreate={onNewProject} />
+              <ProjectSelect state={state} value={projectId} onChange={onProjectChange} onCreate={onNewProject} />
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>
               <AttachmentDraftView draft={attachments} disabled={creating || !state.connected} />
@@ -156,11 +156,11 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
                 <AlertDescription>Git status unavailable. Open Worktrees to inspect and refresh.</AlertDescription>
               </Alert>
             )}
-            {outcome?.archived && (
+            {project?.archived && (
               <Alert className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
                 <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>This project is archived.</span>
-                  <Button variant="link" size="sm" className="h-auto p-0" disabled={!state.connected} onClick={() => { if (outcome) send({ _tag: "archive_outcome_project", id: outcome.id, archived: false }); }}>Unarchive project</Button>
+                  <Button variant="link" size="sm" className="h-auto p-0" disabled={!state.connected} onClick={() => { if (project) send({ _tag: "archive_project", id: project.id, archived: false }); }}>Unarchive project</Button>
                 </AlertDescription>
               </Alert>
             )}
@@ -177,7 +177,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, outcomeProj
 function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; value?: string; onChange: (id?: string) => void; onCreate: () => void }) {
   const [open, setOpen] = useState(false);
   const search = useRef<HTMLInputElement>(null);
-  const current = value ? state.outcomeProjects.find(p => p.id === value) : undefined;
+  const current = value ? state.projects.find(p => p.id === value) : undefined;
   const choices = activeProjects(state);
   if (current?.archived) choices.push(current);
   const pick = (id?: string) => { onChange(id); setOpen(false); };

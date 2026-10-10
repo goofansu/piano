@@ -1,4 +1,4 @@
-import type { FolderView, OutcomeProject, SessionInfo, SessionReference } from "@shared/wire";
+import type { FolderView, Project, SessionInfo, SessionReference } from "@shared/wire";
 
 /** How the sidebar lists sessions: by folder, project, date, or as one list. */
 export type GroupBy = "folder" | "project" | "date" | "none";
@@ -44,17 +44,17 @@ export function folderGroups<T extends Pick<FolderView, "name" | "sessions">>(fo
   return order(folders.map(f => ({ ...f, sessions: sortSessions(f.sessions, sort) })), sort, f => f.name, f => latest(f.sessions.map(s => s.updatedAt)));
 }
 
-export interface ProjectGroup<P, S> { project: P | null; sessions: S[] }
+export interface SessionGroup<P, S> { project: P | null; sessions: S[] }
 /**
  * Projects in the chosen order, then one group for the listed sessions that belong to no project.
  * Members come from the registry references, so a member whose folder was closed still appears.
  */
-export function projectGroups<P extends Pick<OutcomeProject, "id" | "name">, R extends Pick<SessionReference, "cwd" | "sessionId" | "outcomeProjectId" | "title" | "updatedAt">, S extends Pick<SessionInfo, "cwd" | "sessionId" | "title" | "updatedAt">>(
+export function projectGroups<P extends Pick<Project, "id" | "name">, R extends Pick<SessionReference, "cwd" | "sessionId" | "projectId" | "title" | "updatedAt">, S extends Pick<SessionInfo, "cwd" | "sessionId" | "title" | "updatedAt">>(
   projects: readonly P[], references: readonly R[], listed: readonly S[], sort: SortBy,
-): Array<ProjectGroup<P, R> | ProjectGroup<P, S>> {
-  const groups = projects.map((project): ProjectGroup<P, R> => ({ project, sessions: sortSessions(references.filter(s => s.outcomeProjectId === project.id), sort) }));
-  const filed = new Set(references.filter(s => s.outcomeProjectId).map(s => `${s.cwd}\n${s.sessionId}`));
-  const ungrouped: ProjectGroup<P, S> = { project: null, sessions: sortSessions(listed.filter(s => !filed.has(`${s.cwd}\n${s.sessionId}`)), sort) };
+): Array<SessionGroup<P, R> | SessionGroup<P, S>> {
+  const groups = projects.map((project): SessionGroup<P, R> => ({ project, sessions: sortSessions(references.filter(s => s.projectId === project.id), sort) }));
+  const filed = new Set(references.filter(s => s.projectId).map(s => `${s.cwd}\n${s.sessionId}`));
+  const ungrouped: SessionGroup<P, S> = { project: null, sessions: sortSessions(listed.filter(s => !filed.has(`${s.cwd}\n${s.sessionId}`)), sort) };
   return [...order(groups, sort, g => g.project?.name ?? "", g => latest(g.sessions.map(s => s.updatedAt))), ungrouped];
 }
 

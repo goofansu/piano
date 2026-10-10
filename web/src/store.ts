@@ -1,5 +1,5 @@
 /** Client state: one reducer over ServerMessages plus local UI actions. */
-import type { Dialog, FolderView, HostInfo, ModelCatalog, OutcomeProject, ProjectTrust, RenderMsg, ServerMessage, SessionCursor, SessionReference, SessionState, ToolExecution, Workspace, WorktreeDiscovery } from "@shared/wire";
+import type { Dialog, FolderView, HostInfo, ModelCatalog, Project, ProjectTrust, RenderMsg, ServerMessage, SessionCursor, SessionReference, SessionState, ToolExecution, Workspace, WorktreeDiscovery } from "@shared/wire";
 
 export interface SessionView {
   cwd: string;
@@ -30,9 +30,9 @@ export interface AppState {
   selectionId: string | null;
   resync: boolean;
   /** What the main pane shows. */
-  view: { kind: "session" } | { kind: "new"; cwd?: string; outcomeProjectId?: string } | { kind: "missing-session"; sessionId: string };
+  view: { kind: "session" } | { kind: "new"; cwd?: string; projectId?: string } | { kind: "missing-session"; sessionId: string };
   folders: FolderView[];
-  outcomeProjects: OutcomeProject[];
+  projects: Project[];
   sessionReferences: SessionReference[];
   workspaces: Workspace[];
   /** The server has sent the registry at least once since connecting. */
@@ -64,7 +64,7 @@ export const initialState: AppState = {
   resync: false,
   view: { kind: "new" },
   folders: [],
-  outcomeProjects: [],
+  projects: [],
   sessionReferences: [],
   workspaces: [],
   registryLoaded: false,
@@ -85,7 +85,7 @@ export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
   | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null; firstMessage?: Pick<PendingCreate, "text" | "attachments"> }
-  | { type: "new"; cwd?: string; outcomeProjectId?: string }
+  | { type: "new"; cwd?: string; projectId?: string }
   | { type: "missing-session"; sessionId: string }
   | { type: "draft_changed"; key: string; text: string }
   | { type: "draft_appended"; key: string; text: string };
@@ -130,7 +130,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)) };
     case "new":
-      return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd, outcomeProjectId: a.outcomeProjectId }, selecting: null, session: null, pendingCreate: null };
+      return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd, projectId: a.projectId }, selecting: null, session: null, pendingCreate: null };
     case "missing-session":
       return { ...s, selectionId: null, resync: false, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null, pendingCreate: null };
     case "draft_changed":
@@ -154,7 +154,7 @@ export function sessionDelivery(s: AppState, m: Extract<ServerMessage, { _tag: "
 function applyServer(s: AppState, m: ServerMessage): AppState {
   switch (m._tag) {
     case "registry":
-      return { ...s, folders: [...m.folders], outcomeProjects: [...m.outcomeProjects ?? []], sessionReferences: [...m.sessionReferences ?? []], workspaces: [...m.workspaces ?? []], registryLoaded: true };
+      return { ...s, folders: [...m.folders], projects: [...m.projects ?? []], sessionReferences: [...m.sessionReferences ?? []], workspaces: [...m.workspaces ?? []], registryLoaded: true };
     case "hosts": {
       // A host that was working and no longer is has finished a turn. Unless it is on screen, remember that.
       const viewing = s.session ? sessionKey(s.session) : s.selecting ? sessionKey(s.selecting) : null;

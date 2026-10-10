@@ -1,4 +1,4 @@
-import type { ClientCommand as ClientMessage, FolderView, OutcomeProject, SessionReference } from "@shared/wire";
+import type { ClientCommand as ClientMessage, FolderView, Project, SessionReference } from "@shared/wire";
 import { cn } from "cn";
 import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, TextCursorInputIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -7,8 +7,8 @@ import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { BranchLabel } from "@/components/BranchLabel";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
-import { type ProjectDialog, ProjectMenu, sessionProject } from "@/components/OutcomeProjects";
 import { Keys } from "@/components/PianoMark";
+import { type ProjectDialog, ProjectMenu, sessionProject } from "@/components/Projects";
 import { useSessionActions } from "@/components/SessionActions";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,7 @@ interface Props {
   send: (m: ClientMessage) => void;
   select: (cwd: string, sessionId: string | null) => void;
   /** The New page; with a project, the session started there joins it. */
-  openNew: (cwd?: string, outcomeProjectId?: string) => void;
+  openNew: (cwd?: string, projectId?: string) => void;
   onProjectDialog: (dialog: ProjectDialog) => void;
   /** Hide the sidebar (or close the sheet it is shown in). */
   onHide: () => void;
@@ -87,7 +87,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
     if (!current) return;
     const owner = state.folders.find((p) => p.worktrees.some((w) => w.path === current.cwd));
     const member = state.sessionReferences.find(s => s.cwd === current.cwd && s.sessionId === current.sessionId);
-    const key = view.groupBy === "folder" ? owner?.path : view.groupBy === "project" ? projectKey(member?.outcomeProjectId ?? "") : undefined;
+    const key = view.groupBy === "folder" ? owner?.path : view.groupBy === "project" ? projectKey(member?.projectId ?? "") : undefined;
     if (key && !openGroups.has(key)) setOpen(key, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.cwd, current?.sessionId, state.folders, state.sessionReferences, view.groupBy]);
@@ -96,11 +96,11 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   const known = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!state.registryLoaded) return;
-    const ids = state.outcomeProjects.map(p => p.id);
+    const ids = state.projects.map(p => p.id);
     if (known.current) for (const id of ids) if (!known.current.has(id)) setOpen(projectKey(id), true);
     known.current = new Set(ids);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.registryLoaded, state.outcomeProjects]);
+  }, [state.registryLoaded, state.projects]);
 
   // First load is one orchestrated sequence: skeleton rows at once, then the real rows a beat
   // apart. The stagger applies only to that first reveal, not to every later list change.
@@ -132,12 +132,12 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
     }
     if (view.groupBy === "project") {
       // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
-      const active = state.outcomeProjects.filter(p => !p.archived);
+      const active = state.projects.filter(p => !p.archived);
       const all = projectGroups(active, state.sessionReferences.filter(s => !s.archived), state.folders.flatMap(p => p.sessions), view.sortBy);
       if (active.length === 0 && all.every(g => g.sessions.length === 0)) return empty("No sessions yet. Start one and it appears here.");
       return groups(all.map(g => {
         const key = projectKey(g.project?.id ?? "");
-        return <OutcomeGroup key={key} project={g.project} sessions={g.sessions} open={openGroups.has(key)} onOpenChange={open => setOpen(key, open)} {...groupProps} />;
+        return <ProjectGroup key={key} project={g.project} sessions={g.sessions} open={openGroups.has(key)} onOpenChange={open => setOpen(key, open)} {...groupProps} />;
       }));
     }
     if (view.groupBy === "date") {
@@ -387,8 +387,8 @@ function SessionList({ sessions, current, state, send, select, reveal, onProject
   </>;
 }
 
-/** An outcome project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
-function OutcomeGroup({ project, sessions, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: OutcomeProject | null; sessions: readonly Member[] }) {
+/** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
+function ProjectGroup({ project, sessions, current, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: Project | null; sessions: readonly Member[] }) {
   const actions = useSessionActions(send, state.connected);
   const members = sessions;
   return (
@@ -414,7 +414,7 @@ function OutcomeGroup({ project, sessions, current, open, onOpenChange, state, s
           <DropdownMenuContent align="end">
             <DropdownMenuGroup>
               <DropdownMenuItem disabled={!state.connected} onSelect={() => onProjectDialog({ project })}><PencilIcon /> Edit project</DropdownMenuItem>
-              <DropdownMenuItem disabled={!state.connected} onSelect={() => send({ _tag: "archive_outcome_project", id: project.id, archived: !project.archived })}>
+              <DropdownMenuItem disabled={!state.connected} onSelect={() => send({ _tag: "archive_project", id: project.id, archived: !project.archived })}>
                 {project.archived ? <><ArchiveRestoreIcon /> Unarchive project</> : <><ArchiveIcon /> Archive project</>}
               </DropdownMenuItem>
             </DropdownMenuGroup>

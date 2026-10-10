@@ -84,7 +84,7 @@ export const handleSocket = (socket: Socket.Socket) =>
       // never a grouping snapshot captured before those asynchronous observations.
       const data = yield* registry.get;
       const sessionReferences = data.sessions.map(s => ({ ...s, unavailable: observed.find(o => o.cwd === s.cwd && o.sessionId === s.sessionId)?.unavailable }));
-      yield* broadcast.publish({ _tag: "registry", folders, outcomeProjects: data.outcomeProjects, sessionReferences, workspaces: data.workspaces });
+      yield* broadcast.publish({ _tag: "registry", folders, projects: data.projects, sessionReferences, workspaces: data.workspaces });
     })));
 
     // ── selection / attachment ──
@@ -172,11 +172,11 @@ export const handleSocket = (socket: Socket.Socket) =>
             const cwd = resolve(expandHome(msg.cwd ?? selected?.cwd ?? homedir()));
             return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });
           }
-          case "save_outcome_project":
-            yield* registry.saveOutcomeProject(msg.project);
+          case "save_project":
+            yield* registry.saveProject(msg.project);
             return yield* publishRegistry;
-          case "archive_outcome_project":
-            yield* registry.archiveOutcomeProject(msg.id, msg.archived);
+          case "archive_project":
+            yield* registry.archiveProject(msg.id, msg.archived);
             return yield* publishRegistry;
           case "assign_project":
             yield* registry.assignProject(msg.cwd, msg.sessionId, msg.projectId);
@@ -238,11 +238,11 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "select":
             return yield* show(msg);
           case "create_session": {
-            if (msg.outcomeProjectId && !(yield* registry.get).outcomeProjects.some(p => p.id === msg.outcomeProjectId && !p.archived)) return yield* Effect.fail(new Error("Project is unavailable or archived. Choose a current project before starting."));
+            if (msg.projectId && !(yield* registry.get).projects.some(p => p.id === msg.projectId && !p.archived)) return yield* Effect.fail(new Error("Project is unavailable or archived. Choose a current project before starting."));
             const cwd = yield* registry.ensureFolder(msg.cwd);
             const session = yield* Semaphore.withPermits(navigation, 1)(start({ cwd, sessionId: null, selectionId: msg.selectionId }, msg.options));
-            if (msg.outcomeProjectId) {
-              yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, msg.outcomeProjectId);
+            if (msg.projectId) {
+              yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, msg.projectId);
               yield* publishRegistry;
             }
             const text = msg.text?.trim() ?? "";

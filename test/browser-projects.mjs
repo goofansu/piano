@@ -1,5 +1,5 @@
-// Step 1 outcome-project gate: scratch-only registry, Git and fake Pi; no model calls.
-// node test/browser-outcome-projects.mjs <evidence-directory>
+// Project grouping gate: scratch-only registry, Git and fake Pi; no model calls.
+// node test/browser-projects.mjs <evidence-directory>
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,9 +8,9 @@ import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readRegistry, seedRegistry } from './fixtures/registry.ts';
 
-const evidence = resolve(process.argv[2] ?? '/tmp/piano-outcome-evidence');
+const evidence = resolve(process.argv[2] ?? '/tmp/piano-projects-evidence');
 mkdirSync(evidence, { recursive: true });
-const root = mkdtempSync(join(tmpdir(), 'piano-outcome-browser-'));
+const root = mkdtempSync(join(tmpdir(), 'piano-projects-browser-'));
 const api = join(root, 'api'), web = join(root, 'web'), sessions = join(root, 'sessions'), audit = join(root, 'audit.jsonl');
 const database = join(root, 'data', 'piano', 'piano.db');
 for (const dir of [api, web, sessions, join(root, 'agent')]) mkdirSync(dir);
@@ -37,7 +37,7 @@ const capture = p => { p.stdout.on('data', d => processLog += d); p.stderr.on('d
 const startBackend = () => capture(spawn(process.execPath, ['server/main.ts'], { env, stdio: ['ignore', 'pipe', 'pipe'] }));
 let backend = startBackend();
 const frontend = capture(spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '7172', '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: 'http://127.0.0.1:7171' }, stdio: ['ignore', 'pipe', 'pipe'] }));
-const browser = `outcome-${process.pid}`, commands = [];
+const browser = `projects-${process.pid}`, commands = [];
 async function ab(...args) {
   const started = Date.now();
   const result = await new Promise((res, rej) => {
@@ -57,7 +57,7 @@ const menuitem = name => ab('find', 'role', 'menuitem', 'click', '--name', name,
 const wait = code => ab('wait', '--fn', code);
 const settle = () => ab('wait', '300');
 const registry = () => readRegistry(join(root, 'registry.json'), database);
-const project = name => registry().outcomeProjects.find(p => p.name === name);
+const project = name => registry().projects.find(p => p.name === name);
 const member = sessionId => registry().sessions.find(s => s.sessionId === sessionId);
 async function ready() {
   for (let i = 0; i < 100; i++) {
@@ -126,8 +126,8 @@ try {
   await groupBy('Folder');
   await openGroup('api'); await openGroup('web');
   await file('API session', 'Launch subscriptions'); await file('Web session', 'Launch subscriptions');
-  assert.equal(member('one').outcomeProjectId, project('Launch subscriptions').id);
-  assert.equal(member('two').outcomeProjectId, project('Launch subscriptions').id);
+  assert.equal(member('one').projectId, project('Launch subscriptions').id);
+  assert.equal(member('two').projectId, project('Launch subscriptions').id);
   // Non-project groupings share one metadata line for location and registry membership.
   for (const grouping of ['Date', 'None', 'Folder']) {
     await groupBy(grouping);
@@ -140,11 +140,11 @@ try {
   }
   await ab('screenshot', join(evidence, 'cross-repository.png'));
   await createWithSession('Improve accessibility', 'Accessibility session');
-  assert.equal(member('three').outcomeProjectId, project('Improve accessibility').id);
+  assert.equal(member('three').projectId, project('Improve accessibility').id);
   // An empty project is usable; its route survives reload.
   await create('Empty project'); await ab('reload');
   await wait(`document.querySelector('main h1')?.textContent === 'Empty project'`);
-  assert.equal(registry().outcomeProjects.length, 3);
+  assert.equal(registry().projects.length, 3);
   // Group by project lists every project plus a No project group; the grouping is remembered across reload.
   await groupBy('Project'); await ab('wait', '--text', 'No project');
   await openGroup('Empty project'); await ab('wait', '--text', 'No sessions yet');
@@ -177,7 +177,7 @@ try {
   await wait(`!document.querySelector('[aria-label="Send"]').disabled`); await ab('click', '[aria-label="Send"]');
   await wait(`!!document.querySelector('[aria-label="Stop"]')`);
   const running = registry().sessions.find(s => !references.some(r => r.sessionId === s.sessionId));
-  assert.equal(running.cwd, web); assert.equal(running.outcomeProjectId, project('Subscriptions').id);
+  assert.equal(running.cwd, web); assert.equal(running.projectId, project('Subscriptions').id);
   const runningUrl = await evaluate('location.href');
   const auditRecords = () => readFileSync(audit, 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.sessionId === running.sessionId);
   assert.equal(auditRecords().filter(e => e.event === 'spawn').length, 1);
@@ -194,16 +194,16 @@ try {
   assert.equal(project('Subscriptions').archived, false);
   // Move and leave with the running member, without restarting or aborting it.
   await file('/hold', 'Improve accessibility');
-  assert.equal(member(running.sessionId).outcomeProjectId, project('Improve accessibility').id);
+  assert.equal(member(running.sessionId).projectId, project('Improve accessibility').id);
   await file('/hold', 'None');
-  assert.equal(member(running.sessionId).outcomeProjectId, undefined);
+  assert.equal(member(running.sessionId).projectId, undefined);
   assert.equal(auditRecords().filter(e => e.event === 'spawn').length, 1);
   assert.equal(auditRecords().filter(e => e.event === 'exit' || e.command === 'abort').length, 0);
   await ab('open', runningUrl); await wait(`!!document.querySelector('[aria-label="Stop"]')`);
   // Membership lives in the sidebar menu; the simplified header no longer duplicates that action.
   // The palette finds sessions by project name but offers no project commands.
   await file('/hold', 'Subscriptions');
-  assert.equal(member(running.sessionId).outcomeProjectId, project('Subscriptions').id);
+  assert.equal(member(running.sessionId).projectId, project('Subscriptions').id);
   await palette('Subscriptions');
   const items = await evaluate(`[...document.querySelectorAll('[cmdk-item]')].filter(i => i.getBoundingClientRect().height > 0).map(i => i.textContent.trim())`);
   assert.ok(items.includes('/holdweb') && items.includes('API sessionapi'), `sessions found by project name: ${items}`);
@@ -213,7 +213,7 @@ try {
   await groupBy('Folder'); await wait(`!!document.querySelector('[aria-label="Folder menu for api"]')`);
   await ab('click', '[aria-label="Folder menu for api"]'); await menuitem('Close'); await button('Close'); await settle();
   assert.equal(registry().folders.includes(api), false);
-  assert.equal(member('one').outcomeProjectId, project('Subscriptions').id);
+  assert.equal(member('one').projectId, project('Subscriptions').id);
   await groupBy('Project'); await ab('wait', '--text', 'No project');
   await button('API session api'); await ab('wait', '--text', 'History one');
   assert.equal(await evaluate(`[...document.querySelectorAll('header p[title]')].find(p => p.textContent.startsWith('Working directory'))?.title`), api);

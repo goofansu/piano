@@ -42,7 +42,7 @@ type Row = SQLInputValue[];
 /** Ordered parent-first; deletions run in reverse. Column names never come from user input. */
 const tables = [
   { name: "projects", columns: ["id", "name", "goal", "archived", "position"], keys: 1,
-    rows: (d: RegistryData): Row[] => d.outcomeProjects.map((p, i) => [p.id, p.name, p.goal ?? null, Number(p.archived), i]) },
+    rows: (d: RegistryData): Row[] => d.projects.map((p, i) => [p.id, p.name, p.goal ?? null, Number(p.archived), i]) },
   { name: "workspaces", columns: ["path", "id", "folder_path", "position"], keys: 1,
     rows: (d: RegistryData): Row[] => d.workspaces.map((w, i) => [w.path, w.id, w.folder, i]) },
   { name: "folders", columns: ["path", "position"], keys: 1,
@@ -50,7 +50,7 @@ const tables = [
   { name: "worktrees", columns: ["path", "folder_path", "branch", "position"], keys: 1,
     rows: (d: RegistryData): Row[] => d.worktrees.map((w, i) => [w.path, w.folder, w.branch, i]) },
   { name: "sessions", columns: ["cwd", "session_id", "project_id", "title", "created_at", "updated_at", "archived", "stats", "pull_request_state", "pull_request_url", "pull_request_source", "pull_request_api_host", "position"], keys: 2,
-    rows: (d: RegistryData): Row[] => d.sessions.map((s, i) => [s.cwd, s.sessionId, s.outcomeProjectId ?? null, s.title ?? null, s.createdAt, s.updatedAt, Number(s.archived),
+    rows: (d: RegistryData): Row[] => d.sessions.map((s, i) => [s.cwd, s.sessionId, s.projectId ?? null, s.title ?? null, s.createdAt, s.updatedAt, Number(s.archived),
       s.stats === undefined ? null : JSON.stringify(s.stats), s.pullRequest === undefined ? "discover" : s.pullRequest === null ? "removed" : "linked", s.pullRequest?.url ?? null, s.pullRequest?.source ?? null, s.pullRequest?.apiHost ?? null, i]) },
 ];
 
@@ -76,18 +76,18 @@ function snapshot(db: DatabaseSync): RegistryData {
   return {
     version: 2,
     folders: rows("folders").map(r => r.path as string),
-    outcomeProjects: rows("projects").map(r => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived), ...(r.goal === null ? {} : { goal: r.goal as string }) })),
+    projects: rows("projects").map(r => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived), ...(r.goal === null ? {} : { goal: r.goal as string }) })),
     workspaces: rows("workspaces").map(r => ({ id: r.id as string, path: r.path as string, folder: r.folder_path as string })),
     worktrees: rows("worktrees").map(r => ({ path: r.path as string, folder: r.folder_path as string, branch: r.branch as string })),
     sessions: rows("sessions").map(r => ({ cwd: r.cwd as string, sessionId: r.session_id as string, createdAt: r.created_at as string, updatedAt: r.updated_at as string, archived: Boolean(r.archived),
-      ...(r.project_id === null ? {} : { outcomeProjectId: r.project_id as string }), ...(r.title === null ? {} : { title: r.title as string }),
+      ...(r.project_id === null ? {} : { projectId: r.project_id as string }), ...(r.title === null ? {} : { title: r.title as string }),
       ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
       ...(r.pull_request_state === "discover" ? {} : { pullRequest: r.pull_request_state === "removed" ? null : { url: r.pull_request_url as string, source: r.pull_request_source as "branch" | "manual", ...(r.pull_request_api_host === null ? {} : { apiHost: r.pull_request_api_host as "github.int.exe.xyz" }) } }),
     })),
   };
 }
 
-const empty: RegistryData = { version: 2, folders: [], worktrees: [], workspaces: [], sessions: [], outcomeProjects: [] };
+const empty: RegistryData = { version: 2, folders: [], worktrees: [], workspaces: [], sessions: [], projects: [] };
 
 /** `initial` populates a new database only; test fixtures use it to seed scratch registries. */
 export function openRegistryDatabase(path: string, initial: RegistryData = empty) {

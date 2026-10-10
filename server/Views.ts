@@ -12,10 +12,10 @@ import { listWorktrees } from "./Worktrees.ts";
 export const buildSessionReferences = Effect.gen(function* () {
   const data = yield* (yield* Registry).get;
   const running = yield* (yield* SessionHosts).list;
-  const paths = [...new Set(data.sessions.filter(s => s.outcomeProjectId).map(s => s.cwd))];
+  const paths = [...new Set(data.sessions.filter(s => s.projectId).map(s => s.cwd))];
   const histories = new Map(yield* Effect.forEach(paths, cwd => listSessions(cwd).pipe(Effect.map(sessions => [cwd, sessions] as const)), { concurrency: 4 }));
   return data.sessions.map((s): SessionReference => ({ ...s,
-    unavailable: !s.outcomeProjectId || running.some(h => h.cwd === s.cwd && h.sessionId === s.sessionId) ? undefined
+    unavailable: !s.projectId || running.some(h => h.cwd === s.cwd && h.sessionId === s.sessionId) ? undefined
       : !histories.get(s.cwd)?.some(h => h.sessionId === s.sessionId) ? "history"
       : !existsSync(s.cwd) ? "checkout" : undefined,
   }));

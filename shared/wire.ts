@@ -381,16 +381,16 @@ export type WorkspaceChanges = typeof WorkspaceChanges.Type;
 
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
-export const OutcomeProject = Schema.Struct({
+export const Project = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)),
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
   goal: Schema.optional(Schema.String.check(Schema.isMaxLength(1000))),
   archived: Schema.Boolean,
 });
-export type OutcomeProject = typeof OutcomeProject.Type;
+export type Project = typeof Project.Type;
 export const SessionReference = Schema.Struct({
   cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
-  outcomeProjectId: Schema.optional(Schema.String), archived: Schema.Boolean,
+  projectId: Schema.optional(Schema.String), archived: Schema.Boolean,
   /** Registry's last-update time, so a project's recency follows its members. */
   updatedAt: Schema.optional(Schema.String),
   unavailable: Schema.optional(Schema.Literals(["history", "checkout"])),
@@ -566,8 +566,8 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("worktrees", { folder: Schema.String }),
   /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
   Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String), refresh: Schema.optional(Schema.Boolean) }),
-  Schema.TaggedStruct("save_outcome_project", { project: Schema.Struct({ id: OutcomeProject.fields.id, name: OutcomeProject.fields.name, goal: OutcomeProject.fields.goal }) }),
-  Schema.TaggedStruct("archive_outcome_project", { id: Schema.String, archived: Schema.Boolean }),
+  Schema.TaggedStruct("save_project", { project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name, goal: Project.fields.goal }) }),
+  Schema.TaggedStruct("archive_project", { id: Schema.String, archived: Schema.Boolean }),
   Schema.TaggedStruct("assign_project", { cwd: Schema.String, sessionId: Schema.String, projectId: Schema.NullOr(Schema.String) }),
   Schema.TaggedStruct("add_folder", { path: Schema.String }),
   Schema.TaggedStruct("remove_folder", { path: Schema.String }),
@@ -579,7 +579,7 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("add_worktree", { requestId: Schema.String, folder: Schema.String, path: Schema.String }),
   Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
   /** Create and start a session in a directory (registering it as a folder when needed) and send its first prompt. */
-  Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, outcomeProjectId: Schema.optional(Schema.String), options: StartOptions, text: Schema.optional(Schema.String), attachments: attachmentInput }),
+  Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, projectId: Schema.optional(Schema.String), options: StartOptions, text: Schema.optional(Schema.String), attachments: attachmentInput }),
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
   Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
   /** Round-trip liveness, independent of incoming session activity. */
@@ -605,7 +605,7 @@ export type WorktreeResult = typeof WorktreeResult.Type;
 
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("pong", { nonce: Schema.String }),
-  Schema.TaggedStruct("registry", { folders: Schema.Array(FolderView), outcomeProjects: Schema.optional(Schema.Array(OutcomeProject)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
+  Schema.TaggedStruct("registry", { folders: Schema.Array(FolderView), projects: Schema.optional(Schema.Array(Project)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
   Schema.TaggedStruct("catalogs_invalidated", {}),
   Schema.TaggedStruct("worktrees", { folder: Schema.String, discovery: WorktreeDiscovery }),

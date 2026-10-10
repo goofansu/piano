@@ -5,7 +5,7 @@ import { AppLayout, LayoutView, useAppLayout } from "@/components/AppLayout";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
-import { type ProjectDialog, ProjectDialogView } from "@/components/OutcomeProjects";
+import { type ProjectDialog, ProjectDialogView } from "@/components/Projects";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage, type SettingsSection } from "@/components/SettingsPage";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
@@ -26,7 +26,7 @@ export default function App() {
   const [state, reactDispatch] = useReducer(reduce, initialState, (s): AppState => {
     const seeded = { ...s, catalogs: readJson<AppState["catalogs"]>(CATALOGS_KEY, {}) };
     const route = parseRoute(location);
-    return route.kind === "session" ? { ...seeded, view: { kind: "session" } } : { ...seeded, view: { kind: "new", outcomeProjectId: route.kind === "new" ? route.projectId : undefined } };
+    return route.kind === "session" ? { ...seeded, view: { kind: "session" } } : { ...seeded, view: { kind: "new", projectId: route.kind === "new" ? route.projectId : undefined } };
   });
   useEffect(() => {
     // Without storage the server cache still answers.
@@ -102,9 +102,9 @@ export default function App() {
   }, [state.connected, state.resync, send]);
 
   const [projectDialog, setProjectDialog] = useState<ProjectDialog | null>(null);
-  const openNew = useCallback((cwd?: string, outcomeProjectId?: string) => {
+  const openNew = useCallback((cwd?: string, projectId?: string) => {
     setSettingsOpen(false);
-    dispatch({ type: "new", cwd, outcomeProjectId });
+    dispatch({ type: "new", cwd, projectId });
     closeMobile();
   }, [closeMobile]);
   // A project's home is its New page: sessions started there join it.
@@ -146,7 +146,7 @@ export default function App() {
     if (r.kind === "new") {
       wanted.current = null;
       // Back or forward onto the same New page keeps whatever directory it already had.
-      if (s.view.kind !== "new" || s.view.outcomeProjectId !== r.projectId) dispatch({ type: "new", outcomeProjectId: r.projectId });
+      if (s.view.kind !== "new" || s.view.projectId !== r.projectId) dispatch({ type: "new", projectId: r.projectId });
       return;
     }
     // A session needs its directory, which only the folder list knows.
@@ -174,7 +174,7 @@ export default function App() {
     if (wanted.current) return;
     const current = state.session ?? state.selecting;
     const route: Route | null = state.view.kind === "new"
-      ? { kind: "new", projectId: state.view.outcomeProjectId }
+      ? { kind: "new", projectId: state.view.projectId }
       : state.view.kind === "missing-session"
         ? { kind: "session", sessionId: state.view.sessionId }
         : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
@@ -186,10 +186,10 @@ export default function App() {
       else history.pushState(null, "", path);
     }
     const title = state.view.kind === "missing-session" ? "Session not found"
-      : route.kind === "new" ? (route.projectId && state.outcomeProjects.find(p => p.id === route.projectId)?.name) || "New session"
+      : route.kind === "new" ? (route.projectId && state.projects.find(p => p.id === route.projectId)?.name) || "New session"
       : state.sessionReferences.find(t => t.sessionId === route.sessionId)?.title || "Session";
     document.title = `${settingsOpen ? "Settings" : title} - Piano`;
-  }, [settingsOpen, settingsSection, state.view, state.session, state.selecting, state.folders, state.outcomeProjects, state.sessionReferences]);
+  }, [settingsOpen, settingsSection, state.view, state.session, state.selecting, state.folders, state.projects, state.sessionReferences]);
 
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
@@ -217,7 +217,7 @@ export default function App() {
         {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
         <LayoutView key={state.view.kind} active={!settingsOpen}>
           {state.view.kind === "new" ? (
-            <NewSession state={state} send={send} onDraftChange={onDraftChange} initialCwd={state.view.cwd} outcomeProjectId={state.view.outcomeProjectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
+            <NewSession state={state} send={send} onDraftChange={onDraftChange} initialCwd={state.view.cwd} projectId={state.view.projectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
           ) : state.view.kind === "missing-session" ? (
             <Empty className="flex-1 px-4" role="alert">
               <EmptyHeader>
