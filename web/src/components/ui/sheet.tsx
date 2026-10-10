@@ -33,8 +33,8 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        // piano: lighter scrim with a darker one at night; Piano's motion tokens
-        "fixed inset-0 z-50 bg-black/40 ease-(--ease-enter) data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=closed]:ease-(--ease-exit) data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=open]:fade-in-0 dark:bg-black/60",
+        // piano: the warm --scrim token (umber by day, midnight by night); Piano's motion tokens
+        "fixed inset-0 z-50 bg-scrim ease-(--ease-enter) data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=closed]:ease-(--ease-exit) data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=open]:fade-in-0",
         className
       )}
       {...props}

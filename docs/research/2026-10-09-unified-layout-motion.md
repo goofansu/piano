@@ -146,7 +146,7 @@ modal-scoped selector; neither earlier failure is represented as a pass.
 [css]: ../../web/src/index.css
 [palette]: ../../web/src/components/CommandPalette.tsx
 [test]: ../../test/browser-slash-completion.mjs
-[felt]: ../design-felt.md
+[felt]: ../design-moonstone.md
 [invariants]: ../development-invariants.md
 [shadcn-sidebar]: https://ui.shadcn.com/docs/components/radix/sidebar
 [shadcn-sheet]: https://ui.shadcn.com/docs/components/radix/sheet

@@ -37,8 +37,8 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        // piano: lighter scrim with a darker one at night; Piano's motion tokens
-        "fixed inset-0 z-50 bg-black/40 duration-(--dur-enter) data-[state=closed]:animate-out data-[state=closed]:duration-(--dur-exit) data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 dark:bg-black/60",
+        // piano: the warm --scrim token (umber by day, midnight by night); Piano's motion tokens
+        "fixed inset-0 z-50 bg-scrim duration-(--dur-enter) data-[state=closed]:animate-out data-[state=closed]:duration-(--dur-exit) data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
