@@ -109,7 +109,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
       <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
-            <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex [&>span]:w-1 [&>span]:scale-y-125" />
+            <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex" />
             <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">{project?.name ?? "What should we work on?"}</h1>
             {/* A project's goal is its only standing text, so it shows at every width; the tagline stays desktop-only. */}
             <p className={cn("mt-2 text-base text-ink-2", !project?.goal && "hidden md:block")}>{project?.goal || "A little progress starts with an idea."}</p>
