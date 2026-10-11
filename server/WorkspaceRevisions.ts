@@ -57,12 +57,15 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
     const relativeStore = relative(cwd, await realpath(store));
     if (relativeStore !== ".." && !relativeStore.startsWith(`..${sep}`) && !isAbsolute(relativeStore)) unsupported("Revision storage must be outside the workspace. Set PIANO_REVISION_STORE to a private external directory.");
     const gitDir = (await checkout.text(["rev-parse", "--absolute-git-dir"])).trim();
-    let changes = 0, watchError: Error | undefined;
+    // macOS FSEvents can deliver a write made just before the watch began. An event counts
+    // only when it is unnamed or its path (or, once removed, its directory) changed since.
+    const watchedFrom = BigInt(Date.now()) * 1_000_000n, events: Array<string | undefined> = [];
+    let watchError: Error | undefined;
     const watchers: FSWatcher[] = [];
     let temporary: string | undefined;
     try {
       for (const path of new Set([cwd, gitDir])) {
-        const watcher = watch(path, { recursive: true }, () => { changes++; });
+        const watcher = watch(path, { recursive: true }, (_, file) => { events.push(file == null ? undefined : join(path, file)); });
         watcher.on("error", error => { watchError = error; }); watchers.push(watcher);
       }
       const head = await checkout.head();
@@ -179,7 +182,12 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
       if (head !== before.head || branch !== before.branch || JSON.stringify(before) !== JSON.stringify(after) || await realpath(workspace.path) !== cwd) raced();
       await new Promise<void>(r => setImmediate(r));
       if (watchError) throw watchError;
-      if (changes) raced();
+      for (let path of new Set(events)) {
+        if (path === undefined) raced();
+        let stat = await lstat(path!, { bigint: true }).catch(() => undefined);
+        while (!stat && path !== dirname(path!)) { path = dirname(path!); stat = await lstat(path, { bigint: true }).catch(() => undefined); }
+        if (!stat || stat.ctimeNs >= watchedFrom) raced();
+      }
       // Freeze the source boundary now; later live edits cannot alter these bytes.
       for (const watcher of watchers) watcher.close();
       await mkdir(join(temporary, "blobs"));
