@@ -1,7 +1,7 @@
 import { CHANGES_FILE_PATCH_BYTES, CHANGES_INITIAL_PATCH_BYTES, type ChangeFile, type Workspace, type WorkspaceChanges } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, FileMinusIcon, FilePlusIcon, MessageSquarePlusIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { workspaceChangedFile, workspaceChanges } from "@/lib/api";
 import { type DiffFile, parseUnifiedDiff } from "@/lib/diff";
 import { abbrevHome } from "@/lib/format";
+import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
 /** Tools whose completion can change the checkout; a finished turn is also a refresh point. */
@@ -23,49 +24,18 @@ const EDITING_TOOLS = new Set(["edit", "write", "bash"]);
 const LARGE_FILE_LINES = 800;
 const FILE_PATCH_LIMIT = `${CHANGES_FILE_PATCH_BYTES / (1024 * 1024)} MiB`;
 
-/** Refresh live observations on open, focus and edits; superseded requests cannot publish. */
+/** Live on open, focus and edits (a quiet 600 ms after the checkout may have moved); a response for another workspace never shows. */
 function useWorkspaceChanges(workspace: Workspace | undefined, active: boolean, mutationKey: string) {
-  const [observation, setObservation] = useState<WorkspaceChanges | null>(null);
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const sequence = useRef(0), controller = useRef<AbortController | null>(null);
-  const workspaceId = workspace?.id, workspacePath = workspace?.path;
-  const refresh = useCallback(() => {
-    if (!workspaceId || !workspacePath) return;
-    controller.current?.abort();
-    const request = new AbortController(); controller.current = request;
-    const mine = ++sequence.current;
-    setBusy(true); setError(undefined);
-    (async () => {
-      const value = await workspaceChanges(workspaceId, { signal: request.signal });
-      if (value.workspace.id !== workspaceId || value.workspace.path !== workspacePath) throw new Error("Changes returned a different workspace. Refresh before inspecting changes.");
-      if (value.result.status === "error") throw new Error(value.result.detail);
-      if (mine === sequence.current) setObservation(value);
-    })().catch(e => { if (mine === sequence.current) setError(e instanceof Error ? e.message : String(e)); })
-      .finally(() => {
-        if (mine === sequence.current) setBusy(false);
-      });
-  }, [workspaceId, workspacePath]);
-  // A new workspace starts from nothing; an older response for it is ignored.
-  useEffect(() => {
-    setObservation(null); setError(undefined); setBusy(false);
-    if (active) refresh();
-    return () => { sequence.current++; controller.current?.abort(); };
-  }, [active, refresh]);
-  useEffect(() => {
-    if (!active) return;
-    const onFocus = () => refresh();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [active, refresh]);
-  const seenKey = useRef(mutationKey);
-  useEffect(() => {
-    if (!active || seenKey.current === mutationKey) { seenKey.current = mutationKey; return; }
-    seenKey.current = mutationKey;
-    const timer = setTimeout(refresh, 600);
-    return () => clearTimeout(timer);
-  }, [active, mutationKey, refresh]);
-  return { observation, error, busy, refresh };
+  const id = workspace?.id, path = workspace?.path;
+  const key = active && id && path ? JSON.stringify([id, path]) : null;
+  const { value, error, loading, refresh } = useObservation<WorkspaceChanges>(key, async signal => {
+    const value = await workspaceChanges(id!, { signal });
+    if (value.workspace.id !== id || value.workspace.path !== path) throw new Error("Changes returned a different workspace. Refresh before inspecting changes.");
+    if (value.result.status === "error") throw new Error(value.result.detail);
+    return value;
+  }, { focus: true, trigger: mutationKey, debounce: 600 });
+  // A refresh in progress replaces the last failure, as the first read does.
+  return { observation: value ?? null, error: loading ? undefined : error, busy: loading, refresh: () => void refresh() };
 }
 
 /** The latest checkout-changing tool result plus the streaming flag: when either moves, the checkout may have. */
@@ -188,32 +158,28 @@ function LiveFile({ metadata, initial, workspace, observedAt, open, onOpenChange
   metadata: ChangeFile; initial?: DiffFile; workspace: Workspace; observedAt: string; open: boolean;
   onOpenChange: (open: boolean) => void; onAsk: (file: DiffFile, observedAt: string, truncated: boolean) => void;
 }) {
-  const [loaded, setLoaded] = useState(initial ? { file: { ...initial, ...metadata }, observedAt, truncated: false } : undefined);
-  const [error, setError] = useState<string>();
-  const [attempt, setAttempt] = useState(0);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!open || loaded) return;
-    const controller = new AbortController();
-    setBusy(true); setError(undefined);
-    (async () => {
-      const value = await workspaceChangedFile(workspace.id, metadata.path, { signal: controller.signal });
-      if (value.workspace.id !== workspace.id || value.workspace.path !== workspace.path) throw new Error("File response belongs to another workspace.");
-      if (value.result.status === "error") throw new Error(value.result.detail);
-      const file = parseUnifiedDiff(value.result.diff).find(f => f.path === metadata.path);
-      const stats = value.result.files.find(f => f.path === metadata.path);
-      if (!stats) throw new Error("File metadata is unavailable. Refresh changes.");
-      if (!file) throw new Error(value.result.truncated ? `Patch is too large to display a complete line (${FILE_PATCH_LIMIT} limit).` : "File changed or no longer has a diff. Refresh changes.");
-      if (!controller.signal.aborted) setLoaded({ file: { ...file, ...stats }, observedAt: value.observedAt, truncated: value.result.truncated });
-    })().catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e)); })
-      .finally(() => { if (!controller.signal.aborted) setBusy(false); });
-    return () => controller.abort();
-  }, [open, loaded, workspace.id, workspace.path, metadata.path, attempt]);
+  const seeded = useMemo(() => initial ? { file: { ...initial, ...metadata }, observedAt, truncated: false } : undefined, [initial, metadata, observedAt]);
+  // Read when first expanded; collapsing before it arrives abandons the read, and a loaded patch
+  // stays (collapsed or not) until the parent observes the checkout again and remounts this file.
+  const [kept, setKept] = useState(false);
+  const fetched = useObservation(JSON.stringify([workspace.id, workspace.path, metadata.path]), async signal => {
+    const value = await workspaceChangedFile(workspace.id, metadata.path, { signal });
+    if (value.workspace.id !== workspace.id || value.workspace.path !== workspace.path) throw new Error("File response belongs to another workspace.");
+    if (value.result.status === "error") throw new Error(value.result.detail);
+    const file = parseUnifiedDiff(value.result.diff).find(f => f.path === metadata.path);
+    const stats = value.result.files.find(f => f.path === metadata.path);
+    if (!stats) throw new Error("File metadata is unavailable. Refresh changes.");
+    if (!file) throw new Error(value.result.truncated ? `Patch is too large to display a complete line (${FILE_PATCH_LIMIT} limit).` : "File changed or no longer has a diff. Refresh changes.");
+    return { file: { ...file, ...stats }, observedAt: value.observedAt, truncated: value.result.truncated };
+  }, { enabled: !seeded && (open || kept) });
+  useEffect(() => { if (fetched.value) setKept(true); }, [fetched.value]);
+  const loaded = seeded ?? fetched.value;
+  const error = fetched.loading ? undefined : fetched.error, busy = fetched.loading;
   const file: DiffFile = loaded?.file ?? { ...metadata, status: "modified", notes: [], hunks: [], raw: "" };
   return <FileSection file={file} open={open} onOpenChange={onOpenChange}
     onAsk={loaded && open ? () => onAsk(loaded.file, loaded.observedAt, loaded.truncated) : undefined}
     message={error ?? (busy && !loaded ? "Loading fresh patch…" : !loaded ? "Expand to load patch" : loaded.truncated ? `Partial patch: exceeds the ${FILE_PATCH_LIMIT} per-file limit. Inspect the remainder locally.` : undefined)}
-    retry={error ? () => setAttempt(n => n + 1) : undefined} />;
+    retry={error ? () => void fetched.refresh() : undefined} />;
 }
 
 function FileSection({ file, open, onOpenChange, onAsk, message, retry }: { file: DiffFile; open: boolean; onOpenChange: (open: boolean) => void; onAsk?: () => void; message?: string; retry?: () => void }) {

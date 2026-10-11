@@ -15,6 +15,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { oauthProviders, providerLogout, type RadiusSetupAction, radiusSetup } from "@/lib/api";
+import { useObservation } from "@/lib/useObservation";
 
 type Removal = { action: "remove-mcp" | "uninstall-web-search"; key: string };
 
@@ -22,17 +23,13 @@ type Removal = { action: "remove-mcp" | "uninstall-web-search"; key: string };
 const REFRESH_SPIN_MS = 600;
 /** Setup toasts share an id, so finishing setup replaces the step's toast instead of stacking. */
 const SETUP_TOAST = "radius-setup";
+const INSTALL_POLL_MS = 1500;
 
 export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => void; providersChanged: () => void }) {
-  const [state, setState] = useState<RadiusSetupState>();
-  const [providers, setProviders] = useState<OAuthProvider[]>([]);
-  const [revision, setRevision] = useState(0);
-  const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
-  const [refreshing, setRefreshing] = useState(true);
   const [login, setLogin] = useState<string>();
   // The dialog keeps the last removal's wording while it animates closed.
   const [removal, setRemoval] = useState<Removal>();
@@ -42,42 +39,37 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   // Web search changes finish in the background; remember one seen to finish here until it can be announced.
   const lastInstallation = useRef<RadiusSetupState["installation"]["status"]>(undefined);
   const finished = useRef<"install" | "uninstall">(undefined);
-  const observe = useCallback((next: RadiusSetupState) => {
+  const observe = (next: RadiusSetupState) => {
     if (lastInstallation.current === "running" && next.installation.status === "success") finished.current = next.installation.action;
     lastInstallation.current = next.installation.status;
-  }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    let installing = false;
-    const load = async () => {
-      setRefreshing(true);
-      const manual = manualRefresh.current;
-      manualRefresh.current = false;
-      try {
-        const [next, signIns] = await Promise.all([
-          radiusSetup(undefined, { signal: controller.signal }), oauthProviders({ signal: controller.signal }),
-          manual && new Promise(resolve => setTimeout(resolve, REFRESH_SPIN_MS)),
-        ]);
-        if (controller.signal.aborted) return;
-        observe(next); setProviders([...signIns]); setState(next); setError("");
-        installing = next.installation.status === "running";
-        // A running or just-finished web-search change gets its own toast once it settles.
-        if (manual && !installing && !finished.current) toast.success("Radius setup refreshed.",{ id: SETUP_TOAST });
-      } catch { if (!controller.signal.aborted) setError("Could not refresh Radius setup. Check your connection and try again."); }
-      finally { if (!controller.signal.aborted) setRefreshing(false); }
-      if (!controller.signal.aborted && installing) timer = setTimeout(load, 1500);
-    };
-    void load();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [revision, observe]);
-  const refreshProviders = useCallback(() => { setRevision(value => value + 1); providersChanged(); }, [providersChanged]);
+  };
+  // A running web-search change is polled until it settles.
+  const setup = useObservation<{ state: RadiusSetupState; providers: OAuthProvider[] }>("radius", async signal => {
+    const manual = manualRefresh.current;
+    manualRefresh.current = false;
+    const [next, signIns] = await Promise.all([
+      radiusSetup(undefined, { signal }), oauthProviders({ signal }),
+      manual && new Promise(resolve => setTimeout(resolve, REFRESH_SPIN_MS)),
+    ]);
+    if (signal.aborted) throw signal.reason;
+    observe(next);
+    // A running or just-finished web-search change gets its own toast once it settles.
+    if (manual && next.installation.status !== "running" && !finished.current) toast.success("Radius setup refreshed.", { id: SETUP_TOAST });
+    return { state: next, providers: [...signIns] };
+  }, { interval: value => value?.state.installation.status === "running" ? INSTALL_POLL_MS : undefined });
+  const state = setup.value?.state, providers = setup.value?.providers ?? [];
+  const refreshing = setup.loading || !setup.value && !setup.error;
+  const error = setup.error && !setup.loading ? "Could not refresh Radius setup. Check your connection and try again." : "";
+  const { refresh } = setup;
+  const refreshProviders = useCallback(() => { void refresh(); providersChanged(); }, [refresh, providersChanged]);
   const signOut = async () => {
     setSigningOut(true); setActionError("");
     try {
-      await providerLogout("radius");
       // Only acknowledge sign-out after Pi confirms credential removal.
-      setProviders(current => current.map(provider => provider.id === "radius" ? { ...provider, signedIn: false } : provider));
+      await setup.mutate(async (_signal, previous) => {
+        await providerLogout("radius");
+        return previous && { ...previous, providers: previous.providers.map(provider => provider.id === "radius" ? { ...provider, signedIn: false } : provider) };
+      });
       refreshProviders();
       toast.success("Signed out of Radius.");
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not sign out. Try again."); }
@@ -86,12 +78,15 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const act = async (action: RadiusSetupAction, removalKey?: string) => {
     setBusy(true); setActionError("");
     try {
-      const next = await radiusSetup({ action, removalKey });
-      observe(next); setState(next);
+      await setup.mutate(async (_signal, previous) => {
+        const next = await radiusSetup({ action, removalKey });
+        observe(next);
+        return previous && { ...previous, state: next };
+      });
       if (action === "configure-mcp") toast.success("Radius MCP added. Start a new session to use it.", { id: SETUP_TOAST });
       if (action === "remove-mcp") toast.success("Radius MCP removed for new sessions.", { id: SETUP_TOAST });
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not complete setup. Refresh before retrying."); }
-    finally { setBusy(false); setRemovalOpen(false); setRevision(value => value + 1); }
+    finally { setBusy(false); setRemovalOpen(false); void refresh(); }
   };
   const radius = providers.find(provider => provider.id === "radius");
   const installing = state?.installation.status === "running";
@@ -116,7 +111,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const webSearchReady = state?.webSearch.status === "ready";
   return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
     <SettingsHeader title="Radius" titleId="settings-section-title" onMenu={onMenu}>
-      <IconButton label="Refresh setup" disabled={busy || signingOut || refreshing} onClick={() => { setActionError(""); manualRefresh.current = true; setRevision(value => value + 1); }}>
+      <IconButton label="Refresh setup" disabled={busy || signingOut || refreshing} onClick={() => { setActionError(""); manualRefresh.current = true; void refresh(); }}>
           <RefreshCwIcon className={cn(refreshing && "animate-spin [animation-duration:600ms] motion-reduce:animate-none")} />
       </IconButton>
     </SettingsHeader>
@@ -204,7 +199,7 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
       </DialogContent>
     </Dialog>
     {confirmSignOut && <ProviderSignOutDialog name="Radius" busy={signingOut} cancel={() => setConfirmSignOut(false)} confirm={() => void signOut()} />}
-    {login && <ProviderLoginDialog key={login} initialProvider="radius" providers={providers} close={() => { setLogin(undefined); setRevision(value => value + 1); }} signedIn={refreshProviders} />}
+    {login && <ProviderLoginDialog key={login} initialProvider="radius" providers={providers} close={() => { setLogin(undefined); void refresh(); }} signedIn={refreshProviders} />}
   </section>;
 }
 

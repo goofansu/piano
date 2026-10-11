@@ -1,6 +1,6 @@
 import type { OAuthProvider } from "@shared/wire";
 import { AlertCircleIcon, HomeIcon, PlugIcon, RadiusIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { oauthProviders, providerLogout } from "@/lib/api";
 import type { SettingsSection } from "@/lib/routes";
+import { useObservation } from "@/lib/useObservation";
 
 export type { SettingsSection } from "@/lib/routes";
 
@@ -40,25 +41,18 @@ export function SettingsNavigation({ compact, section, onShow, onHide, onSelect,
 }
 
 export function SettingsPage({ section, onMenu, providersChanged }: { section: SettingsSection; onMenu: () => void; providersChanged: () => void }) {
-  const [providers, setProviders] = useState<OAuthProvider[]>();
-  const [error, setError] = useState("");
-  const [revision, setRevision] = useState(0);
+  // Kept while another section shows; returning to Providers reads them again.
+  const observed = useObservation("providers", signal => oauthProviders({ signal }), { enabled: section === "providers" });
+  const providers = observed.value && [...observed.value];
+  const error = observed.error && !observed.loading ? "Could not load providers." : "";
   const [login, setLogin] = useState<{ provider: string; key: string }>();
   const [signingOut, setSigningOut] = useState<string>();
   const [signOutTarget, setSignOutTarget] = useState<OAuthProvider>();
-  useEffect(() => {
-    if (section !== "providers") return;
-    const controller = new AbortController();
-    setError("");
-    void oauthProviders({ signal: controller.signal }).then(result => {
-      if (!controller.signal.aborted) setProviders([...result]);
-    }).catch(() => { if (!controller.signal.aborted) setError("Could not load providers."); });
-    return () => controller.abort();
-  }, [revision, section]);
+  const { refresh } = observed;
   const refreshProviders = useCallback(() => {
-    setRevision(value => value + 1);
+    void refresh();
     providersChanged();
-  }, [providersChanged]);
+  }, [refresh, providersChanged]);
   const signOut = async (provider: OAuthProvider) => {
     setSigningOut(provider.id);
     try {
@@ -79,7 +73,7 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
             <AlertTitle>Could not load providers</AlertTitle>
             <AlertDescription>
               <p>Check your connection and try again.</p>
-              <Button variant="outline" size="sm" onClick={() => setRevision(value => value + 1)}>Retry</Button>
+              <Button variant="outline" size="sm" onClick={() => void observed.refresh()}>Retry</Button>
             </AlertDescription>
           </Alert>
             : !providers ? <div role="status" className="flex flex-col gap-2">
