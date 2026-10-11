@@ -9,7 +9,7 @@ import { CommandIcon, useSessionCommands } from "@/components/SessionCommandHost
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
 import { hasMod } from "@/lib/keys";
-import { sessionCatalog } from "@/lib/sessionCatalog";
+import { recentSessions } from "@/lib/sessionCatalog";
 import { directoryTrust, focusedDirectory } from "@/lib/sessionContext";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
 import { useNavigation } from "@/lib/useNavigation";
@@ -51,9 +51,7 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
   // The session header's and sidebar row menu's commands, by the same names, for the selected session.
   const { commands: sessionCommandList, run: runCommand } = useSessionCommands();
   // Every session that is not archived, including those whose folder was closed: reachable here by name.
-  // Newest first; a session with no known creation time (its folder is closed) follows.
-  const sessions = useMemo(() => sessionCatalog(state)
-    .sort((a, b) => (Date.parse(b.createdAt ?? "") || 0) - (Date.parse(a.createdAt ?? "") || 0)),
+  const sessions = useMemo(() => recentSessions(state),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, state.session?.cwd, state.session?.sessionId, state.selecting]);
   // Trust belongs to the directory the main pane is about: the New page's, else the selected session's.

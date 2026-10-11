@@ -129,7 +129,7 @@ try {
   // Archive through the normal pointer menu, then prove a stale tab cannot start it.
   await ab('click', '[aria-label="Session menu for Ownership journey"]');
   await ab('find', 'role', 'menuitem', 'click', '--name', 'Archive', '--exact');
-  await ab('wait', '--fn', `received.some(m=>m._tag==='registry'&&m.folders.every(p=>p.sessions.every(s=>s.sessionId!==${JSON.stringify(id)})))`);
+  await ab('wait', '--fn', `received.some(m=>m._tag==='registry'&&m.sessionReferences.every(s=>s.sessionId!==${JSON.stringify(id)}||s.archived))`);
   await ab('tab', 'second');
   await evaluate(`control.send(JSON.stringify({ _tag:'act', selectionId:received.filter(m=>m._tag==='selected').at(-1).selectionId, action:{_tag:'prompt',text:'STALE_REOPEN'}, start:{} })); true`);
   await ab('wait', '--text', 'This session is archived');

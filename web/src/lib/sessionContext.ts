@@ -142,7 +142,7 @@ export function sessionContext(state: AppState): SessionContext {
   const checkout = folder?.worktrees.find(w => w.path === cwd);
   const folderName = folder?.name ?? cwd?.split("/").pop() ?? "";
   const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
-  const info = ref && (sessionReference(state, ref) ?? folder?.sessions.find(s => s.cwd === ref.cwd && s.sessionId === ref.sessionId));
+  const info = ref && sessionReference(state, ref);
   const workspace = workspaceFor(state, session?.cwd);
   const checkoutMissing = !!session?.state.checkoutMissing;
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;

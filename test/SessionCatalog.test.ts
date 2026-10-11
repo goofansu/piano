@@ -1,32 +1,27 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { FolderView, SessionInfo, SessionReference, WorktreeView } from "../shared/wire.ts";
-import { catalogEntry, sessionCatalog } from "../web/src/lib/sessionCatalog.ts";
+import type { FolderView, WorktreeView } from "../shared/wire.ts";
+import { catalogEntry, recentSessions, sessionCatalog } from "../web/src/lib/sessionCatalog.ts";
 import { dateGroups, folderGroups, projectGroups, sortSessions } from "../web/src/lib/sidebarView.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const worktree = (path: string, branch: string | null, root: boolean): WorktreeView => ({
   workspace: { id: `ws:${path}`, folder: "/repo", path }, trust: { required: false, trusted: false }, branch, path, root, status: "current",
 });
-const info = (cwd: string, sessionId: string, title: string, branch = ""): SessionInfo => ({
-  sessionId, workspaceId: `ws:${cwd}`, cwd, branch, title, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", hosted: false, streaming: false,
-});
-const ref = (cwd: string, sessionId: string, title: string, extra: Partial<SessionReference> = {}): SessionReference => ({
-  cwd, sessionId, title, archived: false, updatedAt: "2026-10-01T00:00:00Z", ...extra,
-});
+const ref = (cwd: string, sessionId: string, title: string, extra: Parameters<typeof sessionReference>[2] = {}) => sessionReference(cwd, sessionId, { title, ...extra });
 const folder: FolderView = {
   path: "/repo", name: "repo",
   worktrees: [worktree("/repo", "main", true), worktree("/work/repo.feature", "feature", false)],
   discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
-  sessions: [info("/repo", "open-unfiled", "Open unfiled", "main"), info("/work/repo.feature", "open-member", "Open member", "feature")],
 };
 const state: AppState = {
   ...initialState,
   folders: [folder],
   projects: [{ id: "launch", name: "Launch", archived: false }, { id: "old", name: "Old", archived: true }],
   sessionReferences: [
-    ref("/repo", "open-unfiled", "Open unfiled"),
-    ref("/work/repo.feature", "open-member", "Open member", { projectId: "launch" }),
+    ref("/repo", "open-unfiled", "Open unfiled", { branch: "main" }),
+    ref("/work/repo.feature", "open-member", "Open member", { projectId: "launch", branch: "feature" }),
     // The folder holding these was closed.
     ref("/closed/app", "closed-member", "Closed member", { projectId: "launch", unavailable: "checkout" }),
     ref("/closed/app", "closed-unfiled", "Closed unfiled"),
@@ -96,4 +91,20 @@ test("lookup by ID resolves archived and closed-folder sessions for routing and 
   assert.equal(catalogEntry(state, "closed-unfiled")?.title, "Closed unfiled");
   assert.equal(catalogEntry(state, "missing"), undefined);
   assert.equal(sessionCatalog(state).some(s => s.sessionId === "archived"), false, "archived sessions are not listed or searched");
+});
+
+test("the palette lists newest first by creation time, a closed folder's session included", () => {
+  const dated: AppState = {
+    ...state,
+    sessionReferences: [
+      ref("/repo", "older-open", "Older open", { createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-09T00:00:00Z" }),
+      ref("/closed/app", "newest-closed", "Newest closed", { createdAt: "2026-10-05T00:00:00Z", updatedAt: "2026-10-05T00:00:00Z" }),
+      ref("/work/repo.feature", "middle-open", "Middle open", { createdAt: "2026-10-03T00:00:00Z" }),
+    ],
+  };
+  const order = recentSessions(dated);
+  assert.deepEqual(order.map(s => s.sessionId), ["newest-closed", "middle-open", "older-open"],
+    "the registry's creation time reaches a session whose folder is closed, so it is not pushed last");
+  assert.equal(order[0]!.createdAt, "2026-10-05T00:00:00Z");
+  assert.equal(order[0]!.folderPath, undefined);
 });

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { completionTarget, directoryTrust, focusedDirectory, sessionActivity, sessionCheckoutMissing, sessionContext, sessionMutable } from "../web/src/lib/sessionContext.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
 const worktree = (path: string, branch: string | null, extra: Partial<WorktreeView> = {}): WorktreeView => ({
@@ -12,7 +13,6 @@ const folder: FolderView = {
   path: "/repo", name: "repo",
   worktrees: [worktree("/repo", "main"), worktree("/work/repo.feature", "feature")],
   discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
-  sessions: [{ sessionId: "s1", workspaceId: "ws:/work/repo.feature", cwd: "/work/repo.feature", branch: "feature", title: "Folder title", createdAt: "", updatedAt: "", hosted: true, streaming: false }],
 };
 const session = (cwd: string, state: Partial<SessionState> = {}, extra: Partial<SessionView> = {}): SessionView => ({
   cwd, sessionId: "s1", hosted: true, cursor: null, state: { sessionId: "s1", ...state } as SessionState, messages: [], dialogs: [], ...extra,
@@ -21,7 +21,7 @@ const base: AppState = {
   ...initialState, connected: true, selectionId: "sel", view: { kind: "session" },
   folders: [folder], workspaces: [ws("/repo"), ws("/work/repo.feature"), ws("/closed")],
   projects: [{ id: "p1", name: "Launch", archived: false }],
-  sessionReferences: [{ cwd: "/work/repo.feature", sessionId: "s1", projectId: "p1", archived: false }],
+  sessionReferences: [sessionReference("/work/repo.feature", "s1", { title: "Registry title", projectId: "p1", branch: "feature" })],
 };
 
 test("a worktree session reads its folder, worktree, branch, project and workspace from one place", () => {
@@ -33,6 +33,7 @@ test("a worktree session reads its folder, worktree, branch, project and workspa
   assert.equal(ctx.project?.name, "Launch");
   assert.equal(ctx.workspace?.id, "ws:/work/repo.feature");
   assert.equal(ctx.canOpenChanges, true);
+  assert.equal(ctx.title, "Registry title", "an unnamed Pi session shows its registry title");
   assert.equal(sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).worktreeName, "main");
   assert.equal(sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).title, "Named");
 });
@@ -53,7 +54,7 @@ test("a removed checkout keeps its workspace identity but cannot open Changes; a
   assert.equal(missing.checkoutMissing, true);
   assert.equal(missing.workspace?.id, "ws:/work/repo.feature");
   assert.equal(missing.canOpenChanges, false);
-  const plain: FolderView = { ...folder, worktrees: [worktree("/repo", null, { status: "non-git" })], discovery: { status: "non-git", observedAt: "" }, sessions: [] };
+  const plain: FolderView = { ...folder, worktrees: [worktree("/repo", null, { status: "non-git" })], discovery: { status: "non-git", observedAt: "" } };
   const nonGit = sessionContext({ ...base, folders: [plain], session: session("/repo") });
   assert.equal(nonGit.workspace?.id, "ws:/repo");
   assert.equal(nonGit.changesWorkspace, undefined);
@@ -110,7 +111,7 @@ test("the selected session waits for a settled attachment before registry change
   // The New page has no selection; sidebar rows stay actionable there.
   assert.equal(sessionMutable({ ...base, selectionId: null, view: { kind: "new" } }, other), true);
   assert.equal(sessionCheckoutMissing({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) }, selected), true);
-  assert.equal(sessionCheckoutMissing({ ...base, sessionReferences: [{ ...other, archived: false, unavailable: "checkout" }] }, other), true);
+  assert.equal(sessionCheckoutMissing({ ...base, sessionReferences: [sessionReference(other.cwd, other.sessionId, { unavailable: "checkout" })] }, other), true);
   assert.equal(sessionCheckoutMissing(settled, other), false);
 });
 
