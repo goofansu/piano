@@ -1,4 +1,3 @@
-import type { DirListing } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, CheckIcon, FolderIcon, FolderPlusIcon, GitBranchIcon, HomeIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +13,7 @@ import { listDirectory, makeDirectory } from "@/lib/api";
 import { abbrevHome } from "@/lib/format";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { listRow } from "@/lib/styles";
+import { useObservation } from "@/lib/useObservation";
 
 interface Props {
   open: boolean;
@@ -32,53 +32,25 @@ const MAX_VISIBLE = 500;
  */
 export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props) {
   const [input, setInput] = useState("");
-  const [dir, setDir] = useState<DirListing | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const cache = useRef(new Map<string, DirListing>());
-  const seq = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Disable same-tick duplicate submissions too. Observation aborts this claim on directory/close changes.
+  const creation = useRef<AbortSignal | null>(null);
 
   const { dirPath, prefix } = useMemo(() => parseInput(input), [input]);
+  const { value: dir, error, loading, mutating, mutate } = useObservation(open ? dirPath || "~" : null,
+    (signal, path) => listDirectory(path, { signal }));
+  const ready = open && !!dir && !error && !loading && !mutating;
 
   useEffect(() => {
     if (!open) return;
     const start = initialPath || readStorage(LAST_KEY) || "";
     setInput(start ? withSlash(start) : "~/");
     setCreating(false);
-    setError(null);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    const timer = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
   }, [open, initialPath]);
-
-  // Load whatever directory the input currently points at.
-  useEffect(() => {
-    if (!open) return;
-    const key = dirPath || "~";
-    const cached = cache.current.get(key);
-    if (cached) {
-      setDir(cached);
-      setError(null);
-      return;
-    }
-    const mine = ++seq.current;
-    setLoading(true);
-    listDirectory(key)
-      .then((d) => {
-        if (mine !== seq.current) return;
-        cache.current.set(key, d);
-        cache.current.set(d.path, d);
-        setDir(d);
-        setError(null);
-      })
-      .catch((e) => {
-        if (mine !== seq.current) return;
-        setError(e instanceof Error ? e.message : String(e));
-        setDir(null);
-      })
-      .finally(() => mine === seq.current && setLoading(false));
-  }, [open, dirPath]);
 
   const entries = useMemo(() => {
     const all = dir?.entries ?? [];
@@ -88,11 +60,11 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
   const hidden = entries.length - visible.length;
 
   const goTo = (path: string) => setInput(withSlash(path));
-  const selected = dir && !prefix ? dir.path : dir ? dir.path : "";
+  const selected = dir?.path ?? "";
 
   const select = () => {
-    const path = input.endsWith("/") ? dirPath || dir?.path : entries.length === 1 && prefix ? entries[0].path : dir?.path;
-    if (!path) return;
+    if (!ready || !dir) return;
+    const path = entries.length === 1 && prefix ? entries[0].path : dir.path;
     writeStorage(LAST_KEY, path);
     onPick(path);
     onOpenChange(false);
@@ -100,23 +72,32 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
 
   const createFolder = async () => {
     const name = newName.trim();
-    if (!name || !dir) return;
+    if (!name || !ready || !dir || (creation.current && !creation.current.aborted)) return;
     if (/[\\/]/.test(name)) {
       toast.error("Folder name cannot contain slashes");
       return;
     }
-    let created: string;
+    let created: string | undefined;
     try {
-      created = await makeDirectory(`${dir.path}/${name}`);
+      const parent = await mutate(async (signal, previous) => {
+        creation.current = signal;
+        try {
+          // Closing may stop observing the result, not undo an already submitted mkdir.
+          created = await makeDirectory(`${dir.path}/${name}`, { signal });
+          // Keep the observation associated with its parent until navigation reads the child.
+          return previous;
+        } finally {
+          if (creation.current === signal) creation.current = null;
+        }
+      });
+      // The observation returns nothing if this directory or picker opening was superseded.
+      if (!parent || !created) return;
+      setCreating(false);
+      setNewName("");
+      goTo(created);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not create folder");
-      return;
     }
-    cache.current.delete(dir.path);
-    cache.current.delete(dirPath || "~");
-    setCreating(false);
-    setNewName("");
-    goTo(created);
   };
 
   return (
@@ -209,8 +190,8 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
               }}
             >
               <FolderPlusIcon className="size-4 text-ink-2" />
-              <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New folder name" className="h-8 font-mono text-sm" aria-label="New folder name" autoComplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
-              <Button type="submit" size="icon-xs" aria-label="Create" disabled={!newName.trim()}><CheckIcon /></Button>
+              <Input autoFocus value={newName} disabled={mutating} onChange={(e) => setNewName(e.target.value)} placeholder="New folder name" className="h-8 font-mono text-sm" aria-label="New folder name" autoComplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
+              <Button type="submit" size="icon-xs" aria-label="Create" disabled={!ready || !newName.trim()}><CheckIcon /></Button>
               <Button type="button" size="icon-xs" variant="ghost" aria-label="Cancel" onClick={() => setCreating(false)}><XIcon /></Button>
             </form>
           )}
@@ -226,12 +207,12 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
         </ScrollArea>
 
         <DialogFooter className="items-center sm:justify-between">
-          <Button type="button" variant="ghost" size="sm" disabled={!dir || creating} onClick={() => setCreating(true)}>
+          <Button type="button" variant="ghost" size="sm" disabled={!ready || creating} onClick={() => setCreating(true)}>
             <FolderPlusIcon /> New folder
           </Button>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="button" disabled={!dir || loading} onClick={select}>Use this folder</Button>
+            <Button type="button" disabled={!ready} onClick={select}>Use this folder</Button>
           </div>
         </DialogFooter>
         <span className="sr-only">{selected}</span>
