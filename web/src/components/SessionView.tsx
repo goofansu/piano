@@ -30,11 +30,10 @@ interface Props {
   onDraftAppend: (key: DraftKey, text: string) => void;
   /** Adds text to a draft as a new paragraph. */
   onDraftParagraph: (key: DraftKey, text: string) => void;
-  openProject: (id: string) => void;
   pullRequest: ReturnType<typeof useSessionPullRequest>;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, onDraftParagraph, openProject, pullRequest }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, onDraftParagraph, pullRequest }: Props) {
   // The selected session's Changes sheet and PR popover; hidden while Settings covers the view.
   const { settings, panel, openPanel, closePanel } = useNavigation();
   const changesOpen = !settings && panel === "changes";
@@ -60,7 +59,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
 
   return (
     <>
-      <SessionHeader state={state} onMenu={onMenu} openProject={openProject} status={status}
+      <SessionHeader state={state} onMenu={onMenu} status={status}
         pullRequest={t?.sessionId && <SessionPullRequestControl key={sessionKey(t)} open={pullRequestOpen} onOpenChange={onPullRequestOpenChange} pr={pullRequest} />} />
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={changesWorkspace} session={t}
         onAsk={text => {

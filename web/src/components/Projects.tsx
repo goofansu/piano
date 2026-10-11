@@ -1,47 +1,22 @@
-import type { ClientCommand, Project } from "@shared/wire";
-import { PlusIcon, TargetIcon } from "lucide-react";
+import type { ClientCommand } from "@shared/wire";
+import { ArchiveIcon, ArchiveRestoreIcon, type LucideIcon, PencilIcon, PlusIcon, TargetIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { projectChoices } from "@/lib/projectCommands";
-import { sessionProject } from "@/lib/sessionContext";
+import type { ProjectCommandIcon, ProjectDialog } from "@/lib/projectCommands";
 import type { AppState } from "@/store";
 
-type SessionRef = { cwd: string; sessionId: string };
+const ICONS: Record<ProjectCommandIcon, LucideIcon> = { new: PlusIcon, edit: PencilIcon, archive: ArchiveIcon, unarchive: ArchiveRestoreIcon, project: TargetIcon };
 
-/** The one project dialog: create or rename a project. With `assign`, the saved project also takes that session. */
-export type ProjectDialog = { project?: Project; assign?: SessionRef };
-
-/**
- * Membership lives in the session's own menu, like Rename or Archive. Choosing a project is a radio
- * pick; "New project…" creates one and files the session in it. The command palette carries no
- * project commands yet: which ones are wanted is left to daily use.
- */
-export function ProjectMenu({ state, send, session, onDialog }: {
-  state: AppState; send: (command: ClientCommand) => void; session: SessionRef; onDialog: (dialog: ProjectDialog) => void;
-}) {
-  const current = sessionProject(state, session);
-  const choices = projectChoices(state, current);
-  const assign = (projectId: string | null) => send({ _tag: "assign_project", cwd: session.cwd, sessionId: session.sessionId, projectId });
-  return <DropdownMenuSub>
-    <DropdownMenuSubTrigger disabled={!state.connected}><TargetIcon /> Project{current && <span className="ml-1 min-w-0 max-w-32 truncate text-muted-foreground">{current.name}</span>}</DropdownMenuSubTrigger>
-    <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
-      {choices.length > 0 && <>
-        <DropdownMenuRadioGroup value={current?.id ?? ""} onValueChange={id => assign(id || null)}>
-          {choices.map(p => <DropdownMenuRadioItem key={p.id} value={p.id}><span className="truncate">{p.name}</span>{p.archived && <span className="ml-1 text-muted-foreground">· Archived</span>}</DropdownMenuRadioItem>)}
-          <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-      </>}
-      <DropdownMenuItem onSelect={() => onDialog({ assign: session })}><PlusIcon /> New project…</DropdownMenuItem>
-    </DropdownMenuSubContent>
-  </DropdownMenuSub>;
+/** A project command's icon, wherever its command is offered. */
+export function ProjectCommandIconView({ icon }: { icon: ProjectCommandIcon }) {
+  const Icon = ICONS[icon];
+  return <Icon />;
 }
 
-/** Organization only: saving never opens, aborts or releases a Pi child. */
+/** Organization only: saving never opens, aborts or releases a Pi child. The command host owns the one instance. */
 export function ProjectDialogView({ state, send, dialog, close, openProject }: {
   state: AppState; send: (command: ClientCommand) => void; dialog: ProjectDialog; close: () => void; openProject: (id: string) => void;
 }) {

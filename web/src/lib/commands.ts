@@ -1,0 +1,64 @@
+/**
+ * The one runner for every command a surface offers: global, project, folder and session. Surfaces
+ * render descriptors and call `run(command)`; this decides what running one means, and refuses one
+ * that is not enabled, whichever surface offered it. `CommandHost` supplies the effects.
+ */
+// Relative, not @shared: module tests load this file directly in Node.
+import type { ClientCommand } from "../../../shared/wire.ts";
+import type { FolderCommand } from "./folderCommands.ts";
+import type { Appearance, GlobalCommand } from "./globalCommands.ts";
+import type { Panel } from "./navigation.ts";
+import type { ProjectCommand, ProjectDialog } from "./projectCommands.ts";
+import type { SettingsSection } from "./routes.ts";
+import type { SessionCommand, SessionDisplay, SessionTarget } from "./sessionCommands.ts";
+import type { SidebarView } from "./sidebarView.ts";
+
+export type Command = GlobalCommand | ProjectCommand | FolderCommand | SessionCommand;
+
+/** A form the host owns, which asks before anything changes; its answer re-checks the rule. */
+export type CommandForm =
+  | { kind: "rename-session"; target: SessionTarget }
+  | { kind: "delete-session"; target: SessionTarget }
+  | { kind: "close-folder"; folder: { path: string; name: string } }
+  | { kind: "project"; dialog: ProjectDialog };
+
+/** What running a command can do; the host binds each to navigation, the client, and its own forms. */
+export interface CommandEffects {
+  send: (message: ClientCommand) => void;
+  closeSettings: () => void;
+  openSettings: (section?: SettingsSection) => void;
+  openNew: (cwd?: string, projectId?: string) => void;
+  openPanel: (panel: Panel) => void;
+  toggleSidebar: () => void;
+  setAppearance: (appearance: Appearance) => void;
+  setView: (change: Partial<SidebarView>) => void;
+  setDisplay: (display: SessionDisplay) => void;
+  copy: (value: string, label: string) => void;
+  openForm: (form: CommandForm) => void;
+}
+
+/** Carry out `command`'s intent. A disabled command does nothing; the result says whether it ran. */
+export function runCommand(command: Command, effects: CommandEffects): boolean {
+  if (!command.enabled) return false;
+  const intent = command.intent;
+  switch (intent.kind) {
+    case "send": effects.send(intent.command); break;
+    case "home": effects.closeSettings(); break;
+    case "settings": effects.openSettings(intent.section); break;
+    case "new-session": effects.openNew("cwd" in intent ? intent.cwd : undefined, "projectId" in intent ? intent.projectId : undefined); break;
+    case "toggle-sidebar": effects.toggleSidebar(); break;
+    case "appearance": effects.setAppearance(intent.appearance); break;
+    case "view": effects.setView(intent.change); break;
+    case "project-dialog": effects.openForm({ kind: "project", dialog: intent.dialog }); break;
+    case "close-folder": effects.openForm({ kind: "close-folder", folder: intent.folder }); break;
+    case "copy": effects.copy(intent.value, intent.label); break;
+    case "changes": effects.openPanel("changes"); break;
+    case "pull-request": effects.openPanel("pr"); break;
+    case "display": effects.setDisplay(intent.display); break;
+    // An enabled session command always has its target; the guard only narrows the type.
+    case "rename": if (!intent.target) return false; effects.openForm({ kind: "rename-session", target: intent.target }); break;
+    case "delete": if (!intent.target) return false; effects.openForm({ kind: "delete-session", target: intent.target }); break;
+    case "archive": if (!intent.target) return false; effects.send({ _tag: "archive_session", cwd: intent.target.cwd, sessionId: intent.target.sessionId }); break;
+  }
+  return true;
+}

@@ -1,16 +1,20 @@
 import type { ClientCommand } from "@shared/wire";
 import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, ListIcon, type LucideIcon, MessageSquareIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { useTheme } from "next-themes";
 import { createContext, useContext, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ProjectDialogView } from "@/components/Projects";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { type Command, type CommandEffects, type CommandForm, runCommand } from "@/lib/commands";
 import { type SessionCommand, type SessionCommandIcon, type SessionDisplay, type SessionTarget, sessionCommands } from "@/lib/sessionCommands";
 import { sessionCheckoutMissing, sessionMutable } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
+import { useSidebarView } from "@/lib/useSidebarView";
 import type { AppState } from "@/store";
 
 async function copySessionValue(value: string, label: string) {
@@ -32,17 +36,20 @@ export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
   return <Icon />;
 }
 
-interface SessionCommandsValue { run: (command: SessionCommand) => void; display: SessionDisplay; state: AppState }
-const SessionCommandsContext = createContext<SessionCommandsValue | null>(null);
+interface CommandsValue { run: (command: Command) => void; display: SessionDisplay; state: AppState }
+const CommandsContext = createContext<CommandsValue | null>(null);
 
-/**
- * Session commands for `target`, or for the selected session, and the runner that carries them out.
- * Every surface goes through here, so a command means the same thing wherever it is offered.
- */
+/** The host's runner: every surface hands its global, project, folder and session commands here. */
+export function useCommands() {
+  const value = useContext(CommandsContext);
+  if (!value) throw new Error("useCommands needs a CommandHost");
+  return value;
+}
+
+/** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
-  const value = useContext(SessionCommandsContext);
-  if (!value) throw new Error("useSessionCommands needs a SessionCommandHost");
-  return { commands: sessionCommands(value.state, target, { display: value.display }), run: value.run, display: value.display };
+  const { state, run, display } = useCommands();
+  return { commands: sessionCommands(state, target, { display }), run, display };
 }
 
 /** A descriptor as a menu row, by its label and icon. */
@@ -55,48 +62,49 @@ export function SessionCommandMenuItem({ command, run }: { command: SessionComma
 }
 
 /**
- * The one owner of session command effects and their confirmations: a single Rename dialog and a
- * single Delete dialog, whichever surface asked for them.
+ * The one owner of command effects and their forms: whichever surface asked, running a command goes
+ * through `runCommand`, which refuses a disabled one, and there is a single Rename, Delete, Close
+ * folder and project dialog. Each form re-checks its rule when it is answered.
  */
-export function SessionCommandHost({ state, send, children }: { state: AppState; send: (command: ClientCommand) => void; children: React.ReactNode }) {
-  const { openNew, openPanel } = useNavigation();
+export function CommandHost({ state, send, toggleSidebar, children }: {
+  state: AppState; send: (command: ClientCommand) => void; toggleSidebar: () => void; children: React.ReactNode;
+}) {
+  const { openNew, openPanel, openSettings, closeSettings } = useNavigation();
   const [display, setDisplay] = useSessionDisplay();
-  const [renaming, setRenaming] = useState<SessionTarget | null>(null);
-  const [deleting, setDeleting] = useState<SessionTarget | null>(null);
+  const { setView } = useSidebarView();
+  const { setTheme } = useTheme();
+  const [form, setForm] = useState<CommandForm | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
-  // Confirmations re-check the rule when they are answered: the attachment may have changed since.
+  const renaming = form?.kind === "rename-session" ? form.target : null;
+  const deleting = form?.kind === "delete-session" ? form.target : null;
+  const closing = form?.kind === "close-folder" ? form.folder : null;
+  const close = () => setForm(null);
+  // Forms re-check the rule when they are answered: the attachment or connection may have changed since.
   const canRename = !!renaming && sessionMutable(state, renaming) && !sessionCheckoutMissing(state, renaming) && !!draftTitle.trim() && draftTitle.trim() !== (renaming.title ?? "");
   const canDelete = !!deleting && sessionMutable(state, deleting);
+  const canClose = !!closing && state.connected;
 
-  const run = (command: SessionCommand) => {
-    if (!command.enabled) return;
-    const intent = command.intent;
-    switch (intent.kind) {
-      case "copy": void copySessionValue(intent.value, intent.label); return;
-      case "changes": openPanel("changes"); return;
-      case "pull-request": openPanel("pr"); return;
-      case "display": setDisplay(intent.display); return;
-      case "new-session": openNew(intent.cwd); return;
-      case "rename": if (intent.target) { setDraftTitle(intent.target.title ?? ""); setRenaming(intent.target); } return;
-      case "delete": if (intent.target) setDeleting(intent.target); return;
-      case "archive": {
-        const t = intent.target;
-        if (t && sessionMutable(state, t)) send({ _tag: "archive_session", cwd: t.cwd, sessionId: t.sessionId });
-        return;
-      }
-    }
+  const effects: CommandEffects = {
+    send, closeSettings, openSettings, openNew, openPanel, toggleSidebar, setView, setDisplay,
+    setAppearance: setTheme,
+    copy: (value, label) => void copySessionValue(value, label),
+    openForm: next => {
+      if (next.kind === "rename-session") setDraftTitle(next.target.title ?? "");
+      setForm(next);
+    },
   };
+  const run = (command: Command) => { runCommand(command, effects); };
 
-  return <SessionCommandsContext.Provider value={{ run, display, state }}>
+  return <CommandsContext.Provider value={{ run, display, state }}>
     {children}
-    <Dialog open={!!renaming} onOpenChange={open => !open && setRenaming(null)}>
+    <Dialog open={!!renaming} onOpenChange={open => !open && close()}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); renameInputRef.current?.focus(); }}>
         <form onSubmit={event => {
           event.preventDefault();
           if (!renaming || !canRename) return;
           send({ _tag: "rename_session", cwd: renaming.cwd, sessionId: renaming.sessionId, title: draftTitle.trim() });
-          setRenaming(null);
+          close();
         }} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>Rename session</DialogTitle>
@@ -104,26 +112,43 @@ export function SessionCommandHost({ state, send, children }: { state: AppState;
           </DialogHeader>
           <FieldGroup><Field><Input ref={renameInputRef} aria-label="Session name" value={draftTitle} onChange={event => setDraftTitle(event.target.value)} onFocus={event => event.target.select()} maxLength={200} /></Field></FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setRenaming(null)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={close}>Cancel</Button>
             <Button type="submit" disabled={!canRename}>Rename</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-    <Dialog open={!!deleting} onOpenChange={open => !open && setDeleting(null)}>
+    <Dialog open={!!deleting} onOpenChange={open => !open && close()}>
       <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Delete this session?</DialogTitle>
           <DialogDescription>"{deleting?.title || "Untitled"}" and its transcript are removed from Pi's session store. This cannot be undone.</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="outline" onClick={close}>Cancel</Button>
           <Button variant="destructive" disabled={!canDelete} onClick={() => {
             if (deleting && canDelete) send({ _tag: "delete_session", cwd: deleting.cwd, sessionId: deleting.sessionId });
-            setDeleting(null);
+            close();
           }}>Delete</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </SessionCommandsContext.Provider>;
+    <Dialog open={!!closing} onOpenChange={open => !open && close()}>
+      <DialogContent className="sm:max-w-md" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Close this folder?</DialogTitle>
+          <DialogDescription>"{closing?.name}" will be removed from the sidebar. Files and session history will not be deleted.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={close}>Cancel</Button>
+          <Button disabled={!canClose} onClick={() => {
+            if (!closing || !canClose) return;
+            send({ _tag: "remove_folder", path: closing.path });
+            close();
+          }}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    {form?.kind === "project" && <ProjectDialogView key={JSON.stringify(form.dialog)} state={state} send={send} dialog={form.dialog} close={close} openProject={id => openNew(undefined, id)} />}
+  </CommandsContext.Provider>;
 }
