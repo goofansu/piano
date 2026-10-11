@@ -191,7 +191,7 @@ Do not forward the whole developer credential environment into an untrusted prev
 
 ## INV-12 — Pi compatibility is tested, not inferred
 
-Pi's normal CLI setup loads resources in the selected cwd. Keep protocol translation in PiSessions;
+Pi's normal CLI setup loads resources in the selected cwd. Keep protocol translation behind the PiSessions seam (in PiRecords);
 supported extension dialogs/status are exposed and terminal-only methods have documented limits.
 Record installed versions and test the locked dependency plus any explicit CLI override.
 

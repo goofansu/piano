@@ -3,9 +3,11 @@
  * interface in the browser's own vocabulary (SessionEvent / SessionAction).
  *
  * Behind the seam: command construction, strict JSONL framing, request
- * correlation, streaming reconstruction, dialog retention, state tracking,
- * fan-out to any number of subscribers, stderr capture, exit handling and
- * orderly shutdown. The only external seam is ChildProcessSpawner.
+ * correlation, locking and publication, readback scheduling, dialog deadlines
+ * and claims, abort/stop orchestration, fan-out to any number of subscribers,
+ * stderr capture, exit handling and orderly shutdown. What each Pi record and
+ * readback means is PiRecords' PiProjector. The only external seam is
+ * ChildProcessSpawner.
  */
 import { randomUUID } from "node:crypto";
 import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Schema, type Scope, Semaphore, Stream } from "effect";
@@ -16,12 +18,12 @@ type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
 import { imageType } from "../shared/attachments.ts";
 import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
-import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, SessionAction, SessionActionResult, SessionClosure, SessionEvent, SessionFrame, SessionState, SessionStats, Snapshot } from "../shared/wire.ts";
-import { Attachments, SlashCommand } from "../shared/wire.ts";
+import type { Dialog, DialogResolution, PromptSubmission, SessionAction, SessionActionResult, SessionClosure, SessionEvent, SessionFrame, SessionState, SessionStats, SlashCommand, Snapshot } from "../shared/wire.ts";
+import { Attachments } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { PiCli } from "./PiCli.ts";
-import { type PiRecord, type RawMessage, StreamAssembler } from "./PiRecords.ts";
+import { commandsOf, PiProjector, type PiRecord, queuedMessagesOf, type RawMessage, type RawState, type RawStats, type RefreshKind, stateFactsOf, statsOf } from "./PiRecords.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
 
@@ -84,18 +86,9 @@ export class PiSessions extends Context.Service<
 
 // ── Implementation ───────────────────────────────────────────────────────────
 
-/** Keep Pi's execution precedence, exposing only browser-useful catalog fields. */
-const commandsOf = (data: unknown): Effect.Effect<ReadonlyArray<SlashCommand>, PiSessionError> => {
-  const commands = (data as { commands?: unknown } | undefined)?.commands;
-  if (!Schema.is(Schema.Array(SlashCommand))(commands)) return Effect.fail(new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid command catalog." }));
-  const unique = new Map<string, SlashCommand>();
-  // Extensions execute before skills and templates; skills expand before templates.
-  for (const source of ["extension", "skill", "prompt"] as const) for (const command of commands) {
-    if (command.source === source && !unique.has(command.name)) unique.set(command.name, {
-      name: command.name, description: command.description, source,
-    });
-  }
-  return Effect.succeed([...unique.values()]);
+const catalogOf = (data: unknown): Effect.Effect<ReadonlyArray<SlashCommand>, PiSessionError> => {
+  const commands = commandsOf(data);
+  return commands ? Effect.succeed(commands) : Effect.fail(new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid command catalog." }));
 };
 
 /** Host acknowledgement deadline, not a deadline for model work or extension execution. */
@@ -104,7 +97,6 @@ export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTime
 /** Bounded recovery for dialogs whose extension-owned cancellation is invisible over RPC. */
 export const PiDialogRecoveryMs = Context.Reference<number>("piano/PiDialogRecoveryMs", { defaultValue: () => 10 * 60_000 });
 
-const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
 const encoder = new TextEncoder();
 
 interface Response extends PiRecord {
@@ -114,45 +106,6 @@ interface Response extends PiRecord {
   data?: unknown;
   error?: string;
 }
-
-interface RawStats {
-  cost?: number;
-  tokens?: SessionState["tokens"];
-  contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
-}
-
-interface RawState {
-  model?: { provider: string; id: string };
-  thinkingLevel?: string;
-  isStreaming: boolean;
-  isCompacting?: boolean;
-  sessionFile?: string;
-  sessionId: string;
-  sessionName?: string;
-}
-
-const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
-  if (!value || typeof value !== "object") return;
-  const { steering, followUp } = value as { steering?: unknown; followUp?: unknown };
-  if (!Array.isArray(steering) || !Array.isArray(followUp) ||
-      ![...steering, ...followUp].every((text) => typeof text === "string")) return;
-  return [
-    ...steering.map((text: string) => ({ kind: "steering" as const, text })),
-    ...followUp.map((text: string) => ({ kind: "follow-up" as const, text })),
-  ];
-};
-
-const toState = (s: RawState): SessionState => ({
-  sessionId: s.sessionId,
-  sessionFile: s.sessionFile,
-  sessionName: s.sessionName,
-  model: s.model ? `${s.model.provider}/${s.model.id}` : undefined,
-  thinkingLevel: s.thinkingLevel,
-  isStreaming: s.isStreaming,
-  isCompacting: s.isCompacting ?? false,
-  isRetrying: false,
-  queuedMessages: [],
-});
 
 /** Retained state shows nothing Pi could still continue on its own or that awaits an answer. */
 const settled = ({ state, dialogs }: Snapshot) => dialogs.length === 0 && !isWorking(state) && !state.isStopping &&
@@ -354,11 +307,11 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
     if ((initial[0] as RawState).sessionId !== spec.sessionId) return yield* new PiSessionError({ reason: "protocol", detail: "Pi opened a different session ID. History was not merged; check the saved reference." });
-    const assembler = new StreamAssembler();
+    const projector = new PiProjector({ generation, recoveryMs });
     // Everything a subscriber's snapshot holds except host observations, kept by the shared fold.
     const snapshotRef = yield* Ref.make<Snapshot>({
-      state: { ...toState(initial[0] as RawState), ...spec.lastKnownStats, contextIsLastKnown: true },
-      messages: assembler.serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
+      state: { ...projector.state(initial[0] as RawState), ...spec.lastKnownStats, contextIsLastKnown: true },
+      messages: projector.history(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
       dialogs: [],
       tools: [],
     });
@@ -381,11 +334,8 @@ const openSession = (spec: PiSessionSpec) =>
     let contextVersion = 0;
     let operationVersion = 0;
     let submissionId = 0;
-    let turnRetry = false;
-    let summaryRetry = false;
     let announced = false;
     let processedVersion = 0;
-    const seenDialogs = new Set<string>();
     const dialogClosed = new Map<string, Deferred.Deferred<void>>();
     const promptOperations = new Set<number>();
     let aborting: { dispatched: Deferred.Deferred<void>; pendingPrompts: Set<number>; acknowledged: boolean } | undefined;
@@ -398,15 +348,17 @@ const openSession = (spec: PiSessionSpec) =>
         }),
       );
 
+    /** Merge state fields; callers hold the snapshot lock. */
+    const mergeState = (patch: Partial<SessionState>) => Effect.gen(function* () {
+      const current = yield* stateOf;
+      const next = { ...current, ...patch };
+      if (isWorking(next) || next.model !== current.model) next.contextIsLastKnown = true;
+      if (JSON.stringify(next) === JSON.stringify(current)) return;
+      for (const field of metadataFields) if (next[field] !== current[field]) factVersions[field] += 1;
+      yield* publish({ _tag: "state", state: next });
+    });
     const patchState = (patch: Partial<SessionState> | (() => Partial<SessionState>)) =>
-      Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
-        const current = yield* stateOf;
-        const next = { ...current, ...(typeof patch === "function" ? patch() : patch) };
-        if (isWorking(next) || next.model !== current.model) next.contextIsLastKnown = true;
-        if (JSON.stringify(next) === JSON.stringify(current)) return;
-        for (const field of metadataFields) if (next[field] !== current[field]) factVersions[field] += 1;
-        yield* publish({ _tag: "state", state: next });
-      }));
+      Semaphore.withPermits(lock, 1)(Effect.suspend(() => mergeState(typeof patch === "function" ? patch() : patch)));
 
     /** All terminal paths compete under the snapshot lock, before any transport yield. */
     const resolveDialog = (dialog: Dialog, reason: DialogResolution["reason"], response?: Record<string, unknown>) => Effect.gen(function* () {
@@ -465,10 +417,10 @@ const openSession = (spec: PiSessionSpec) =>
       const outputVersion = child.observationVersion();
       yield* patchState({ contextIsLastKnown: true });
       yield* Effect.gen(function* () {
-        const stats = (yield* child.request({ type: "get_session_stats" })) as RawStats;
+        const stats = statsOf((yield* child.request({ type: "get_session_stats" })) as RawStats);
         const statsUpdatedAt = yield* Clock.currentTimeMillis;
         yield* patchState(() => version === statsVersion && modelVersion === factVersions.model && !announced
-          ? { context: stats.contextUsage, cost: stats.cost, tokens: stats.tokens, statsUpdatedAt,
+          ? { ...stats, statsUpdatedAt,
               contextIsLastKnown: outputVersion !== child.observationVersion(), statsRefreshError: undefined } : {});
       }).pipe(Effect.catchTag("PiSessionError", error => patchState(() => announced || version !== statsVersion
         ? {} : { contextIsLastKnown: true, statsRefreshError: `Usage refresh failed: ${error.detail}` })));
@@ -484,12 +436,7 @@ const openSession = (spec: PiSessionSpec) =>
       const raw = (yield* child.request({ type: "get_state" })) as RawState;
       yield* patchState(() => {
         if (operation !== operationVersion || announced) return {};
-        const observed = {
-          model: raw.model ? `${raw.model.provider}/${raw.model.id}` : undefined,
-          thinkingLevel: raw.thinkingLevel,
-          sessionName: raw.sessionName,
-          sessionFile: raw.sessionFile,
-        };
+        const observed = stateFactsOf(raw);
         const patch: Partial<Record<typeof metadataFields[number], string | undefined>> = {};
         // Unrelated streaming/queue events must not discard a model observation.
         for (const field of metadataFields) if (versions[field] === factVersions[field]) patch[field] = observed[field];
@@ -508,7 +455,7 @@ const openSession = (spec: PiSessionSpec) =>
         if (version !== contextVersion || announced) return;
         const applied = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
           if (version !== contextVersion || outputVersion !== child.observationVersion() || announced) return false;
-          yield* publish({ _tag: "context", messages: assembler.serializeMessages(data.messages) });
+          yield* publish({ _tag: "context", messages: projector.history(data.messages) });
           return true;
         }));
         if (applied) return yield* patchState({ projectionError: undefined });
@@ -518,10 +465,10 @@ const openSession = (spec: PiSessionSpec) =>
 
     // At most one worker per readback kind. Never await RPC inspection from the
     // record consumer: Pi may need a later dialog answered before replying.
-    const refreshers = { stats: refreshStats, context: refreshContext, state: Effect.suspend(() => refreshState(operationVersion)) };
-    const refreshing = new Set<keyof typeof refreshers>();
-    const requested = new Set<keyof typeof refreshers>();
-    const scheduleRefresh = (...kinds: Array<keyof typeof refreshers>) => Effect.gen(function* () {
+    const refreshers: Record<RefreshKind, Effect.Effect<void>> = { stats: refreshStats, context: refreshContext, state: Effect.suspend(() => refreshState(operationVersion)) };
+    const refreshing = new Set<RefreshKind>();
+    const requested = new Set<RefreshKind>();
+    const scheduleRefresh = (...kinds: ReadonlyArray<RefreshKind>) => Effect.gen(function* () {
       for (const kind of kinds) {
         requested.add(kind);
         if (refreshing.has(kind)) continue;
@@ -535,108 +482,24 @@ const openSession = (spec: PiSessionSpec) =>
     const onRecord = ({ record, receivedAt }: { record: PiRecord; receivedAt: number }) =>
       Effect.gen(function* () {
         if (announced) return;
-        switch (record.type) {
-          case "agent_start":
-            return yield* patchState({ isStreaming: true });
-          case "queue_update": {
-            const messages = queuedMessagesOf(record);
-            if (!messages) return yield* apply([{ _tag: "notice", level: "warning", message: "Pi sent an invalid queue update." }]);
-            return yield* apply([{ _tag: "queue_update", messages }]);
-          }
-          case "agent_settled":
-            turnRetry = false;
-            summaryRetry = false;
-            yield* apply(() => assembler.handle(record));
-            yield* patchState({ isStreaming: false, isCompacting: false, isRetrying: false });
-            return yield* scheduleRefresh("context", "state", "stats");
-          case "message_start":
-            yield* patchState({ contextIsLastKnown: true });
-            return yield* apply(() => assembler.handle(record));
-          case "message_end":
-            yield* patchState({ contextIsLastKnown: true });
-            yield* apply(() => assembler.handle(record));
-            return yield* scheduleRefresh("stats");
-          case "compaction_end":
-            yield* patchState({ isCompacting: false });
-            // Pi reports null tokens/percent until fresh post-compaction usage exists.
-            return yield* scheduleRefresh("context", "stats");
-          case "session_info_changed":
-            return yield* patchState({ sessionName: record.name as string | undefined });
-          case "thinking_level_changed":
-            return yield* patchState({ thinkingLevel: record.level as string | undefined });
-          case "extension_ui_request": {
-            const method = String(record.method);
-            if (method === "notify") {
-              const level = record.notifyType === "error" ? "error" : record.notifyType === "warning" ? "warning" : "info";
-              return yield* apply([{ _tag: "notice", level, message: String(record.message ?? "") }]);
-            }
-            if (["setStatus", "setWidget", "setTitle", "set_editor_text"].includes(method)) {
-              const current = (yield* stateOf).extension ?? { statuses: [], widgets: [] };
-              const extension = { ...current };
-              if (method === "setStatus") extension.statuses = [
-                ...current.statuses.filter(s => s.key !== record.statusKey),
-                ...(typeof record.statusText === "string" ? [{ key: String(record.statusKey), text: record.statusText }] : []),
-              ];
-              if (method === "setWidget") extension.widgets = [
-                ...current.widgets.filter(w => w.key !== record.widgetKey),
-                ...(Array.isArray(record.widgetLines) ? [{ key: String(record.widgetKey), lines: record.widgetLines.map(String), placement: record.widgetPlacement === "belowEditor" ? "belowEditor" as const : "aboveEditor" as const }] : []),
-              ];
-              if (method === "setTitle") extension.title = String(record.title ?? "");
-              if (method === "set_editor_text") extension.editorRequest = { id: `${generation}:${record.id}`, text: String(record.text ?? "") };
-              yield* patchState({ extension });
-              return;
-            }
-            if (!DIALOG_METHODS.has(method)) return;
-            const id = String(record.id);
-            if (seenDialogs.has(id)) return;
-            seenDialogs.add(id);
-            const timeoutMs = typeof record.timeout === "number" && Number.isFinite(record.timeout) && record.timeout > 0 ? record.timeout : undefined;
-            const piTimeout = timeoutMs !== undefined && timeoutMs <= recoveryMs;
-            const dialog: Dialog = {
-              id, generation, receivedAt, timeoutMs,
-              deadlineAt: receivedAt + (piTimeout ? timeoutMs : recoveryMs),
-              deadlineKind: piTimeout ? "pi-timeout" : "host-recovery",
-              method: method as Dialog["method"],
-              title: record.title as string | undefined,
-              message: record.message as string | undefined,
-              options: record.options as string[] | undefined,
-              placeholder: record.placeholder as string | undefined,
-              prefill: record.prefill as string | undefined,
-            };
-            const closed = yield* Deferred.make<void>();
-            dialogClosed.set(id, closed);
-            yield* apply([{ _tag: "dialog", dialog }]);
-            const abort = aborting;
-            // Never stop stdout consumption while an extension or a pipe is blocked.
-            yield* Effect.gen(function* () {
-              if (abort) yield* Deferred.await(abort.dispatched);
-              else yield* Effect.sleep(Math.max(0, dialog.deadlineAt - (yield* Clock.currentTimeMillis))).pipe(Effect.raceFirst(Deferred.await(closed)));
-              yield* resolveDialog(dialog, abort ? "aborted" : piTimeout ? "expired" : "recovery");
-            }).pipe(Effect.ignore, Effect.forkIn(sessionScope));
-            return;
-          }
-          case "auto_retry_start":
-            turnRetry = true;
-            yield* patchState({ isStreaming: true, isRetrying: true });
-            return yield* apply([{ _tag: "notice", level: "warning", message: `Retrying (${record.attempt}/${record.maxAttempts}): ${record.errorMessage}` }]);
-          case "auto_retry_end":
-            turnRetry = false;
-            return yield* patchState({ isRetrying: summaryRetry });
-          case "summarization_retry_scheduled":
-            summaryRetry = true;
-            yield* patchState({ isRetrying: true });
-            return yield* apply([{ _tag: "notice", level: "warning", message: `Retrying summary (${record.attempt}/${record.maxAttempts}): ${record.errorMessage}` }]);
-          case "summarization_retry_finished":
-            summaryRetry = false;
-            return yield* patchState({ isRetrying: turnRetry });
-          case "compaction_start":
-            yield* patchState({ isCompacting: true });
-            return yield* apply([{ _tag: "notice", level: "info", message: `Compacting context (${record.reason})` }]);
-          case "extension_error":
-            return yield* apply([{ _tag: "notice", level: "error", message: `Extension error: ${record.error}` }]);
-          default:
-            return yield* apply(() => assembler.handle(record));
-        }
+        // Translate under the lock too: a history readback replaces the projector's correlation facts.
+        const { refresh, dialog } = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
+          const projected = projector.record(record, receivedAt);
+          if (projected.dialog) dialogClosed.set(projected.dialog.id, yield* Deferred.make<void>());
+          if (projected.state) yield* mergeState(projected.state);
+          for (const event of projected.events) yield* publish(event);
+          return projected;
+        }));
+        yield* scheduleRefresh(...refresh);
+        const closed = dialog && dialogClosed.get(dialog.id);
+        if (!dialog || !closed) return;
+        const abort = aborting;
+        // Never stop stdout consumption while an extension or a pipe is blocked.
+        yield* Effect.gen(function* () {
+          if (abort) yield* Deferred.await(abort.dispatched);
+          else yield* Effect.sleep(Math.max(0, dialog.deadlineAt - (yield* Clock.currentTimeMillis))).pipe(Effect.raceFirst(Deferred.await(closed)));
+          yield* resolveDialog(dialog, abort ? "aborted" : dialog.deadlineKind === "pi-timeout" ? "expired" : "recovery");
+        }).pipe(Effect.ignore, Effect.forkIn(sessionScope));
       });
 
     const recordsDrained = yield* Deferred.make<void>();
@@ -659,7 +522,7 @@ const openSession = (spec: PiSessionSpec) =>
           for (const dialog of yield* dialogsOf) yield* resolveDialog(dialog, "exited").pipe(Effect.ignore);
           const resolution = (yield* stateOf).dialogResolution;
           if (resolution?.delivery === "pending") yield* patchState({ dialogResolution: { ...resolution, delivery: "uncertain", detail: "Pi stopped during response delivery. Do not resend this dialog response." } });
-          yield* apply(() => [...assembler.handle({ type: "piano_closed" }), { _tag: "closed", closure: final }]);
+          yield* apply(() => [...projector.closed(), { _tag: "closed", closure: final }]);
         });
       });
     // Release is "during work" when Pi still held work it could continue or that awaited an
@@ -707,7 +570,7 @@ const openSession = (spec: PiSessionSpec) =>
           ? ++operationVersion : operationVersion;
         switch (action._tag) {
           case "commands":
-            return { _tag: "commands", commands: yield* child.request({ type: "get_commands" }).pipe(Effect.flatMap(commandsOf)) };
+            return { _tag: "commands", commands: yield* child.request({ type: "get_commands" }).pipe(Effect.flatMap(catalogOf)) };
           case "prompt":
           case "steer": {
             if (action.attachments?.length) {
@@ -870,7 +733,7 @@ const probe = (cwd: string, options?: { globalSettingsOnly?: boolean }): Effect.
     const [models, state, commands] = yield* Effect.all([
       child.request({ type: "get_available_models" }),
       child.request({ type: "get_state" }),
-      child.request({ type: "get_commands" }).pipe(Effect.flatMap(commandsOf)),
+      child.request({ type: "get_commands" }).pipe(Effect.flatMap(catalogOf)),
     ]).pipe(
       Effect.raceFirst(
         Deferred.await(child.exited).pipe(
@@ -878,12 +741,12 @@ const probe = (cwd: string, options?: { globalSettingsOnly?: boolean }): Effect.
         ),
       ),
     );
-    const raw = state as RawState;
+    const facts = stateFactsOf(state as RawState);
     return {
       commands,
       models: ((models as { models?: ProbeResult["models"] }).models ?? []),
-      defaultModel: raw.model ? `${raw.model.provider}/${raw.model.id}` : undefined,
-      defaultThinkingLevel: raw.thinkingLevel,
+      defaultModel: facts.model,
+      defaultThinkingLevel: facts.thinkingLevel,
     };
   }).pipe(Effect.scoped);
 
