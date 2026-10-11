@@ -154,7 +154,7 @@ export function RadiusSettings({ onMenu }: { onMenu: () => void }) {
                 {state.mcp.detail && <p className="text-xs text-muted-foreground">{state.mcp.detail}</p>}
               </ItemContent>
               <ItemActions className="max-sm:basis-full max-sm:pl-12">
-                {!mcpReady && <Button variant="outline" size="sm" disabled={disabled || state.mcp.status === "blocked" || !signedIn} aria-label="Add Radius MCP" onClick={() => void act("configure-mcp")}>Add</Button>}
+                {!mcpReady && <Button size="sm" disabled={disabled || state.mcp.status === "blocked" || !signedIn} aria-label="Add Radius MCP" onClick={() => void act("configure-mcp")}>Add</Button>}
                 {state.mcp.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => confirmRemoval({ action: "remove-mcp", key: state.mcp.removalKey! })} aria-label="Remove Radius MCP">Remove</Button>}
               </ItemActions>
             </Item>
@@ -168,9 +168,9 @@ export function RadiusSettings({ onMenu }: { onMenu: () => void }) {
                 <p className="text-xs text-muted-foreground">An organization owner or admin must enable Web search separately in Radius.</p>
               </ItemContent>
               <ItemActions className="max-sm:basis-full max-sm:pl-12">
-                {installing ? <Button variant="outline" size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
+                {installing ? <Button variant={state.installation.action === "uninstall" ? "ghost" : "default"} size="sm" disabled><Spinner data-icon="inline-start" />{state.installation.action === "uninstall" ? "Uninstalling…" : "Installing…"}</Button>
                   : <>
-                    {!webSearchReady && <Button variant="outline" size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} aria-label="Install web search" onClick={() => void act("install-web-search")}>Install</Button>}
+                    {!webSearchReady && <Button size="sm" disabled={disabled || state.webSearch.status === "blocked" || !signedIn} aria-label="Install web search" onClick={() => void act("install-web-search")}>Install</Button>}
                     {state.webSearch.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} onClick={() => confirmRemoval({ action: "uninstall-web-search", key: state.webSearch.removalKey! })} aria-label="Uninstall web search">Uninstall</Button>}
                   </>}
               </ItemActions>
