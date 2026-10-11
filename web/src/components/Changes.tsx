@@ -1,4 +1,4 @@
-import { CHANGES_FILE_PATCH_BYTES, CHANGES_INITIAL_PATCH_BYTES, type ChangeFile, type Workspace, type WorkspaceChanges } from "@shared/wire";
+import { CHANGES_INITIAL_PATCH_BYTES, type ChangeFile, type Workspace, type WorkspaceChanges } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, FileMinusIcon, FilePlusIcon, MessageSquarePlusIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -14,73 +14,35 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { workspaceChangedFile, workspaceChanges } from "@/lib/api";
-import { type DiffFile, parseUnifiedDiff } from "@/lib/diff";
+import { allCollapsed, askText, changedFile, checkWorkspaceResponse, type Disclosure, FILE_PATCH_LIMIT, fileMessage, initialDisclosure, isLarge, isOpen, type LoadedFile, refreshKey, seedFiles, setOpen, summary, toggleAll } from "@/lib/changesView";
+import { type DiffFile, lineCount } from "@/lib/diff";
 import { abbrevHome } from "@/lib/format";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
-/** Tools whose completion can change the checkout; a finished turn is also a refresh point. */
-const EDITING_TOOLS = new Set(["edit", "write", "bash"]);
-const LARGE_FILE_LINES = 800;
-const FILE_PATCH_LIMIT = `${CHANGES_FILE_PATCH_BYTES / (1024 * 1024)} MiB`;
-
 /** Live on open, focus and edits (a quiet 600 ms after the checkout may have moved); a response for another workspace never shows. */
-function useWorkspaceChanges(workspace: Workspace | undefined, active: boolean, mutationKey: string) {
-  const id = workspace?.id, path = workspace?.path;
-  const key = active && id && path ? JSON.stringify([id, path]) : null;
-  const { value, error, loading, refresh } = useObservation<WorkspaceChanges>(key, async signal => {
-    const value = await workspaceChanges(id!, { signal });
-    if (value.workspace.id !== id || value.workspace.path !== path) throw new Error("Changes returned a different workspace. Refresh before inspecting changes.");
-    if (value.result.status === "error") throw new Error(value.result.detail);
-    return value;
-  }, { focus: true, trigger: mutationKey, debounce: 600 });
+function useWorkspaceChanges(workspace: Workspace | undefined, active: boolean, refreshKey: string) {
+  const key = active && workspace ? JSON.stringify([workspace.id, workspace.path]) : null;
+  const { value, error, loading, refresh } = useObservation<WorkspaceChanges>(key, async signal =>
+    checkWorkspaceResponse(workspace!, await workspaceChanges(workspace!.id, { signal })),
+  { focus: true, trigger: refreshKey, debounce: 600 });
   // A refresh in progress replaces the last failure, as the first read does.
   return { observation: value ?? null, error: loading ? undefined : error, busy: loading, refresh: () => void refresh() };
 }
-
-/** The latest checkout-changing tool result plus the streaming flag: when either moves, the checkout may have. */
-function mutationKey(session: SessionView | null): string {
-  if (!session) return "";
-  for (let i = session.messages.length - 1; i >= 0; i--) {
-    const m = session.messages[i];
-    if (m.role === "tool_result" && m.toolName && EDITING_TOOLS.has(m.toolName)) return `${m.id}|${session.state.isStreaming ? 1 : 0}`;
-  }
-  return `none|${session.state.isStreaming ? 1 : 0}`;
-}
-
-const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: {
   open: boolean; onOpenChange: (open: boolean) => void; workspace: Workspace | undefined; session: SessionView | null;
   /** Receives review text for the composer draft; the caller decides how to close and confirm. */
   onAsk: (text: string) => void;
 }) {
-  const key = mutationKey(session);
-  const { observation, error, busy, refresh } = useWorkspaceChanges(workspace, open, key);
+  const { observation, error, busy, refresh } = useWorkspaceChanges(workspace, open, refreshKey(session));
   const result = observation?.workspace.id === workspace?.id ? observation?.result : undefined;
   const ready = result?.status === "ready" ? result : undefined;
   const files = ready?.files ?? [];
-  const initial = useMemo(() => {
-    const parsed = ready ? parseUnifiedDiff(ready.diff) : [];
-    if (ready?.truncated) parsed.pop(); // The last file may have an incomplete hunk.
-    return new Map(parsed.map(file => [file.path, file]));
-  }, [ready]);
-  const additions = files.reduce((n, f) => n + f.additions, 0), deletions = files.reduce((n, f) => n + f.deletions, 0);
-  // Collapsed paths persist across refreshes so a reader keeps their place; large files start folded.
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const [expandedLarge, setExpandedLarge] = useState<Set<string>>(() => new Set());
-  const isOpen = (f: ChangeFile) => !collapsed.has(f.path) && ((initial.has(f.path) && lineCount(initial.get(f.path)!) <= LARGE_FILE_LINES) || expandedLarge.has(f.path));
-  const allCollapsed = files.length > 0 && files.every(f => !isOpen(f));
-  const toggleAll = () => {
-    if (allCollapsed) { setCollapsed(new Set()); setExpandedLarge(new Set(files.map(f => f.path))); }
-    else setCollapsed(new Set(files.map(f => f.path)));
-  };
-  const ask = (file: DiffFile, observedAt: string, truncated: boolean) => {
-    onAsk(`About \`${file.path}\` (live working-tree diff inspected at ${clock(observedAt)}; ${truncated ? "partial patch, not the complete file" : "not an immutable revision"}):\n\n\`\`\`diff\n${file.raw}\`\`\`\n`);
-  };
-  const summary = ready
-    ? files.length === 0 ? "no changes" : `${files.length} ${files.length === 1 ? "file" : "files"} · +${additions} −${deletions}`
-    : error || result ? "Changes unavailable" : "Loading…";
+  const seed = useMemo(() => seedFiles(ready), [ready]);
+  const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
+  const everyCollapsed = allCollapsed(disclosure, files, seed);
+  const ask = (loaded: LoadedFile) => onAsk(askText(loaded));
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -92,12 +54,12 @@ export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: 
             <span aria-hidden>·</span>
             {ready && <BranchLabel branch={ready.branch ?? "Detached HEAD"} />}
             {ready && <span aria-hidden>·</span>}
-            <span role="status" className="truncate">{summary}</span>
+            <span role="status" className="truncate">{summary(result, !!error)}</span>
             {busy && ready && <Spinner className="size-3" />}
           </SheetDescription>
           <div className="-ml-2 flex items-center gap-1">
             <Button variant="ghost" size="sm" disabled={!workspace} onClick={refresh} aria-label="Refresh changes"><RefreshCwIcon className={cn(busy && "animate-spin")} /> Refresh</Button>
-            <Button variant="ghost" size="sm" disabled={files.length === 0} onClick={toggleAll}>{allCollapsed ? "Expand all" : "Collapse all"}</Button>
+            <Button variant="ghost" size="sm" disabled={files.length === 0} onClick={() => setDisclosure(d => toggleAll(d, files, seed))}>{everyCollapsed ? "Expand all" : "Collapse all"}</Button>
           </div>
           {error && ready && <p role="status" title={error} className="text-xs text-ink-2">Refresh failed. Showing previous changes.</p>}
         </SheetHeader>
@@ -118,11 +80,8 @@ export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: 
             {files.length > 0 && (
               <ItemGroup className="gap-2" aria-label="Changed files">
                 {files.map(file => (
-                  <LiveFile key={`${observation!.workspace.id}:${observation!.observedAt}:${file.path}`} metadata={file} initial={initial.get(file.path)} workspace={observation!.workspace} observedAt={observation!.observedAt} open={isOpen(file)}
-                    onOpenChange={next => {
-                      setCollapsed(prev => { const s = new Set(prev); if (next) s.delete(file.path); else s.add(file.path); return s; });
-                      if (next) setExpandedLarge(prev => new Set(prev).add(file.path));
-                    }}
+                  <LiveFile key={`${observation!.workspace.id}:${observation!.observedAt}:${file.path}`} metadata={file} initial={seed.get(file.path)} workspace={observation!.workspace} observedAt={observation!.observedAt} open={isOpen(disclosure, file.path, seed)}
+                    onOpenChange={next => setDisclosure(d => setOpen(d, file.path, next))}
                     onAsk={ask} />
                 ))}
               </ItemGroup>
@@ -152,39 +111,30 @@ export function ChangesSheet({ open, onOpenChange, workspace, session, onAsk }: 
   );
 }
 
-const lineCount = (file: DiffFile) => file.hunks.reduce((n, h) => n + h.lines.length, 0);
-
 function LiveFile({ metadata, initial, workspace, observedAt, open, onOpenChange, onAsk }: {
   metadata: ChangeFile; initial?: DiffFile; workspace: Workspace; observedAt: string; open: boolean;
-  onOpenChange: (open: boolean) => void; onAsk: (file: DiffFile, observedAt: string, truncated: boolean) => void;
+  onOpenChange: (open: boolean) => void; onAsk: (loaded: LoadedFile) => void;
 }) {
-  const seeded = useMemo(() => initial ? { file: { ...initial, ...metadata }, observedAt, truncated: false } : undefined, [initial, metadata, observedAt]);
+  const seeded = useMemo<LoadedFile | undefined>(() => initial ? { file: { ...initial, ...metadata }, observedAt, truncated: false } : undefined, [initial, metadata, observedAt]);
   // Read when first expanded; collapsing before it arrives abandons the read, and a loaded patch
   // stays (collapsed or not) until the parent observes the checkout again and remounts this file.
   const [kept, setKept] = useState(false);
-  const fetched = useObservation(JSON.stringify([workspace.id, workspace.path, metadata.path]), async signal => {
-    const value = await workspaceChangedFile(workspace.id, metadata.path, { signal });
-    if (value.workspace.id !== workspace.id || value.workspace.path !== workspace.path) throw new Error("File response belongs to another workspace.");
-    if (value.result.status === "error") throw new Error(value.result.detail);
-    const file = parseUnifiedDiff(value.result.diff).find(f => f.path === metadata.path);
-    const stats = value.result.files.find(f => f.path === metadata.path);
-    if (!stats) throw new Error("File metadata is unavailable. Refresh changes.");
-    if (!file) throw new Error(value.result.truncated ? `Patch is too large to display a complete line (${FILE_PATCH_LIMIT} limit).` : "File changed or no longer has a diff. Refresh changes.");
-    return { file: { ...file, ...stats }, observedAt: value.observedAt, truncated: value.result.truncated };
-  }, { enabled: !seeded && (open || kept) });
+  const fetched = useObservation(JSON.stringify([workspace.id, workspace.path, metadata.path]), async signal =>
+    changedFile(workspace, await workspaceChangedFile(workspace.id, metadata.path, { signal }), metadata.path),
+ { enabled: !seeded && (open || kept) });
   useEffect(() => { if (fetched.value) setKept(true); }, [fetched.value]);
   const loaded = seeded ?? fetched.value;
   const error = fetched.loading ? undefined : fetched.error, busy = fetched.loading;
   const file: DiffFile = loaded?.file ?? { ...metadata, status: "modified", notes: [], hunks: [], raw: "" };
   return <FileSection file={file} open={open} onOpenChange={onOpenChange}
-    onAsk={loaded && open ? () => onAsk(loaded.file, loaded.observedAt, loaded.truncated) : undefined}
-    message={error ?? (busy && !loaded ? "Loading fresh patch…" : !loaded ? "Expand to load patch" : loaded.truncated ? `Partial patch: exceeds the ${FILE_PATCH_LIMIT} per-file limit. Inspect the remainder locally.` : undefined)}
+    onAsk={loaded && open ? () => onAsk(loaded) : undefined}
+    message={fileMessage({ error, busy, loaded })}
     retry={error ? () => void fetched.refresh() : undefined} />;
 }
 
 function FileSection({ file, open, onOpenChange, onAsk, message, retry }: { file: DiffFile; open: boolean; onOpenChange: (open: boolean) => void; onAsk?: () => void; message?: string; retry?: () => void }) {
   const Icon = file.status === "added" ? FilePlusIcon : file.status === "deleted" ? FileMinusIcon : FileDiffIcon;
-  const large = lineCount(file) > LARGE_FILE_LINES;
+  const large = isLarge(file);
   const description = [
     file.status === "added" ? "New file" : file.status === "deleted" ? "Deleted" : undefined,
     file.binary ? "Binary; contents not shown" : undefined,

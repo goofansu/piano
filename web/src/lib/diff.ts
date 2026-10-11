@@ -98,3 +98,6 @@ export function parseUnifiedDiff(text: string): DiffFile[] {
   finish(lines.length);
   return files;
 }
+
+/** Rendered rows across a file's hunks: context, additions, deletions and "\ No newline" marks. */
+export const lineCount = (file: DiffFile) => file.hunks.reduce((n, h) => n + h.lines.length, 0);
