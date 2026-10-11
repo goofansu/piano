@@ -21,7 +21,7 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across proj
   ```
 
 - Open <http://127.0.0.1:7070>.
-- Keep Piano on loopback or behind private authenticated access: it has no built-in access authentication and can execute commands as your user.
+- Piano is a trusted single-user tool for local use or private authenticated exe.dev access, not public or multi-user hosting. Keep its listener on loopback; it has no built-in access authentication and can execute commands as your user. See the [supported use case and security-review baseline](docs/hosted-development.md#supported-use-case-and-review-baseline) before raising access-boundary findings.
 
 ## Provider sign-in
 
