@@ -6,7 +6,6 @@ import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } f
 import { BranchLabel } from "@/components/BranchLabel";
 import { FolderPicker } from "@/components/FolderPicker";
 import { IconButton } from "@/components/IconButton";
-import { KeyboardDiagnostics } from "@/components/KeyboardDiagnostics";
 import { ModelSelect } from "@/components/ModelSelect";
 import { PianoMark } from "@/components/PianoMark";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
@@ -122,7 +121,6 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
                 </Button>
               </div>
             </div>
-            <KeyboardDiagnostics textarea={textarea} />
             {folder?.discovery.status === "error" && (
               <Alert variant="destructive" className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
                 <AlertDescription>Git status unavailable. Open Worktrees to inspect and refresh.</AlertDescription>
