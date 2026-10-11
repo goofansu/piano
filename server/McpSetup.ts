@@ -12,9 +12,9 @@ import { Context, Data, Effect, Layer } from "effect";
 import { FileAuthStorageBackend } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js";
 import { createDefaultTransport, McpOAuthCredentialStore, McpServerConnection, McpServerLog, signInMcpServer } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/runtime.js";
 import { MCP_CATALOG, type McpCatalogId, type McpServerSetup, type McpSetupRequest, type McpSetupState } from "../shared/mcp.ts";
-import type { ProviderLoginState } from "../shared/wire.ts";
 import { McpConfigEntries } from "./McpConfigEntries.ts";
 import { agentDir } from "./PiEnv.ts";
+import { SignInAttempts, SignInError, type SignInSource, type SignInState } from "./SignInAttempts.ts";
 
 type CatalogServer = { id: McpCatalogId; name: string; url: string };
 /** Pi's rule: an HTTP server without provider auth or an Authorization header signs in with MCP OAuth. */
@@ -32,10 +32,10 @@ export class McpSetup extends Context.Service<McpSetup, {
   readonly state: Effect.Effect<McpSetupState>;
   readonly change: (request: McpSetupRequest) => Effect.Effect<McpSetupState, McpSetupError>;
   /** The current sign-in attempt, shaped as provider sign-in so the browser shares one dialog. */
-  readonly login: Effect.Effect<ProviderLoginState | null>;
-  readonly startLogin: (server: string) => Effect.Effect<ProviderLoginState, McpSetupError>;
-  readonly answerLogin: (id: string, promptId: string, value: string) => Effect.Effect<ProviderLoginState, McpSetupError>;
-  readonly cancelLogin: (id: string) => Effect.Effect<ProviderLoginState, McpSetupError>;
+  readonly login: Effect.Effect<SignInState | null>;
+  readonly startLogin: (server: string) => Effect.Effect<SignInState, SignInError>;
+  readonly answerLogin: (id: string, promptId: string, value: string) => Effect.Effect<SignInState, SignInError>;
+  readonly cancelLogin: (id: string) => Effect.Effect<SignInState, SignInError>;
 }>()("piano/McpSetup") {}
 
 export const McpSetupLive = Layer.effect(McpSetup, Effect.gen(function* () {
@@ -65,14 +65,13 @@ export const McpSetupLive = Layer.effect(McpSetup, Effect.gen(function* () {
   const writing = <A>(change: Effect.Effect<A, unknown>, detail: string) => change.pipe(
     Effect.mapError(() => new McpSetupError({ detail })), Effect.map(snapshot));
 
-  let current: { state: ProviderLoginState; abort: AbortController; done: Promise<void>; active: boolean; redirect?: URL } | undefined;
-  let pending: { id: string; resolve: (value: string | undefined) => void } | undefined;
-  const cancel = (message: string) => {
-    if (current?.state.status !== "running") return;
-    current.state = { id: current.state.id, provider: current.state.provider, status: "cancelled", message };
-    current.abort.abort();
-  };
-  yield* Effect.addFinalizer(() => Effect.promise(async () => { cancel("Sign-in cancelled: Piano stopped."); await current?.done; }));
+  // Its own lane, apart from provider sign-in: Pi's MCP callback reuses the registered client's port or
+  // takes a free one, not a provider's fixed port, and a provider attempt this dialog cannot show must
+  // not block it. Success stores a token only; the cached catalogs and commands do not depend on it.
+  const attempts = yield* SignInAttempts.make({
+    busy: "A sign-in is already in progress. Finish it before starting another.",
+    afterSuccess: Effect.void,
+  });
   const failure = (detail: string) => new McpSetupError({ detail });
   const signedInEntry = (id: string) => {
     const server = catalog(id);
@@ -81,6 +80,55 @@ export const McpSetupLive = Layer.effect(McpSetup, Effect.gen(function* () {
     if (!entry || !url) throw new Error(`Install ${server.name} MCP before signing in.`);
     return { server, entry, url };
   };
+
+  const source = (server: CatalogServer, entry: McpServerEntry, url: string): SignInSource => ({
+    message: `Connecting to ${server.name}…`,
+    // OAuth errors may include token response bodies. Never deliver or log them.
+    failure: `Sign-in to ${server.name} failed. Check the authorization and try again.`,
+    run: async ({ signal, show, ask }) => {
+      let redirect: URL | undefined;
+      // Check the pasted address before accepting it, so a mistyped paste asks again instead of failing the sign-in.
+      const check = (value: string) => {
+        let pasted: URL | undefined;
+        try { pasted = new URL(value.trim()); } catch { /* reported below */ }
+        if (!redirect || !pasted || pasted.origin !== redirect.origin || pasted.pathname !== redirect.pathname
+          || pasted.searchParams.get("state") !== redirect.searchParams.get("state") || !(pasted.searchParams.get("code") || pasted.searchParams.get("error"))) {
+          return "Paste the full address of the page your browser opened after approving.";
+        }
+      };
+      const connection = new McpServerConnection({ entry, cwd: directory, createTransport: createDefaultTransport, credentials,
+        log: new McpServerLog(join(directory, "mcp.log")), onTools: () => {} });
+      try {
+        // Connecting first answers whether a sign-in is needed and records the server's challenge, as `pi mcp login` does.
+        try {
+          await connection.getClient();
+          return { status: "success", message: `Already signed in to ${server.name}.` };
+        } catch {
+          if (connection.state !== "needs-auth") return { status: "error", message: `Could not reach ${server.name} MCP. Check the network and try again.` };
+        }
+        await signInMcpServer({
+          serverUrl: url, store: credentials.forServer(entry.name, url), settings: connection.oauthSettings(), challenge: connection.challenge, signal,
+          prompt: {
+            showAuthorizationUrl: authorization => {
+              if (!["https:", "http:"].includes(authorization.protocol)) throw new Error("Unsupported authorization URL.");
+              redirect = new URL(authorization.searchParams.get("redirect_uri") ?? "http://127.0.0.1/callback");
+              redirect.searchParams.set("state", authorization.searchParams.get("state") ?? "");
+              show({ url: authorization.href, message: `Approve access in ${server.name}.` });
+            },
+            // Piano often runs on another machine than the browser, whose redirect to Pi's loopback
+            // callback then fails; the user pastes that address instead. A callback that does arrive aborts this.
+            promptForRedirectUrl: promptSignal => ask({ type: "text", message: "If the page after approving does not load, paste its address here.",
+              placeholder: `${redirect?.origin ?? "http://127.0.0.1"}/callback?code=…` }, { signal: promptSignal, check }).catch(() => undefined),
+          },
+        });
+        connection.challenge = undefined;
+        await connection.reconnect();
+        return { status: "success", message: `Signed in. Start a new session to use ${server.name} tools.` };
+      } finally {
+        await connection.close().catch(() => undefined);
+      }
+    },
+  });
 
   return McpSetup.of({
     state: Effect.sync(snapshot),
@@ -91,7 +139,7 @@ export const McpSetupLive = Layer.effect(McpSetup, Effect.gen(function* () {
           Effect.flatMap(server => entries.save(server, existing => existing ? undefined : { url: server.url }))),
         "Could not install this MCP server. Check Pi's global configuration and file permissions, then refresh.");
         case "uninstall": return writing(Effect.try(() => {
-          if (current?.active && current.state.provider === request.server) throw new Error("Sign-in in progress.");
+          if (attempts.busy(request.server)) throw new Error("Sign-in in progress.");
           return catalog(request.server);
         }).pipe(
           Effect.flatMap(server => entries.remove(server, request.removalKey)),
@@ -100,7 +148,7 @@ export const McpSetupLive = Layer.effect(McpSetup, Effect.gen(function* () {
         "Could not uninstall this MCP server. Its configuration may have changed. Refresh and confirm again.");
         case "sign-out": return Effect.try({
           try: () => {
-            if (current?.active) throw new Error("Sign-in in progress.");
+            if (attempts.busy()) throw new Error("Sign-in in progress.");
             const { entry, url } = signedInEntry(request.server);
             credentials.remove(entry.name, url);
             return snapshot();
@@ -109,100 +157,10 @@ export const McpSetupLive = Layer.effect(McpSetup, Effect.gen(function* () {
         });
       }
     },
-    login: Effect.sync(() => current ? structuredClone(current.state) : null),
-    startLogin: id => Effect.try({
-      try: () => {
-        if (current?.active) throw new Error("A sign-in is already in progress. Finish it before starting another.");
-        const { server, entry, url } = signedInEntry(id);
-        const attempt: NonNullable<typeof current> = { state: { id: crypto.randomUUID(), provider: server.id, status: "running", message: `Connecting to ${server.name}…` },
-          abort: new AbortController(), done: Promise.resolve(), active: true };
-        current = attempt;
-        const { signal } = attempt.abort;
-        const timer = setTimeout(() => cancel("Sign-in expired. Please try again."), 15 * 60_000);
-        const finish = (status: "success" | "error", message: string) => {
-          if (!signal.aborted) attempt.state = { id: attempt.state.id, provider: server.id, status, message };
-        };
-        attempt.done = (async () => {
-          const connection = new McpServerConnection({ entry, cwd: directory, createTransport: createDefaultTransport, credentials,
-            log: new McpServerLog(join(directory, "mcp.log")), onTools: () => {} });
-          try {
-            // Connecting first answers whether a sign-in is needed and records the server's challenge, as `pi mcp login` does.
-            try {
-              await connection.getClient();
-              finish("success", `Already signed in to ${server.name}.`);
-              return;
-            } catch {
-              if (connection.state !== "needs-auth") { finish("error", `Could not reach ${server.name} MCP. Check the network and try again.`); return; }
-            }
-            await signInMcpServer({
-              serverUrl: url, store: credentials.forServer(entry.name, url), settings: connection.oauthSettings(), challenge: connection.challenge, signal,
-              prompt: {
-                showAuthorizationUrl: authorization => {
-                  if (!["https:", "http:"].includes(authorization.protocol)) throw new Error("Unsupported authorization URL.");
-                  attempt.redirect = new URL(authorization.searchParams.get("redirect_uri") ?? "http://127.0.0.1/callback");
-                  attempt.redirect.searchParams.set("state", authorization.searchParams.get("state") ?? "");
-                  Object.assign(attempt.state, { url: authorization.href, message: `Approve access in ${server.name}.` });
-                },
-                // Piano often runs on another machine than the browser, whose redirect to Pi's loopback
-                // callback then fails; the user pastes that address instead. A callback that does arrive aborts this.
-                promptForRedirectUrl: promptSignal => new Promise(resolve => {
-                  const promptId = crypto.randomUUID();
-                  const done = (value: string | undefined) => {
-                    promptSignal.removeEventListener("abort", aborted);
-                    if (pending?.id === promptId) pending = undefined;
-                    if (attempt.state.prompt?.id === promptId) delete attempt.state.prompt;
-                    resolve(value);
-                  };
-                  const aborted = () => done(undefined);
-                  if (promptSignal.aborted) { aborted(); return; }
-                  attempt.state.prompt = { id: promptId, type: "text", message: "If the page after approving does not load, paste its address here.", placeholder: `${attempt.redirect?.origin ?? "http://127.0.0.1"}/callback?code=…` };
-                  pending = { id: promptId, resolve: done };
-                  promptSignal.addEventListener("abort", aborted, { once: true });
-                }),
-              },
-            });
-            connection.challenge = undefined;
-            await connection.reconnect();
-            finish("success", `Signed in. Start a new session to use ${server.name} tools.`);
-          } catch {
-            // OAuth errors may include token response bodies. Never deliver or log them.
-            finish("error", `Sign-in to ${server.name} failed. Check the authorization and try again.`);
-          } finally {
-            clearTimeout(timer);
-            pending?.resolve(undefined);
-            attempt.active = false;
-            await connection.close().catch(() => undefined);
-          }
-        })();
-        return structuredClone(attempt.state);
-      },
-      catch: cause => failure(cause instanceof Error ? cause.message : "Could not start sign-in."),
-    }),
-    answerLogin: (id, promptId, value) => Effect.try({
-      try: () => {
-        if (current?.state.id !== id || current.state.status !== "running" || pending?.id !== promptId) throw failure("This sign-in prompt has already closed. Refresh and try again.");
-        // Check the pasted address here, so a mistyped paste asks again instead of failing the sign-in.
-        const expected = current.redirect;
-        let pasted: URL | undefined;
-        try { pasted = new URL(value.trim()); } catch { /* reported below */ }
-        if (!expected || !pasted || pasted.origin !== expected.origin || pasted.pathname !== expected.pathname
-          || pasted.searchParams.get("state") !== expected.searchParams.get("state") || !(pasted.searchParams.get("code") || pasted.searchParams.get("error"))) {
-          throw failure("Paste the full address of the page your browser opened after approving.");
-        }
-        const claim = pending;
-        pending = undefined;
-        claim.resolve(value);
-        return structuredClone(current.state);
-      },
-      catch: cause => cause instanceof McpSetupError ? cause : failure("Could not complete sign-in."),
-    }),
-    cancelLogin: id => Effect.try({
-      try: () => {
-        if (current?.state.id !== id) throw new Error("stale");
-        cancel("Sign-in cancelled.");
-        return structuredClone(current.state);
-      },
-      catch: () => failure("This sign-in is no longer current."),
-    }),
+    login: attempts.state,
+    startLogin: id => Effect.try({ try: () => signedInEntry(id), catch: cause => new SignInError({ detail: cause instanceof Error ? cause.message : "Could not start sign-in." }) }).pipe(
+      Effect.flatMap(({ server, entry, url }) => attempts.start(server.id, source(server, entry, url)))),
+    answerLogin: attempts.answer,
+    cancelLogin: attempts.cancel,
   });
 }));
