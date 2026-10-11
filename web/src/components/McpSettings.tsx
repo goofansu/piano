@@ -1,5 +1,5 @@
 import { MCP_CATALOG, type McpServerSetup, type McpSetupRequest } from "@shared/mcp";
-import { CheckCircle2Icon, ExternalLinkIcon, ServerIcon } from "lucide-react";
+import { CheckCircle2Icon, ServerIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
@@ -90,10 +90,7 @@ function McpServerItem({ server, state, disabled, install, uninstall, signIn, si
         {ready && (!state.oauth || state.signedIn) && <><CheckCircle2Icon className="size-3.5 text-brand" aria-hidden /><span className="sr-only">(Ready)</span></>}
       </ItemTitle>
       <ItemDescription className="line-clamp-none">
-        {server.description}{" "}
-        <a className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline" href={server.docs} target="_blank" rel="noopener noreferrer">
-          Docs<ExternalLinkIcon className="size-3.5" aria-hidden />
-        </a>
+        {server.description}
       </ItemDescription>
       {status && <p className="text-xs text-muted-foreground">{status}</p>}
     </ItemContent>

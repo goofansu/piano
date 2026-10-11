@@ -1,11 +1,10 @@
 import { Schema } from "effect";
 
 /** MCP servers Piano can set up from Settings. Pi owns the configuration and the sign-in. */
-export const MCP_CATALOG: readonly { id: McpCatalogId; name: string; url: string; description: string; docs: string }[] = [
+export const MCP_CATALOG: readonly { id: McpCatalogId; name: string; url: string; description: string }[] = [
   {
     id: "linear", name: "Linear", url: "https://mcp.linear.app/mcp",
     description: "Let Pi find, create and update Linear issues, projects and comments.",
-    docs: "https://linear.app/docs/mcp",
   },
 ];
 export const McpCatalogId = Schema.Literals(["linear"]);
