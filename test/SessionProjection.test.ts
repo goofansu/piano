@@ -3,13 +3,11 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { NodeServices } from '@effect/platform-node';
 import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
 import { DirectoryFacts, DirectoryFactsLive } from '../server/DirectoryFacts.ts';
 import { PiCli } from '../server/PiCli.ts';
 import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
-import { peekSession } from '../server/SessionFiles.ts';
 import type { SessionEvent } from '../shared/wire.ts';
 
 const cli = { node: process.execPath, cli: new URL('./fake-projection-pi.mjs', import.meta.url).pathname, extraArgs: [] };
@@ -111,31 +109,6 @@ test('safe live/reload output retains tools and extension state without inventin
       assert.ok(!JSON.stringify(yield* Fiber.join(closed)).includes(secret), 'exit and stderr are projected too');
     }).pipe(Effect.timeout('5 seconds'), Effect.scoped));
   } finally { delete process.env.PIANO_TEST_SECRET; }
-});
-
-test('reopening uses Pi context edits, compaction and active branch without replacing virtual selection', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'piano-projection-file-'));
-  const secret = 'sk-file-canary-123456789';
-  try {
-    const manager = SessionManager.create(root, root);
-    manager.appendModelChange('router', 'auto'); manager.appendThinkingLevelChange('low');
-    const first = manager.appendMessage({ role: 'user', content: 'old prompt', timestamp: 1 });
-    const reply = manager.appendMessage({ role: 'assistant', api: 'openai-completions', provider: 'physical', model: 'answer', content: [{ type: 'text', text: `original ${secret}` }], usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 3, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'stop', timestamp: 2 });
-    manager.appendMessage({ role: 'user', content: 'abandoned branch', timestamp: 3 });
-    manager.branch(reply);
-    manager.appendContextEdit(reply, { content: `edited ${secret}` });
-    manager.appendCompaction('summary', reply, 30);
-    const file = manager.getSessionFile()!;
-    const original = readFileSync(file, 'utf8');
-    const snap = await Effect.runPromise(peekSession(file, manager.getSessionId()));
-    assert.equal(snap.state.model, 'router/auto'); assert.equal(snap.state.thinkingLevel, 'low');
-    assert.deepEqual(snap.messages.map(m => m.text), ['summary', 'edited [REDACTED]']);
-    assert.equal(snap.messages[1].model, 'physical/answer');
-    assert.equal(snap.messages.some(m => m.id === first), false);
-    assert.equal(snap.state.cost, undefined, 'a file peek must not invent full-session accounting from context');
-    assert.equal(readFileSync(file, 'utf8'), original, 'redaction never rewrites Pi history');
-    assert.ok(original.includes(secret));
-  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('subagent details project through PiSessions with correlation, lifecycle limits and safe fallback', async () => {

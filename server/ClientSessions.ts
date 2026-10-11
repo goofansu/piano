@@ -14,9 +14,9 @@
 import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import type { ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
+import { emptySnapshot } from "./PiHistory.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
 import type { RegistryError, RegistryLookupError } from "./Registry.ts";
-import { emptySnapshot } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { type CreateSessionRequest, type RetireMode, WorkspaceCommands } from "./WorkspaceCommands.ts";
 
