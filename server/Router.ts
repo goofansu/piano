@@ -200,22 +200,21 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.oauthProviders, () =>
       Effect.flatMap(ProviderLogin, login => login.providers).pipe(Effect.map(providers => ({ providers })), failAs(502, "Could not load OAuth providers.")));
 
+    // A refused sign-in request answers with its own detail; SignInAttempts keeps token responses out of it (INV-11).
+    const signInFailure = <A, R>(effect: Effect.Effect<A, SignInError, R>) => effect.pipe(
+      Effect.catchTag("SignInError", error => fail(409, error.detail)),
+      failAs(409, "Sign-in request could not be completed. Resume the current sign-in or try again."));
+
     yield* serve(Endpoints.providerLogout, ({ body }) =>
-      Effect.flatMap(ProviderLogin, login => login.signOut(body.provider)).pipe(
-        Effect.as({ ok: true as const }), failAs(409, "Could not sign out. Finish any sign-in in progress and try again.")));
+      Effect.flatMap(ProviderLogin, login => login.signOut(body.provider)).pipe(Effect.as({ ok: true as const }), signInFailure));
 
     // Credential values and callback URLs travel only in bodies. This global
     // operation creates no session and owns no conversation history.
-    const providerLogin = <E>(step: (login: ProviderLogin["Service"]) => Effect.Effect<SignInState | null, E>) =>
-      Effect.flatMap(ProviderLogin, step).pipe(
-        Effect.map(state => ({ state })),
-        failAs(409, "Sign-in request could not be completed. Resume the current sign-in or try again."));
-    yield* serve(Endpoints.providerLoginState, () => providerLogin(l => l.state), { redact: false });
-    yield* serve(Endpoints.startProviderLogin, ({ body }) => providerLogin(l => l.start(body.provider)), { redact: false });
-    yield* serve(Endpoints.answerProviderLogin, ({ body }) => providerLogin(l => l.answer(body.id, body.promptId, body.value)), { redact: false });
-    yield* serve(Endpoints.cancelProviderLogin, ({ body }) => providerLogin(l => l.cancel(body.id)), { redact: false });
-    const login = <R>(step: Effect.Effect<SignInState | null, SignInError, R>) => step.pipe(
-      Effect.map(state => ({ state })), Effect.catchTag("SignInError", error => fail(409, error.detail)));
+    const login = <R>(step: Effect.Effect<SignInState | null, SignInError, R>) => step.pipe(Effect.map(state => ({ state })), signInFailure);
+    yield* serve(Endpoints.providerLoginState, () => login(Effect.flatMap(ProviderLogin, l => l.state)), { redact: false });
+    yield* serve(Endpoints.startProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.start(body.provider))), { redact: false });
+    yield* serve(Endpoints.answerProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.answer(body.id, body.promptId, body.value))), { redact: false });
+    yield* serve(Endpoints.cancelProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.cancel(body.id))), { redact: false });
     yield* serve(Endpoints.mcpLoginState, () => login(Effect.flatMap(McpSetup, setup => setup.login)), { redact: false });
     yield* serve(Endpoints.startMcpLogin, ({ body }) => login(Effect.flatMap(McpSetup, setup => setup.startLogin(body.server))), { redact: false });
     yield* serve(Endpoints.answerMcpLogin, ({ body }) => login(Effect.flatMap(McpSetup, setup => setup.answerLogin(body.id, body.promptId, body.value))), { redact: false });
