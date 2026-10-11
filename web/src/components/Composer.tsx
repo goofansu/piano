@@ -1,4 +1,4 @@
-import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, SubagentUsage, ThinkingLevel } from "@shared/wire";
+import type { Attachment, ModelCatalog, QueuedMessage, RenderMsg, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { useRef, useState } from "react";
@@ -13,7 +13,7 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { composerControl, DELIVERY, DELIVERY_MODES, type DeliveryMode } from "@/lib/composerControl";
-import { formatTokenCount } from "@/lib/format";
+import { contextFigures, type SessionUsage } from "@/lib/contextUsage";
 import { isSendKey } from "@/lib/keys";
 import type { DraftKey } from "@/lib/messageDraft";
 import { readStorage, writeStorage } from "@/lib/storage";
@@ -41,10 +41,7 @@ interface Props {
   onModelChange: (ref: string) => void;
   effort: ThinkingLevel;
   onEffortChange: (level: ThinkingLevel) => void;
-  context?: ContextUsage;
-  cost?: number;
-  totals?: SessionStats["tokens"];
-  subagents?: SubagentUsage;
+  usage?: SessionUsage;
   messages?: ReadonlyArray<RenderMsg>;
   queuedMessages?: ReadonlyArray<QueuedMessage>;
 }
@@ -53,7 +50,7 @@ const QUEUE_MODE_KEY = "piano.queueMode";
 const loadQueueMode = (): DeliveryMode => (readStorage(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering");
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, stopping, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, subagents, messages = [], queuedMessages = [] }: Props) {
+export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, stopping, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, usage, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
@@ -74,15 +71,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
     onTextChange("");
     attachments.clear();
   };
-  const tokens = context?.tokens ?? null;
-  const selectedModel = catalog?.models.find((m) => m.ref === (model || catalog.defaultModel));
-  const contextWindow = context?.contextWindow ?? selectedModel?.contextWindow;
-  const percent = tokens === null ? null : context?.percent ?? null;
-  const left = percent === null ? null : Math.max(0, 100 - percent);
-  const used = percent !== null ? `${Math.round(percent)}%` : tokens !== null ? formatTokenCount(tokens) : null;
-  const window = contextWindow !== undefined && contextWindow > 0 ? formatTokenCount(contextWindow) : null;
-  // Before the first reply only the window is known, so it stands alone rather than reading as "—/1k".
-  const contextLabel = used && window ? `${used}/${window}` : used ?? window ?? "—";
+  const figures = contextFigures(usage?.context, catalog, model);
   const showQueueKinds = queuedMessages.some(message => message.kind === "steering");
 
   return (
@@ -192,14 +181,14 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
                 variant="ghost"
                 size="sm"
                 aria-label="Context usage"
-                aria-description={tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`}
-                className={cn("px-1.5 font-mono text-xs font-normal", left !== null && left < 15 && "text-warning hover:text-warning")}
+                aria-description={figures.description}
+                className={cn("px-1.5 font-mono text-xs font-normal", figures.low && "text-warning hover:text-warning")}
               >
-                {contextLabel}
+                {figures.label}
               </Button>
             </PopoverTrigger>
             <PopoverContent side="top" align="end" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
-              <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} subagents={subagents} />
+              <ContextDetails figures={figures} usage={usage} messages={messages} />
             </PopoverContent>
           </Popover>
         </div>

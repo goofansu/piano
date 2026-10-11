@@ -1,4 +1,4 @@
-import type { ContextUsage, RenderMsg, SessionStats, SubagentUsage } from "@shared/wire";
+import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { useEffect, useRef, useState } from "react";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -7,37 +7,28 @@ import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { type ContextFigures, cacheHit, type SessionUsage } from "@/lib/contextUsage";
 import { formatTokenCount } from "@/lib/format";
 
 interface Props {
-  context?: ContextUsage;
-  contextWindow?: number;
-  cost?: number;
-  totals?: SessionStats["tokens"];
+  figures: ContextFigures;
+  /** Subagent usage is the server's count over the whole session, not only the messages in context. */
+  usage?: SessionUsage;
   messages: ReadonlyArray<RenderMsg>;
-  /** The server's count over the whole session, not only the messages in context. */
-  subagents?: SubagentUsage;
 }
 
 const number = (value: number) => value.toLocaleString();
 const dollars = (value: number) => `$${value.toFixed(4)}`;
-const cacheHit = (usage?: Pick<NonNullable<SessionStats["tokens"]>, "input" | "cacheRead" | "cacheWrite">) => {
-  if (!usage) return undefined;
-  const input = usage.input + usage.cacheRead + usage.cacheWrite;
-  return input > 0 ? Math.round(100 * usage.cacheRead / input) : undefined;
-};
 
 /** History usage is per response, not a reconstruction of Pi's current context. */
-export function ContextDetails({ context, contextWindow, cost, totals, messages, subagents }: Props) {
+export function ContextDetails({ figures, usage: session, messages }: Props) {
+  const { cost, tokens: totals, subagents } = session ?? {};
   const responses = messages.filter(message => message.role === "assistant" && message.usage);
   const [selectedId, setSelectedId] = useState<string>();
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
   const selected = responses.find(message => message.id === selectedId) ?? responses.at(-1);
   const values = responses.map(message => metric === "tokens" ? message.usage!.totalTokens : message.usage!.cost);
   const max = Math.max(0, ...values);
-  const tokens = context?.tokens ?? null;
-  const percent = tokens === null ? null : context?.percent ?? null;
-  const left = percent === null ? null : Math.max(0, 100 - percent);
   const usage = selected?.usage;
   const position = selected ? responses.indexOf(selected) + 1 : 0;
   const chartRef = useRef<HTMLDivElement>(null);
@@ -57,17 +48,17 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages,
 
   return <div className="flex flex-col gap-4 text-sm">
     <section className="flex flex-col gap-2">
-      <h2 className="font-medium">{tokens === null ? "Context usage unavailable" : `Context: ${number(tokens)} tokens`}</h2>
-      {contextWindow !== undefined && contextWindow > 0 && <p className="text-ink-2">Context window: {number(contextWindow)} tokens</p>}
-      {percent !== null && (
+      <h2 className="font-medium">{figures.heading}</h2>
+      {figures.window !== undefined && <p className="text-ink-2">Context window: {number(figures.window)} tokens</p>}
+      {figures.used && (
         <Progress
-          value={Math.max(0, Math.min(100, percent))}
+          value={figures.used.value}
           aria-label="Context window used"
-          aria-valuetext={`${percent.toFixed(1)}% used`}
-          className={cn("h-1.5", left !== null && left < 15 && "*:data-[slot=progress-indicator]:bg-warning")}
+          aria-valuetext={figures.used.text}
+          className={cn("h-1.5", figures.low && "*:data-[slot=progress-indicator]:bg-warning")}
         />
       )}
-      {left !== null && <p className="text-ink-2">{left < 1 ? left.toFixed(1) : Math.round(left)}% left</p>}
+      {figures.left !== null && <p className="text-ink-2">{figures.left}</p>}
     </section>
     <Separator />
     <section className="flex flex-col gap-2" aria-label="Response usage history">

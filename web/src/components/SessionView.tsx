@@ -127,10 +127,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         onModelChange={choice.onModelChange}
         effort={choice.effort}
         onEffortChange={choice.onEffortChange}
-        context={t?.state.context}
-        cost={t?.state.cost}
-        totals={t?.state.tokens}
-        subagents={t?.state.subagents}
+        usage={t?.state}
         messages={t?.messages}
         queuedMessages={t?.state.queuedMessages}
       />}
