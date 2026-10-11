@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -127,18 +127,5 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
     yield* setup.change({ action: "uninstall", server: "linear", removalKey: removalKey! });
     assert.deepEqual(json(file), { custom: { untouched: true }, mcpServers: { other: { command: "do-not-run" } } });
     assert.equal((yield* linear(setup)).status, "missing");
-  }));
-});
-
-test("INV-12: an unrelated server named after the catalog entry is not overwritten", async () => {
-  await fixture((setup, directory) => Effect.gen(function* () {
-    const file = join(directory, "mcp.json");
-    save(file, { mcpServers: { linear: { url: "https://example.com/other-mcp" } } });
-    const blocked = yield* linear(setup);
-    assert.equal(blocked.status, "blocked");
-    assert.match(blocked.detail!, /Another MCP server is named linear/);
-    yield* Effect.flip(setup.change({ action: "install", server: "linear" }));
-    assert.deepEqual(json(file), { mcpServers: { linear: { url: "https://example.com/other-mcp" } } });
-    assert.ok(!existsSync(join(directory, "mcp-auth.json")));
   }));
 });

@@ -2,24 +2,21 @@
  * configuration format, OAuth (discovery, registration, PKCE, refresh) and credential storage;
  * this module only decides which catalog entry to add or remove and relays Pi's sign-in prompts.
  * Nothing here mutates running sessions: a new session reads the updated setup. */
-import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { SettingsManager } from "@earendil-works/pi-coding-agent";
+import type { McpServerEntry } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-// Pi 1.1.0 exports neither its MCP configuration writer nor its sign-in flow. Keep these pinned
-// compatibility dependencies here, as RadiusSetup does; McpSetup tests exercise the installed
-// helpers. Recheck on every Pi upgrade and replace with a public interface when one exists (INV-12).
+// Pi 1.1.0 exports neither its MCP credential store nor its sign-in flow. Keep these pinned
+// compatibility dependencies here; McpSetup tests exercise the installed helpers. Recheck on
+// every Pi upgrade and replace with a public interface when one exists (INV-12). McpConfigEntries
+// holds the configuration helpers.
 import { FileAuthStorageBackend } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js";
-import { addMcpServerConfig, loadMcpConfig, type McpServerEntry, removeMcpServerConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
 import { createDefaultTransport, McpOAuthCredentialStore, McpServerConnection, McpServerLog, signInMcpServer } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/runtime.js";
 import { MCP_CATALOG, type McpCatalogId, type McpServerSetup, type McpSetupRequest, type McpSetupState } from "../shared/mcp.ts";
 import type { ProviderLoginState } from "../shared/wire.ts";
-import { DirectoryFacts } from "./DirectoryFacts.ts";
+import { McpConfigEntries } from "./McpConfigEntries.ts";
 import { agentDir } from "./PiEnv.ts";
 
 type CatalogServer = { id: McpCatalogId; name: string; url: string };
-const normalize = (url: string) => url.replace(/\/+$/, "");
-const removalKey = (entry: McpServerEntry) => createHash("sha256").update(JSON.stringify([entry.name, entry.config])).digest("hex");
 /** Pi's rule: an HTTP server without provider auth or an Authorization header signs in with MCP OAuth. */
 const oauthUrl = (entry: McpServerEntry) => "url" in entry.config && !entry.config.auth
   && !Object.keys(entry.config.headers ?? {}).some(header => header.toLowerCase() === "authorization") ? entry.config.url : undefined;
@@ -43,44 +40,30 @@ export class McpSetup extends Context.Service<McpSetup, {
 
 export const McpSetupLive = Layer.effect(McpSetup, Effect.gen(function* () {
   const environment = yield* McpSetupEnvironment;
-  const facts = yield* DirectoryFacts;
   const directory = environment.directory();
-  const file = join(directory, "mcp.json");
+  const entries = yield* McpConfigEntries(directory);
   const credentials = new McpOAuthCredentialStore(new FileAuthStorageBackend(join(directory, "mcp-auth.json")), directory);
   const catalog = (id: string) => {
     const server = environment.servers().find(server => server.id === id);
     if (!server) throw new Error("Unknown MCP server.");
     return server;
   };
-  /** The global entry for a catalog server: matched by endpoint, else by its default name. */
-  const find = (server: CatalogServer) => {
-    const loaded = loadMcpConfig({ agentDir: directory, cwd: directory, projectTrusted: false });
-    if (loaded.errors.length) throw new Error("Check Pi's global mcp.json for invalid entries before continuing.");
-    const matches = loaded.servers.filter(entry => entry.scope === "global" && "url" in entry.config && normalize(entry.config.url) === normalize(server.url));
-    if (matches.length > 1) throw new Error(`Several MCP entries use ${server.name}'s endpoint. Keep one in Pi's mcp.json before continuing.`);
-    const entry = matches[0] ?? loaded.servers.find(entry => entry.name === server.id);
-    if (entry && !matches.length) throw new Error(`Another MCP server is named ${server.id}. Rename it in Pi before continuing.`);
-    return entry;
-  };
+  const find = entries.find;
   const setup = (server: CatalogServer): McpServerSetup => {
+    const observed = entries.observe(server);
+    const detail = observed.status === "blocked" ? { detail: observed.detail } : {};
+    if (!observed.entry) return { id: server.id, status: observed.status, oauth: true, signedIn: false, ...detail };
+    const { entry, removalKey } = observed;
+    const url = oauthUrl(entry);
     try {
-      const entry = find(server);
-      if (!entry) return { id: server.id, status: "missing", oauth: true, signedIn: false };
-      const url = oauthUrl(entry);
-      const observed = { id: server.id, oauth: !!url, signedIn: !!url && !!credentials.tokens(entry.name, url), removalKey: removalKey(entry) };
-      const builtinDisabled = SettingsManager.create(directory, directory, { projectTrusted: false }).getGlobalSettings().extensions?.includes("-builtin:mcp");
-      if (builtinDisabled || entry.config.enabled === false || entry.config.exposure === "hidden") {
-        return { ...observed, status: "blocked", detail: `${server.name} MCP is disabled or hidden in Pi. Enable it in Pi before continuing.` };
-      }
-      return { ...observed, status: "ready" };
-    } catch (cause) {
-      return { id: server.id, status: "blocked", oauth: true, signedIn: false, detail: cause instanceof Error ? cause.message : "Check Pi's global MCP configuration." };
+      return { id: server.id, status: observed.status, oauth: !!url, signedIn: !!url && !!credentials.tokens(entry.name, url), removalKey, ...detail };
+    } catch {
+      return { id: server.id, status: "blocked", oauth: !!url, signedIn: false, detail: "Check Pi's MCP credentials before continuing." };
     }
   };
   const snapshot = (): McpSetupState => ({ servers: environment.servers().map(setup) });
-  // A configuration change can change every directory's tools and commands.
-  const writing = (change: () => void, detail: string) => Effect.try({ try: change, catch: () => new McpSetupError({ detail }) }).pipe(
-    Effect.ensuring(facts.invalidate), Effect.map(snapshot));
+  const writing = <A>(change: Effect.Effect<A, unknown>, detail: string) => change.pipe(
+    Effect.mapError(() => new McpSetupError({ detail })), Effect.map(snapshot));
 
   let current: { state: ProviderLoginState; abort: AbortController; done: Promise<void>; active: boolean; redirect?: URL } | undefined;
   let pending: { id: string; resolve: (value: string | undefined) => void } | undefined;
@@ -103,25 +86,18 @@ export const McpSetupLive = Layer.effect(McpSetup, Effect.gen(function* () {
     state: Effect.sync(snapshot),
     change: request => {
       switch (request.action) {
-        case "install": return writing(() => {
-          const server = catalog(request.server);
-          const step = setup(server);
-          if (step.status === "blocked") throw new Error(step.detail);
-          // Synchronous read/merge/write: Pi's helper retains unrelated entries and keys.
-          if (step.status === "missing") addMcpServerConfig(file, server.id, { url: server.url });
-          if (setup(server).status !== "ready") throw new Error("Configuration was not saved.");
-        }, "Could not install this MCP server. Check Pi's global configuration and file permissions, then refresh.");
-        case "uninstall": return writing(() => {
+        case "install": return writing(Effect.try(() => catalog(request.server)).pipe(
+          // Any existing entry for the endpoint is kept as the user configured it.
+          Effect.flatMap(server => entries.save(server, existing => existing ? undefined : { url: server.url }))),
+        "Could not install this MCP server. Check Pi's global configuration and file permissions, then refresh.");
+        case "uninstall": return writing(Effect.try(() => {
           if (current?.active && current.state.provider === request.server) throw new Error("Sign-in in progress.");
-          const server = catalog(request.server);
-          const entry = find(server);
-          if (!entry || removalKey(entry) !== request.removalKey) throw new Error("Configuration changed since confirmation.");
-          removeMcpServerConfig(file, entry.name);
+          return catalog(request.server);
+        }).pipe(
+          Effect.flatMap(server => entries.remove(server, request.removalKey)),
           // Stored tokens without a configuration have no other place in Piano to be removed.
-          const url = oauthUrl(entry);
-          if (url) credentials.remove(entry.name, url);
-          if (find(server)) throw new Error("Removal not verified.");
-        }, "Could not uninstall this MCP server. Its configuration may have changed. Refresh and confirm again.");
+          Effect.flatMap(entry => Effect.try(() => { const url = oauthUrl(entry); if (url) credentials.remove(entry.name, url); }))),
+        "Could not uninstall this MCP server. Its configuration may have changed. Refresh and confirm again.");
         case "sign-out": return Effect.try({
           try: () => {
             if (current?.active) throw new Error("Sign-in in progress.");
