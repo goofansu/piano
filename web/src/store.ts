@@ -2,6 +2,7 @@
 import type { FolderView, HostInfo, ModelCatalog, Project, ProjectTrust, RenderMsg, ServerMessage, SessionCursor, SessionReference, Snapshot, Workspace, WorktreeDiscovery } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { applySessionEvent } from "../../shared/sessionProjection.ts";
+import { appendParagraph, type DraftKey, sessionDraftKey } from "./lib/messageDraft.ts";
 
 /** The selected session: the server's snapshot folded forward by its live events, plus where it came from. */
 export interface SessionView extends Snapshot {
@@ -49,8 +50,8 @@ export interface AppState {
   pendingCreate: PendingCreate | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
-  /** Unsent editor text belongs to this browser, keyed by session identity. */
-  drafts: Record<string, string>;
+  /** Unsent editor text belongs to this browser; see lib/messageDraft for keys and images. */
+  drafts: Record<DraftKey, string>;
 }
 
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) => `${s.cwd}\n${s.sessionId ?? ""}`;
@@ -84,8 +85,11 @@ export type Action =
   | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null; firstMessage?: Pick<PendingCreate, "text" | "attachments"> }
   | { type: "new"; cwd?: string; projectId?: string }
   | { type: "missing-session"; sessionId: string }
-  | { type: "draft_changed"; key: string; text: string }
-  | { type: "draft_appended"; key: string; text: string };
+  | { type: "draft_changed"; key: DraftKey; text: string }
+  /** Typed characters, appended as they are. */
+  | { type: "draft_appended"; key: DraftKey; text: string }
+  /** Text added from elsewhere (Changes, an extension, the restored queue), as a new paragraph. */
+  | { type: "draft_paragraph_appended"; key: DraftKey; text: string };
 
 export function reduce(s: AppState, a: Action): AppState {
   let next = reduceAction(s, a);
@@ -134,6 +138,8 @@ function reduceAction(s: AppState, a: Action): AppState {
       return { ...s, drafts: { ...s.drafts, [a.key]: a.text } };
     case "draft_appended":
       return { ...s, drafts: { ...s.drafts, [a.key]: (s.drafts[a.key] ?? "") + a.text } };
+    case "draft_paragraph_appended":
+      return { ...s, drafts: { ...s.drafts, [a.key]: appendParagraph(s.drafts[a.key] ?? "", a.text) } };
     case "server":
       return applyServer(s, a.message);
   }
@@ -201,9 +207,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       if (m.result._tag !== "queue_restored") return s;
       const restored = m.result.messages.map((message) => message.text).join("\n\n");
       if (!restored) return s;
-      const key = sessionKey(m);
-      const existing = s.drafts[key] ?? "";
-      return { ...s, drafts: { ...s.drafts, [key]: existing ? `${existing}\n\n${restored}` : restored } };
+      return reduceAction(s, { type: "draft_paragraph_appended", key: sessionDraftKey(m), text: restored });
     }
     case "session": {
       const disposition = sessionDelivery(s, m);

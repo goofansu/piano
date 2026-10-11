@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Toaster } from "@/components/ui/sonner";
 import type { NotifyLevel } from "@/lib/client";
+import type { DraftKey } from "@/lib/messageDraft";
 import { initialView } from "@/lib/navigation";
 import { parseRoute } from "@/lib/routes";
 import { sessionReady, workspaceFor } from "@/lib/sessionContext";
@@ -55,8 +56,9 @@ export default function App() {
   const prWorkspaceId = workspaceFor(state, prSession?.cwd)?.id;
   const pullRequest = useSessionPullRequest(prWorkspaceId, prSession?.sessionId, !!prSession && isWorking(prSession.state));
 
-  const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
-  const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);
+  const onDraftChange = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_changed", key, text }), []);
+  const onDraftAppend = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_appended", key, text }), []);
+  const onDraftParagraph = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_paragraph_appended", key, text }), []);
   const anyWorking = state.hosts.some((h) => h.streaming);
 
   return (
@@ -83,7 +85,7 @@ export default function App() {
               </EmptyContent>
             </Empty>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} openProject={openProject} pullRequest={pullRequest} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} onDraftParagraph={onDraftParagraph} openProject={openProject} pullRequest={pullRequest} />
           )}
         </LayoutView>
         {settings && <LayoutView><SettingsPage section={settings} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
