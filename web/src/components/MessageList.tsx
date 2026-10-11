@@ -113,10 +113,10 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
         <Button
           type="button"
           variant="outline"
-          size="icon-sm"
+          size="icon-lg"
           aria-label="Scroll to bottom"
           onClick={scrollToBottom}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full shadow-2 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none"
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full shadow-2 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none [&_svg:not([class*='size-'])]:size-5"
         >
           <ArrowDownIcon />
         </Button>
