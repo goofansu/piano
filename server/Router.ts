@@ -9,6 +9,7 @@ import type { DirListing, ProviderLoginState, Workspace } from "../shared/wire.t
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
+import { McpSetup, type McpSetupError } from "./McpSetup.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
@@ -189,6 +190,15 @@ export const AppRouter = HttpRouter.use((router) =>
     });
     yield* serve(Endpoints.radiusSetup, () => Effect.flatMap(RadiusSetup, setup => setup.state).pipe(Effect.map(state => ({ state }))), { redact: false });
     yield* serve(Endpoints.changeRadiusSetup, ({ body }) => radiusAction(body).pipe(Effect.map(state => ({ state })), Effect.catchTag("RadiusSetupError", error => fail(409, error.detail))), { redact: false });
+
+    const mcp = <A>(step: (setup: McpSetup["Service"]) => Effect.Effect<A, McpSetupError>) => Effect.flatMap(McpSetup, step).pipe(
+      Effect.map(state => ({ state })), Effect.catchTag("McpSetupError", error => fail(409, error.detail)));
+    yield* serve(Endpoints.mcpSetup, () => mcp(setup => setup.state), { redact: false });
+    yield* serve(Endpoints.changeMcpSetup, ({ body }) => mcp(setup => setup.change(body)), { redact: false });
+    yield* serve(Endpoints.mcpLoginState, () => mcp(setup => setup.login), { redact: false });
+    yield* serve(Endpoints.startMcpLogin, ({ body }) => mcp(setup => setup.startLogin(body.server)), { redact: false });
+    yield* serve(Endpoints.answerMcpLogin, ({ body }) => mcp(setup => setup.answerLogin(body.id, body.promptId, body.value)), { redact: false });
+    yield* serve(Endpoints.cancelMcpLogin, ({ body }) => mcp(setup => setup.cancelLogin(body.id)), { redact: false });
 
     yield* serve(Endpoints.oauthProviders, () =>
       Effect.flatMap(ProviderLogin, login => login.providers).pipe(Effect.map(providers => ({ providers })), failAs(502, "Could not load OAuth providers.")));

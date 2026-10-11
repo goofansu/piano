@@ -15,8 +15,9 @@ function safeUrl(raw?: string) {
   try { const url = new URL(raw!); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : undefined; } catch { return undefined; }
 }
 
-/** Explicit dismissal cancels pending sign-in; browser disconnect still preserves it. */
-export function ProviderLoginDialog({ initialProvider, providers, close, signedIn }: { initialProvider: string; providers: OAuthProvider[]; close: () => void; signedIn: () => void }) {
+/** Explicit dismissal cancels pending sign-in; browser disconnect still preserves it.
+ * `api` runs another sign-in of the same shape, such as an MCP server's. */
+export function ProviderLoginDialog({ initialProvider, providers, close, signedIn, api = providerLogin }: { initialProvider: string; providers: OAuthProvider[]; close: () => void; signedIn: () => void; api?: (request?: ProviderLoginRequest) => Promise<ProviderLoginState | null> }) {
   const [state, setState] = useState<ProviderLoginState | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -27,12 +28,12 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
   useEffect(() => {
     let alive = true;
     initialization.current ??= (async () => {
-      const state = await providerLogin();
-      return initialProvider && state?.status !== "running" ? providerLogin({ method: "POST", body: { provider: initialProvider } }) : state;
+      const state = await api();
+      return initialProvider && state?.status !== "running" ? api({ method: "POST", body: { provider: initialProvider } }) : state;
     })();
     void initialization.current.then(state => { if (alive) { setState(state); } }).catch(error => { if (alive) setError(error.message); }).finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
-  }, [initialProvider]);
+  }, [initialProvider, api]);
   useEffect(() => {
     if (state?.status !== "running" || busy) return;
     let alive = true;
@@ -40,7 +41,7 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
     const poll = async () => {
       const version = epoch.current;
       try {
-        const next = await providerLogin();
+        const next = await api();
         if (alive && version === epoch.current) {
           setState(next); setConnectionError("");
           if (next?.status !== "running") setError("");
@@ -50,11 +51,11 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
     };
     timer = setTimeout(poll, 750);
     return () => { alive = false; clearTimeout(timer); };
-  }, [state?.status, busy]);
+  }, [state?.status, busy, api]);
   const change = async (request: ProviderLoginRequest) => {
     epoch.current++;
     setBusy(true); setError("");
-    try { setState(await providerLogin(request)); } catch (error) { setError(error instanceof Error ? error.message : "Could not complete sign-in."); }
+    try { setState(await api(request)); } catch (error) { setError(error instanceof Error ? error.message : "Could not complete sign-in."); }
     finally { epoch.current++; setBusy(false); }
   };
   const notified = useRef<string | undefined>(undefined);
@@ -70,7 +71,7 @@ export function ProviderLoginDialog({ initialProvider, providers, close, signedI
     epoch.current++;
     setBusy(true); setError("");
     try {
-      const result = await providerLogin({ method: "DELETE", body: { id: state.id } });
+      const result = await api({ method: "DELETE", body: { id: state.id } });
       // Authorization may have completed before cancellation reached the server.
       if (result?.status === "success") signedIn();
       close();
