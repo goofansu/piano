@@ -37,8 +37,8 @@ interface Props {
   onHide: () => void;
 }
 
-/** Row heights: 36px with a pointer, 44px on a touch screen. */
-const row = "h-9 pointer-coarse:h-11";
+/** Row heights: 36px with a pointer, 44px on touch desktops, 48px on phones. */
+const row = "h-9 pointer-coarse:h-11 max-md:h-12";
 /** Row actions live in a fixed slot on the right and appear on hover, so nothing shifts. */
 const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
 const groupRow = cn(row, "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
@@ -121,7 +121,7 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader onHide={onHide}>
         <IconButton label="Search sessions" tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>} onClick={() => setPalette(true)}>
           <SearchIcon />
