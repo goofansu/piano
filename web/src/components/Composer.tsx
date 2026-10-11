@@ -14,13 +14,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatTokenCount } from "@/lib/format";
 import { isSendKey } from "@/lib/keys";
+import { type DraftKey, hasContent, sendable } from "@/lib/messageDraft";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
 
 interface Props {
-  draftKey: string;
+  /** `null` while the session is loading; the composer is disabled then. */
+  draftKey: DraftKey | null;
   completion?: CompletionContext;
   text: string;
   onTextChange: (text: string) => void;
@@ -70,10 +72,9 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
   useAutoGrow(ref, text, 192);
   useTypeToFocus(ref, onTextAppend, !disabled);
   const send = (kind: QueueMode = queueMode) => {
-    const t = text.trim();
-    if (disabled || stopping || attachments.busy || imagesWaiting || (!t && !attachments.items.length)) return;
+    if (disabled || stopping || imagesWaiting || !sendable({ text, images: attachments })) return;
     // Nothing can steer a compaction; whatever is sent then waits for it to finish.
-    onSend(t, compacting ? "follow-up" : kind, attachments.items);
+    onSend(text.trim(), compacting ? "follow-up" : kind, attachments.items);
     onTextChange("");
     attachments.clear();
   };
@@ -86,8 +87,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
   const window = contextWindow !== undefined && contextWindow > 0 ? formatTokenCount(contextWindow) : null;
   // Before the first reply only the window is known, so it stands alone rather than reading as "—/1k".
   const contextLabel = used && window ? `${used}/${window}` : used ?? window ?? "—";
-  const hasText = text.trim().length > 0 || attachments.items.length > 0;
-  const showStop = streaming && !hasText;
+  const showStop = streaming && !hasContent({ text, images: attachments });
   const showDelivery = streaming && !compacting;
   const showQueueKinds = queuedMessages.some(message => message.kind === "steering");
 
@@ -180,7 +180,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
                 variant={showStop ? "outline" : "default"}
                 className={cn(composerAction, "relative")}
                 aria-label={showStop ? "Stop" : showDelivery ? DELIVERY[queueMode].label : streaming ? "Queue message" : "Send"}
-                disabled={stopping || (showStop ? disabled : disabled || !hasText || attachments.busy || imagesWaiting)}
+                disabled={stopping || (showStop ? disabled : disabled || !sendable({ text, images: attachments }) || imagesWaiting)}
                 onClick={showStop ? onStop : () => send()}
               >
                 <span aria-hidden className={cn("absolute inset-0 grid place-items-center transition-[opacity,transform] duration-(--dur-enter) ease-(--ease-enter)", showStop ? "scale-75 opacity-0" : "scale-100 opacity-100")}><ArrowUpIcon /></span>

@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { type DraftKey, sessionDraftKey } from "@/lib/messageDraft";
 import { closureNeedsAttention, sessionActivity, sessionContext } from "@/lib/sessionContext";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useNavigation } from "@/lib/useNavigation";
@@ -23,13 +24,15 @@ interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
   onMenu: () => void;
-  onDraftChange: (key: string, text: string) => void;
-  onDraftAppend: (key: string, text: string) => void;
+  onDraftChange: (key: DraftKey, text: string) => void;
+  onDraftAppend: (key: DraftKey, text: string) => void;
+  /** Adds text to a draft as a new paragraph. */
+  onDraftParagraph: (key: DraftKey, text: string) => void;
   openProject: (id: string) => void;
   pullRequest: ReturnType<typeof useSessionPullRequest>;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openProject, pullRequest }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, onDraftParagraph, openProject, pullRequest }: Props) {
   // The selected session's Changes sheet and PR popover; hidden while Settings covers the view.
   const { settings, panel, openPanel, closePanel } = useNavigation();
   const changesOpen = !settings && panel === "changes";
@@ -44,7 +47,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const { ready, checkoutMissing, folder: located, changesWorkspace } = sessionContext(state);
   const folder = t ? located : undefined;
   const { status, streaming, replyActivity, firstMessageOnItsWay, submissionText } = sessionActivity(state, display);
-  const draftKey = t ? sessionKey(t) : undefined;
+  const draftKey = t ? sessionDraftKey(t) : null;
   const catalog = t ? state.catalogs[t.cwd] ?? null : null;
   useEffect(() => { if (state.connected && t?.cwd && !checkoutMissing) send({ _tag: "models", cwd: t.cwd }); }, [t?.cwd, checkoutMissing, state.connected, state.catalogRevision, send]);
   // A running Pi owns the selection; a saved session's picks wait for its first prompt and
@@ -64,7 +67,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
       {t && <ChangesSheet open={changesOpen} onOpenChange={onChangesOpenChange} workspace={changesWorkspace} session={t}
         onAsk={text => {
           if (!draftKey) return;
-          onDraftAppend(draftKey, `${state.drafts[draftKey]?.trim() ? "\n\n" : ""}${text}`);
+          onDraftParagraph(draftKey, text);
           onChangesOpenChange(false);
           toast.success("Added to your message");
         }} />}
@@ -133,7 +136,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           <p>Suggested message</p>
           <pre className="whitespace-pre-wrap break-words">{extension.editorRequest.text}</pre>
           <Button size="sm" variant="outline" disabled={usedEditorRequest === extension.editorRequest.id} onClick={() => {
-            if (draftKey && extension.editorRequest) { onDraftAppend(draftKey, `${state.drafts[draftKey] ? "\n\n" : ""}${extension.editorRequest.text}`); setUsedEditorRequest(extension.editorRequest.id); }
+            if (draftKey && extension.editorRequest) { onDraftParagraph(draftKey, extension.editorRequest.text); setUsedEditorRequest(extension.editorRequest.id); }
           }}>Append to draft</Button>
         </div>}
       </section>}
@@ -143,7 +146,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           <AlertDescription>History is still available. You can archive or delete this session, or restore the checkout at its original path and reload to continue.</AlertDescription>
         </Alert>
       ) : <Composer
-        draftKey={draftKey ?? "loading"}
+        draftKey={draftKey}
         completion={ready && t ? { cwd: t.cwd, sessionId: t.hosted ? t.sessionId ?? undefined : undefined, revision: `${state.selectionId}:${t.cursor?.generation}:${t.hosted}:${catalog?.fetchedAt}` } : undefined}
         text={draftKey ? state.drafts[draftKey] ?? "" : ""}
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}

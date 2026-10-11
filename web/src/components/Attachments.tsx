@@ -1,4 +1,4 @@
-import { base64Bytes, IMAGE_TYPES, imageType, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES } from "@shared/attachments";
+import { base64Bytes, IMAGE_TYPES } from "@shared/attachments";
 import type { Attachment as AttachmentData, RenderMsg } from "@shared/wire";
 import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState, useSyncExternalStore } from "react";
@@ -7,44 +7,19 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Attachment, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup, AttachmentMedia, AttachmentTitle, AttachmentTrigger } from "@/components/ui/attachment";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { type DraftKey, imageDrafts } from "@/lib/messageDraft";
 
-// Memory-only drafts: do not put private image bytes in localStorage or the registry.
-const empty: { items: readonly AttachmentData[]; busy: boolean; error: string } = { items: [], busy: false, error: "" };
-const drafts = new Map<string, typeof empty>();
-const listeners = new Set<() => void>();
-const subscribe = (notify: () => void) => { listeners.add(notify); return () => { listeners.delete(notify); }; };
-export function useAttachments(key: string) {
-  const state = useSyncExternalStore(subscribe, () => drafts.get(key) ?? empty);
-  const set = (value: typeof empty) => {
-    if (value.items.length || value.busy || value.error) drafts.set(key, value); else drafts.delete(key);
-    for (const notify of listeners) notify();
-  };
-  const add = async (files: File[]) => {
-    const before = drafts.get(key) ?? empty;
-    if (!files.length || before.busy) return;
-    set({ ...before, busy: true, error: "" });
-    try {
-      const current = before.items;
-      if (current.length + files.length > MAX_ATTACHMENTS) throw new Error("Attach up to 4 images per message.");
-      if (current.reduce((n, a) => n + base64Bytes(a.data), 0) + files.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENT_BYTES) throw new Error("Images must total 20 MiB or less.");
-      const added: AttachmentData[] = [];
-      for (const file of files) {
-        if (!file.size || file.size > MAX_IMAGE_BYTES) throw new Error(`${file.name}: choose an image up to 10 MiB.`);
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const mimeType = imageType(bytes);
-        if (!mimeType || (file.type && file.type !== mimeType)) throw new Error(`${file.name}: use PNG, JPEG, GIF or WebP. Other files aren't supported yet.`);
-        const data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result).split(",")[1]);
-          reader.onerror = () => reject(new Error(`Could not read ${file.name}. Try again.`));
-          reader.readAsDataURL(file);
-        });
-        added.push({ kind: "image", name: file.name.slice(0, 255), mimeType, data });
-      }
-      set({ items: [...current, ...added], busy: false, error: "" });
-    } catch (e) { set({ ...before, busy: false, error: e instanceof Error ? e.message : "Could not read images." }); }
-  };
-  return { ...state, add, remove: (index: number) => { if (!state.busy) set({ ...state, items: state.items.filter((_, i) => i !== index) }); }, clear: () => { if (!state.busy) set(empty); } };
+/** Reads a file as base64 with the browser's native encoder. */
+const encode = (file: File) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result).split(",")[1]);
+  reader.onerror = () => reject(new Error(`Could not read ${file.name}. Try again.`));
+  reader.readAsDataURL(file);
+});
+/** A draft's images (`null` while no draft is addressed), bound to React; messageDraft owns them and their policy. */
+export function useAttachments(key: DraftKey | null) {
+  const state = useSyncExternalStore(imageDrafts.subscribe, () => imageDrafts.get(key));
+  return { ...state, add: (files: File[]) => imageDrafts.add(key, files, encode), remove: (index: number) => imageDrafts.remove(key, index), clear: () => imageDrafts.clear(key) };
 }
 export type AttachmentDraft = ReturnType<typeof useAttachments>;
 

@@ -20,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
 import { isSendKey } from "@/lib/keys";
+import { type DraftKey, NEW_SESSION_DRAFT, sendable } from "@/lib/messageDraft";
 import { directoryTrust, folderFor } from "@/lib/sessionContext";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
@@ -31,7 +32,7 @@ import type { AppState } from "@/store";
 interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
-  onDraftChange: (key: string, text: string) => void;
+  onDraftChange: (key: DraftKey, text: string) => void;
   initialCwd?: string;
   /** The project a session started here joins; the page is that project's home. */
   projectId?: string;
@@ -54,9 +55,9 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
     if (projectId) return "";
     return readStorage(LAST_DIR) ?? "";
   });
-  const text = state.drafts["new-session"] ?? "";
-  const setText = (value: string) => onDraftChange("new-session", value);
-  const attachments = useAttachments("new-session");
+  const text = state.drafts[NEW_SESSION_DRAFT] ?? "";
+  const setText = (value: string) => onDraftChange(NEW_SESSION_DRAFT, value);
+  const attachments = useAttachments(NEW_SESSION_DRAFT);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -67,7 +68,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
   useEffect(() => { onDirectoryChange?.(cwd); }, [cwd, onDirectoryChange]);
 
   useAutoGrow(textarea, text, 288);
-  useTypeToFocus(textarea, useCallback((s: string) => onDraftChange("new-session", text + s), [onDraftChange, text]));
+  useTypeToFocus(textarea, useCallback((s: string) => onDraftChange(NEW_SESSION_DRAFT, text + s), [onDraftChange, text]));
   // Fall back to the first known folder when nothing is remembered.
   useEffect(() => {
     if (!projectId && !cwd && state.folders[0]) setCwd(state.folders[0].path);
@@ -88,7 +89,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
   useEffect(() => {
     if (state.connected && cwd) { send({ _tag: "models", cwd }); send({ _tag: "trust", cwd }); }
   }, [cwd, state.connected, state.catalogRevision, send]);
-  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!choice.model && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !project?.archived;
+  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!choice.model && sendable({ text, images: attachments }) && !creating && !project?.archived;
 
   const submit = () => {
     if (!ready) return;
