@@ -1,82 +1,59 @@
 import { MCP_CATALOG, type McpServerSetup, type McpSetupRequest } from "@shared/mcp";
 import { CheckCircle2Icon, ServerIcon } from "lucide-react";
-import { useState } from "react";
 import { toast } from "sonner";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
-import { SettingsHeader } from "@/components/SettingsHeader";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { RemovalDialog } from "@/components/RemovalDialog";
+import { SettingsAlert, SettingsSectionFrame, SettingsSkeleton } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { mcpLogin, mcpSetup } from "@/lib/api";
 import { useObservation } from "@/lib/useObservation";
+import { useSetupActions } from "@/lib/useSetupActions";
 
 type Server = (typeof MCP_CATALOG)[number];
+type Confirmation = { kind: "sign-out"; server: Server } | { kind: "uninstall"; server: Server; key: string };
 
 /** Catalog MCP servers on this machine: install, sign in, sign out and uninstall, all through Pi. */
 export function McpSettings({ onMenu }: { onMenu: () => void }) {
   const setup = useObservation("mcp", signal => mcpSetup(undefined, { signal }));
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const [login, setLogin] = useState<{ server: Server; key: string }>();
-  const [signOut, setSignOut] = useState<Server>();
-  // The dialog keeps the last removal's wording while it animates closed.
-  const [removal, setRemoval] = useState<{ server: Server; key: string }>();
-  const [removalOpen, setRemovalOpen] = useState(false);
+  const actions = useSetupActions<Confirmation, Server>({ refresh: () => void setup.refresh(), success: text => toast.success(text) });
+  const { confirmation, confirming, signIn } = actions;
+  const busy = actions.running !== undefined;
   const servers = setup.value?.servers;
   const error = setup.error && !setup.loading ? "Could not load MCP servers. Check your connection and try again." : "";
-  const act = async (request: McpSetupRequest, done: string) => {
-    setBusy(true); setActionError("");
-    try {
-      const next = await setup.mutate(async () => mcpSetup(request));
-      toast.success(done);
-      return next;
-    } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not change MCP setup. Refresh before retrying."); }
-    finally { setBusy(false); setRemovalOpen(false); setSignOut(undefined); void setup.refresh(); }
-  };
+  const act = (request: McpSetupRequest, done: string) => actions.run({
+    id: request.action, run: () => setup.mutate(async () => mcpSetup(request)), done, fallback: "Could not change MCP setup. Refresh before retrying.",
+  });
   const disabled = busy || setup.loading || !!error;
-  return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
-    <SettingsHeader title="MCP" titleId="settings-section-title" onMenu={onMenu} />
-    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
-      <section aria-labelledby="settings-section-title" className="mx-auto flex max-w-2xl flex-col gap-6">
-        {(error || actionError) && <Alert variant="destructive"><AlertTitle>MCP setup needs attention</AlertTitle><AlertDescription>{error || actionError}</AlertDescription></Alert>}
-        {!servers ? <div role="status"><span className="sr-only">Loading MCP servers…</span><Skeleton className="h-20 w-full rounded-xl" /></div>
-          : <ItemGroup className="gap-2">{MCP_CATALOG.map(server => {
-            const state = servers.find(s => s.id === server.id);
-            return state && <McpServerItem key={server.id} server={server} state={state} disabled={disabled}
-              install={() => void act({ action: "install", server: server.id }, `${server.name} MCP installed.`).then(next => {
-                // Installing is the decision to use it: go straight on to signing in.
-                const installed = next?.servers.find(s => s.id === server.id);
-                if (installed?.status === "ready" && installed.oauth && !installed.signedIn) setLogin({ server, key: crypto.randomUUID() });
-              })}
-              uninstall={() => { setRemoval({ server, key: state.removalKey! }); setRemovalOpen(true); }}
-              signIn={() => setLogin({ server, key: crypto.randomUUID() })}
-              signOut={() => setSignOut(server)} />;
-          })}</ItemGroup>}
-      </section>
-    </div>
-    <Dialog open={removalOpen} onOpenChange={open => { if (!open && !busy) setRemovalOpen(false); }}>
-      <DialogContent className="sm:max-w-md" showCloseButton={false} onInteractOutside={event => event.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle>Uninstall {removal?.server.name} MCP?</DialogTitle>
-          <DialogDescription>Removes {removal?.server.name} MCP and its saved sign-in from Pi on this machine.</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" disabled={busy} onClick={() => setRemovalOpen(false)}>Cancel</Button>
-          <Button variant="destructive" disabled={busy} onClick={() => { if (removal && removalOpen) void act({ action: "uninstall", server: removal.server.id, removalKey: removal.key }, `${removal.server.name} MCP uninstalled for new sessions.`); }}>
-            {busy && <Spinner data-icon="inline-start" />}Uninstall
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-    {signOut && <ProviderSignOutDialog name={signOut.name} busy={busy} cancel={() => setSignOut(undefined)} confirm={() => void act({ action: "sign-out", server: signOut.id }, `Signed out of ${signOut.name}.`)} />}
-    {login && <ProviderLoginDialog key={login.key} api={mcpLogin} initialProvider={login.server.id}
-      providers={[{ id: login.server.id, name: login.server.name, signedIn: false }]}
-      close={() => { setLogin(undefined); void setup.refresh(); }} signedIn={() => void setup.refresh()} />}
-  </section>;
+  const removal = confirmation?.kind === "uninstall" ? confirmation : undefined;
+  return <SettingsSectionFrame title="MCP" onMenu={onMenu} dialogs={<>
+    {/* Keeps the last removal's wording while it animates closed. */}
+    <RemovalDialog open={confirming && !!removal} busy={busy} cancel={actions.cancel} action="Uninstall"
+      title={`Uninstall ${removal?.server.name} MCP?`} description={`Removes ${removal?.server.name} MCP and its saved sign-in from Pi on this machine.`}
+      confirm={() => { if (removal) void act({ action: "uninstall", server: removal.server.id, removalKey: removal.key }, `${removal.server.name} MCP uninstalled for new sessions.`); }} />
+    {confirming && confirmation?.kind === "sign-out" && <ProviderSignOutDialog name={confirmation.server.name} busy={busy} cancel={actions.cancel}
+      confirm={() => void act({ action: "sign-out", server: confirmation.server.id }, `Signed out of ${confirmation.server.name}.`)} />}
+    {signIn && <ProviderLoginDialog key={signIn.key} api={mcpLogin} initialProvider={signIn.subject.id}
+      providers={[{ id: signIn.subject.id, name: signIn.subject.name, signedIn: false }]}
+      close={() => { actions.closeSignIn(); void setup.refresh(); }} signedIn={() => void setup.refresh()} />}
+  </>}>
+    {(error || actions.error) && <SettingsAlert title="MCP setup needs attention">{error || actions.error}</SettingsAlert>}
+    {!servers ? <SettingsSkeleton label="Loading MCP servers…"><Skeleton className="h-20 w-full rounded-xl" /></SettingsSkeleton>
+      : <ItemGroup className="gap-2">{MCP_CATALOG.map(server => {
+        const state = servers.find(s => s.id === server.id);
+        return state && <McpServerItem key={server.id} server={server} state={state} disabled={disabled}
+          install={() => void act({ action: "install", server: server.id }, `${server.name} MCP installed.`).then(next => {
+            // Installing is the decision to use it: go straight on to signing in.
+            const installed = next?.servers.find(s => s.id === server.id);
+            if (installed?.status === "ready" && installed.oauth && !installed.signedIn) actions.openSignIn(server);
+          })}
+          uninstall={() => actions.confirm({ kind: "uninstall", server, key: state.removalKey! })}
+          signIn={() => actions.openSignIn(server)}
+          signOut={() => actions.confirm({ kind: "sign-out", server })} />;
+      })}</ItemGroup>}
+  </SettingsSectionFrame>;
 }
 
 function McpServerItem({ server, state, disabled, install, uninstall, signIn, signOut }: {
