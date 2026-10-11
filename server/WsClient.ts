@@ -17,13 +17,12 @@ import { makeSocketDelivery } from "./BoundedDelivery.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { expandHome } from "./PiEnv.ts";
-import { projectTrust, setProjectTrust } from "./ProjectTrust.ts";
+import { projectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { makeSessionViewer } from "./SessionViewer.ts";
 import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceCommands } from "./WorkspaceCommands.ts";
-import { listWorktrees } from "./Worktrees.ts";
 
 const describe = (e: unknown): string => {
   if (e && typeof e === "object") {
@@ -57,12 +56,8 @@ export const handleSocket = (socket: Socket.Socket) =>
         switch (msg._tag) {
           case "registry":
             return yield* sidebar.refresh;
-          case "worktrees": {
-            const discovery = yield* registry.requireFolder(msg.folder).pipe(
-              Effect.andThen(listWorktrees(msg.folder)),
-              Effect.catchTag("RegistryLookupError", e => Effect.succeed({ status: "error" as const, observedAt: new Date().toISOString(), detail: e.detail })));
-            return yield* send({ _tag: "worktrees", folder: msg.folder, discovery });
-          }
+          case "worktrees":
+            return yield* send({ _tag: "worktrees", folder: msg.folder, discovery: yield* commands.discoverWorktrees(msg.folder) });
           case "models": {
             const cwd = resolve(expandHome(msg.cwd ?? (yield* viewer.cwd) ?? homedir()));
             return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });
@@ -82,16 +77,15 @@ export const handleSocket = (socket: Socket.Socket) =>
             const cwd = resolve(expandHome(msg.cwd));
             return yield* send({ _tag: "trust", cwd, trust: yield* projectTrust(cwd) });
           }
-          case "set_trust": {
-            const path = resolve(expandHome(msg.path));
-            yield* setProjectTrust(path, msg.trusted).pipe(
-              Effect.andThen(send({ _tag: "toast", level: "success", message: msg.trusted ? "Trusted. Sessions started from now load this folder's Pi settings and skills." : "Untrusted. Sessions started from now skip this folder's Pi settings and skills." })),
+          case "set_trust":
+            // Every client hears `catalogs_invalidated`; the requesting one also gets its answers at once.
+            return yield* commands.setTrust(msg.path, msg.trusted).pipe(
+              Effect.flatMap(({ cwd, trust }) => Effect.gen(function* () {
+                yield* send({ _tag: "toast", level: "success", message: msg.trusted ? "Trusted. Sessions started from now load this folder's Pi settings and skills." : "Untrusted. Sessions started from now skip this folder's Pi settings and skills." });
+                yield* send({ _tag: "trust", cwd, trust });
+                yield* send({ _tag: "models", catalog: yield* catalog.get(cwd) });
+              })),
               Effect.catchTag("ProjectTrustError", e => sendError(e.detail)));
-            yield* send({ _tag: "models", catalog: yield* catalog.refresh(path) });
-            yield* send({ _tag: "trust", cwd: path, trust: yield* projectTrust(path) });
-            // Trust lives in Pi's store, not the registry, so say that the sidebar changed.
-            return yield* sidebar.changed;
-          }
           case "create_worktree":
           case "add_worktree": {
             yield* (msg._tag === "create_worktree"
@@ -113,9 +107,7 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "act": {
             // A start reaches browsers as a `hosts` update.
             const { session } = yield* viewer.act(msg.selectionId, msg.start);
-            if (msg.action._tag === "prompt" || msg.action._tag === "steer")
-              yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, msg.action.text);
-            const result = yield* session.act(msg.action);
+            const result = yield* commands.act(session, msg.action);
             if (result) yield* send({ _tag: "action_result", cwd: session.spec.cwd, sessionId: session.spec.sessionId, result });
             return;
           }

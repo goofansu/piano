@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer, type Scope, Stream } from "effect";
+import { Effect, Fiber, Layer, type Scope, Stream } from "effect";
+import { Catalog, CatalogLive } from "../server/Catalog.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, type RegistryData, RegistryDatabasePath, RegistryLive, RegistryLookupError } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
+import { SidebarViewLive } from "../server/SidebarView.ts";
 import { WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-commands-")));
@@ -21,9 +23,10 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 const git = (dir: string, ...args: string[]) => execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { stdio: "pipe" });
 let databases = 0;
-const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry | Scope.Scope>) => {
+const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry | Catalog | Scope.Scope>) => {
   const layer = WorkspaceCommandsLive.pipe(
-    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
+    Layer.provide(SidebarViewLive()),
+    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provideMerge(CatalogLive),
     Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   return Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(layer),
     Effect.provideService(PiCli, { node: process.execPath, cli: new URL("./fake-pi.mjs", import.meta.url).pathname, extraArgs: [] }),
@@ -129,4 +132,54 @@ test("INV-02: archive and delete both stop Pi; archive keeps the reference, dele
     const reopen = yield* Effect.flip(hosts.open({ cwd, sessionId: archived }));
     assert.match(reopen.detail ?? "", /archived/);
   }));
+});
+
+/** Counts activity bumps: only a recorded prompt or steer moves a reference's `updatedAt`. */
+const activity = Effect.gen(function* () {
+  const registry = yield* Registry;
+  const bumps: string[] = [];
+  yield* registry.onChange((before, after) => Effect.sync(() => {
+    for (const s of after.sessions) {
+      if (before.sessions.find(b => b.sessionId === s.sessionId && b.updatedAt !== s.updatedAt)) bumps.push(s.sessionId);
+    }
+  }));
+  return bumps;
+});
+
+test("INV-01: a prompt or steer records activity, whether it starts a session or follows; other input does not", async () => {
+  await run(Effect.gen(function* () {
+    const commands = yield* WorkspaceCommands;
+    const bumps = yield* activity;
+    // Activity times have millisecond resolution; keep each step on its own tick so every bump is a change.
+    const tick = Effect.sleep("2 millis");
+    const session = yield* commands.createSession({ cwd, options: {}, text: "First prompt" }, yield* recordingClient([]));
+    const id = session.spec.sessionId;
+    assert.deepEqual(bumps, [id], "creating with a first prompt records activity");
+    yield* tick;
+    yield* commands.act(session, { _tag: "prompt", text: "Second prompt" });
+    yield* tick;
+    yield* commands.act(session, { _tag: "steer", text: "Steer" });
+    assert.deepEqual(bumps, [id, id, id], "each later prompt and steer records activity");
+    yield* tick;
+    yield* commands.act(session, { _tag: "set_thinking_level", level: "low" });
+    assert.deepEqual(bumps, [id, id, id], "other input is not activity");
+  }));
+});
+
+test("INV-01: a trust decision is saved in Pi's store and every client's model catalog is invalidated", async () => {
+  // A project skill makes the directory's trust matter to Pi.
+  mkdirSync(join(cwd, ".agents/skills/hello"), { recursive: true });
+  writeFileSync(join(cwd, ".agents/skills/hello/SKILL.md"), "---\nname: hello\ndescription: say hello\n---\nSay hello.\n");
+  try {
+    await run(Effect.gen(function* () {
+      const commands = yield* WorkspaceCommands, catalog = yield* Catalog;
+      // Each socket forwards this stream as `catalogs_invalidated`.
+      const invalidated = yield* catalog.changes.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+      assert.deepEqual(yield* commands.setTrust(cwd, true), { cwd, trust: { required: true, trusted: true } });
+      assert.deepEqual(yield* commands.setTrust(cwd, false), { cwd, trust: { required: true, trusted: false } });
+      assert.equal([...(yield* Fiber.join(invalidated))].length, 2, "one invalidation per decision");
+    }));
+  } finally {
+    rmSync(join(cwd, ".agents"), { recursive: true, force: true });
+  }
 });
