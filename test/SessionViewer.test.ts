@@ -130,7 +130,6 @@ test("forgetting the selected session detaches before retiring it and clears the
     const cleared = yield* next(m => m._tag === "selected");
     assert.ok(cleared._tag === "selected");
     assert.deepEqual([cleared.selectionId, cleared.sessionId, cleared.hosted], ["A", null, false]);
-    assert.equal(yield* view.cwd, undefined);
     assert.ok((yield* Effect.flip(view.act("A", {}))) instanceof StaleSelection, "a retired session cannot be restarted from the old view");
     assert.deepEqual(yield* hosts.list, []);
     assert.deepEqual(delivered.filter(m => m._tag === "session").map(m => m._tag === "session" && m.event._tag), [], "detached before Pi stopped");

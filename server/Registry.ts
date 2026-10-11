@@ -10,7 +10,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
 import { Project, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
-import { expandHome } from "./PiEnv.ts";
+import { directoryPath } from "./PiEnv.ts";
 import { openRegistryDatabase } from "./RegistryDatabase.ts";
 
 export class RegistryError extends Data.TaggedError("RegistryError")<{ readonly detail: string }> {
@@ -211,13 +211,13 @@ export const RegistryLive = Layer.effect(
       }),
       addFolder: (raw) =>
         Effect.gen(function* () {
-          const path = resolve(expandHome(raw));
+          const path = directoryPath(raw);
           if (!existsSync(path) || !statSync(path).isDirectory()) return yield* new RegistryError({ detail: `Not a directory: ${path}` });
           yield* update((d) => (d.folders.includes(path) ? d : { ...d, folders: [...d.folders, path] }));
         }),
       ensureFolder: (raw) =>
         Effect.gen(function* () {
-          const path = resolve(expandHome(raw));
+          const path = directoryPath(raw);
           const d = yield* Ref.get(state);
           if (d.folders.includes(path) || d.worktrees.some((w) => w.path === path)) return path;
           if (!existsSync(path) || !statSync(path).isDirectory()) return yield* new RegistryError({ detail: `Not a directory: ${path}` });

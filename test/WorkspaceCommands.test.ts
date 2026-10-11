@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, type Scope, Stream } from "effect";
-import { Catalog, CatalogLive } from "../server/Catalog.ts";
+import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, type RegistryData, RegistryDatabasePath, RegistryLive, RegistryLookupError } from "../server/Registry.ts";
@@ -23,10 +23,10 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 const git = (dir: string, ...args: string[]) => execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { stdio: "pipe" });
 let databases = 0;
-const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry | Catalog | Scope.Scope>) => {
+const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry | DirectoryFacts | Scope.Scope>) => {
   const layer = WorkspaceCommandsLive.pipe(
-    Layer.provide(SidebarViewLive()),
-    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provideMerge(CatalogLive),
+    Layer.provide(SidebarViewLive()), Layer.provideMerge(DirectoryFactsLive),
+    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   return Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(layer),
     Effect.provideService(PiCli, { node: process.execPath, cli: new URL("./fake-pi.mjs", import.meta.url).pathname, extraArgs: [] }),
@@ -176,11 +176,15 @@ test("INV-01: a trust decision is saved in Pi's store and every client's model c
   writeFileSync(join(cwd, ".agents/skills/hello/SKILL.md"), "---\nname: hello\ndescription: say hello\n---\nSay hello.\n");
   try {
     await run(Effect.gen(function* () {
-      const commands = yield* WorkspaceCommands, catalog = yield* Catalog;
+      const commands = yield* WorkspaceCommands, facts = yield* DirectoryFacts;
       // Each socket forwards this stream as `catalogs_invalidated`.
-      const invalidated = yield* catalog.changes.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true }));
-      assert.deepEqual(yield* commands.setTrust(cwd, true), { cwd, trust: { required: true, trusted: true } });
-      assert.deepEqual(yield* commands.setTrust(cwd, false), { cwd, trust: { required: true, trusted: false } });
+      const invalidated = yield* facts.changes.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+      const trusted = yield* commands.setTrust(cwd, true);
+      assert.deepEqual([trusted.cwd, trusted.trust], [cwd, { required: true, trusted: true }]);
+      assert.match(trusted.notice, /^Trusted\./);
+      const untrusted = yield* commands.setTrust(cwd, false);
+      assert.deepEqual([untrusted.cwd, untrusted.trust], [cwd, { required: true, trusted: false }]);
+      assert.match(untrusted.notice, /^Untrusted\./);
       assert.equal([...(yield* Fiber.join(invalidated))].length, 2, "one invalidation per decision");
     }));
   } finally {

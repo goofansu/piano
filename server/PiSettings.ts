@@ -2,7 +2,7 @@
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer, Semaphore } from "effect";
 import type { SessionDefaults } from "../shared/wire.ts";
-import { Catalog } from "./Catalog.ts";
+import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { agentDir } from "./PiEnv.ts";
 
 export class PiSettingsError extends Data.TaggedError("PiSettingsError")<{ readonly detail: string }> {}
@@ -27,7 +27,7 @@ function defaultsOf(settings: SettingsManager): SessionDefaults {
 }
 
 export const PiSettingsLive = Layer.effect(PiSettings, Effect.gen(function* () {
-  const catalog = yield* Catalog;
+  const facts = yield* DirectoryFacts;
   const lock = yield* Semaphore.make(1);
   const read = Effect.try({ try: () => defaultsOf(manager()), catch: () => new PiSettingsError({ detail: "Could not read Pi settings. Check the settings file and try again." }) });
   return PiSettings.of({
@@ -35,7 +35,7 @@ export const PiSettingsLive = Layer.effect(PiSettings, Effect.gen(function* () {
     saveDefaults: next => Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
       const current = yield* read;
       if (next.model !== undefined && next.model !== current.model) {
-        const available = yield* catalog.global;
+        const available = yield* facts.global;
         if (available.error) return yield* new PiSettingsError({ detail: "Could not load models. Refresh and try again." });
         if (!available.models.some(model => model.ref === next.model)) return yield* new PiSettingsError({ detail: "Choose an available model." });
       }
@@ -54,7 +54,7 @@ export const PiSettingsLive = Layer.effect(PiSettings, Effect.gen(function* () {
           return defaultsOf(manager());
         },
         catch: () => new PiSettingsError({ detail: "Could not save Pi settings. Check file permissions and reload before retrying." }),
-      }).pipe(Effect.ensuring(catalog.invalidate));
+      }).pipe(Effect.ensuring(facts.invalidate));
     })),
   });
 }));

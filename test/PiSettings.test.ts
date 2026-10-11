@@ -5,10 +5,11 @@ import { test } from "node:test";
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
-import { Catalog, CatalogLive } from "../server/Catalog.ts";
+import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { PiSettings, PiSettingsLive } from "../server/PiSettings.ts";
+import { SessionHosts } from "../server/SessionHosts.ts";
 import { createPiCompatibilityFixture } from "./fixtures/PiCompatibility.ts";
 
 test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choices and leave sessions and folder overrides alone", async () => {
@@ -21,14 +22,14 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
   process.env.HOME = fixture.root;
   process.env.PI_CODING_AGENT_DIR = fixture.agentDir;
   try {
-    const layer = PiSettingsLive.pipe(Layer.provideMerge(CatalogLive), Layer.provideMerge(PiSessionsLive), Layer.provide(NodeServices.layer));
+    const layer = PiSettingsLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(Layer.mock(SessionHosts, {})), Layer.provideMerge(PiSessionsLive), Layer.provide(NodeServices.layer));
     await Effect.runPromise(Effect.gen(function* () {
-      const settings = yield* PiSettings, catalogs = yield* Catalog, sessions = yield* PiSessions;
+      const settings = yield* PiSettings, catalogs = yield* DirectoryFacts, sessions = yield* PiSessions;
       assert.deepEqual(yield* settings.defaults, { model: undefined, thinkingLevel: "medium" });
       // Global discovery must ignore project configuration, even for a trusted checkout.
       const globalProbe = yield* sessions.probe(project, { globalSettingsOnly: true });
       assert.notEqual(globalProbe.defaultModel, "piano-phase0/project");
-      const initial = yield* catalogs.get(fixture.root);
+      const initial = yield* catalogs.catalog(fixture.root);
       const session = yield* sessions.open({ cwd: fixture.root, sessionId: "defaults-existing", model: "piano-phase0/global", thinkingLevel: "low" });
       const original = yield* session.state;
       const wanted = { model: "piano-phase0/global", thinkingLevel: "high" } as const;
@@ -40,11 +41,11 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
       assert.equal(persisted.defaultThinkingLevel, "high");
       assert.equal(persisted.theme, "dark");
       assert.equal(persisted.cacheWarming, "off");
-      const next = yield* catalogs.get(fixture.root);
+      const next = yield* catalogs.catalog(fixture.root);
       assert.equal(next.defaultModel, wanted.model);
       assert.equal(next.defaultThinkingLevel, "high");
       assert.notEqual(next.fetchedAt, initial.fetchedAt);
-      const overridden = yield* catalogs.get(project);
+      const overridden = yield* catalogs.catalog(project);
       assert.equal(overridden.defaultModel, "piano-phase0/project");
       assert.equal(overridden.defaultThinkingLevel, "high");
       assert.equal((yield* session.state).model, original.model);

@@ -1,20 +1,19 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { Cause, Data, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type Endpoint, Endpoints, type IdParam, type Json } from "../shared/http.ts";
 import type { RadiusSetupState } from "../shared/radius.ts";
 import type { DirListing, ProviderLoginState, Workspace } from "../shared/wire.ts";
-import { Catalog } from "./Catalog.ts";
+import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
-import { expandHome } from "./PiEnv.ts";
+import { directoryPath } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup, type RadiusSetupError } from "./RadiusSetup.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
-import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
@@ -25,7 +24,7 @@ import { handleSocket } from "./WsClient.ts";
 /** Subdirectories for the folder picker, with git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
 const listDirectory = (raw: string) =>
   Effect.gen(function* () {
-    const path = resolve(expandHome(raw || "~"));
+    const path = directoryPath(raw || "~");
     if (!existsSync(path)) return yield* Effect.fail(new Error(`No such directory: ${path}`));
     if (!statSync(path).isDirectory()) return yield* Effect.fail(new Error(`${path} is a file, not a directory`));
     const names: string[] = [];
@@ -149,7 +148,7 @@ export const AppRouter = HttpRouter.use((router) =>
     });
 
     yield* serve(Endpoints.makeDirectory, ({ body }) => Effect.gen(function* () {
-      const path = resolve(expandHome(body.path));
+      const path = directoryPath(body.path);
       if (!body.path || path === "/") return yield* fail(400, Endpoints.makeDirectory.invalid);
       yield* Effect.try({ try: () => mkdirSync(path, { recursive: true }), catch: e => new ApiFailure({ status: 400, error: e instanceof Error ? e.message : String(e) }) });
       return { path };
@@ -167,21 +166,13 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.changeSessionPullRequest, ({ session, body }) =>
       Effect.flatMap(SessionPullRequests, prs => prs.change(session, body)).pipe(pullRequestFailure));
 
-    // Discovery never opens a saved session or creates a second writer. A live
-    // session is resolved by server-owned identity; otherwise use the cwd probe.
     yield* serve(Endpoints.slashCommands, ({ body }) => Effect.gen(function* () {
       if (!body.cwd) return yield* fail(400, Endpoints.slashCommands.invalid);
-      const cwd = resolve(expandHome(body.cwd));
-      if (body.sessionId) {
-        const session = yield* (yield* SessionHosts).get(cwd, body.sessionId);
-        if (!session) return yield* fail(409, "Session is no longer running. Reopen the suggestions.");
-        const result = yield* session.act({ _tag: "commands" });
-        if (result?._tag === "commands") return { commands: result.commands };
-        return yield* fail(502, "Command catalog unavailable.");
-      }
-      const catalog = yield* (yield* Catalog).get(cwd);
-      return catalog.error ? yield* fail(502, catalog.error) : { commands: catalog.commands ?? [] };
-    }).pipe(failAs(502, "Could not load commands. Reopen the suggestions to retry.")));
+      const facts = yield* DirectoryFacts;
+      return { commands: yield* facts.commands(body.cwd, body.sessionId) };
+    }).pipe(
+      Effect.catchTag("DirectoryCommandsError", error => fail(error.reason === "stopped" ? 409 : 502, error.detail)),
+      failAs(502, "Could not load commands. Reopen the suggestions to retry.")));
 
     yield* serve(Endpoints.saveDefaults, ({ body }) =>
       Effect.flatMap(PiSettings, settings => settings.saveDefaults(body)).pipe(

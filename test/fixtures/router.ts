@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
-import { CatalogLive } from "../../server/Catalog.ts";
+import { DirectoryFactsLive } from "../../server/DirectoryFacts.ts";
 import { PiCli } from "../../server/PiCli.ts";
 import { PiSessionsLive } from "../../server/PiSessions.ts";
 import { PiSettingsLive } from "../../server/PiSettings.ts";
@@ -50,8 +50,8 @@ export async function startRouter<Fakes = never>(prefix: string, services?: Laye
     Layer.succeed(RegistryDatabasePath, join(root, "registry.db")),
     NodeServices.layer,
   );
-  const Services = Layer.mergeAll(SessionHostsLive({ idleMs: 0 }), PiSettingsLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
-    Layer.provideMerge(CatalogLive), Layer.provideMerge(RegistryLive), Layer.provideMerge(PiSessionsLive), Layer.provide(Config));
+  const Services = Layer.mergeAll(PiSettingsLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
+    Layer.provideMerge(DirectoryFactsLive), Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provideMerge(RegistryLive), Layer.provideMerge(PiSessionsLive), Layer.provide(Config));
   const Core = WorkspaceCommandsLive.pipe(Layer.provideMerge(SidebarViewLive()), Layer.provideMerge(Services));
 
   const workspaceId = await Effect.runPromise(Effect.gen(function* () {
