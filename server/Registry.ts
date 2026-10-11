@@ -125,12 +125,14 @@ export class Registry extends Context.Service<
     readonly addWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
     /** Register a session started through piano. Idempotent. */
     readonly addSession: (cwd: string, sessionId: string, title?: string) => Effect.Effect<void, RegistryError>;
-    /** Bump a session's activity time; sets the title from the first prompt when none was given. */
+    /** Bump a session's activity time; sets the title from the first prompt when neither a start name nor Pi's name gave one. */
     readonly touchSession: (cwd: string, sessionId: string, text?: string) => Effect.Effect<void, RegistryError>;
-    /** Cache Pi's last statistics without changing session activity/order or creating references. */
-    readonly cacheSessionStats: (cwd: string, sessionId: string, stats: SessionStats) => Effect.Effect<void, RegistryError>;
-    /** Set the title shown for a session; it mirrors Pi's session name whenever one is known. */
-    readonly renameSession: (cwd: string, sessionId: string, title: string) => Effect.Effect<void, RegistryError>;
+    /**
+     * Mirror Pi's facts onto a session reference in one write: Pi's session name, when it has
+     * one, replaces the title; statistics replace the last-known cache. Never changes activity
+     * or order, and never creates a reference.
+     */
+    readonly mirrorSession: (cwd: string, sessionId: string, facts: { readonly sessionName?: string; readonly stats?: SessionStats }) => Effect.Effect<void, RegistryError>;
     /** Compare-and-set the association: delayed forge reads cannot undo removal or overwrite a newer choice. */
     readonly setSessionPullRequest: (expected: SessionEntry, link: SessionPullRequestLink | null | undefined) => Effect.Effect<boolean, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
@@ -242,18 +244,15 @@ export const RegistryLive = Layer.effect(
               : t,
           ),
         })),
-      cacheSessionStats: (cwd, sessionId, stats) => update((d) => {
+      mirrorSession: (cwd, sessionId, facts) => update((d) => {
         const entry = d.sessions.find(isSession(cwd, sessionId));
-        if (!entry || JSON.stringify(entry.stats) === JSON.stringify(stats)) return d;
-        return { ...d, sessions: d.sessions.map(t => t === entry ? { ...t, stats } : t) };
+        if (!entry) return d;
+        // Pi owns the name; a session Pi has not named keeps its start name or first prompt.
+        const title = facts.sessionName?.trim().slice(0, 200) || entry.title;
+        const stats = facts.stats ?? entry.stats;
+        if (title === entry.title && JSON.stringify(stats) === JSON.stringify(entry.stats)) return d;
+        return { ...d, sessions: d.sessions.map(t => t === entry ? { ...t, title, stats } : t) };
       }),
-      renameSession: (cwd, sessionId, title) =>
-        update((d) => {
-          const next = title.trim().slice(0, 200) || undefined;
-          const entry = d.sessions.find(isSession(cwd, sessionId));
-          if (!entry || entry.title === next) return d;
-          return { ...d, sessions: d.sessions.map((t) => (t === entry ? { ...t, title: next } : t)) };
-        }),
       setSessionPullRequest: (expected, link) => Effect.gen(function* () {
         let saved = false;
         yield* update(d => {

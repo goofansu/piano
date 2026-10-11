@@ -58,7 +58,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   } finally { db.close(); }
   await f.run(Effect.gen(function* () {
     const r = yield* Registry;
-    yield* r.renameSession(hidden, "same", "Renamed");
+    yield* r.mirrorSession(hidden, "same", { sessionName: "Renamed" });
     yield* r.assignProject(hidden, "same", "project-2");
     yield* r.removeFolder(folder);
   }));
@@ -67,6 +67,37 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   assert.deepEqual(reopened.workspaces, original.workspaces);
   assert.deepEqual(reopened.sessions[0], { ...original.sessions[0], title: "Renamed", projectId: "project-2" });
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
+});
+
+test("INV-01: the title mirrors Pi's name, else the start name or first prompt; mirroring never moves activity", async t => {
+  const f = fixture(t), cwd = join(f.root, "folder");
+  const entry = (id: string) => f.run(Effect.gen(function* () { return (yield* (yield* Registry).get).sessions.find(s => s.sessionId === id); }));
+  await f.run(Effect.gen(function* () {
+    const r = yield* Registry;
+    yield* r.addSession(cwd, "prompted");
+    yield* r.touchSession(cwd, "prompted", "  First prompt  ");
+    yield* r.touchSession(cwd, "prompted", "Second prompt");
+    yield* r.addSession(cwd, "started", "Start name");
+    yield* r.touchSession(cwd, "started", "A prompt");
+  }));
+  assert.equal((await entry("prompted"))?.title, "First prompt");
+  assert.equal((await entry("started"))?.title, "Start name");
+
+  const before = await entry("prompted");
+  const stats = { cost: 2, statsUpdatedAt: 1 };
+  await f.run(Effect.gen(function* () { yield* (yield* Registry).mirrorSession(cwd, "prompted", { stats }); }));
+  assert.deepEqual(await entry("prompted"), { ...before, stats }, "statistics alone keep the title and activity time");
+
+  await f.run(Effect.gen(function* () {
+    const r = yield* Registry;
+    yield* r.mirrorSession(cwd, "prompted", { sessionName: "Named by Pi" });
+    yield* r.touchSession(cwd, "prompted", "Later prompt");
+    yield* r.mirrorSession(cwd, "unregistered", { sessionName: "Ghost", stats });
+  }));
+  const named = await entry("prompted");
+  assert.equal(named?.title, "Named by Pi", "a later prompt never replaces Pi's name");
+  assert.deepEqual(named?.stats, stats, "a name alone keeps the cached statistics");
+  assert.equal(await entry("unregistered"), undefined, "mirroring never creates a reference");
 });
 
 test("INV-01: a failed transaction publishes neither partial rows nor in-memory changes; retry succeeds", async t => {
