@@ -127,11 +127,13 @@ test("slash completion uses one revision rule for the New page and a session", (
   const fresh = { ...base, view: { kind: "new" as const, cwd: "/repo" }, selectionId: null, session: null };
   const target = completionTarget(fresh);
   assert.equal(target?.cwd, "/repo");
-  assert.equal(target?.sessionId, undefined);
+  assert.equal(target?.session, undefined);
   assert.notEqual(completionTarget({ ...fresh, trusts: { "/repo": { required: true, trusted: true } } })?.revision, target?.revision, "a trust change invalidates discovery");
   assert.equal(completionTarget({ ...fresh, connected: false }), undefined);
   const hosted = completionTarget({ ...base, session: session("/repo") });
-  assert.deepEqual([hosted?.cwd, hosted?.sessionId], ["/repo", "s1"]);
-  assert.equal(completionTarget({ ...base, session: session("/repo", {}, { hosted: false }) })?.sessionId, undefined, "discovery never starts a saved session");
+  assert.deepEqual([hosted?.cwd, hosted?.session], ["/repo", { workspaceId: "ws:/repo", sessionId: "s1" }], "a running session is asked by its IDs");
+  const saved = completionTarget({ ...base, session: session("/repo", {}, { hosted: false }) });
+  assert.deepEqual([saved?.cwd, saved?.session], ["/repo", undefined], "discovery never starts a saved session");
+  assert.equal(completionTarget({ ...base, workspaces: [], session: session("/repo") }), undefined, "a running session without a known workspace is not asked");
   assert.equal(completionTarget({ ...base, resync: true, session: session("/repo") }), undefined, "only on a ready attachment");
 });

@@ -8,7 +8,6 @@ import { Effect, Layer } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiSessions } from "../server/PiSessions.ts";
 import { RadiusSetup, RadiusSetupEnvironment, RadiusSetupLive } from "../server/RadiusSetup.ts";
-import { SessionHosts } from "../server/SessionHosts.ts";
 
 const PACKAGE = "npm:@earendil-works/pi-radius-web-search";
 const URL = "https://radius.pi.dev/mcp";
@@ -26,7 +25,7 @@ async function fixture(run: (setup: RadiusSetup["Service"], directory: string, p
   }));
   try {
     await Effect.runPromise(Effect.gen(function* () { yield* run(yield* RadiusSetup, directory, { facts: yield* DirectoryFacts, count: () => count }); }).pipe(
-      Effect.provide(RadiusSetupLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(sessions), Layer.provide(Layer.mock(SessionHosts, {})))), Effect.scoped,
+      Effect.provide(RadiusSetupLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(sessions))), Effect.scoped,
       Effect.provideService(RadiusSetupEnvironment, { directory: () => directory, install: install ?? (async () => { throw new Error("Unexpected install"); }), uninstall: uninstall ?? (async () => { throw new Error("Unexpected uninstall"); }) }),
     ));
   } finally { rmSync(directory, { recursive: true, force: true }); }

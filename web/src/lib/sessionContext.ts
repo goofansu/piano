@@ -50,8 +50,8 @@ export function focusedDirectory(state: AppState): FocusedDirectory | undefined 
 /** Where slash completion discovers commands; a new revision invalidates pending discovery. */
 export interface CompletionTarget {
   cwd: string;
-  /** Only for a live child; discovery must not start a saved session. */
-  sessionId?: string;
+  /** Only for a live child, addressed by its registry IDs; discovery must not start a saved session. */
+  session?: { workspaceId: string; sessionId: string };
   revision: string;
 }
 
@@ -65,7 +65,10 @@ export function completionTarget(state: AppState): CompletionTarget | undefined 
   const session = state.view.kind === "session" ? state.session : null;
   if (!focus || !state.connected || (session && !sessionReady(state))) return undefined;
   const revision = [state.selectionId, session?.cursor?.generation, session?.hosted, directoryTrust(state, focus.cwd)?.trusted, state.catalogs[focus.cwd]?.fetchedAt].join(":");
-  return { cwd: focus.cwd, sessionId: session?.hosted ? session.sessionId ?? undefined : undefined, revision };
+  if (!session?.hosted || !session.sessionId) return { cwd: focus.cwd, revision };
+  // A running session answers only for itself; until its workspace is known there is nothing to ask.
+  const workspaceId = workspaceFor(state, session.cwd)?.id;
+  return workspaceId ? { cwd: focus.cwd, session: { workspaceId, sessionId: session.sessionId }, revision } : undefined;
 }
 
 /** The registry reference behind a session row, so membership is read from one place. */

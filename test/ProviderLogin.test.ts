@@ -8,7 +8,6 @@ import { Effect, Layer } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiSessions } from "../server/PiSessions.ts";
 import { ProviderLogin, ProviderLoginLive, ProviderLoginRuntime } from "../server/ProviderLogin.ts";
-import { SessionHosts } from "../server/SessionHosts.ts";
 import type { ProviderLoginState } from "../shared/wire.ts";
 
 type Login = NonNullable<NonNullable<ReturnType<ModelRuntime["getProvider"]>>["auth"]["oauth"]>["login"];
@@ -36,7 +35,7 @@ async function fixture(flow: Login, run: (login: ProviderLogin["Service"], authP
   }));
   try {
     await Effect.runPromise(Effect.gen(function* () { yield* run(yield* ProviderLogin, authPath, { catalog: yield* DirectoryFacts, count: () => count }); }).pipe(
-      Effect.provide(ProviderLoginLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(sessions), Layer.provide(Layer.mock(SessionHosts, {})))), Effect.scoped,
+      Effect.provide(ProviderLoginLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(sessions))), Effect.scoped,
       Effect.provideService(ProviderLoginRuntime, { create: async () => runtime, deviceId: () => "f24f9f2a-a49e-46d0-99a3-402c03b548f5" }),
     ));
   } finally { rmSync(root, { recursive: true, force: true }); }

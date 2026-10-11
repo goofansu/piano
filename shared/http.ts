@@ -141,11 +141,16 @@ export const Endpoints = {
 
   // Composer
 
-  /** A live session answers from its own child; otherwise the directory's probe does. */
+  /** Before a session starts: the directory's probe answers. The path travels in the body. */
   slashCommands: endpoint({
     method: "POST", path: "/api/commands",
-    body: Schema.Struct({ cwd: Schema.String, sessionId: Schema.optional(Schema.String) }), invalid: "Directory is required.",
+    body: Schema.Struct({ cwd: Schema.String }), invalid: "Directory is required.",
     response: Schema.Struct({ commands: Schema.Array(SlashCommand) }), fallback: "Could not load commands.",
+  }),
+  /** A running session answers from its own child; a stopped one is never started to answer (409). */
+  sessionCommands: endpoint({
+    method: "GET", path: "/api/session/commands", query: ["workspaceId", "sessionId"],
+    response: Schema.Struct({ commands: Schema.Array(SlashCommand) }), noStore: true, fallback: "Could not load commands.",
   }),
 
   // Settings

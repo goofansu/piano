@@ -89,7 +89,9 @@ try {
     try { if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok && (await fetch(`http://127.0.0.1:${webPort}`)).ok) break; } catch {}
     if (n === 99) throw new Error('Scratch startup deadline'); await delay(100);
   }
-  assert.equal((await fetch(`http://127.0.0.1:${backendPort}/api/commands`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, sessionId: 'not-running' }) })).status, 409, 'discovery does not open stopped sessions');
+  const folders = (await (await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).json()).folders;
+  const workspaceId = folders.find(f => f.path === cwd).worktrees.find(w => w.root).workspace.id;
+  assert.equal((await fetch(`http://127.0.0.1:${backendPort}/api/session/commands?${new URLSearchParams({ workspaceId, sessionId: 'not-running' })}`)).status, 409, 'discovery does not open stopped sessions');
   ab('open', `http://127.0.0.1:${webPort}/new`);
   ab('set', 'viewport', '1440', '1000');
   await until(`document.querySelector('[aria-label^="Model:"]')?.title.includes('alpha')`);
@@ -261,10 +263,10 @@ try {
   ab('press', 'Escape');
   await until(`!document.querySelector('[aria-label="Delivery: steer"]')`);
   // Delay discovery to expose stale insertion after editing the draft.
-  evaluate(`window.originalFetch=window.fetch;window.fetch=(...args)=>String(args[0]).includes('/api/commands')?new Promise(resolve=>setTimeout(()=>resolve(originalFetch(...args)),700)):originalFetch(...args);true`);
+  evaluate(`window.originalFetch=window.fetch;window.fetch=(...args)=>/\\/api\\/(session\\/)?commands/.test(String(args[0]))?new Promise(resolve=>setTimeout(()=>resolve(originalFetch(...args)),700)):originalFetch(...args);true`);
   await fill('/'); await fill('ordinary prose'); await delay(800);
   assert.equal(evaluate(`!!document.querySelector('${menu}')`), false); assert.equal(draft(), 'ordinary prose');
-  evaluate(`window.fetch=(...args)=>String(args[0]).includes('/api/commands')?Promise.resolve(new Response(JSON.stringify({error:'unavailable'}),{status:502})):originalFetch(...args);true`);
+  evaluate(`window.fetch=(...args)=>/\\/api\\/(session\\/)?commands/.test(String(args[0]))?Promise.resolve(new Response(JSON.stringify({error:'unavailable'}),{status:502})):originalFetch(...args);true`);
   await fill('/'); ab('wait', '--text', 'Could not load commands. Close and reopen to retry.');
   ab('press', 'Escape');
   evaluate(`window.fetch=window.originalFetch;true`);

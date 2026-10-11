@@ -10,7 +10,6 @@ import { DirectoryFacts, DirectoryFactsLive } from '../server/DirectoryFacts.ts'
 import { PiCli } from '../server/PiCli.ts';
 import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
 import { peekSession } from '../server/SessionFiles.ts';
-import { SessionHosts } from '../server/SessionHosts.ts';
 import type { SessionEvent } from '../shared/wire.ts';
 
 const cli = { node: process.execPath, cli: new URL('./fake-projection-pi.mjs', import.meta.url).pathname, extraArgs: [] };
@@ -231,6 +230,6 @@ test('catalog observations and caches belong to the requested cwd', async () => 
       assert.equal(project.cwd, root); assert.equal(project.models[0].name, root);
       assert.equal(home.cwd, tmp); assert.equal(home.models[0].name, tmp);
       assert.equal((yield* facts.catalog(root)).models[0].name, root);
-    }).pipe(Effect.provide(DirectoryFactsLive.pipe(Layer.provide(Layer.mock(SessionHosts, {})))), Effect.scoped));
+    }).pipe(Effect.provide(DirectoryFactsLive), Effect.scoped));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
