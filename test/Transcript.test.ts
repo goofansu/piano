@@ -122,6 +122,23 @@ test("a delegation card shows its run's settled status from a later card, with b
   const notice = rows.find(row => row.msg.id === "n");
   assert.ok(notice?.kind === "subagent");
   assert.deepEqual([notice.subagent.terminal, notice.subagent.statusLabel, notice.subagent.output, notice.subagent.hasDetails], ["completed", "Completed", "Done", true]);
+
+  const updated = transcriptRows([...history,
+    { id: "wait", role: "tool_result", text: "", subagent: { kind: "collection", scope: "named", status: "Delivered 2 results", runs: [
+      { runId: "run-d1", profile: "reviewer", status: "failed" },
+      { runId: "run-d2", profile: "reviewer", status: "completed" },
+    ], stillRunning: 1, unknown: 0, unavailable: 0, noActiveRuns: false } },
+    { id: "requested", role: "tool_result", text: "", subagent: { kind: "cancellation", status: "Cancellation requested", outcomes: [
+      { kind: "requested", runId: "run-d1" }, { kind: "requested", runId: "run-d3" },
+    ] } },
+    { id: "query", role: "tool_result", text: "", subagent: { kind: "result", source: "tool", runId: "run-d1", status: "Still running when checked" } },
+  ]);
+  assert.deepEqual(reply(updated, "a").tools.map(tool => [tool.subagent!.terminal, tool.subagent!.statusLabel, tool.subagent!.badge]), [
+    ["failed", "Failed", "destructive"], ["completed", "Completed", "success"], [undefined, "Started", "secondary"],
+  ], "the last qualifying collection overrides earlier outcomes; requests and nonterminal queries neither settle nor erase them");
+  const originalNotice = updated.find(row => row.msg.id === "n");
+  assert.ok(originalNotice?.kind === "subagent");
+  assert.deepEqual([originalNotice.subagent.terminal, originalNotice.subagent.statusLabel], ["completed", "Completed"], "reported outcomes update delegations, not other result cards");
 });
 
 test("a card's own settled status keeps its fuller status text, and its label never contradicts the badge", () => {

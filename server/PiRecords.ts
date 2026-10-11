@@ -8,6 +8,7 @@
  */
 import { Option, Schema } from 'effect';
 import { imageType } from '../shared/attachments.ts';
+import { reportedSubagentStatus } from '../shared/sessionProjection.ts';
 import type { Dialog, ModelChoice, QueuedMessage, RenderMsg, RunUsage, SessionAction, SessionEvent, SessionState, SubagentCard, ThinkingLevel, ToolExecution, Usage } from '../shared/wire.ts';
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from '../shared/wire.ts';
 import { projectDisplay, redactDisplay } from './DisplayProjection.ts';
@@ -243,18 +244,11 @@ export function serializeMessage(id: string, msg: RawMessage, projection = new S
 function serializeWithProjection(msgs: ReadonlyArray<RawMessage>, prefix: string, projection: SubagentProjection): RenderMsg[] {
   projection.reset();
   const rendered = msgs.flatMap((m, i) => { const result = serializeMessage(`${prefix}${i}`, m, projection); return result ? [result] : []; });
-  const terminalRuns = new Map<string, 'completed' | 'failed' | 'cancelled'>();
-  for (const message of rendered) {
-    const card = message.subagent;
-    if (card?.kind === 'result' && card.runId && card.terminalStatus) terminalRuns.set(card.runId, card.terminalStatus);
-    if (card?.kind === 'collection') for (const run of card.runs) terminalRuns.set(run.runId, run.status);
-    if (card?.kind === 'cancellation') for (const outcome of card.outcomes) if (outcome.kind === 'already terminal') terminalRuns.set(outcome.runId, outcome.phase);
-  }
+  const reportedStatus = reportedSubagentStatus(rendered);
   return rendered.map(message => {
     const card = message.subagent;
-    if (card?.kind !== 'delegation' || !card.runId) return message;
-    const status = terminalRuns.get(card.runId);
-    return status ? { ...message, subagent: { ...card, status: titleStatus(status), terminalStatus: status } } : message;
+    const status = reportedStatus(card);
+    return card && status ? { ...message, subagent: { ...card, status: titleStatus(status), terminalStatus: status } } : message;
   });
 }
 export function serializeMessages(msgs: ReadonlyArray<RawMessage>, prefix = 'm'): RenderMsg[] {

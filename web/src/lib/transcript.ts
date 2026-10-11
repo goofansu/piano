@@ -1,5 +1,6 @@
 import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
 // Relative so node tests can load this pure module without the web alias.
+import { reportedSubagentStatus } from "../../../shared/sessionProjection.ts";
 import { abbrevHome } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
@@ -146,7 +147,7 @@ const turnLabel = (m: RenderMsg) => messageLabel(m.skill ? `/skill:${m.skill.nam
 export function transcriptRows(messages: ReadonlyArray<RenderMsg>, { pending = null, tools = {}, showTools = true }: TranscriptOptions = {}): TranscriptRow[] {
   const results = new Map<string, RenderMsg>();
   const callIds = new Set<string>();
-  const terminalRuns = new Map<string, TerminalStatus>();
+  const cardStatus = reportedSubagentStatus(messages);
   // Destinations, with their labels: every labelled prompt, and every labelled reply that
   // ended a turn (the next prompt or reply is not another reply).
   const destinations = new Map<string, string>();
@@ -161,12 +162,7 @@ export function transcriptRows(messages: ReadonlyArray<RenderMsg>, { pending = n
   for (const m of messages) {
     if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
     for (const call of m.toolCalls ?? []) callIds.add(call.id);
-    const card = m.subagent;
-    if (card?.kind === "result" && card.runId && card.terminalStatus) terminalRuns.set(card.runId, card.terminalStatus);
-    if (card?.kind === "collection") for (const run of card.runs) terminalRuns.set(run.runId, run.status);
-    if (card?.kind === "cancellation") for (const outcome of card.outcomes) if (outcome.kind === "already terminal") terminalRuns.set(outcome.runId, outcome.phase);
   }
-  const cardStatus = (card: SubagentCard | undefined) => card?.kind === "delegation" && card.runId ? terminalRuns.get(card.runId) : undefined;
   // Live calls made inside another call, by the call that made them: named as its parent, or
   // under its id as a "parent/child" path. Built once so each row finds its own in one lookup.
   const children = new Map<string, ToolExecution[]>();
