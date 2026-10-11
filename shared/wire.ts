@@ -433,29 +433,23 @@ export const Project = Schema.Struct({
   archived: Schema.Boolean,
 });
 export type Project = typeof Project.Type;
+/**
+ * One registered session: the sidebar's, palette's and router's only session list. Running state
+ * travels separately in `hosts`.
+ */
 export const SessionReference = Schema.Struct({
   cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
+  /** Registry identity of the session's directory (INV-07). */
+  workspaceId: Schema.String,
+  /** Git's branch for that directory from the last discovery; null when unknown, detached, non-Git or its folder is closed. */
+  branch: Schema.NullOr(Schema.String),
   projectId: Schema.optional(Schema.String), archived: Schema.Boolean,
+  createdAt: Schema.String,
   /** Registry's last-update time, so a project's recency follows its members. */
-  updatedAt: Schema.optional(Schema.String),
+  updatedAt: Schema.String,
   unavailable: Schema.optional(Schema.Literals(["history", "checkout"])),
 });
 export type SessionReference = typeof SessionReference.Type;
-
-export const SessionInfo = Schema.Struct({
-  sessionId: Schema.String,
-  workspaceId: Schema.String,
-  /** Directory the session runs in: the folder root or one of its worktrees. */
-  cwd: Schema.String,
-  /** Branch of that worktree; empty for the folder root. */
-  branch: Schema.String,
-  title: Schema.optional(Schema.String),
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
-  hosted: Schema.Boolean,
-  streaming: Schema.Boolean,
-});
-export type SessionInfo = typeof SessionInfo.Type;
 
 /** What picking a worktree needs, from Git; not exact revisions or verification evidence. */
 export const WorktreeFacts = Schema.Struct({
@@ -494,8 +488,6 @@ export const FolderView = Schema.Struct({
   /** Explicitly selected directories only; discovery does not register anything. */
   worktrees: Schema.Array(WorktreeView),
   discovery: WorktreeDiscovery,
-  /** All of the folder's sessions across its worktrees, most recent first. */
-  sessions: Schema.Array(SessionInfo),
 });
 export type FolderView = typeof FolderView.Type;
 

@@ -1,10 +1,12 @@
 /**
  * The session catalog: which sessions exist and how each one appears. The sidebar groups it,
- * the command palette ranks it, and routing and the document title look sessions up in it,
- * instead of each joining the registry references, folder rows and host broadcast themselves.
+ * the command palette ranks it, and routing and the document title look sessions up in it.
+ * Each entry is one registry reference, placed in its open folder and joined with the host
+ * broadcast, the only source of running state.
  */
 import type { FolderView, Project, SessionReference } from "@shared/wire";
 import { type AppState, sessionKey } from "../store.ts";
+import { findProject } from "./projectCommands.ts";
 
 /** Working: Pi is streaming. Done: finished while not on screen. Idle: running, waiting. Off: no process. */
 export type SessionActivity = "working" | "done" | "idle" | "off";
@@ -13,8 +15,8 @@ export interface SessionEntry {
   cwd: string;
   sessionId: string;
   title: string | undefined;
-  createdAt: string | undefined;
-  updatedAt: string | undefined;
+  createdAt: string;
+  updatedAt: string;
   /** The registered folder holding the session's directory; undefined once that folder is closed. */
   folderPath: string | undefined;
   /** The folder's name, else the directory's last segment. */
@@ -51,33 +53,24 @@ const HINTS = {
 function entries(state: AppState): SessionEntry[] {
   const folderOf = new Map<string, FolderView>();
   for (const f of state.folders) for (const w of f.worktrees) folderOf.set(w.path, f);
-  const listedInfo = new Map(state.folders.flatMap(f => f.sessions).map(s => [sessionKey(s), s]));
-  const projects = new Map(state.projects.map(p => [p.id, p]));
   const hosts = new Map(state.hosts.map(h => [sessionKey(h), h]));
   const done = new Set(state.done);
   const current = state.session ?? state.selecting;
-  // Every reference, then any folder row the registry has not referenced (a stale broadcast).
-  const known = new Set(state.sessionReferences.map(sessionKey));
-  const rows: Array<SessionReference & { createdAt?: string }> = [
-    ...state.sessionReferences,
-    ...[...listedInfo.values()].filter(s => !known.has(sessionKey(s))).map(s => ({ ...s, archived: false })),
-  ];
-  return rows.map(ref => {
+  return state.sessionReferences.map(ref => {
     const key = sessionKey(ref);
-    const info = listedInfo.get(key);
     const folder = folderOf.get(ref.cwd);
     const checkout = folder?.worktrees.find(w => w.path === ref.cwd);
-    const project = ref.projectId ? projects.get(ref.projectId) : undefined;
+    const project = findProject(state, ref.projectId);
     const host = hosts.get(key);
     return {
       cwd: ref.cwd,
       sessionId: ref.sessionId,
-      title: ref.title ?? info?.title,
-      createdAt: info?.createdAt ?? ref.createdAt,
-      updatedAt: ref.updatedAt ?? info?.updatedAt,
+      title: ref.title,
+      createdAt: ref.createdAt,
+      updatedAt: ref.updatedAt,
       folderPath: folder?.path,
       folder: folder?.name ?? ref.cwd.split("/").pop() ?? ref.cwd,
-      branch: info?.branch ?? checkout?.branch ?? "",
+      branch: ref.branch ?? "",
       inWorktree: !!checkout && !checkout.root,
       projectId: ref.projectId,
       project,
@@ -95,6 +88,11 @@ function entries(state: AppState): SessionEntry[] {
 /** Every session that is not archived, display-ready. `listed` says which ones the sidebar shows. */
 export function sessionCatalog(state: AppState): SessionEntry[] {
   return entries(state).filter(s => !s.archived);
+}
+
+/** The palette's order: every session that is not archived, newest created first, wherever its folder is. */
+export function recentSessions(state: AppState): SessionEntry[] {
+  return sessionCatalog(state).sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
 }
 
 /** One session by its ID, archived or not: what a `/s/<id>` address resolves to. */

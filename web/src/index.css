@@ -308,6 +308,18 @@
   background: var(--selected);
 }
 
+/* Session navigation has its own reading scale; menus portaled outside it keep theirs. */
+[data-slot="session-sidebar"] {
+  --type-label: 0.9375rem;
+  --type-caption: 0.8125rem;
+}
+@media (width < 48rem) {
+  [data-slot="session-sidebar"] {
+    --type-label: 1.0625rem;
+    --type-caption: 0.9375rem;
+  }
+}
+
 /* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */
 .prose-chat {
   overflow-wrap: anywhere;

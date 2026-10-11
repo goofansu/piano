@@ -8,6 +8,7 @@
  * and a GET has no body.
  */
 import { Schema } from "effect";
+import { McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { RadiusSetupState } from "./radius.ts";
 import {
   DirListing,
@@ -85,6 +86,7 @@ const RadiusSetupRequest = Schema.Union([
 ]);
 
 const RadiusReply = Schema.Struct({ state: RadiusSetupState });
+const McpReply = Schema.Struct({ state: McpSetupState });
 const LoginReply = Schema.Struct({ state: Schema.NullOr(ProviderLoginState) });
 const loginFallback = "Could not complete sign-in.";
 const loginInvalid = "Invalid sign-in request.";
@@ -139,11 +141,16 @@ export const Endpoints = {
 
   // Composer
 
-  /** A live session answers from its own child; otherwise the directory's probe does. */
+  /** Before a session starts: the directory's probe answers. The path travels in the body. */
   slashCommands: endpoint({
     method: "POST", path: "/api/commands",
-    body: Schema.Struct({ cwd: Schema.String, sessionId: Schema.optional(Schema.String) }), invalid: "Directory is required.",
+    body: Schema.Struct({ cwd: Schema.String }), invalid: "Directory is required.",
     response: Schema.Struct({ commands: Schema.Array(SlashCommand) }), fallback: "Could not load commands.",
+  }),
+  /** A running session answers from its own child; a stopped one is never started to answer (409). */
+  sessionCommands: endpoint({
+    method: "GET", path: "/api/session/commands", query: ["workspaceId", "sessionId"],
+    response: Schema.Struct({ commands: Schema.Array(SlashCommand) }), noStore: true, fallback: "Could not load commands.",
   }),
 
   // Settings
@@ -161,6 +168,15 @@ export const Endpoints = {
     method: "POST", path: "/api/settings/radius",
     body: RadiusSetupRequest, invalid: "Invalid Radius setup action.",
     response: RadiusReply, noStore: true, fallback: "Could not load Radius setup.",
+  }),
+  mcpSetup: endpoint({
+    method: "GET", path: "/api/settings/mcp",
+    response: McpReply, noStore: true, fallback: "Could not load MCP servers.",
+  }),
+  changeMcpSetup: endpoint({
+    method: "POST", path: "/api/settings/mcp",
+    body: McpSetupRequest, invalid: "Invalid MCP setup action.",
+    response: McpReply, noStore: true, fallback: "Could not change MCP setup.",
   }),
   oauthProviders: endpoint({
     method: "GET", path: "/api/oauth-providers",
@@ -191,6 +207,28 @@ export const Endpoints = {
   }),
   cancelProviderLogin: endpoint({
     method: "DELETE", path: "/api/provider-login",
+    body: Schema.Struct({ id: Schema.String }), invalid: loginInvalid,
+    response: LoginReply, noStore: true, fallback: loginFallback,
+  }),
+
+  // MCP server sign-in: the same attempt shape as provider sign-in, run by Pi's MCP OAuth.
+
+  mcpLoginState: endpoint({
+    method: "GET", path: "/api/settings/mcp/login",
+    response: LoginReply, noStore: true, fallback: loginFallback,
+  }),
+  startMcpLogin: endpoint({
+    method: "POST", path: "/api/settings/mcp/login",
+    body: Schema.Struct({ server: Schema.String }), invalid: loginInvalid,
+    response: LoginReply, noStore: true, fallback: loginFallback,
+  }),
+  answerMcpLogin: endpoint({
+    method: "PUT", path: "/api/settings/mcp/login",
+    body: Schema.Struct({ id: Schema.String, promptId: Schema.String, value: Schema.String.check(Schema.isMaxLength(16_384)) }), invalid: loginInvalid,
+    response: LoginReply, noStore: true, fallback: loginFallback,
+  }),
+  cancelMcpLogin: endpoint({
+    method: "DELETE", path: "/api/settings/mcp/login",
     body: Schema.Struct({ id: Schema.String }), invalid: loginInvalid,
     response: LoginReply, noStore: true, fallback: loginFallback,
   }),

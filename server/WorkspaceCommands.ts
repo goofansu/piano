@@ -3,7 +3,7 @@
  * and add worktrees, trust a folder, and create, prompt, rename, archive and delete sessions.
  * Registry holds references only (INV-01); SessionHosts owns the single child per session
  * (INV-02); Worktrees owns Git and Worktrunk; Pi's trust store owns trust. The requesting
- * client's SessionViewer attaches what it opens, through `SessionClient`.
+ * client's ClientSessions attaches what it opens, through `SessionClient`.
  */
 import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer } from "effect";

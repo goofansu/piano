@@ -7,16 +7,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DefaultPackageManager, type McpServerConfig, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-// Pi 1.1.0 has no public provider-auth configuration writer. Keep this pinned
-// compatibility dependency here; RadiusSetup tests exercise the installed helper.
-// Do not reproduce Pi's config loader or move configuration into Registry (INV-01/12).
-import { addMcpServerConfig, loadMcpConfig, removeMcpServerConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
 import type { RadiusSetupState, RadiusSetupStep } from "../shared/radius.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
+import { type McpCatalogEntry, McpConfigEntries } from "./McpConfigEntries.ts";
 import { agentDir } from "./PiEnv.ts";
 import { runAsync, SubprocessError } from "./Subprocess.ts";
 
-const RADIUS_MCP_URL = "https://radius.pi.dev/mcp";
+const RADIUS_MCP: McpCatalogEntry = { id: "radius", name: "Radius", url: "https://radius.pi.dev/mcp" };
 const PACKAGE = "npm:@earendil-works/pi-radius-web-search";
 const isWebSearch = (source: string) => source === PACKAGE || source.startsWith(`${PACKAGE}@`);
 const removalKey = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -56,46 +53,24 @@ export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* ()
   const environment = yield* RadiusSetupEnvironment;
   const facts = yield* DirectoryFacts;
   const invalidate = () => Effect.runPromise(facts.invalidate);
-  /** Runs a synchronous configuration change; `changed()` marks that Pi's files were written. */
-  const writing = <A>(change: (changed: () => void) => A, detail: string) => Effect.suspend(() => {
-    let wrote = false;
-    return Effect.try({ try: () => change(() => { wrote = true; }), catch: () => new RadiusSetupError({ detail }) })
-      .pipe(Effect.ensuring(Effect.suspend(() => wrote ? facts.invalidate : Effect.void)));
-  });
   let installation: RadiusSetupState["installation"] = { status: "idle" };
   let pending: { action: "install" | "uninstall"; key?: string; abort: AbortController; done: Promise<void> } | undefined;
   const directory = environment.directory();
+  const entries = yield* McpConfigEntries(directory);
   const settings = () => {
     const manager = SettingsManager.create(directory, directory, { projectTrusted: false });
     if (manager.drainErrors().length) throw new Error("Could not read Pi settings.");
     return manager;
   };
-  const mcp = () => {
-    const loaded = loadMcpConfig({ agentDir: directory, cwd: directory, projectTrusted: false });
-    if (loaded.errors.length) throw new Error("Check Pi's global mcp.json before setting up Radius.");
-    const matches = loaded.servers.filter(entry => "url" in entry.config && entry.config.url.replace(/\/+$/, "") === RADIUS_MCP_URL);
-    if (matches.length > 1) throw new Error("Multiple Radius MCP entries exist. Choose one in Pi before continuing.");
-    const entry = matches[0] ?? loaded.servers.find(entry => entry.name === "radius");
-    if (entry && !("url" in entry.config && entry.config.url.replace(/\/+$/, "") === RADIUS_MCP_URL)) {
-      throw new Error("An unrelated MCP server is named radius. Rename it in Pi before continuing.");
-    }
-    return entry;
-  };
+  /** Radius's policy: Pi sends the `radius` provider token, never OAuth or a fixed Authorization header. */
+  const configured = (config: McpServerConfig) => "url" in config && config.auth?.provider === "radius" && !config.oauth
+    && !Object.keys(config.headers ?? {}).some(key => key.toLowerCase() === "authorization");
   const mcpStep = (): RadiusSetupStep => {
-    try {
-      const entry = mcp();
-      const identity = entry ? { removalKey: removalKey([entry.name, entry.config]) } : {};
-      if (settings().getGlobalSettings().extensions?.includes("-builtin:mcp") || entry?.config.enabled === false || entry?.config.exposure === "hidden") {
-        return { status: "blocked", ...identity, detail: "Radius MCP is disabled or hidden in Pi. Enable it in Pi before continuing." };
-      }
-      if (!entry) return { status: "missing" };
-      const config = entry.config;
-      const configured = "url" in config && config.auth?.provider === "radius" && !config.oauth
-        && !Object.keys(config.headers ?? {}).some(key => key.toLowerCase() === "authorization");
-      return { status: configured ? "ready" : "missing", ...identity };
-    } catch {
-      return { status: "blocked", detail: "Check Pi's global MCP configuration for invalid or conflicting entries before continuing." };
-    }
+    const observed = entries.observe(RADIUS_MCP);
+    if (observed.status === "missing") return { status: "missing" };
+    const identity = observed.removalKey ? { removalKey: observed.removalKey } : {};
+    if (observed.status === "blocked") return { status: "blocked", ...identity, detail: observed.detail };
+    return { status: configured(observed.entry.config) ? "ready" : "missing", ...identity };
   };
   const packageState = () => {
     const manager = settings();
@@ -161,34 +136,23 @@ export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* ()
   });
   return RadiusSetup.of({
     state: Effect.sync(snapshot),
-    configureMcp: writing(changed => {
-      const step = mcpStep();
-      if (step.status === "blocked") throw new Error(step.detail);
-      if (step.status !== "ready") {
-        const existing = mcp();
-        const config: McpServerConfig = { ...(existing?.config ?? {}), url: RADIUS_MCP_URL, auth: { provider: "radius" } };
-        if ("url" in config) {
-          delete config.oauth;
-          if (config.headers) config.headers = Object.fromEntries(Object.entries(config.headers).filter(([key]) => key.toLowerCase() !== "authorization"));
-        }
-        // Synchronous read/merge/write: no await at which another Piano tab can
-        // replace the entry. The Pi helper retains unrelated keys and indentation.
-        changed();
-        addMcpServerConfig(join(directory, "mcp.json"), existing?.name ?? "radius", config);
+    configureMcp: entries.save(RADIUS_MCP, existing => {
+      if (existing && configured(existing.config)) return undefined;
+      // Keep the user's other keys; drop only credentials that would compete with provider auth.
+      const config: McpServerConfig = { ...(existing?.config ?? {}), url: RADIUS_MCP.url, auth: { provider: "radius" } };
+      if ("url" in config) {
+        delete config.oauth;
+        if (config.headers) config.headers = Object.fromEntries(Object.entries(config.headers).filter(([key]) => key.toLowerCase() !== "authorization"));
       }
-      const state = snapshot();
-      if (state.mcp.status !== "ready") throw new Error("Configuration was not saved.");
-      return state;
-    }, "Could not configure Radius MCP. Check Pi's global configuration and file permissions, then refresh."),
+      return config;
+    }).pipe(
+      Effect.map(snapshot),
+      Effect.filterOrFail(state => state.mcp.status === "ready", () => undefined),
+      Effect.mapError(() => new RadiusSetupError({ detail: "Could not configure Radius MCP. Check Pi's global configuration and file permissions, then refresh." }))),
     installWebSearch: changePackage("install"),
     uninstallWebSearch: key => changePackage("uninstall", key),
-    removeMcp: key => writing(changed => {
-      const entry = mcp();
-      if (!entry || !key || removalKey([entry.name, entry.config]) !== key) throw new Error("MCP configuration changed since confirmation.");
-      changed();
-      removeMcpServerConfig(join(directory, "mcp.json"), entry.name);
-      if (mcp()) throw new Error("MCP removal not verified.");
-      return snapshot();
-    }, "Could not remove Radius MCP. Its configuration may have changed. Refresh and confirm again."),
+    removeMcp: key => entries.remove(RADIUS_MCP, key).pipe(
+      Effect.map(snapshot),
+      Effect.mapError(() => new RadiusSetupError({ detail: "Could not remove Radius MCP. Its configuration may have changed. Refresh and confirm again." }))),
   });
 }));

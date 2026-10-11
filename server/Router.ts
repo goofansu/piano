@@ -5,17 +5,21 @@ import { Cause, Data, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type Endpoint, Endpoints, type IdParam, type Json } from "../shared/http.ts";
 import type { RadiusSetupState } from "../shared/radius.ts";
-import type { DirListing, ProviderLoginState, Workspace } from "../shared/wire.ts";
+import type { DirListing, Workspace } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
+import { errorText } from "./ErrorText.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
+import { McpSetup, type McpSetupError } from "./McpSetup.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup, type RadiusSetupError } from "./RadiusSetup.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
+import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { SidebarView } from "./SidebarView.ts";
+import type { SignInError, SignInState } from "./SignInAttempts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
@@ -74,8 +78,7 @@ const failAs = (status: number, fallback: string | ((error: unknown) => string))
     return fail(status, typeof fallback === "string" ? fallback : fallback(error));
   }));
 
-const detailOr = (fallback: string) => (error: unknown) =>
-  error && typeof error === "object" && "detail" in error && typeof error.detail === "string" ? error.detail : fallback;
+const detailOr = (fallback: string) => (error: unknown) => errorText(error, fallback);
 
 /** What a handler receives: the decoded body, and the registered workspace and session its IDs name. */
 type Input<Q extends IdParam, B extends Json | undefined> =
@@ -166,13 +169,20 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.changeSessionPullRequest, ({ session, body }) =>
       Effect.flatMap(SessionPullRequests, prs => prs.change(session, body)).pipe(pullRequestFailure));
 
+    const commandsFailure = failAs(502, "Could not load commands. Reopen the suggestions to retry.");
     yield* serve(Endpoints.slashCommands, ({ body }) => Effect.gen(function* () {
       if (!body.cwd) return yield* fail(400, Endpoints.slashCommands.invalid);
       const facts = yield* DirectoryFacts;
-      return { commands: yield* facts.commands(body.cwd, body.sessionId) };
-    }).pipe(
-      Effect.catchTag("DirectoryCommandsError", error => fail(error.reason === "stopped" ? 409 : 502, error.detail)),
-      failAs(502, "Could not load commands. Reopen the suggestions to retry.")));
+      return { commands: yield* facts.commands(body.cwd) };
+    }).pipe(Effect.catchTag("DirectoryCommandsError", error => fail(502, error.detail)), commandsFailure));
+    // INV-02: discovery asks the running child and never opens a saved session or a second writer.
+    yield* serve(Endpoints.sessionCommands, ({ session }) => Effect.gen(function* () {
+      const running = yield* Effect.flatMap(SessionHosts, hosts => hosts.get(session.cwd, session.sessionId));
+      if (!running) return yield* fail(409, "Session is no longer running. Reopen the suggestions.");
+      const result = yield* running.act({ _tag: "commands" });
+      if (result?._tag !== "commands") return yield* fail(502, "Command catalog unavailable.");
+      return { commands: result.commands };
+    }).pipe(commandsFailure));
 
     yield* serve(Endpoints.saveDefaults, ({ body }) =>
       Effect.flatMap(PiSettings, settings => settings.saveDefaults(body)).pipe(
@@ -190,23 +200,33 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.radiusSetup, () => Effect.flatMap(RadiusSetup, setup => setup.state).pipe(Effect.map(state => ({ state }))), { redact: false });
     yield* serve(Endpoints.changeRadiusSetup, ({ body }) => radiusAction(body).pipe(Effect.map(state => ({ state })), Effect.catchTag("RadiusSetupError", error => fail(409, error.detail))), { redact: false });
 
+    const mcp = <A>(step: (setup: McpSetup["Service"]) => Effect.Effect<A, McpSetupError>) => Effect.flatMap(McpSetup, step).pipe(
+      Effect.map(state => ({ state })), Effect.catchTag("McpSetupError", error => fail(409, error.detail)));
+    yield* serve(Endpoints.mcpSetup, () => mcp(setup => setup.state), { redact: false });
+    yield* serve(Endpoints.changeMcpSetup, ({ body }) => mcp(setup => setup.change(body)), { redact: false });
+
     yield* serve(Endpoints.oauthProviders, () =>
       Effect.flatMap(ProviderLogin, login => login.providers).pipe(Effect.map(providers => ({ providers })), failAs(502, "Could not load OAuth providers.")));
 
+    // A refused sign-in request answers with its own detail; SignInAttempts keeps token responses out of it (INV-11).
+    const signInFailure = <A, R>(effect: Effect.Effect<A, SignInError, R>) => effect.pipe(
+      Effect.catchTag("SignInError", error => fail(409, error.detail)),
+      failAs(409, "Sign-in request could not be completed. Resume the current sign-in or try again."));
+
     yield* serve(Endpoints.providerLogout, ({ body }) =>
-      Effect.flatMap(ProviderLogin, login => login.signOut(body.provider)).pipe(
-        Effect.as({ ok: true as const }), failAs(409, "Could not sign out. Finish any sign-in in progress and try again.")));
+      Effect.flatMap(ProviderLogin, login => login.signOut(body.provider)).pipe(Effect.as({ ok: true as const }), signInFailure));
 
     // Credential values and callback URLs travel only in bodies. This global
     // operation creates no session and owns no conversation history.
-    const login = <E>(step: (login: ProviderLogin["Service"]) => Effect.Effect<ProviderLoginState | null, E>) =>
-      Effect.flatMap(ProviderLogin, step).pipe(
-        Effect.map(state => ({ state })),
-        failAs(409, "Sign-in request could not be completed. Resume the current sign-in or try again."));
-    yield* serve(Endpoints.providerLoginState, () => login(l => l.state), { redact: false });
-    yield* serve(Endpoints.startProviderLogin, ({ body }) => login(l => l.start(body.provider)), { redact: false });
-    yield* serve(Endpoints.answerProviderLogin, ({ body }) => login(l => l.answer(body.id, body.promptId, body.value)), { redact: false });
-    yield* serve(Endpoints.cancelProviderLogin, ({ body }) => login(l => l.cancel(body.id)), { redact: false });
+    const login = <R>(step: Effect.Effect<SignInState | null, SignInError, R>) => step.pipe(Effect.map(state => ({ state })), signInFailure);
+    yield* serve(Endpoints.providerLoginState, () => login(Effect.flatMap(ProviderLogin, l => l.state)), { redact: false });
+    yield* serve(Endpoints.startProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.start(body.provider))), { redact: false });
+    yield* serve(Endpoints.answerProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.answer(body.id, body.promptId, body.value))), { redact: false });
+    yield* serve(Endpoints.cancelProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.cancel(body.id))), { redact: false });
+    yield* serve(Endpoints.mcpLoginState, () => login(Effect.flatMap(McpSetup, setup => setup.login)), { redact: false });
+    yield* serve(Endpoints.startMcpLogin, ({ body }) => login(Effect.flatMap(McpSetup, setup => setup.startLogin(body.server))), { redact: false });
+    yield* serve(Endpoints.answerMcpLogin, ({ body }) => login(Effect.flatMap(McpSetup, setup => setup.answerLogin(body.id, body.promptId, body.value))), { redact: false });
+    yield* serve(Endpoints.cancelMcpLogin, ({ body }) => login(Effect.flatMap(McpSetup, setup => setup.cancelLogin(body.id))), { redact: false });
 
     // Image bytes, not JSON: outside the endpoint table. The ID is a content hash, never a path.
     yield* router.add("GET", "/api/image-previews/:id", Effect.gen(function* () {

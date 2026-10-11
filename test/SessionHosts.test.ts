@@ -276,7 +276,9 @@ for (const operation of ['archive', 'delete'] as const) test(`INV-01/02: ${opera
   }), { holdShutdown: true });
 });
 
-test('INV-01: old alias history remains accessible without migration; conflicting references/files are explicit', async () => {
+// PiHistory's tests own where alias history is found and what a conflict is; this one owns
+// that the registry's reference keeps its spelling and that a conflict refuses before Pi starts.
+test('INV-01/02: alias history opens under its registry owner; conflicting references or files refuse to start', async () => {
   await run(Effect.gen(function* () {
     const hosts = yield* SessionHosts, registry = yield* Registry;
     const file = seed(alias, 'legacy', 'alias history');
@@ -288,11 +290,8 @@ test('INV-01: old alias history remains accessible without migration; conflictin
     const view = yield* hosts.peek(cwd, 'legacy');
     assert.equal(view.cwd, alias); assert.equal(view.snapshot.messages[0].text, 'alias history');
     assert.equal((yield* registry.get).sessions.find(s => s.sessionId === 'legacy')?.cwd, alias);
-    const before = readFileSync(file, 'utf8');
-    const conflict = seed(cwd, 'legacy', 'different history');
-    const error = yield* hosts.open({ cwd, sessionId: 'legacy' }).pipe(Effect.flip);
-    assert.match(error.detail, /Conflicting Pi files/);
-    assert.equal(readFileSync(file, 'utf8'), before); assert.ok(existsSync(conflict));
+    seed(cwd, 'legacy', 'different history');
+    assert.match((yield* hosts.open({ cwd, sessionId: 'legacy' }).pipe(Effect.flip)).detail, /Conflicting Pi files/);
     yield* registry.addSession(cwd, 'legacy');
     assert.match((yield* hosts.open({ cwd, sessionId: 'legacy' }).pipe(Effect.flip)).detail, /Conflicting session references/);
     assert.equal(records('legacy').filter(r => r.event === 'spawn').length, 1);

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { pickCommands, SESSION_HEADER_COMMANDS, SESSION_ROW_COMMANDS, type SessionCommandId, sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
 const worktree = (path: string, branch: string | null): WorktreeView => ({
@@ -12,7 +13,6 @@ const folder: FolderView = {
   path: "/repo", name: "repo",
   worktrees: [worktree("/repo", "main"), worktree("/work/repo.feature", "feature")],
   discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
-  sessions: [],
 };
 const session = (cwd: string, state: Partial<SessionState> = {}): SessionView => ({
   cwd, sessionId: "s1", hosted: true, cursor: null, state: { sessionId: "s1", ...state } as SessionState, messages: [], dialogs: [],
@@ -20,7 +20,7 @@ const session = (cwd: string, state: Partial<SessionState> = {}): SessionView =>
 const base: AppState = {
   ...initialState, connected: true, selectionId: "sel", view: { kind: "session" },
   folders: [folder], workspaces: [ws("/repo"), ws("/work/repo.feature")],
-  sessionReferences: [{ cwd: "/work/repo.feature", sessionId: "s1", archived: false }, { cwd: "/repo", sessionId: "s2", archived: false }],
+  sessionReferences: [sessionReference("/work/repo.feature", "s1"), sessionReference("/repo", "s2")],
   session: session("/work/repo.feature"),
 };
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
@@ -50,7 +50,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
 
   const missing = enabled({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) });
   assert.deepEqual([missing.rename, missing.changes, missing["new-session-here"], missing.archive, missing.delete], [false, false, false, true, true]);
-  const missingRow = enabled({ ...base, sessionReferences: [{ ...other, archived: false, unavailable: "checkout" }] }, other);
+  const missingRow = enabled({ ...base, sessionReferences: [sessionReference(other.cwd, other.sessionId, { title: other.title, unavailable: "checkout" })] }, other);
   assert.deepEqual(missingRow, { rename: false, archive: true, delete: true });
 
   const noWorkspace = enabled({ ...base, workspaces: [] });

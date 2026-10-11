@@ -5,7 +5,7 @@
  * record's fields itself.
  */
 import { Schema } from 'effect';
-import type { Dialog, QueuedMessage, RenderMsg, RunUsage, SessionEvent, SessionState, SubagentCard, ToolExecution, Usage } from '../shared/wire.ts';
+import type { Dialog, ModelChoice, QueuedMessage, RenderMsg, RunUsage, SessionEvent, SessionState, SubagentCard, ThinkingLevel, ToolExecution, Usage } from '../shared/wire.ts';
 import { SlashCommand } from '../shared/wire.ts';
 import { projectDisplay, redactDisplay } from './DisplayProjection.ts';
 import { imagePreview } from './ImagePreviews.ts';
@@ -326,6 +326,58 @@ export const commandsOf = (data: unknown): ReadonlyArray<SlashCommand> | undefin
     });
   }
   return [...unique.values()];
+};
+
+/** One entry of Pi's `get_available_models` reply; other fields stay in Pi. */
+const RawModel = Schema.Struct({
+  provider: Schema.String,
+  id: Schema.String,
+  name: Schema.optional(Schema.String),
+  reasoning: Schema.optional(Schema.Boolean),
+  contextWindow: Schema.Number,
+  /** Pi's per-model effort table: null disables a level, a value enables xhigh or max. */
+  thinkingLevelMap: Schema.optional(Schema.Record(Schema.String, Schema.NullOr(Schema.String))),
+});
+type RawModel = typeof RawModel.Type;
+
+const LEVELS: ReadonlyArray<ThinkingLevel> = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+/** The rule Pi applies (pi-ai getSupportedThinkingLevels): a non-reasoning model only has off; a level mapped to null is out; xhigh and max need an explicit mapping. */
+const thinkingLevelsOf = (m: RawModel): ThinkingLevel[] => !m.reasoning ? ['off'] : LEVELS.filter((level) => {
+  const mapped = m.thinkingLevelMap?.[level];
+  if (mapped === null) return false;
+  if (level === 'xhigh' || level === 'max') return mapped !== undefined;
+  return true;
+});
+
+/** Pi's `enabledModels` patterns, matched case-insensitively against `provider/id` or the bare id; `*` is a wildcard. */
+function enabledMatcher(patterns: ReadonlyArray<string>): (ref: string, id: string) => boolean {
+  const tests = patterns.map((p) => {
+    const lowered = p.toLowerCase();
+    if (lowered.includes('*')) {
+      const re = new RegExp(`^${lowered.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
+      return (ref: string, id: string) => re.test(ref) || re.test(id);
+    }
+    return (ref: string, id: string) => ref === lowered || id === lowered;
+  });
+  return (ref, id) => tests.some((t) => t(ref.toLowerCase(), id.toLowerCase()));
+}
+
+/**
+ * Pi's `get_available_models` reply as the browser's model choices, in Pi's order: the efforts
+ * each model accepts and whether Pi's `enabledModels` setting scopes it in. Undefined when malformed.
+ */
+export const modelChoicesOf = (data: unknown, enabledPatterns: ReadonlyArray<string>): ReadonlyArray<ModelChoice> | undefined => {
+  const models = Schema.decodeUnknownOption(Schema.Struct({ models: Schema.Array(RawModel) }))(data);
+  if (models._tag === 'None') return;
+  const isEnabled = enabledMatcher(enabledPatterns);
+  return models.value.models.map((m): ModelChoice => {
+    const ref = `${m.provider}/${m.id}`;
+    return {
+      ref, provider: m.provider, id: m.id, name: m.name, reasoning: !!m.reasoning, contextWindow: m.contextWindow,
+      enabled: isEnabled(ref, m.id), thinkingLevels: thinkingLevelsOf(m),
+    };
+  });
 };
 
 // ── Live records ─────────────────────────────────────────────────────────────

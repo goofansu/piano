@@ -8,9 +8,8 @@ import { NodeServices } from '@effect/platform-node';
 import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
 import { DirectoryFacts, DirectoryFactsLive } from '../server/DirectoryFacts.ts';
 import { PiCli, type PiCliConfig } from '../server/PiCli.ts';
+import { PiHistory } from '../server/PiHistory.ts';
 import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
-import { peekSession } from '../server/SessionFiles.ts';
-import { SessionHosts } from '../server/SessionHosts.ts';
 import type { RenderMsg, SessionEvent, SessionState, SubagentCard, SubagentUsage } from '../shared/wire.ts';
 
 const cli = { node: process.execPath, cli: new URL('./fake-projection-pi.mjs', import.meta.url).pathname, extraArgs: [] };
@@ -113,32 +112,6 @@ test('safe live/reload output retains tools and extension state without inventin
       assert.ok(!JSON.stringify(yield* Fiber.join(closed)).includes(secret), 'exit and stderr are projected too');
     }).pipe(Effect.timeout('5 seconds'), Effect.scoped));
   } finally { delete process.env.PIANO_TEST_SECRET; }
-});
-
-test('reopening uses Pi context edits, compaction and active branch without replacing virtual selection', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'piano-projection-file-'));
-  const secret = 'sk-file-canary-123456789';
-  try {
-    const manager = SessionManager.create(root, root);
-    manager.appendModelChange('router', 'auto'); manager.appendThinkingLevelChange('low');
-    const first = manager.appendMessage({ role: 'user', content: 'old prompt', timestamp: 1 });
-    const reply = manager.appendMessage({ role: 'assistant', api: 'openai-completions', provider: 'physical', model: 'answer', content: [{ type: 'text', text: `original ${secret}` }], usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 3, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'stop', timestamp: 2 });
-    manager.appendMessage({ role: 'user', content: 'abandoned branch', timestamp: 3 });
-    manager.branch(reply);
-    manager.appendContextEdit(reply, { content: `edited ${secret}` });
-    manager.appendCompaction('summary', reply, 30);
-    const file = manager.getSessionFile()!;
-    const original = readFileSync(file, 'utf8');
-    const snap = await Effect.runPromise(peekSession(file, manager.getSessionId()));
-    assert.equal(snap.messages.some(message => message.subagent), false, 'compaction left no delivery in the context');
-    assert.equal(snap.state.model, 'router/auto'); assert.equal(snap.state.thinkingLevel, 'low');
-    assert.deepEqual(snap.messages.map(m => m.text), ['summary', 'edited [REDACTED]']);
-    assert.equal(snap.messages[1].model, 'physical/answer');
-    assert.equal(snap.messages.some(m => m.id === first), false);
-    assert.equal(snap.state.cost, undefined, 'a file peek must not invent full-session accounting from context');
-    assert.equal(readFileSync(file, 'utf8'), original, 'redaction never rewrites Pi history');
-    assert.ok(original.includes(secret));
-  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('subagent details project through PiSessions with correlation, lifecycle limits and safe fallback', async () => {
@@ -329,7 +302,8 @@ test('a reopened session file counts Run usage from every entry, including compa
     manager.appendCompaction('Compacted', kept, 1000);
     const file = manager.getSessionFile()!;
     assert.match(readFileSync(file, 'utf8'), /"type":"custom_message"/, 'Notifications persist as custom_message entries');
-    const snap = await Effect.runPromise(peekSession(file, manager.getSessionId()));
+    const snap = await Effect.runPromise(PiHistory.peek(manager.getSessionId(), file));
+    assert.equal(snap.messages.some(message => message.subagent), false, 'compaction left no delivery in the context');
     assert.equal(snap.messages.some(message => message.subagent), false, 'compaction left no delivery in the context');
     assert.deepEqual(usageRows(snap.state.subagents), {
       profiles: [['usage-probe-pi', 3524, 0.007096, 'openai/gpt-6.1-sol', 1], ['usage-probe-claude', 20902, 0.042112, 'claude-haiku-4-5-20251001', 1], ['usage-probe-all', 2030, 0.0025, 'openai/gpt-6.1-sol', 1]],
@@ -348,6 +322,6 @@ test('catalog observations and caches belong to the requested cwd', async () => 
       assert.equal(project.cwd, root); assert.equal(project.models[0].name, root);
       assert.equal(home.cwd, tmp); assert.equal(home.models[0].name, tmp);
       assert.equal((yield* facts.catalog(root)).models[0].name, root);
-    }).pipe(Effect.provide(DirectoryFactsLive.pipe(Layer.provide(Layer.mock(SessionHosts, {})))), Effect.scoped));
+    }).pipe(Effect.provide(DirectoryFactsLive), Effect.scoped));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

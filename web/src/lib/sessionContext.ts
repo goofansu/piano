@@ -7,6 +7,7 @@ import type { FolderView, Project, ProjectTrust, SessionClosure, SessionReferenc
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
+import { findProject } from "./projectCommands.ts";
 
 type SessionRef = { cwd: string; sessionId: string };
 
@@ -50,8 +51,8 @@ export function focusedDirectory(state: AppState): FocusedDirectory | undefined 
 /** Where slash completion discovers commands; a new revision invalidates pending discovery. */
 export interface CompletionTarget {
   cwd: string;
-  /** Only for a live child; discovery must not start a saved session. */
-  sessionId?: string;
+  /** Only for a live child, addressed by its registry IDs; discovery must not start a saved session. */
+  session?: { workspaceId: string; sessionId: string };
   revision: string;
 }
 
@@ -65,7 +66,10 @@ export function completionTarget(state: AppState): CompletionTarget | undefined 
   const session = state.view.kind === "session" ? state.session : null;
   if (!focus || !state.connected || (session && !sessionReady(state))) return undefined;
   const revision = [state.selectionId, session?.cursor?.generation, session?.hosted, directoryTrust(state, focus.cwd)?.trusted, state.catalogs[focus.cwd]?.fetchedAt].join(":");
-  return { cwd: focus.cwd, sessionId: session?.hosted ? session.sessionId ?? undefined : undefined, revision };
+  if (!session?.hosted || !session.sessionId) return { cwd: focus.cwd, revision };
+  // A running session answers only for itself; until its workspace is known there is nothing to ask.
+  const workspaceId = workspaceFor(state, session.cwd)?.id;
+  return workspaceId ? { cwd: focus.cwd, session: { workspaceId, sessionId: session.sessionId }, revision } : undefined;
 }
 
 /** The registry reference behind a session row, so membership is read from one place. */
@@ -74,8 +78,7 @@ export function sessionReference(state: AppState, session: SessionRef): SessionR
 }
 
 export function sessionProject(state: AppState, session: SessionRef | null | undefined): Project | undefined {
-  const id = session && sessionReference(state, session)?.projectId;
-  return id ? state.projects.find(p => p.id === id) : undefined;
+  return findProject(state, session && sessionReference(state, session)?.projectId);
 }
 
 /** Session actions go out only on a current, settled attachment. */
@@ -142,7 +145,7 @@ export function sessionContext(state: AppState): SessionContext {
   const checkout = folder?.worktrees.find(w => w.path === cwd);
   const folderName = folder?.name ?? cwd?.split("/").pop() ?? "";
   const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
-  const info = ref && (sessionReference(state, ref) ?? folder?.sessions.find(s => s.cwd === ref.cwd && s.sessionId === ref.sessionId));
+  const info = ref && sessionReference(state, ref);
   const workspace = workspaceFor(state, session?.cwd);
   const checkoutMissing = !!session?.state.checkoutMissing;
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;

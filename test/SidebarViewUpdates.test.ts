@@ -54,7 +54,7 @@ const run = <A, E>(git: ReturnType<typeof slowGit>, effect: Effect.Effect<A, E, 
 };
 const nextView = (view: SidebarView["Service"], match: (m: SidebarMessage) => boolean) =>
   view.subscribe.pipe(Effect.flatMap(s => s.pipe(Stream.filter(match), Stream.take(1), Stream.runCollect)), Effect.map(c => [...c][0]!));
-const titleOf = (m: SidebarMessage) => m.folders[0]?.sessions[0]?.title;
+const titleOf = (m: SidebarMessage) => m.sessionReferences?.[0]?.title;
 
 test("INV-06: changes during discovery coalesce into one more run; a late subscriber gets the latest view", async () => {
   const git = slowGit();
@@ -74,10 +74,10 @@ test("INV-06: changes during discovery coalesce into one more run; a late subscr
     git.release();
     const built = yield* Fiber.join(fresh);
     assert.equal(git.calls - before, 2, "the held run plus one run for everything that changed during it");
-    assert.equal(built.folders[0]?.sessions.length, 20);
+    assert.equal(built.sessionReferences?.length, 20);
 
     const late = yield* nextView(view, () => true);
-    assert.deepEqual(late.folders.map(f => [f.path, f.sessions.length]), [[first, 20]], "a late subscriber starts from the latest view");
+    assert.deepEqual([late.folders.map(f => f.path), late.sessionReferences?.length], [[first], 20], "a late subscriber starts from the latest view");
   }));
 });
 
@@ -122,6 +122,25 @@ test("INV-01: a registry write made outside any browser request reaches the side
     yield* registry.touchSession(first, "pi-named");
     const [, next] = [...(yield* Fiber.join(views))];
     const updatedAt = (yield* registry.get).sessions[0]?.updatedAt;
-    assert.equal(next?.folders[0]?.sessions[0]?.updatedAt, updatedAt, "the view after the statistics write is the touch");
+    assert.equal(next?.sessionReferences?.[0]?.updatedAt, updatedAt, "the view after the statistics write is the touch");
+  }));
+});
+
+test("INV-01/INV-07: a session reference keeps its registry creation time and workspace after its folder closes", async () => {
+  const git = slowGit();
+  await run(git, Effect.gen(function* () {
+    const registry = yield* Registry, view = yield* SidebarView;
+    yield* registry.addFolder(first);
+    yield* registry.addSession(first, "kept", "Kept");
+    const entry = (yield* registry.get).sessions[0]!;
+    const workspaceId = (yield* registry.get).workspaces.find(w => w.path === first)!.id;
+    const open = (yield* view.fresh).sessionReferences?.[0];
+    assert.deepEqual(open && [open.createdAt, open.workspaceId, open.branch], [entry.createdAt, workspaceId, null], "non-Git discovery knows no branch");
+
+    yield* registry.removeFolder(first);
+    const closed = yield* view.fresh;
+    assert.deepEqual(closed.folders, []);
+    const ref = closed.sessionReferences?.[0];
+    assert.deepEqual(ref && [ref.sessionId, ref.createdAt, ref.workspaceId, ref.branch], ["kept", entry.createdAt, workspaceId, null]);
   }));
 });

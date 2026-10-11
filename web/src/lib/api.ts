@@ -9,6 +9,7 @@
 import { Schema } from "effect";
 // Relative so module tests can load the Schemas under plain Node, which has no `@shared` alias.
 import { type Endpoint, Endpoints, type IdParam, type Json, type RadiusSetupAction } from "../../../shared/http.ts";
+import type { McpSetupRequest } from "../../../shared/mcp.ts";
 import type { SessionPullRequestAction, ThinkingLevel } from "../../../shared/wire.ts";
 
 export type { RadiusSetupAction };
@@ -91,9 +92,13 @@ export const sessionPullRequest = (workspaceId: string, sessionId: string, actio
 
 // Composer
 
-/** A live session answers from its own child; otherwise the directory's probe does. */
-export const slashCommands = async (cwd: string, sessionId: string | undefined, options?: RequestOptions) =>
-  (await call(Endpoints.slashCommands, { body: { cwd, sessionId } }, options)).commands;
+/** Before a session starts, from the directory's probe. */
+export const slashCommands = async (cwd: string, options?: RequestOptions) =>
+  (await call(Endpoints.slashCommands, { body: { cwd } }, options)).commands;
+
+/** From the running session's own child; fails with 409 once it has stopped. */
+export const sessionCommands = async (workspaceId: string, sessionId: string, options?: RequestOptions) =>
+  (await call(Endpoints.sessionCommands, { query: { workspaceId, sessionId } }, options)).commands;
 
 export const saveDefaults = async (model: string | undefined, thinkingLevel: ThinkingLevel, options?: RequestOptions) =>
   (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;
@@ -122,6 +127,19 @@ export const providerLogin = async (request: ProviderLoginRequest = { method: "G
     case "DELETE": return (await call(Endpoints.cancelProviderLogin, request, options)).state;
   }
 };
+
+/** The same sign-in attempt as providers', run by Pi's MCP OAuth for a catalog server. */
+export const mcpLogin = async (request: ProviderLoginRequest = { method: "GET" }, options?: RequestOptions) => {
+  switch (request.method) {
+    case "GET": return (await call(Endpoints.mcpLoginState, {}, options)).state;
+    case "POST": return (await call(Endpoints.startMcpLogin, { body: { server: request.body.provider } }, options)).state;
+    case "PUT": return (await call(Endpoints.answerMcpLogin, request, options)).state;
+    case "DELETE": return (await call(Endpoints.cancelMcpLogin, request, options)).state;
+  }
+};
+
+export const mcpSetup = async (request?: McpSetupRequest, options?: RequestOptions) =>
+  (request ? await call(Endpoints.changeMcpSetup, { body: request }, options) : await call(Endpoints.mcpSetup, {}, options)).state;
 
 export const radiusSetup = async (action?: { action: RadiusSetupAction; removalKey?: string }, options?: RequestOptions) =>
   (action

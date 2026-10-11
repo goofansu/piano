@@ -126,7 +126,7 @@ export function AppLayout({ layout, navigation, navigationTitle, content, childr
         )}
       </aside>
       <Sheet open={layout.mobileOpen} onOpenChange={open => { if (open) layout.show(); else layout.closeMobile(); }}>
-        <SheetContent side="left" className="h-dvh w-full border-0 bg-surface-0 p-0 sm:max-w-none" showCloseButton={false} aria-describedby={undefined}
+        <SheetContent side="left" className="h-dvh w-full border-0 bg-surface-0 p-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:max-w-none" showCloseButton={false} aria-describedby={undefined}
           onOpenAutoFocus={event => { event.preventDefault(); (event.currentTarget as HTMLElement | null)?.focus(); }}
           onCloseAutoFocus={event => {
             event.preventDefault();

@@ -4,12 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer, type Scope } from "effect";
+import { Effect, Layer } from "effect";
 import { DirectoryCommandsError, DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
-import { RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 
 // HOME is the scratch root, so `~/checkout` and the absolute path name one directory.
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-facts-")));
@@ -21,19 +19,17 @@ process.env.PI_CODING_AGENT_DIR = join(root, "agent");
 process.env.PI_CODING_AGENT_SESSION_DIR = join(root, "sessions");
 after(() => { process.env.HOME = previousHome; rmSync(root, { recursive: true, force: true }); });
 
-let databases = 0;
 /** The real module over the fake Pi child; `probes()` counts Pi probes, the observable cost of a cache miss. */
-const run = <A, E>(work: (facts: DirectoryFacts["Service"], probes: () => number) => Effect.Effect<A, E, SessionHosts | Scope.Scope>) => {
+const run = <A, E>(work: (facts: DirectoryFacts["Service"], probes: () => number) => Effect.Effect<A, E>) => {
   let probes = 0;
   const counted = Layer.effect(PiSessions, Effect.map(PiSessions, real => PiSessions.of({
     ...real, probe: (...args) => Effect.suspend(() => { probes++; return real.probe(...args); }),
   }))).pipe(Layer.provide(PiSessionsLive));
-  const layer = DirectoryFactsLive.pipe(Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provideMerge(counted),
-    Layer.provide(RegistryLive), Layer.provide(NodeServices.layer));
+  const layer = DirectoryFactsLive.pipe(Layer.provide(counted), Layer.provide(NodeServices.layer));
   return Effect.runPromise(Effect.gen(function* () { return yield* work(yield* DirectoryFacts, () => probes); }).pipe(
-    Effect.scoped, Effect.provide(layer),
+    Effect.provide(layer),
     Effect.provideService(PiCli, { node: process.execPath, cli: new URL("./fake-pi.mjs", import.meta.url).pathname, extraArgs: [] }),
-    Effect.provideService(RegistryDatabasePath, join(root, `registry-${++databases}.db`)), Effect.timeout("10 seconds")));
+    Effect.timeout("10 seconds")));
 };
 
 test("one directory, however a caller spells it, has one catalog entry and one trust answer", async () => {
@@ -48,20 +44,26 @@ test("one directory, however a caller spells it, has one catalog entry and one t
   }));
 });
 
-test("INV-02: commands come from the live session when one is named, otherwise from the directory's probe", async () => {
-  await run(facts => Effect.gen(function* () {
-    const hosts = yield* SessionHosts;
-    const names = (commands: ReadonlyArray<{ name: string }>) => commands.map(c => c.name);
+test("commands before a session starts come from the directory's cached probe, models in wire terms", async () => {
+  await run((facts, probes) => Effect.gen(function* () {
     // The fake Pi lists `probe-only` when started without a session and `live-only` in a session.
-    const probed = names(yield* facts.commands("~/checkout"));
+    const probed = (yield* facts.commands("~/checkout")).map(c => c.name);
     assert.ok(probed.includes("probe-only") && !probed.includes("live-only"), probed.join());
-    const session = yield* hosts.open({ cwd, sessionId: crypto.randomUUID(), create: true });
-    const live = names(yield* facts.commands("~/checkout", session.spec.sessionId));
-    assert.ok(live.includes("live-only") && !live.includes("probe-only"), live.join());
-    yield* hosts.release(cwd, session.spec.sessionId);
-    const stopped = yield* Effect.flip(facts.commands(cwd, session.spec.sessionId));
-    assert.ok(stopped instanceof DirectoryCommandsError && stopped.reason === "stopped", "a stopped session is not reopened to answer");
-    assert.deepEqual(yield* hosts.list, []);
+    const catalog = yield* facts.catalog(cwd);
+    assert.equal(probes(), 1, "commands and catalog share one probe");
+    // Pi's effort table, already translated: minimal is mapped off and xhigh is mapped in.
+    assert.deepEqual(catalog.models.map(m => [m.ref, m.thinkingLevels]),
+      [["fake/alpha", ["off", "low", "medium", "high", "xhigh"]], ["fake/beta", ["off"]]]);
+  }));
+});
+
+test("a directory whose probe fails has no commands, and the failure is not cached", async () => {
+  const missing = join(root, "missing");
+  await run((facts, probes) => Effect.gen(function* () {
+    const failed = yield* Effect.flip(facts.commands(missing));
+    assert.ok(failed instanceof DirectoryCommandsError && failed.detail.length > 0);
+    yield* Effect.flip(facts.commands(missing));
+    assert.equal(probes(), 2, "the next request probes again");
   }));
 });
 

@@ -9,7 +9,6 @@ import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts"
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { PiSettings, PiSettingsLive } from "../server/PiSettings.ts";
-import { SessionHosts } from "../server/SessionHosts.ts";
 import { createPiCompatibilityFixture } from "./fixtures/PiCompatibility.ts";
 
 test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choices and leave sessions and folder overrides alone", async () => {
@@ -22,7 +21,7 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
   process.env.HOME = fixture.root;
   process.env.PI_CODING_AGENT_DIR = fixture.agentDir;
   try {
-    const layer = PiSettingsLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(Layer.mock(SessionHosts, {})), Layer.provideMerge(PiSessionsLive), Layer.provide(NodeServices.layer));
+    const layer = PiSettingsLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provideMerge(PiSessionsLive), Layer.provide(NodeServices.layer));
     await Effect.runPromise(Effect.gen(function* () {
       const settings = yield* PiSettings, catalogs = yield* DirectoryFacts, sessions = yield* PiSessions;
       assert.deepEqual(yield* settings.defaults, { model: undefined, thinkingLevel: "medium" });
