@@ -58,7 +58,7 @@ try {
         if (fixture.failLogout) return json({ error: 'Could not sign out. Try again.' }, 503);
         if (fixture.holdLogout) await new Promise(resolve => { fixture.finishLogout = resolve; });
         fixture.signedIn = false; fixture.state = null;
-        return json({});
+        return json({ ok: true });
       }
       if (path !== '/api/provider-login') return original(input, init);
       switch (init.method ?? 'GET') {
