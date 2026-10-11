@@ -1,11 +1,10 @@
-import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
+import type { ClientCommand as ClientMessage } from "@shared/wire";
 import { cn } from "cn";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { ChangesSheet } from "@/components/Changes";
 import { Composer } from "@/components/Composer";
-import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { MessageList } from "@/components/MessageList";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
@@ -14,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { sessionActivity, sessionContext } from "@/lib/sessionContext";
+import { useModelChoice } from "@/lib/useModelChoice";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { type AppState, sessionKey } from "@/store";
@@ -40,25 +40,16 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const folder = t ? located : undefined;
   const { status, streaming, replyActivity, firstMessageOnItsWay, submissionText } = sessionActivity(state, display);
   const draftKey = t ? sessionKey(t) : undefined;
-  const [model, setModel] = useState<string | undefined>(undefined);
-  // Follow the session's own model and effort when known; otherwise Pi's defaults.
-  useEffect(() => setModel(t?.state.model), [t?.cwd, t?.sessionId, t?.state.model]);
-  const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
-  useEffect(() => setEffort(t?.state.thinkingLevel as ThinkingLevel | undefined), [t?.cwd, t?.sessionId, t?.state.thinkingLevel]);
   const catalog = t ? state.catalogs[t.cwd] ?? null : null;
   useEffect(() => { if (state.connected && t?.cwd && !checkoutMissing) send({ _tag: "models", cwd: t.cwd }); }, [t?.cwd, checkoutMissing, state.connected, state.catalogRevision, send]);
-  const effectiveModel = model || catalog?.defaultModel;
-  const effectiveEffort = (t?.hosted ? t.state.thinkingLevel as ThinkingLevel | undefined : undefined)
-    ?? clampEffort(levelsFor(catalog, effectiveModel), effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
+  // A running Pi owns the selection; a saved session's picks wait for its first prompt and
+  // override only what was picked, so Pi restores the rest of its recorded selection.
+  const choice = useModelChoice(catalog, { kind: "session", hosted: !!t?.hosted, model: t?.state.model, thinkingLevel: t?.state.thinkingLevel },
+    `${t?.cwd}\0${t?.sessionId}\0${t?.hosted}`, action => send({ _tag: "act", action }));
   const extension = t?.state.extension;
   // Pi reports an extension block for every session; only one that says something is shown.
   const extensionContent = !!extension && !!(extension.title || extension.statuses.length || extension.widgets.length || extension.editorRequest);
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
-  const [overrides, setOverrides] = useState<{ model?: string; thinkingLevel?: ThinkingLevel }>({});
-  useEffect(() => setOverrides({}), [t?.cwd, t?.sessionId]);
-  // Continuing a file lets Pi restore/check its own selection. Only deliberate
-  // offline picker changes override that, not a read-only recorded-model hint.
-  const startOptions = () => overrides;
   const submission = t?.state.submission;
 
   return (
@@ -156,21 +147,15 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         disabled={!ready || !t || input?.outcome === "starting"}
         streaming={streaming}
         compacting={t?.state.isCompacting}
-        onSend={(text, kind, attachments) => send({ _tag: "act", action: { _tag: kind === "steering" ? "steer" : "prompt", text, attachments }, start: startOptions() })}
+        onSend={(text, kind, attachments) => send({ _tag: "act", action: { _tag: kind === "steering" ? "steer" : "prompt", text, attachments }, start: choice.start() })}
         onStop={() => send({ _tag: "act", action: { _tag: "stop" } })}
         stopping={t?.state.isStopping}
         catalog={catalog}
         onRefreshModels={t ? () => send({ _tag: "models", cwd: t.cwd, refresh: true }) : undefined}
-        model={model}
-        onModelChange={(ref) => {
-          if (t?.hosted) send({ _tag: "act", action: { _tag: "set_model", model: ref } });
-          else { setModel(ref); setOverrides(o => ({ ...o, model: ref })); }
-        }}
-        effort={effectiveEffort}
-        onEffortChange={(level) => {
-          if (t?.hosted) send({ _tag: "act", action: { _tag: "set_thinking_level", level } });
-          else { setEffort(level); setOverrides(o => ({ ...o, thinkingLevel: level })); }
-        }}
+        model={choice.model}
+        onModelChange={choice.onModelChange}
+        effort={choice.effort}
+        onEffortChange={choice.onEffortChange}
         context={t?.state.context}
         cost={t?.state.cost}
         totals={t?.state.tokens}

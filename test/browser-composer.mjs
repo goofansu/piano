@@ -224,6 +224,13 @@ async function run() {
   if (evaluate(`document.querySelectorAll('[aria-label="Effort"] [role="radio"]').length`) !== 1) throw new Error('Non-reasoning model exposed unsupported efforts');
   const shortAction = evaluate(geometry).controls.find(c => c.label === 'Send');
   if (longAction.x !== shortAction.x || longAction.y !== shortAction.y) throw new Error('Changing the model label moved Send');
+  // A reconnect keeps the New page's choice while the refreshed catalog still lists the model.
+  ab('press', 'Escape');
+  const socketsBefore = evaluate(`observedSockets.length`);
+  evaluate(`observedSockets.find(s=>s.url.endsWith('/ws')&&s.readyState===1).close(); true`);
+  ab('wait', '--fn', `observedSockets.length > ${socketsBefore} && !document.querySelector('[aria-label="Send"]')?.disabled`);
+  await until(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label') === 'Model: fake/beta; effort: off'`).catch(() => { throw new Error('Reconnect discarded the New page model choice'); });
+  ab('click', '[aria-label^="Model:"]');
   ab('click', option);
   ab('find', 'role', 'radio', 'click', '--name', 'xhigh', '--exact');
   await until(`document.querySelector('[aria-label^="Model:"]').getAttribute('aria-label').endsWith('effort: xhigh')`);
