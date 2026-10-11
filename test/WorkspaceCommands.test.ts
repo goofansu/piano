@@ -34,6 +34,10 @@ const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts 
 };
 const firstSnapshot = (session: PiSession) => session.events.pipe(Stream.filter(e => e._tag === "snapshot"), Stream.take(1), Stream.runCollect,
   Effect.map(c => { const e = [...c][0]!; assert.ok(e._tag === "snapshot"); return e.snapshot; }));
+/** Waits until Pi has recorded `text` as a user message, whether before or after attaching. */
+const userMessage = (session: PiSession, text: string) => session.events.pipe(
+  Stream.filter(e => e._tag === "snapshot" ? e.snapshot.messages.some(m => m.role === "user" && m.text === text) : e._tag === "message_end" && e.message.role === "user" && e.message.text === text),
+  Stream.take(1), Stream.runDrain);
 /**
  * A client that records what it attached, and what the registry and Pi held each time a registry
  * write was announced; the sidebar view publishes from that same announcement.
@@ -65,7 +69,7 @@ test("INV-01/02: creating a session writes the reference and project before the 
     const entry = (yield* registry.get).sessions.find(s => s.sessionId === id)!;
     assert.equal(entry.cwd, cwd);
     assert.ok((yield* registry.get).folders.includes(cwd), "an unregistered directory becomes a folder");
-    assert.ok((yield* firstSnapshot(session)).messages.some(m => m.role === "user" && m.text === "hello"), "the trimmed prompt reached Pi");
+    yield* userMessage(session, "hello"); // the trimmed prompt reached Pi
     assert.equal((yield* hosts.list).filter(h => h.sessionId === id).length, 1, "one child for the new session");
   }));
 });
