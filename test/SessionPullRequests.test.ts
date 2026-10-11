@@ -34,9 +34,17 @@ async function fixture(t: TestContext) {
     await runtime.dispose();
     rmSync(root, { recursive: true, force: true });
   });
-  const get = (id = "one") => runtime.runPromise(prs.get(repo, id));
-  const change = (action: Parameters<typeof prs.change>[2], id = "one") => runtime.runPromise(prs.change(repo, id, action));
-  return { root, repo, path, git, control, runtime, registry, prs, get, change, layer };
+  // Stand in for the router: resolve the entry by identity, then hand it to the module.
+  const getIn = (from: ManagedRuntime.ManagedRuntime<SessionPullRequests | Registry, unknown>, id = "one") => from.runPromise(Effect.gen(function* () {
+    const s = (yield* (yield* Registry).get).sessions.find(s => s.cwd === repo && s.sessionId === id);
+    return yield* (yield* SessionPullRequests).get(s!);
+  }));
+  const get = (id = "one") => getIn(runtime, id);
+  const change = (action: Parameters<typeof prs.change>[1], id = "one") => runtime.runPromise(Effect.gen(function* () {
+    const s = (yield* registry.get).sessions.find(s => s.cwd === repo && s.sessionId === id);
+    return yield* prs.change(s!, action);
+  }));
+  return { root, repo, path, git, control, runtime, registry, prs, get, getIn, change, layer };
 }
 
 test("INV-01/07: discovers by branch AND head repository, pins identity across branch changes/restart, scopes manual links/removal to a session", async t => {
@@ -60,8 +68,8 @@ test("INV-01/07: discovers by branch AND head repository, pins identity across b
   assert.deepEqual(persisted.sessions[1].pullRequest, { url: "https://github.com/example/repo/pull/43", source: "branch" });
   const restarted = ManagedRuntime.make(f.layer);
   try {
-    assert.equal((await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "one"); }))).discovery, false);
-    assert.equal((await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "two"); }))).pullRequest?.number, 43);
+    assert.equal((await f.getIn(restarted, "one")).discovery, false);
+    assert.equal((await f.getIn(restarted, "two")).pullRequest?.number, 43);
   } finally { await restarted.dispose(); }
   assert.equal((await f.change({ action: "discover" })).pullRequest?.number, 43);
 });
@@ -91,7 +99,6 @@ test("unknown/auth/malformed results are not healthy absence; explicit link vali
   assert.equal(noReplacement.link?.url, candidate(42).url, "failed discovery does not remove an existing association");
   f.control({ prs: [{ ...candidate(42), state: "CLOSED" }] }); rmSync(f.repo, { recursive: true });
   assert.equal((await f.get()).pullRequest?.state, "closed", "saved PR can be read after checkout removal");
-  await assert.rejects(f.get("unregistered"), /not registered/);
 });
 
 test("exe.dev integration routes discovery and saved/manual PR reads through gh without changing browser URLs or global host", async t => {
@@ -126,7 +133,7 @@ test("exe.dev integration routes discovery and saved/manual PR reads through gh 
   rmSync(f.repo, { recursive: true });
   const restarted = ManagedRuntime.make(f.layer);
   try {
-    const pr = await restarted.runPromise(Effect.gen(function* () { return yield* (yield* SessionPullRequests).get(f.repo, "one"); }));
+    const pr = await f.getIn(restarted, "one");
     assert.equal(pr.pullRequest?.state, "merged"); assert.equal(pr.pullRequest?.url, candidate(42).url);
   } finally { await restarted.dispose(); }
   f.control({ error: "integration detached", expectedHost: host });

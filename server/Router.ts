@@ -162,10 +162,10 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.workspaceCapture, ({ workspace }) => Effect.flatMap(WorkspaceRevisions, revisions => revisions.capture(workspace)));
 
     const pullRequestFailure = failAs(400, detailOr("Invalid pull request request."));
-    yield* serve(Endpoints.sessionPullRequest, ({ workspace, session }) =>
-      Effect.flatMap(SessionPullRequests, prs => prs.get(workspace.path, session.sessionId)).pipe(pullRequestFailure));
-    yield* serve(Endpoints.changeSessionPullRequest, ({ workspace, session, body }) =>
-      Effect.flatMap(SessionPullRequests, prs => prs.change(workspace.path, session.sessionId, body)).pipe(pullRequestFailure));
+    yield* serve(Endpoints.sessionPullRequest, ({ session }) =>
+      Effect.flatMap(SessionPullRequests, prs => prs.get(session)).pipe(pullRequestFailure));
+    yield* serve(Endpoints.changeSessionPullRequest, ({ session, body }) =>
+      Effect.flatMap(SessionPullRequests, prs => prs.change(session, body)).pipe(pullRequestFailure));
 
     // Discovery never opens a saved session or creates a second writer. A live
     // session is resolved by server-owned identity; otherwise use the cwd probe.

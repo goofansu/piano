@@ -84,16 +84,18 @@ const checkout = (git: string, cwd: string) => Effect.gen(function* () {
   return { branch, remote, repo: match[1]!.toLowerCase(), apiHost: proxy ? EXE_GITHUB : "github.com" as GitHubHost };
 });
 
+/** Callers pass the session entry they resolved by ID; this module never looks a session up by path. */
 export class SessionPullRequests extends Context.Service<SessionPullRequests, {
-  readonly get: (cwd: string, sessionId: string) => Effect.Effect<SessionPullRequest, PullRequestError | RegistryError>;
-  readonly change: (cwd: string, sessionId: string, action: SessionPullRequestAction) => Effect.Effect<SessionPullRequest, PullRequestError | RegistryError>;
+  readonly get: (session: SessionEntry) => Effect.Effect<SessionPullRequest, PullRequestError | RegistryError>;
+  readonly change: (session: SessionEntry, action: SessionPullRequestAction) => Effect.Effect<SessionPullRequest, PullRequestError | RegistryError>;
 }>()("piano/SessionPullRequests") {}
 
 export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.gen(function* () {
   const registry = yield* Registry;
   const git = yield* GitCommand, ghCli = yield* GhCommand;
-  const entry = (cwd: string, sessionId: string) => Effect.gen(function* () {
-    const found = (yield* registry.get).sessions.find(s => s.cwd === cwd && s.sessionId === sessionId);
+  // After a save, read the entry back so the answer reflects whatever the registry now holds.
+  const reread = (s: SessionEntry) => Effect.gen(function* () {
+    const found = (yield* registry.get).sessions.find(t => t.cwd === s.cwd && t.sessionId === s.sessionId);
     if (!found) return yield* failure("Session is not registered. Refresh the session list.");
     return found;
   });
@@ -155,9 +157,8 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
     return { link, pullRequest: found.success.pullRequest, discovery: false };
   });
   return SessionPullRequests.of({
-    get: (cwd, sessionId) => Effect.gen(function* () { return yield* result(yield* entry(cwd, sessionId)); }),
-    change: (cwd, sessionId, action) => Effect.gen(function* () {
-      const s = yield* entry(cwd, sessionId);
+    get: s => result(s),
+    change: (s, action) => Effect.gen(function* () {
       if (action.action === "link") {
         // Explicit association is the user's choice, not a claim that GitHub is reachable.
         const key = yield* parseIdentity(action.url);
@@ -165,7 +166,7 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
         const host = new URL(action.url.trim()).hostname === EXE_GITHUB ? EXE_GITHUB : yield* hostFor({ ...s, pullRequest: undefined });
         const link: SessionPullRequestLink = { url: key.url, source: "manual", ...(host === EXE_GITHUB ? { apiHost: EXE_GITHUB } : {}) };
         yield* save(s, link);
-        return yield* result(yield* entry(cwd, sessionId));
+        return yield* result(yield* reread(s));
       }
       if (action.action === "discover") return yield* result(s, true);
       yield* save(s, null);
