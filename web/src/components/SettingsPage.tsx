@@ -1,5 +1,5 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, HomeIcon, PlugIcon, RadiusIcon, ServerIcon } from "lucide-react";
+import { AlertCircleIcon, CheckCircle2Icon, HomeIcon, PlugIcon, RadiusIcon, ServerIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
@@ -89,10 +89,10 @@ export function SettingsPage({ section, onMenu }: { section: SettingsSection; on
             </Empty>
             : <ItemGroup className="gap-2">{providers.map(provider => <Item key={provider.id} role="listitem" variant="outline" className="flex-nowrap">
               <ItemContent className="min-w-0">
-                <ItemTitle>{provider.name}</ItemTitle>
+                <ItemTitle>{provider.name}{provider.signedIn && <><CheckCircle2Icon className="size-3.5 text-brand" aria-hidden /><span className="sr-only">(Signed in)</span></>}</ItemTitle>
               </ItemContent>
               <ItemActions className="shrink-0">
-                <Button variant="outline" size="sm" disabled={!!signingOut} aria-label={`${provider.signedIn ? "Sign out of" : "Sign in to"} ${provider.name}`} onClick={() => {
+                <Button variant={provider.signedIn ? "ghost" : "default"} size="sm" className={provider.signedIn ? "text-muted-foreground" : undefined} disabled={!!signingOut} aria-label={`${provider.signedIn ? "Sign out of" : "Sign in to"} ${provider.name}`} onClick={() => {
                   if (provider.signedIn) setSignOutTarget(provider);
                   else setLogin({ provider: provider.id, key: crypto.randomUUID() });
                 }}>{signingOut === provider.id ? "Signing out…" : provider.signedIn ? "Sign out" : "Sign in"}</Button>
