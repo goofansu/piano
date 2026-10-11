@@ -20,6 +20,7 @@ function handle(cmd) {
     case 'get_state': return reply(cmd, { sessionId, isStreaming: streaming, model: { provider: 'fake', id: model }, thinkingLevel: 'off' });
     case 'get_messages': return reply(cmd, { messages: [] });
     case 'get_session_stats': return reply(cmd, {});
+    case 'get_entries': return reply(cmd, { entries: [], leafId: null });
     case 'get_available_models': return reply(cmd, { models: [{ provider: 'fake', id: 'alpha', reasoning: false, contextWindow: 200000 }] });
     case 'extension_ui_response':
       responses.push(cmd);

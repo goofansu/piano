@@ -11,8 +11,7 @@ import { PiCli, type PiCliConfig } from '../server/PiCli.ts';
 import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
 import { peekSession } from '../server/SessionFiles.ts';
 import { SessionHosts } from '../server/SessionHosts.ts';
-import type { RenderMsg, SessionEvent, SubagentCard } from '../shared/wire.ts';
-import { subagentUsage } from '../web/src/lib/subagentUsage.ts';
+import type { RenderMsg, SessionEvent, SessionState, SubagentCard, SubagentUsage } from '../shared/wire.ts';
 
 const cli = { node: process.execPath, cli: new URL('./fake-projection-pi.mjs', import.meta.url).pathname, extraArgs: [] };
 const delegationCli = { node: process.execPath, cli: new URL('./fake-delegation-pi.mjs', import.meta.url).pathname, extraArgs: [] };
@@ -131,6 +130,7 @@ test('reopening uses Pi context edits, compaction and active branch without repl
     const file = manager.getSessionFile()!;
     const original = readFileSync(file, 'utf8');
     const snap = await Effect.runPromise(peekSession(file, manager.getSessionId()));
+    assert.equal(snap.messages.some(message => message.subagent), false, 'compaction left no delivery in the context');
     assert.equal(snap.state.model, 'router/auto'); assert.equal(snap.state.thinkingLevel, 'low');
     assert.deepEqual(snap.messages.map(m => m.text), ['summary', 'edited [REDACTED]']);
     assert.equal(snap.messages[1].model, 'physical/answer');
@@ -224,8 +224,14 @@ test('delegation fixture continues and persists an existing Pi JSONL session', a
 });
 
 const card = (messages: ReadonlyArray<RenderMsg>, find: (card: SubagentCard) => boolean) => messages.find(message => message.subagent && find(message.subagent))?.subagent;
-const usageRows = (messages: ReadonlyArray<RenderMsg>) => {
-  const usage = subagentUsage(messages)!;
+/** The first session state, current or later, that satisfies `ok`. */
+const stateWhere = (session: PiSession, ok: (state: SessionState) => boolean) => session.events.pipe(
+  Stream.map(e => e._tag === 'snapshot' ? e.snapshot.state : e._tag === 'state' ? e.state : undefined),
+  Stream.filter((state): state is SessionState => state !== undefined && ok(state)),
+  Stream.take(1), Stream.runCollect, Effect.map(states => states[0]!),
+);
+const usageRows = (usage: SubagentUsage | undefined) => {
+  assert.ok(usage, 'some delivery carried usage');
   return {
     profiles: usage.profiles.map(p => [p.profile, p.totalTokens, Number(p.cost.toFixed(6)), p.model ?? null, p.runs]),
     total: [usage.total.totalTokens, Number(usage.total.cost.toFixed(6)), usage.total.runs],
@@ -259,14 +265,22 @@ test('delivered Run usage projects from waits, results and Notifications, live a
     const notice = card(live, c => c.kind === 'result' && c.runId === 'run-qbdd-2');
     assert.ok(notice?.kind === 'result');
     assert.deepEqual([notice.source, notice.usage, notice.model], ['notification', claude, 'claude-haiku-4-5-20251001']);
-    assert.deepEqual(usageRows(live), {
+    assert.deepEqual(usageRows((yield* stateWhere(session, state => state.subagents?.total.runs === 3)).subagents), {
       profiles: [['usage-probe-pi', 3524, 0.007096, 'openai/gpt-6.1-sol', 1], ['usage-probe-idle', 0, 0, null, 1], ['usage-probe-claude', 20902, 0.042112, 'claude-haiku-4-5-20251001', 1]],
       total: [24426, 0.049208, 3],
     });
+
+    yield* observe(session, '/usage-compact', e => e._tag === 'context');
+    const after = yield* stateWhere(session, state => state.subagents?.total.runs === 4);
+    assert.deepEqual((yield* snapshot(session)).messages.flatMap(message => message.subagent ? [message.subagent.kind === 'result' ? message.subagent.runId : message.subagent.kind] : []), ['run-qbdd-3'], 'compaction left only the later delivery in the context');
+    assert.deepEqual(usageRows(after.subagents), {
+      profiles: [['usage-probe-pi', 3524, 0.007096, 'openai/gpt-6.1-sol', 1], ['usage-probe-idle', 0, 0, null, 1], ['usage-probe-claude', 41804, 0.084224, 'claude-haiku-4-5-20251001', 2]],
+      total: [45328, 0.09132, 4],
+    }, 'Run usage survives compaction, as Pi\'s session totals do');
   }).pipe(Effect.timeout('5 seconds'), Effect.scoped), usageCli);
 });
 
-test('a reopened session file reconstructs Run usage from persisted Notifications and tool results', async () => {
+test('a reopened session file counts Run usage from every entry, including compacted Notifications and tool results', async () => {
   const root = mkdtempSync(join(tmpdir(), 'piano-usage-history-'));
   try {
     const manager = SessionManager.create(root, root);
@@ -284,10 +298,13 @@ test('a reopened session file reconstructs Run usage from persisted Notification
     done('r', 'agent_result', { kind: 'result', rowPhrase: '2 characters', tone: 'toolOutput', outcome: 'available', run: { runId: 'run-qbdd-1', agent: 'usage-probe-pi', status: 'completed', usage: probe, model: 'openai/gpt-6.1-sol' } });
     notify('run-qbdd-1', 'subagent-qbdd-1', 'usage-probe-pi', probe, 'openai/gpt-6.1-sol');
     notify('run-qbdd-2', 'subagent-qbdd-2', 'usage-probe-claude', claude, 'claude-haiku-4-5-20251001');
+    const kept = manager.appendMessage({ role: 'user', content: 'Continue', timestamp: 3 });
+    manager.appendCompaction('Compacted', kept, 1000);
     const file = manager.getSessionFile()!;
     assert.match(readFileSync(file, 'utf8'), /"type":"custom_message"/, 'Notifications persist as custom_message entries');
     const snap = await Effect.runPromise(peekSession(file, manager.getSessionId()));
-    assert.deepEqual(usageRows(snap.messages), {
+    assert.equal(snap.messages.some(message => message.subagent), false, 'compaction left no delivery in the context');
+    assert.deepEqual(usageRows(snap.state.subagents), {
       profiles: [['usage-probe-pi', 3524, 0.007096, 'openai/gpt-6.1-sol', 1], ['usage-probe-claude', 20902, 0.042112, 'claude-haiku-4-5-20251001', 1]],
       total: [24426, 0.049208, 2],
     });

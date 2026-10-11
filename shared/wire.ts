@@ -44,6 +44,23 @@ export const RunUsage = Schema.Struct({
 });
 export type RunUsage = typeof RunUsage.Type;
 const RunSpend = { usage: Schema.optional(RunUsage), model: Schema.optional(Schema.String) };
+/** Delivered Runs' spend summed, with its token total and how many Runs it counts. */
+const RunTotal = Schema.Struct({ ...RunUsage.fields, totalTokens: Schema.Number, runs: Schema.Number });
+export const ProfileUsage = Schema.Struct({
+  ...RunTotal.fields,
+  profile: Schema.String,
+  /** Models the Profile's Runs reported; a Run without one adds nothing here. */
+  models: Schema.Array(Schema.String),
+  /** Every Run named a model, and all named the same one. */
+  model: Schema.optional(Schema.String),
+});
+export type ProfileUsage = typeof ProfileUsage.Type;
+export const SubagentUsage = Schema.Struct({
+  /** In order of each Profile's first delivered Run, including Runs that spent nothing. */
+  profiles: Schema.Array(ProfileUsage),
+  total: RunTotal,
+});
+export type SubagentUsage = typeof SubagentUsage.Type;
 
 const SubagentIdentity = {
   runId: Schema.optional(Schema.String),
@@ -249,6 +266,9 @@ export const SessionState = Schema.Struct({
   /** Full-session totals from Pi, not a sum of displayed current-context messages. */
   cost: SessionStats.fields.cost,
   tokens: SessionStats.fields.tokens,
+  /** Run usage delivered anywhere in the session file, compacted or on another branch, as Pi counts
+   * its own totals; absent until a delivery carries usage. */
+  subagents: Schema.optional(SubagentUsage),
   extension: Schema.optional(ExtensionState),
   projectionError: Schema.optional(Schema.String),
   stateRefreshError: Schema.optional(Schema.String),

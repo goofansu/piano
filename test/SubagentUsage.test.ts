@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { subagentUsage } from "../server/RunLedger.ts";
 import type { RenderMsg, RunUsage, SubagentCard } from "../shared/wire.ts";
-import { subagentUsage } from "../web/src/lib/subagentUsage.ts";
 
 const spend = (input: number, cost: number, rest: Partial<RunUsage> = {}): RunUsage => ({ input, output: 0, cacheRead: 0, cacheWrite: 0, cost, ...rest });
 const msg = (subagent: SubagentCard, id = Math.random().toString(36)): RenderMsg => ({ id, role: "tool_result", text: "", subagent });
@@ -16,7 +16,6 @@ test("absent usage folds to nothing, unlike Runs that spent nothing", () => {
   assert.equal(subagentUsage([notice("r1", "a"), fetched("r2", "b"), waited({ runId: "r3", profile: "c" })]), undefined);
   const zero = subagentUsage([waited({ runId: "r1", profile: "a", usage: spend(0, 0) })])!;
   assert.deepEqual(zero.profiles.map(p => [p.profile, p.totalTokens, p.cost, p.runs]), [["a", 0, 0, 1]]);
-  assert.equal(zero.total.cacheHit, undefined, "no prompt tokens has no cache hit rate");
 });
 
 test("a Run delivered on every channel counts once, the last usage-bearing delivery winning", () => {
@@ -47,6 +46,5 @@ test("Profiles sum all five figures across Runs, with a model only when every Ru
   ]);
   const mixed = usage.profiles[2]!;
   assert.deepEqual([mixed.input, mixed.output, mixed.cacheRead, mixed.cacheWrite], [10, 5, 30, 10]);
-  assert.equal(mixed.cacheHit, 60, "cacheRead over input plus cache reads and writes");
   assert.deepEqual([usage.total.totalTokens, Number(usage.total.cost.toFixed(6)), usage.total.runs], [24483, 1.052208, 6]);
 });

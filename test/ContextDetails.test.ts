@@ -4,16 +4,18 @@ import { after, test } from "node:test";
 import { type ComponentType, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
-import type { RenderMsg, SessionStats } from "../shared/wire.ts";
+import { subagentUsage } from "../server/RunLedger.ts";
+import type { RenderMsg, SessionStats, SubagentUsage } from "../shared/wire.ts";
 
 // Load the real TSX component through the application's existing Vite transform.
 const vite = await createServer({ root: path.resolve("web"), server: { middlewareMode: true, watch: null }, appType: "custom" });
 after(() => vite.close());
 const { ContextDetails } = await vite.ssrLoadModule("/src/components/ContextDetails.tsx") as {
-  ContextDetails: ComponentType<{ cost?: number; totals?: SessionStats["tokens"]; messages: ReadonlyArray<RenderMsg> }>;
+  ContextDetails: ComponentType<{ cost?: number; totals?: SessionStats["tokens"]; messages: ReadonlyArray<RenderMsg>; subagents?: SubagentUsage }>;
 };
 const totals = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, total: 120 };
-const render = (messages: RenderMsg[]) => renderToStaticMarkup(createElement(ContextDetails, { cost: 0.5, totals, messages }));
+// The server folds deliveries into `subagents`; the popover renders what it is given.
+const render = (deliveries: RenderMsg[]) => renderToStaticMarkup(createElement(ContextDetails, { cost: 0.5, totals, messages: [], subagents: subagentUsage(deliveries) }));
 const result = (runId: string, profile: string, usage: Record<string, number> | undefined, model?: string): RenderMsg =>
   ({ id: runId + profile, role: "context", label: "subagent-notification", text: "", subagent: { kind: "result", source: "notification", runId, profile, status: "Completed", ...(usage ? { usage: usage as never } : {}), ...(model ? { model } : {}) } });
 const rows = (html: string) => {

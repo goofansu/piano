@@ -1,4 +1,4 @@
-import type { ContextUsage, RenderMsg, SessionStats } from "@shared/wire";
+import type { ContextUsage, RenderMsg, SessionStats, SubagentUsage } from "@shared/wire";
 import { cn } from "cn";
 import { useEffect, useRef, useState } from "react";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -8,7 +8,6 @@ import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatTokenCount } from "@/lib/format";
-import { cacheHit, subagentUsage } from "@/lib/subagentUsage";
 
 interface Props {
   context?: ContextUsage;
@@ -16,13 +15,20 @@ interface Props {
   cost?: number;
   totals?: SessionStats["tokens"];
   messages: ReadonlyArray<RenderMsg>;
+  /** The server's count over the whole session, not only the messages in context. */
+  subagents?: SubagentUsage;
 }
 
 const number = (value: number) => value.toLocaleString();
 const dollars = (value: number) => `$${value.toFixed(4)}`;
+const cacheHit = (usage?: Pick<NonNullable<SessionStats["tokens"]>, "input" | "cacheRead" | "cacheWrite">) => {
+  if (!usage) return undefined;
+  const input = usage.input + usage.cacheRead + usage.cacheWrite;
+  return input > 0 ? Math.round(100 * usage.cacheRead / input) : undefined;
+};
 
 /** History usage is per response, not a reconstruction of Pi's current context. */
-export function ContextDetails({ context, contextWindow, cost, totals, messages }: Props) {
+export function ContextDetails({ context, contextWindow, cost, totals, messages, subagents }: Props) {
   const responses = messages.filter(message => message.role === "assistant" && message.usage);
   const [selectedId, setSelectedId] = useState<string>();
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
@@ -36,7 +42,6 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
   const position = selected ? responses.indexOf(selected) + 1 : 0;
   const chartRef = useRef<HTMLDivElement>(null);
   const chartWidth = responses.length * 12;
-  const subagents = subagentUsage(messages);
   // A Run that spent nothing is still a Run, but not a row worth reading.
   const spent = subagents?.profiles.filter(profile => profile.totalTokens > 0 || profile.cost > 0) ?? [];
 

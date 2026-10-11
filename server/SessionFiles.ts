@@ -8,6 +8,7 @@ import type { Snapshot } from "../shared/wire.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { sessionDirFor } from "./PiEnv.ts";
 import { type RawMessage, serializeMessages, stateFactsOf } from "./PiRecords.ts";
+import { RunLedger } from "./RunLedger.ts";
 
 export interface SessionSummary {
   sessionId: string;
@@ -40,7 +41,8 @@ export const listSessions = (cwd: string): Effect.Effect<SessionSummary[]> =>
 export const findSessionFile = (cwd: string, sessionId: string): Effect.Effect<string | undefined> =>
   listSessions(cwd).pipe(Effect.map((s) => s.find((i) => i.sessionId === sessionId)?.path));
 
-/** Read the active branch of a session file as a Snapshot. Safe while Pi is writing to it. */
+/** Read the active branch of a session file as a Snapshot, with Run usage from every entry.
+ * Safe while Pi is writing to it. */
 export const peekSession = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
   Effect.sync(() => {
     const sm = SessionManager.open(path);
@@ -54,7 +56,8 @@ export const peekSession = (path: string, sessionId: string): Effect.Effect<Snap
     const model = selection?.type === "model_change" ? { provider: selection.provider, id: selection.modelId }
       : context.model ? { provider: context.model.provider, id: context.model.modelId } : undefined;
     return projectDisplay({
-      state: stateFactsOf({ sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel: context.thinkingLevel, isStreaming: false }),
+      state: { ...stateFactsOf({ sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel: context.thinkingLevel, isStreaming: false }),
+        subagents: new RunLedger().add(sm.getEntries()).usage },
       messages: serializeMessages(context.messages as RawMessage[]),
       dialogs: [],
     });

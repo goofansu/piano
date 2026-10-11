@@ -72,8 +72,14 @@ const historicalStart = messages.find(message => message.role === 'toolResult' &
 const liveSubagentId = historicalStart?.details.subagentId ?? 'subagent-stable';
 const liveAgent = historicalStart?.details.agent ?? 'reviewer';
 let lastId = entries.findLast(entry => entry.type === 'message')?.id ?? null;
+// Every entry Pi keeps, including ones compaction removed from the context `messages`.
+const entryOf = (message, id) => message.role === 'custom'
+  ? { type: 'custom_message', id, parentId: null, timestamp: new Date().toISOString(), customType: message.customType, content: message.content, display: message.display, details: message.details }
+  : { type: 'message', id, parentId: null, timestamp: new Date().toISOString(), message };
+const log = entries.length ? entries.filter(entry => entry.type !== 'session') : messages.map((message, i) => entryOf(message, `entry-${i}`));
 function emit(message) {
   messages.push(message);
+  log.push(entryOf(message, `entry-${log.length}`));
   if (sessionFile) {
     const id = `delegation-${messages.length}`;
     appendFileSync(sessionFile, JSON.stringify({ type: 'message', id, parentId: lastId, timestamp: new Date().toISOString(), message }) + '\n');
@@ -85,6 +91,11 @@ function handle(command) {
   switch (command.type) {
     case 'get_state': return reply(command, { sessionId, model: { provider: 'fake', id: 'delegation' }, thinkingLevel: 'off', isStreaming: false });
     case 'get_messages': return reply(command, { messages });
+    case 'get_entries': {
+      const since = command.since === undefined ? -1 : log.findIndex(entry => entry.id === command.since);
+      if (since === -1 && command.since !== undefined) return out({ type: 'response', id: command.id, command: command.type, success: false, error: `Entry not found: ${command.since}` });
+      return reply(command, { entries: log.slice(since + 1), leafId: log.at(-1)?.id ?? null });
+    }
     case 'get_session_stats': return reply(command, { cost: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, contextUsage: { tokens: 0, contextWindow: 1000, percent: 0 } });
     case 'get_commands': return reply(command, { commands: [] });
     case 'get_available_models': return reply(command, { models: [{ provider: 'fake', id: 'delegation', reasoning: false, contextWindow: 1000 }] });
@@ -100,6 +111,16 @@ function handle(command) {
       if (command.message === '/usage-live') {
         out({ type: 'agent_start' });
         emit(usageLive);
+        out({ type: 'agent_settled' });
+      }
+      if (command.message === '/usage-compact') {
+        // Compaction replaces the context; the delivered Runs stay only in the entries. A Run delivered
+        // afterwards shows a read that followed the compaction.
+        messages.splice(0, messages.length, { role: 'compactionSummary', summary: 'Compacted', tokensBefore: 1000 });
+        log.push({ type: 'compaction', id: `entry-${log.length}`, parentId: null, timestamp: new Date().toISOString(), summary: 'Compacted', firstKeptEntryId: `entry-${log.length}`, tokensBefore: 1000 });
+        out({ type: 'compaction_end', reason: 'manual' });
+        out({ type: 'agent_start' });
+        emit(notification('run-qbdd-3', 'subagent-qbdd-3', 'usage-probe-claude', 'later probe', { usage: claudeUsage, model: 'claude-haiku-4-5-20251001' }));
         out({ type: 'agent_settled' });
       }
       out({ type: 'extension_ui_request', id: 'notice', method: 'notify', message: `barrier ${command.message}` });
