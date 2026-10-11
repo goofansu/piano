@@ -7,16 +7,17 @@ const args = process.argv.slice(2);
 const sessionId = args[args.indexOf('--session-id') + 1] ?? 'projection';
 const canary = process.env.PIANO_TEST_SECRET ?? 'sk-projection-canary-123456789';
 const usage = n => ({ input: 10, output: n, cacheRead: 0, cacheWrite: 0, totalTokens: 10 + n, cost: { total: n / 100 } });
-let messages = [], streaming = false, thinkingLevel = 'low', raceContext = false, failRefresh = false;
+let messages = [], streaming = false, thinkingLevel = 'low', raceContext = false, failRefresh = false, malformed = false;
 const assistant = content => ({ role: 'assistant', provider: 'physical', model: 'answer', thinkingLevel: 'high', content, usage: usage(5), stopReason: 'stop' });
 const ui = (method, fields) => out({ type: 'extension_ui_request', id: method, method, ...fields });
 const delta = (type, contentIndex, fields = {}, n = 1) => out({ type: 'message_update', usage: usage(n), assistantMessageEvent: { type, contentIndex, ...fields } });
 const end = message => { messages.push(message); out({ type: 'message_end', message }); };
 function handle(c) {
   switch (c.type) {
-    case 'get_state': return reply(c, { sessionId, model: { provider: 'router', id: 'auto' }, thinkingLevel, isStreaming: streaming });
+    case 'get_state': return reply(c, malformed ? { sessionId, model: 'router/auto' } : { sessionId, model: { provider: 'router', id: 'auto' }, thinkingLevel, isStreaming: streaming });
     case 'get_messages': {
       if (failRefresh) return reply(c, undefined, 'Fixture refresh failed ' + canary);
+      if (malformed) return reply(c, {});
       if (raceContext) {
         raceContext = false;
         const stale = messages;
@@ -28,7 +29,7 @@ function handle(c) {
     }
     case 'get_commands': return reply(c, { commands: [{ name: 'project-command', description: process.cwd(), source: 'extension' }] });
     case 'get_available_models': return reply(c, { models: [{ provider: 'router', id: 'auto', name: process.cwd(), reasoning: true, contextWindow: 1000 }] });
-    case 'get_session_stats': return reply(c, { cost: 1.23, tokens: { input: 100, output: 20, cacheRead: 30, cacheWrite: 0, total: 150 }, contextUsage: { tokens: 50, contextWindow: 1000, percent: 5 } });
+    case 'get_session_stats': return reply(c, malformed ? { cost: '1.23' } : { cost: 1.23, tokens: { input: 100, output: 20, cacheRead: 30, cacheWrite: 0, total: 150 }, contextUsage: { tokens: 50, contextWindow: 1000, percent: 5 } });
     case 'set_thinking_level': thinkingLevel = 'low'; return reply(c);
     case 'extension_ui_response': return ui('notify', { message: c.value === canary ? 'original option received' : 'wrong option received' });
     case 'prompt': {
@@ -65,8 +66,10 @@ function handle(c) {
         out({ type: 'compaction_end', result: { summary: 'different event summary' } });
       } else if (c.message === '/refresh-fail') {
         failRefresh = true;
+      } else if (c.message === '/readbacks-malformed') {
+        malformed = true;
       } else if (c.message === '/refresh-recover') {
-        failRefresh = false;
+        failRefresh = false; malformed = false;
       } else if (c.message === '/edit-context') {
         messages = [{ role: 'custom', content: 'Authoritative context edit', display: true }];
       } else if (c.message === '/select-secret') {

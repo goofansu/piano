@@ -5,17 +5,18 @@ import { type ComponentType, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 import { subagentUsage } from "../server/RunLedger.ts";
-import type { RenderMsg, SessionStats, SubagentUsage } from "../shared/wire.ts";
+import type { RenderMsg } from "../shared/wire.ts";
+import { type ContextFigures, contextFigures, type SessionUsage } from "../web/src/lib/contextUsage.ts";
 
 // Load the real TSX component through the application's existing Vite transform.
 const vite = await createServer({ root: path.resolve("web"), server: { middlewareMode: true, watch: null }, appType: "custom" });
 after(() => vite.close());
 const { ContextDetails } = await vite.ssrLoadModule("/src/components/ContextDetails.tsx") as {
-  ContextDetails: ComponentType<{ cost?: number; totals?: SessionStats["tokens"]; messages: ReadonlyArray<RenderMsg>; subagents?: SubagentUsage }>;
+  ContextDetails: ComponentType<{ figures: ContextFigures; usage?: SessionUsage; messages: ReadonlyArray<RenderMsg> }>;
 };
 const totals = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, total: 120 };
 // The server folds deliveries into `subagents`; the popover renders what it is given.
-const render = (deliveries: RenderMsg[]) => renderToStaticMarkup(createElement(ContextDetails, { cost: 0.5, totals, messages: [], subagents: subagentUsage(deliveries) }));
+const render = (deliveries: RenderMsg[]) => renderToStaticMarkup(createElement(ContextDetails, { figures: contextFigures(undefined, null, undefined), usage: { cost: 0.5, tokens: totals, subagents: subagentUsage(deliveries) }, messages: [] }));
 const result = (runId: string, profile: string, usage: Record<string, number> | undefined, model?: string): RenderMsg =>
   ({ id: runId + profile, role: "context", label: "subagent-notification", text: "", subagent: { kind: "result", source: "notification", runId, profile, status: "Completed", ...(usage ? { usage: usage as never } : {}), ...(model ? { model } : {}) } });
 const rows = (html: string) => {
