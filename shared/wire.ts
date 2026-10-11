@@ -603,7 +603,9 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("worktrees", { folder: Schema.String }),
   /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
   Schema.TaggedStruct("models", { cwd: Schema.String, refresh: Schema.optional(Schema.Boolean) }),
-  Schema.TaggedStruct("save_project", { project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }) }),
+  /** Create or rename a project; with `assign`, that session joins it in the same registry write. */
+  Schema.TaggedStruct("save_project", { project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }),
+    assign: Schema.optional(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String })) }),
   Schema.TaggedStruct("archive_project", { id: Schema.String, archived: Schema.Boolean }),
   Schema.TaggedStruct("assign_project", { cwd: Schema.String, sessionId: Schema.String, projectId: Schema.NullOr(Schema.String) }),
   Schema.TaggedStruct("add_folder", { path: Schema.String }),
