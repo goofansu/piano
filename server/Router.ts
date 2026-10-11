@@ -1,18 +1,19 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Cause, Effect, Schema } from "effect";
+import { Cause, Data, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { type Endpoint, Endpoints, type IdParam, type Json } from "../shared/http.ts";
 import type { RadiusSetupState } from "../shared/radius.ts";
-import { type DirListing, SessionDefaults, SessionPullRequestAction } from "../shared/wire.ts";
+import type { DirListing, ProviderLoginState, Workspace } from "../shared/wire.ts";
 import { Catalog } from "./Catalog.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { expandHome } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
-import { RadiusSetup } from "./RadiusSetup.ts";
-import { Registry } from "./Registry.ts";
+import { RadiusSetup, type RadiusSetupError } from "./RadiusSetup.ts";
+import { Registry, type SessionEntry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { SidebarView } from "./SidebarView.ts";
@@ -61,19 +62,70 @@ const listDirectory = (raw: string) =>
     return listing;
   });
 
-/** Paths travel in JSON bodies, never in URLs, so access logs and proxies don't record them. */
-const readBody = Effect.gen(function* () {
-  const text = yield* (yield* HttpServerRequest.HttpServerRequest).text.pipe(Effect.orElseSucceed(() => ""));
-  try {
-    const body: unknown = JSON.parse(text);
-    return body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-});
+/** A failed request as the browser sees it: a status and the `error` message it shows. */
+class ApiFailure extends Data.TaggedError("ApiFailure")<{ readonly status: number; readonly error: string }> {}
 
-const json = (body: unknown, status = 200) =>
-  HttpServerResponse.text(JSON.stringify(projectDisplay(body), null, 2), { status, contentType: "application/json" });
+const fail = (status: number, error: string) => Effect.fail(new ApiFailure({ status, error }));
+
+/** Every other failure becomes `status` with its own `detail`, or `fallback` when it has none. */
+const failAs = (status: number, fallback: string | ((error: unknown) => string)) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.catchCause(cause => {
+    const error = Cause.squash(cause);
+    if (error instanceof ApiFailure) return Effect.fail(error);
+    return fail(status, typeof fallback === "string" ? fallback : fallback(error));
+  }));
+
+const detailOr = (fallback: string) => (error: unknown) =>
+  error && typeof error === "object" && "detail" in error && typeof error.detail === "string" ? error.detail : fallback;
+
+/** What a handler receives: the decoded body, and the registered workspace and session its IDs name. */
+type Input<Q extends IdParam, B extends Json | undefined> =
+  & (B extends Json ? { readonly body: B["Type"] } : unknown)
+  & ("workspaceId" extends Q ? { readonly workspace: Workspace } : unknown)
+  & ("sessionId" extends Q ? { readonly session: SessionEntry } : unknown);
+
+const respond = (body: unknown, status: number, { noStore = false, redact = true } = {}) =>
+  HttpServerResponse.text(JSON.stringify(redact ? projectDisplay(body) : body, null, 2), {
+    status, contentType: "application/json", ...(noStore ? { headers: { "cache-control": "no-store" } } : {}),
+  });
+
+/**
+ * One route per endpoint of shared/http.ts. IDs are resolved and the body decoded before the
+ * handler runs; its result leaves through the response Schema, so the server cannot answer
+ * outside the contract the browser decodes.
+ */
+const route = (router: HttpRouter.HttpRouter) => <Q extends IdParam, B extends Json | undefined, R extends Json, Req>(
+  endpoint: Endpoint<Q, B, R>,
+  handler: (input: Input<Q, B>) => Effect.Effect<R["Type"], ApiFailure, Req>,
+  /** Sign-in and Radius setup state carry no transcript content and leave unprojected, so codes and URLs reach the user intact. */
+  options: { readonly redact?: boolean } = {},
+) => router.add(endpoint.method, endpoint.path, Effect.gen(function* () {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const input: Record<string, unknown> = {};
+  if (endpoint.query.length > 0) {
+    const params = new URL(request.url, "http://localhost").searchParams;
+    const workspaceId = params.get("workspaceId"), sessionId = params.get("sessionId");
+    const wantsSession = (endpoint.query as ReadonlyArray<IdParam>).includes("sessionId");
+    if (!workspaceId || (wantsSession && !sessionId)) return yield* fail(400, wantsSession ? "Workspace and session IDs are required." : "Workspace ID is required.");
+    const registry = yield* Registry;
+    const found = yield* (wantsSession && sessionId ? registry.sessionIn(workspaceId, sessionId) : Effect.map(registry.workspace(workspaceId), workspace => ({ workspace })))
+      .pipe(Effect.catchTag("RegistryLookupError", error => fail(404, error.detail)));
+    Object.assign(input, found);
+  }
+  if (endpoint.body) {
+    const text = yield* request.text.pipe(Effect.orElseSucceed(() => ""));
+    const body = Schema.decodeUnknownExit(Schema.fromJsonString(endpoint.body as Json))(text);
+    if (body._tag === "Failure") return yield* fail(400, endpoint.invalid);
+    input.body = body.value;
+  }
+  const result = yield* handler(input as Input<Q, B>);
+  const encoded = Schema.encodeUnknownExit(endpoint.response)(result);
+  if (encoded._tag === "Failure") {
+    yield* Effect.logError(`${endpoint.method} ${endpoint.path} answered outside its contract`, encoded.cause);
+    return yield* fail(500, "The server answered outside its contract. Inspect the server log.");
+  }
+  return respond(encoded.value, 200, { noStore: endpoint.noStore, redact: options.redact });
+}).pipe(Effect.catchTag("ApiFailure", failure => Effect.succeed(respond({ error: failure.error }, failure.status)))));
 
 export const AppRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
@@ -88,84 +140,84 @@ export const AppRouter = HttpRouter.use((router) =>
       }).pipe(Effect.scoped),
     );
 
-    yield* router.add(
-      "POST",
-      "/api/ls",
-      Effect.gen(function* () {
-        const { path } = yield* readBody;
-        const raw = typeof path === "string" ? path : "~";
-        return yield* listDirectory(raw).pipe(
-          Effect.map((listing) => json(listing)),
-          // Answer with the failure's own message, never the Effect cause wrapper.
-          Effect.catchCause((cause) => {
-            const e = Cause.squash(cause);
-            const message = e instanceof Error ? (e as NodeJS.ErrnoException).code === "EACCES" ? `Cannot read ${raw}: permission denied` : e.message : String(e);
-            return Effect.succeed(json({ error: message }, 400));
-          }),
-        );
-      }),
-    );
+    const serve = route(router);
 
-    // mkdir -p for the folder picker's "New folder".
-    yield* router.add(
-      "POST",
-      "/api/mkdir",
-      Effect.gen(function* () {
-        const body = yield* readBody;
-        const target = typeof body.path === "string" ? body.path : "";
-        const path = resolve(expandHome(target));
-        if (!target || path === "/" ) return json({ error: "path is required" }, 400);
-        try {
-          mkdirSync(path, { recursive: true });
-          return json({ path });
-        } catch (e) {
-          return json({ error: e instanceof Error ? e.message : String(e) }, 400);
-        }
-      }),
-    );
+    yield* serve(Endpoints.listDirectory, ({ body }) => {
+      const raw = body.path ?? "~";
+      // Answer with the failure's own message, never the Effect cause wrapper.
+      return listDirectory(raw).pipe(failAs(400, e => e instanceof Error ? (e as NodeJS.ErrnoException).code === "EACCES" ? `Cannot read ${raw}: permission denied` : e.message : String(e)));
+    });
 
-    for (const method of ["GET", "PUT"] as const) {
-      yield* router.add(method, "/api/session/pull-request", Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const params = new URL(request.url, "http://localhost").searchParams;
-        const workspaceId = params.get("workspaceId"), sessionId = params.get("sessionId");
-        if (!workspaceId || !sessionId) return json({ error: "Workspace and session IDs are required." }, 400);
-        const found = yield* (yield* Registry).sessionIn(workspaceId, sessionId).pipe(Effect.result);
-        if (found._tag === "Failure") return json({ error: found.failure.detail }, 404);
-        const cwd = found.success.workspace.path;
-        const prs = yield* SessionPullRequests;
-        if (method === "GET") return json(yield* prs.get(cwd, sessionId));
-        const body = yield* request.text;
-        const action = yield* Effect.try(() => Schema.decodeUnknownSync(Schema.fromJsonString(SessionPullRequestAction))(body));
-        return json(yield* prs.change(cwd, sessionId, action));
-      }).pipe(Effect.catchCause(cause => {
-        const error = Cause.squash(cause);
-        const message = error instanceof Error && "detail" in error ? String(error.detail) : "Invalid pull request request.";
-        return Effect.succeed(json({ error: message }, 400));
-      })));
-    }
-
-    for (const endpoint of ["changes", "changes/file"] as const) {
-      yield* router.add("POST", `/api/workspace/${endpoint}`, Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId") ?? "";
-        const found = yield* (yield* Registry).workspace(id).pipe(Effect.result);
-        if (found._tag === "Failure") return json({ error: found.failure.detail }, 404);
-        const workspace = found.success;
-        const body = endpoint === "changes/file" ? yield* readBody : undefined;
-        if (body && typeof body.path !== "string") return json({ error: "File path is required in the request body." }, 400);
-        return json(yield* (yield* WorkspaceChanges).preview(workspace, body?.path as string | undefined));
-      }));
-    }
-
-    yield* router.add("POST", "/api/workspace/capture", Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      const id = new URL(request.url, "http://localhost").searchParams.get("workspaceId") ?? "";
-      const found = yield* (yield* Registry).workspace(id).pipe(Effect.result);
-      if (found._tag === "Failure") return json({ error: found.failure.detail }, 404);
-      return json(yield* (yield* WorkspaceRevisions).capture(found.success));
+    yield* serve(Endpoints.makeDirectory, ({ body }) => Effect.gen(function* () {
+      const path = resolve(expandHome(body.path));
+      if (!body.path || path === "/") return yield* fail(400, Endpoints.makeDirectory.invalid);
+      yield* Effect.try({ try: () => mkdirSync(path, { recursive: true }), catch: e => new ApiFailure({ status: 400, error: e instanceof Error ? e.message : String(e) }) });
+      return { path };
     }));
 
+    yield* serve(Endpoints.folders, () => Effect.map(Effect.flatMap(SidebarView, view => view.fresh), ({ folders }) => ({ folders })));
+
+    yield* serve(Endpoints.workspaceChanges, ({ workspace }) => Effect.flatMap(WorkspaceChanges, changes => changes.preview(workspace)));
+    yield* serve(Endpoints.workspaceChangedFile, ({ workspace, body }) => Effect.flatMap(WorkspaceChanges, changes => changes.preview(workspace, body.path)));
+    yield* serve(Endpoints.workspaceCapture, ({ workspace }) => Effect.flatMap(WorkspaceRevisions, revisions => revisions.capture(workspace)));
+
+    const pullRequestFailure = failAs(400, detailOr("Invalid pull request request."));
+    yield* serve(Endpoints.sessionPullRequest, ({ workspace, session }) =>
+      Effect.flatMap(SessionPullRequests, prs => prs.get(workspace.path, session.sessionId)).pipe(pullRequestFailure));
+    yield* serve(Endpoints.changeSessionPullRequest, ({ workspace, session, body }) =>
+      Effect.flatMap(SessionPullRequests, prs => prs.change(workspace.path, session.sessionId, body)).pipe(pullRequestFailure));
+
+    // Discovery never opens a saved session or creates a second writer. A live
+    // session is resolved by server-owned identity; otherwise use the cwd probe.
+    yield* serve(Endpoints.slashCommands, ({ body }) => Effect.gen(function* () {
+      if (!body.cwd) return yield* fail(400, Endpoints.slashCommands.invalid);
+      const cwd = resolve(expandHome(body.cwd));
+      if (body.sessionId) {
+        const session = yield* (yield* SessionHosts).get(cwd, body.sessionId);
+        if (!session) return yield* fail(409, "Session is no longer running. Reopen the suggestions.");
+        const result = yield* session.act({ _tag: "commands" });
+        if (result?._tag === "commands") return { commands: result.commands };
+        return yield* fail(502, "Command catalog unavailable.");
+      }
+      const catalog = yield* (yield* Catalog).get(cwd);
+      return catalog.error ? yield* fail(502, catalog.error) : { commands: catalog.commands ?? [] };
+    }).pipe(failAs(502, "Could not load commands. Reopen the suggestions to retry.")));
+
+    yield* serve(Endpoints.saveDefaults, ({ body }) =>
+      Effect.flatMap(PiSettings, settings => settings.saveDefaults(body)).pipe(
+        Effect.map(defaults => ({ defaults })),
+        Effect.catchTag("PiSettingsError", error => fail(400, error.detail))));
+
+    const radiusAction = (body: typeof Endpoints.changeRadiusSetup.body.Type) => Effect.flatMap(RadiusSetup, (setup): Effect.Effect<RadiusSetupState, RadiusSetupError> => {
+      switch (body.action) {
+        case "configure-mcp": return setup.configureMcp;
+        case "install-web-search": return setup.installWebSearch;
+        case "remove-mcp": return setup.removeMcp(body.removalKey);
+        case "uninstall-web-search": return setup.uninstallWebSearch(body.removalKey);
+      }
+    });
+    yield* serve(Endpoints.radiusSetup, () => Effect.flatMap(RadiusSetup, setup => setup.state).pipe(Effect.map(state => ({ state }))), { redact: false });
+    yield* serve(Endpoints.changeRadiusSetup, ({ body }) => radiusAction(body).pipe(Effect.map(state => ({ state })), Effect.catchTag("RadiusSetupError", error => fail(409, error.detail))), { redact: false });
+
+    yield* serve(Endpoints.oauthProviders, () =>
+      Effect.flatMap(ProviderLogin, login => login.providers).pipe(Effect.map(providers => ({ providers })), failAs(502, "Could not load OAuth providers.")));
+
+    yield* serve(Endpoints.providerLogout, ({ body }) =>
+      Effect.flatMap(ProviderLogin, login => login.signOut(body.provider)).pipe(
+        Effect.as({ ok: true as const }), failAs(409, "Could not sign out. Finish any sign-in in progress and try again.")));
+
+    // Credential values and callback URLs travel only in bodies. This global
+    // operation creates no session and owns no conversation history.
+    const login = <E>(step: (login: ProviderLogin["Service"]) => Effect.Effect<ProviderLoginState | null, E>) =>
+      Effect.flatMap(ProviderLogin, step).pipe(
+        Effect.map(state => ({ state })),
+        failAs(409, "Sign-in request could not be completed. Resume the current sign-in or try again."));
+    yield* serve(Endpoints.providerLoginState, () => login(l => l.state), { redact: false });
+    yield* serve(Endpoints.startProviderLogin, ({ body }) => login(l => l.start(body.provider)), { redact: false });
+    yield* serve(Endpoints.answerProviderLogin, ({ body }) => login(l => l.answer(body.id, body.promptId, body.value)), { redact: false });
+    yield* serve(Endpoints.cancelProviderLogin, ({ body }) => login(l => l.cancel(body.id)), { redact: false });
+
+    // Image bytes, not JSON: outside the endpoint table. The ID is a content hash, never a path.
     yield* router.add("GET", "/api/image-previews/:id", Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
       const id = new URL(request.url, "http://localhost").pathname.split("/").pop() ?? "";
@@ -173,83 +225,6 @@ export const AppRouter = HttpRouter.use((router) =>
       return image ? HttpServerResponse.uint8Array(image.bytes, { contentType: image.mimeType,
         headers: { "cache-control": "private, no-store", "x-content-type-options": "nosniff" } })
         : HttpServerResponse.empty({ status: 404 });
-    }));
-
-    // Discovery never opens a saved session or creates a second writer. A live
-    // session is resolved by server-owned identity; otherwise use the cwd probe.
-    yield* router.add("POST", "/api/commands", Effect.gen(function* () {
-      const body = yield* readBody;
-      const raw = typeof body.cwd === "string" ? body.cwd : "";
-      if (!raw) return json({ error: "Directory is required." }, 400);
-      const cwd = resolve(expandHome(raw));
-      const sessionId = typeof body.sessionId === "string" ? body.sessionId : undefined;
-      if (sessionId) {
-        const session = yield* (yield* SessionHosts).get(cwd, sessionId);
-        if (!session) return json({ error: "Session is no longer running. Reopen the suggestions." }, 409);
-        const result = yield* session.act({ _tag: "commands" });
-        if (result?._tag === "commands") return json({ commands: result.commands });
-        return json({ error: "Command catalog unavailable." }, 502);
-      }
-      const catalog = yield* (yield* Catalog).get(cwd);
-      return catalog.error ? json({ error: catalog.error }, 502) : json({ commands: catalog.commands ?? [] });
-    }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load commands. Reopen the suggestions to retry." }, 502)))));
-
-    yield* router.add("PUT", "/api/settings/defaults", Effect.gen(function* () {
-      const body = yield* readBody;
-      const parsed = Schema.decodeUnknownExit(SessionDefaults)(body);
-      if (parsed._tag === "Failure") return json({ error: "Choose a valid default model and effort." }, 400);
-      return json({ defaults: yield* (yield* PiSettings).saveDefaults(parsed.value) });
-    }).pipe(Effect.catchTag("PiSettingsError", error => Effect.succeed(json({ error: error.detail }, 400)))));
-
-    for (const method of ["GET", "POST"] as const) {
-      yield* router.add(method, "/api/settings/radius", Effect.gen(function* () {
-        const setup = yield* RadiusSetup;
-        let state: RadiusSetupState;
-        if (method === "GET") state = yield* setup.state;
-        else {
-          const body = yield* readBody;
-          if (body.action === "configure-mcp") state = yield* setup.configureMcp;
-          else if (body.action === "install-web-search") state = yield* setup.installWebSearch;
-          else if (body.action === "remove-mcp" && typeof body.removalKey === "string") state = yield* setup.removeMcp(body.removalKey);
-          else if (body.action === "uninstall-web-search" && typeof body.removalKey === "string") state = yield* setup.uninstallWebSearch(body.removalKey);
-          else return json({ error: "Invalid Radius setup action." }, 400);
-        }
-        return HttpServerResponse.text(JSON.stringify({ state }), { contentType: "application/json", headers: { "cache-control": "no-store" } });
-      }).pipe(Effect.catchTag("RadiusSetupError", error => Effect.succeed(json({ error: error.detail }, 409)))));
-    }
-
-    yield* router.add("GET", "/api/oauth-providers", Effect.gen(function* () {
-      return json({ providers: yield* (yield* ProviderLogin).providers });
-    }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not load OAuth providers." }, 502)))));
-
-    yield* router.add("POST", "/api/provider-logout", Effect.gen(function* () {
-      const body = yield* readBody;
-      if (typeof body.provider !== "string") return json({ error: "Invalid sign-out request." }, 400);
-      yield* (yield* ProviderLogin).signOut(body.provider);
-      return json({ ok: true });
-    }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Could not sign out. Finish any sign-in in progress and try again." }, 409)))));
-
-    // Credential values and callback URLs travel only in POST bodies. This
-    // global operation creates no session and owns no conversation history.
-    for (const method of ["GET", "POST", "DELETE", "PUT"] as const) {
-      yield* router.add(method, "/api/provider-login", Effect.gen(function* () {
-        const login = yield* ProviderLogin;
-        let result: unknown;
-        if (method === "GET") result = { state: yield* login.state };
-        else {
-          const body = yield* readBody;
-          if (method === "POST" && typeof body.provider === "string") result = { state: yield* login.start(body.provider) };
-          else if (method === "DELETE" && typeof body.id === "string") result = { state: yield* login.cancel(body.id) };
-          else if (method === "PUT" && typeof body.id === "string" && typeof body.promptId === "string" && typeof body.value === "string" && body.value.length <= 16_384) result = { state: yield* login.answer(body.id, body.promptId, body.value) };
-          else return json({ error: "Invalid sign-in request." }, 400);
-        }
-        return HttpServerResponse.text(JSON.stringify(result), { contentType: "application/json", headers: { "cache-control": "no-store" } });
-      }).pipe(Effect.catchCause(() => Effect.succeed(json({ error: "Sign-in request could not be completed. Resume the current sign-in or try again." }, 409)))));
-    }
-
-    yield* router.add("GET", "/api/folders", Effect.gen(function* () {
-      const { folders } = yield* (yield* SidebarView).fresh;
-      return json({ folders });
     }));
   }),
 );

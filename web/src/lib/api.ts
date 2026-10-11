@@ -1,24 +1,17 @@
 /**
- * The browser's half of the HTTP seam, as shared/wire.ts is for the socket: one function per
- * `/api/*` endpoint, each response decoded against its shared Schema, and one error shape.
+ * The browser's half of the HTTP seam: one function per endpoint of shared/http.ts, the table the
+ * server router also serves. Each response is decoded against the endpoint's Schema, and every
+ * failure has one error shape.
  *
  * Paths never travel in URLs: registered workspaces and sessions are addressed by ID in the query
- * string, filesystem paths in a POST body.
+ * string, filesystem paths in a request body.
  */
 import { Schema } from "effect";
 // Relative so module tests can load the Schemas under plain Node, which has no `@shared` alias.
-import { RadiusSetupState } from "../../../shared/radius.ts";
-import {
-  DirListing,
-  OAuthProvider,
-  ProviderLoginState,
-  SessionDefaults,
-  SessionPullRequest,
-  type SessionPullRequestAction,
-  SlashCommand,
-  type ThinkingLevel,
-  WorkspaceChanges,
-} from "../../../shared/wire.ts";
+import { type Endpoint, Endpoints, type IdParam, type Json, type RadiusSetupAction } from "../../../shared/http.ts";
+import type { SessionPullRequestAction, ThinkingLevel } from "../../../shared/wire.ts";
+
+export type { RadiusSetupAction };
 
 /**
  * Every failed request: the server's own `error` message when it sent one, otherwise the
@@ -37,25 +30,22 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
-type Fallback = string | ((status: number) => string);
+/** What a call sends: the endpoint's ID parameters and, when it has one, its body. */
+type Input<Q extends IdParam, B extends Json | undefined> =
+  & ([Q] extends [never] ? unknown : { readonly query: Readonly<Record<Q, string>> })
+  & (B extends Json ? { readonly body: B["Type"] } : unknown);
 
-interface Call {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
-  /** Query parameters carry IDs only. */
-  query?: Record<string, string>;
-  body?: unknown;
-  signal?: AbortSignal;
-  cache?: RequestCache;
-  fallback: Fallback;
-}
-
-async function call<A>(path: string, schema: Schema.Decoder<A>, { method = "GET", query, body, signal, cache, fallback }: Call): Promise<A> {
+async function call<Q extends IdParam, B extends Json | undefined, R extends Json>(
+  endpoint: Endpoint<Q, B, R>, input: Input<Q, B>, { signal }: RequestOptions = {},
+): Promise<R["Type"]> {
+  const { method, path, noStore, fallback } = endpoint;
+  const { query, body } = input as { query?: Record<string, string>; body?: unknown };
   const failure = (status: number) => typeof fallback === "string" ? fallback : fallback(status);
   let response: Response;
   try {
     response = await fetch(query ? `${path}?${new URLSearchParams(query)}` : path, {
-      method, signal, cache,
-      ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      method, signal, ...(noStore ? { cache: "no-store" as const } : {}),
+      ...(endpoint.body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
     });
   } catch (error) {
     if (signal?.aborted) throw error;
@@ -70,80 +60,70 @@ async function call<A>(path: string, schema: Schema.Decoder<A>, { method = "GET"
     const message = json && typeof json === "object" && "error" in json && typeof json.error === "string" && json.error ? json.error : failure(response.status);
     throw new ApiError(message, response.status);
   }
-  const decoded = Schema.decodeUnknownExit(schema)(json);
+  const decoded = Schema.decodeUnknownExit(endpoint.response)(json);
   if (decoded._tag === "Failure") throw new ApiError(failure(response.status), response.status);
   return decoded.value;
 }
 
-const Ok = Schema.Struct({ ok: Schema.Literal(true) });
-
 // Folder picker
 
 export const listDirectory = (path: string, options?: RequestOptions) =>
-  call("/api/ls", DirListing, { method: "POST", body: { path }, ...options, fallback: "Could not list this folder." });
+  call(Endpoints.listDirectory, { body: { path } }, options);
 
 export const makeDirectory = async (path: string, options?: RequestOptions) =>
-  (await call("/api/mkdir", Schema.Struct({ path: Schema.String }), { method: "POST", body: { path }, ...options, fallback: "Could not create folder" })).path;
+  (await call(Endpoints.makeDirectory, { body: { path } }, options)).path;
 
 // Live workspace changes
 
 export const workspaceChanges = (workspaceId: string, options?: RequestOptions) =>
-  call("/api/workspace/changes", WorkspaceChanges, {
-    method: "POST", query: { workspaceId }, ...options,
-    fallback: status => `Changes request failed (${status}). Refresh folders or inspect the server.`,
-  });
+  call(Endpoints.workspaceChanges, { query: { workspaceId } }, options);
 
 export const workspaceChangedFile = (workspaceId: string, path: string, options?: RequestOptions) =>
-  call("/api/workspace/changes/file", WorkspaceChanges, {
-    method: "POST", query: { workspaceId }, body: { path }, ...options, fallback: status => `File request failed (${status}).`,
-  });
+  call(Endpoints.workspaceChangedFile, { query: { workspaceId }, body: { path } }, options);
 
 // Session pull request
 
 /** Reads always bypass the HTTP cache: GitHub facts are live. */
 export const sessionPullRequest = (workspaceId: string, sessionId: string, action?: SessionPullRequestAction, options?: RequestOptions) =>
-  call("/api/session/pull-request", SessionPullRequest, {
-    method: action ? "PUT" : "GET", query: { workspaceId, sessionId }, body: action, cache: "no-store", ...options,
-    fallback: "Could not load the pull request.",
-  });
+  action
+    ? call(Endpoints.changeSessionPullRequest, { query: { workspaceId, sessionId }, body: action }, options)
+    : call(Endpoints.sessionPullRequest, { query: { workspaceId, sessionId } }, options);
 
 // Composer
 
 /** A live session answers from its own child; otherwise the directory's probe does. */
 export const slashCommands = async (cwd: string, sessionId: string | undefined, options?: RequestOptions) =>
-  (await call("/api/commands", Schema.Struct({ commands: Schema.Array(SlashCommand) }), {
-    method: "POST", body: { cwd, sessionId }, ...options, fallback: "Could not load commands.",
-  })).commands;
+  (await call(Endpoints.slashCommands, { body: { cwd, sessionId } }, options)).commands;
 
 export const saveDefaults = async (model: string | undefined, thinkingLevel: ThinkingLevel, options?: RequestOptions) =>
-  (await call("/api/settings/defaults", Schema.Struct({ defaults: SessionDefaults }), {
-    method: "PUT", body: { model, thinkingLevel }, ...options, fallback: "Could not save defaults. Try again.",
-  })).defaults;
+  (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;
 
 // Settings
 
 export const oauthProviders = async (options?: RequestOptions) =>
-  (await call("/api/oauth-providers", Schema.Struct({ providers: Schema.Array(OAuthProvider) }), { ...options, fallback: "Could not load providers." })).providers;
+  (await call(Endpoints.oauthProviders, {}, options)).providers;
 
 export const providerLogout = async (provider: string, options?: RequestOptions) => {
-  await call("/api/provider-logout", Ok, { method: "POST", body: { provider }, ...options, fallback: "Could not sign out. Try again." });
+  await call(Endpoints.providerLogout, { body: { provider } }, options);
 };
 
 /** Each sign-in request answers with the current attempt, or null when none exists. */
 export type ProviderLoginRequest =
   | { method: "GET" }
-  | { method: "POST"; body: { provider: string } }
-  | { method: "PUT"; body: { id: string; promptId: string; value: string } }
-  | { method: "DELETE"; body: { id: string } };
+  | { method: "POST"; body: typeof Endpoints.startProviderLogin.body.Type }
+  | { method: "PUT"; body: typeof Endpoints.answerProviderLogin.body.Type }
+  | { method: "DELETE"; body: typeof Endpoints.cancelProviderLogin.body.Type };
 
-export const providerLogin = async (request: ProviderLoginRequest = { method: "GET" }, options?: RequestOptions) =>
-  (await call("/api/provider-login", Schema.Struct({ state: Schema.NullOr(ProviderLoginState) }), {
-    ...request, ...options, fallback: "Could not complete sign-in.",
-  })).state;
-
-export type RadiusSetupAction = "configure-mcp" | "install-web-search" | "remove-mcp" | "uninstall-web-search";
+export const providerLogin = async (request: ProviderLoginRequest = { method: "GET" }, options?: RequestOptions) => {
+  switch (request.method) {
+    case "GET": return (await call(Endpoints.providerLoginState, {}, options)).state;
+    case "POST": return (await call(Endpoints.startProviderLogin, request, options)).state;
+    case "PUT": return (await call(Endpoints.answerProviderLogin, request, options)).state;
+    case "DELETE": return (await call(Endpoints.cancelProviderLogin, request, options)).state;
+  }
+};
 
 export const radiusSetup = async (action?: { action: RadiusSetupAction; removalKey?: string }, options?: RequestOptions) =>
-  (await call("/api/settings/radius", Schema.Struct({ state: RadiusSetupState }), {
-    ...(action ? { method: "POST", body: action } : {}), ...options, fallback: "Could not load Radius setup.",
-  })).state;
+  (action
+    ? await call(Endpoints.changeRadiusSetup, { body: action as typeof Endpoints.changeRadiusSetup.body.Type }, options)
+    : await call(Endpoints.radiusSetup, {}, options)).state;

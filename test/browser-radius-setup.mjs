@@ -86,7 +86,7 @@ try {
         if(init.method!=='POST'||JSON.parse(init.body).provider!=='radius')return json({error:'Invalid sign-out'},400);
         f.logoutCalls++;
         if(f.failLogout)return json({error:'Could not sign out. Try again.'},503);
-        f.signedIn=false;f.state=null;return json({});
+        f.signedIn=false;f.state=null;return json({ok:true});
       }
       if(path!=='/api/provider-login')return original(input,init);
       switch(init.method??'GET') {
