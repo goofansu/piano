@@ -84,27 +84,22 @@ function McpServerItem({ server, state, disabled, install, uninstall, signIn, si
   install: () => void; uninstall: () => void; signIn: () => void; signOut: () => void;
 }) {
   const ready = state.status === "ready";
-  const status = state.detail ?? (!ready ? undefined
-    : !state.oauth ? "Pi signs in with the Authorization header in its configuration."
-    : state.signedIn ? undefined : `Sign in so Pi can use your ${server.name} account.`);
-  return <Item variant="outline" className="rounded-xl px-4 sm:px-5">
+  // Only the name and its actions; a line appears only for a configuration problem the user must fix in Pi.
+  return <Item variant="outline" className="flex-nowrap rounded-xl px-4 sm:px-5">
     <ItemMedia variant="icon"><ServerIcon /></ItemMedia>
     <ItemContent className="min-w-0">
       <ItemTitle>
         {server.name}
         {ready && (!state.oauth || state.signedIn) && <><CheckCircle2Icon className="size-3.5 text-brand" aria-hidden /><span className="sr-only">(Ready)</span></>}
       </ItemTitle>
-      <ItemDescription className="line-clamp-none">
-        {server.description}
-      </ItemDescription>
-      {status && <p className="text-xs text-muted-foreground">{status}</p>}
+      {state.detail && <ItemDescription className="line-clamp-none">{state.detail}</ItemDescription>}
     </ItemContent>
-    <ItemActions className="max-sm:basis-full max-sm:pl-12">
+    <ItemActions className="shrink-0">
       {state.status === "missing" && <Button size="sm" disabled={disabled} aria-label={`Install ${server.name} MCP`} onClick={install}>Install</Button>}
       {ready && state.oauth && (state.signedIn
-        ? <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} aria-label={`Sign out of ${server.name}`} onClick={signOut}>Sign out</Button>
+        ? <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={disabled} aria-label={`Sign out of ${server.name}`} onClick={signOut}>Sign out</Button>
         : <Button size="sm" disabled={disabled} aria-label={`Sign in to ${server.name}`} onClick={signIn}>Sign in</Button>)}
-      {state.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground max-sm:-mx-2.5" disabled={disabled} aria-label={`Uninstall ${server.name} MCP`} onClick={uninstall}>Uninstall</Button>}
+      {state.removalKey && <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={disabled} aria-label={`Uninstall ${server.name} MCP`} onClick={uninstall}>Uninstall</Button>}
     </ItemActions>
   </Item>;
 }
