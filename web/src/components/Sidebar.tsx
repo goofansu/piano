@@ -1,30 +1,31 @@
-import type { ClientCommand as ClientMessage, FolderView, Project } from "@shared/wire";
+import type { FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, type LucideIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
+import { MoreHorizontalIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, TargetIcon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
+import { SessionCommandMenuItem, useCommands, useSessionCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { IconButton } from "@/components/IconButton";
 import { Keys } from "@/components/PianoMark";
-import { type ProjectDialog, ProjectMenu } from "@/components/Projects";
-import { SessionCommandMenuItem, useSessionCommands } from "@/components/SessionCommandHost";
+import { ProjectCommandIconView } from "@/components/Projects";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, type GlobalCommandGroup, globalCommands } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import { activeProjects, type ProjectCommand, type ProjectCommandIcon, projectCommands } from "@/lib/projectCommands";
+import { activeProjects, assignProjectCommand, newProjectCommand, projectChoices, projectCommands } from "@/lib/projectCommands";
 import { type SessionEntry, sessionCatalog } from "@/lib/sessionCatalog";
-import { pickCommands, SESSION_ROW_COMMANDS } from "@/lib/sessionCommands";
+import { pickCommands, SESSION_ROW_COMMANDS, type SessionTarget } from "@/lib/sessionCommands";
+import { sessionProject } from "@/lib/sessionContext";
 import { projectKey } from "@/lib/sidebarGroups";
 import { dateGroups, folderGroups, projectGroups, type SidebarView, sortSessions } from "@/lib/sidebarView";
 import { useNavigation } from "@/lib/useNavigation";
@@ -34,8 +35,6 @@ import { type AppState, sessionKey } from "@/store";
 
 interface Props {
   state: AppState;
-  send: (m: ClientMessage) => void;
-  onProjectDialog: (dialog: ProjectDialog) => void;
   /** Hide the sidebar (or close the sheet it is shown in). */
   onHide: () => void;
 }
@@ -47,9 +46,9 @@ const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hov
 const groupRow = cn(row, "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
 const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
-export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
+export function Sidebar({ state, onHide }: Props) {
   const { select, openNew, openSettings, setPalette } = useNavigation();
-  const { view, setView } = useSidebarView();
+  const { view } = useSidebarView();
   const { openGroups, setOpen } = useSidebarGroups(state, view.groupBy);
   const current = state.session ?? state.selecting;
   const [dateNow, setDateNow] = useState(() => new Date());
@@ -80,7 +79,7 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
   const listed = useMemo(() => sessionCatalog(state).filter(s => s.listed),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, current?.cwd, current?.sessionId]);
-  const groupProps = { state, send, select, openNew, reveal, onProjectDialog };
+  const groupProps = { state, select, reveal };
   const empty = (text: string) => (
     <Empty className="view-enter py-8">
       <EmptyHeader>
@@ -129,7 +128,7 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
         <IconButton label="Search sessions" tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>} onClick={() => setPalette(true)}>
           <SearchIcon />
         </IconButton>
-        <ViewMenu state={state} view={view} onChange={setView} />
+        <ViewMenu state={state} view={view} />
       </LayoutHeader>
       <div className="px-3 pb-3">
         <Button
@@ -153,20 +152,17 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
 }
 
 /** One menu for grouping and sorting the list; appearance lives here too. Each choice is a global command, as the palette offers it. */
-function ViewMenu({ state, view, onChange }: { state: AppState; view: SidebarView; onChange: (change: Partial<SidebarView>) => void }) {
-  const { setTheme, theme } = useTheme();
+function ViewMenu({ state, view }: { state: AppState; view: SidebarView }) {
+  const { theme } = useTheme();
+  const { run } = useCommands();
   const commands = globalCommands(state, { settingsOpen: false, view, theme: theme ?? "system" });
   const choices = (group: GlobalCommandGroup) => commands.filter(c => c.group === group);
-  const run = (c: GlobalCommand | undefined) => {
-    if (c?.intent.kind === "view") onChange(c.intent.change);
-    else if (c?.intent.kind === "appearance") setTheme(c.intent.appearance);
-  };
   // The label takes the slack so the current value sits beside the trigger's own chevron.
   const choice = (label: string, group: GlobalCommandGroup) => (
     <><span className="flex-1">{label}</span><span className="text-muted-foreground">{choices(group).find(c => c.checked)?.menuLabel ?? ""}</span></>
   );
   const radio = (group: GlobalCommandGroup, item: (c: GlobalCommand) => React.ReactNode) => (
-    <DropdownMenuRadioGroup value={choices(group).find(c => c.checked)?.id ?? ""} onValueChange={id => run(commands.find(c => c.id === id))}>
+    <DropdownMenuRadioGroup value={choices(group).find(c => c.checked)?.id ?? ""} onValueChange={id => { const c = commands.find(c => c.id === id); if (c) run(c); }}>
       {choices(group).map(item)}
     </DropdownMenuRadioGroup>
   );
@@ -253,16 +249,16 @@ export function SidebarRail({ onShow, working }: { onShow: () => void; working: 
   return <LayoutRail onShow={onShow} working={working} footer={<IconButton label="Settings" side="right" onClick={() => openSettings()}><SettingsIcon /></IconButton>} />;
 }
 
-interface GroupProps extends Pick<Props, "send" | "state" | "onProjectDialog">, Pick<Navigation, "select" | "openNew"> {
+interface GroupProps extends Pick<Props, "state">, Pick<Navigation, "select"> {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reveal: () => string | undefined;
 }
 
 /** One line per session: the title alone. Location and project live in the session header and the groupings. */
-function SessionRow({ t, state, send, select, onProjectDialog, reveal }: {
+function SessionRow({ t, state, select, reveal }: {
   t: SessionEntry;
-} & Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal">) {
+} & Pick<GroupProps, "state" | "select" | "reveal">) {
   const [enter] = useState(reveal);
   const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
   const { commands, run } = useSessionCommands(target);
@@ -298,7 +294,7 @@ function SessionRow({ t, state, send, select, onProjectDialog, reveal }: {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
-            <ProjectMenu state={state} send={send} session={target} onDialog={onProjectDialog} />
+            <ProjectMenu state={state} session={target} />
             {menu.filter(c => c.group !== "destructive").map(item)}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
@@ -311,13 +307,35 @@ function SessionRow({ t, state, send, select, onProjectDialog, reveal }: {
   );
 }
 
-const PROJECT_ICONS: Record<ProjectCommandIcon, LucideIcon> = { new: PlusIcon, edit: PencilIcon, archive: ArchiveIcon, unarchive: ArchiveRestoreIcon };
-const ProjectCommandIconView = ({ icon }: { icon: ProjectCommandIcon }) => { const Icon = PROJECT_ICONS[icon]; return <Icon />; };
+/**
+ * Membership lives in the session's own menu, like Rename or Archive. Choosing a project is a radio
+ * pick; "New project…" creates one and files the session in it. The command palette carries no
+ * project commands yet: which ones are wanted is left to daily use.
+ */
+function ProjectMenu({ state, session }: { state: AppState; session: SessionTarget }) {
+  const { run } = useCommands();
+  const current = sessionProject(state, session);
+  const choices = projectChoices(state, current);
+  const create = newProjectCommand(state, session);
+  return <DropdownMenuSub>
+    <DropdownMenuSubTrigger disabled={!create.enabled}><TargetIcon /> Project{current && <span className="ml-1 min-w-0 max-w-32 truncate text-muted-foreground">{current.name}</span>}</DropdownMenuSubTrigger>
+    <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
+      {choices.length > 0 && <>
+        <DropdownMenuRadioGroup value={current?.id ?? ""} onValueChange={id => run(assignProjectCommand(state, session, id || null))}>
+          {choices.map(p => <DropdownMenuRadioItem key={p.id} value={p.id}><span className="truncate">{p.name}</span>{p.archived && <span className="ml-1 text-muted-foreground">· Archived</span>}</DropdownMenuRadioItem>)}
+          <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+      </>}
+      <DropdownMenuItem disabled={!create.enabled} onSelect={() => run(create)}><ProjectCommandIconView icon={create.icon} /> {create.label}…</DropdownMenuItem>
+    </DropdownMenuSubContent>
+  </DropdownMenuSub>;
+}
 
 const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} className="size-4" />;
 
 /** Session rows from the catalog; each entry already says how it appears. */
-function SessionRows({ sessions, className, ...row }: Pick<GroupProps, "state" | "send" | "select" | "onProjectDialog" | "reveal"> & { sessions: readonly SessionEntry[]; className: string }) {
+function SessionRows({ sessions, className, ...row }: Pick<GroupProps, "state" | "select" | "reveal"> & { sessions: readonly SessionEntry[]; className: string }) {
   return (
     <ul className={className}>
       {sessions.map(s => <SessionRow key={sessionKey(s)} t={s} {...row} />)}
@@ -326,22 +344,18 @@ function SessionRows({ sessions, className, ...row }: Pick<GroupProps, "state" |
 }
 
 /** Every listed session in one list. */
-function SessionList({ sessions, state, send, select, reveal, onProjectDialog }: Omit<GroupProps, "open" | "onOpenChange" | "openNew"> & { sessions: readonly SessionEntry[] }) {
-  return <SessionRows className="flex flex-col gap-1" sessions={sessions} state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />;
+function SessionList({ sessions, state, select, reveal }: Omit<GroupProps, "open" | "onOpenChange"> & { sessions: readonly SessionEntry[] }) {
+  return <SessionRows className="flex flex-col gap-1" sessions={sessions} state={state} select={select} reveal={reveal} />;
 }
 
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
-function ProjectGroup({ project, sessions, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
+function ProjectGroup({ project, sessions, open, onOpenChange, state, select, reveal }: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
   const [enter] = useState(reveal);
+  const { run } = useCommands();
   const members = sessions;
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find(c => c.id === "new-session");
   const menu = commands.filter(c => c.id !== "new-session");
-  const run = ({ intent }: ProjectCommand) => {
-    if (intent.kind === "new-session") openNew(undefined, intent.projectId);
-    else if (intent.kind === "edit") onProjectDialog({ project: intent.project });
-    else send(intent.command);
-  };
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={cn(groupRow, enter)}>
@@ -371,15 +385,16 @@ function ProjectGroup({ project, sessions, open, onOpenChange, state, send, sele
       </div>
       <CollapsibleContent className="disclosure-content">
         {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty>
-          : <SessionRows className="flex flex-col gap-1 py-1" sessions={members} state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />}
+          : <SessionRows className="flex flex-col gap-1 py-1" sessions={members} state={state} select={select} reveal={reveal} />}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function FolderGroup({ folder, sessions, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
+function FolderGroup({ folder, sessions, open, onOpenChange, state, select, reveal }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const [enter] = useState(reveal);
-  const [closing, setClosing] = useState(false);
+  const { run } = useCommands();
+  const [create, close] = folderCommands(state, folder);
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -390,7 +405,7 @@ function FolderGroup({ folder, sessions, open, onOpenChange, state, send, select
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{folder.name}</span>
           </button>
         </CollapsibleTrigger>
-        <IconButton size="icon-xs" className={hoverSlot} label={`New session in ${folder.name}`} tooltip="New session here" onClick={() => openNew(folder.path)}>
+        <IconButton size="icon-xs" className={hoverSlot} label={create.ariaLabel ?? create.label} tooltip={create.label} onClick={() => run(create)}>
           <PlusIcon />
         </IconButton>
         <DropdownMenu>
@@ -401,8 +416,8 @@ function FolderGroup({ folder, sessions, open, onOpenChange, state, send, select
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuGroup>
-              <DropdownMenuItem disabled={!state.connected} onSelect={() => setClosing(true)}>
-                <XIcon /> Close
+              <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
+                <XIcon /> {close.label}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
@@ -412,24 +427,8 @@ function FolderGroup({ folder, sessions, open, onOpenChange, state, send, select
       {folder.discovery.status === "non-git" && <Badge variant="secondary" className="ml-7">Non-Git</Badge>}
       <CollapsibleContent className="disclosure-content">
         {sessions.length === 0 ? <ListEmpty>No sessions yet</ListEmpty>
-          : <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} state={state} send={send} select={select} onProjectDialog={onProjectDialog} reveal={reveal} />}
+          : <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} state={state} select={select} reveal={reveal} />}
       </CollapsibleContent>
-      <Dialog open={closing} onOpenChange={setClosing}>
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Close this folder?</DialogTitle>
-            <DialogDescription>"{folder.name}" will be removed from the sidebar. Files and session history will not be deleted.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setClosing(false)}>Cancel</Button>
-            <Button disabled={!state.connected} onClick={() => {
-              if (!state.connected) return;
-              send({ _tag: "remove_folder", path: folder.path });
-              setClosing(false);
-            }}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Collapsible>
   );
 }

@@ -1,16 +1,18 @@
 import { GitBranchIcon, MoreHorizontalIcon, PanelLeftOpenIcon, SplitIcon } from "lucide-react";
+import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import { IconButton } from "@/components/IconButton";
-import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/SessionCommandHost";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { pickCommands, SESSION_HEADER_COMMANDS } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
+import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
-export function SessionHeader({ state, onMenu, openProject, status, pullRequest }: {
-  state: AppState; onMenu: () => void; openProject: (id: string) => void; status: string; pullRequest: React.ReactNode;
+export function SessionHeader({ state, onMenu, status, pullRequest }: {
+  state: AppState; onMenu: () => void; status: string; pullRequest: React.ReactNode;
 }) {
+  const { openNew } = useNavigation();
   const session = state.session;
   // Zed's form: `folder ⇄ worktree / ⑂ branch`; the folder's own checkout is the `main` worktree.
   const { title, branch, sessionId, project, cwd, folderName: folder, worktreeName: worktree } = sessionContext(state);
@@ -27,7 +29,7 @@ export function SessionHeader({ state, onMenu, openProject, status, pullRequest 
         {cwd ? <>
           <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-1">
             {/* The project is the way back to where this session was opened from. */}
-            {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" onClick={() => openProject(project.id)}>{project.name}</button>}
+            {project && <button type="button" className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring" onClick={() => openNew(undefined, project.id)}>{project.name}</button>}
             <h1 className="truncate text-sm font-medium">{session ? title : "New session"}</h1>
           </div>
           {/* Plain workspace metadata has no dedicated UI primitive. */}

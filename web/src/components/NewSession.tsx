@@ -4,6 +4,7 @@ import { ArrowUpIcon, FolderIcon, FolderOpenIcon, GitBranchPlusIcon, PanelLeftOp
 import { useCallback, useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { BranchLabel } from "@/components/BranchLabel";
+import { useCommands } from "@/components/CommandHost";
 import { FolderPicker } from "@/components/FolderPicker";
 import { IconButton } from "@/components/IconButton";
 import { ModelSelect } from "@/components/ModelSelect";
@@ -20,7 +21,7 @@ import { abbrevHome } from "@/lib/format";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { isSendKey } from "@/lib/keys";
 import { type DraftKey, NEW_SESSION_DRAFT, sendable } from "@/lib/messageDraft";
-import { canStartSessionIn, findProject, projectChoices, projectCommand } from "@/lib/projectCommands";
+import { canStartSessionIn, findProject, newProjectCommand, projectChoices, projectCommand } from "@/lib/projectCommands";
 import { completionTarget, folderFor } from "@/lib/sessionContext";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
@@ -37,15 +38,14 @@ interface Props {
   /** The project a session started here joins; the page is that project's home. */
   projectId?: string;
   onProjectChange: (projectId?: string) => void;
-  /** Open the New project dialog; the created project becomes this page's project. */
-  onNewProject: () => void;
   onMenu: () => void;
 }
 
 const NEW = { kind: "new" } as const;
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, onDraftChange, chooseDirectory, projectId, onProjectChange, onNewProject, onMenu }: Props) {
+export function NewSession({ state, send, onDraftChange, chooseDirectory, projectId, onProjectChange, onMenu }: Props) {
+  const { run } = useCommands();
   // The client starts a fresh page in the last directory used, else the first folder; opened for a project, it starts without one.
   const cwd = state.view.kind === "new" ? state.view.cwd ?? "" : "";
   const text = state.drafts[NEW_SESSION_DRAFT] ?? "";
@@ -92,8 +92,8 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
               <div className="min-w-0 shrink">
                 <DirectorySelect state={state} value={cwd} onChange={chooseDirectory} onBrowse={() => setPickerOpen(true)} send={send} />
               </div>
-              {trust && <TrustToggle command={trust} send={send} />}
-              <ProjectSelect state={state} value={projectId} onChange={onProjectChange} onCreate={onNewProject} />
+              {trust && <TrustToggle command={trust} run={run} />}
+              <ProjectSelect state={state} value={projectId} onChange={onProjectChange} />
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, !state.connected)}>
               <AttachmentDraftView draft={attachments} disabled={!state.connected} />
@@ -130,7 +130,7 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
               <Alert className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
                 <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>This project is archived.</span>
-                  <Button variant="link" size="sm" className="h-auto p-0" disabled={!unarchive.enabled} onClick={() => { if (unarchive.intent.kind === "send") send(unarchive.intent.command); }}>{unarchive.label}</Button>
+                  <Button variant="link" size="sm" className="h-auto p-0" disabled={!unarchive.enabled} onClick={() => run(unarchive)}>{unarchive.label}</Button>
                 </AlertDescription>
               </Alert>
             )}
@@ -142,9 +142,15 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
   );
 }
 
-/** Which project the new session joins: the same searchable picker as the directory beside it, and the place to create the first one. */
-function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; value?: string; onChange: (id?: string) => void; onCreate: () => void }) {
+/**
+ * Which project the new session joins: the same searchable picker as the directory beside it, and the
+ * place to create the first one. A project created here becomes the page's project.
+ */
+function ProjectSelect({ state, value, onChange }: { state: AppState; value?: string; onChange: (id?: string) => void }) {
+  const { run } = useCommands();
   const [open, setOpen] = useState(false);
+  const create = newProjectCommand(state);
+  const onCreate = () => { setOpen(false); run(create); };
   const search = useRef<HTMLInputElement>(null);
   const current = findProject(state, value);
   const choices = projectChoices(state, current);
@@ -165,13 +171,13 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
               <EmptyDescription>No projects yet. A project groups sessions from any folders around one outcome.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Button variant="outline" size="sm" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }}><PlusIcon /> New project</Button>
+              <Button variant="outline" size="sm" disabled={!create.enabled} onClick={onCreate}><PlusIcon /> {create.label}</Button>
             </EmptyContent>
           </Empty>
         ) : (
           <Command>
             <PickerSearch ref={search} aria-label="Search projects" placeholder="Search projects">
-              <IconButton label="New project" disabled={!state.connected} onClick={() => { setOpen(false); onCreate(); }}>
+              <IconButton label={create.label} disabled={!create.enabled} onClick={onCreate}>
                 <PlusIcon aria-hidden />
               </IconButton>
             </PickerSearch>
@@ -205,14 +211,14 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
  * The palette's Trust folder command as a toggle that shows the directory's state; offered only for
  * directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted.
  */
-function TrustToggle({ command, send }: { command: GlobalCommand; send: (m: ClientMessage) => void }) {
+function TrustToggle({ command, run }: { command: GlobalCommand; run: (command: GlobalCommand) => void }) {
   const trusted = !!command.pressed;
   return (
     <Button
       variant="ghost" size="sm" aria-pressed={trusted} aria-label="Directory trust" disabled={!command.enabled}
       className={cn(picker, "shrink-0", trusted ? "text-ink-3" : "text-ink-2")}
       title={trusted ? "Pi loads this folder's .pi settings, extensions and skills. Click to untrust." : "Pi skips this folder's .pi settings, extensions and skills. Click to trust."}
-      onClick={() => { if (command.intent.kind === "send") send(command.intent.command); }}
+      onClick={() => run(command)}
     >
       {trusted ? <ShieldCheckIcon /> : <ShieldOffIcon />}
       <span className="max-[360px]:hidden">{trusted ? "Trusted" : "Untrusted"}</span>

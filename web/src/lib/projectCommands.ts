@@ -1,8 +1,9 @@
 /**
  * Project policy for the client, described once: which projects a picker offers, what a project's
- * row offers (each command with whether it is available now and what running it means), and
- * whether a session can start in a project. The sidebar, the session's Project menu and the New
- * session page render these instead of each deciding.
+ * row offers (each command with whether it is available now and what running it means), creating a
+ * project and moving a session between projects, and whether a session can start in a project. The
+ * sidebar, the session's Project menu and the New session page render these and hand them to the
+ * one command host instead of each deciding.
  */
 import type { ClientCommand, Project } from "@shared/wire";
 import type { AppState } from "../store.ts";
@@ -32,15 +33,20 @@ export function canStartSessionIn(state: AppState, projectId: string | null | un
   return !findProject(state, projectId)?.archived;
 }
 
-export type ProjectCommandId = "new-session" | "edit" | "archive" | "unarchive";
+type SessionRef = { cwd: string; sessionId: string };
 
-export type ProjectCommandIcon = "new" | "edit" | "archive" | "unarchive";
+/** The one project dialog: create or rename a project. With `assign`, the saved project also takes that session. */
+export type ProjectDialog = { project?: Project; assign?: SessionRef };
+
+export type ProjectCommandId = "new-session" | "edit" | "archive" | "unarchive" | "new-project" | "assign";
+
+export type ProjectCommandIcon = "new" | "edit" | "archive" | "unarchive" | "project";
 
 export type ProjectCommandIntent =
   /** Open the New session page as the project's home; it sends nothing. */
   | { kind: "new-session"; projectId: string }
-  /** Open the project dialog to rename it. */
-  | { kind: "edit"; project: Project }
+  /** Open the project dialog: to rename `dialog.project`, or to create a project (taking `dialog.assign`). */
+  | { kind: "project-dialog"; dialog: ProjectDialog }
   /** Send this registry change. */
   | { kind: "send"; command: ClientCommand };
 
@@ -67,7 +73,7 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       id: "new-session", label: "New session in project", ariaLabel: `New session in ${project.name}`, icon: "new",
       enabled: canStartSessionIn(state, project.id), intent: { kind: "new-session", projectId: project.id },
     },
-    { id: "edit", label: "Edit project", icon: "edit", enabled: state.connected, intent: { kind: "edit", project } },
+    { id: "edit", label: "Edit project", icon: "edit", enabled: state.connected, intent: { kind: "project-dialog", dialog: { project } } },
     {
       id: archive ? "archive" : "unarchive", label: archive ? "Archive project" : "Unarchive project", icon: archive ? "archive" : "unarchive",
       enabled: state.connected, intent: { kind: "send", command: { _tag: "archive_project", id: project.id, archived: archive } },
@@ -78,4 +84,23 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
 /** One command of `project`'s, when it currently applies (Archive and Unarchive exclude each other). */
 export function projectCommand(state: AppState, project: Project, id: ProjectCommandId): ProjectCommand | undefined {
   return projectCommands(state, project).find(c => c.id === id);
+}
+
+/**
+ * New project: the project dialog, which creates a project and, with `assign`, files that session in
+ * it. Saving changes the registry, so it waits for a connection.
+ */
+export function newProjectCommand(state: AppState, assign?: SessionRef): ProjectCommand {
+  return {
+    id: "new-project", label: "New project", icon: "new", enabled: state.connected,
+    intent: { kind: "project-dialog", dialog: assign ? { assign: { cwd: assign.cwd, sessionId: assign.sessionId } } : {} },
+  };
+}
+
+/** Move `session` into `projectId`, or out of every project with null. A registry change, so it waits for a connection. */
+export function assignProjectCommand(state: AppState, session: SessionRef, projectId: string | null): ProjectCommand {
+  return {
+    id: "assign", label: findProject(state, projectId)?.name ?? "None", icon: "project", enabled: state.connected,
+    intent: { kind: "send", command: { _tag: "assign_project", cwd: session.cwd, sessionId: session.sessionId, projectId } },
+  };
 }

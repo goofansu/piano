@@ -1,15 +1,13 @@
-import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
 import { CheckIcon } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
+import { CommandIcon, useSessionCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
-import { CommandIcon, useSessionCommands } from "@/components/SessionCommandHost";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
-import { type GlobalCommand, globalCommands } from "@/lib/globalCommands";
+import { globalCommands } from "@/lib/globalCommands";
 import { hasMod } from "@/lib/keys";
 import { recentSessions } from "@/lib/sessionCatalog";
 import { useNavigation } from "@/lib/useNavigation";
@@ -18,16 +16,14 @@ import type { AppState } from "@/store";
 
 interface Props {
   state: AppState;
-  toggleSidebar: () => void;
-  send: (command: ClientCommand) => void;
 }
 
 /**
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ state, toggleSidebar, send }: Props) {
-  const { palette: open, setPalette: onOpenChange, settings, select, openNew, openSettings, closeSettings } = useNavigation();
+export function CommandPalette({ state }: Props) {
+  const { palette: open, setPalette: onOpenChange, settings, select } = useNavigation();
   // Mod+K, the only global shortcut, toggles the palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -37,8 +33,7 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
-  const { setTheme } = useTheme();
-  const { view, setView } = useSidebarView();
+  const { view } = useSidebarView();
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!open) setSearch(""); }, [open]);
@@ -48,7 +43,8 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
     const frame = requestAnimationFrame(() => list.current?.scrollTo({ top: 0, behavior: "instant" }));
     return () => cancelAnimationFrame(frame);
   }, [open, search]);
-  // The session header's and sidebar row menu's commands, by the same names, for the selected session.
+  // The session header's and sidebar row menu's commands, by the same names, for the selected session;
+  // the host runs these and the global commands alike.
   const { commands: sessionCommandList, run: runCommand } = useSessionCommands();
   // Every session that is not archived, including those whose folder was closed: reachable here by name.
   const sessions = useMemo(() => recentSessions(state),
@@ -56,18 +52,6 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
   [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, state.session?.cwd, state.session?.sessionId, state.selecting]);
   // The sidebar's View menu choices by the same names; trust is for the directory the main pane is about.
   const globalCommandList = globalCommands(state, { settingsOpen: !!settings, view });
-  const runGlobal = (c: GlobalCommand) => {
-    const intent = c.intent;
-    switch (intent.kind) {
-      case "home": return closeSettings();
-      case "settings": return openSettings(intent.section);
-      case "new-session": return openNew();
-      case "send": return send(intent.command);
-      case "toggle-sidebar": return toggleSidebar();
-      case "appearance": return setTheme(intent.appearance);
-      case "view": return setView(intent.change);
-    }
-  };
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
@@ -101,7 +85,7 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
         )}
         <CommandGroup key="global" heading="Global commands">
           {globalCommandList.map(c => (
-            <CommandItem key={c.id} value={c.label} keywords={c.keywords ? [...c.keywords] : undefined} disabled={!c.enabled} onSelect={() => run(() => runGlobal(c))}>
+            <CommandItem key={c.id} value={c.label} keywords={c.keywords ? [...c.keywords] : undefined} disabled={!c.enabled} onSelect={() => run(() => runCommand(c))}>
               <GlobalCommandIcon icon={c.icon} /> {c.label}
               {c.checked && <><CheckIcon className="ml-auto" aria-hidden /><span className="sr-only">current</span></>}
             </CommandItem>

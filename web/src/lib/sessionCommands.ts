@@ -1,7 +1,7 @@
 /**
  * The per-session commands the sidebar row menu, the session header and the command palette offer,
  * described once: label, icon, group, whether it is available now, and what running it means.
- * Surfaces render these descriptors and hand the intent to the one `SessionCommandHost`.
+ * Surfaces render these descriptors and hand them to the one `CommandHost` (see `commands.ts`).
  */
 import type { AppState } from "../store.ts";
 import { isSelectedSession, sessionCheckoutMissing, sessionContext, sessionMutable } from "./sessionContext.ts";

@@ -1,12 +1,11 @@
 import { isWorking } from "@shared/sessionProjection";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { AppLayout, LayoutView, useAppLayout } from "@/components/AppLayout";
+import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
-import { type ProjectDialog, ProjectDialogView } from "@/components/Projects";
-import { SessionCommandHost } from "@/components/SessionCommandHost";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
@@ -46,9 +45,6 @@ export default function App() {
   const navigation = useNavigationController(client, closeMobile);
   const { settings } = useSyncExternalStore(navigation.subscribe, navigation.getState);
   const { openNew, openSettings, closeSettings } = navigation;
-  // A project's home is its New page: sessions started there join it.
-  const openProject = useCallback((projectId: string) => openNew(undefined, projectId), [openNew]);
-  const [projectDialog, setProjectDialog] = useState<ProjectDialog | null>(null);
   // One PR projection feeds the header, menu, and palette for the selected session.
   const prSession = state.view.kind === "session" ? state.session : null;
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
@@ -63,17 +59,17 @@ export default function App() {
 
   return (
     <NavigationContext.Provider value={navigation}>
-    <SessionCommandHost state={state} send={send}>
+    <CommandHost state={state} send={send} toggleSidebar={toggleSidebar}>
     <AppLayout layout={layout} navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
       navigation={compact => settings
         ? <SettingsNavigation compact={compact} section={settings} onShow={layout.show} onHide={layout.hide} onSelect={openSettings} onHome={closeSettings} />
         : compact ? <SidebarRail onShow={layout.show} working={anyWorking} />
-          : <Sidebar state={state} send={send} onProjectDialog={setProjectDialog} onHide={layout.hide} />}
+          : <Sidebar state={state} onHide={layout.hide} />}
       content={<>
         {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
         <LayoutView key={state.view.kind} active={!settings}>
           {state.view.kind === "new" ? (
-            <NewSession state={state} send={send} onDraftChange={onDraftChange} chooseDirectory={chooseDirectory} projectId={state.view.projectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} />
+            <NewSession state={state} send={send} onDraftChange={onDraftChange} chooseDirectory={chooseDirectory} projectId={state.view.projectId} onProjectChange={id => openNew(undefined, id)} onMenu={showSidebar} />
           ) : state.view.kind === "missing-session" ? (
             <Empty className="flex-1 px-4" role="alert">
               <EmptyHeader>
@@ -85,7 +81,7 @@ export default function App() {
               </EmptyContent>
             </Empty>
           ) : (
-            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} onDraftParagraph={onDraftParagraph} openProject={openProject} pullRequest={pullRequest} />
+            <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} onDraftParagraph={onDraftParagraph} pullRequest={pullRequest} />
           )}
         </LayoutView>
         {settings && <LayoutView><SettingsPage section={settings} onMenu={showSidebar} /></LayoutView>}
@@ -102,11 +98,10 @@ export default function App() {
         closeButton
         toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
       />
-      {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette send={send} state={state} toggleSidebar={toggleSidebar} />
+      <CommandPalette state={state} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={sessionReady(state)} />
     </AppLayout>
-    </SessionCommandHost>
+    </CommandHost>
     </NavigationContext.Provider>
   );
 }
