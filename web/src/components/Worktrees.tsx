@@ -1,4 +1,4 @@
-import type { ClientCommand, WorktreeFacts } from "@shared/wire";
+import type { ClientCommand } from "@shared/wire";
 import { ArrowLeftIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertDetails } from "@/components/Banner";
@@ -12,9 +12,8 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { folderFor } from "@/lib/sessionContext";
+import { filterWorktrees, initialWorktreeRequest, RECEIPT_TIMEOUT_MS, transition, type WorktreeEvent, worktreeLabel } from "@/lib/worktreeRequest";
 import type { AppState } from "@/store";
-
-const label = (worktree: WorktreeFacts) => worktree.branch ?? worktree.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD";
 
 /** The current folder's repository only: opening or refreshing rediscovers that one repository. One deliberate selection or new-branch operation; never automatic retries. */
 export function WorktreesPopover({ onOpenChange, onPendingChange, state, currentCwd, send, onSelect }: {
@@ -29,46 +28,50 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
   const [hooks, setHooks] = useState(false);
   // Picking is the common case; the creation form opens on request.
   const [creating, setCreating] = useState(false);
-  const [request, setRequest] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The ref is the operation's current state, so an event never reads a stale render; the state re-renders.
+  const operationRef = useRef(initialWorktreeRequest);
+  const [operation, setOperation] = useState(initialWorktreeRequest);
   const errorRef = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const error = operation.request.status === "failed" ? operation.request.detail : null;
   useEffect(() => { if (error) errorRef.current?.scrollIntoView({ block: "nearest" }); }, [error]);
-  const [refreshing, setRefreshing] = useState(false);
+  const { refreshing } = operation;
   const target = discovery?.status === "ready" ? folder : undefined;
-  const pending = request !== null;
+  const pending = operation.request.status === "pending";
   useEffect(() => { onPendingChange(pending); }, [pending, onPendingChange]);
-  const rediscover = useCallback(() => { if (folder) { setRefreshing(true); send({ _tag: "worktrees", folder: folder.path }); } }, [folder?.path, send]);
+  const step = useCallback((event: WorktreeEvent) => {
+    const next = transition(operationRef.current, event);
+    operationRef.current = next.state; setOperation(next.state);
+    if (next.command) send(next.command);
+    return next;
+  }, [send]);
+  const rediscover = useCallback(() => { step({ type: "refresh", folder: folder?.path }); }, [folder?.path, step]);
   useEffect(() => {
-    setError(null); setRequest(null); setCreating(false); rediscover();
-  }, [rediscover]);
+    setCreating(false); step({ type: "rediscover", folder: folder?.path });
+  }, [folder?.path, step]);
   const answered = folder && state.worktrees[folder.path];
-  useEffect(() => { if (answered) setRefreshing(false); }, [answered]);
+  useEffect(() => { if (answered) step({ type: "answered" }); }, [answered, step]);
   useEffect(() => {
-    if (!request || state.worktreeResult?.requestId !== request) return;
-    const result = state.worktreeResult.result;
-    setRequest(null);
-    if (result.status === "error") { setError(result.detail); return; }
-    setBranch(""); setCreating(false); onSelect(result.path); onOpenChange(false);
-  }, [state.worktreeResult, request, onSelect, onOpenChange]);
+    const opened = step({ type: "receipt", receipt: state.worktreeResult }).ready;
+    if (opened === undefined) return;
+    setBranch(""); setCreating(false); onSelect(opened); onOpenChange(false);
+  }, [state.worktreeResult, step, onSelect, onOpenChange]);
   useEffect(() => {
     if (!pending) return;
     // A disconnected client has no durable job receipt. Never resend automatically.
-    const timer = setTimeout(() => { setRequest(null); setError("No creation/selection receipt. Refresh discovery and inspect the checkout before retrying; it may already exist."); }, 75_000);
-    if (!state.connected) { setRequest(null); setError("Connection lost. Refresh discovery after reconnecting before retrying; the operation may have changed the checkout."); }
+    const timer = setTimeout(() => step({ type: "timeout" }), RECEIPT_TIMEOUT_MS);
+    if (!state.connected) step({ type: "disconnected" });
     return () => clearTimeout(timer);
-  }, [pending, state.connected]);
+  }, [pending, state.connected, step]);
   const submit = () => {
-    if (pending || !state.connected || !branch.trim() || !target) return;
-    const requestId = crypto.randomUUID(); setRequest(requestId); setError(null);
-    send({ _tag: "create_worktree", requestId, folder: target.path, branch: branch.trim(), hooks });
+    if (!state.connected || !branch.trim() || !target) return;
+    step({ type: "start", requestId: crypto.randomUUID(), intent: { kind: "create", folder: target.path, branch: branch.trim(), hooks } });
   };
-  const startCreating = (initialBranch = "") => { setError(null); setBranch(initialBranch); setCreating(true); };
-  const showList = () => { setCreating(false); setError(null); };
-  // Literal matching avoids unrelated fuzzy hits and preserves discovery order.
-  const needle = query.trim().toLowerCase();
+  const startCreating = (initialBranch = "") => { step({ type: "dismiss" }); setBranch(initialBranch); setCreating(true); };
+  const showList = () => { setCreating(false); step({ type: "dismiss" }); };
   const all = discovery?.status === "ready" ? discovery.worktrees : [];
-  const visible = needle ? all.filter(w => [label(w), w.path].some(text => text.toLowerCase().includes(needle))) : all;
+  const visible = filterWorktrees(all, query);
+  const needle = query.trim();
   const busy = pending || !state.connected || refreshing;
   const errorBox = error && (
     <Alert ref={errorRef} variant="destructive" className="animate-in fade-in-0 slide-in-from-top-1">
@@ -125,11 +128,8 @@ export function WorktreesPopover({ onOpenChange, onPendingChange, state, current
           </CommandEmpty>
           {target && visible.length > 0 && <CommandGroup>
             {visible.map(worktree => (
-              <CommandItem key={worktree.path} value={worktree.path} disabled={busy || worktree.prunable} onSelect={() => {
-                const requestId = crypto.randomUUID(); setRequest(requestId); setError(null);
-                send({ _tag: "add_worktree", requestId, folder: target.path, path: worktree.path });
-              }}>
-                <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">{label(worktree)}</span>
+              <CommandItem key={worktree.path} value={worktree.path} disabled={busy || worktree.prunable} onSelect={() => step({ type: "start", requestId: crypto.randomUUID(), intent: { kind: "select", folder: target.path, path: worktree.path } })}>
+                <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">{worktreeLabel(worktree)}</span>
                 <PickerCheck selected={worktree.path === currentCwd} />
               </CommandItem>
             ))}
