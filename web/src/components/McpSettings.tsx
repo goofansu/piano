@@ -41,7 +41,6 @@ export function McpSettings({ onMenu }: { onMenu: () => void }) {
     <SettingsHeader title="MCP" titleId="settings-section-title" onMenu={onMenu} />
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
       <section aria-labelledby="settings-section-title" className="mx-auto flex max-w-2xl flex-col gap-6">
-        <p className="max-w-prose text-sm text-muted-foreground">Give Pi tools from other apps. New sessions on this machine use what you install here.</p>
         {(error || actionError) && <Alert variant="destructive"><AlertTitle>MCP setup needs attention</AlertTitle><AlertDescription>{error || actionError}</AlertDescription></Alert>}
         {!servers ? <div role="status"><span className="sr-only">Loading MCP servers…</span><Skeleton className="h-20 w-full rounded-xl" /></div>
           : <ItemGroup className="gap-2">{MCP_CATALOG.map(server => {
