@@ -2,29 +2,27 @@
  * PiSessions: one running `pi --mode rpc` child per session, behind a small
  * interface in the browser's own vocabulary (SessionEvent / SessionAction).
  *
- * Behind the seam: command construction, strict JSONL framing, request
- * correlation, locking and publication, readback scheduling, dialog deadlines
- * and claims, abort/stop orchestration, fan-out to any number of subscribers,
- * stderr capture, exit handling and orderly shutdown. What each Pi record and
- * readback means is PiRecords' PiProjector. The only external seam is
- * ChildProcessSpawner.
+ * Behind the seam: strict JSONL framing, request correlation, locking and
+ * publication, readback scheduling, dialog deadlines and claims, abort/stop
+ * orchestration, fan-out to any number of subscribers, stderr capture, exit
+ * handling and orderly shutdown. PiRecords translates both ways: what each Pi
+ * record and readback means, and which Pi command each action sends. The only
+ * external seam is ChildProcessSpawner.
  */
 import { randomUUID } from "node:crypto";
-import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Schema, type Scope, Semaphore, Stream } from "effect";
+import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, type Scope, Semaphore, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
-import { imageType } from "../shared/attachments.ts";
 import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
 import type { Dialog, DialogResolution, ModelChoice, PromptSubmission, SessionAction, SessionActionResult, SessionClosure, SessionEvent, SessionFrame, SessionState, SessionStats, SlashCommand, Snapshot } from "../shared/wire.ts";
-import { Attachments } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { PiCli } from "./PiCli.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
-import { commandsOf, modelChoicesOf, PiProjector, type PiRecord, queuedMessagesOf, type RawMessage, type RawState, type RawStats, type RefreshKind, stateFactsOf, statsOf } from "./PiRecords.ts";
+import { commandsOf, dialogCancellation, dispositionOf, modelChoicesOf, type PiCommand, PiProjector, type PiRecord, type PiTranslation, piCommandFor, queuedMessagesOf, type RawMessage, type RawState, type RawStats, type RefreshKind, sessionArgs, stateFactsOf, statsOf } from "./PiRecords.ts";
 import { RunLedger } from "./RunLedger.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
@@ -88,6 +86,9 @@ const catalogOf = (data: unknown): Effect.Effect<ReadonlyArray<SlashCommand>, Pi
   const commands = commandsOf(data);
   return commands ? Effect.succeed(commands) : Effect.fail(new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid command catalog." }));
 };
+
+const commandOf = (translation: PiTranslation): Effect.Effect<PiCommand, PiSessionError> =>
+  "rejected" in translation ? Effect.fail(new PiSessionError({ reason: "rejected", detail: translation.rejected })) : Effect.succeed(translation.command);
 
 /** Host acknowledgement deadline, not a deadline for model work or extension execution. */
 export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTimeoutMs", { defaultValue: () => 30_000 });
@@ -282,11 +283,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
 
 const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
-    const args = spec.sessionFile ? ["--session", spec.sessionFile] : ["--session-id", spec.sessionId];
-    if (spec.model) args.push("--model", spec.model);
-    if (spec.thinkingLevel) args.push("--thinking", spec.thinkingLevel);
-    if (spec.name) args.push("--name", spec.name);
-    const child = yield* spawnChild(args, spec.cwd);
+    const child = yield* spawnChild(sessionArgs(spec), spec.cwd);
     const sessionScope = yield* Effect.scope;
     const generation = randomUUID();
     const recoveryMs = yield* PiDialogRecoveryMs;
@@ -304,11 +301,12 @@ const openSession = (spec: PiSessionSpec) =>
         ),
       ),
     );
-    if ((initial[0] as RawState).sessionId !== spec.sessionId) return yield* new PiSessionError({ reason: "protocol", detail: "Pi opened a different session ID. History was not merged; check the saved reference." });
     const projector = new PiProjector({ generation, recoveryMs });
+    const opened = projector.state(initial[0] as RawState);
+    if (opened.sessionId !== spec.sessionId) return yield* new PiSessionError({ reason: "protocol", detail: "Pi opened a different session ID. History was not merged; check the saved reference." });
     // Everything a subscriber's snapshot holds except host observations, kept by the shared fold.
     const snapshotRef = yield* Ref.make<Snapshot>({
-      state: { ...projector.state(initial[0] as RawState), ...spec.lastKnownStats, contextIsLastKnown: true },
+      state: { ...opened, ...spec.lastKnownStats, contextIsLastKnown: true },
       messages: projector.history(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
       dialogs: [],
       tools: [],
@@ -359,7 +357,7 @@ const openSession = (spec: PiSessionSpec) =>
       Semaphore.withPermits(lock, 1)(Effect.suspend(() => mergeState(typeof patch === "function" ? patch() : patch)));
 
     /** All terminal paths compete under the snapshot lock, before any transport yield. */
-    const resolveDialog = Effect.fn("PiSessions.resolveDialog")(function* (dialog: Dialog, reason: DialogResolution["reason"], response?: Record<string, unknown>) {
+    const resolveDialog = Effect.fn("PiSessions.resolveDialog")(function* (dialog: Dialog, reason: DialogResolution["reason"], answer?: PiCommand) {
       const resolution = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         if (!(yield* dialogsOf).some(open => open.id === dialog.id)) return;
         const now = yield* Clock.currentTimeMillis;
@@ -382,9 +380,7 @@ const openSession = (spec: PiSessionSpec) =>
         return resolution;
       }));
       if (!resolution || resolution.delivery === "not-sent") return resolution;
-      const result = yield* child.write({ type: "extension_ui_response", id: dialog.id,
-        ...(resolution.reason === "answered" ? response : { cancelled: true }),
-      }).pipe(Effect.result);
+      const result = yield* child.write(resolution.reason === "answered" && answer ? answer : dialogCancellation(dialog.id)).pipe(Effect.result);
       const final: DialogResolution = { ...resolution,
         delivery: result._tag === "Success" ? "written" : "uncertain",
         detail: result._tag === "Success"
@@ -586,17 +582,12 @@ const openSession = (spec: PiSessionSpec) =>
           ? ++operationVersion : operationVersion;
         switch (action._tag) {
           case "commands":
-            return { _tag: "commands", commands: yield* child.request({ type: "get_commands" }).pipe(Effect.flatMap(catalogOf)) };
+            return { _tag: "commands", commands: yield* child.request(yield* commandOf(piCommandFor(action))).pipe(Effect.flatMap(catalogOf)) };
           case "prompt":
           case "steer": {
-            if (action.attachments?.length) {
-              if (!Schema.is(Attachments)(action.attachments) || action.attachments.some(a => {
-                const bytes = Buffer.from(a.data, "base64");
-                return bytes.toString("base64") !== a.data || imageType(bytes) !== a.mimeType;
-              })) return yield* new PiSessionError({ reason: "rejected", detail: "Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to 10 MiB each and 20 MiB total (4 images)." });
-              // Pi's clear_queue only returns text. Do not offer a lossy image queue.
-              if (isWorking(yield* stateOf)) return yield* new PiSessionError({ reason: "rejected", detail: "Wait for Pi to finish before sending images." });
-            }
+            const command = yield* commandOf(piCommandFor(action));
+            // Pi's clear_queue only returns text. Do not offer a lossy image queue.
+            if (action.attachments?.length && isWorking(yield* stateOf)) return yield* new PiSessionError({ reason: "rejected", detail: "Wait for Pi to finish before sending images." });
             // Explicit new input starts a new operation boundary. An older abort's
             // acknowledgement must never cancel its dialogs or clear its activity.
             aborting = undefined;
@@ -607,10 +598,10 @@ const openSession = (spec: PiSessionSpec) =>
             // not the browser/caller that may disconnect while Pi handles input.
             const work = Effect.gen(function* () {
               yield* submit("submitting");
-              yield* child.request({ type: "prompt", message: action.text, images: action.attachments?.map(a => ({ type: "image", data: a.data, mimeType: a.mimeType })), streamingBehavior: action.attachments?.length ? undefined : action._tag === "steer" ? "steer" : "followUp" }).pipe(
+              yield* child.request(command).pipe(
                 Effect.flatMap((data) => {
-                  const disposition = (data as { disposition?: unknown } | undefined)?.disposition;
-                  if (disposition !== "started" && disposition !== "queued" && disposition !== "handled") {
+                  const disposition = dispositionOf(data);
+                  if (!disposition) {
                     return Effect.fail(new PiSessionError({ reason: "protocol", detail: "Pi acknowledged the input without a recognized disposition. Inspect the session before sending again." }));
                   }
                   return submit(disposition);
@@ -630,12 +621,13 @@ const openSession = (spec: PiSessionSpec) =>
             return;
           }
           case "abort": {
+            const command = yield* commandOf(piCommandFor(action));
             const work = Effect.gen(function* () {
               const dispatched = yield* Deferred.make<void>();
               const current = { dispatched, pendingPrompts: new Set(promptOperations), acknowledged: false };
               aborting = current;
               const dialogs = yield* dialogsOf;
-              const native = yield* child.request({ type: "abort" }, dispatched).pipe(Effect.forkChild);
+              const native = yield* child.request(command, dispatched).pipe(Effect.forkChild);
               // Order abort before releasing an extension that may continue work.
               // This waits for the transport attempt, NOT Pi's acknowledgement.
               yield* Deferred.await(dispatched);
@@ -676,47 +668,26 @@ const openSession = (spec: PiSessionSpec) =>
             return yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
           }
           case "restore_queue": {
-            const messages = queuedMessagesOf(yield* child.request({ type: "clear_queue" }));
+            const messages = queuedMessagesOf(yield* child.request(yield* commandOf(piCommandFor(action))));
             if (!messages) return yield* new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid cleared queue." });
             return { _tag: "queue_restored", messages };
           }
-          case "set_model": {
-            const slash = action.model.indexOf("/");
-            if (slash <= 0) return yield* new PiSessionError({ reason: "rejected", detail: `Model must be provider/id, got "${action.model}"` });
-            yield* child.request({
-              type: "set_model",
-              provider: action.model.slice(0, slash),
-              modelId: action.model.slice(slash + 1),
-            });
+          case "set_model":
+            yield* child.request(yield* commandOf(piCommandFor(action)));
             yield* refreshState(operation);
             yield* refreshStats;
             return;
-          }
           case "set_thinking_level":
-            yield* child.request({ type: "set_thinking_level", level: action.level });
+          case "set_name":
+            yield* child.request(yield* commandOf(piCommandFor(action)));
             yield* refreshState(operation);
             return;
-          case "set_name": {
-            const name = action.name.replace(/[\r\n]+/g, " ").trim();
-            if (!name) return yield* new PiSessionError({ reason: "rejected", detail: "A session name cannot be empty." });
-            yield* child.request({ type: "set_session_name", name });
-            yield* refreshState(operation);
-            return;
-          }
           case "answer": {
             const work = Effect.gen(function* () {
               const dialog = (yield* dialogsOf).find(open => open.id === action.id);
               if (!dialog || action.generation !== generation) return yield* new PiSessionError({ reason: "rejected", detail: "Dialog is no longer open in this Pi process. Refresh the session; do not resend the answer." });
-              let value = action.value ?? "";
-              if (dialog.method === "select" && !action.cancelled) {
-                // Keep protocol values private. Redacted labels must not change
-                // what Pi receives, nor silently choose between colliding labels.
-                const options = dialog.options?.filter(option => projectDisplay(option) === value) ?? [];
-                if (options.length !== 1) return yield* new PiSessionError({ reason: "rejected", detail: "This option is unavailable or ambiguous after redaction. Cancel the dialog instead." });
-                value = options[0];
-              }
-              const response = action.confirmed !== undefined ? { confirmed: action.confirmed } : { value };
-              const resolution = yield* resolveDialog(dialog, action.cancelled ? "cancelled" : "answered", response);
+              const answer = yield* commandOf(piCommandFor(action, dialog));
+              const resolution = yield* resolveDialog(dialog, action.cancelled ? "cancelled" : "answered", answer);
               if (!resolution || resolution.reason === "expired" || resolution.reason === "recovery") return yield* new PiSessionError({ reason: "rejected", detail: "Dialog was already claimed or its host deadline elapsed. The answer was not sent." });
             });
             yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
