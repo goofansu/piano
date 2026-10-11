@@ -53,3 +53,14 @@ test("a result outside the response Schema is never sent", async () => {
   assert.equal(body.error, "The server answered outside its contract. Inspect the server log.");
   assert.ok(!JSON.stringify(body).includes("not a manifest"));
 });
+
+test("INV-04: a provider sign-in refusal reaches the browser with its own detail, as MCP sign-in's does", async () => {
+  const send = (path: string, method: string, body: unknown) =>
+    server.handle(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  for (const path of ["/api/provider-login", "/api/settings/mcp/login"]) {
+    assert.deepEqual(await reply(await send(path, "PUT", { id: "gone", promptId: "gone", value: "x" })),
+      { status: 409, body: { error: "This sign-in prompt has already closed. Refresh and try again." } }, path);
+    assert.deepEqual(await reply(await send(path, "DELETE", { id: "gone" })),
+      { status: 409, body: { error: "This sign-in is no longer current." } }, path);
+  }
+});

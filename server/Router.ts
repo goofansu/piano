@@ -5,7 +5,7 @@ import { Cause, Data, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type Endpoint, Endpoints, type IdParam, type Json } from "../shared/http.ts";
 import type { RadiusSetupState } from "../shared/radius.ts";
-import type { DirListing, ProviderLoginState, Workspace } from "../shared/wire.ts";
+import type { DirListing, Workspace } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
@@ -17,6 +17,7 @@ import { RadiusSetup, type RadiusSetupError } from "./RadiusSetup.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { SidebarView } from "./SidebarView.ts";
+import type { SignInError, SignInState } from "./SignInAttempts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
@@ -195,28 +196,29 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.map(state => ({ state })), Effect.catchTag("McpSetupError", error => fail(409, error.detail)));
     yield* serve(Endpoints.mcpSetup, () => mcp(setup => setup.state), { redact: false });
     yield* serve(Endpoints.changeMcpSetup, ({ body }) => mcp(setup => setup.change(body)), { redact: false });
-    yield* serve(Endpoints.mcpLoginState, () => mcp(setup => setup.login), { redact: false });
-    yield* serve(Endpoints.startMcpLogin, ({ body }) => mcp(setup => setup.startLogin(body.server)), { redact: false });
-    yield* serve(Endpoints.answerMcpLogin, ({ body }) => mcp(setup => setup.answerLogin(body.id, body.promptId, body.value)), { redact: false });
-    yield* serve(Endpoints.cancelMcpLogin, ({ body }) => mcp(setup => setup.cancelLogin(body.id)), { redact: false });
 
     yield* serve(Endpoints.oauthProviders, () =>
       Effect.flatMap(ProviderLogin, login => login.providers).pipe(Effect.map(providers => ({ providers })), failAs(502, "Could not load OAuth providers.")));
 
+    // A refused sign-in request answers with its own detail; SignInAttempts keeps token responses out of it (INV-11).
+    const signInFailure = <A, R>(effect: Effect.Effect<A, SignInError, R>) => effect.pipe(
+      Effect.catchTag("SignInError", error => fail(409, error.detail)),
+      failAs(409, "Sign-in request could not be completed. Resume the current sign-in or try again."));
+
     yield* serve(Endpoints.providerLogout, ({ body }) =>
-      Effect.flatMap(ProviderLogin, login => login.signOut(body.provider)).pipe(
-        Effect.as({ ok: true as const }), failAs(409, "Could not sign out. Finish any sign-in in progress and try again.")));
+      Effect.flatMap(ProviderLogin, login => login.signOut(body.provider)).pipe(Effect.as({ ok: true as const }), signInFailure));
 
     // Credential values and callback URLs travel only in bodies. This global
     // operation creates no session and owns no conversation history.
-    const login = <E>(step: (login: ProviderLogin["Service"]) => Effect.Effect<ProviderLoginState | null, E>) =>
-      Effect.flatMap(ProviderLogin, step).pipe(
-        Effect.map(state => ({ state })),
-        failAs(409, "Sign-in request could not be completed. Resume the current sign-in or try again."));
-    yield* serve(Endpoints.providerLoginState, () => login(l => l.state), { redact: false });
-    yield* serve(Endpoints.startProviderLogin, ({ body }) => login(l => l.start(body.provider)), { redact: false });
-    yield* serve(Endpoints.answerProviderLogin, ({ body }) => login(l => l.answer(body.id, body.promptId, body.value)), { redact: false });
-    yield* serve(Endpoints.cancelProviderLogin, ({ body }) => login(l => l.cancel(body.id)), { redact: false });
+    const login = <R>(step: Effect.Effect<SignInState | null, SignInError, R>) => step.pipe(Effect.map(state => ({ state })), signInFailure);
+    yield* serve(Endpoints.providerLoginState, () => login(Effect.flatMap(ProviderLogin, l => l.state)), { redact: false });
+    yield* serve(Endpoints.startProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.start(body.provider))), { redact: false });
+    yield* serve(Endpoints.answerProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.answer(body.id, body.promptId, body.value))), { redact: false });
+    yield* serve(Endpoints.cancelProviderLogin, ({ body }) => login(Effect.flatMap(ProviderLogin, l => l.cancel(body.id))), { redact: false });
+    yield* serve(Endpoints.mcpLoginState, () => login(Effect.flatMap(McpSetup, setup => setup.login)), { redact: false });
+    yield* serve(Endpoints.startMcpLogin, ({ body }) => login(Effect.flatMap(McpSetup, setup => setup.startLogin(body.server))), { redact: false });
+    yield* serve(Endpoints.answerMcpLogin, ({ body }) => login(Effect.flatMap(McpSetup, setup => setup.answerLogin(body.id, body.promptId, body.value))), { redact: false });
+    yield* serve(Endpoints.cancelMcpLogin, ({ body }) => login(Effect.flatMap(McpSetup, setup => setup.cancelLogin(body.id))), { redact: false });
 
     // Image bytes, not JSON: outside the endpoint table. The ID is a content hash, never a path.
     yield* router.add("GET", "/api/image-previews/:id", Effect.gen(function* () {
