@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { deliveryAction } from "@/lib/composerControl";
 import { type DraftKey, sessionDraftKey } from "@/lib/messageDraft";
 import { closureNeedsAttention, sessionActivity, sessionContext } from "@/lib/sessionContext";
 import { useModelChoice } from "@/lib/useModelChoice";
@@ -155,7 +156,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         disabled={!ready || !t || input?.outcome === "starting"}
         streaming={streaming}
         compacting={t?.state.isCompacting}
-        onSend={(text, kind, attachments) => send({ _tag: "act", action: { _tag: kind === "steering" ? "steer" : "prompt", text, attachments }, start: choice.start() })}
+        onSend={(text, kind, attachments) => send({ _tag: "act", action: { _tag: deliveryAction(kind), text, attachments }, start: choice.start() })}
         onStop={() => send({ _tag: "act", action: { _tag: "stop" } })}
         stopping={t?.state.isStopping}
         catalog={catalog}
