@@ -15,7 +15,8 @@ const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
 import { imageType } from "../shared/attachments.ts";
-import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, SessionAction, SessionActionResult, SessionEvent, SessionFrame, SessionState, SessionStats, Snapshot } from "../shared/wire.ts";
+import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
+import type { Dialog, DialogResolution, PromptSubmission, QueuedMessage, SessionAction, SessionActionResult, SessionClosure, SessionEvent, SessionFrame, SessionState, SessionStats, Snapshot } from "../shared/wire.ts";
 import { Attachments, SlashCommand } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
@@ -153,13 +154,18 @@ const toState = (s: RawState): SessionState => ({
   queuedMessages: [],
 });
 
+/** Retained state shows nothing Pi could still continue on its own or that awaits an answer. */
+const settled = ({ state, dialogs }: Snapshot) => dialogs.length === 0 && !isWorking(state) && !state.isStopping &&
+  !state.queuedMessages?.length && state.dialogResolution?.delivery !== "pending" && state.dialogResolution?.delivery !== "uncertain" &&
+  state.submission?.outcome !== "submitting" && state.submission?.outcome !== "uncertain";
+
 /** A spawned Pi child with request correlation. Everything above builds on `request` and `records`. */
 interface Child {
   readonly request: (command: Record<string, unknown>, dispatched?: Deferred.Deferred<void>) => Effect.Effect<unknown, PiSessionError>;
   readonly write: (record: Record<string, unknown>) => Effect.Effect<void, PiSessionError>;
   /** Every non-response record, in stdout order. Ends when the child exits. */
   readonly records: Queue.Dequeue<{ record: PiRecord; receivedAt: number }, Cause.Done>;
-  readonly exited: Deferred.Deferred<string>;
+  readonly exited: Deferred.Deferred<SessionClosure>;
   /** Includes queued records, so readbacks cannot race output not yet projected. */
   readonly observationVersion: () => number;
   readonly hasPendingWork: () => boolean;
@@ -177,7 +183,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     const writes = new Set<Deferred.Deferred<void, PiSessionError>>();
     let transportError: PiSessionError | undefined;
     const pending = new Map<string, Deferred.Deferred<unknown, PiSessionError>>();
-    const exited = yield* Deferred.make<string>();
+    const exited = yield* Deferred.make<SessionClosure>();
     let stderr = "";
     let closed = false;
     let seq = 0;
@@ -235,11 +241,12 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       Effect.forkScoped,
     );
 
-    const finish = (reason: string) =>
+    const finish = (closure: SessionClosure) =>
       Effect.gen(function* () {
         if (closed) return;
         closed = true;
-        yield* Deferred.succeed(exited, reason);
+        const reason = closure.detail;
+        yield* Deferred.succeed(exited, closure);
         for (const d of pending.values()) {
           yield* Deferred.fail(d, new PiSessionError({ reason: "exited", detail: reason }));
         }
@@ -249,8 +256,8 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       });
 
     yield* handle.exitCode.pipe(
-      Effect.flatMap((code) => finish(`Pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}`)),
-      Effect.catchCause((cause) => finish(`Pi exit could not be observed: ${String(cause)}`)),
+      Effect.flatMap((code) => finish({ _tag: "exited", code, detail: `Pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}` })),
+      Effect.catchCause((cause) => finish({ _tag: "failed", detail: `Pi exit could not be observed: ${String(cause)}` })),
       Effect.forkScoped,
     );
 
@@ -281,7 +288,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
 
     const write = (record: Record<string, unknown>) =>
       Effect.gen(function* () {
-        if (closed) return yield* new PiSessionError({ reason: "exited", detail: yield* Deferred.await(exited) });
+        if (closed) return yield* new PiSessionError({ reason: "exited", detail: (yield* Deferred.await(exited)).detail });
         if (transportError) return yield* transportError;
         const done = yield* Deferred.make<void, PiSessionError>();
         writes.add(done);
@@ -342,22 +349,27 @@ const openSession = (spec: PiSessionSpec) =>
       // suppress a deadline until a still-live child eventually exits.
       Effect.raceFirst(
         Deferred.await(child.exited).pipe(
-          Effect.flatMap((reason) => new PiSessionError({ reason: "spawn", detail: reason })),
+          Effect.flatMap((closure) => new PiSessionError({ reason: "spawn", detail: closure.detail })),
         ),
       ),
     );
     if ((initial[0] as RawState).sessionId !== spec.sessionId) return yield* new PiSessionError({ reason: "protocol", detail: "Pi opened a different session ID. History was not merged; check the saved reference." });
-    const stateRef = yield* Ref.make<SessionState>({ ...toState(initial[0] as RawState), ...spec.lastKnownStats, contextIsLastKnown: true });
     const assembler = new StreamAssembler();
-    const messagesRef = yield* Ref.make(
-      assembler.serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
-    );
-    const dialogsRef = yield* Ref.make(new Map<string, Dialog>());
+    // Everything a subscriber's snapshot holds except host observations, kept by the shared fold.
+    const snapshotRef = yield* Ref.make<Snapshot>({
+      state: { ...toState(initial[0] as RawState), ...spec.lastKnownStats, contextIsLastKnown: true },
+      messages: assembler.serializeMessages(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
+      dialogs: [],
+      tools: [],
+    });
+    const stateOf = Effect.map(Ref.get(snapshotRef), snapshot => snapshot.state);
+    const dialogsOf = Effect.map(Ref.get(snapshotRef), snapshot => snapshot.dialogs);
     const subscribers = new Set<Effect.Success<ReturnType<typeof makeDelivery<SessionFrame>>>>();
     let sequence = 0;
     const cursor = () => ({ cwd: spec.cwd, sessionId: spec.sessionId, generation, sequence });
     // All callers hold the snapshot lock. Never await a consumer here.
     const publish = (event: SessionEvent) => Effect.gen(function* () {
+      yield* Ref.update(snapshotRef, snapshot => applySessionEvent(snapshot, event));
       sequence++;
       const frame: SessionFrame = { ...projectDisplay(event), cursor: cursor() };
       for (const subscriber of subscribers) yield* subscriber.offer(frame);
@@ -378,58 +390,28 @@ const openSession = (spec: PiSessionSpec) =>
     const promptOperations = new Set<number>();
     let aborting: { dispatched: Deferred.Deferred<void>; pendingPrompts: Set<number>; acknowledged: boolean } | undefined;
 
-    /** Update local state and publish, atomically with respect to snapshots. */
+    /** Fold and publish, atomically with respect to snapshots. */
     const apply = (events: ReadonlyArray<SessionEvent> | (() => ReadonlyArray<SessionEvent>)) =>
       Semaphore.withPermits(lock, 1)(
         Effect.gen(function* () {
-          for (const event of typeof events === "function" ? events() : events) {
-            switch (event._tag) {
-              case "message_end":
-                yield* Ref.update(messagesRef, (ms) => [...ms, event.message]);
-                break;
-              case "context":
-                yield* Ref.set(messagesRef, [...event.messages]);
-                break;
-              case "state":
-                yield* Ref.set(stateRef, event.state);
-                break;
-              case "queue_update":
-                yield* Ref.update(stateRef, (state) => ({ ...state, queuedMessages: event.messages }));
-                break;
-              case "submission":
-                yield* Ref.update(stateRef, (state) => !state.submission || event.submission.id >= state.submission.id
-                  ? { ...state, submission: event.submission } : state);
-                break;
-              case "closed":
-                yield* Ref.update(stateRef, (state) => ({ ...state, isStreaming: false, isCompacting: false, isRetrying: false, isStopping: false, queuedMessages: [], contextIsLastKnown: true, closedReason: event.reason }));
-                break;
-              case "dialog":
-                yield* Ref.update(dialogsRef, (m) => new Map(m).set(event.dialog.id, event.dialog));
-                break;
-              default:
-                break;
-            }
-            yield* publish(event);
-          }
+          for (const event of typeof events === "function" ? events() : events) yield* publish(event);
         }),
       );
 
     const patchState = (patch: Partial<SessionState> | (() => Partial<SessionState>)) =>
       Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
-        const current = yield* Ref.get(stateRef);
+        const current = yield* stateOf;
         const next = { ...current, ...(typeof patch === "function" ? patch() : patch) };
-        if (next.isStreaming || next.isCompacting || next.isRetrying || next.model !== current.model) next.contextIsLastKnown = true;
+        if (isWorking(next) || next.model !== current.model) next.contextIsLastKnown = true;
         if (JSON.stringify(next) === JSON.stringify(current)) return;
         for (const field of metadataFields) if (next[field] !== current[field]) factVersions[field] += 1;
-        yield* Ref.set(stateRef, next);
         yield* publish({ _tag: "state", state: next });
       }));
 
     /** All terminal paths compete under the snapshot lock, before any transport yield. */
     const resolveDialog = (dialog: Dialog, reason: DialogResolution["reason"], response?: Record<string, unknown>) => Effect.gen(function* () {
       const resolution = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
-        const dialogs = yield* Ref.get(dialogsRef);
-        if (!dialogs.has(dialog.id)) return;
+        if (!(yield* dialogsOf).some(open => open.id === dialog.id)) return;
         const now = yield* Clock.currentTimeMillis;
         if ((reason === "answered" || reason === "cancelled") && now >= dialog.deadlineAt) {
           reason = dialog.deadlineKind === "pi-timeout" ? "expired" : "recovery";
@@ -442,15 +424,11 @@ const openSession = (spec: PiSessionSpec) =>
           : reason === "aborted" ? "Abort current: cancelling this dialog. Pending queue is not cleared."
           : "Response claimed locally; waiting for transport delivery.";
         const resolution: DialogResolution = { id: dialog.id, generation, reason, delivery: send ? "pending" : "not-sent", detail };
-        const next = new Map(dialogs); next.delete(dialog.id);
-        yield* Ref.set(dialogsRef, next);
         const closed = dialogClosed.get(dialog.id);
         if (closed) yield* Deferred.succeed(closed, undefined);
         dialogClosed.delete(dialog.id);
-        const state = { ...yield* Ref.get(stateRef), dialogResolution: resolution };
-        yield* Ref.set(stateRef, state);
         yield* publish({ _tag: "dialog_resolved", resolution });
-        yield* publish({ _tag: "state", state });
+        yield* publish({ _tag: "state", state: { ...yield* stateOf, dialogResolution: resolution } });
         return resolution;
       }));
       if (!resolution || resolution.delivery === "not-sent") return resolution;
@@ -464,12 +442,8 @@ const openSession = (spec: PiSessionSpec) =>
           : `Dialog response delivery is uncertain. It will not be retried or reopened. Inspect the session; restart Pi if blocked. ${result.failure.detail}`,
       };
       yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
-        const state = yield* Ref.get(stateRef);
-        if (state.dialogResolution?.id === dialog.id && !announced) {
-          const next = { ...state, dialogResolution: final };
-          yield* Ref.set(stateRef, next);
-          yield* publish({ _tag: "state", state: next });
-        }
+        const state = yield* stateOf;
+        if (state.dialogResolution?.id === dialog.id && !announced) yield* publish({ _tag: "state", state: { ...state, dialogResolution: final } });
         if (result._tag === "Failure") yield* publish({ _tag: "notice", level: "error", message: final.detail });
       }));
       if (result._tag === "Failure") return yield* result.failure;
@@ -534,9 +508,7 @@ const openSession = (spec: PiSessionSpec) =>
         if (version !== contextVersion || announced) return;
         const applied = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
           if (version !== contextVersion || outputVersion !== child.observationVersion() || announced) return false;
-          const messages = assembler.serializeMessages(data.messages);
-          yield* Ref.set(messagesRef, messages);
-          yield* publish({ _tag: "context", messages });
+          yield* publish({ _tag: "context", messages: assembler.serializeMessages(data.messages) });
           return true;
         }));
         if (applied) return yield* patchState({ projectionError: undefined });
@@ -599,7 +571,7 @@ const openSession = (spec: PiSessionSpec) =>
               return yield* apply([{ _tag: "notice", level, message: String(record.message ?? "") }]);
             }
             if (["setStatus", "setWidget", "setTitle", "set_editor_text"].includes(method)) {
-              const current = (yield* Ref.get(stateRef)).extension ?? { statuses: [], widgets: [] };
+              const current = (yield* stateOf).extension ?? { statuses: [], widgets: [] };
               const extension = { ...current };
               if (method === "setStatus") extension.statuses = [
                 ...current.statuses.filter(s => s.key !== record.statusKey),
@@ -676,34 +648,38 @@ const openSession = (spec: PiSessionSpec) =>
     // Subscribers learn exactly once that Pi is gone: from the child's own exit (a crash),
     // or from this scope closing (a deliberate release), whichever comes first. The
     // finalizer is registered after the child's, so it runs before Pi is shut down.
-    const announceClosed = (reason: string) =>
+    const announceClosed = (closure: Effect.Effect<SessionClosure>) =>
       Effect.suspend(() => {
         if (announced) return Effect.void;
         announced = true;
         return Effect.gen(function* () {
-          const submission = (yield* Ref.get(stateRef)).submission;
-          if (submission?.outcome === "submitting") yield* apply([{ _tag: "submission", submission: { ...submission, outcome: "uncertain", detail: `Pi stopped before acknowledging this input: ${reason}` } }]);
-          for (const dialog of (yield* Ref.get(dialogsRef)).values()) yield* resolveDialog(dialog, "exited").pipe(Effect.ignore);
-          const resolution = (yield* Ref.get(stateRef)).dialogResolution;
+          const final = yield* closure;
+          const submission = (yield* stateOf).submission;
+          if (submission?.outcome === "submitting") yield* apply([{ _tag: "submission", submission: { ...submission, outcome: "uncertain", detail: `Pi stopped before acknowledging this input: ${final.detail}` } }]);
+          for (const dialog of yield* dialogsOf) yield* resolveDialog(dialog, "exited").pipe(Effect.ignore);
+          const resolution = (yield* stateOf).dialogResolution;
           if (resolution?.delivery === "pending") yield* patchState({ dialogResolution: { ...resolution, delivery: "uncertain", detail: "Pi stopped during response delivery. Do not resend this dialog response." } });
-          yield* apply(() => [...assembler.handle({ type: "piano_closed" }), { _tag: "closed", reason }]);
+          yield* apply(() => [...assembler.handle({ type: "piano_closed" }), { _tag: "closed", closure: final }]);
         });
       });
-    yield* Effect.addFinalizer(() => announceClosed("released"));
+    // Release is "during work" when Pi still held work it could continue or that awaited an
+    // answer. Readback workers and prompt fibers are already interrupted by now, so judge from
+    // retained state and transport uncertainty, never from those fibers.
+    yield* Effect.addFinalizer(() => announceClosed(Effect.map(Ref.get(snapshotRef), (snapshot): SessionClosure =>
+      settled(snapshot) && !child.hasPendingWork()
+        ? { _tag: "released", detail: "Pi was released" }
+        : { _tag: "released_during_work", detail: "Pi was released during work" })));
     // Preserve already-read output before announcing an exit. The record-loop
     // finalizer only signals completion; it never waits for a later child finalizer.
     yield* Deferred.await(child.exited).pipe(
-      Effect.flatMap((reason) => Deferred.await(recordsDrained).pipe(Effect.andThen(announceClosed(reason)))),
+      Effect.flatMap((closure) => Deferred.await(recordsDrained).pipe(Effect.andThen(announceClosed(Effect.succeed(closure))))),
       Effect.forkScoped,
     );
 
     const currentState = Effect.gen(function* () {
-      const state = yield* Ref.get(stateRef);
-      return { ...state, isQuiescent: !announced && !child.hasPendingWork() && processedVersion === child.observationVersion() &&
-        refreshing.size === 0 && promptOperations.size === 0 && (yield* Ref.get(dialogsRef)).size === 0 &&
-        !state.isStreaming && !state.isCompacting && !state.isRetrying && !state.isStopping && !state.queuedMessages?.length &&
-        state.dialogResolution?.delivery !== "pending" && state.dialogResolution?.delivery !== "uncertain" &&
-        state.submission?.outcome !== "submitting" && state.submission?.outcome !== "uncertain" };
+      const snapshot = yield* Ref.get(snapshotRef);
+      return { ...snapshot.state, isQuiescent: !announced && !child.hasPendingWork() && processedVersion === child.observationVersion() &&
+        refreshing.size === 0 && promptOperations.size === 0 && settled(snapshot) };
     });
 
     const events: Stream.Stream<SessionFrame, DeliveryOverflow> = Stream.unwrap(
@@ -711,14 +687,9 @@ const openSession = (spec: PiSessionSpec) =>
         Effect.gen(function* () {
           const sub = yield* makeDelivery<SessionFrame>();
           subscribers.add(sub);
-          const snapshot: Snapshot = {
-            state: yield* currentState,
-            messages: yield* Ref.get(messagesRef),
-            dialogs: [...(yield* Ref.get(dialogsRef)).values()],
-            ...assembler.snapshot(),
-          };
+          const snapshot: Snapshot = { ...yield* Ref.get(snapshotRef), state: yield* currentState };
           return Stream.make<[SessionFrame]>({ _tag: "snapshot", snapshot: projectDisplay(snapshot), cursor: cursor() }).pipe(
-            Stream.concat(snapshot.state.closedReason ? Stream.empty : sub.stream),
+            Stream.concat(snapshot.state.closure ? Stream.empty : sub.stream),
             Stream.takeUntil((e) => e._tag === "closed"),
             Stream.ensuring(Effect.sync(() => { subscribers.delete(sub); })),
           );
@@ -744,9 +715,8 @@ const openSession = (spec: PiSessionSpec) =>
                 const bytes = Buffer.from(a.data, "base64");
                 return bytes.toString("base64") !== a.data || imageType(bytes) !== a.mimeType;
               })) return yield* new PiSessionError({ reason: "rejected", detail: "Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to 10 MiB each and 20 MiB total (4 images)." });
-              const state = yield* Ref.get(stateRef);
               // Pi's clear_queue only returns text. Do not offer a lossy image queue.
-              if (state.isStreaming || state.isCompacting || state.isRetrying) return yield* new PiSessionError({ reason: "rejected", detail: "Wait for Pi to finish before sending images." });
+              if (isWorking(yield* stateOf)) return yield* new PiSessionError({ reason: "rejected", detail: "Wait for Pi to finish before sending images." });
             }
             // Explicit new input starts a new operation boundary. An older abort's
             // acknowledgement must never cancel its dialogs or clear its activity.
@@ -772,7 +742,7 @@ const openSession = (spec: PiSessionSpec) =>
               );
               yield* refreshState(operation);
               // Handled commands may edit context without a run/compaction event.
-              if (!(yield* Ref.get(stateRef)).isStreaming) {
+              if (!(yield* stateOf).isStreaming) {
                 yield* refreshContext;
                 yield* scheduleRefresh("stats");
               }
@@ -785,7 +755,7 @@ const openSession = (spec: PiSessionSpec) =>
               const dispatched = yield* Deferred.make<void>();
               const current = { dispatched, pendingPrompts: new Set(promptOperations), acknowledged: false };
               aborting = current;
-              const dialogs = [...(yield* Ref.get(dialogsRef)).values()];
+              const dialogs = yield* dialogsOf;
               const native = yield* child.request({ type: "abort" }, dispatched).pipe(Effect.forkChild);
               // Order abort before releasing an extension that may continue work.
               // This waits for the transport attempt, NOT Pi's acknowledgement.
@@ -856,7 +826,7 @@ const openSession = (spec: PiSessionSpec) =>
           }
           case "answer": {
             const work = Effect.gen(function* () {
-              const dialog = (yield* Ref.get(dialogsRef)).get(action.id);
+              const dialog = (yield* dialogsOf).find(open => open.id === action.id);
               if (!dialog || action.generation !== generation) return yield* new PiSessionError({ reason: "rejected", detail: "Dialog is no longer open in this Pi process. Refresh the session; do not resend the answer." });
               let value = action.value ?? "";
               if (dialog.method === "select" && !action.cancelled) {
@@ -904,7 +874,7 @@ const probe = (cwd: string, options?: { globalSettingsOnly?: boolean }): Effect.
     ]).pipe(
       Effect.raceFirst(
         Deferred.await(child.exited).pipe(
-          Effect.flatMap((reason) => new PiSessionError({ reason: "spawn", detail: reason })),
+          Effect.flatMap((closure) => new PiSessionError({ reason: "spawn", detail: closure.detail })),
         ),
       ),
     );

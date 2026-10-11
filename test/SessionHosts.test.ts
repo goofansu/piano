@@ -344,7 +344,8 @@ test('INV-02/03: hung readbacks time out visibly without blocking a later dialog
     process.kill(records('hung-inspection')[0].pid, 'SIGUSR1');
     yield* Fiber.join(closed);
     const view = yield* hosts.peek(cwd, 'hung-inspection');
-    assert.match(view.snapshot.state.closedReason ?? '', /code 7/);
+    const closure = view.snapshot.state.closure;
+    assert.equal(closure?._tag === 'exited' && closure.code, 7, 'a crash is reported as an exit, not a release');
     assert.ok(view.snapshot.messages.some(m => m.text.includes('behind hung readback')));
     const reopened = yield* hosts.open({ cwd, sessionId: 'hung-inspection' });
     assert.equal((yield* reopened.state).isStreaming, false);

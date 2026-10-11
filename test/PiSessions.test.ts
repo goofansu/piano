@@ -283,7 +283,8 @@ test("model switch and child crash", async () => {
   assert.equal(result.thinkingLevel, "high");
   const closed = result.events[result.events.length - 1] as Extract<SessionEvent, { _tag: "closed" }>;
   assert.equal(closed._tag, "closed");
-  assert.match(closed.reason, /code 3/);
+  assert.equal(closed.closure._tag === "exited" && closed.closure.code, 3, "a crash is an exit, not a release");
+  assert.match(closed.closure.detail, /code 3: boom/);
   assert.ok(result.events.some((e) => e._tag === "message_end" && e.message.text === "crash now"), "output already read before exit is not discarded");
   assert.equal(result.failed.reason, "exited");
 });
@@ -515,18 +516,24 @@ test("probe reports models and default", async () => {
   assert.equal(r.defaultModel, "fake/alpha");
 });
 
-test("releasing a session tells subscribers it closed", async () => {
-  const events = await run(Effect.gen(function* () {
-    const sessions = yield* PiSessions;
-    const scope = yield* Scope.make();
-    const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "s4" }).pipe(Scope.provide(scope));
-    const collector = yield* collectUntil(t.events, (e) => e._tag === "closed").pipe(Effect.forkChild);
-    yield* Effect.sleep("50 millis");
-    yield* Scope.close(scope, Exit.succeed(undefined));
-    return yield* Fiber.join(collector).pipe(Effect.timeoutOption("5 seconds"));
-  }));
-  assert.equal(events._tag, "Some", "subscriber saw the stream end");
-  const last = events.value[events.value.length - 1] as Extract<SessionEvent, { _tag: "closed" }>;
-  assert.equal(last._tag, "closed");
-  assert.equal(last.reason, "released");
+test("INV-02: releasing a session tells subscribers it closed, and whether that interrupted work", async () => {
+  for (const [sessionId, prompt, expected] of [["s4", undefined, "released"], ["s4-working", "ask first", "released_during_work"]] as const) {
+    const events = await run(Effect.gen(function* () {
+      const sessions = yield* PiSessions;
+      const scope = yield* Scope.make();
+      const t = yield* sessions.open({ cwd: process.cwd(), sessionId }).pipe(Scope.provide(scope));
+      const collector = yield* collectUntil(t.events, (e) => e._tag === "closed").pipe(Effect.forkChild);
+      if (prompt) {
+        const waiting = yield* collectUntil(t.events, (e) => e._tag === "dialog").pipe(Effect.forkChild);
+        yield* t.act({ _tag: "prompt", text: prompt });
+        yield* Fiber.join(waiting);
+      } else yield* Effect.sleep("50 millis");
+      yield* Scope.close(scope, Exit.succeed(undefined));
+      return yield* Fiber.join(collector).pipe(Effect.timeoutOption("5 seconds"));
+    }));
+    assert.equal(events._tag, "Some", "subscriber saw the stream end");
+    const last = events.value[events.value.length - 1] as Extract<SessionEvent, { _tag: "closed" }>;
+    assert.equal(last._tag, "closed");
+    assert.equal(last.closure._tag, expected);
+  }
 });

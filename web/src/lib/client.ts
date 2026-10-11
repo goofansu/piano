@@ -5,7 +5,7 @@
  */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
-import { sessionReady } from "./sessionContext.ts";
+import { closureNeedsAttention, sessionReady } from "./sessionContext.ts";
 import type { Connection, ConnectionHandlers } from "./ws.ts";
 
 export type NotifyLevel = "success" | "info" | "warning" | "error";
@@ -80,7 +80,7 @@ export function createClient({ initial, connect, notify, newSelectionId = () => 
     else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError) notify(m.result.stopError, "error");
     else if (m._tag === "worktree_result" && m.result.status === "ready" && m.result.creation) notify(`Created ${m.result.branch} from ${m.result.creation.baseBranch} · hooks ${m.result.creation.hooks}`, "success");
     else if (notifySession && m._tag === "session" && m.event._tag === "notice") notify(m.event.message, m.event.level);
-    else if (notifySession && m._tag === "session" && m.event._tag === "closed" && !/released|code 0\b/.test(m.event.reason)) notify(`Pi stopped: ${m.event.reason}`, "warning");
+    else if (notifySession && m._tag === "session" && m.event._tag === "closed" && closureNeedsAttention(m.event.closure)) notify(`Pi stopped: ${m.event.closure.detail}`, "warning");
   };
 
   return {

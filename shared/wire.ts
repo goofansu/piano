@@ -203,6 +203,19 @@ export const SessionStats = Schema.Struct({
 });
 export type SessionStats = typeof SessionStats.Type;
 
+/** Why a session's Pi child stopped. Decide policy from the tag; `detail` is display text only. */
+export const SessionClosure = Schema.Union([
+  /** Released with nothing in flight: idle retirement, archive or shutdown of a settled session. */
+  Schema.TaggedStruct("released", { detail: Schema.String }),
+  /** Released while work was in flight. Interrupted operations are not resumed. */
+  Schema.TaggedStruct("released_during_work", { detail: Schema.String }),
+  /** Pi exited on its own. */
+  Schema.TaggedStruct("exited", { code: Schema.Number, detail: Schema.String }),
+  /** Pi's exit could not be observed. */
+  Schema.TaggedStruct("failed", { detail: Schema.String }),
+]);
+export type SessionClosure = typeof SessionClosure.Type;
+
 export const SessionState = Schema.Struct({
   sessionId: Schema.String,
   sessionFile: Schema.optional(Schema.String),
@@ -234,7 +247,8 @@ export const SessionState = Schema.Struct({
   statsRefreshError: Schema.optional(Schema.String),
   /** Host observation used for retirement; no pending/unobserved work, not task success. */
   isQuiescent: Schema.optional(Schema.Boolean),
-  closedReason: Schema.optional(Schema.String),
+  /** Set once this child has stopped; the session is then history only. */
+  closure: Schema.optional(SessionClosure),
   /** Piano filesystem observation: history is readable, but execution needs the checkout. */
   checkoutMissing: Schema.optional(Schema.Boolean),
 });
@@ -262,7 +276,7 @@ export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("dialog", { dialog: Dialog }),
   Schema.TaggedStruct("dialog_resolved", { resolution: DialogResolution }),
   Schema.TaggedStruct("notice", { level: Schema.Literals(["info", "warning", "error"]), message: Schema.String }),
-  Schema.TaggedStruct("closed", { reason: Schema.String }),
+  Schema.TaggedStruct("closed", { closure: SessionClosure }),
 ]);
 export type SessionEvent = typeof SessionEvent.Type;
 

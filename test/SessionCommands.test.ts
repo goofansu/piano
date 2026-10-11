@@ -15,7 +15,7 @@ const folder: FolderView = {
   sessions: [],
 };
 const session = (cwd: string, state: Partial<SessionState> = {}): SessionView => ({
-  cwd, sessionId: "s1", hosted: true, cursor: null, state: { sessionId: "s1", ...state } as SessionState, messages: [], pending: null, dialogs: [], tools: {},
+  cwd, sessionId: "s1", hosted: true, cursor: null, state: { sessionId: "s1", ...state } as SessionState, messages: [], dialogs: [],
 });
 const base: AppState = {
   ...initialState, connected: true, selectionId: "sel", view: { kind: "session" },

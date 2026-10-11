@@ -264,11 +264,6 @@ export class StreamAssembler {
     return serializeWithProjection(msgs, prefix, this.projection);
   }
 
-  /** Used by the same atomic snapshot boundary as retained finalized messages. */
-  snapshot(): { pending?: RenderMsg; tools: ToolExecution[] } {
-    return { pending: this.partial, tools: [...this.tools.values()] };
-  }
-
   handle(raw: PiRecord): SessionEvent[] {
     const event = raw as MessageEventRecord;
     switch (event.type) {

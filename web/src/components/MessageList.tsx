@@ -17,7 +17,7 @@ import { disclosureRow } from "@/lib/styles";
 import { messageAnchorId, STICK_EVENT, type ToolRow, type TranscriptRow, transcriptRows } from "@/lib/transcript";
 
 interface Props {
-  messages: RenderMsg[];
+  messages: ReadonlyArray<RenderMsg>;
   pending: RenderMsg | null;
   /** Local first input awaiting authoritative history; not a transcript message. */
   submittedInput?: Pick<RenderMsg, "text" | "attachments"> | null;

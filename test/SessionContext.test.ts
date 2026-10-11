@@ -15,7 +15,7 @@ const folder: FolderView = {
   sessions: [{ sessionId: "s1", workspaceId: "ws:/work/repo.feature", cwd: "/work/repo.feature", branch: "feature", title: "Folder title", createdAt: "", updatedAt: "", hosted: true, streaming: false }],
 };
 const session = (cwd: string, state: Partial<SessionState> = {}, extra: Partial<SessionView> = {}): SessionView => ({
-  cwd, sessionId: "s1", hosted: true, cursor: null, state: { sessionId: "s1", ...state } as SessionState, messages: [], pending: null, dialogs: [], tools: {}, ...extra,
+  cwd, sessionId: "s1", hosted: true, cursor: null, state: { sessionId: "s1", ...state } as SessionState, messages: [], dialogs: [], ...extra,
 });
 const base: AppState = {
   ...initialState, connected: true, selectionId: "sel", view: { kind: "session" },
@@ -77,8 +77,8 @@ test("status precedence: startup, delivery, reconnecting, read-only, exited, the
   assert.equal(status({ ...base, pendingCreate: pending, session: session("/repo", {}, { dialogs: [{ id: "d", method: "confirm", title: "Q" } as never] }) }), "Waiting for input", "a dialog outranks startup");
   assert.equal(status({ ...base, pendingCreate: { ...pending, outcome: "uncertain" } }), "Delivery uncertain");
   assert.equal(status({ ...base }), "Loading");
-  assert.equal(status({ ...base, session: session("/repo", { checkoutMissing: true }, { closedReason: "x" }) }), "Read-only");
-  assert.equal(status({ ...base, session: session("/repo", {}, { closedReason: "x" }) }), "Exited");
+  assert.equal(status({ ...base, session: session("/repo", { checkoutMissing: true, closure: { _tag: "failed", detail: "x" } }) }), "Read-only");
+  assert.equal(status({ ...base, session: session("/repo", { closure: { _tag: "failed", detail: "x" } }) }), "Exited");
   assert.equal(status({ ...base, session: session("/repo", { isCompacting: true, isRetrying: true }) }), "Compacting · Retrying");
   assert.equal(status({ ...base, session: session("/repo", { isStreaming: true }) }), "Working");
   assert.equal(status({ ...base, session: session("/repo") }), "Ready");

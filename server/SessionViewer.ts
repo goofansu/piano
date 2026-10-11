@@ -78,7 +78,7 @@ export const makeSessionViewer = (output: ViewerOutput) => Effect.gen(function* 
     yield* session.events.pipe(
       Stream.runForEach(event => Effect.gen(function* () {
         if (current(selection)) yield* event._tag === "snapshot"
-          ? deliver({ _tag: "selected", selectionId: selection.selectionId, cursor: event.cursor, cwd: session.spec.cwd, sessionId: session.spec.sessionId, hosted: !event.snapshot.state.closedReason, snapshot: event.snapshot })
+          ? deliver({ _tag: "selected", selectionId: selection.selectionId, cursor: event.cursor, cwd: session.spec.cwd, sessionId: session.spec.sessionId, hosted: !event.snapshot.state.closure, snapshot: event.snapshot })
           : deliver({ _tag: "session", selectionId: selection.selectionId, cursor: event.cursor, event });
         if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
       })),
