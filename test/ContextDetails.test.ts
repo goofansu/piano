@@ -38,7 +38,6 @@ test("Subagents rows sit below main-only Session usage, one per Profile that spe
     ["usage-probe-claude", "claude-haiku-4-5-20251001", "20,902", "$0.0421"],
     ["mixed", "2", "$0.0000"],
     ["All subagents", "24,428", "$0.0492"],
-    ["Session + subagents", "24,548", "$0.5492"],
   ]);
   assert.match(html, /<th[^>]*>Total tokens<\/th><td[^>]*>—<\/td><td[^>]*>120<\/td>/, "the Session column stays Pi's main-session figure");
   assert.match(html, /<th[^>]*>Cost<\/th><td[^>]*>—<\/td><td[^>]*>\$0\.5000<\/td>/);

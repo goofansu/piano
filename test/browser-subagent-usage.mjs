@@ -102,7 +102,7 @@ try {
     await ab('wait', '--text', 'All subagents');
     await ab('scrollintoview', '[aria-label="Subagent usage by profile"]');
     const subagents = await table('Subagent usage by profile');
-    assert.deepEqual(subagents.slice(0, 4), [
+    assert.deepEqual(subagents, [
       ['Subagents', 'Tokens', 'Cost'],
       ['usage-probe-pi', 'openai/gpt-6.1-sol', '3,524', '$0.0071'],
       ['usage-probe-claude', 'claude-haiku-4-5-20251001', '20,902', '$0.0421'],
@@ -114,13 +114,13 @@ try {
     await ab('screenshot', join(evidence, `subagent-usage-${width}.png`));
     await ab('press', 'Escape');
   }
+  // Spend lives in the popover only; the Run's result card details carry no usage line.
   const notice = '[data-slot="subagent-result-card"][data-run-id="run-qbdd-2"]';
   await ab('scrollintoview', notice);
   await ab('click', `${notice} button`);
-  await ab('wait', '--text', 'Usage 20,902 tokens');
+  await ab('wait', `${notice} [data-state="open"]`);
   observed.disclosure = await evaluate(`document.querySelector(${JSON.stringify(notice)}).innerText`);
-  assert.match(observed.disclosure, /Usage 20,902 tokens · \$0\.0421 · claude-haiku-4-5-20251001/);
-  await ab('screenshot', join(evidence, 'subagent-result-disclosure.png'));
+  assert.doesNotMatch(observed.disclosure, /Usage|tokens/);
   writeFileSync(join(evidence, 'observed.json'), JSON.stringify(observed, null, 2));
   console.log(JSON.stringify(observed[1280], null, 2));
   console.log(`PASS: ${live ? 'live-delivered then reloaded' : 'reopened'} ${realSession ? 'real' : 'fixture'} session shows usage-probe-pi 3,524 / $0.0071 once despite three deliveries, usage-probe-claude 20,902 / $0.0421, All subagents 24,426 / $0.0492, on mobile and desktop. Zero model calls.`);

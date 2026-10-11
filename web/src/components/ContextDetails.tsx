@@ -142,11 +142,6 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages,
               <TableCell className="break-all">{number(subagents.total.totalTokens)}</TableCell>
               <TableCell className="break-all">{dollars(subagents.total.cost)}</TableCell>
             </TableRow>
-            {cost !== undefined && <TableRow>
-              <TableHead scope="row" className="text-left font-normal text-ink-2">Session + subagents</TableHead>
-              <TableCell className="break-all">{totals ? number(totals.total + subagents.total.totalTokens) : "—"}</TableCell>
-              <TableCell className="break-all">{dollars(cost + subagents.total.cost)}</TableCell>
-            </TableRow>}
           </TableBody>
         </Table>
       )}
