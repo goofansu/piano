@@ -40,7 +40,7 @@ export function SettingsNavigation({ compact, section, onShow, onHide, onSelect,
   </div>;
 }
 
-export function SettingsPage({ section, onMenu, providersChanged }: { section: SettingsSection; onMenu: () => void; providersChanged: () => void }) {
+export function SettingsPage({ section, onMenu }: { section: SettingsSection; onMenu: () => void }) {
   // Kept while another section shows; returning to Providers reads them again.
   const observed = useObservation("providers", signal => oauthProviders({ signal }), { enabled: section === "providers" });
   const providers = observed.value && [...observed.value];
@@ -49,10 +49,8 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
   const [signingOut, setSigningOut] = useState<string>();
   const [signOutTarget, setSignOutTarget] = useState<OAuthProvider>();
   const { refresh } = observed;
-  const refreshProviders = useCallback(() => {
-    void refresh();
-    providersChanged();
-  }, [refresh, providersChanged]);
+  // Signing in or out changes the usable models; the server invalidates every catalog itself.
+  const refreshProviders = useCallback(() => { void refresh(); }, [refresh]);
   const signOut = async (provider: OAuthProvider) => {
     setSigningOut(provider.id);
     try {
@@ -63,7 +61,7 @@ export function SettingsPage({ section, onMenu, providersChanged }: { section: S
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
     } finally { setSigningOut(undefined); setSignOutTarget(undefined); }
   };
-  if (section !== "providers") return <RadiusSettings onMenu={onMenu} providersChanged={providersChanged} />;
+  if (section !== "providers") return <RadiusSettings onMenu={onMenu} />;
   return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
       <SettingsHeader title="Providers" titleId="settings-providers-title" onMenu={onMenu} />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">

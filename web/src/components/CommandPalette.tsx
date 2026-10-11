@@ -10,7 +10,7 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 import { abbrevPath } from "@/lib/format";
 import { hasMod } from "@/lib/keys";
 import { sessionCatalog } from "@/lib/sessionCatalog";
-import { directoryTrust } from "@/lib/sessionContext";
+import { directoryTrust, focusedDirectory } from "@/lib/sessionContext";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -20,15 +20,13 @@ interface Props {
   state: AppState;
   toggleSidebar: () => void;
   send: (command: ClientCommand) => void;
-  /** The New session composer's directory, while that page is open. */
-  composerCwd?: string;
 }
 
 /**
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ state, toggleSidebar, send, composerCwd }: Props) {
+export function CommandPalette({ state, toggleSidebar, send }: Props) {
   const { palette: open, setPalette: onOpenChange, settings, select, openNew, openSettings, closeSettings } = useNavigation();
   // Mod+K, the only global shortcut, toggles the palette.
   useEffect(() => {
@@ -58,7 +56,10 @@ export function CommandPalette({ state, toggleSidebar, send, composerCwd }: Prop
     .sort((a, b) => (Date.parse(b.createdAt ?? "") || 0) - (Date.parse(a.createdAt ?? "") || 0)),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, state.session?.cwd, state.session?.sessionId, state.selecting]);
-  const composerTrust = composerCwd ? directoryTrust(state, composerCwd) : undefined;
+  // Trust belongs to the directory the main pane is about: the New page's, else the selected session's.
+  const focus = focusedDirectory(state);
+  const focusCwd = focus && !focus.checkoutMissing ? focus.cwd : undefined;
+  const focusTrust = focusCwd ? directoryTrust(state, focusCwd) : undefined;
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
@@ -105,10 +106,10 @@ export function CommandPalette({ state, toggleSidebar, send, composerCwd }: Prop
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
           </CommandItem>
-          {composerCwd && composerTrust?.required && (
-            <CommandItem value={composerTrust.trusted ? "Untrust folder" : "Trust folder"} keywords={["trust", "pi settings", "skills"]} disabled={!state.connected}
-              onSelect={() => run(() => send({ _tag: "set_trust", path: composerCwd, trusted: !composerTrust.trusted }))}>
-              {composerTrust.trusted ? <><ShieldOffIcon /> Untrust folder</> : <><ShieldCheckIcon /> Trust folder</>}
+          {focusCwd && focusTrust?.required && (
+            <CommandItem value={focusTrust.trusted ? "Untrust folder" : "Trust folder"} keywords={["trust", "pi settings", "skills"]} disabled={!state.connected}
+              onSelect={() => run(() => send({ _tag: "set_trust", path: focusCwd, trusted: !focusTrust.trusted }))}>
+              {focusTrust.trusted ? <><ShieldOffIcon /> Untrust folder</> : <><ShieldCheckIcon /> Trust folder</>}
             </CommandItem>
           )}
           <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>

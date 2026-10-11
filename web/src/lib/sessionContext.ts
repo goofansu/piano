@@ -34,6 +34,40 @@ export function directoryTrust(state: AppState, cwd: string): ProjectTrust | und
   return state.trusts[cwd] ?? state.folders.flatMap(f => f.worktrees).find(w => w.path === cwd)?.trust;
 }
 
+export interface FocusedDirectory {
+  cwd: string;
+  /** The selected session's checkout is gone, so Pi cannot be asked about it. */
+  checkoutMissing: boolean;
+}
+
+/** The directory the main pane is about: the New page's directory, else the selected session's. */
+export function focusedDirectory(state: AppState): FocusedDirectory | undefined {
+  if (state.view.kind === "new") return state.view.cwd ? { cwd: state.view.cwd, checkoutMissing: false } : undefined;
+  const session = state.view.kind === "session" ? state.session : null;
+  return session ? { cwd: session.cwd, checkoutMissing: !!session.state.checkoutMissing } : undefined;
+}
+
+/** Where slash completion discovers commands; a new revision invalidates pending discovery. */
+export interface CompletionTarget {
+  cwd: string;
+  /** Only for a live child; discovery must not start a saved session. */
+  sessionId?: string;
+  revision: string;
+}
+
+/**
+ * Slash completion for the focused directory, once it can be asked: on the New page while
+ * connected, for a session once its attachment is ready. The revision changes when the
+ * attachment, its child, the directory's trust or its model catalog is replaced.
+ */
+export function completionTarget(state: AppState): CompletionTarget | undefined {
+  const focus = focusedDirectory(state);
+  const session = state.view.kind === "session" ? state.session : null;
+  if (!focus || !state.connected || (session && !sessionReady(state))) return undefined;
+  const revision = [state.selectionId, session?.cursor?.generation, session?.hosted, directoryTrust(state, focus.cwd)?.trusted, state.catalogs[focus.cwd]?.fetchedAt].join(":");
+  return { cwd: focus.cwd, sessionId: session?.hosted ? session.sessionId ?? undefined : undefined, revision };
+}
+
 /** The registry reference behind a session row, so membership is read from one place. */
 export function sessionReference(state: AppState, session: SessionRef): SessionReference | undefined {
   return state.sessionReferences.find(s => s.cwd === session.cwd && s.sessionId === session.sessionId);

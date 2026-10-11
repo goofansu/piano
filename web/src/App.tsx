@@ -49,13 +49,13 @@ export default function App() {
   // A project's home is its New page: sessions started there join it.
   const openProject = useCallback((projectId: string) => openNew(undefined, projectId), [openNew]);
   const [projectDialog, setProjectDialog] = useState<ProjectDialog | null>(null);
-  const [composerCwd, setComposerCwd] = useState("");
   // One PR projection feeds the header, menu, and palette for the selected session.
   const prSession = state.view.kind === "session" ? state.session : null;
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
   const prWorkspaceId = workspaceFor(state, prSession?.cwd)?.id;
   const pullRequest = useSessionPullRequest(prWorkspaceId, prSession?.sessionId, !!prSession && isWorking(prSession.state));
 
+  const chooseDirectory = useCallback((cwd: string) => dispatch({ type: "new_directory", cwd }), []);
   const onDraftChange = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_appended", key, text }), []);
   const onDraftParagraph = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_paragraph_appended", key, text }), []);
@@ -73,7 +73,7 @@ export default function App() {
         {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
         <LayoutView key={state.view.kind} active={!settings}>
           {state.view.kind === "new" ? (
-            <NewSession state={state} send={send} onDraftChange={onDraftChange} initialCwd={state.view.cwd} projectId={state.view.projectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} onDirectoryChange={setComposerCwd} />
+            <NewSession state={state} send={send} onDraftChange={onDraftChange} chooseDirectory={chooseDirectory} projectId={state.view.projectId} onProjectChange={id => openNew(undefined, id)} onNewProject={() => setProjectDialog({})} onMenu={showSidebar} />
           ) : state.view.kind === "missing-session" ? (
             <Empty className="flex-1 px-4" role="alert">
               <EmptyHeader>
@@ -88,7 +88,7 @@ export default function App() {
             <SessionView state={state} send={send} onMenu={showSidebar} onDraftChange={onDraftChange} onDraftAppend={onDraftAppend} onDraftParagraph={onDraftParagraph} openProject={openProject} pullRequest={pullRequest} />
           )}
         </LayoutView>
-        {settings && <LayoutView><SettingsPage section={settings} onMenu={showSidebar} providersChanged={() => { const cwd = state.view.kind === "new" ? composerCwd : state.session?.cwd; if (cwd) send({ _tag: "models", cwd, refresh: true }); }} /></LayoutView>}
+        {settings && <LayoutView><SettingsPage section={settings} onMenu={showSidebar} /></LayoutView>}
       </>}>
       {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls.
           Above dialogs and sheets (z-50) but below menus, popovers and tooltips (z-[60]), so an open menu is never covered. */}
@@ -103,7 +103,7 @@ export default function App() {
         toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
       />
       {projectDialog && <ProjectDialogView key={JSON.stringify(projectDialog)} state={state} send={send} dialog={projectDialog} close={() => setProjectDialog(null)} openProject={openProject} />}
-      <CommandPalette send={send} state={state} toggleSidebar={toggleSidebar} composerCwd={state.view.kind === "new" ? composerCwd : undefined} />
+      <CommandPalette send={send} state={state} toggleSidebar={toggleSidebar} />
       <DialogHost dialogs={state.resync ? [] : state.session?.dialogs ?? []} send={send} connected={sessionReady(state)} />
     </AppLayout>
     </SessionCommandHost>

@@ -1,7 +1,7 @@
 import type { ClientCommand as ClientMessage } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, FolderIcon, FolderOpenIcon, GitBranchPlusIcon, PanelLeftOpenIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, TargetIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { BranchLabel } from "@/components/BranchLabel";
 import { FolderPicker } from "@/components/FolderPicker";
@@ -16,13 +16,11 @@ import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
 import { isSendKey } from "@/lib/keys";
 import { type DraftKey, NEW_SESSION_DRAFT, sendable } from "@/lib/messageDraft";
-import { directoryTrust, folderFor } from "@/lib/sessionContext";
-import { readStorage, writeStorage } from "@/lib/storage";
+import { completionTarget, directoryTrust, folderFor } from "@/lib/sessionContext";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
@@ -33,52 +31,30 @@ interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
   onDraftChange: (key: DraftKey, text: string) => void;
-  initialCwd?: string;
+  /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
+  chooseDirectory: (cwd: string) => void;
   /** The project a session started here joins; the page is that project's home. */
   projectId?: string;
   onProjectChange: (projectId?: string) => void;
   /** Open the New project dialog; the created project becomes this page's project. */
   onNewProject: () => void;
   onMenu: () => void;
-  /** The chosen directory, so the command palette can offer its trust command. */
-  onDirectoryChange?: (cwd: string) => void;
 }
 
-const LAST_DIR = "piano.lastDir";
 const NEW = { kind: "new" } as const;
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({ state, send, onDraftChange, initialCwd, projectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
-  const [cwd, setCwd] = useState(() => {
-    if (initialCwd) return initialCwd;
-    // Opened for a project, the page starts without a directory; a directory already chosen here survives picking a project.
-    if (projectId) return "";
-    return readStorage(LAST_DIR) ?? "";
-  });
+export function NewSession({ state, send, onDraftChange, chooseDirectory, projectId, onProjectChange, onNewProject, onMenu }: Props) {
+  // The client starts a fresh page in the last directory used, else the first folder; opened for a project, it starts without one.
+  const cwd = state.view.kind === "new" ? state.view.cwd ?? "" : "";
   const text = state.drafts[NEW_SESSION_DRAFT] ?? "";
   const setText = (value: string) => onDraftChange(NEW_SESSION_DRAFT, value);
   const attachments = useAttachments(NEW_SESSION_DRAFT);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (initialCwd) setCwd(initialCwd);
-  }, [initialCwd]);
-  useEffect(() => { onDirectoryChange?.(cwd); }, [cwd, onDirectoryChange]);
 
   useAutoGrow(textarea, text, 288);
   useTypeToFocus(textarea, useCallback((s: string) => onDraftChange(NEW_SESSION_DRAFT, text + s), [onDraftChange, text]));
-  // Fall back to the first known folder when nothing is remembered.
-  useEffect(() => {
-    if (!projectId && !cwd && state.folders[0]) setCwd(state.folders[0].path);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.folders.length]);
-  useEffect(() => {
-    if (!creating) return;
-    const t = setTimeout(() => setCreating(false), 15000);
-    return () => clearTimeout(t);
-  }, [creating]);
 
   const folder = folderFor(state, cwd);
   const project = projectId ? state.projects.find(p => p.id === projectId) : undefined;
@@ -86,15 +62,12 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
   const catalog = state.catalogs[cwd] ?? null;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
   const choice = useModelChoice(catalog, NEW, cwd);
-  useEffect(() => {
-    if (state.connected && cwd) { send({ _tag: "models", cwd }); send({ _tag: "trust", cwd }); }
-  }, [cwd, state.connected, state.catalogRevision, send]);
-  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!choice.model && sendable({ text, images: attachments }) && !creating && !project?.archived;
+  // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
+  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!choice.model && sendable({ text, images: attachments }) && !project?.archived;
 
   const submit = () => {
+    // Creating switches the main pane to the new session at once, so this page never shows a pending state.
     if (!ready) return;
-    writeStorage(LAST_DIR, cwd.trim());
-    setCreating(true);
     send({ _tag: "create_session", cwd: cwd.trim(), projectId, options: choice.start(), text: text.trim(), attachments: attachments.items });
     setText("");
     attachments.clear();
@@ -115,18 +88,18 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
             {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
             <div className="mb-2 flex min-w-0 items-center gap-1">
               <div className="min-w-0 shrink">
-                <DirectorySelect state={state} value={cwd} onChange={setCwd} onBrowse={() => setPickerOpen(true)} send={send} />
+                <DirectorySelect state={state} value={cwd} onChange={chooseDirectory} onBrowse={() => setPickerOpen(true)} send={send} />
               </div>
               {trust?.required && (
                 <TrustToggle trusted={trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: cwd, trusted })} />
               )}
               <ProjectSelect state={state} value={projectId} onChange={onProjectChange} onCreate={onNewProject} />
             </div>
-            <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, creating || !state.connected)}>
-              <AttachmentDraftView draft={attachments} disabled={creating || !state.connected} />
+            <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, !state.connected)}>
+              <AttachmentDraftView draft={attachments} disabled={!state.connected} />
               <SlashTextarea
                 ref={textarea}
-                completion={state.connected && !creating ? { cwd, revision: `${trust?.trusted}:${catalog?.fetchedAt}` } : undefined}
+                completion={completionTarget(state)}
                 autoFocus={!window.matchMedia("(pointer: coarse)").matches}
                 value={text}
                 rows={1}
@@ -141,10 +114,10 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
                 }}
               />
               <div className={composerToolbar}>
-                <AttachButton draft={attachments} disabled={creating || !state.connected} />
+                <AttachButton draft={attachments} disabled={!state.connected} />
                 <ModelSelect catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={choice.model} onChange={choice.onModelChange} effort={choice.effort} onEffortChange={choice.onEffortChange} noDirectory={!cwd} />
                 <Button size="icon" className={composerAction} aria-label="Send" disabled={!ready} onClick={submit}>
-                  <span key={creating ? "busy" : "send"} className="control-enter inline-flex">{creating ? <Spinner /> : <ArrowUpIcon />}</span>
+                  <span className="control-enter inline-flex"><ArrowUpIcon /></span>
                 </Button>
               </div>
             </div>
@@ -161,11 +134,10 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
                 </AlertDescription>
               </Alert>
             )}
-            {creating && <p className="sr-only" role="status">Starting Pi</p>}
           </div>
         </div>
       </div>
-      <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={(path) => setCwd(path)} initialPath={cwd || undefined} />
+      <FolderPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={chooseDirectory} initialPath={cwd || undefined} />
     </>
   );
 }

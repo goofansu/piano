@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { deliveryAction } from "@/lib/composerControl";
 import { type DraftKey, sessionDraftKey } from "@/lib/messageDraft";
-import { closureNeedsAttention, sessionActivity, sessionContext } from "@/lib/sessionContext";
+import { closureNeedsAttention, completionTarget, sessionActivity, sessionContext } from "@/lib/sessionContext";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
@@ -50,7 +50,6 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const { status, streaming, replyActivity, firstMessageOnItsWay, submissionText } = sessionActivity(state, display);
   const draftKey = t ? sessionDraftKey(t) : null;
   const catalog = t ? state.catalogs[t.cwd] ?? null : null;
-  useEffect(() => { if (state.connected && t?.cwd && !checkoutMissing) send({ _tag: "models", cwd: t.cwd }); }, [t?.cwd, checkoutMissing, state.connected, state.catalogRevision, send]);
   // A running Pi owns the selection; a saved session's picks wait for its first prompt and
   // override only what was picked, so Pi restores the rest of its recorded selection.
   const choice = useModelChoice(catalog, { kind: "session", hosted: !!t?.hosted, model: t?.state.model, thinkingLevel: t?.state.thinkingLevel },
@@ -148,7 +147,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         </Alert>
       ) : <Composer
         draftKey={draftKey}
-        completion={ready && t ? { cwd: t.cwd, sessionId: t.hosted ? t.sessionId ?? undefined : undefined, revision: `${state.selectionId}:${t.cursor?.generation}:${t.hosted}:${catalog?.fetchedAt}` } : undefined}
+        completion={completionTarget(state)}
         text={draftKey ? state.drafts[draftKey] ?? "" : ""}
         onTextChange={(text) => { if (draftKey) onDraftChange(draftKey, text); }}
         onTextAppend={(text) => { if (draftKey) onDraftAppend(draftKey, text); }}

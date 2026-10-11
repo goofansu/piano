@@ -27,7 +27,7 @@ export interface AppState {
   connected: boolean;
   selectionId: string | null;
   resync: boolean;
-  /** What the main pane shows. */
+  /** What the main pane shows. The New page's `cwd` is the directory a session started there runs in; it has no other owner. */
   view: { kind: "session" } | { kind: "new"; cwd?: string; projectId?: string } | { kind: "missing-session"; sessionId: string };
   folders: FolderView[];
   projects: Project[];
@@ -83,7 +83,10 @@ export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
   | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null; firstMessage?: Pick<PendingCreate, "text" | "attachments"> }
+  /** Opens the New page; without a directory it keeps the one already chosen there. */
   | { type: "new"; cwd?: string; projectId?: string }
+  /** Picks the New page's directory; ignored on any other view. */
+  | { type: "new_directory"; cwd: string }
   | { type: "missing-session"; sessionId: string }
   | { type: "draft_changed"; key: DraftKey; text: string }
   /** Typed characters, appended as they are. */
@@ -131,7 +134,10 @@ function reduceAction(s: AppState, a: Action): AppState {
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)) };
     case "new":
-      return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd, projectId: a.projectId }, selecting: null, session: null, pendingCreate: null };
+      // Picking a project, or New session again, on the New page keeps the directory chosen there.
+      return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd ?? (s.view.kind === "new" ? s.view.cwd : undefined), projectId: a.projectId }, selecting: null, session: null, pendingCreate: null };
+    case "new_directory":
+      return s.view.kind === "new" && s.view.cwd !== a.cwd ? { ...s, view: { ...s.view, cwd: a.cwd } } : s;
     case "missing-session":
       return { ...s, selectionId: null, resync: false, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null, pendingCreate: null };
     case "draft_changed":
@@ -173,7 +179,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "models":
       return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
     case "catalogs_invalidated":
-      // Views re-probe on the revision; the old catalog stays until its replacement arrives, so open pickers do not flash empty.
+      // The client re-asks for the focused directory on the revision; the old catalog stays until its replacement arrives, so open pickers do not flash empty.
       return { ...s, catalogRevision: s.catalogRevision + 1 };
     case "trust":
       return { ...s, trusts: { ...s.trusts, [m.cwd]: m.trust } };
