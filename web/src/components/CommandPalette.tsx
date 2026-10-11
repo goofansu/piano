@@ -6,23 +6,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { CommandIcon, useSessionCommands } from "@/components/SessionCommandHost";
-import type { SettingsSection } from "@/components/SettingsPage";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
+import { hasMod } from "@/lib/keys";
 import { sessionCatalog } from "@/lib/sessionCatalog";
 import { directoryTrust } from "@/lib/sessionContext";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
+import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarView } from "@/lib/useSidebarView";
 import type { AppState } from "@/store";
 
 interface Props {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   state: AppState;
-  select: (cwd: string, sessionId: string | null) => void;
-  openNew: (cwd?: string) => void;
-  openSettings: (section?: SettingsSection) => void;
-  closeSettings?: () => void;
   toggleSidebar: () => void;
   send: (command: ClientCommand) => void;
   /** The New session composer's directory, while that page is open. */
@@ -33,7 +28,17 @@ interface Props {
  * The command palette: session navigation/actions, new sessions, and view commands.
  * Search matches a session's title, its directory, its branch and its project.
  */
-export function CommandPalette({ open, onOpenChange, state, select, openNew, openSettings, closeSettings, toggleSidebar, send, composerCwd }: Props) {
+export function CommandPalette({ state, toggleSidebar, send, composerCwd }: Props) {
+  const { palette: open, setPalette: onOpenChange, settings, select, openNew, openSettings, closeSettings } = useNavigation();
+  // Mod+K, the only global shortcut, toggles the palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      if (hasMod(e) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") { e.preventDefault(); onOpenChange(!open); }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [open, onOpenChange]);
   const { setTheme } = useTheme();
   const { view, setView } = useSidebarView();
   const [search, setSearch] = useState("");
@@ -86,7 +91,7 @@ export function CommandPalette({ open, onOpenChange, state, select, openNew, ope
           </CommandGroup>
         )}
         <CommandGroup key="global" heading="Global commands">
-          {closeSettings ? <CommandItem value="Home" keywords={["back", "session"]} onSelect={() => run(closeSettings)}>
+          {settings ? <CommandItem value="Home" keywords={["back", "session"]} onSelect={() => run(closeSettings)}>
             <HomeIcon /> Home
           </CommandItem> : <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
