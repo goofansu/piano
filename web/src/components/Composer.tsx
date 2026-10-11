@@ -1,4 +1,4 @@
-import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, ThinkingLevel } from "@shared/wire";
+import type { Attachment, ContextUsage, ModelCatalog, QueuedMessage, RenderMsg, SessionStats, SubagentUsage, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { useRef, useState } from "react";
@@ -44,6 +44,7 @@ interface Props {
   context?: ContextUsage;
   cost?: number;
   totals?: SessionStats["tokens"];
+  subagents?: SubagentUsage;
   messages?: ReadonlyArray<RenderMsg>;
   queuedMessages?: ReadonlyArray<QueuedMessage>;
 }
@@ -52,7 +53,7 @@ const QUEUE_MODE_KEY = "piano.queueMode";
 const loadQueueMode = (): DeliveryMode => (readStorage(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering");
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
-export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, stopping, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
+export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, stopping, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, subagents, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
@@ -198,7 +199,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
               </Button>
             </PopoverTrigger>
             <PopoverContent side="top" align="end" aria-label="Context usage details" className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono">
-              <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} />
+              <ContextDetails context={context} contextWindow={contextWindow} cost={cost} totals={totals} messages={messages} subagents={subagents} />
             </PopoverContent>
           </Popover>
         </div>

@@ -175,6 +175,26 @@ test("handled input acknowledges consumption without starting work or inventing 
   }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
 });
 
+test("without pi-subagent, Run usage stays absent and never fails Pi's stats", async () => {
+  await run(Effect.gen(function* () {
+    const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "plain" });
+    for (const text of ["first", "second"]) {
+      const ready = yield* Deferred.make<void>();
+      const settled = yield* collectUntil(t.events.pipe(
+        Stream.tap((e) => e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void),
+      ), (e) => e._tag === "state" && !e.state.isStreaming && e.state.submission?.outcome === "started").pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
+      yield* t.act({ _tag: "prompt", text });
+      yield* Fiber.join(settled);
+    }
+    // One stats worker: the second turn's figures (cost 0.04) follow the first turn's entry read.
+    yield* collectUntil(t.events, (e) => (e._tag === "snapshot" ? e.snapshot.state : e._tag === "state" ? e.state : undefined)?.cost === 0.04);
+    const state = yield* t.state;
+    assert.equal(state.subagents, undefined, "no table is invented from other extensions' entries or message usage");
+    assert.equal(state.statsRefreshError, undefined);
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+});
+
 test("canonical context updates after a response and compaction while still running", async () => {
   await run(Effect.gen(function* () {
     const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "live" });

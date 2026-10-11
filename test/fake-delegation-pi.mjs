@@ -40,13 +40,47 @@ const defaultMessages = [
   assistant('bad-start', 'agent_start', { agent: 'reviewer', description: 'Malformed details', prompt: 'Fallback' }),
   result('bad-start', 'agent_start', 'Readable malformed fallback', { kind: 'start', rowPhrase: '', agent: 'reviewer', runId: 123 }),
 ];
-const messages = entries.length ? entries.filter(entry => entry.type === 'message').map(entry => entry.message) : defaultMessages;
+// The two-Run shape of a real Pi 1.1.0 session with pi-subagent Run usage (sanitized): the waited
+// Run is delivered by wait, agent_result and its Notification; the other only by its Notification.
+const probeUsage = { input: 3518, output: 6, cacheRead: 0, cacheWrite: 0, cost: 0.007096 };
+const claudeUsage = { input: 10, output: 106, cacheRead: 0, cacheWrite: 20786, cost: 0.042112 };
+const waitAllUsage = { input: 1200, output: 30, cacheRead: 800, cacheWrite: 0, cost: 0.0025 };
+const zero = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+const probeStart = (callId, agent, runId, subagentId, label) => [
+  assistant(callId, 'agent_start', { agent, description: label, prompt: 'Reply with exactly: OK' }),
+  result(callId, 'agent_start', `Started ${runId}`, { kind: 'start', rowPhrase: 'Started', tone: 'toolTitle', agent, runId, subagentId }),
+];
+const notification = (runId, subagentId, agent, label, spend) => ({ role: 'custom', customType: 'subagent-notification', display: true, content: `Result of ${label}`, details: { runId, subagentId, agent, label, status: 'completed', durationMillis: 2407, ...spend } });
+const usageMessages = [
+  ...probeStart('start-pi', 'usage-probe-pi', 'run-qbdd-1', 'subagent-qbdd-1', 'waited probe'),
+  ...probeStart('start-claude', 'usage-probe-claude', 'run-qbdd-2', 'subagent-qbdd-2', 'unwaited probe'),
+  ...probeStart('start-idle', 'usage-probe-idle', 'run-idle', 'subagent-idle', 'idle probe'),
+  assistant('wait-pi', 'agent_wait', { ids: ['run-qbdd-1', 'run-idle'] }),
+  result('wait-pi', 'agent_wait', 'OK', { kind: 'collection', scope: 'named', runs: [
+    { runId: 'run-qbdd-1', agent: 'usage-probe-pi', status: 'completed', usage: probeUsage, model: 'openai/gpt-6.1-sol' },
+    { runId: 'run-idle', agent: 'usage-probe-idle', status: 'completed', usage: zero },
+  ], stillRunning: 0, unknown: 0, unavailable: 0, noActiveRuns: false }),
+  assistant('result-pi', 'agent_result', { id: 'run-qbdd-1' }),
+  result('result-pi', 'agent_result', 'OK', { kind: 'result', rowPhrase: '2 characters', tone: 'toolOutput', outcome: 'available', run: { runId: 'run-qbdd-1', agent: 'usage-probe-pi', status: 'completed', usage: probeUsage, model: 'openai/gpt-6.1-sol' } }),
+  notification('run-qbdd-1', 'subagent-qbdd-1', 'usage-probe-pi', 'waited probe', { usage: probeUsage, model: 'openai/gpt-6.1-sol' }),
+  notification('run-idle', 'subagent-idle', 'usage-probe-idle', 'idle probe', {}),
+  assistant('result-bad', 'agent_result', { id: 'run-idle' }),
+  result('result-bad', 'agent_result', 'Malformed usage', { kind: 'result', rowPhrase: '15 characters', tone: 'toolOutput', outcome: 'available', run: { runId: 'run-idle', agent: 'usage-probe-idle', status: 'completed', usage: { ...probeUsage, cost: -1 }, model: 'x'.repeat(101) } }),
+];
+const usageLive = notification('run-qbdd-2', 'subagent-qbdd-2', 'usage-probe-claude', 'unwaited probe', { usage: claudeUsage, model: 'claude-haiku-4-5-20251001' });
+const messages = entries.length ? entries.filter(entry => entry.type === 'message').map(entry => entry.message) : args.includes('--usage') ? usageMessages : defaultMessages;
 const historicalStart = messages.find(message => message.role === 'toolResult' && message.details?.kind === 'start' && typeof message.details.subagentId === 'string');
 const liveSubagentId = historicalStart?.details.subagentId ?? 'subagent-stable';
 const liveAgent = historicalStart?.details.agent ?? 'reviewer';
 let lastId = entries.findLast(entry => entry.type === 'message')?.id ?? null;
+// Every entry Pi keeps, including ones compaction removed from the context `messages`.
+const entryOf = (message, id) => message.role === 'custom'
+  ? { type: 'custom_message', id, parentId: null, timestamp: new Date().toISOString(), customType: message.customType, content: message.content, display: message.display, details: message.details }
+  : { type: 'message', id, parentId: null, timestamp: new Date().toISOString(), message };
+const log = entries.length ? entries.filter(entry => entry.type !== 'session') : messages.map((message, i) => entryOf(message, `entry-${i}`));
 function emit(message) {
   messages.push(message);
+  log.push(entryOf(message, `entry-${log.length}`));
   if (sessionFile) {
     const id = `delegation-${messages.length}`;
     appendFileSync(sessionFile, JSON.stringify({ type: 'message', id, parentId: lastId, timestamp: new Date().toISOString(), message }) + '\n');
@@ -58,6 +92,11 @@ function handle(command) {
   switch (command.type) {
     case 'get_state': return reply(command, { sessionId, model: { provider: 'fake', id: 'delegation' }, thinkingLevel: 'off', isStreaming: false });
     case 'get_messages': return reply(command, { messages });
+    case 'get_entries': {
+      const since = command.since === undefined ? -1 : log.findIndex(entry => entry.id === command.since);
+      if (since === -1 && command.since !== undefined) return out({ type: 'response', id: command.id, command: command.type, success: false, error: `Entry not found: ${command.since}` });
+      return reply(command, { entries: log.slice(since + 1), leafId: log.at(-1)?.id ?? null });
+    }
     case 'get_session_stats': return reply(command, { cost: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, contextUsage: { tokens: 0, contextWindow: 1000, percent: 0 } });
     case 'get_commands': return reply(command, { commands: [] });
     case 'get_available_models': return reply(command, { models: [{ provider: 'fake', id: 'delegation', reasoning: false, contextWindow: 1000 }] });
@@ -68,6 +107,38 @@ function handle(command) {
         emit(assistant('live-resume', 'agent_resume', { id: liveSubagentId, description: 'Live delegation', prompt: 'Continue the historical review.' }));
         emit(result('live-resume', 'agent_resume', 'Resumed run-live', { kind: 'resume', rowPhrase: 'Resumed', tone: 'toolTitle', subagentId: liveSubagentId, runId: 'run-live' }));
         emit({ role: 'custom', customType: 'subagent-notification', display: true, content: 'Live result', details: { runId: 'run-live', subagentId: liveSubagentId, agent: liveAgent, label: 'Live delegation', status: 'cancelled', durationMillis: 25 } });
+        out({ type: 'agent_settled' });
+      }
+      if (command.message === '/usage-live') {
+        out({ type: 'agent_start' });
+        emit(usageLive);
+        out({ type: 'agent_settled' });
+      }
+      if (command.message === '/usage-compact') {
+        // Compaction replaces the context; the delivered Runs stay only in the entries. A Run delivered
+        // afterwards shows a read that followed the compaction.
+        messages.splice(0, messages.length, { role: 'compactionSummary', summary: 'Compacted', tokensBefore: 1000 });
+        log.push({ type: 'compaction', id: `entry-${log.length}`, parentId: null, timestamp: new Date().toISOString(), summary: 'Compacted', firstKeptEntryId: `entry-${log.length}`, tokensBefore: 1000 });
+        out({ type: 'compaction_end', reason: 'manual' });
+        out({ type: 'agent_start' });
+        emit(notification('run-qbdd-3', 'subagent-qbdd-3', 'usage-probe-claude', 'later probe', { usage: claudeUsage, model: 'claude-haiku-4-5-20251001' }));
+        out({ type: 'agent_settled' });
+      }
+      if (command.message === '/usage-wait-all') {
+        // pi-subagent omits the Notification for a Run whose result a wait already delivered.
+        out({ type: 'agent_start' });
+        for (const message of probeStart('start-all', 'usage-probe-all', 'run-qbdd-4', 'subagent-qbdd-4', 'wait-all probe')) emit(message);
+        emit(assistant('wait-all', 'agent_wait_all', {}));
+        emit(result('wait-all', 'agent_wait_all', 'OK', { kind: 'collection', scope: 'all-active', runs: [
+          { runId: 'run-qbdd-4', agent: 'usage-probe-all', status: 'completed', usage: waitAllUsage, model: 'openai/gpt-6.1-sol' },
+        ], stillRunning: 0, unknown: 0, unavailable: 0, noActiveRuns: false }));
+        out({ type: 'agent_settled' });
+      }
+      if (command.message === '/usage-late-notice') {
+        // The waited Run's Notification arrives in a later read, after a Run that spent nothing.
+        out({ type: 'agent_start' });
+        emit(notification('run-qbdd-4', 'subagent-qbdd-4', 'usage-probe-all', 'wait-all probe', { usage: waitAllUsage, model: 'openai/gpt-6.1-sol' }));
+        emit(notification('run-idle-2', 'subagent-idle-2', 'usage-probe-idle', 'idle probe', { usage: zero }));
         out({ type: 'agent_settled' });
       }
       out({ type: 'extension_ui_request', id: 'notice', method: 'notify', message: `barrier ${command.message}` });

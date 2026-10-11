@@ -25,6 +25,7 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { PiCli } from "./PiCli.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import { commandsOf, modelChoicesOf, PiProjector, type PiRecord, queuedMessagesOf, type RawMessage, type RawState, type RawStats, type RefreshKind, stateFactsOf, statsOf } from "./PiRecords.ts";
+import { RunLedger } from "./RunLedger.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
 
@@ -405,6 +406,19 @@ const openSession = (spec: PiSessionSpec) =>
       if (aborting?.acknowledged && aborting.pendingPrompts.size === 0) aborting = undefined;
     });
 
+    /** Run usage from entries Pi appended since the last read. Only the stats worker reads. */
+    const ledger = new RunLedger();
+    const readRuns = Effect.gen(function* () {
+      const entries = (since?: string) => child.request({ type: "get_entries", ...(since ? { since } : {}) }).pipe(
+        Effect.map(data => (data as { entries?: unknown[] } | undefined)?.entries ?? []));
+      const since = ledger.since;
+      // A session that no longer holds the last entry read is counted afresh.
+      ledger.add(yield* entries(since).pipe(Effect.catchTag("PiSessionError", error => since
+        ? Effect.sync(() => ledger.reset()).pipe(Effect.andThen(entries()))
+        : Effect.fail(error))));
+      return ledger.usage;
+    });
+
     /** Canonical projected context and billed cost from Pi, not partial response usage.
      * Refresh at persisted boundaries, never per token/delta. Best effort.
      */
@@ -416,9 +430,14 @@ const openSession = (spec: PiSessionSpec) =>
       yield* Effect.gen(function* () {
         const stats = statsOf((yield* child.request({ type: "get_session_stats" })) as RawStats);
         const statsUpdatedAt = yield* Clock.currentTimeMillis;
-        yield* patchState(() => version === statsVersion && modelVersion === factVersions.model && !announced
+        const current = () => version === statsVersion && modelVersion === factVersions.model && !announced;
+        yield* patchState(() => current()
           ? { ...stats, statsUpdatedAt,
               contextIsLastKnown: outputVersion !== child.observationVersion(), statsRefreshError: undefined } : {});
+        // Pi's figures above neither wait on nor fail with the Runs' entries; a failed read keeps
+        // the last count, and the next refresh continues from the last entry read.
+        const subagents = yield* readRuns.pipe(Effect.option);
+        if (subagents._tag === "Some") yield* patchState(() => current() ? { subagents: subagents.value } : {});
       }).pipe(Effect.catchTag("PiSessionError", error => patchState(() => announced || version !== statsVersion
         ? {} : { contextIsLastKnown: true, statsRefreshError: `Usage refresh failed: ${error.detail}` })));
     });

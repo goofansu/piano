@@ -15,6 +15,7 @@ import type { Snapshot } from "../shared/wire.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { directoryPath, sessionDirFor } from "./PiEnv.ts";
 import { type RawMessage, serializeMessages, stateFactsOf } from "./PiRecords.ts";
+import { RunLedger } from "./RunLedger.ts";
 
 /** Where a session's Pi history is, across the spellings of its checkout. */
 export type HistoryLocation =
@@ -30,7 +31,8 @@ export interface PiHistory {
   readonly locate: (sessionId: string, checkouts: Iterable<string>) => Effect.Effect<HistoryLocation, PiHistoryError>;
   /** The session IDs Pi has history for in this directory. An unreadable store has none. */
   readonly sessionIds: (cwd: string) => Effect.Effect<ReadonlySet<string>>;
-  /** The active branch of a session file as a Snapshot, or an empty one without a file. Safe while Pi writes it. */
+  /** The active branch of a session file as a Snapshot, with Run usage from every entry, or an empty
+   * one without a file. Safe while Pi writes it. */
   readonly peek: (sessionId: string, file: string | undefined) => Effect.Effect<Snapshot>;
 }
 
@@ -79,7 +81,8 @@ const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
     const model = selection?.type === "model_change" ? { provider: selection.provider, id: selection.modelId }
       : context.model ? { provider: context.model.provider, id: context.model.modelId } : undefined;
     return projectDisplay({
-      state: stateFactsOf({ sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel: context.thinkingLevel, isStreaming: false }),
+      state: { ...stateFactsOf({ sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel: context.thinkingLevel, isStreaming: false }),
+        subagents: new RunLedger().add(sm.getEntries()).usage },
       messages: serializeMessages(context.messages as RawMessage[]),
       dialogs: [],
     });

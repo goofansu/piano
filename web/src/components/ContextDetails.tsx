@@ -1,4 +1,4 @@
-import type { ContextUsage, RenderMsg, SessionStats } from "@shared/wire";
+import type { ContextUsage, RenderMsg, SessionStats, SubagentUsage } from "@shared/wire";
 import { cn } from "cn";
 import { useEffect, useRef, useState } from "react";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -15,6 +15,8 @@ interface Props {
   cost?: number;
   totals?: SessionStats["tokens"];
   messages: ReadonlyArray<RenderMsg>;
+  /** The server's count over the whole session, not only the messages in context. */
+  subagents?: SubagentUsage;
 }
 
 const number = (value: number) => value.toLocaleString();
@@ -26,7 +28,7 @@ const cacheHit = (usage?: Pick<NonNullable<SessionStats["tokens"]>, "input" | "c
 };
 
 /** History usage is per response, not a reconstruction of Pi's current context. */
-export function ContextDetails({ context, contextWindow, cost, totals, messages }: Props) {
+export function ContextDetails({ context, contextWindow, cost, totals, messages, subagents }: Props) {
   const responses = messages.filter(message => message.role === "assistant" && message.usage);
   const [selectedId, setSelectedId] = useState<string>();
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
@@ -40,6 +42,8 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
   const position = selected ? responses.indexOf(selected) + 1 : 0;
   const chartRef = useRef<HTMLDivElement>(null);
   const chartWidth = responses.length * 12;
+  // A Run that spent nothing is still a Run, but not a row worth reading.
+  const spent = subagents?.profiles.filter(profile => profile.totalTokens > 0 || profile.cost > 0) ?? [];
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -95,7 +99,7 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
       </>}
     </section>
     <Separator />
-    <section>
+    <section className="flex flex-col gap-3">
       <Table className="table-fixed text-right text-xs tabular-nums" aria-label="Token and cost breakdown">
         <TableHeader>
           <TableRow className="text-ink-2">
@@ -115,6 +119,32 @@ export function ContextDetails({ context, contextWindow, cost, totals, messages 
         </TableRow>)}</TableBody>
       </Table>
       {totals && <p className="sr-only">Session total: {number(totals.total)} tokens</p>}
+      {subagents && spent.length > 0 && (
+        <Table className="table-fixed text-right text-xs tabular-nums" aria-label="Subagent usage by profile">
+          <TableHeader>
+            <TableRow className="text-ink-2">
+              <TableHead className="w-1/2 text-left font-normal">Subagents</TableHead>
+              <TableHead className="text-right font-normal">Tokens</TableHead>
+              <TableHead className="text-right font-normal">Cost</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {spent.map(profile => <TableRow key={profile.profile}>
+              <TableHead scope="row" className="whitespace-normal text-left font-normal text-ink-2">
+                <span className="block wrap-anywhere">{profile.profile}</span>
+                {profile.model && <span className="block wrap-anywhere text-ink-3">{profile.model}</span>}
+              </TableHead>
+              <TableCell className="break-all">{number(profile.totalTokens)}</TableCell>
+              <TableCell className="break-all">{dollars(profile.cost)}</TableCell>
+            </TableRow>)}
+            <TableRow>
+              <TableHead scope="row" className="text-left font-normal text-ink-2">All subagents</TableHead>
+              <TableCell className="break-all">{number(subagents.total.totalTokens)}</TableCell>
+              <TableCell className="break-all">{dollars(subagents.total.cost)}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      )}
     </section>
   </div>;
 }
