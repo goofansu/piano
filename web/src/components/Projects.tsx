@@ -53,8 +53,8 @@ export function ProjectDialogView({ state, send, dialog, close, openProject }: {
       event.preventDefault();
       if (!ready) return;
       const id = dialog.project?.id ?? crypto.randomUUID();
-      send({ _tag: "save_project", project: { id, name: name.trim() } });
-      if (dialog.assign) send({ _tag: "assign_project", cwd: dialog.assign.cwd, sessionId: dialog.assign.sessionId, projectId: id });
+      // One message, so the project and its new session arrive in one registry write.
+      send({ _tag: "save_project", project: { id, name: name.trim() }, assign: dialog.assign && { cwd: dialog.assign.cwd, sessionId: dialog.assign.sessionId } });
       close();
       if (!editing && !dialog.assign) openProject(id);
     }}>

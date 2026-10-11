@@ -115,7 +115,11 @@ export class Registry extends Context.Service<
     readonly requireFolder: (path: string) => Effect.Effect<void, RegistryLookupError>;
     /** A known project that is not archived. */
     readonly requireActiveProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
-    readonly saveProject: (project: Omit<Project, "archived">) => Effect.Effect<void, RegistryError>;
+    /**
+     * Create or rename a project. With `assign`, that session joins it in the same write: one
+     * change announcement, and an unregistered session rejects the whole save.
+     */
+    readonly saveProject: (project: Omit<Project, "archived">, assign?: { readonly cwd: string; readonly sessionId: string }) => Effect.Effect<void, RegistryError>;
     readonly archiveProject: (id: string, archived: boolean) => Effect.Effect<void, RegistryError>;
     readonly assignProject: (cwd: string, sessionId: string, projectId: string | null) => Effect.Effect<void, RegistryError>;
     readonly addFolder: (path: string) => Effect.Effect<void, RegistryError>;
@@ -193,12 +197,14 @@ export const RegistryLive = Layer.effect(
         return project ? Effect.succeed(project)
           : Effect.fail(new RegistryLookupError({ subject: "project", detail: "Project is unavailable or archived. Choose a current project before starting." }));
       }),
-      saveProject: project => update(d => {
+      saveProject: (project, assign) => update(d => {
         const parsed = Schema.decodeUnknownSync(Project)({ ...project, archived: d.projects.find(p => p.id === project.id)?.archived ?? false });
         if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
+        if (assign && !d.sessions.some(isSession(assign.cwd, assign.sessionId))) throw new RegistryError({ detail: "Session reference is unavailable. Refresh and try again." });
         const next = { ...parsed, name: parsed.name.trim() };
-        return { ...d, projects: d.projects.some(p => p.id === next.id)
-          ? d.projects.map(p => p.id === next.id ? next : p) : [...d.projects, next] };
+        const projects = d.projects.some(p => p.id === next.id) ? d.projects.map(p => p.id === next.id ? next : p) : [...d.projects, next];
+        const sessions = assign ? d.sessions.map(s => isSession(assign.cwd, assign.sessionId)(s) ? { ...s, projectId: next.id } : s) : d.sessions;
+        return { ...d, projects, sessions };
       }),
       archiveProject: (id, archived) => update(d => {
         if (!d.projects.some(p => p.id === id)) throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });

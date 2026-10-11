@@ -95,3 +95,19 @@ test("a request that fails reaches the client as an error for its selection, and
     assert.deepEqual(answers(from).at(-1), { _tag: "pong", nonce: "n" });
   }));
 });
+
+test("INV-01: save_project with a session saves both, and an unknown session is answered as an error", async () => {
+  await run(Effect.gen(function* () {
+    const registry = yield* Registry;
+    yield* registry.addSession(cwd, "one");
+    const { receive } = yield* client;
+    const from = sent.length;
+    yield* yield* receive({ _tag: "save_project", project: { id: "ghost", name: "Ghost" }, assign: { cwd, sessionId: "missing" } });
+    assert.deepEqual(answers(from), [{ _tag: "error", message: "Session reference is unavailable. Refresh and try again.", selectionId: undefined }]);
+    assert.deepEqual((yield* registry.get).projects, []);
+    yield* yield* receive({ _tag: "save_project", project: { id: "launch", name: "Launch" }, assign: { cwd, sessionId: "one" } });
+    const data = yield* registry.get;
+    assert.deepEqual(data.projects, [{ id: "launch", name: "Launch", archived: false }]);
+    assert.equal(data.sessions.find(s => s.sessionId === "one")?.projectId, "launch");
+  }));
+});

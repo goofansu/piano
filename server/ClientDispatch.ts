@@ -54,7 +54,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
           return yield* send({ _tag: "models", catalog: yield* facts.catalog(request.cwd, { refresh: request.refresh }) });
         // Registry writes reach every client's sidebar on their own.
         case "save_project":
-          return yield* registry.saveProject(request.project);
+          return yield* registry.saveProject(request.project, request.assign);
         case "archive_project":
           return yield* registry.archiveProject(request.id, request.archived);
         case "assign_project":

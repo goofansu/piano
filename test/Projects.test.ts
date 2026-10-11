@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Effect } from "effect";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
+import { Registry, type RegistryData, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
 test("INV-01/07: grouping preserves identities and survives closing, moving, archiving and restart", async t => {
@@ -61,4 +61,27 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, arc
   const reopened = await run(Effect.gen(function* () { return yield* (yield* Registry).get; }));
   assert.equal(reopened.sessions[0].projectId, "accessibility");
   assert.deepEqual(reopened.workspaces, old.workspaces);
+});
+
+test("INV-01/05: saving a project with a session is one write, announced once, or nothing at all", async t => {
+  const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = join(root, "registry.db"), cwd = join(root, "api");
+  seedRegistry(path, { folders: [cwd], sessions: [{ cwd, sessionId: "one", createdAt: "then", updatedAt: "now", archived: false }] });
+  await Effect.runPromise(Effect.gen(function* () {
+    const r = yield* Registry;
+    const heard: RegistryData[] = [];
+    yield* r.onChange((_before, after) => Effect.sync(() => { heard.push(after); }));
+
+    const before = yield* r.get;
+    const failure = yield* r.saveProject({ id: "launch", name: "Launch" }, { cwd, sessionId: "missing" }).pipe(Effect.flip);
+    assert.match(failure.message, /Session reference is unavailable/);
+    assert.deepEqual(yield* r.get, before, "an unknown session saves no project either");
+    assert.equal(heard.length, 0);
+
+    yield* r.saveProject({ id: "launch", name: "Launch" }, { cwd, sessionId: "one" });
+    assert.equal(heard.length, 1, "the project and its session arrive in one announcement");
+    assert.deepEqual(heard[0].projects, [{ id: "launch", name: "Launch", archived: false }]);
+    assert.equal(heard[0].sessions.find(s => s.sessionId === "one")?.projectId, "launch");
+  }).pipe(Effect.scoped, Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, path)));
 });
