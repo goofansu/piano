@@ -1,17 +1,14 @@
 /** Client state: one reducer over ServerMessages plus local UI actions. */
-import type { Dialog, FolderView, HostInfo, ModelCatalog, Project, ProjectTrust, RenderMsg, ServerMessage, SessionCursor, SessionReference, SessionState, ToolExecution, Workspace, WorktreeDiscovery } from "@shared/wire";
+import type { FolderView, HostInfo, ModelCatalog, Project, ProjectTrust, RenderMsg, ServerMessage, SessionCursor, SessionReference, Snapshot, Workspace, WorktreeDiscovery } from "@shared/wire";
+// Relative, not @shared: module tests load this file directly in Node.
+import { applySessionEvent } from "../../shared/sessionProjection.ts";
 
-export interface SessionView {
+/** The selected session: the server's snapshot folded forward by its live events, plus where it came from. */
+export interface SessionView extends Snapshot {
   cwd: string;
   sessionId: string | null;
   hosted: boolean;
   cursor: SessionCursor | null;
-  state: SessionState;
-  messages: RenderMsg[];
-  pending: RenderMsg | null;
-  dialogs: Dialog[];
-  tools: Record<string, ToolExecution>;
-  closedReason?: string;
 }
 
 /** Browser-only submitted input, never part of Pi's transcript or registry. */
@@ -111,7 +108,7 @@ export function reduce(s: AppState, a: Action): AppState {
     return { ...next, pendingCreate: { ...input, outcome: submission.outcome, detail: submission.detail } };
   }
   if (submission?.outcome === "started" || submission?.outcome === "queued") return { ...next, pendingCreate: { ...input, outcome: "submitted", detail: undefined } };
-  if (t.closedReason && input.outcome !== "submitted") return { ...next, pendingCreate: { ...input, outcome: "uncertain", detail: t.closedReason } };
+  if (t.state.closure && input.outcome !== "submitted") return { ...next, pendingCreate: { ...input, outcome: "uncertain", detail: t.state.closure.detail } };
   return next;
 }
 
@@ -195,18 +192,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         view: { kind: "session" },
         selecting: null,
         done: s.done.filter((k) => k !== sessionKey(m)),
-        session: {
-          cwd: m.cwd,
-          sessionId: m.sessionId,
-          hosted: m.hosted,
-          cursor: m.cursor,
-          state: m.snapshot.state,
-          closedReason: m.snapshot.state.closedReason,
-          messages: [...m.snapshot.messages],
-          pending: m.snapshot.pending ?? null,
-          dialogs: [...m.snapshot.dialogs],
-          tools: Object.fromEntries((m.snapshot.tools ?? []).map(tool => [tool.id, tool])),
-        },
+        session: { ...m.snapshot, cwd: m.cwd, sessionId: m.sessionId, hosted: m.hosted, cursor: m.cursor },
       };
     case "error":
       if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;
@@ -223,38 +209,11 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       const disposition = sessionDelivery(s, m);
       if (disposition === "ignore") return s;
       if (disposition === "resync") return { ...s, resync: true };
-      const t = { ...s.session!, cursor: m.cursor };
-      // Advance the cursor even for a notice or an intentionally ignored fact.
-      s = { ...s, session: t };
+      const t = s.session!;
       const e = m.event;
-      switch (e._tag) {
-        case "snapshot":
-          return { ...s, session: { ...t, hosted: true, state: e.snapshot.state, messages: [...e.snapshot.messages], dialogs: [...e.snapshot.dialogs], pending: e.snapshot.pending ?? null, tools: Object.fromEntries((e.snapshot.tools ?? []).map(tool => [tool.id, tool])) } };
-        case "state":
-          return { ...s, session: { ...t, state: e.state, pending: e.state.isStreaming ? t.pending : null } };
-        case "queue_update":
-          return { ...s, session: { ...t, state: { ...t.state, queuedMessages: [...e.messages] } } };
-        case "submission":
-          if (t.state.submission && e.submission.id < t.state.submission.id) return s;
-          return { ...s, session: { ...t, state: { ...t.state, submission: e.submission } } };
-        case "message_update":
-          return { ...s, session: { ...t, pending: e.message } };
-        case "message_end":
-          return { ...s, session: { ...t, messages: [...t.messages, e.message], pending: e.message.role === "assistant" ? null : t.pending } };
-        case "context":
-          return { ...s, session: { ...t, messages: [...e.messages] } };
-        case "tool_update":
-          return { ...s, session: { ...t, tools: { ...t.tools, [e.tool.id]: e.tool } } };
-        case "dialog":
-          return t.dialogs.some((d) => d.id === e.dialog.id && d.generation === e.dialog.generation) ? s : { ...s, session: { ...t, dialogs: [...t.dialogs, e.dialog] } };
-        case "dialog_resolved":
-          return { ...s, session: { ...t, dialogs: t.dialogs.filter((d) => d.id !== e.resolution.id || d.generation !== e.resolution.generation) } };
-        case "closed":
-          return { ...s, session: { ...t, hosted: false, state: { ...t.state, isStreaming: false, isCompacting: false, isRetrying: false, isStopping: false, queuedMessages: [] }, pending: null, dialogs: [], closedReason: e.reason } };
-        case "notice":
-          return s;
-      }
-      return s;
+      // Advance the cursor even for a notice or an intentionally ignored fact.
+      const hosted = e._tag === "snapshot" ? true : e._tag === "closed" ? false : t.hosted;
+      return { ...s, session: { ...applySessionEvent(t, e), cwd: t.cwd, sessionId: t.sessionId, hosted, cursor: m.cursor } };
     }
     default:
       return s;

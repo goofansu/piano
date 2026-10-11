@@ -1,3 +1,4 @@
+import { isWorking } from "@shared/sessionProjection";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { AppLayout, LayoutView, useAppLayout } from "@/components/AppLayout";
@@ -52,7 +53,7 @@ export default function App() {
   const prSession = state.view.kind === "session" ? state.session : null;
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
   const prWorkspaceId = workspaceFor(state, prSession?.cwd)?.id;
-  const pullRequest = useSessionPullRequest(prWorkspaceId, prSession?.sessionId, !!(prSession?.state.isStreaming || prSession?.state.isCompacting || prSession?.state.isRetrying));
+  const pullRequest = useSessionPullRequest(prWorkspaceId, prSession?.sessionId, !!prSession && isWorking(prSession.state));
 
   const onDraftChange = useCallback((key: string, text: string) => dispatch({ type: "draft_changed", key, text }), []);
   const onDraftAppend = useCallback((key: string, text: string) => dispatch({ type: "draft_appended", key, text }), []);

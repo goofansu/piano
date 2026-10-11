@@ -5,7 +5,8 @@
 import { realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
-import type { HostInfo, Snapshot } from "../shared/wire.ts";
+import { isWorking } from "../shared/sessionProjection.ts";
+import type { HostInfo, SessionClosure, Snapshot } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, PiSessions } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
@@ -55,7 +56,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   const locks = new Map<string, Semaphore.Semaphore>();
   // Runtime diagnostics, not a competing history. Retained across child reopen,
   // not across server restart; no execution records are written into registry.
-  const exits = new Map<string, string>();
+  const exits = new Map<string, SessionClosure>();
   const changed = yield* PubSub.sliding<ReadonlyArray<HostInfo>>(1);
   let stopping = false;
   const lockFor = (key: string) => Effect.sync(() => {
@@ -122,9 +123,8 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     for (const h of hosts.values()) {
       const state = yield* h.session.state;
       // A disappearing/closing child is not an idle (successfully settled) host.
-      if (h.closing || state.closedReason) continue;
-      out.push({ cwd: h.session.spec.cwd, sessionId: h.session.spec.sessionId,
-        streaming: !!(state.isStreaming || state.isCompacting || state.isRetrying) });
+      if (h.closing || state.closure) continue;
+      out.push({ cwd: h.session.spec.cwd, sessionId: h.session.spec.sessionId, streaming: isWorking(state) });
     }
     return out;
   });
@@ -146,13 +146,12 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   });
 
   // Caller holds this key's lock through actual process exit, not just close intent.
-  const close = (key: string, host: Host, reason?: string) => Effect.gen(function* () {
+  const close = (key: string, host: Host, closure?: SessionClosure) => Effect.gen(function* () {
     if (hosts.get(key) !== host) return;
     host.closing = true;
-    const state = yield* host.session.state;
-    const detail = reason ?? state.closedReason ?? (state.isQuiescent ? "released" : "Pi was released during work. Interrupted operations were not resumed.");
-    exits.set(key, detail);
     yield* Scope.close(host.scope, Exit.void);
+    // PiSessions announces how its child stopped, including whether a release interrupted work.
+    exits.set(key, closure ?? (yield* host.session.state).closure ?? { _tag: "released", detail: "Pi was released" });
     yield* cacheStats(host.session);
     hosts.delete(key);
     yield* announce;
@@ -166,7 +165,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     yield* requireCheckout(ref.cwd);
     const existing = hosts.get(key);
     if (existing) {
-      if (!(yield* existing.session.state).closedReason) return existing.session;
+      if (!(yield* existing.session.state).closure) return existing.session;
       yield* close(key, existing);
     }
     if (spec.create) yield* registry.addSession(ref.cwd, spec.sessionId, spec.name).pipe(Effect.mapError(e => rejected(e.detail)));
@@ -212,11 +211,11 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
         }));
       }
       host.lastActivity = yield* Clock.currentTimeMillis;
-      const reason = event._tag === "closed" ? event.reason : event._tag === "snapshot" ? event.snapshot.state.closedReason : undefined;
-      if (reason) {
+      const closure = event._tag === "closed" ? event.closure : event._tag === "snapshot" ? event.snapshot.state.closure : undefined;
+      if (closure) {
         // Retire only this incarnation. A late event must never close a replacement.
         const lock = yield* lockFor(key);
-        yield* owned(Semaphore.withPermits(lock, 1)(close(key, host, reason)));
+        yield* owned(Semaphore.withPermits(lock, 1)(close(key, host, closure)));
       } else if (event._tag === "state" || event._tag === "snapshot") yield* announce;
     })),
       // The host observer also recaptures after overflow; it must never lose exit
@@ -261,7 +260,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       const ref = yield* reference(cwd, id, physical);
       const { missing } = yield* checkout(ref.cwd);
       const host = hosts.get(key);
-      if (host && (missing || (yield* host.session.state).closedReason)) {
+      if (host && (missing || (yield* host.session.state).closure)) {
         yield* close(key, host);
         return undefined;
       }
@@ -273,13 +272,13 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       // A caller can beat the event watcher to this lock after Pi exits or the
       // checkout disappears. Stop the writer before returning file-only history.
       const host = hosts.get(key);
-      if (host && (missing || (yield* host.session.state).closedReason)) {
+      if (host && (missing || (yield* host.session.state).closure)) {
         yield* close(key, host);
         ref = yield* reference(cwd, id, physical);
       }
       const snapshot = ref.file ? yield* peekSession(ref.file, id) : emptySnapshot(id);
       yield* mirrorName(ref.cwd, id, snapshot.state.sessionName);
-      return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, ...ref.stats, contextIsLastKnown: true, checkoutMissing: missing, closedReason: exits.get(key) } } };
+      return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, ...ref.stats, contextIsLastKnown: true, checkoutMissing: missing, closure: exits.get(key) } } };
     })),
     archive: (cwd, id) => retire(cwd, id, false), delete: (cwd, id) => retire(cwd, id, true),
     list, changes: Stream.fromPubSub(changed),

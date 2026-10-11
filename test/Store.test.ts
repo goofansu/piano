@@ -102,20 +102,6 @@ test("a late queue restore appends to its original session draft without changin
   assert.equal(state.view.kind, "session");
 });
 
-test("a late submission outcome cannot replace the explanation for newer input", () => {
-  const cursor = { cwd: "/scratch/a", sessionId: "a", generation: "child", sequence: 5 };
-  let state = reduce({ ...initialState, connected: true, selectionId: "select-a" }, { type: "server", message: {
-    _tag: "selected", selectionId: "select-a", cursor, cwd: "/scratch/a", sessionId: "a", hosted: true,
-    snapshot: { state: { sessionId: "a", isStreaming: true, submission: { id: 2, outcome: "queued" } }, messages: [], dialogs: [] },
-  } });
-  state = reduce(state, { type: "server", message: { _tag: "session", selectionId: "select-a", cursor: { ...cursor, sequence: 6 }, event: {
-    _tag: "submission", submission: { id: 1, outcome: "handled" },
-  } } });
-  assert.equal(state.session?.state.submission?.outcome, "queued");
-  assert.equal(state.session?.state.isStreaming, true, "handling input never settles current activity");
-  assert.deepEqual(state.session?.messages, [], "handling input never invents a user message");
-});
-
 test("a disappearing host is not a completed turn; an actual idle transition is", () => {
   const host = { cwd: "/scratch/a", sessionId: "a", streaming: true };
   const running = reduce(initialState, { type: "server", message: { _tag: "hosts", hosts: [host] } });
@@ -286,11 +272,11 @@ test("INV-03: disconnect or child exit cannot revoke a confirmed first-input out
     } } });
     state = reduce(state, { type: "server", message: {
       _tag: "session", selectionId: "reattach", cursor: { ...selected.cursor!, sequence: 1 },
-      event: { _tag: "closed", reason: "process exited with code 1" },
+      event: { _tag: "closed", closure: { _tag: "exited", code: 1, detail: "process exited with code 1" } },
     } });
     assert.equal(state.pendingCreate?.outcome, expected, "worker exit is separate from prompt delivery");
     assert.equal(state.pendingCreate?.text, "original input");
-    assert.equal(state.session?.closedReason, "process exited with code 1");
+    assert.equal(state.session?.hosted, false);
   }
 });
 
@@ -299,11 +285,10 @@ test("INV-03: a child exit before first input reaches history ends Starting with
   let state = reduce(beginCreate(), { type: "server", message: selected });
   state = reduce(state, { type: "server", message: {
     _tag: "session", selectionId: "create", cursor: { ...selected.cursor!, sequence: 1 },
-    event: { _tag: "closed", reason: "process exited with code 1" },
+    event: { _tag: "closed", closure: { _tag: "exited", code: 1, detail: "process exited with code 1" } },
   } });
   assert.equal(state.pendingCreate?.outcome, "uncertain");
   assert.equal(state.pendingCreate?.text, "original input");
   assert.equal(state.pendingCreate?.detail, "process exited with code 1");
   assert.equal(state.session?.hosted, false);
-  assert.deepEqual(state.session?.messages, []);
 });

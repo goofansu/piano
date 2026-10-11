@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 /** Extension dialogs (select / confirm / input / editor) raised by Pi; answered one at a time. */
-export function DialogHost({ dialogs, send, connected }: { dialogs: PiDialog[]; send: (m: ClientMessage) => void; connected: boolean }) {
+export function DialogHost({ dialogs, send, connected }: { dialogs: ReadonlyArray<PiDialog>; send: (m: ClientMessage) => void; connected: boolean }) {
   const d = dialogs[0];
   return d ? <DialogView key={`${d.generation}/${d.id}`} d={d} more={dialogs.length - 1} send={send} connected={connected} /> : null;
 }

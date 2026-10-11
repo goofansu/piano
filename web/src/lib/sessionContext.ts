@@ -3,7 +3,9 @@
  * project and readiness. Header, palette, sidebar and session view read these instead of each
  * looking the session up in the folder list themselves.
  */
-import type { FolderView, Project, ProjectTrust, SessionReference, Workspace, WorktreeView } from "@shared/wire";
+import type { FolderView, Project, ProjectTrust, SessionClosure, SessionReference, Workspace, WorktreeView } from "@shared/wire";
+// Relative, not @shared: module tests load this file directly in Node.
+import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
 
 type SessionRef = { cwd: string; sessionId: string };
@@ -147,7 +149,7 @@ export interface SessionActivity {
 export function sessionActivity(state: AppState, display: "everything" | "messages"): SessionActivity {
   const t = state.session;
   const input = state.pendingCreate;
-  const streaming = !!(t?.state.isStreaming || t?.state.isCompacting || t?.state.isRetrying);
+  const streaming = !!t && isWorking(t.state);
   const activity = [
     t?.dialogs.length ? "Waiting for input" : null,
     t?.state.isCompacting ? "Compacting" : null,
@@ -182,7 +184,12 @@ export function sessionActivity(state: AppState, display: "everything" | "messag
     : !state.connected || (t !== null && !sessionReady(state)) ? "Reconnecting"
     : !t ? "Loading"
     : t.state.checkoutMissing ? "Read-only"
-    : t.closedReason ? "Exited"
+    : t.state.closure ? "Exited"
     : activity || (streaming ? "Working" : t.hosted ? "Ready" : "Not running");
   return { status, streaming, replyActivity, firstMessageOnItsWay: !!t && (submission?.outcome === "submitting" || streaming), submissionText };
 }
+
+/** Whether a stop needs the person's attention: anything but a quiet release or a clean exit
+ * may have cut work short. Toast and banner both follow this, never the display text. */
+export const closureNeedsAttention = (closure: SessionClosure | undefined): closure is SessionClosure =>
+  !!closure && closure._tag !== "released" && !(closure._tag === "exited" && closure.code === 0);

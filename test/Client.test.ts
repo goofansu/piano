@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
+import type { ClientMessage, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
@@ -88,24 +88,35 @@ test("INV-02/05: act is sent only on a ready attachment and carries its selectio
   assert.deepEqual(h.sent.filter(m => m._tag === "act").map(m => m.selectionId), ["sel1", "sel2"]);
 });
 
-test("notifications: applied session notices and abnormal closes notify; rejected or released ones do not", () => {
+test("notifications: applied session notices notify; rejected frames do not", () => {
   const h = harness();
   h.status(true);
   h.client.select("/scratch", "a");
   h.server(h.selected("a", 1));
   h.server(h.event(2, { _tag: "notice", level: "warning", message: "applied" }));
   h.server(h.event(2, { _tag: "notice", level: "warning", message: "duplicate" }));
-  h.server(h.event(3, { _tag: "closed", reason: "released" }));
   h.server({ _tag: "toast", level: "info", message: "server toast" });
   h.server({ _tag: "error", message: "boom" });
   assert.deepEqual(h.notes, [["applied", "warning"], ["server toast", "info"], ["boom", "error"]]);
+});
 
-  const crash = harness();
-  crash.status(true);
-  crash.client.select("/scratch", "a");
-  crash.server(crash.selected("a", 1));
-  crash.server(crash.event(2, { _tag: "closed", reason: "exited with code 1" }));
-  assert.deepEqual(crash.notes, [["Pi stopped: exited with code 1", "warning"]]);
+test("INV-02: a closure notifies by its kind, never by its wording", () => {
+  const cases: Array<[SessionClosure, boolean]> = [
+    [{ _tag: "released", detail: "Pi was released" }, false],
+    [{ _tag: "exited", code: 0, detail: "Pi exited with code 0" }, false],
+    [{ _tag: "released_during_work", detail: "Pi was released during work" }, true],
+    [{ _tag: "exited", code: 1, detail: "Pi exited with code 1: lock released" }, true],
+    [{ _tag: "failed", detail: "Pi exit could not be observed" }, true],
+  ];
+  for (const [closure, notifies] of cases) {
+    const h = harness();
+    h.status(true);
+    h.client.select("/scratch", "a");
+    h.server(h.selected("a", 1));
+    h.server(h.event(2, { _tag: "closed", closure }));
+    assert.deepEqual(h.notes, notifies ? [[`Pi stopped: ${closure.detail}`, "warning"]] : [], closure._tag);
+    assert.equal(h.client.getState().session?.state.closure, closure);
+  }
 });
 
 test("create_session mints a selection and shows the first message until Pi records it", () => {

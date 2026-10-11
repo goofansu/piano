@@ -151,9 +151,9 @@ try {
     const closed = yield* watch(session, "explicit-exit", event => event._tag === "closed");
     yield* session.act({ _tag: "prompt", text: "/phase0-exit" }).pipe(Effect.ignore);
     const events = yield* Fiber.join(closed);
-    const last = events[events.length - 1]; assert.ok(last._tag === "closed"); assert.match(last.reason, /code 0\b/);
+    const last = events[events.length - 1]; assert.ok(last._tag === "closed"); assert.ok(last.closure._tag === "exited" && last.closure.code === 0);
     assert.equal((yield* session.state).isStreaming, false);
-    return { syntheticRequests: 1, providerResponseClosedByAbort: true, exit: last.reason };
+    return { syntheticRequests: 1, providerResponseClosedByAbort: true, exit: last.closure.detail };
   })));
   // This is a compatibility observation, not an assertion that abandoned dialogs are acceptable.
   const abortObservation = await run(Effect.gen(function* () {

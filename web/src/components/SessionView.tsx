@@ -1,6 +1,6 @@
 import type { ClientCommand as ClientMessage } from "@shared/wire";
 import { cn } from "cn";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { ChangesSheet } from "@/components/Changes";
@@ -12,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { sessionActivity, sessionContext } from "@/lib/sessionContext";
+import { closureNeedsAttention, sessionActivity, sessionContext } from "@/lib/sessionContext";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
@@ -38,6 +38,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   const onPullRequestOpenChange = (open: boolean) => open ? openPanel("pr") : closePanel();
   const [display] = useSessionDisplay();
   const t = state.session;
+  // The transcript looks executions up by tool call ID.
+  const tools = useMemo(() => Object.fromEntries((t?.tools ?? []).map(tool => [tool.id, tool])), [t?.tools]);
   const input = state.pendingCreate;
   const { ready, checkoutMissing, folder: located, changesWorkspace } = sessionContext(state);
   const folder = t ? located : undefined;
@@ -72,8 +74,8 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           <p className="whitespace-pre-wrap break-words">{folder.discovery.detail}</p>
         </Banner>
       )}
-      {t?.closedReason && t.closedReason !== "released" && (
-        <Banner variant="destructive" title={`Pi stopped: ${t.closedReason}.`}>
+      {t && closureNeedsAttention(t.state.closure) && (
+        <Banner variant="destructive" title={`Pi stopped: ${t.state.closure.detail}.`}>
           <p>Interrupted operations are not resumed. Inspect the checkout before continuing.</p>
         </Banner>
       )}
@@ -98,7 +100,7 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
             messages={t?.messages ?? []}
             pending={t?.pending ?? null}
             submittedInput={input}
-            tools={t?.tools ?? {}}
+            tools={tools}
             activity={replyActivity}
             placeholder={firstMessageOnItsWay ? undefined : "No messages yet."}
           />
