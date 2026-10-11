@@ -5,15 +5,13 @@
  * (a browser request, a Pi rename mirrored by SessionHosts) needs no publish step of its own.
  *
  * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06)
- * and Pi history listings are the slow observations: they run single-flight in the background,
+ * and session availability (SessionHosts' judgement of Pi history and checkouts) are the slow observations: they run single-flight in the background,
  * and changes that arrive during a run cause at most one more. A change that keeps the set of
  * registered folders and worktrees publishes at once from the last observation, so a prompt or
  * rename never waits on Git.
  */
-import { existsSync } from "node:fs";
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import type { FolderView, HostInfo, ServerMessage, SessionReference, WorktreeDiscovery, WorktreeView } from "../shared/wire.ts";
-import { PiHistory } from "./PiHistory.ts";
 import { projectTrust } from "./ProjectTrust.ts";
 import { Registry, type RegistryData } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
@@ -42,8 +40,8 @@ interface Observation {
   readonly shape: string;
   readonly paths: ReadonlySet<string>;
   readonly discoveries: ReadonlyMap<string, WorktreeDiscovery>;
-  /** Pi session IDs with history, per project member directory. */
-  readonly histories: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Why a project member cannot be opened, as SessionHosts judges it; a member not yet observed is available. */
+  readonly unavailable: (cwd: string, sessionId: string) => SessionReference["unavailable"];
 }
 
 const shapeOf = (data: RegistryData) => JSON.stringify([data.folders, data.worktrees.map(w => [w.folder, w.path])]);
@@ -73,10 +71,9 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) => Layer.effec
 
   const observe = Effect.fn("SidebarView.observe")(function* (data: RegistryData) {
     const discoveries = new Map(yield* Effect.forEach(data.folders, folder => Effect.map(discover(folder), d => [folder, d] as const), { concurrency: 4 }));
-    const members = [...new Set(data.sessions.filter(s => s.projectId).map(s => s.cwd))];
-    const histories = new Map(yield* Effect.forEach(members, cwd => Effect.map(PiHistory.sessionIds(cwd), ids => [cwd, ids] as const), { concurrency: 4 }));
+    const unavailable = yield* hosts.availability(data.sessions.filter(s => s.projectId));
     const paths = new Set([...data.folders, ...data.worktrees.map(w => w.path)]);
-    return { shape: shapeOf(data), paths, discoveries, histories } satisfies Observation;
+    return { shape: shapeOf(data), paths, discoveries, unavailable } satisfies Observation;
   });
 
   /** Registry selects directories and sessions; discovery supplies current Git facts, never cached registry branches. */
@@ -100,9 +97,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) => Layer.effec
     const sessionReferences = data.sessions.map(({ stats: _stats, pullRequest: _pullRequest, ...s }): SessionReference => ({ ...s,
       workspaceId: data.workspaces.find(w => w.path === s.cwd)!.id,
       branch: branchOf.get(s.cwd) ?? null,
-      unavailable: !s.projectId || hosted(s.cwd, s.sessionId) ? undefined
-        : seen.histories.get(s.cwd)?.has(s.sessionId) === false ? "history"
-        : !existsSync(s.cwd) ? "checkout" : undefined,
+      unavailable: !s.projectId || hosted(s.cwd, s.sessionId) ? undefined : seen.unavailable(s.cwd, s.sessionId),
     }));
     return { _tag: "registry", folders, projects: data.projects, sessionReferences, workspaces: data.workspaces } satisfies SidebarMessage;
   });

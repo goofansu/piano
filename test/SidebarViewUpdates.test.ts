@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -142,5 +142,32 @@ test("INV-01/INV-07: a session reference keeps its registry creation time and wo
     assert.deepEqual(closed.folders, []);
     const ref = closed.sessionReferences?.[0];
     assert.deepEqual(ref && [ref.sessionId, ref.createdAt, ref.workspaceId, ref.branch], ["kept", entry.createdAt, workspaceId, null]);
+  }));
+});
+
+/** A Pi session file whose header records `cwd`, as Pi writes it when its CLI starts there. */
+const seedHistory = (cwd: string, id: string) => writeFileSync(join(root, "sessions", `${id}.jsonl`),
+  `${JSON.stringify({ type: "session", version: 3, id, cwd, timestamp: "2026-10-05T00:00:00Z" })}\n`);
+
+test("INV-01: the sidebar marks a project member unavailable exactly when SessionHosts cannot find its history or checkout", async () => {
+  const physical = join(root, "physical"), alias = join(root, "alias"), gone = join(root, "gone");
+  mkdirSync(physical); symlinkSync(physical, alias); mkdirSync(gone);
+  await run(slowGit(), Effect.gen(function* () {
+    const registry = yield* Registry, view = yield* SidebarView, hosts = yield* SessionHosts;
+    yield* registry.addFolder(alias);
+    yield* registry.addFolder(gone);
+    yield* registry.saveProject({ id: "outcome", name: "Outcome" });
+    // Pi was started in the physical directory, so its file names that spelling, not the registry's.
+    seedHistory(physical, "aliased");
+    seedHistory(gone, "removed");
+    for (const [cwd, id] of [[alias, "aliased"], [alias, "never-written"], [gone, "removed"]]) {
+      yield* registry.addSession(cwd, id);
+      yield* registry.assignProject(cwd, id, "outcome");
+    }
+    rmSync(gone, { recursive: true });
+    const unavailable = new Map((yield* view.fresh).sessionReferences?.map(s => [s.sessionId, s.unavailable]));
+    assert.deepEqual(Object.fromEntries(unavailable), { aliased: undefined, "never-written": "history", removed: "checkout" });
+    // The opener agrees: it finds the aliased session's file under the physical spelling.
+    assert.equal((yield* hosts.peek(alias, "aliased")).snapshot.state.sessionFile, join(root, "sessions", "aliased.jsonl"));
   }));
 });
