@@ -5,7 +5,7 @@
 import { realpath, rm } from "node:fs/promises";
 import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
 import { isWorking } from "../shared/sessionProjection.ts";
-import type { HostInfo, SessionClosure, SessionStats, Snapshot } from "../shared/wire.ts";
+import type { HostInfo, SessionClosure, SessionReference, SessionStats, Snapshot } from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiHistory } from "./PiHistory.ts";
 import { type PiSession, PiSessionError, PiSessions } from "./PiSessions.ts";
@@ -54,6 +54,14 @@ export class SessionHosts extends Context.Service<SessionHosts, {
   readonly archive: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
   readonly delete: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
   readonly list: Effect.Effect<ReadonlyArray<HostInfo>>;
+  /**
+   * Why each session could not be opened from its history, judged by the rules `open` uses: Pi's
+   * file under any spelling of its checkout, and a checkout that still resolves. Undefined when it
+   * can. Lists each spelling's history once, so a caller can ask about many sessions in the
+   * background; it is not a lock-held answer and an open may still refuse for other reasons.
+   */
+  readonly availability: (sessions: ReadonlyArray<{ readonly cwd: string; readonly sessionId: string }>) =>
+    Effect.Effect<(cwd: string, sessionId: string) => SessionReference["unavailable"]>;
   readonly changes: Stream.Stream<ReadonlyArray<HostInfo>>;
 }>()("piano/SessionHosts") {}
 
@@ -118,6 +126,21 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     const history = yield* PiHistory.locate(sessionId, [owner, cwd, physical]).pipe(Effect.mapError(e => rejected(e.detail)));
     if (history._tag === "conflict") return yield* rejected(`Conflicting Pi files for checkout aliases (${owner}, ${physical}). Piano has not merged or moved history. Resolve the conflicting session ID before starting it.`);
     return { cwd: owner, file: history._tag === "file" ? history.path : undefined, stats: entry?.stats };
+  });
+
+  const availability = Effect.fn("SessionHosts.availability")(function* (refs: ReadonlyArray<{ readonly cwd: string; readonly sessionId: string }>) {
+    // Per checkout, once: whether it resolves, and the IDs Pi has history for under its registry and physical spellings.
+    const checkouts = new Map(yield* Effect.forEach(new Set(refs.map(r => r.cwd)), cwd => Effect.gen(function* () {
+      // A checkout that cannot be resolved cannot be opened either; its history is still listed under the registry spelling.
+      const { physical, missing } = yield* checkout(cwd).pipe(Effect.orElseSucceed(() => ({ physical: directoryPath(cwd), missing: true })));
+      const ids = yield* Effect.forEach(new Set([directoryPath(cwd), physical]), PiHistory.sessionIds);
+      return [cwd, { missing, ids }] as const;
+    }), { concurrency: 4 }));
+    // History is judged first: a session without it cannot be opened even once its checkout is restored.
+    return (cwd: string, sessionId: string): SessionReference["unavailable"] => {
+      const c = checkouts.get(cwd);
+      return !c ? undefined : !c.ids.some(ids => ids.has(sessionId)) ? "history" : c.missing ? "checkout" : undefined;
+    };
   });
 
   const list = Effect.gen(function* () {
@@ -273,6 +296,6 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, ...ref.stats, contextIsLastKnown: true, checkoutMissing: missing, closure: exits.get(key) } } };
     })),
     archive: (cwd, id) => retire(cwd, id, false), delete: (cwd, id) => retire(cwd, id, true),
-    list, changes: Stream.fromPubSub(changed),
+    list, availability, changes: Stream.fromPubSub(changed),
   });
 }));
