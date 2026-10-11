@@ -9,9 +9,9 @@ import { lstat, mkdir, mkdtemp, open, readFile, readlink, realpath, rename, rm, 
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
 import type { RevisionFile, RevisionManifest, Workspace, WorkspaceCapture } from "../shared/wire.ts";
-import { hardenedGit, isSafePath } from "./HardenedGit.ts";
+import { CheckoutError, observe, openCheckout } from "./GitCheckout.ts";
 import { RegistryDatabasePath } from "./Registry.ts";
-import { GitCommand, SubprocessError } from "./Subprocess.ts";
+import { GitCommand } from "./Subprocess.ts";
 
 export const RevisionStorePath = Context.Reference<string | undefined>("piano/RevisionStorePath", { defaultValue: () => process.env.PIANO_REVISION_STORE });
 export class WorkspaceRevisions extends Context.Service<WorkspaceRevisions, {
@@ -29,47 +29,34 @@ class CaptureProblem extends Error {
 }
 const unsupported = (message: string): never => { throw new CaptureProblem("unsupported", message); };
 const raced = (): never => { throw new CaptureProblem("inconclusive", "Workspace changed during capture. Stop writers and refresh; no candidate was published."); };
-const split = (bytes: Buffer) => {
-  const text = bytes.toString("utf8");
-  if (!Buffer.from(text).equals(bytes)) unsupported("Non-UTF-8 paths are not supported for capture.");
-  return text.split("\0").filter(Boolean);
-};
-function safePath(path: string) {
-  if (!isSafePath(path)) unsupported(`Unsafe or unsupported repository path: ${JSON.stringify(path)}`);
-  return path;
-}
 function mode(value: string): RevisionFile["mode"] {
   if (value === "160000") unsupported("Submodules are not supported for exact capture. Their checkout and external inputs must be captured before verification.");
   if (value !== "100644" && value !== "100755" && value !== "120000") unsupported(`Unsupported file mode ${value}.`);
   return value as RevisionFile["mode"];
 }
 
-async function command(cli: string, cwd: string, args: string[], signal: AbortSignal, input?: Buffer, diff = false): Promise<Buffer> {
-  try {
-    return (await hardenedGit(cli, args, { cwd, input, limit: diff ? MAX_DIFF : MAX_BYTES, okCodes: diff ? [0, 1] : [0] }, signal)).stdout;
-  } catch (error) {
-    if (error instanceof SubprocessError && error.reason === "limit") throw new CaptureProblem("unsupported", "Capture output exceeds the supported size limit.");
-    throw error;
-  }
-}
 type GitEntry = { path: string; mode: RevisionFile["mode"]; oid: string };
 
 export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.gen(function* () {
   const database = resolve(yield* RegistryDatabasePath);
   const store = resolve((yield* RevisionStorePath) ?? join(dirname(database), `${basename(database)}.revisions`));
-  const cli = yield* GitCommand;
+  const git = yield* GitCommand;
   const lock = yield* Semaphore.make(1);
 
   async function capture(workspace: Workspace, signal: AbortSignal): Promise<WorkspaceCapture["result"]> {
-    const cwd = await realpath(workspace.path);
+    // Checkout failures (root, size, encoding, unsafe paths) are unsupported input.
+    const checkout = await openCheckout(workspace.path, { git, signal, limit: MAX_BYTES, messages: {
+      root: "Capture requires the Git checkout root, not a subdirectory.",
+      limit: "Capture output exceeds the supported size limit.",
+      encoding: "Non-UTF-8 paths are not supported for capture.",
+      path: path => `Unsafe or unsupported repository path: ${JSON.stringify(path)}`,
+    } });
+    const { cwd, safePath } = checkout;
     // Candidate writes must not be observed as source edits or recursively captured.
     await mkdir(store, { recursive: true, mode: 0o700 });
     const relativeStore = relative(cwd, await realpath(store));
     if (relativeStore !== ".." && !relativeStore.startsWith(`..${sep}`) && !isAbsolute(relativeStore)) unsupported("Revision storage must be outside the workspace. Set PIANO_REVISION_STORE to a private external directory.");
-    const git = (...args: string[]) => command(cli, cwd, args, signal);
-    const top = (await git("rev-parse", "--show-toplevel")).toString().trim();
-    if (await realpath(top) !== cwd) unsupported("Capture requires the Git checkout root, not a subdirectory.");
-    const gitDir = (await git("rev-parse", "--absolute-git-dir")).toString().trim();
+    const gitDir = (await checkout.text(["rev-parse", "--absolute-git-dir"])).trim();
     let changes = 0, watchError: Error | undefined;
     const watchers: FSWatcher[] = [];
     let temporary: string | undefined;
@@ -78,37 +65,36 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
         const watcher = watch(path, { recursive: true }, () => { changes++; });
         watcher.on("error", error => { watchError = error; }); watchers.push(watcher);
       }
-      const head = (await git("rev-parse", "--verify", "HEAD")).toString().trim();
-      const branchRef = (await git("rev-parse", "--abbrev-ref", "HEAD")).toString().trim();
-      const branch = branchRef === "HEAD" ? null : branchRef;
+      const head = await checkout.head();
+      if (head === null) throw new Error("Capture requires a commit on HEAD.");
+      const branch = await checkout.branch();
       async function inventory() {
-        const index = await git("ls-files", "--stage", "-z");
-        const flags = await git("ls-files", "--debug", "-z");
+        const index = await checkout.records(["ls-files", "--stage", "-z"]);
+        const flags = (await checkout.run(["ls-files", "--debug", "-z"])).stdout;
         // Extended index flags: skip-worktree and intent-to-add have semantics not
         // represented by ordinary stage-0 blobs. Do not silently flatten them.
         if ([...flags.toString().matchAll(/\n {2}size: \d+\s+flags: ([0-9a-f]+)\n/g)].some(m => (parseInt(m[1], 16) & 0x60000000) !== 0)) unsupported("Sparse/skip-worktree and intent-to-add index entries are not supported for capture.");
-        return { head: (await git("rev-parse", "--verify", "HEAD")).toString().trim(),
-          branch: (await git("rev-parse", "--abbrev-ref", "HEAD")).toString().trim(),
-          index, untracked: await git("ls-files", "--others", "--exclude-standard", "-z"),
-          ignored: await git("ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z") };
+        return { head: await checkout.head(), branch: await checkout.branch(),
+          index, untracked: await checkout.records(["ls-files", "--others", "--exclude-standard", "-z"]),
+          ignored: await checkout.records(["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"]) };
       }
       const before = await inventory();
-      const index: GitEntry[] = split(before.index).map(line => {
+      const index: GitEntry[] = before.index.map(line => {
         const match = /^(\d+) ([0-9a-f]+) (\d)\t([\s\S]+)$/.exec(line);
         if (!match) throw new Error("Malformed Git index entry.");
         if (match[3] !== "0") unsupported("Unresolved index conflicts prevent capture. Resolve the conflicts and refresh.");
         return { mode: mode(match[1]), oid: match[2], path: safePath(match[4]) };
       });
-      const base: GitEntry[] = split(await git("ls-tree", "-r", "-z", head)).map(line => {
+      const base: GitEntry[] = (await checkout.records(["ls-tree", "-r", "-z", head])).map(line => {
         const match = /^(\d+) \w+ ([0-9a-f]+)\t([\s\S]+)$/.exec(line);
         if (!match) throw new Error("Malformed Git tree entry.");
         return { mode: mode(match[1]), oid: match[2], path: safePath(match[3]) };
       });
-      const paths = [...new Set([...index.map(e => e.path), ...split(before.untracked).map(safePath)])].sort();
+      const paths = [...new Set([...index.map(e => e.path), ...before.untracked.map(safePath)])].sort();
       if (Math.max(paths.length, base.length, index.length) > MAX_PATHS) unsupported(`Capture supports at most ${MAX_PATHS} paths per tree.`);
       // Read Git blobs in one bounded process; mode/path never comes from filename parsing by a shell.
       const oids = [...new Set([...base, ...index].map(e => e.oid))];
-      const batch = await command(cli, cwd, ["cat-file", "--batch"], signal, Buffer.from(oids.map(oid => `${oid}\n`).join("")));
+      const batch = (await checkout.run(["cat-file", "--batch"], { input: Buffer.from(oids.map(oid => `${oid}\n`).join("")) })).stdout;
       const blobs = new Map<string, Buffer>(); let position = 0, total = 0;
       for (const oid of oids) {
         const end = batch.indexOf(10, position), header = batch.subarray(position, end).toString();
@@ -165,7 +151,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
       const files = await readWorking();
       const manifest: RevisionManifest = { version: 1, baseHead: head,
         scope: { included: "All tracked paths and non-ignored untracked files (repository ignore rules, no global config); raw bytes, Git executable bit and symlinks.",
-          excluded: ["Git administrative files", "Ignored untracked contents", "External inputs and dependencies", "Empty directories, timestamps and permission bits other than owner-executable"], ignored: split(before.ignored).sort() },
+          excluded: ["Git administrative files", "Ignored untracked contents", "External inputs and dependencies", "Empty directories, timestamps and permission bits other than owner-executable"], ignored: [...before.ignored].sort() },
         base: fromGit(base), index: fromGit(index), files };
       const revision = `v1-${digest(JSON.stringify(manifest))}`;
       temporary = await mkdtemp(join(store, ".capture-"));
@@ -182,7 +168,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
         const dir = await mkdtemp(join(temporary!, "diff-"));
         try {
           await materialize(join(dir, "a"), left); await materialize(join(dir, "b"), right);
-          return (await command(cli, dir, ["diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-renames", "--src-prefix=", "--dst-prefix=", "--", "a", "b"], signal, undefined, true)).toString("utf8");
+          return (await checkout.run(["diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-renames", "--src-prefix=", "--dst-prefix=", "--", "a", "b"], { cwd: dir, limit: MAX_DIFF, okCodes: [0, 1] })).stdout.toString("utf8");
         } finally { await rm(dir, { recursive: true, force: true }); }
       }
       const workingDiff = await diff(manifest.base, files), stagedDiff = await diff(manifest.base, manifest.index), unstagedDiff = await diff(manifest.index, files);
@@ -190,7 +176,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
       // the watch also rejects ABA/transient edits. Not an adversarial FS snapshot.
       if (JSON.stringify(files) !== JSON.stringify(await readWorking())) raced();
       const after = await inventory();
-      if (head !== before.head || branchRef !== before.branch || JSON.stringify(before) !== JSON.stringify(after) || await realpath(workspace.path) !== cwd) raced();
+      if (head !== before.head || branch !== before.branch || JSON.stringify(before) !== JSON.stringify(after) || await realpath(workspace.path) !== cwd) raced();
       await new Promise<void>(r => setImmediate(r));
       if (watchError) throw watchError;
       if (changes) raced();
@@ -219,9 +205,7 @@ export const WorkspaceRevisionsLive = Layer.effect(WorkspaceRevisions, Effect.ge
       if (temporary) await rm(temporary, { recursive: true, force: true });
     }
   }
-  return WorkspaceRevisions.of({ capture: workspace => Semaphore.withPermits(lock, 1)(Effect.tryPromise({
-    try: signal => capture(workspace, AbortSignal.any([signal, AbortSignal.timeout(30_000)])),
-    catch: e => e,
-  }).pipe(Effect.catch(e => Effect.succeed<WorkspaceCapture["result"]>({ status: e instanceof CaptureProblem ? e.status : "error", detail: e instanceof Error ? e.message : String(e) })),
-    Effect.map(result => ({ workspace, observedAt: new Date().toISOString(), result })))) });
+  return WorkspaceRevisions.of({ capture: workspace => observe(workspace, lock, signal => capture(workspace, signal), {
+    status: e => e instanceof CaptureProblem ? e.status : e instanceof CheckoutError ? "unsupported" : "error",
+  }) });
 }));
