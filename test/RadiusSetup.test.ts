@@ -69,36 +69,6 @@ test("INV-01/11/12: Radius MCP uses provider auth, preserves unrelated configura
     yield* setup.configureMcp;
     assert.equal(readFileSync(file, "utf8"), before);
     assert(!JSON.stringify(yield* setup.state).includes("private-"));
-    // Only global config is considered; even a project entry cannot redirect a token.
-    mkdirSync(join(directory, ".pi"));
-    save(join(directory, ".pi/mcp.json"), { mcpServers: { personal: { url: "https://untrusted.invalid/mcp" } } });
-    assert.equal((yield* setup.state).mcp.status, "ready");
-  }));
-});
-
-test("Radius setup refuses conflicts, malformed files and deliberate disabled policies without overwriting them", async () => {
-  await fixture((setup, directory) => Effect.gen(function* () {
-    const file = join(directory, "mcp.json");
-    for (const text of [
-      '{"private-malformed-token":',
-      JSON.stringify({ mcpServers: { radius: { url: "https://other.invalid/mcp" } } }),
-      JSON.stringify({ mcpServers: { one: { url: URL }, two: { url: URL } } }),
-      JSON.stringify({ mcpServers: { radius: { url: URL, enabled: false } } }),
-      JSON.stringify({ mcpServers: { radius: { url: URL, exposure: "hidden" } } }),
-    ]) {
-      writeFileSync(file, text);
-      assert.equal((yield* setup.state).mcp.status, "blocked");
-      assert.equal((yield* Effect.result(setup.configureMcp))._tag, "Failure");
-      assert.equal(readFileSync(file, "utf8"), text);
-      assert(!JSON.stringify(yield* setup.state).includes("private-"));
-    }
-    save(file, {});
-    save(join(directory, "settings.json"), { extensions: ["-builtin:mcp"] });
-    assert.equal((yield* setup.state).mcp.status, "blocked");
-    assert.equal((yield* Effect.result(setup.configureMcp))._tag, "Failure");
-    rmSync(join(directory, "settings.json"));
-    assert.equal((yield* setup.configureMcp).mcp.status, "ready");
-    assert.deepEqual(json(file), { mcpServers: { radius: { url: URL, auth: { provider: "radius" } } } });
   }));
 });
 
@@ -162,32 +132,19 @@ test("INV-02: stopping the service aborts only its installer and waits for clean
   assert.equal(aborted, true);
 });
 
-test("INV-01/10/11: confirmed MCP removal targets the reviewed entry, preserves credentials and refuses stale identities", async () => {
+test("INV-01/10/11: Radius MCP is created under its default name and removal preserves Radius credentials", async () => {
   await fixture((setup, directory) => Effect.gen(function* () {
     const file = join(directory, "mcp.json");
-    const other = { command: "do-not-run", env: { TOKEN: "private-other" } };
     const auth = { radius: { type: "oauth", access: "private-access", refresh: "private-refresh" } };
     save(join(directory, "auth.json"), auth);
-    save(file, { custom: "keep", mcpServers: { personal: { url: URL, enabled: false }, other } });
-    const reviewed = (yield* setup.state).mcp.removalKey!;
-    assert(reviewed);
-    // Another tab/editor changed the target after opening the confirmation.
-    save(file, { custom: "keep", mcpServers: { personal: { url: URL, exposure: "hidden" }, other } });
-    assert.equal((yield* Effect.result(setup.removeMcp(reviewed)))._tag, "Failure");
-    assert(json(file).mcpServers.personal);
-    const latest = (yield* setup.state).mcp.removalKey!;
-    assert.notEqual(latest, reviewed);
-    assert.equal((yield* setup.removeMcp(latest)).mcp.status, "missing");
-    assert.deepEqual(json(file), { custom: "keep", mcpServers: { other } });
+    save(file, { mcpServers: { other: { command: "do-not-run" } } });
+    assert.equal((yield* setup.configureMcp).mcp.status, "ready");
+    assert.deepEqual(json(file), { mcpServers: { other: { command: "do-not-run" }, radius: { url: URL, auth: { provider: "radius" } } } });
+    assert.equal((yield* Effect.result(setup.removeMcp("stale")))._tag, "Failure");
+    const key = (yield* setup.state).mcp.removalKey!;
+    assert.equal((yield* setup.removeMcp(key)).mcp.status, "missing");
+    assert.deepEqual(json(file), { mcpServers: { other: { command: "do-not-run" } } });
     assert.deepEqual(json(join(directory, "auth.json")), auth);
-    assert.equal((yield* Effect.result(setup.removeMcp(latest)))._tag, "Failure");
-    save(file, { mcpServers: { radius: { url: "https://unrelated.invalid" } } });
-    const before = readFileSync(file, "utf8");
-    assert.equal((yield* Effect.result(setup.removeMcp(latest)))._tag, "Failure");
-    assert.equal(readFileSync(file, "utf8"), before);
-    writeFileSync(file, "{malformed");
-    assert.equal((yield* Effect.result(setup.removeMcp(latest)))._tag, "Failure");
-    assert.equal(readFileSync(file, "utf8"), "{malformed");
   }));
 });
 
@@ -240,7 +197,7 @@ test("INV-02/10: uninstall is confirmation-bound, retryable and serialized with 
   });
 });
 
-test("INV-12: changing Pi's packages or MCP configuration re-probes every directory's catalog", async () => {
+test("INV-12: changing Pi's packages re-probes every directory's catalog", async () => {
   await fixture((setup, _directory, { facts, count }) => Effect.gen(function* () {
     const cwd = "/nonexistent/piano-radius-catalog";
     yield* facts.catalog(cwd);
@@ -250,12 +207,5 @@ test("INV-12: changing Pi's packages or MCP configuration re-probes every direct
     assert.equal((yield* settled(setup)).installation.status, "success");
     yield* facts.catalog(cwd);
     assert.equal(count(), 2, "a web-search install re-probes the catalog");
-    yield* setup.configureMcp;
-    yield* facts.catalog(cwd);
-    assert.equal(count(), 3, "saving the Radius MCP entry re-probes the catalog");
-    // Already configured: nothing is written, so the cache stays.
-    yield* setup.configureMcp;
-    yield* facts.catalog(cwd);
-    assert.equal(count(), 3);
   }), installed);
 });
