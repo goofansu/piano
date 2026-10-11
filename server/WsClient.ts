@@ -49,8 +49,6 @@ export const handleSocket = (socket: Socket.Socket) =>
     const send = delivery.offer;
     const sendError = (e: unknown, selectionId?: string) =>
       Effect.logWarning(`client error: ${describe(e)}`).pipe(Effect.andThen(send({ _tag: "error", message: describe(e), selectionId })));
-    // Signals only: the sidebar view publishes registry edits promptly and rediscovers Git in the background.
-    const publishRegistry = sidebar.changed;
 
     const viewer = yield* makeSessionViewer({ deliver: send, overflow: error => disconnect(error.detail, error.oversized ? 1009 : 1013) });
 
@@ -58,7 +56,7 @@ export const handleSocket = (socket: Socket.Socket) =>
       Effect.gen(function* () {
         switch (msg._tag) {
           case "registry":
-            return yield* publishRegistry;
+            return yield* sidebar.refresh;
           case "worktrees": {
             const discovery = yield* registry.requireFolder(msg.folder).pipe(
               Effect.andThen(listWorktrees(msg.folder)),
@@ -69,21 +67,17 @@ export const handleSocket = (socket: Socket.Socket) =>
             const cwd = resolve(expandHome(msg.cwd ?? (yield* viewer.cwd) ?? homedir()));
             return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });
           }
+          // Registry writes reach every client's sidebar on their own.
           case "save_project":
-            yield* registry.saveProject(msg.project);
-            return yield* publishRegistry;
+            return yield* registry.saveProject(msg.project);
           case "archive_project":
-            yield* registry.archiveProject(msg.id, msg.archived);
-            return yield* publishRegistry;
+            return yield* registry.archiveProject(msg.id, msg.archived);
           case "assign_project":
-            yield* registry.assignProject(msg.cwd, msg.sessionId, msg.projectId);
-            return yield* publishRegistry;
+            return yield* registry.assignProject(msg.cwd, msg.sessionId, msg.projectId);
           case "add_folder":
-            yield* registry.addFolder(msg.path);
-            return yield* publishRegistry;
+            return yield* registry.addFolder(msg.path);
           case "remove_folder":
-            yield* registry.removeFolder(msg.path);
-            return yield* publishRegistry;
+            return yield* registry.removeFolder(msg.path);
           case "trust": {
             const cwd = resolve(expandHome(msg.cwd));
             return yield* send({ _tag: "trust", cwd, trust: yield* projectTrust(cwd) });
@@ -95,7 +89,8 @@ export const handleSocket = (socket: Socket.Socket) =>
               Effect.catchTag("ProjectTrustError", e => sendError(e.detail)));
             yield* send({ _tag: "models", catalog: yield* catalog.refresh(path) });
             yield* send({ _tag: "trust", cwd: path, trust: yield* projectTrust(path) });
-            return yield* publishRegistry;
+            // Trust lives in Pi's store, not the registry, so say that the sidebar changed.
+            return yield* sidebar.changed;
           }
           case "create_worktree":
           case "add_worktree": {
@@ -105,8 +100,8 @@ export const handleSocket = (socket: Socket.Socket) =>
             ).pipe(
               Effect.flatMap(result => send({ _tag: "worktree_result", requestId: msg.requestId, result })),
               Effect.catchTag("WorktreeError", e => send({ _tag: "worktree_result", requestId: msg.requestId, result: { status: "error", detail: e.detail } })));
-            // Failure may have left a checkout behind. Refresh rather than retrying a mutation.
-            return yield* publishRegistry;
+            // Failure may have left a checkout behind. Rediscover rather than retrying a mutation.
+            return yield* sidebar.refresh;
           }
           case "ping":
             return yield* send({ _tag: "pong", nonce: msg.nonce });
@@ -116,25 +111,22 @@ export const handleSocket = (socket: Socket.Socket) =>
           case "create_session":
             return; // Claimed and started in receive order by the read loop.
           case "act": {
-            const { session, started } = yield* viewer.act(msg.selectionId, msg.start);
-            if (started) yield* publishRegistry;
-            if (msg.action._tag === "prompt" || msg.action._tag === "steer") {
+            // A start reaches browsers as a `hosts` update.
+            const { session } = yield* viewer.act(msg.selectionId, msg.start);
+            if (msg.action._tag === "prompt" || msg.action._tag === "steer")
               yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, msg.action.text);
-              yield* publishRegistry;
-            }
             const result = yield* session.act(msg.action);
             if (result) yield* send({ _tag: "action_result", cwd: session.spec.cwd, sessionId: session.spec.sessionId, result });
             return;
           }
           case "rename_session":
-            yield* commands.renameSession(msg.cwd, msg.sessionId, msg.title);
-            return yield* publishRegistry;
+            return yield* commands.renameSession(msg.cwd, msg.sessionId, msg.title);
           case "archive_session":
           case "delete_session": {
             const mode = msg._tag === "delete_session" ? "delete" : "archive";
             yield* viewer.forget(msg.cwd, msg.sessionId, commands.retireSession(msg.cwd, msg.sessionId, mode));
             if (mode === "delete") yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
-            return yield* publishRegistry;
+            return;
           }
         }
       });
@@ -179,7 +171,7 @@ export const handleSocket = (socket: Socket.Socket) =>
         if (msg._tag === "select") yield* fork(yield* viewer.select(msg));
         else if (msg._tag === "create_session") yield* fork(commands.createSession(
           { cwd: msg.cwd, projectId: msg.projectId, options: msg.options, text: msg.text, attachments: msg.attachments },
-          { attach: yield* viewer.create(msg), published: publishRegistry },
+          { attach: yield* viewer.create(msg) },
         ));
         else yield* fork(handle(msg));
       }
