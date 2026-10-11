@@ -1,12 +1,14 @@
 /**
  * Pi-only translation: every Pi record, readback and history message becomes the browser's wire
  * vocabulary here, with content-indexed reconstruction of streaming output. Originals stay in Pi.
- * PiSessions owns the child, locking, publication and readback scheduling; it never inspects a
- * record's fields itself.
+ * Outbound, browser actions become Pi's CLI arguments and RPC commands here. PiSessions owns the
+ * child, locking, publication and readback scheduling; it never inspects or builds a record's
+ * fields itself.
  */
 import { Schema } from 'effect';
-import type { Dialog, ModelChoice, QueuedMessage, RenderMsg, RunUsage, SessionEvent, SessionState, SubagentCard, ThinkingLevel, ToolExecution, Usage } from '../shared/wire.ts';
-import { SlashCommand } from '../shared/wire.ts';
+import { imageType } from '../shared/attachments.ts';
+import type { Dialog, ModelChoice, QueuedMessage, RenderMsg, RunUsage, SessionAction, SessionEvent, SessionState, SubagentCard, ThinkingLevel, ToolExecution, Usage } from '../shared/wire.ts';
+import { Attachments, SlashCommand } from '../shared/wire.ts';
 import { projectDisplay, redactDisplay } from './DisplayProjection.ts';
 import { imagePreview } from './ImagePreviews.ts';
 
@@ -378,6 +380,81 @@ export const modelChoicesOf = (data: unknown, enabledPatterns: ReadonlyArray<str
       enabled: isEnabled(ref, m.id), thinkingLevels: thinkingLevelsOf(m),
     };
   });
+};
+
+// ── Outbound commands ────────────────────────────────────────────────────────
+
+/** Pi's CLI arguments for opening a session after `--mode rpc`. */
+export const sessionArgs = (spec: { sessionId: string; sessionFile?: string; model?: string; thinkingLevel?: string; name?: string }): string[] => [
+  ...spec.sessionFile ? ['--session', spec.sessionFile] : ['--session-id', spec.sessionId],
+  ...spec.model ? ['--model', spec.model] : [],
+  ...spec.thinkingLevel ? ['--thinking', spec.thinkingLevel] : [],
+  ...spec.name ? ['--name', spec.name] : [],
+];
+
+/** One RPC record for Pi's stdin; the transport adds the request id. */
+export type PiCommand = { readonly type: string; readonly [key: string]: unknown };
+
+/** A browser action as Pi's command, or why it cannot be sent; Stop has no single Pi command. */
+export type PiTranslation = { readonly command: PiCommand } | { readonly rejected: string };
+
+const imagesValid = (attachments: unknown) => Schema.is(Attachments)(attachments) && !attachments.some(a => {
+  const bytes = Buffer.from(a.data, 'base64');
+  return bytes.toString('base64') !== a.data || imageType(bytes) !== a.mimeType;
+});
+
+/** Cancels an open dialog; Pi sends no acknowledgement. */
+export const dialogCancellation = (id: string): PiCommand => ({ type: 'extension_ui_response', id, cancelled: true });
+
+/** An answer translates against the open dialog it targets. */
+export function piCommandFor(action: Extract<SessionAction, { _tag: 'answer' }>, dialog: Dialog): PiTranslation;
+export function piCommandFor(action: Exclude<SessionAction, { _tag: 'stop' | 'answer' }>): PiTranslation;
+export function piCommandFor(action: Exclude<SessionAction, { _tag: 'stop' }>, dialog?: Dialog): PiTranslation {
+  switch (action._tag) {
+    case 'commands': return { command: { type: 'get_commands' } };
+    case 'abort': return { command: { type: 'abort' } };
+    case 'restore_queue': return { command: { type: 'clear_queue' } };
+    case 'set_thinking_level': return { command: { type: 'set_thinking_level', level: action.level } };
+    case 'prompt':
+    case 'steer': {
+      const { attachments } = action;
+      if (attachments?.length && !imagesValid(attachments)) return { rejected: 'Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to 10 MiB each and 20 MiB total (4 images).' };
+      return { command: { type: 'prompt', message: action.text,
+        ...attachments && { images: attachments.map(a => ({ type: 'image', data: a.data, mimeType: a.mimeType })) },
+        // Images go only to an idle Pi (its clear_queue returns text alone), so they never queue.
+        ...!attachments?.length && { streamingBehavior: action._tag === 'steer' ? 'steer' : 'followUp' },
+      } };
+    }
+    case 'set_model': {
+      const slash = action.model.indexOf('/');
+      if (slash <= 0) return { rejected: `Model must be provider/id, got "${action.model}"` };
+      return { command: { type: 'set_model', provider: action.model.slice(0, slash), modelId: action.model.slice(slash + 1) } };
+    }
+    case 'set_name': {
+      const name = action.name.replace(/[\r\n]+/g, ' ').trim();
+      if (!name) return { rejected: 'A session name cannot be empty.' };
+      return { command: { type: 'set_session_name', name } };
+    }
+    case 'answer': {
+      if (!dialog) throw new Error('piCommandFor: an answer needs its dialog');
+      if (action.cancelled) return { command: dialogCancellation(dialog.id) };
+      let value = action.value ?? '';
+      if (dialog.method === 'select') {
+        // Keep protocol values private. Redacted labels must not change
+        // what Pi receives, nor silently choose between colliding labels.
+        const options = dialog.options?.filter(option => projectDisplay(option) === value) ?? [];
+        if (options.length !== 1) return { rejected: 'This option is unavailable or ambiguous after redaction. Cancel the dialog instead.' };
+        value = options[0];
+      }
+      return { command: { type: 'extension_ui_response', id: dialog.id, ...action.confirmed !== undefined ? { confirmed: action.confirmed } : { value } } };
+    }
+  }
+}
+
+/** How Pi took a prompt (INV-03), from its acknowledgement. Undefined when unrecognized. */
+export const dispositionOf = (data: unknown): 'started' | 'queued' | 'handled' | undefined => {
+  const disposition = (data as { disposition?: unknown } | undefined)?.disposition;
+  return disposition === 'started' || disposition === 'queued' || disposition === 'handled' ? disposition : undefined;
 };
 
 // ── Live records ─────────────────────────────────────────────────────────────
