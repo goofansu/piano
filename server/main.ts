@@ -53,7 +53,7 @@ const Services = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSetting
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),
 );
-const Core = Layer.mergeAll(WorkspaceCommandsLive, SidebarViewLive()).pipe(Layer.provideMerge(Services));
+const Core = WorkspaceCommandsLive.pipe(Layer.provideMerge(SidebarViewLive()), Layer.provideMerge(Services));
 
 const Routes = Layer.mergeAll(AppRouter, HttpStaticServer.layer({ root: WEB_DIST, index: "index.html", spa: true }), Drain);
 

@@ -1,15 +1,21 @@
 /**
- * Workspace and session commands: the domain steps behind the browser's create, rename,
- * archive and delete requests. Registry holds references only (INV-01); SessionHosts owns
- * the single child per session (INV-02); Worktrees owns Git and Worktrunk. The requesting
+ * Workspace and session commands: the domain steps behind the browser's requests to discover
+ * and add worktrees, trust a folder, and create, prompt, rename, archive and delete sessions.
+ * Registry holds references only (INV-01); SessionHosts owns the single child per session
+ * (INV-02); Worktrees owns Git and Worktrunk; Pi's trust store owns trust. The requesting
  * client's SessionViewer attaches what it opens, through `SessionClient`.
  */
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import type { Attachment, StartOptions, WorktreeResult } from "../shared/wire.ts";
+import type { Attachment, ProjectTrust, SessionAction, SessionActionResult, StartOptions, WorktreeDiscovery, WorktreeResult } from "../shared/wire.ts";
+import { Catalog } from "./Catalog.ts";
+import { expandHome } from "./PiEnv.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
+import { type ProjectTrustError, projectTrust, setProjectTrust } from "./ProjectTrust.ts";
 import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
+import { SidebarView } from "./SidebarView.ts";
 import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
 
 export type ReadyWorktree = Extract<WorktreeResult, { status: "ready" }>;
@@ -31,12 +37,18 @@ export interface SessionClient<E, R> {
 export type RetireMode = "archive" | "delete";
 
 export class WorkspaceCommands extends Context.Service<WorkspaceCommands, {
+  /** Git's worktrees for a registered folder; an unregistered one is an error discovery, not a failure. */
+  readonly discoverWorktrees: (folder: string) => Effect.Effect<WorktreeDiscovery>;
   /** Register an existing checkout of a registered folder. */
   readonly addWorktree: (folder: string, path: string) => Effect.Effect<ReadyWorktree, WorktreeError | RegistryError>;
   /** Create a new branch checkout through Worktrunk and register it. */
   readonly createWorktree: (folder: string, branch: string, options: { readonly hooks?: boolean }) => Effect.Effect<ReadyWorktree, WorktreeError | RegistryError>;
+  /** Save Pi's trust decision for a directory. Every client re-probes its models; returns what Pi will now do there. */
+  readonly setTrust: (path: string, trusted: boolean) => Effect.Effect<{ readonly cwd: string; readonly trust: ProjectTrust }, ProjectTrustError>;
   /** Start a new session; the registry reference and project are written before any prompt reaches Pi. */
   readonly createSession: <E, R>(request: CreateSessionRequest, client: SessionClient<E, R>) => Effect.Effect<PiSession, E | PiSessionError | RegistryError | RegistryLookupError, R>;
+  /** Send input to a session. A prompt or steer is activity, recorded (with a first title) before Pi sees it. */
+  readonly act: (session: PiSession, action: SessionAction) => Effect.Effect<SessionActionResult | undefined, PiSessionError | RegistryError>;
   /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
   readonly renameSession: (cwd: string, sessionId: string, title: string) => Effect.Effect<string, PiSessionError | RegistryError>;
   /** Stop Pi, then archive the reference or delete Pi's history and the reference. */
@@ -46,6 +58,8 @@ export class WorkspaceCommands extends Context.Service<WorkspaceCommands, {
 export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(function* () {
   const registry = yield* Registry;
   const hosts = yield* SessionHosts;
+  const catalog = yield* Catalog;
+  const sidebar = yield* SidebarView;
 
   const registered = (folder: string) => registry.requireFolder(folder).pipe(
     Effect.catchTag("RegistryLookupError", e => Effect.fail(new WorktreeError({ detail: e.detail }))));
@@ -53,8 +67,28 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
     if (result.path !== result.folder) yield* registry.addWorktree({ folder: result.folder, path: result.path, branch: result.branch ?? "" });
     return result;
   });
+  const act = (session: PiSession, action: SessionAction) => Effect.gen(function* () {
+    if (action._tag === "prompt" || action._tag === "steer") yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, action.text);
+    return yield* session.act(action);
+  });
 
   return WorkspaceCommands.of({
+    discoverWorktrees: folder => registry.requireFolder(folder).pipe(
+      Effect.andThen(listWorktrees(folder)),
+      Effect.catchTag("RegistryLookupError", e => Effect.succeed({ status: "error" as const, observedAt: new Date().toISOString(), detail: e.detail }))),
+
+    setTrust: (path, trusted) => Effect.gen(function* () {
+      const cwd = resolve(expandHome(path));
+      yield* setProjectTrust(cwd, trusted);
+      // Pi's resources for this directory, and so its models and commands, change for sessions started from now.
+      yield* catalog.invalidate;
+      // Trust lives in Pi's store, not the registry, so the sidebar hears of it here.
+      yield* sidebar.changed;
+      return { cwd, trust: yield* projectTrust(cwd) };
+    }),
+
+    act,
+
     addWorktree: (folder, path) => Effect.gen(function* () {
       yield* registered(folder);
       const discovery = yield* listWorktrees(folder);
@@ -80,8 +114,7 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
       if (request.projectId) yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, request.projectId);
       const text = request.text?.trim() ?? "";
       if (!text && !request.attachments?.length) return session;
-      yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, text);
-      yield* session.act({ _tag: "prompt", text, attachments: request.attachments });
+      yield* act(session, { _tag: "prompt", text, attachments: request.attachments });
       return session;
     }),
 

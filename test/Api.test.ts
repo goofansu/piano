@@ -44,7 +44,7 @@ const Config = Layer.mergeAll(
 );
 const Services = Layer.mergeAll(SessionHostsLive({ idleMs: 0 }), PiSettingsLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
   Layer.provideMerge(CatalogLive), Layer.provideMerge(RegistryLive), Layer.provideMerge(PiSessionsLive), Layer.provide(Config));
-const Core = Layer.mergeAll(WorkspaceCommandsLive, SidebarViewLive()).pipe(Layer.provideMerge(Services));
+const Core = WorkspaceCommandsLive.pipe(Layer.provideMerge(SidebarViewLive()), Layer.provideMerge(Services));
 
 let workspaceId = "";
 let dispose: () => Promise<void> = async () => {};
