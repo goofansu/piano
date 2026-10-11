@@ -85,7 +85,7 @@ try {
     await ab('click', '[aria-label="Context usage"]');
     await ab('wait', '--text', 'All subagents');
     observed.beforeLive = await table('Subagent usage by profile');
-    assert.deepEqual(observed.beforeLive.slice(1, 3), [['usage-probe-pi', 'openai/gpt-6.1-sol', '3,524', '$0.0071'], ['All subagents', '3,524', '$0.0071']]);
+    assert.deepEqual(observed.beforeLive.slice(1, 3), [['usage-probe-pi', 'gpt-6.1-sol', '3,524', '$0.0071'], ['All subagents', '3,524', '$0.0071']]);
     await ab('press', 'Escape');
     await ab('fill', 'textarea', '/usage-live');
     await ab('press', 'Enter');
@@ -104,7 +104,7 @@ try {
     const subagents = await table('Subagent usage by profile');
     assert.deepEqual(subagents, [
       ['Subagents', 'Tokens', 'Cost'],
-      ['usage-probe-pi', 'openai/gpt-6.1-sol', '3,524', '$0.0071'],
+      ['usage-probe-pi', 'gpt-6.1-sol', '3,524', '$0.0071'],
       ['usage-probe-claude', 'claude-haiku-4-5-20251001', '20,902', '$0.0421'],
       ['All subagents', '24,426', '$0.0492'],
     ]);

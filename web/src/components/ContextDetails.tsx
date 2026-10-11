@@ -114,16 +114,18 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
         <Table className="table-fixed text-right text-xs tabular-nums" aria-label="Subagent usage by profile">
           <TableHeader>
             <TableRow className="text-ink-2">
-              <TableHead className="w-1/2 text-left font-normal">Subagents</TableHead>
+              <TableHead className="w-2/5 text-left font-normal">Subagents</TableHead>
               <TableHead className="text-right font-normal">Tokens</TableHead>
               <TableHead className="text-right font-normal">Cost</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {spent.map(profile => <TableRow key={profile.profile}>
-              <TableHead scope="row" className="whitespace-normal text-left font-normal text-ink-2">
+            {/* A Profile row may wrap to two lines: pad it and keep the figures on the Profile's line. */}
+            {spent.map(profile => <TableRow key={profile.profile} className="*:py-2.5 *:align-top">
+              <TableHead scope="row" className="h-auto whitespace-normal text-left font-normal text-ink-2">
                 <span className="block wrap-anywhere">{profile.profile}</span>
-                {profile.model && <span className="block wrap-anywhere text-ink-3">{profile.model}</span>}
+                {/* The model ID alone; the provider stays in the tooltip. */}
+                {profile.model && <span className="mt-1 block wrap-anywhere text-ink-3" title={profile.model}>{profile.model.slice(profile.model.indexOf("/") + 1)}</span>}
               </TableHead>
               <TableCell className="break-all">{number(profile.totalTokens)}</TableCell>
               <TableCell className="break-all">{dollars(profile.cost)}</TableCell>

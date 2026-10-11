@@ -35,7 +35,7 @@ test("Subagents rows sit below main-only Session usage, one per Profile that spe
   assert.ok(html.indexOf('aria-label="Token and cost breakdown"') < html.indexOf('aria-label="Subagent usage by profile"'));
   assert.deepEqual(rows(html), [
     ["Subagents", "Tokens", "Cost"],
-    ["usage-probe-pi", "openai/gpt-6.1-sol", "3,524", "$0.0071"],
+    ["usage-probe-pi", "gpt-6.1-sol", "3,524", "$0.0071"],
     ["usage-probe-claude", "claude-haiku-4-5-20251001", "20,902", "$0.0421"],
     ["mixed", "2", "$0.0000"],
     ["All subagents", "24,428", "$0.0492"],
