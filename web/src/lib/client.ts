@@ -1,11 +1,14 @@
 /**
  * The browser's side of the wire: one client per page owns the projected state, the connection,
- * selection correlation, re-selection after reconnect or resync (INV-02/05) and which server
- * messages become notifications. React only subscribes and sends; nothing here depends on render timing.
+ * selection correlation, re-selection after reconnect or resync (INV-02/05), which server
+ * messages become notifications, the New page's default directory, and asking Pi about the
+ * focused directory's models and trust. React only subscribes and sends; nothing here depends on
+ * render timing.
  */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
-import { closureNeedsAttention, sessionReady } from "./sessionContext.ts";
+import { closureNeedsAttention, focusedDirectory, sessionReady } from "./sessionContext.ts";
+import { readStorage, writeStorage } from "./storage.ts";
 import type { Connection, ConnectionHandlers } from "./ws.ts";
 
 export type NotifyLevel = "success" | "info" | "warning" | "error";
@@ -14,12 +17,23 @@ export type Notify = (message: string, level?: NotifyLevel) => void;
 /** Browser-local changes; connection status, server frames and selection correlation stay with the client. */
 export type LocalAction = Exclude<Action, { type: "connected" | "server" | "selecting" }>;
 
+/** The directory the last session was created in, offered first on a fresh New page. */
+export interface LastDirectory {
+  read: () => string | null;
+  write: (cwd: string) => void;
+}
+
+const LAST_DIR = "piano.lastDir";
+const storedLastDirectory: LastDirectory = { read: () => readStorage(LAST_DIR), write: (cwd) => writeStorage(LAST_DIR, cwd) };
+
 export interface ClientOptions {
   initial: AppState;
   /** Opens the auto-reconnecting transport (`openConnection` in the browser). */
   connect: (handlers: ConnectionHandlers) => Connection;
   notify: Notify;
   newSelectionId?: () => string;
+  /** Defaults to this browser's storage. */
+  lastDirectory?: LastDirectory;
 }
 
 export interface Client {
@@ -34,20 +48,47 @@ export interface Client {
   dispatch: (action: LocalAction) => void;
 }
 
-export function createClient({ initial, connect, notify, newSelectionId = () => crypto.randomUUID() }: ClientOptions): Client {
-  let state = initial;
+export function createClient({ initial, connect, notify, newSelectionId = () => crypto.randomUUID(), lastDirectory = storedLastDirectory }: ClientOptions): Client {
+  /** A New page opened without a directory or project starts in the last one used, else the first folder. */
+  const withNewPageDirectory = (s: AppState) => {
+    if (s.view.kind !== "new" || s.view.cwd || s.view.projectId) return s;
+    const cwd = lastDirectory.read() || s.folders[0]?.path;
+    return cwd ? reduce(s, { type: "new_directory", cwd }) : s;
+  };
+
+  let state = withNewPageDirectory(initial);
   let connection: Connection | null = null;
+  /** The focused directory and catalog revision last asked about on this connection. */
+  let asked: string | null = null;
   const listeners = new Set<() => void>();
 
+  /**
+   * One models and trust request per focused directory, catalog revision and connection: a
+   * reconnect or `catalogs_invalidated` asks again, and only for the directory on screen.
+   * A removed checkout has nothing to ask about.
+   */
+  const askAboutFocus = () => {
+    if (!state.connected) { asked = null; return; }
+    const focus = focusedDirectory(state);
+    if (!focus || focus.checkoutMissing) return;
+    const key = `${focus.cwd}\0${state.catalogRevision}`;
+    if (key === asked) return;
+    asked = key;
+    connection?.send({ _tag: "models", cwd: focus.cwd });
+    connection?.send({ _tag: "trust", cwd: focus.cwd });
+  };
+
   const apply = (action: Action) => {
-    const next = reduce(state, action);
+    const next = withNewPageDirectory(reduce(state, action));
     if (next === state) return;
     state = next;
+    askAboutFocus();
     for (const listener of listeners) listener();
   };
 
   const send = (m: ClientCommand) => {
     if (m._tag === "select" || m._tag === "create_session") {
+      if (m._tag === "create_session") lastDirectory.write(m.cwd);
       const selectionId = newSelectionId();
       apply({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null,
         firstMessage: m._tag === "create_session" && (m.text?.trim() || m.attachments?.length)

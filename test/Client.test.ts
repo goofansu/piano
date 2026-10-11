@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
+import { NEW_SESSION_DRAFT } from "../web/src/lib/messageDraft.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
@@ -127,4 +128,93 @@ test("create_session mints a selection and shows the first message until Pi reco
   assert.equal(created?.selectionId, "sel1");
   assert.equal(h.client.getState().pendingCreate?.text, "hello");
   assert.equal(h.client.getState().view.kind, "session");
+});
+
+/** What the client asked Pi about, as `tag cwd` pairs, since the last call. */
+function focusHarness(options: { remembered?: string | null; initial?: typeof initialState } = {}) {
+  const sent: ClientMessage[] = [];
+  const written: string[] = [];
+  let handlers: ConnectionHandlers | undefined;
+  let ids = 0;
+  const client = createClient({
+    initial: options.initial ?? initialState,
+    connect: (h) => { handlers = h; return { send: (m) => sent.push(m), close: () => {} }; },
+    notify: () => {},
+    newSelectionId: () => `sel${++ids}`,
+    lastDirectory: { read: () => options.remembered ?? null, write: (cwd) => written.push(cwd) },
+  });
+  client.start();
+  let seen = 0;
+  const asked = () => {
+    const out = sent.slice(seen).filter(m => m._tag === "models" || m._tag === "trust").map(m => `${m._tag} ${m.cwd}`);
+    seen = sent.length;
+    return out;
+  };
+  const server = (m: ServerMessage) => handlers!.onMessage(m);
+  const status = (connected: boolean) => handlers!.onStatus(connected);
+  const folder = (path: string) => ({ path, name: path.slice(1), worktrees: [], discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] }, sessions: [] }) as never;
+  const selected = (cwd: string, checkoutMissing = false): ServerMessage => ({
+    _tag: "selected", cwd, sessionId: "s", selectionId: client.getState().selectionId!, hosted: false,
+    cursor: { cwd, sessionId: "s", generation: "g1", sequence: 1 },
+    snapshot: { state: { sessionId: "s", isStreaming: false, checkoutMissing }, messages: [], dialogs: [] },
+  });
+  return { client, asked, server, status, folder, selected, written };
+}
+
+test("INV-05: picking a New-page directory asks for its models and trust exactly once", () => {
+  const h = focusHarness();
+  h.status(true);
+  assert.deepEqual(h.asked(), [], "no directory, nothing to ask");
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  assert.deepEqual(h.asked(), ["models /a", "trust /a"]);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.client.dispatch({ type: "new", projectId: "p1" });
+  assert.deepEqual(h.client.getState().view, { kind: "new", cwd: "/a", projectId: "p1" }, "picking a project keeps the directory");
+  h.client.dispatch({ type: "draft_changed", key: NEW_SESSION_DRAFT, text: "typing" });
+  assert.deepEqual(h.asked(), [], "the same directory is not asked about again");
+  h.client.dispatch({ type: "new_directory", cwd: "/b" });
+  assert.deepEqual(h.asked(), ["models /b", "trust /b"]);
+});
+
+test("INV-05: catalogs_invalidated and reconnect re-ask only for the focused directory", () => {
+  const h = focusHarness();
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.client.select("/b", "s");
+  h.server(h.selected("/b"));
+  assert.deepEqual(h.asked(), ["models /a", "trust /a", "models /b", "trust /b"], "the selected session becomes the focus");
+  h.server({ _tag: "catalogs_invalidated" });
+  assert.deepEqual(h.asked(), ["models /b", "trust /b"]);
+  h.status(false);
+  assert.deepEqual(h.asked(), [], "nothing is sent while disconnected");
+  h.status(true);
+  assert.deepEqual(h.asked(), ["models /b", "trust /b"], "a reconnect asks once for the session still on screen");
+  h.server(h.selected("/b"));
+  assert.deepEqual(h.asked(), [], "the re-selection's snapshot does not ask again");
+});
+
+test("a session whose checkout was removed asks Pi nothing", () => {
+  const h = focusHarness();
+  h.status(true);
+  h.client.select("/gone", "s");
+  h.server(h.selected("/gone", true));
+  h.server({ _tag: "catalogs_invalidated" });
+  assert.deepEqual(h.asked(), []);
+});
+
+test("a fresh New page starts in the last directory used, else the first folder, unless it belongs to a project", () => {
+  const remembered = focusHarness({ remembered: "/last" });
+  assert.deepEqual(remembered.client.getState().view, { kind: "new", cwd: "/last" });
+  remembered.status(true);
+  assert.deepEqual(remembered.asked(), ["models /last", "trust /last"]);
+  remembered.client.send({ _tag: "create_session", cwd: "/next", options: {}, text: "hi" });
+  assert.deepEqual(remembered.written, ["/next"], "creating a session remembers its directory");
+
+  const first = focusHarness();
+  first.status(true);
+  first.server({ _tag: "registry", folders: [first.folder("/one"), first.folder("/two")] });
+  assert.deepEqual(first.client.getState().view, { kind: "new", cwd: "/one" });
+
+  const project = focusHarness({ remembered: "/last", initial: { ...initialState, view: { kind: "new", projectId: "p1" } } });
+  assert.deepEqual(project.client.getState().view, { kind: "new", projectId: "p1" }, "a project's home starts without a directory");
 });

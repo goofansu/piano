@@ -25,7 +25,7 @@ const REFRESH_SPIN_MS = 600;
 const SETUP_TOAST = "radius-setup";
 const INSTALL_POLL_MS = 1500;
 
-export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => void; providersChanged: () => void }) {
+export function RadiusSettings({ onMenu }: { onMenu: () => void }) {
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -61,7 +61,8 @@ export function RadiusSettings({ onMenu, providersChanged }: { onMenu: () => voi
   const refreshing = setup.loading || !setup.value && !setup.error;
   const error = setup.error && !setup.loading ? "Could not refresh Radius setup. Check your connection and try again." : "";
   const { refresh } = setup;
-  const refreshProviders = useCallback(() => { void refresh(); providersChanged(); }, [refresh, providersChanged]);
+  // Signing in or out changes the usable models; the server invalidates every catalog itself.
+  const refreshProviders = useCallback(() => { void refresh(); }, [refresh]);
   const signOut = async () => {
     setSigningOut(true); setActionError("");
     try {

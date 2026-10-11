@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
-import { directoryTrust, sessionActivity, sessionCheckoutMissing, sessionContext, sessionMutable } from "../web/src/lib/sessionContext.ts";
+import { completionTarget, directoryTrust, focusedDirectory, sessionActivity, sessionCheckoutMissing, sessionContext, sessionMutable } from "../web/src/lib/sessionContext.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 
 const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
@@ -112,4 +112,25 @@ test("the selected session waits for a settled attachment before registry change
   assert.equal(sessionCheckoutMissing({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) }, selected), true);
   assert.equal(sessionCheckoutMissing({ ...base, sessionReferences: [{ ...other, archived: false, unavailable: "checkout" }] }, other), true);
   assert.equal(sessionCheckoutMissing(settled, other), false);
+});
+
+test("the focused directory is the New page's directory, else the selected session's, which the palette's trust command targets", () => {
+  assert.deepEqual(focusedDirectory({ ...base, view: { kind: "new", cwd: "/repo" }, session: null }), { cwd: "/repo", checkoutMissing: false });
+  assert.equal(focusedDirectory({ ...base, view: { kind: "new" }, session: null }), undefined);
+  assert.deepEqual(focusedDirectory({ ...base, session: session("/work/repo.feature") }), { cwd: "/work/repo.feature", checkoutMissing: false });
+  assert.deepEqual(focusedDirectory({ ...base, session: session("/gone", { checkoutMissing: true }) }), { cwd: "/gone", checkoutMissing: true });
+  assert.equal(focusedDirectory({ ...base, session: null, selecting: { cwd: "/repo", sessionId: "s1" } }), undefined, "nothing is focused until the snapshot arrives");
+});
+
+test("slash completion uses one revision rule for the New page and a session", () => {
+  const fresh = { ...base, view: { kind: "new" as const, cwd: "/repo" }, selectionId: null, session: null };
+  const target = completionTarget(fresh);
+  assert.equal(target?.cwd, "/repo");
+  assert.equal(target?.sessionId, undefined);
+  assert.notEqual(completionTarget({ ...fresh, trusts: { "/repo": { required: true, trusted: true } } })?.revision, target?.revision, "a trust change invalidates discovery");
+  assert.equal(completionTarget({ ...fresh, connected: false }), undefined);
+  const hosted = completionTarget({ ...base, session: session("/repo") });
+  assert.deepEqual([hosted?.cwd, hosted?.sessionId], ["/repo", "s1"]);
+  assert.equal(completionTarget({ ...base, session: session("/repo", {}, { hosted: false }) })?.sessionId, undefined, "discovery never starts a saved session");
+  assert.equal(completionTarget({ ...base, resync: true, session: session("/repo") }), undefined, "only on a ready attachment");
 });
