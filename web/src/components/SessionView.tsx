@@ -1,4 +1,4 @@
-import type { ClientCommand as ClientMessage } from "@shared/wire";
+import type { ClientCommand as ClientMessage, ExtensionState } from "@shared/wire";
 import { cn } from "cn";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -14,7 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { deliveryAction } from "@/lib/composerControl";
 import { type DraftKey, sessionDraftKey } from "@/lib/messageDraft";
-import { closureNeedsAttention, completionTarget, sessionActivity, sessionContext } from "@/lib/sessionContext";
+import { completionTarget, sessionActivity, sessionContext } from "@/lib/sessionContext";
+import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
@@ -45,20 +46,17 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
   // The transcript looks executions up by tool call ID.
   const tools = useMemo(() => Object.fromEntries((t?.tools ?? []).map(tool => [tool.id, tool])), [t?.tools]);
   const input = state.pendingCreate;
-  const { ready, checkoutMissing, folder: located, changesWorkspace } = sessionContext(state);
-  const folder = t ? located : undefined;
-  const { status, streaming, replyActivity, firstMessageOnItsWay, submissionText } = sessionActivity(state, display);
+  const { ready, changesWorkspace } = sessionContext(state);
+  const { status, streaming, replyActivity, firstMessageOnItsWay } = sessionActivity(state, display);
+  const notices = sessionNotices(state, display);
+  const readOnly = notices.find(n => n.placement === "composer");
   const draftKey = t ? sessionDraftKey(t) : null;
   const catalog = t ? state.catalogs[t.cwd] ?? null : null;
   // A running Pi owns the selection; a saved session's picks wait for its first prompt and
   // override only what was picked, so Pi restores the rest of its recorded selection.
   const choice = useModelChoice(catalog, { kind: "session", hosted: !!t?.hosted, model: t?.state.model, thinkingLevel: t?.state.thinkingLevel },
     `${t?.cwd}\0${t?.sessionId}\0${t?.hosted}`, action => send({ _tag: "act", action }));
-  const extension = t?.state.extension;
-  // Pi reports an extension block for every session; only one that says something is shown.
-  const extensionContent = !!extension && !!(extension.title || extension.statuses.length || extension.widgets.length || extension.editorRequest);
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
-  const submission = t?.state.submission;
 
   return (
     <>
@@ -72,27 +70,12 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           toast.success("Added to your message");
         }} />}
 
-      {folder?.discovery.status === "error" && (
-        <Banner variant="destructive" title="Git status unavailable." action={<Button variant="ghost" size="sm" onClick={() => send({ _tag: "registry" })}>Refresh</Button>}>
-          <p className="whitespace-pre-wrap break-words">{folder.discovery.detail}</p>
+      {notices.filter(n => n.placement === "banner").map(n => (
+        <Banner key={n.id} variant={n.tone === "destructive" ? "destructive" : "warning"} title={n.title}
+          action={n.action && <Button variant="ghost" size="sm" onClick={() => n.action && send(n.action.command)}>{n.action.label}</Button>}>
+          {n.details.length ? n.details.map(detail => <p key={detail} className="whitespace-pre-wrap break-words">{detail}</p>) : undefined}
         </Banner>
-      )}
-      {t && closureNeedsAttention(t.state.closure) && (
-        <Banner variant="destructive" title={`Pi stopped: ${t.state.closure.detail}.`}>
-          <p>Interrupted operations are not resumed. Inspect the checkout before continuing.</p>
-        </Banner>
-      )}
-      {t?.state.projectionError && (
-        <Banner variant="warning" title="Unable to refresh the conversation. Recent changes may be missing.">
-          <p className="break-words">{t.state.projectionError}</p>
-        </Banner>
-      )}
-      {(t?.state.stateRefreshError || t?.state.statsRefreshError) && (
-        <Banner variant="warning" title="Unable to refresh session details. Some information may be stale.">
-          <p className="break-words">{t.state.stateRefreshError}</p>
-          <p className="break-words">{t.state.statsRefreshError}</p>
-        </Banner>
-      )}
+      ))}
       {/* Submitted input renders immediately outside Pi's history. Only an ordinary
           history load uses the skeleton; terminal input outcomes retain the original. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -115,35 +98,15 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
           </div>
         )}
       </div>
-      {t?.state.dialogResolution && (
-        <section aria-label="Last dialog" role="status" className="animate-in px-4 pt-2 text-sm text-ink-2 fade-in-0 slide-in-from-bottom-1 md:px-6">
-          <p className="mx-auto max-w-3xl break-words">Dialog {t.state.dialogResolution.reason}: {t.state.dialogResolution.detail}</p>
-        </section>
-      )}
-      {submissionText && (
-        <section aria-label="Last input" role="status" className={cn("animate-in px-4 pt-2 text-sm fade-in-0 slide-in-from-bottom-1 md:px-6", submission?.outcome === "uncertain" || submission?.outcome === "rejected" ? "text-warning" : "text-ink-2")}>
-          <div className="mx-auto max-w-3xl break-words">
-            <p>{submissionText}</p>
-            {(input?.detail ?? submission?.detail) && <p className="mt-1">{input?.detail ?? submission?.detail}</p>}
-          </div>
-        </section>
-      )}
-      {extension && extensionContent && <section aria-label="Extension state" className="mx-auto w-full max-w-3xl max-h-40 overflow-auto px-4 pt-2 text-xs text-ink-2 md:px-6">
-        {extension.title && <p>Extension title: {extension.title}</p>}
-        {extension.statuses.map(status => <p key={status.key}>{status.key}: {status.text}</p>)}
-        {extension.widgets.map(widget => <div key={widget.key}><p>{widget.key} · {widget.placement === "aboveEditor" ? "above editor" : "below editor"}</p><pre className="whitespace-pre-wrap break-words">{widget.lines.join("\n")}</pre></div>)}
-        {extension.editorRequest && <div>
-          <p>Suggested message</p>
-          <pre className="whitespace-pre-wrap break-words">{extension.editorRequest.text}</pre>
-          <Button size="sm" variant="outline" disabled={usedEditorRequest === extension.editorRequest.id} onClick={() => {
-            if (draftKey && extension.editorRequest) { onDraftParagraph(draftKey, extension.editorRequest.text); setUsedEditorRequest(extension.editorRequest.id); }
-          }}>Append to draft</Button>
-        </div>}
-      </section>}
-      {checkoutMissing ? (
+      {notices.filter(n => n.placement === "status").map(n => n.extension
+        ? <ExtensionBlock key={n.id} extension={n.extension} used={usedEditorRequest} onAppend={request => {
+            if (draftKey) { onDraftParagraph(draftKey, request.text); setUsedEditorRequest(request.id); }
+          }} />
+        : <StatusLine key={n.id} notice={n} />)}
+      {readOnly ? (
         <Alert className="mx-4 my-3 w-auto md:mx-6">
-          <AlertTitle>Checkout removed · Read-only session</AlertTitle>
-          <AlertDescription>History is still available. You can archive or delete this session, or restore the checkout at its original path and reload to continue.</AlertDescription>
+          <AlertTitle>{readOnly.title}</AlertTitle>
+          <AlertDescription>{readOnly.details.join(" ")}</AlertDescription>
         </Alert>
       ) : <Composer
         draftKey={draftKey}
@@ -172,6 +135,37 @@ export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend,
         queuedMessages={t?.state.queuedMessages}
       />}
     </>
+  );
+}
+
+/** A status line under the transcript: the last dialog's or input's outcome. Hand-written: no shadcn component is a plain live line. */
+function StatusLine({ notice }: { notice: SessionNotice }) {
+  return (
+    <section aria-label={notice.id === "dialog-resolution" ? "Last dialog" : "Last input"} role="status"
+      className={cn("animate-in px-4 pt-2 text-sm fade-in-0 slide-in-from-bottom-1 md:px-6", notice.tone === "warning" ? "text-warning" : "text-ink-2")}>
+      <div className="mx-auto max-w-3xl break-words">
+        <p>{notice.title}</p>
+        {notice.details.map(detail => <p key={detail} className="mt-1">{detail}</p>)}
+      </div>
+    </section>
+  );
+}
+
+/** What Pi's extensions report: title, statuses, widgets and a suggested message to append. */
+function ExtensionBlock({ extension, used, onAppend }: { extension: ExtensionState; used: string | undefined; onAppend: (request: { id: string; text: string }) => void }) {
+  return (
+    <section aria-label="Extension state" className="mx-auto w-full max-w-3xl max-h-40 overflow-auto px-4 pt-2 text-xs text-ink-2 md:px-6">
+      {extension.title && <p>Extension title: {extension.title}</p>}
+      {extension.statuses.map(status => <p key={status.key}>{status.key}: {status.text}</p>)}
+      {extension.widgets.map(widget => <div key={widget.key}><p>{widget.key} · {widget.placement === "aboveEditor" ? "above editor" : "below editor"}</p><pre className="whitespace-pre-wrap break-words">{widget.lines.join("\n")}</pre></div>)}
+      {extension.editorRequest && <div>
+        <p>Suggested message</p>
+        <pre className="whitespace-pre-wrap break-words">{extension.editorRequest.text}</pre>
+        <Button size="sm" variant="outline" disabled={used === extension.editorRequest.id} onClick={() => {
+          if (extension.editorRequest) onAppend(extension.editorRequest);
+        }}>Append to draft</Button>
+      </div>}
+    </section>
   );
 }
 
