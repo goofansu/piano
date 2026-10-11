@@ -1,6 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpDownIcon, CheckIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, RadiusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon } from "lucide-react";
+import { ArrowUpDownIcon, CheckIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, RadiusIcon, ServerIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -102,6 +102,9 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
           </CommandItem>
           <CommandItem value="Radius" keywords={["settings", "setup", "oauth", "mcp", "web search"]} onSelect={() => run(() => openSettings("radius"))}>
             <RadiusIcon /> Radius
+          </CommandItem>
+          <CommandItem value="MCP" keywords={["settings", "servers", "tools", "linear", "install", "sign in"]} onSelect={() => run(() => openSettings("mcp"))}>
+            <ServerIcon /> MCP
           </CommandItem>
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session

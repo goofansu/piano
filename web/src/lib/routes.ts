@@ -5,11 +5,11 @@
  *   /s/<sessionId>   one session; its directory is looked up in the folder list
  *   /settings/<section> one settings page; /settings aliases Providers
  */
-export type SettingsSection = "providers" | "radius";
+export type SettingsSection = "providers" | "radius" | "mcp";
 export type Route = { kind: "new"; projectId?: string } | { kind: "session"; sessionId: string } | { kind: "settings"; section: SettingsSection };
 
 export function parseRoute(loc: { pathname: string }): Route {
-  const settings = loc.pathname.match(/^\/settings(?:\/(providers|radius))?\/?$/);
+  const settings = loc.pathname.match(/^\/settings(?:\/(providers|radius|mcp))?\/?$/);
   if (settings) return { kind: "settings", section: (settings[1] as SettingsSection) ?? "providers" };
   const project = loc.pathname.match(/^\/projects\/([^/]+)\/?$/);
   if (project) return { kind: "new", projectId: decodeURIComponent(project[1]) };

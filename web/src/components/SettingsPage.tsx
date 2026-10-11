@@ -1,9 +1,10 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, HomeIcon, PlugIcon, RadiusIcon } from "lucide-react";
+import { AlertCircleIcon, HomeIcon, PlugIcon, RadiusIcon, ServerIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
+import { McpSettings } from "@/components/McpSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RadiusSettings } from "@/components/RadiusSettings";
@@ -21,7 +22,7 @@ import { useObservation } from "@/lib/useObservation";
 
 export type { SettingsSection } from "@/lib/routes";
 
-const SECTIONS = [{ id: "providers", label: "Providers", icon: PlugIcon }, { id: "radius", label: "Radius", icon: RadiusIcon }] as const;
+const SECTIONS = [{ id: "providers", label: "Providers", icon: PlugIcon }, { id: "radius", label: "Radius", icon: RadiusIcon }, { id: "mcp", label: "MCP", icon: ServerIcon }] as const;
 
 export function SettingsNavigation({ compact, section, onShow, onHide, onSelect, onHome }: { compact: boolean; section: SettingsSection; onShow: () => void; onHide: () => void; onSelect: (section: SettingsSection) => void; onHome: () => void }) {
   const menu = <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
@@ -61,7 +62,8 @@ export function SettingsPage({ section, onMenu }: { section: SettingsSection; on
       toast.error(error instanceof Error ? error.message : "Could not sign out. Try again.");
     } finally { setSigningOut(undefined); setSignOutTarget(undefined); }
   };
-  if (section !== "providers") return <RadiusSettings onMenu={onMenu} />;
+  if (section === "radius") return <RadiusSettings onMenu={onMenu} />;
+  if (section === "mcp") return <McpSettings onMenu={onMenu} />;
   return <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
       <SettingsHeader title="Providers" titleId="settings-providers-title" onMenu={onMenu} />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
