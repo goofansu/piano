@@ -12,9 +12,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenu
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { composerControl, DELIVERY, DELIVERY_MODES, type DeliveryMode } from "@/lib/composerControl";
 import { formatTokenCount } from "@/lib/format";
 import { isSendKey } from "@/lib/keys";
-import { type DraftKey, hasContent, sendable } from "@/lib/messageDraft";
+import type { DraftKey } from "@/lib/messageDraft";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
@@ -47,34 +48,28 @@ interface Props {
   queuedMessages?: ReadonlyArray<QueuedMessage>;
 }
 
-type QueueMode = QueuedMessage["kind"];
 const QUEUE_MODE_KEY = "piano.queueMode";
-/** How a message sent while Pi works is delivered. Pi's own editor steers on Enter, so steering is the default. */
-const DELIVERY: Record<QueueMode, { label: string; detail: string }> = {
-  steering: { label: "steer", detail: "Adjust the current task." },
-  "follow-up": { label: "follow-up", detail: "Add work after the current task." },
-};
-const MODES: readonly QueueMode[] = ["steering", "follow-up"];
-const otherMode = (mode: QueueMode): QueueMode => (mode === "steering" ? "follow-up" : "steering");
-const loadQueueMode = (): QueueMode => (readStorage(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering");
+const loadQueueMode = (): DeliveryMode => (readStorage(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering");
 
 /** The composer: a layer-1 card that lines up with the transcript column. */
 export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, stopping, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, context, cost, totals, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
-  const [queueMode, setQueueModeState] = useState<QueueMode>(loadQueueMode);
-  const setQueueMode = (mode: QueueMode) => {
+  const [queueMode, setQueueModeState] = useState<DeliveryMode>(loadQueueMode);
+  const setQueueMode = (mode: DeliveryMode) => {
     setQueueModeState(mode);
     writeStorage(QUEUE_MODE_KEY, mode);
   };
-  const imagesWaiting = streaming && attachments.items.length > 0;
+  const control = composerControl({ text, images: attachments, disabled, streaming, compacting: !!compacting, stopping: !!stopping, queued: queuedMessages.length, mode: queueMode });
+  const { imagesWaiting, showDelivery } = control;
+  const showStop = control.primary === "stop";
   useAutoGrow(ref, text, 192);
   useTypeToFocus(ref, onTextAppend, !disabled);
-  const send = (kind: QueueMode = queueMode) => {
-    if (disabled || stopping || imagesWaiting || !sendable({ text, images: attachments })) return;
-    // Nothing can steer a compaction; whatever is sent then waits for it to finish.
-    onSend(text.trim(), compacting ? "follow-up" : kind, attachments.items);
+  const send = (alt: boolean) => {
+    const kind = control.delivery(alt);
+    if (!kind) return;
+    onSend(text.trim(), kind, attachments.items);
     onTextChange("");
     attachments.clear();
   };
@@ -87,8 +82,6 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
   const window = contextWindow !== undefined && contextWindow > 0 ? formatTokenCount(contextWindow) : null;
   // Before the first reply only the window is known, so it stands alone rather than reading as "—/1k".
   const contextLabel = used && window ? `${used}/${window}` : used ?? window ?? "—";
-  const showStop = streaming && !hasContent({ text, images: attachments });
-  const showDelivery = streaming && !compacting;
   const showQueueKinds = queuedMessages.some(message => message.kind === "steering");
 
   return (
@@ -100,7 +93,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
           <section className="control-enter flex max-h-[min(14rem,30dvh)] flex-col border-b border-line px-4 py-3 text-sm" aria-label="Queued messages">
             <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
               <h2 className="font-medium text-ink-2">{streaming ? "Queued messages" : "Paused queue"} ({queuedMessages.length})</h2>
-              <Button variant="ghost" size="sm" className="h-11 shrink-0 md:h-8" aria-label={queuedMessages.length === 1 ? "Edit queued message" : "Edit all queued messages"} title="Move queued messages back to the draft without stopping Pi (Esc)" disabled={disabled || stopping} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
+              <Button variant="ghost" size="sm" className="h-11 shrink-0 md:h-8" aria-label={queuedMessages.length === 1 ? "Edit queued message" : "Edit all queued messages"} title="Move queued messages back to the draft without stopping Pi (Esc)" disabled={!control.canRestoreQueue} onClick={() => { onRestoreQueue(); ref.current?.focus(); }}>
                 <PencilIcon data-icon="inline-start" aria-hidden />
                 {queuedMessages.length === 1 ? "Edit" : "Edit all"}
               </Button>
@@ -129,16 +122,11 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             onKeyDown={(e) => {
               if (isSendKey(e)) {
                 e.preventDefault();
-                send(e.altKey ? otherMode(queueMode) : queueMode);
-              } else if (e.key === "Escape" && !disabled && !stopping) {
-                // Esc acts on the nearest thing first: queued messages return to the draft, then the next press stops Pi.
-                if (queuedMessages.length > 0) {
-                  e.preventDefault();
-                  onRestoreQueue();
-                } else if (streaming) {
-                  e.preventDefault();
-                  onStop();
-                }
+                send(e.altKey);
+              } else if (e.key === "Escape" && control.escape !== "none") {
+                e.preventDefault();
+                if (control.escape === "restore-queue") onRestoreQueue();
+                else onStop();
               }
             }}
           />
@@ -155,8 +143,8 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuRadioGroup value={queueMode} onValueChange={(mode) => setQueueMode(mode as QueueMode)}>
-                  {MODES.map((mode) => (
+                <DropdownMenuRadioGroup value={queueMode} onValueChange={(mode) => setQueueMode(mode as DeliveryMode)}>
+                  {DELIVERY_MODES.map((mode) => (
                     <DropdownMenuRadioItem key={mode} value={mode}>
                       {/* Two lines in one column, so the item's trailing check centers on both. */}
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -179,18 +167,16 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
                 size="icon"
                 variant={showStop ? "outline" : "default"}
                 className={cn(composerAction, "relative")}
-                aria-label={showStop ? "Stop" : showDelivery ? DELIVERY[queueMode].label : streaming ? "Queue message" : "Send"}
-                disabled={stopping || (showStop ? disabled : disabled || !sendable({ text, images: attachments }) || imagesWaiting)}
-                onClick={showStop ? onStop : () => send()}
+                aria-label={control.label}
+                disabled={!control.enabled}
+                onClick={showStop ? onStop : () => send(false)}
               >
                 <span aria-hidden className={cn("absolute inset-0 grid place-items-center transition-[opacity,transform] duration-(--dur-enter) ease-(--ease-enter)", showStop ? "scale-75 opacity-0" : "scale-100 opacity-100")}><ArrowUpIcon /></span>
                 <span aria-hidden className={cn("absolute inset-0 grid place-items-center transition-[opacity,transform] duration-(--dur-enter) ease-(--ease-enter)", showStop ? "scale-100 opacity-100" : "scale-75 opacity-0")}><SquareIcon className="fill-current" /></span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {showStop
-                ? queuedMessages.length > 0 ? <>Stop and move queued input to the draft. <Kbd>Esc</Kbd> edits without stopping.</> : <>Stop <Kbd>Esc</Kbd></>
-                : <>{showDelivery ? `${DELIVERY[queueMode].label}: ${DELIVERY[queueMode].detail}` : streaming ? "Send after compaction finishes" : "Send"} <Kbd>Enter</Kbd></>}
+              {control.hint.lead} <Kbd>{control.hint.key}</Kbd>{control.hint.tail}
             </TooltipContent>
           </Tooltip>
         </div>
