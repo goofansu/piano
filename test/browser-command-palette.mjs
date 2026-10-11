@@ -115,12 +115,12 @@ try {
   const newActions = await evaluate(`(() => {
     return [...document.querySelectorAll('[cmdk-item]')].filter(e => e.getBoundingClientRect().height > 0).map(e => ({ value: e.getAttribute('data-value'), icon: e.querySelector('svg')?.outerHTML, fits: e.scrollWidth <= e.clientWidth }));
   })()`);
-  assert.deepEqual(newActions.map(a => a.value), ['new session', 'new session here'], 'no directory-specific actions');
+  assert.deepEqual(newActions.map(a => a.value), ['new session', 'New session here'], 'no directory-specific actions');
   assert.ok(newActions.every(a => a.fits), 'new session actions fit mobile width');
   assert.ok(newActions[0].icon.includes('lucide-plus'));
   assert.equal(newActions[0].icon, newActions[1].icon, 'new session actions use the same icon');
   assert.equal(await evaluate(`document.querySelector('main header [aria-label="New session here"] svg').classList.contains('lucide-plus')`), true, 'header uses the same plus icon');
-  await ab('click', '[cmdk-item][data-value="new session here"]');
+  await ab('click', '[cmdk-item][data-value="New session here"]');
   await ab('wait', '--text', 'What should we work on?');
   assert.equal(await evaluate(`!!document.querySelector('${input}')`), false, 'here action closes palette');
   assert.equal(await evaluate(`document.querySelector('[role="combobox"][aria-label="Directory"]').getAttribute('title') === ${JSON.stringify(repos[0])}`), true, 'here action selects current project');
