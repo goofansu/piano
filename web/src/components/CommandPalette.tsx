@@ -1,19 +1,17 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpDownIcon, CheckIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
+import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { CommandIcon, useSessionCommands } from "@/components/SessionCommandHost";
-import { SettingsSectionIcon } from "@/components/SettingsSectionFrame";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
+import { type GlobalCommand, globalCommands } from "@/lib/globalCommands";
 import { hasMod } from "@/lib/keys";
-import { SETTINGS_SECTIONS } from "@/lib/routes";
 import { recentSessions } from "@/lib/sessionCatalog";
-import { directoryTrust, focusedDirectory } from "@/lib/sessionContext";
-import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarView } from "@/lib/useSidebarView";
 import type { AppState } from "@/store";
@@ -56,10 +54,20 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
   const sessions = useMemo(() => recentSessions(state),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, state.session?.cwd, state.session?.sessionId, state.selecting]);
-  // Trust belongs to the directory the main pane is about: the New page's, else the selected session's.
-  const focus = focusedDirectory(state);
-  const focusCwd = focus && !focus.checkoutMissing ? focus.cwd : undefined;
-  const focusTrust = focusCwd ? directoryTrust(state, focusCwd) : undefined;
+  // The sidebar's View menu choices by the same names; trust is for the directory the main pane is about.
+  const globalCommandList = globalCommands(state, { settingsOpen: !!settings, view });
+  const runGlobal = (c: GlobalCommand) => {
+    const intent = c.intent;
+    switch (intent.kind) {
+      case "home": return closeSettings();
+      case "settings": return openSettings(intent.section);
+      case "new-session": return openNew();
+      case "send": return send(intent.command);
+      case "toggle-sidebar": return toggleSidebar();
+      case "appearance": return setTheme(intent.appearance);
+      case "view": return setView(intent.change);
+    }
+  };
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
   const run = (action: () => void) => { onOpenChange(false); action(); };
 
@@ -92,42 +100,10 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
           </CommandGroup>
         )}
         <CommandGroup key="global" heading="Global commands">
-          {settings ? <CommandItem value="Home" keywords={["back", "session"]} onSelect={() => run(closeSettings)}>
-            <HomeIcon /> Home
-          </CommandItem> : <CommandItem value="Settings" onSelect={() => run(openSettings)}>
-            <SettingsIcon /> Settings
-          </CommandItem>}
-          {SETTINGS_SECTIONS.map(section => (
-            <CommandItem key={`settings-${section.id}`} value={section.label} keywords={[...section.keywords]} onSelect={() => run(() => openSettings(section.id))}>
-              <SettingsSectionIcon icon={section.icon} /> {section.label}
-            </CommandItem>
-          ))}
-          <CommandItem value="new session" onSelect={() => run(() => openNew())}>
-            <PlusIcon /> New session
-          </CommandItem>
-          {focusCwd && focusTrust?.required && (
-            <CommandItem value={focusTrust.trusted ? "Untrust folder" : "Trust folder"} keywords={["trust", "pi settings", "skills"]} disabled={!state.connected}
-              onSelect={() => run(() => send({ _tag: "set_trust", path: focusCwd, trusted: !focusTrust.trusted }))}>
-              {focusTrust.trusted ? <><ShieldOffIcon /> Untrust folder</> : <><ShieldCheckIcon /> Trust folder</>}
-            </CommandItem>
-          )}
-          <CommandItem value="toggle sidebar" onSelect={() => run(toggleSidebar)}>
-            <PanelLeftIcon /> Toggle sidebar
-          </CommandItem>
-          <CommandItem value="appearance light" keywords={["theme"]} onSelect={() => run(() => setTheme("light"))}><SunIcon /> Light appearance</CommandItem>
-          <CommandItem value="appearance dark" keywords={["theme"]} onSelect={() => run(() => setTheme("dark"))}><MoonIcon /> Dark appearance</CommandItem>
-          <CommandItem value="appearance system" keywords={["theme"]} onSelect={() => run(() => setTheme("system"))}><MonitorIcon /> System appearance</CommandItem>
-          {/* The sidebar's view menu, by the same names. */}
-          {GROUP_BY.map(g => (
-            <CommandItem key={`group-${g.value}`} value={g.value === "none" ? "No grouping" : `Group by ${g.label.toLowerCase()}`} keywords={["group", "sidebar", "view"]} onSelect={() => run(() => setView({ groupBy: g.value }))}>
-              <LayoutListIcon /> {g.value === "none" ? "No grouping" : `Group by ${g.label.toLowerCase()}`}
-              {view.groupBy === g.value && <><CheckIcon className="ml-auto" aria-hidden /><span className="sr-only">current</span></>}
-            </CommandItem>
-          ))}
-          {SORT_BY.map(s => (
-            <CommandItem key={`sort-${s.value}`} value={`Sort by ${s.label.toLowerCase()}`} keywords={["sort", "order", "sidebar", "view"]} onSelect={() => run(() => setView({ sortBy: s.value }))}>
-              <ArrowUpDownIcon /> Sort by {s.label.toLowerCase()}
-              {view.sortBy === s.value && <><CheckIcon className="ml-auto" aria-hidden /><span className="sr-only">current</span></>}
+          {globalCommandList.map(c => (
+            <CommandItem key={c.id} value={c.label} keywords={c.keywords ? [...c.keywords] : undefined} disabled={!c.enabled} onSelect={() => run(() => runGlobal(c))}>
+              <GlobalCommandIcon icon={c.icon} /> {c.label}
+              {c.checked && <><CheckIcon className="ml-auto" aria-hidden /><span className="sr-only">current</span></>}
             </CommandItem>
           ))}
         </CommandGroup>
