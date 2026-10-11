@@ -19,6 +19,8 @@ export interface OpenSpec {
   readonly name?: string;
   /** Only a newly generated server ID may create a registry reference. */
   readonly create?: boolean;
+  /** Initial registry membership for creation only; never passed to Pi or applied on reopen. */
+  readonly projectId?: string;
 }
 interface Host {
   session: PiSession;
@@ -205,9 +207,10 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     if (stopping) return yield* rejected("Piano is shutting down.");
     if (missing) return yield* checkoutMissing;
     if (existing) return existing.session;
-    if (spec.create) yield* registry.addSession(ref.cwd, spec.sessionId, spec.name).pipe(Effect.mapError(e => rejected(e.detail)));
+    const { create, projectId, ...piSpec } = spec;
+    if (create) yield* registry.addSession(ref.cwd, spec.sessionId, spec.name, projectId).pipe(Effect.mapError(e => rejected(e.detail)));
     const scope = yield* Scope.make();
-    const raw = yield* sessions.open({ ...spec, cwd: ref.cwd, sessionFile: ref.file, lastKnownStats: ref.stats, name: ref.file ? undefined : spec.name }).pipe(
+    const raw = yield* sessions.open({ ...piSpec, cwd: ref.cwd, sessionFile: ref.file, lastKnownStats: ref.stats, name: ref.file ? undefined : spec.name }).pipe(
       Scope.provide(scope), Effect.onExit(exit => Exit.isFailure(exit) ? Scope.close(scope, Exit.void) : Effect.void),
     );
     if (stopping) {

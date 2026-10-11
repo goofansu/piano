@@ -114,13 +114,12 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
     }),
 
     createSession: Effect.fn("WorkspaceCommands.createSession")(function* (request, client) {
-      if (request.projectId) yield* registry.requireActiveProject(request.projectId);
+      if (request.projectId !== undefined) yield* registry.requireActiveProject(request.projectId);
       const cwd = yield* registry.ensureFolder(request.cwd);
       const { model, thinkingLevel, name } = request.options;
+      // Registration and initial membership survive a disconnect with server-owned acquisition.
       // Only a fresh server-generated ID may create a reference; SessionHosts keeps one child per ID.
-      const session = yield* client.attach(hosts.open({ cwd, sessionId: randomUUID(), create: true, model, thinkingLevel, name }));
-      // Each registry write has reached the sidebar view by the time it returns.
-      if (request.projectId) yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, request.projectId);
+      const session = yield* client.attach(hosts.open({ cwd, sessionId: randomUUID(), create: true, projectId: request.projectId, model, thinkingLevel, name }));
       const text = request.text?.trim() ?? "";
       if (!text && !request.attachments?.length) return session;
       yield* act(session, { _tag: "prompt", text, attachments: request.attachments });
