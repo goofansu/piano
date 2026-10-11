@@ -69,7 +69,7 @@ function facts(raw: typeof RawPr.Type): PullRequest {
 }
 
 /** Observe both branch and head repository, including tracking-remote choice. */
-const checkout = (git: string, cwd: string) => Effect.gen(function* () {
+const checkout = Effect.fn("SessionPullRequests.checkout")(function* (git: string, cwd: string) {
   const inside = yield* run(git, ["rev-parse", "--is-inside-work-tree"], cwd).pipe(
     Effect.catchIf(e => /not a git repository/.test(e.detail), () => Effect.succeed("false")));
   if (inside !== "true") return null;
@@ -94,7 +94,7 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
   const registry = yield* Registry;
   const git = yield* GitCommand, ghCli = yield* GhCommand;
   // After a save, read the entry back so the answer reflects whatever the registry now holds.
-  const reread = (s: SessionEntry) => Effect.gen(function* () {
+  const reread = Effect.fn("SessionPullRequests.reread")(function* (s: SessionEntry) {
     const found = (yield* registry.get).sessions.find(t => t.cwd === s.cwd && t.sessionId === s.sessionId);
     if (!found) return yield* failure("Session is not registered. Refresh the session list.");
     return found;
@@ -106,7 +106,7 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
       : "Could not read GitHub. Check gh authentication and repository access, then retry.")));
   const hostFor = (s: SessionEntry) => s.pullRequest?.apiHost ? Effect.succeed(s.pullRequest.apiHost)
     : checkout(git, s.cwd).pipe(Effect.map(c => c?.apiHost ?? "github.com" as GitHubHost), Effect.orElseSucceed(() => "github.com" as const));
-  const view = (url: string, host: GitHubHost) => Effect.gen(function* () {
+  const view = Effect.fn("SessionPullRequests.view")(function* (url: string, host: GitHubHost) {
     const key = yield* parseIdentity(url);
     // A public URL overrides GH_HOST in gh. Use number + explicit API repository instead.
     // Neither this lookup nor a saved integration route needs the checkout to still exist.
@@ -114,10 +114,10 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
     return yield* Effect.try({ try: () => facts(Schema.decodeUnknownSync(Schema.fromJsonString(RawPr))(output)),
       catch: () => failure("GitHub returned an invalid pull request response.") });
   });
-  const save = (expected: SessionEntry, link: SessionEntry["pullRequest"]) => Effect.gen(function* () {
+  const save = Effect.fn("SessionPullRequests.save")(function* (expected: SessionEntry, link: SessionEntry["pullRequest"]) {
     if (!(yield* registry.setSessionPullRequest(expected, link))) return yield* failure("The session's pull request changed during lookup. Refresh and try again.");
   });
-  const result = (s: SessionEntry, forceDiscovery = false): Effect.Effect<SessionPullRequest, PullRequestError | RegistryError> => Effect.gen(function* () {
+  const result: (s: SessionEntry, forceDiscovery?: boolean) => Effect.Effect<SessionPullRequest, PullRequestError | RegistryError> = Effect.fn("SessionPullRequests.result")(function* (s: SessionEntry, forceDiscovery = false) {
     if (!forceDiscovery && s.pullRequest === null) return { link: null, pullRequest: null, discovery: false };
     if (!forceDiscovery && s.pullRequest) {
       const pullRequest = yield* view(s.pullRequest.url, yield* hostFor(s)).pipe(Effect.result);
@@ -158,7 +158,7 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
   });
   return SessionPullRequests.of({
     get: s => result(s),
-    change: (s, action) => Effect.gen(function* () {
+    change: Effect.fn("SessionPullRequests.change")(function* (s, action) {
       if (action.action === "link") {
         // Explicit association is the user's choice, not a claim that GitHub is reachable.
         const key = yield* parseIdentity(action.url);

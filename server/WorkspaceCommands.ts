@@ -71,11 +71,11 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
 
   const registered = (folder: string) => registry.requireFolder(folder).pipe(
     Effect.catchTag("RegistryLookupError", e => Effect.fail(new WorktreeError({ detail: e.detail }))));
-  const record = (result: ReadyWorktree) => Effect.gen(function* () {
+  const record = Effect.fn("WorkspaceCommands.record")(function* (result: ReadyWorktree) {
     if (result.path !== result.folder) yield* registry.addWorktree({ folder: result.folder, path: result.path, branch: result.branch ?? "" });
     return result;
   });
-  const act = (session: PiSession, action: SessionAction) => Effect.gen(function* () {
+  const act = Effect.fn("WorkspaceCommands.act")(function* (session: PiSession, action: SessionAction) {
     if (action._tag === "prompt" || action._tag === "steer") yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, action.text);
     return yield* session.act(action);
   });
@@ -85,7 +85,7 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
       Effect.andThen(listWorktrees(folder)),
       Effect.catchTag("RegistryLookupError", e => Effect.succeed({ status: "error" as const, observedAt: new Date().toISOString(), detail: e.detail }))),
 
-    setTrust: (path, trusted) => Effect.gen(function* () {
+    setTrust: Effect.fn("WorkspaceCommands.setTrust")(function* (path, trusted) {
       // Pi's resources for this directory, and so its models and commands, change for sessions started from now.
       const decision = yield* facts.setTrust(path, trusted);
       // Trust lives in Pi's store, not the registry, so the sidebar hears of it here.
@@ -98,7 +98,7 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
 
     act,
 
-    addWorktree: (folder, path) => Effect.gen(function* () {
+    addWorktree: Effect.fn("WorkspaceCommands.addWorktree")(function* (folder, path) {
       yield* registered(folder);
       const discovery = yield* listWorktrees(folder);
       if (discovery.status !== "ready") return yield* new WorktreeError({ detail: discovery.status === "error" ? discovery.detail : "This folder is non-Git." });
@@ -107,13 +107,13 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
       return yield* record({ status: "ready", folder, path: w.path, branch: w.branch });
     }),
 
-    createWorktree: (folder, branch, options) => Effect.gen(function* () {
+    createWorktree: Effect.fn("WorkspaceCommands.createWorktree")(function* (folder, branch, options) {
       yield* registered(folder);
       const w = yield* createWorktree(folder, branch.trim(), { hooks: options.hooks });
       return yield* record({ status: "ready", folder, path: w.path, branch: w.branch, creation: { baseBranch: w.baseBranch, hooks: w.hooks } });
     }),
 
-    createSession: (request, client) => Effect.gen(function* () {
+    createSession: Effect.fn("WorkspaceCommands.createSession")(function* (request, client) {
       if (request.projectId) yield* registry.requireActiveProject(request.projectId);
       const cwd = yield* registry.ensureFolder(request.cwd);
       const { model, thinkingLevel, name } = request.options;
@@ -127,7 +127,7 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
       return session;
     }),
 
-    renameSession: (cwd, sessionId, title) => Effect.gen(function* () {
+    renameSession: Effect.fn("WorkspaceCommands.renameSession")(function* (cwd, sessionId, title) {
       // The host releases a session started only for this once it is idle.
       const session = (yield* hosts.get(cwd, sessionId)) ?? (yield* hosts.open({ cwd, sessionId }));
       yield* session.act({ _tag: "set_name", name: title });

@@ -4,7 +4,7 @@ import { Data, Deferred, type Duration, Effect, Queue, Stream } from "effect";
 
 export class DeliveryOverflow extends Data.TaggedError("DeliveryOverflow")<{ readonly detail: string; readonly oversized: boolean }> {}
 
-export const makeDelivery = <A>(limits = { messages: 256, bytes: 8 * 1024 * 1024 }) => Effect.gen(function* () {
+export const makeDelivery = Effect.fnUntraced(function* <A>(limits = { messages: 256, bytes: 8 * 1024 * 1024 }) {
   const queue = yield* Queue.dropping<{ value: A; bytes: number }>(limits.messages);
   const failed = yield* Deferred.make<never, DeliveryOverflow>();
   let bytes = 0, stopped = false;
@@ -59,11 +59,11 @@ export const socketLimits = {
  * the reason and close code; the caller closes the socket. Requires a Scope that
  * outlives delivery; the writer fiber and acknowledgement deadlines live in it.
  */
-export const makeSocketDelivery = <A, E>(
+export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
   write: (text: string) => Effect.Effect<void, E>,
   encode: (value: A, deliveryId: number) => string,
   limits = socketLimits,
-) => Effect.gen(function* () {
+) {
   const closedWith = yield* Deferred.make<SocketClose>();
   const close = (reason: string, code: number = CloseCode.tryAgainLater) =>
     Deferred.succeed(closedWith, { reason, code }).pipe(Effect.asVoid);
@@ -94,7 +94,7 @@ export const makeSocketDelivery = <A, E>(
     /** Never blocks the producer; overflow closes delivery instead. */
     offer: outbox.offer,
     /** Cumulative: acknowledges every pending frame up to `id`. Unknown or stale IDs are ignored. */
-    ack: (id: number) => Effect.gen(function* () {
+    ack: Effect.fnUntraced(function* (id: number) {
       if (!pending.has(id)) return;
       for (const [pendingId, item] of pending) if (pendingId <= id) {
         pending.delete(pendingId); pendingBytes -= item.bytes;

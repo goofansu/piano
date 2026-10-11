@@ -25,7 +25,7 @@ const git = (cwd: string, args: string[], timeout = 20_000): Effect.Effect<strin
     Effect.map(result => result.stdout.toString()),
     Effect.mapError(e => new WorktreeError({ detail: e.message })),
   );
-const wt = (folder: string, args: string[], timeout?: number) => Effect.gen(function* () {
+const wt = Effect.fn("Worktrees.wt")(function* (folder: string, args: string[], timeout?: number) {
   const command = yield* WorktrunkCommand;
   return yield* run(command, ["-C", folder, ...args], timeout);
 });
@@ -57,7 +57,7 @@ const json = <T, E>(schema: Schema.Codec<T, E>, text: string) => Effect.try({
 });
 
 /** Positively distinguish non-Git directories from broken/inaccessible repository metadata. */
-const isGit = (path: string) => Effect.gen(function* () {
+const isGit = Effect.fn("Worktrees.isGit")(function* (path: string) {
   const metadata = yield* Effect.tryPromise({
     try: async () => {
       let dir = await realpath(path);
@@ -105,7 +105,7 @@ function parseWorktrees(out: string): WorktreeFacts[] | undefined {
 }
 
 /** No healthy fallback and no registry writes. Each call is a fresh point-in-time observation. */
-export const listWorktrees = (folder: string): Effect.Effect<WorktreeDiscovery> => Effect.gen(function* () {
+export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (folder: string): Effect.fn.Return<WorktreeDiscovery> {
   const observedAt = new Date().toISOString();
   return yield* Effect.gen(function* () {
     if (!(yield* isGit(folder))) return { status: "non-git" as const, observedAt };
@@ -123,7 +123,7 @@ export const listWorktrees = (folder: string): Effect.Effect<WorktreeDiscovery> 
 });
 
 /** New branches only. No prose-based retry of a possibly partially completed operation. */
-export const createWorktree = (folder: string, branch: string, options: { hooks?: boolean } = {}) => Effect.gen(function* () {
+export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (folder: string, branch: string, options: { hooks?: boolean } = {}) {
   yield* compatible;
   if (!(yield* isGit(folder))) return yield* new WorktreeError({ detail: "This folder is non-Git. Create a Git repository before creating a worktree." });
   // Reject shortcuts/options before passing a branch name to Worktrunk.
@@ -134,4 +134,4 @@ export const createWorktree = (folder: string, branch: string, options: { hooks?
   const result = yield* json(Created, yield* wt(folder, ["switch", "--create", branch, "--format=json", "--no-cd", ...(options.hooks ? [] : ["--no-hooks"])], 60_000));
   if (!isAbsolute(result.path) || result.branch !== branch || !result.base_branch) return yield* new WorktreeError({ detail: "Worktrunk returned an unexpected creation identity. Inspect discovery before retrying." });
   return { path: result.path, branch: result.branch, baseBranch: result.base_branch, hooks: options.hooks ? "enabled" as const : "skipped" as const };
-}).pipe(Effect.mapError((e) => new WorktreeError({ detail: `${e.detail}\nCreation was not confirmed; a checkout may remain after a hook or transport failure. Refresh discovery before retrying. For unapproved hooks, review and approve them with wt config approvals in a terminal, or explicitly leave hooks off.` })));
+}, Effect.mapError((e) => new WorktreeError({ detail: `${e.detail}\nCreation was not confirmed; a checkout may remain after a hook or transport failure. Refresh discovery before retrying. For unapproved hooks, review and approve them with wt config approvals in a terminal, or explicitly leave hooks off.` })));

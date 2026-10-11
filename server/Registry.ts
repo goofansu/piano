@@ -151,7 +151,7 @@ export const RegistryLive = Layer.effect(
     const state = yield* Ref.make(yield* Effect.try({ try: () => decode(database.data), catch: e => recovery(path, e) }));
     const lock = yield* Semaphore.make(1);
     const listeners = new Set<RegistryListener>();
-    const update = (f: (d: RegistryData) => RegistryData) => Effect.gen(function* () {
+    const update = Effect.fn("Registry.update")(function* (f: (d: RegistryData) => RegistryData) {
       const change = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         const current = yield* Ref.get(state);
         const next = yield* Effect.try({ try: () => f(current), catch: e => e instanceof RegistryError ? e : recovery(path, e) });
@@ -167,7 +167,7 @@ export const RegistryLive = Layer.effect(
       // The write is saved either way: a failing listener is logged, never reported as a failed write.
       yield* Effect.forEach([...listeners], listener => listener(change.before, change.after).pipe(
         Effect.catchCause(cause => Effect.logWarning("registry change listener failed", cause))), { discard: true });
-    }).pipe(Effect.uninterruptible);
+    }, Effect.uninterruptible);
     const now = () => new Date().toISOString();
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) => t.cwd === cwd && t.sessionId === sessionId;
 
@@ -253,7 +253,7 @@ export const RegistryLive = Layer.effect(
         if (title === entry.title && JSON.stringify(stats) === JSON.stringify(entry.stats)) return d;
         return { ...d, sessions: d.sessions.map(t => t === entry ? { ...t, title, stats } : t) };
       }),
-      setSessionPullRequest: (expected, link) => Effect.gen(function* () {
+      setSessionPullRequest: Effect.fn("Registry.setSessionPullRequest")(function* (expected, link) {
         let saved = false;
         yield* update(d => {
           const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));

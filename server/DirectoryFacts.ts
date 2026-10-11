@@ -84,14 +84,14 @@ export const DirectoryFactsLive = Layer.effect(
     const locks = new Map<string | null, Semaphore.Semaphore>();
     const changes = yield* PubSub.sliding<void>(1);
     let epoch = 0;
-    const locked = (key: string | null, refresh = false) => Effect.gen(function* () {
+    const locked = Effect.fn("DirectoryFacts.locked")(function* (key: string | null, refresh = false) {
       let lock = locks.get(key);
       if (!lock) { lock = yield* Semaphore.make(1); locks.set(key, lock); }
       return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() =>
         !refresh && cache.has(key) ? Effect.succeed(cache.get(key)!) : load(key)));
     });
 
-    const load = (key: string | null): Effect.Effect<ModelCatalog> => Effect.gen(function* () {
+    const load: (key: string | null) => Effect.Effect<ModelCatalog> = Effect.fn("DirectoryFacts.load")(function* (key: string | null) {
       const loadingEpoch = epoch;
       const cwd = key ?? homedir();
       const probe = yield* sessions.probe(cwd, { globalSettingsOnly: key === null });
@@ -119,7 +119,7 @@ export const DirectoryFactsLive = Layer.effect(
       };
       cache.set(key, catalog);
       return catalog;
-    }).pipe(
+    }, (effect, key) => effect.pipe(
       Effect.catchTag("PiSessionError", (e) => {
         const failed: ModelCatalog = { cwd: key ?? homedir(), models: [], fetchedAt: new Date().toISOString(), error: e.detail };
         return Effect.succeed(failed);
@@ -131,7 +131,7 @@ export const DirectoryFactsLive = Layer.effect(
           ? Effect.logWarning(`model catalog: ${c.error}`)
           : Effect.logInfo(`${c.models.length} models available, default ${c.defaultModel ?? "(none)"}`),
       ),
-    );
+    ));
 
     const invalidate = Effect.sync(() => { epoch++; cache.clear(); }).pipe(Effect.andThen(PubSub.publish(changes, undefined)), Effect.asVoid);
     const trust = (raw: string) => {
@@ -144,7 +144,7 @@ export const DirectoryFactsLive = Layer.effect(
       trust,
       catalog,
       global: locked(null),
-      commands: (raw, sessionId) => Effect.gen(function* () {
+      commands: Effect.fn("DirectoryFacts.commands")(function* (raw, sessionId) {
         const cwd = directoryPath(raw);
         if (sessionId) {
           const session = yield* hosts.get(cwd, sessionId);
@@ -157,7 +157,7 @@ export const DirectoryFactsLive = Layer.effect(
         if (probed.error) return yield* new DirectoryCommandsError({ reason: "unavailable", detail: probed.error });
         return probed.commands ?? [];
       }),
-      setTrust: (raw, trusted) => Effect.gen(function* () {
+      setTrust: Effect.fn("DirectoryFacts.setTrust")(function* (raw, trusted) {
         const cwd = directoryPath(raw);
         yield* setProjectTrust(cwd, trusted);
         // Pi resolves trust from the nearest saved ancestor, so a decision here can change any

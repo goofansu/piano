@@ -321,7 +321,7 @@ const openSession = (spec: PiSessionSpec) =>
     let sequence = 0;
     const cursor = () => ({ cwd: spec.cwd, sessionId: spec.sessionId, generation, sequence });
     // All callers hold the snapshot lock. Never await a consumer here.
-    const publish = (event: SessionEvent) => Effect.gen(function* () {
+    const publish = Effect.fnUntraced(function* (event: SessionEvent) {
       yield* Ref.update(snapshotRef, snapshot => applySessionEvent(snapshot, event));
       sequence++;
       const frame: SessionFrame = { ...projectDisplay(event), cursor: cursor() };
@@ -349,7 +349,7 @@ const openSession = (spec: PiSessionSpec) =>
       );
 
     /** Merge state fields; callers hold the snapshot lock. */
-    const mergeState = (patch: Partial<SessionState>) => Effect.gen(function* () {
+    const mergeState = Effect.fnUntraced(function* (patch: Partial<SessionState>) {
       const current = yield* stateOf;
       const next = { ...current, ...patch };
       if (isWorking(next) || next.model !== current.model) next.contextIsLastKnown = true;
@@ -361,7 +361,7 @@ const openSession = (spec: PiSessionSpec) =>
       Semaphore.withPermits(lock, 1)(Effect.suspend(() => mergeState(typeof patch === "function" ? patch() : patch)));
 
     /** All terminal paths compete under the snapshot lock, before any transport yield. */
-    const resolveDialog = (dialog: Dialog, reason: DialogResolution["reason"], response?: Record<string, unknown>) => Effect.gen(function* () {
+    const resolveDialog = Effect.fn("PiSessions.resolveDialog")(function* (dialog: Dialog, reason: DialogResolution["reason"], response?: Record<string, unknown>) {
       const resolution = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         if (!(yield* dialogsOf).some(open => open.id === dialog.id)) return;
         const now = yield* Clock.currentTimeMillis;
@@ -430,7 +430,7 @@ const openSession = (spec: PiSessionSpec) =>
      * activity with get_state.isStreaming (which describes the low-level run).
      * Neither a stale observation nor an old command may overwrite newer facts.
      */
-    const refreshState = (operation: number) => Effect.gen(function* () {
+    const refreshState = Effect.fn("PiSessions.refreshState")(function* (operation: number) {
       if (operation !== operationVersion) return;
       const versions = { ...factVersions };
       const raw = (yield* child.request({ type: "get_state" })) as RawState;
@@ -442,7 +442,7 @@ const openSession = (spec: PiSessionSpec) =>
         for (const field of metadataFields) if (versions[field] === factVersions[field]) patch[field] = observed[field];
         return { ...patch, stateRefreshError: undefined };
       });
-    }).pipe(Effect.catchTag("PiSessionError", error => announced || operation !== operationVersion ? Effect.void : patchState({ stateRefreshError: `Session state refresh failed: ${error.detail}` })));
+    }, (effect, operation) => effect.pipe(Effect.catchTag("PiSessionError", error => announced || operation !== operationVersion ? Effect.void : patchState({ stateRefreshError: `Session state refresh failed: ${error.detail}` }))));
 
     /** Replace current context, never concatenate raw history. Retry readbacks
      * raced by Pi output; bound churn and make an unresolved projection visible.
@@ -468,7 +468,7 @@ const openSession = (spec: PiSessionSpec) =>
     const refreshers: Record<RefreshKind, Effect.Effect<void>> = { stats: refreshStats, context: refreshContext, state: Effect.suspend(() => refreshState(operationVersion)) };
     const refreshing = new Set<RefreshKind>();
     const requested = new Set<RefreshKind>();
-    const scheduleRefresh = (...kinds: ReadonlyArray<RefreshKind>) => Effect.gen(function* () {
+    const scheduleRefresh = Effect.fnUntraced(function* (...kinds: ReadonlyArray<RefreshKind>) {
       for (const kind of kinds) {
         requested.add(kind);
         if (refreshing.has(kind)) continue;
