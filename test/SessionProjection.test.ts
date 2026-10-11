@@ -53,6 +53,26 @@ test('content-indexed endings replace drafts and cumulative usage is not added',
   }).pipe(Effect.timeout('5 seconds'), Effect.scoped));
 });
 
+test('readback replies of the wrong shape surface as refresh errors and recover, never as defects', async () => {
+  await run(Effect.gen(function* () {
+    const session = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: 'projection' });
+    const settledState = (pred: (state: SessionState) => boolean) => Effect.gen(function* () {
+      for (;;) { const state = yield* session.state; if (pred(state)) return state; yield* Effect.sleep('20 millis'); }
+    });
+    yield* observe(session, '/readbacks-malformed');
+    const failed = yield* settledState(s => s.statsRefreshError !== undefined);
+    assert.equal(failed.projectionError, 'Current context refresh failed: Pi returned an invalid message history.');
+    assert.equal(failed.stateRefreshError, 'Session state refresh failed: Pi returned an invalid session state.');
+    assert.equal(failed.statsRefreshError, 'Usage refresh failed: Pi returned invalid session statistics.');
+    assert.equal(failed.model, 'router/auto', 'a malformed readback keeps the last facts');
+    yield* observe(session, '/refresh-recover');
+    const recovered = yield* settledState(s => s.statsRefreshError === undefined);
+    assert.equal(recovered.projectionError, undefined);
+    assert.equal(recovered.stateRefreshError, undefined);
+    assert.equal(recovered.cost, 1.23);
+  }).pipe(Effect.timeout('5 seconds'), Effect.scoped));
+});
+
 test('safe live/reload output retains tools and extension state without inventing transcript or usage', async () => {
   const secret = 'P3SecretCanary-123456789';
   process.env.PIANO_TEST_SECRET = secret;

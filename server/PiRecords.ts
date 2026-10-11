@@ -1,14 +1,15 @@
 /**
  * Pi-only translation: every Pi record, readback and history message becomes the browser's wire
  * vocabulary here, with content-indexed reconstruction of streaming output. Originals stay in Pi.
- * Outbound, browser actions become Pi's CLI arguments and RPC commands here. PiSessions owns the
- * child, locking, publication and readback scheduling; it never inspects or builds a record's
- * fields itself.
+ * Outbound, browser actions become Pi's CLI arguments and RPC commands here, and each readback
+ * names its query and decodes its reply, so a reply of the wrong shape is a protocol failure.
+ * PiSessions owns the child, locking, publication and readback scheduling; it never inspects or
+ * builds a record's fields itself.
  */
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import { imageType } from '../shared/attachments.ts';
 import type { Dialog, ModelChoice, QueuedMessage, RenderMsg, RunUsage, SessionAction, SessionEvent, SessionState, SubagentCard, ThinkingLevel, ToolExecution, Usage } from '../shared/wire.ts';
-import { Attachments, SlashCommand } from '../shared/wire.ts';
+import { Attachments, ContextUsage, SessionStats, SlashCommand } from '../shared/wire.ts';
 import { projectDisplay, redactDisplay } from './DisplayProjection.ts';
 import { imagePreview } from './ImagePreviews.ts';
 
@@ -42,7 +43,7 @@ export interface RawMessage {
   customType?: string;
   command?: string;
   output?: string;
-  nestedCalls?: { complete: boolean; calls: { id: string; name: string; arguments?: unknown; status: 'ok' | 'error' | 'unfinished' }[] };
+  nestedCalls?: { complete: boolean; calls: { id: string; name: string; arguments?: unknown; status: string }[] };
   details?: unknown;
 }
 const argsOf = (args: unknown) => args === undefined ? '' : JSON.stringify(args, null, 2);
@@ -274,23 +275,50 @@ type Block = { type: 'text'; text: string } | { type: 'tool'; id: string; name: 
 
 // ── Readbacks ────────────────────────────────────────────────────────────────
 
-/** Pi's `get_state` reply. */
-export interface RawState {
-  model?: { provider: string; id: string };
-  thinkingLevel?: string;
-  isStreaming: boolean;
-  isCompacting?: boolean;
-  sessionFile?: string;
-  sessionId: string;
-  sessionName?: string;
+/**
+ * A Pi query and the decoding of its reply. `decode` returns undefined when the reply breaks the
+ * protocol, which the caller reports as `invalid` rather than trusting the shape.
+ */
+export interface PiReadback<A> {
+  readonly command: PiCommand;
+  readonly decode: (data: unknown) => A | undefined;
+  readonly invalid: string;
 }
 
-/** Pi's `get_session_stats` reply. */
-export interface RawStats {
-  cost?: number;
-  tokens?: SessionState['tokens'];
-  contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
-}
+/** The `get_state` facts Piano reads; Pi's other state fields stay in Pi. */
+const RawState = Schema.Struct({
+  model: Schema.optional(Schema.Struct({ provider: Schema.String, id: Schema.String })),
+  thinkingLevel: Schema.optional(Schema.String),
+  isStreaming: Schema.Boolean,
+  isCompacting: Schema.optional(Schema.Boolean),
+  sessionFile: Schema.optional(Schema.String),
+  sessionId: Schema.String,
+  sessionName: Schema.optional(Schema.String),
+});
+export type RawState = typeof RawState.Type;
+
+/** The `get_session_stats` figures Piano shows; Pi's message counts stay in Pi. */
+const RawStats = Schema.Struct({
+  cost: Schema.optional(Schema.Number),
+  tokens: SessionStats.fields.tokens,
+  contextUsage: Schema.optional(ContextUsage),
+});
+
+/** What serializeMessage dereferences on a message it displays; other fields it reads defensively. */
+const DisplayedMessage = Schema.Struct({
+  content: Schema.optional(Schema.Union([Schema.String, Schema.Array(Schema.Struct({ type: Schema.String }))])),
+  nestedCalls: Schema.optional(Schema.Struct({
+    complete: Schema.Boolean,
+    calls: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String, status: Schema.String })),
+  })),
+});
+const DISPLAYED_ROLES = new Set(['user', 'assistant', 'toolResult', 'custom']);
+/** Extensions may add message roles of their own shape; only a role is asked of those. */
+const isRawMessage = (value: unknown): value is RawMessage => {
+  const message = recordOf(value);
+  return !!message && typeof message.role === 'string' && (!DISPLAYED_ROLES.has(message.role) || Schema.is(DisplayedMessage)(message));
+};
+const fieldOf = (data: unknown, field: string) => recordOf(data)?.[field];
 
 /** The facts any Pi state source establishes: a live readback, or a session file read without Pi. */
 export const stateFactsOf = (raw: RawState) => ({
@@ -301,8 +329,6 @@ export const stateFactsOf = (raw: RawState) => ({
   thinkingLevel: raw.thinkingLevel,
   isStreaming: raw.isStreaming,
 });
-
-export const statsOf = (raw: RawStats) => ({ context: raw.contextUsage, cost: raw.cost, tokens: raw.tokens });
 
 /** Pi's steering and follow-up queue, from `queue_update` or `clear_queue`. Undefined when malformed. */
 export const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
@@ -317,7 +343,7 @@ export const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> |
 };
 
 /** Keep Pi's execution precedence, exposing only browser-useful catalog fields. Undefined when malformed. */
-export const commandsOf = (data: unknown): ReadonlyArray<SlashCommand> | undefined => {
+const commandsOf = (data: unknown): ReadonlyArray<SlashCommand> | undefined => {
   const commands = (data as { commands?: unknown } | undefined)?.commands;
   if (!Schema.is(Schema.Array(SlashCommand))(commands)) return;
   const unique = new Map<string, SlashCommand>();
@@ -382,6 +408,53 @@ export const modelChoicesOf = (data: unknown, enabledPatterns: ReadonlyArray<str
   });
 };
 
+/** Every Pi readback Piano sends: the query, and how its reply decodes. */
+export const piReadbacks = {
+  /** Live state; also a session's ready check. */
+  state: {
+    command: { type: 'get_state' },
+    decode: data => Option.getOrUndefined(Schema.decodeUnknownOption(RawState)(data)),
+    invalid: 'Pi returned an invalid session state.',
+  } satisfies PiReadback<RawState>,
+  /** Authoritative current context, replacing any projected history. */
+  messages: {
+    command: { type: 'get_messages' },
+    decode: data => {
+      const messages = fieldOf(data, 'messages');
+      return Array.isArray(messages) && messages.every(isRawMessage) ? messages : undefined;
+    },
+    invalid: 'Pi returned an invalid message history.',
+  } satisfies PiReadback<ReadonlyArray<RawMessage>>,
+  /** Context use, billed cost and token totals. */
+  stats: {
+    command: { type: 'get_session_stats' },
+    decode: data => Option.getOrUndefined(Option.map(Schema.decodeUnknownOption(RawStats)(data),
+      raw => ({ context: raw.contextUsage, cost: raw.cost, tokens: raw.tokens }))),
+    invalid: 'Pi returned invalid session statistics.',
+  } satisfies PiReadback<Pick<SessionState, 'context' | 'cost' | 'tokens'>>,
+  /** Session entries after `since`, or all of them; RunLedger reads each entry defensively. */
+  entries: (since?: string): PiReadback<ReadonlyArray<unknown>> => ({
+    command: { type: 'get_entries', ...(since ? { since } : {}) },
+    decode: data => {
+      const entries = fieldOf(data, 'entries');
+      return Array.isArray(entries) ? entries : undefined;
+    },
+    invalid: 'Pi returned invalid session entries.',
+  }),
+  /** Slash commands in invocation precedence. */
+  commands: {
+    command: { type: 'get_commands' },
+    decode: commandsOf,
+    invalid: 'Pi returned an invalid command catalog.',
+  } satisfies PiReadback<ReadonlyArray<SlashCommand>>,
+  /** Model choices, scoped in by Pi's `enabledModels` patterns. */
+  models: (enabledPatterns: ReadonlyArray<string>): PiReadback<ReadonlyArray<ModelChoice>> => ({
+    command: { type: 'get_available_models' },
+    decode: data => modelChoicesOf(data, enabledPatterns),
+    invalid: 'Pi returned an invalid model catalog.',
+  }),
+};
+
 // ── Outbound commands ────────────────────────────────────────────────────────
 
 /** Pi's CLI arguments for opening a session after `--mode rpc`. */
@@ -395,7 +468,7 @@ export const sessionArgs = (spec: { sessionId: string; sessionFile?: string; mod
 /** One RPC record for Pi's stdin; the transport adds the request id. */
 export type PiCommand = { readonly type: string; readonly [key: string]: unknown };
 
-/** A browser action as Pi's command, or why it cannot be sent; Stop has no single Pi command. */
+/** A browser action as Pi's command, or why it cannot be sent. Stop has no single Pi command; listing commands is a readback. */
 export type PiTranslation = { readonly command: PiCommand } | { readonly rejected: string };
 
 const imagesValid = (attachments: unknown) => Schema.is(Attachments)(attachments) && !attachments.some(a => {
@@ -408,10 +481,9 @@ export const dialogCancellation = (id: string): PiCommand => ({ type: 'extension
 
 /** An answer translates against the open dialog it targets. */
 export function piCommandFor(action: Extract<SessionAction, { _tag: 'answer' }>, dialog: Dialog): PiTranslation;
-export function piCommandFor(action: Exclude<SessionAction, { _tag: 'stop' | 'answer' }>): PiTranslation;
-export function piCommandFor(action: Exclude<SessionAction, { _tag: 'stop' }>, dialog?: Dialog): PiTranslation {
+export function piCommandFor(action: Exclude<SessionAction, { _tag: 'stop' | 'answer' | 'commands' }>): PiTranslation;
+export function piCommandFor(action: Exclude<SessionAction, { _tag: 'stop' | 'commands' }>, dialog?: Dialog): PiTranslation {
   switch (action._tag) {
-    case 'commands': return { command: { type: 'get_commands' } };
     case 'abort': return { command: { type: 'abort' } };
     case 'restore_queue': return { command: { type: 'clear_queue' } };
     case 'set_thinking_level': return { command: { type: 'set_thinking_level', level: action.level } };

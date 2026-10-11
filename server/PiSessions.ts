@@ -22,7 +22,7 @@ import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { PiCli } from "./PiCli.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
-import { commandsOf, dialogCancellation, dispositionOf, modelChoicesOf, type PiCommand, PiProjector, type PiRecord, type PiTranslation, piCommandFor, queuedMessagesOf, type RawMessage, type RawState, type RawStats, type RefreshKind, sessionArgs, stateFactsOf, statsOf } from "./PiRecords.ts";
+import { dialogCancellation, dispositionOf, type PiCommand, PiProjector, type PiReadback, type PiRecord, type PiTranslation, piCommandFor, piReadbacks, queuedMessagesOf, type RefreshKind, sessionArgs, stateFactsOf } from "./PiRecords.ts";
 import { RunLedger } from "./RunLedger.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
@@ -82,11 +82,6 @@ export class PiSessions extends Context.Service<
 
 // ── Implementation ───────────────────────────────────────────────────────────
 
-const catalogOf = (data: unknown): Effect.Effect<ReadonlyArray<SlashCommand>, PiSessionError> => {
-  const commands = commandsOf(data);
-  return commands ? Effect.succeed(commands) : Effect.fail(new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid command catalog." }));
-};
-
 const commandOf = (translation: PiTranslation): Effect.Effect<PiCommand, PiSessionError> =>
   "rejected" in translation ? Effect.fail(new PiSessionError({ reason: "rejected", detail: translation.rejected })) : Effect.succeed(translation.command);
 
@@ -114,6 +109,8 @@ const settled = ({ state, dialogs }: Snapshot) => dialogs.length === 0 && !isWor
 /** A spawned Pi child with request correlation. Everything above builds on `request` and `records`. */
 interface Child {
   readonly request: (command: Record<string, unknown>, dispatched?: Deferred.Deferred<void>) => Effect.Effect<unknown, PiSessionError>;
+  /** A readback's query, its reply decoded; a reply of the wrong shape fails as "protocol". */
+  readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
   readonly write: (record: Record<string, unknown>) => Effect.Effect<void, PiSessionError>;
   /** Every non-response record, in stdout order. Ends when the child exits. */
   readonly records: Queue.Dequeue<{ record: PiRecord; receivedAt: number }, Cause.Done>;
@@ -275,7 +272,12 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         );
       });
 
-    const child: Child = { request, write, records, exited, observationVersion: () => observationVersion,
+    const read = <A>(readback: PiReadback<A>) => request(readback.command).pipe(Effect.flatMap((data) => {
+      const value = readback.decode(data);
+      return value === undefined ? Effect.fail(new PiSessionError({ reason: "protocol", detail: readback.invalid })) : Effect.succeed(value);
+    }));
+
+    const child: Child = { request, read, write, records, exited, observationVersion: () => observationVersion,
       hasPendingWork: () => pending.size > 0 || writes.size > 0 || uncertainMutation || uncertainWrite,
     };
     return child;
@@ -290,8 +292,8 @@ const openSession = (spec: PiSessionSpec) =>
 
     // Ready check and initial transcript. Both race the child exiting early.
     const initial = yield* Effect.all([
-      child.request({ type: "get_state" }),
-      child.request({ type: "get_messages" }),
+      child.read(piReadbacks.state),
+      child.read(piReadbacks.messages),
     ]).pipe(
       // Readiness failure wins too: race waits for a first success and would
       // suppress a deadline until a still-live child eventually exits.
@@ -302,12 +304,12 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
     const projector = new PiProjector({ generation, recoveryMs });
-    const opened = projector.state(initial[0] as RawState);
+    const opened = projector.state(initial[0]);
     if (opened.sessionId !== spec.sessionId) return yield* new PiSessionError({ reason: "protocol", detail: "Pi opened a different session ID. History was not merged; check the saved reference." });
     // Everything a subscriber's snapshot holds except host observations, kept by the shared fold.
     const snapshotRef = yield* Ref.make<Snapshot>({
       state: { ...opened, ...spec.lastKnownStats, contextIsLastKnown: true },
-      messages: projector.history(((initial[1] as { messages?: RawMessage[] }).messages ?? []) as RawMessage[], "m"),
+      messages: projector.history(initial[1], "m"),
       dialogs: [],
       tools: [],
     });
@@ -405,8 +407,7 @@ const openSession = (spec: PiSessionSpec) =>
     /** Run usage from entries Pi appended since the last read. Only the stats worker reads. */
     const ledger = new RunLedger();
     const readRuns = Effect.gen(function* () {
-      const entries = (since?: string) => child.request({ type: "get_entries", ...(since ? { since } : {}) }).pipe(
-        Effect.map(data => (data as { entries?: unknown[] } | undefined)?.entries ?? []));
+      const entries = (since?: string) => child.read(piReadbacks.entries(since));
       const since = ledger.since;
       // A session that no longer holds the last entry read is counted afresh.
       ledger.add(yield* entries(since).pipe(Effect.catchTag("PiSessionError", error => since
@@ -424,7 +425,7 @@ const openSession = (spec: PiSessionSpec) =>
       const outputVersion = child.observationVersion();
       yield* patchState({ contextIsLastKnown: true });
       yield* Effect.gen(function* () {
-        const stats = statsOf((yield* child.request({ type: "get_session_stats" })) as RawStats);
+        const stats = yield* child.read(piReadbacks.stats);
         const statsUpdatedAt = yield* Clock.currentTimeMillis;
         const current = () => version === statsVersion && modelVersion === factVersions.model && !announced;
         yield* patchState(() => current()
@@ -445,7 +446,7 @@ const openSession = (spec: PiSessionSpec) =>
     const refreshState = Effect.fn("PiSessions.refreshState")(function* (operation: number) {
       if (operation !== operationVersion) return;
       const versions = { ...factVersions };
-      const raw = (yield* child.request({ type: "get_state" })) as RawState;
+      const raw = yield* child.read(piReadbacks.state);
       yield* patchState(() => {
         if (operation !== operationVersion || announced) return {};
         const observed = stateFactsOf(raw);
@@ -463,11 +464,11 @@ const openSession = (spec: PiSessionSpec) =>
       const version = ++contextVersion;
       for (let attempt = 0; attempt < 3; attempt++) {
         const outputVersion = child.observationVersion();
-        const data = (yield* child.request({ type: "get_messages" })) as { messages: RawMessage[] };
+        const messages = yield* child.read(piReadbacks.messages);
         if (version !== contextVersion || announced) return;
         const applied = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
           if (version !== contextVersion || outputVersion !== child.observationVersion() || announced) return false;
-          yield* publish({ _tag: "context", messages: projector.history(data.messages) });
+          yield* publish({ _tag: "context", messages: projector.history(messages) });
           return true;
         }));
         if (applied) return yield* patchState({ projectionError: undefined });
@@ -582,7 +583,7 @@ const openSession = (spec: PiSessionSpec) =>
           ? ++operationVersion : operationVersion;
         switch (action._tag) {
           case "commands":
-            return { _tag: "commands", commands: yield* child.request(yield* commandOf(piCommandFor(action))).pipe(Effect.flatMap(catalogOf)) };
+            return { _tag: "commands", commands: yield* child.read(piReadbacks.commands) };
           case "prompt":
           case "steer": {
             const command = yield* commandOf(piCommandFor(action));
@@ -718,9 +719,9 @@ const probe = (cwd: string, options?: { globalSettingsOnly?: boolean }): Effect.
   Effect.gen(function* () {
     const child = yield* spawnChild(["--no-session", ...(options?.globalSettingsOnly ? ["--no-approve"] : [])], cwd);
     const [models, state, commands] = yield* Effect.all([
-      child.request({ type: "get_available_models" }),
-      child.request({ type: "get_state" }),
-      child.request({ type: "get_commands" }).pipe(Effect.flatMap(catalogOf)),
+      child.read(piReadbacks.models(options?.globalSettingsOnly ? [] : enabledModelPatterns(cwd))),
+      child.read(piReadbacks.state),
+      child.read(piReadbacks.commands),
     ]).pipe(
       Effect.raceFirst(
         Deferred.await(child.exited).pipe(
@@ -728,12 +729,10 @@ const probe = (cwd: string, options?: { globalSettingsOnly?: boolean }): Effect.
         ),
       ),
     );
-    const choices = modelChoicesOf(models, options?.globalSettingsOnly ? [] : enabledModelPatterns(cwd));
-    if (!choices) return yield* new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid model catalog." });
-    const facts = stateFactsOf(state as RawState);
+    const facts = stateFactsOf(state);
     return {
       commands,
-      models: choices,
+      models,
       defaultModel: facts.model,
       defaultThinkingLevel: facts.thinkingLevel,
     };
