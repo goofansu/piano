@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import type { Snapshot } from "../shared/wire.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { sessionDirFor } from "./PiEnv.ts";
-import { type RawMessage, serializeMessages } from "./PiRecords.ts";
+import { type RawMessage, serializeMessages, stateFactsOf } from "./PiRecords.ts";
 
 export interface SessionSummary {
   sessionId: string;
@@ -51,10 +51,10 @@ export const peekSession = (path: string, sessionId: string): Effect.Effect<Snap
     // is recorded separately; this read-only peek cannot check whether a virtual
     // model is still registered. The next CLI open confirms/falls back itself.
     const selection = sm.getBranch().findLast(entry => entry.type === "model_change");
-    const model = selection?.type === "model_change" ? `${selection.provider}/${selection.modelId}`
-      : context.model ? `${context.model.provider}/${context.model.modelId}` : undefined;
+    const model = selection?.type === "model_change" ? { provider: selection.provider, id: selection.modelId }
+      : context.model ? { provider: context.model.provider, id: context.model.modelId } : undefined;
     return projectDisplay({
-      state: { sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel: context.thinkingLevel, isStreaming: false },
+      state: stateFactsOf({ sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel: context.thinkingLevel, isStreaming: false }),
       messages: serializeMessages(context.messages as RawMessage[]),
       dialogs: [],
     });

@@ -1,5 +1,12 @@
-/** Pi-only translation and content-indexed reconstruction. Originals stay in Pi. */
-import type { RenderMsg, SessionEvent, SubagentCard, ToolExecution, Usage } from '../shared/wire.ts';
+/**
+ * Pi-only translation: every Pi record, readback and history message becomes the browser's wire
+ * vocabulary here, with content-indexed reconstruction of streaming output. Originals stay in Pi.
+ * PiSessions owns the child, locking, publication and readback scheduling; it never inspects a
+ * record's fields itself.
+ */
+import { Schema } from 'effect';
+import type { Dialog, QueuedMessage, RenderMsg, SessionEvent, SessionState, SubagentCard, ToolExecution, Usage } from '../shared/wire.ts';
+import { SlashCommand } from '../shared/wire.ts';
 import { projectDisplay, redactDisplay } from './DisplayProjection.ts';
 import { imagePreview } from './ImagePreviews.ts';
 
@@ -251,20 +258,213 @@ interface MessageEventRecord extends PiRecord {
 }
 type Block = { type: 'text'; text: string } | { type: 'tool'; id: string; name: string; args: string };
 
-export class StreamAssembler {
+// ── Readbacks ────────────────────────────────────────────────────────────────
+
+/** Pi's `get_state` reply. */
+export interface RawState {
+  model?: { provider: string; id: string };
+  thinkingLevel?: string;
+  isStreaming: boolean;
+  isCompacting?: boolean;
+  sessionFile?: string;
+  sessionId: string;
+  sessionName?: string;
+}
+
+/** Pi's `get_session_stats` reply. */
+export interface RawStats {
+  cost?: number;
+  tokens?: SessionState['tokens'];
+  contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
+}
+
+/** The facts any Pi state source establishes: a live readback, or a session file read without Pi. */
+export const stateFactsOf = (raw: RawState) => ({
+  sessionId: raw.sessionId,
+  sessionFile: raw.sessionFile,
+  sessionName: raw.sessionName,
+  model: raw.model ? `${raw.model.provider}/${raw.model.id}` : undefined,
+  thinkingLevel: raw.thinkingLevel,
+  isStreaming: raw.isStreaming,
+});
+
+export const statsOf = (raw: RawStats) => ({ context: raw.contextUsage, cost: raw.cost, tokens: raw.tokens });
+
+/** Pi's steering and follow-up queue, from `queue_update` or `clear_queue`. Undefined when malformed. */
+export const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
+  if (!value || typeof value !== 'object') return;
+  const { steering, followUp } = value as { steering?: unknown; followUp?: unknown };
+  if (!Array.isArray(steering) || !Array.isArray(followUp) ||
+      ![...steering, ...followUp].every((text) => typeof text === 'string')) return;
+  return [
+    ...steering.map((text: string) => ({ kind: 'steering' as const, text })),
+    ...followUp.map((text: string) => ({ kind: 'follow-up' as const, text })),
+  ];
+};
+
+/** Keep Pi's execution precedence, exposing only browser-useful catalog fields. Undefined when malformed. */
+export const commandsOf = (data: unknown): ReadonlyArray<SlashCommand> | undefined => {
+  const commands = (data as { commands?: unknown } | undefined)?.commands;
+  if (!Schema.is(Schema.Array(SlashCommand))(commands)) return;
+  const unique = new Map<string, SlashCommand>();
+  // Extensions execute before skills and templates; skills expand before templates.
+  for (const source of ['extension', 'skill', 'prompt'] as const) for (const command of commands) {
+    if (command.source === source && !unique.has(command.name)) unique.set(command.name, {
+      name: command.name, description: command.description, source,
+    });
+  }
+  return [...unique.values()];
+};
+
+// ── Live records ─────────────────────────────────────────────────────────────
+
+/** A Pi readback a record makes due. */
+export type RefreshKind = 'stats' | 'context' | 'state';
+
+/** What one Pi record means for the session, to publish atomically in this order. */
+export interface RecordProjection {
+  /** State fields the record establishes, merged into current state before `events`. */
+  readonly state?: Partial<SessionState>;
+  readonly events: ReadonlyArray<SessionEvent>;
+  /** Readbacks to schedule after publishing; never awaited by the record consumer. */
+  readonly refresh: ReadonlyArray<RefreshKind>;
+  /** A newly opened dialog, also among `events`. The caller owns its deadline and resolution. */
+  readonly dialog?: Dialog;
+}
+
+const DIALOG_METHODS = new Set(['select', 'confirm', 'input', 'editor']);
+const EXTENSION_STATE_METHODS = new Set(['setStatus', 'setWidget', 'setTitle', 'set_editor_text']);
+const project = (events: ReadonlyArray<SessionEvent> = [], state?: Partial<SessionState>, refresh: ReadonlyArray<RefreshKind> = []): RecordProjection =>
+  ({ events, refresh, ...(state ? { state } : {}) });
+const notice = (level: 'info' | 'warning' | 'error', message: string): SessionEvent => ({ _tag: 'notice', level, message });
+
+/**
+ * One Pi child's records in the browser's vocabulary. Owns everything a record sequence
+ * implies: the streaming partial, tool executions, subagent correlation, retry flags,
+ * extension status/widgets and dialog construction. Pure and synchronous; callers serialize
+ * `record`, `history` and `closed` under their snapshot lock.
+ */
+export class PiProjector {
   private partial: RenderMsg | undefined;
   private blocks = new Map<number, Block>();
   private tools = new Map<string, ToolExecution>();
   private projection = new SubagentProjection();
   private seq = 0;
+  private turnRetry = false;
+  private summaryRetry = false;
+  private extension: NonNullable<SessionState['extension']> = { statuses: [], widgets: [] };
+  private seenDialogs = new Set<string>();
 
-  /** Seed or replace authoritative history and retain its correlation facts for
-   * subsequent live records. The messages themselves remain owned by PiSessions. */
-  serializeMessages(msgs: ReadonlyArray<RawMessage>, prefix = 'm'): RenderMsg[] {
+  /** `generation` names this child in dialog and editor request IDs; `recoveryMs` bounds a
+   * dialog without a usable Pi timeout. */
+  private readonly options: { readonly generation: string; readonly recoveryMs: number };
+  constructor(options: { readonly generation: string; readonly recoveryMs: number }) { this.options = options; }
+
+  /** Initial live state from Pi's `get_state`, before any record arrives. */
+  state(raw: RawState): SessionState {
+    return { ...stateFactsOf(raw), isCompacting: raw.isCompacting ?? false, isRetrying: false, queuedMessages: [] };
+  }
+
+  /** Seed or replace authoritative history (`get_messages`) and retain its correlation facts
+   * for subsequent live records. The messages themselves remain owned by Pi. */
+  history(msgs: ReadonlyArray<RawMessage>, prefix = 'm'): RenderMsg[] {
     return serializeWithProjection(msgs, prefix, this.projection);
   }
 
-  handle(raw: PiRecord): SessionEvent[] {
+  record(raw: PiRecord, receivedAt: number): RecordProjection {
+    switch (raw.type) {
+      case 'agent_start':
+        return project([], { isStreaming: true });
+      case 'queue_update': {
+        const messages = queuedMessagesOf(raw);
+        return project([messages ? { _tag: 'queue_update', messages } : notice('warning', 'Pi sent an invalid queue update.')]);
+      }
+      case 'agent_settled':
+        this.turnRetry = false;
+        this.summaryRetry = false;
+        return project(this.settle(), { isStreaming: false, isCompacting: false, isRetrying: false }, ['context', 'state', 'stats']);
+      case 'message_start':
+        return project(this.stream(raw), { contextIsLastKnown: true });
+      case 'message_end':
+        return project(this.stream(raw), { contextIsLastKnown: true }, ['stats']);
+      case 'compaction_start':
+        return project([notice('info', `Compacting context (${raw.reason})`)], { isCompacting: true });
+      case 'compaction_end':
+        // Pi reports null tokens/percent until fresh post-compaction usage exists.
+        return project([], { isCompacting: false }, ['context', 'stats']);
+      case 'session_info_changed':
+        return project([], { sessionName: raw.name as string | undefined });
+      case 'thinking_level_changed':
+        return project([], { thinkingLevel: raw.level as string | undefined });
+      case 'auto_retry_start':
+        this.turnRetry = true;
+        return project([notice('warning', `Retrying (${raw.attempt}/${raw.maxAttempts}): ${raw.errorMessage}`)], { isStreaming: true, isRetrying: true });
+      case 'auto_retry_end':
+        this.turnRetry = false;
+        return project([], { isRetrying: this.summaryRetry });
+      case 'summarization_retry_scheduled':
+        this.summaryRetry = true;
+        return project([notice('warning', `Retrying summary (${raw.attempt}/${raw.maxAttempts}): ${raw.errorMessage}`)], { isRetrying: true });
+      case 'summarization_retry_finished':
+        this.summaryRetry = false;
+        return project([], { isRetrying: this.turnRetry });
+      case 'extension_error':
+        return project([notice('error', `Extension error: ${raw.error}`)]);
+      case 'extension_ui_request':
+        return this.extensionUi(raw, receivedAt);
+      default:
+        return project(this.stream(raw));
+    }
+  }
+
+  /** The child is gone: no tool still running in it can finish. */
+  closed(): SessionEvent[] {
+    return this.settle();
+  }
+
+  private extensionUi(raw: PiRecord, receivedAt: number): RecordProjection {
+    const method = String(raw.method);
+    if (method === 'notify') {
+      return project([notice(raw.notifyType === 'error' ? 'error' : raw.notifyType === 'warning' ? 'warning' : 'info', String(raw.message ?? ''))]);
+    }
+    if (EXTENSION_STATE_METHODS.has(method)) {
+      const current = this.extension;
+      const extension = { ...current };
+      if (method === 'setStatus') extension.statuses = [
+        ...current.statuses.filter(s => s.key !== raw.statusKey),
+        ...(typeof raw.statusText === 'string' ? [{ key: String(raw.statusKey), text: raw.statusText }] : []),
+      ];
+      if (method === 'setWidget') extension.widgets = [
+        ...current.widgets.filter(w => w.key !== raw.widgetKey),
+        ...(Array.isArray(raw.widgetLines) ? [{ key: String(raw.widgetKey), lines: raw.widgetLines.map(String), placement: raw.widgetPlacement === 'belowEditor' ? 'belowEditor' as const : 'aboveEditor' as const }] : []),
+      ];
+      if (method === 'setTitle') extension.title = String(raw.title ?? '');
+      if (method === 'set_editor_text') extension.editorRequest = { id: `${this.options.generation}:${raw.id}`, text: String(raw.text ?? '') };
+      this.extension = extension;
+      return project([], { extension });
+    }
+    const id = String(raw.id);
+    if (!DIALOG_METHODS.has(method) || this.seenDialogs.has(id)) return project();
+    this.seenDialogs.add(id);
+    const { generation, recoveryMs } = this.options;
+    const timeoutMs = typeof raw.timeout === 'number' && Number.isFinite(raw.timeout) && raw.timeout > 0 ? raw.timeout : undefined;
+    const piTimeout = timeoutMs !== undefined && timeoutMs <= recoveryMs;
+    const dialog: Dialog = {
+      id, generation, receivedAt, timeoutMs,
+      deadlineAt: receivedAt + (piTimeout ? timeoutMs : recoveryMs),
+      deadlineKind: piTimeout ? 'pi-timeout' : 'host-recovery',
+      method: method as Dialog['method'],
+      title: raw.title as string | undefined,
+      message: raw.message as string | undefined,
+      options: raw.options as string[] | undefined,
+      placeholder: raw.placeholder as string | undefined,
+      prefill: raw.prefill as string | undefined,
+    };
+    return { events: [{ _tag: 'dialog', dialog }], refresh: [], dialog };
+  }
+
+  /** Streaming output: the partial reply, final messages and tool executions. */
+  private stream(raw: PiRecord): SessionEvent[] {
     const event = raw as MessageEventRecord;
     switch (event.type) {
       case 'message_start': {
@@ -320,18 +520,19 @@ export class StreamAssembler {
         this.tools.set(id, tool);
         return [{ _tag: 'tool_update', tool }];
       }
-      case 'agent_settled':
-      case 'piano_closed': {
-        this.partial = undefined; this.blocks.clear();
-        return [...this.tools.values()].flatMap(tool => {
-          if (tool.status !== 'running') return [];
-          const incomplete: ToolExecution = { ...tool, status: 'incomplete' };
-          this.tools.set(tool.id, incomplete);
-          return [{ _tag: 'tool_update' as const, tool: incomplete }];
-        });
-      }
       default: return [];
     }
+  }
+
+  /** Pi will not continue this run: drop the partial and mark unfinished tools incomplete. */
+  private settle(): SessionEvent[] {
+    this.partial = undefined; this.blocks.clear();
+    return [...this.tools.values()].flatMap(tool => {
+      if (tool.status !== 'running') return [];
+      const incomplete: ToolExecution = { ...tool, status: 'incomplete' };
+      this.tools.set(tool.id, incomplete);
+      return [{ _tag: 'tool_update' as const, tool: incomplete }];
+    });
   }
 
   private update(): SessionEvent[] {
