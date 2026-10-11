@@ -166,3 +166,22 @@ test("INV-07: late discovery cannot undo removal/deletion or attach a candidate 
     f.git("switch", "-q", "feature"); f.git("remote", "set-url", "origin", "git@github.com:example/repo.git");
   }
 });
+
+test("INV-06: inherited GIT_* state cannot redirect discovery; the user's url.<base>.insteadOf still names the remote", async t => {
+  const f = await fixture(t), host = "github.int.exe.xyz";
+  const other = join(f.root, "other"), home = join(f.root, "home");
+  mkdirSync(other); mkdirSync(home);
+  const clean = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  for (const args of [["init", "-q", "-b", "elsewhere"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "other"],
+    ["remote", "add", "origin", "git@github.com:other/repo.git"]]) execFileSync("git", ["-C", other, ...args], { env: clean });
+  // A global rewrite to the exe.dev integration, as a VM may configure for github.com remotes.
+  writeFileSync(join(home, ".gitconfig"), `[url "https://${host}/"]\n\tinsteadOf = git@github.com:\n`);
+  const inherited = { GIT_DIR: join(other, ".git"), GIT_WORK_TREE: other, GIT_CONFIG_GLOBAL: "/dev/null", HOME: home, XDG_CONFIG_HOME: join(home, "config") };
+  const saved = Object.fromEntries(Object.keys(inherited).map(key => [key, process.env[key]]));
+  t.after(() => { for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  Object.assign(process.env, inherited);
+  f.control({ prs: [candidate(42), candidate(7, "elsewhere", "other")], expectedHost: host, expectedRepo: `${host}/example/repo` });
+  const discovered = await f.get();
+  assert.equal(discovered.pullRequest?.number, 42, JSON.stringify(discovered));
+  assert.deepEqual(discovered.link, { url: candidate(42).url, source: "branch", apiHost: host });
+});

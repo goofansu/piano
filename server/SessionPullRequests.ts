@@ -3,8 +3,9 @@
  */
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import type { PullRequest, SessionPullRequest, SessionPullRequestAction, SessionPullRequestLink } from "../shared/wire.ts";
+import { gitRead } from "./GitCheckout.ts";
 import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
-import { GhCommand, GitCommand, run as runProcess } from "./Subprocess.ts";
+import { GhCommand, run as runProcess } from "./Subprocess.ts";
 
 export class PullRequestError extends Data.TaggedError("PullRequestError")<{ readonly detail: string }> {
   override get message() { return this.detail; }
@@ -14,7 +15,7 @@ const failure = (detail: string) => new PullRequestError({ detail });
 const EXE_GITHUB = "github.int.exe.xyz";
 type GitHubHost = "github.com" | typeof EXE_GITHUB;
 
-const run = (command: string, args: string[], cwd: string, env = process.env) =>
+const run = (command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv) =>
   runProcess({ command, args, cwd, env, timeout: 15000, limit: 4 * 1024 * 1024 }).pipe(
     Effect.map(result => result.stdout.toString().trim()),
     Effect.mapError(error => failure(error.message)),
@@ -68,14 +69,23 @@ function facts(raw: typeof RawPr.Type): PullRequest {
   };
 }
 
+/** GitCheckout's hardened read (INV-06): inherited GIT_* state cannot redirect discovery. */
+const git = (cwd: string, args: string[], options: { readonly userConfig?: boolean } = {}) =>
+  gitRead(args, { cwd, timeout: 15000, limit: 4 * 1024 * 1024, ...options }).pipe(
+    Effect.map(result => result.stdout.toString().trim()),
+    Effect.mapError(error => failure(error.message)),
+  );
+
 /** Observe both branch and head repository, including tracking-remote choice. */
-const checkout = Effect.fn("SessionPullRequests.checkout")(function* (git: string, cwd: string) {
-  const inside = yield* run(git, ["rev-parse", "--is-inside-work-tree"], cwd).pipe(
+const checkout = Effect.fn("SessionPullRequests.checkout")(function* (cwd: string) {
+  const inside = yield* git(cwd, ["rev-parse", "--is-inside-work-tree"]).pipe(
     Effect.catchIf(e => /not a git repository/.test(e.detail), () => Effect.succeed("false")));
   if (inside !== "true") return null;
-  const branch = yield* run(git, ["branch", "--show-current"], cwd);
-  const tracking = branch ? yield* run(git, ["for-each-ref", "--format=%(upstream:remotename)", `refs/heads/${branch}`], cwd) : "";
-  const remote = yield* run(git, ["remote", "get-url", tracking && tracking !== "." ? tracking : "origin"], cwd).pipe(
+  const branch = yield* git(cwd, ["branch", "--show-current"]);
+  const tracking = branch ? yield* git(cwd, ["for-each-ref", "--format=%(upstream:remotename)", `refs/heads/${branch}`]) : "";
+  // The URL Git would contact, after the user's `url.<base>.insteadOf` rewrites (e.g. an
+  // exe.dev integration proxy configured globally), so this one read keeps user config.
+  const remote = yield* git(cwd, ["remote", "get-url", tracking && tracking !== "." ? tracking : "origin"], { userConfig: true }).pipe(
     Effect.catchIf(e => /No such remote/.test(e.detail), () => Effect.succeed("")));
   const proxy = remote.match(/^https:\/\/github\.int\.exe\.xyz\/([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i);
   const match = proxy ?? remote.match(/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i);
@@ -92,7 +102,7 @@ export class SessionPullRequests extends Context.Service<SessionPullRequests, {
 
 export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.gen(function* () {
   const registry = yield* Registry;
-  const git = yield* GitCommand, ghCli = yield* GhCommand;
+  const ghCli = yield* GhCommand;
   // After a save, read the entry back so the answer reflects whatever the registry now holds.
   const reread = Effect.fn("SessionPullRequests.reread")(function* (s: SessionEntry) {
     const found = (yield* registry.get).sessions.find(t => t.cwd === s.cwd && t.sessionId === s.sessionId);
@@ -105,7 +115,7 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
       ? "Could not read GitHub through exe.dev. Check that this VM's GitHub integration can access the repository, then retry."
       : "Could not read GitHub. Check gh authentication and repository access, then retry.")));
   const hostFor = (s: SessionEntry) => s.pullRequest?.apiHost ? Effect.succeed(s.pullRequest.apiHost)
-    : checkout(git, s.cwd).pipe(Effect.map(c => c?.apiHost ?? "github.com" as GitHubHost), Effect.orElseSucceed(() => "github.com" as const));
+    : checkout(s.cwd).pipe(Effect.map(c => c?.apiHost ?? "github.com" as GitHubHost), Effect.orElseSucceed(() => "github.com" as const));
   const view = Effect.fn("SessionPullRequests.view")(function* (url: string, host: GitHubHost) {
     const key = yield* parseIdentity(url);
     // A public URL overrides GH_HOST in gh. Use number + explicit API repository instead.
@@ -127,7 +137,7 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
         : { link: s.pullRequest, pullRequest: null, discovery: false, error: pullRequest.failure.detail };
     }
     const discover = Effect.gen(function* () {
-      const before = yield* checkout(git, s.cwd);
+      const before = yield* checkout(s.cwd);
       if (!before?.branch) return null;
       // Normal remotes let gh select the base repository (including fork parents).
       // Integration remotes name the authorized repository explicitly. Match the head
@@ -139,7 +149,7 @@ export const SessionPullRequestsLive = Layer.effect(SessionPullRequests, Effect.
       const matches = candidates.filter(p => p.headRefName === before.branch && `${p.headRepositoryOwner?.login}/${p.headRepository?.name}`.toLowerCase() === before.repo);
       if (matches.length > 1) return yield* failure("Several pull requests match this branch. Link the intended pull request explicitly.");
       if (!matches.length) return null;
-      const after = yield* checkout(git, s.cwd);
+      const after = yield* checkout(s.cwd);
       if (JSON.stringify(before) !== JSON.stringify(after)) return yield* failure("The checkout changed during lookup. Retry discovery.");
       const pullRequest = yield* Effect.try({ try: () => facts(matches[0]!), catch: () => failure("GitHub returned an invalid pull request URL.") });
       return { pullRequest, apiHost: before.apiHost };

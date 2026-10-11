@@ -2,7 +2,9 @@
  * GIT_* state (GIT_DIR/INDEX/OBJECT overrides), global or system config, replace refs,
  * optional locks, fsmonitor or pager, so the environment cannot redirect an answer (INV-06).
  * Source-local repository config is still read by Git; a caller that writes (an index) adds
- * `-c` config to disable hooks and filters. Output is bounded, UTF-8 checked and NUL lists
+ * `-c` config to disable hooks and filters. A read whose answer the user's Git config defines
+ * (a remote URL after `url.<base>.insteadOf`) opts back into global and system config with
+ * `userConfig`; inherited GIT_* state stays cleared. Output is bounded, UTF-8 checked and NUL lists
  * must be complete; repository paths must be relative and stay out of embedded repositories.
  */
 import { realpath } from "node:fs/promises";
@@ -11,9 +13,10 @@ import { Effect, Semaphore } from "effect";
 import type { Workspace } from "../shared/wire.ts";
 import { GitCommand, type RunOptions, type RunResult, runAsync, SubprocessError } from "./Subprocess.ts";
 
-function hardenedEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+function hardenedEnv(extra: Record<string, string> = {}, userConfig = false): NodeJS.ProcessEnv {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-  return { ...env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_OPTIONAL_LOCKS: "0", GIT_NO_REPLACE_OBJECTS: "1", LC_ALL: "C", ...extra };
+  const config = userConfig ? {} : { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  return { ...env, ...config, GIT_OPTIONAL_LOCKS: "0", GIT_NO_REPLACE_OBJECTS: "1", LC_ALL: "C", ...extra };
 }
 
 interface GitOptions extends Pick<RunOptions, "input" | "limit" | "truncate" | "okCodes" | "timeout"> {
@@ -21,13 +24,16 @@ interface GitOptions extends Pick<RunOptions, "input" | "limit" | "truncate" | "
   /** `-c key=value` pairs, already split as Git takes them. */
   readonly config?: readonly string[];
   readonly env?: Record<string, string>;
+  /** Also read global and system config, from Git's default locations only (GIT_CONFIG_* is
+   * cleared with the rest of GIT_*). Only for a read whose answer that config defines. */
+  readonly userConfig?: boolean;
 }
 
 /** A rejected exit becomes `Git <subcommand> failed: <stderr>`; other runner failures pass through. */
 async function runGit(git: string, args: readonly string[], options: GitOptions, signal?: AbortSignal): Promise<RunResult> {
-  const { cwd, config = [], env, ...run } = options;
+  const { cwd, config = [], env, userConfig, ...run } = options;
   try {
-    return await runAsync({ ...run, command: git, cwd, env: hardenedEnv(env), args: ["--no-pager", "-c", "core.fsmonitor=false", ...config, ...args] }, signal);
+    return await runAsync({ ...run, command: git, cwd, env: hardenedEnv(env, userConfig), args: ["--no-pager", "-c", "core.fsmonitor=false", ...config, ...args] }, signal);
   } catch (error) {
     if (error instanceof SubprocessError && error.reason === "exit") throw new Error(`Git ${args[0]} failed: ${error.message}`);
     throw error;
@@ -37,7 +43,7 @@ async function runGit(git: string, args: readonly string[], options: GitOptions,
 /** One hardened Git read in `cwd`, for callers that need no checkout root (worktree discovery,
  * directory hints). Interruption kills the child.
  */
-export const gitRead = (args: readonly string[], options: Pick<GitOptions, "cwd" | "timeout" | "limit">): Effect.Effect<RunResult, Error> =>
+export const gitRead = (args: readonly string[], options: Pick<GitOptions, "cwd" | "timeout" | "limit" | "userConfig">): Effect.Effect<RunResult, Error> =>
   Effect.flatMap(GitCommand, git => Effect.tryPromise({
     try: signal => runGit(git, args, options, signal),
     catch: error => error instanceof Error ? error : new Error(String(error)),
