@@ -13,9 +13,9 @@
 import { existsSync } from "node:fs";
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import type { FolderView, HostInfo, ServerMessage, SessionReference, WorktreeDiscovery, WorktreeView } from "../shared/wire.ts";
+import { PiHistory } from "./PiHistory.ts";
 import { projectTrust } from "./ProjectTrust.ts";
 import { Registry, type RegistryData } from "./Registry.ts";
-import { listSessions } from "./SessionFiles.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { listWorktrees } from "./Worktrees.ts";
 
@@ -74,7 +74,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) => Layer.effec
   const observe = Effect.fn("SidebarView.observe")(function* (data: RegistryData) {
     const discoveries = new Map(yield* Effect.forEach(data.folders, folder => Effect.map(discover(folder), d => [folder, d] as const), { concurrency: 4 }));
     const members = [...new Set(data.sessions.filter(s => s.projectId).map(s => s.cwd))];
-    const histories = new Map(yield* Effect.forEach(members, cwd => Effect.map(listSessions(cwd), list => [cwd, new Set(list.map(h => h.sessionId))] as const), { concurrency: 4 }));
+    const histories = new Map(yield* Effect.forEach(members, cwd => Effect.map(PiHistory.sessionIds(cwd), ids => [cwd, ids] as const), { concurrency: 4 }));
     const paths = new Set([...data.folders, ...data.worktrees.map(w => w.path)]);
     return { shape: shapeOf(data), paths, discoveries, histories } satisfies Observation;
   });

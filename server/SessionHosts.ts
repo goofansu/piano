@@ -7,9 +7,9 @@ import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, PubSub, Scope, Se
 import { isWorking } from "../shared/sessionProjection.ts";
 import type { HostInfo, SessionClosure, SessionStats, Snapshot } from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
+import { PiHistory } from "./PiHistory.ts";
 import { type PiSession, PiSessionError, PiSessions } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
-import { emptySnapshot, listSessions, peekSession } from "./SessionFiles.ts";
 
 export interface OpenSpec {
   readonly cwd: string;
@@ -43,11 +43,6 @@ interface Resolved {
 }
 const hostKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
-// A listed Pi file must resolve. Unlike a checkout, it has no missing state or alias memory.
-const canonical = (cwd: string) => Effect.tryPromise({
-  try: () => realpath(directoryPath(cwd)),
-  catch: error => rejected(`Cannot resolve checkout ${cwd}: ${String(error)}`),
-});
 
 export class SessionHosts extends Context.Service<SessionHosts, {
   readonly get: (cwd: string, sessionId: string) => Effect.Effect<PiSession | undefined, PiSessionError>;
@@ -106,7 +101,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() => work(key, physical)));
   }));
 
-  /** Locate old alias-based references without moving or copying Pi history. */
+  /** The registry reference that owns a session, and its Pi file under the reference's, caller's or ownership key's spelling. */
   const reference = Effect.fn("SessionHosts.reference")(function* (cwd: string, sessionId: string, physical: string, create = false): Effect.fn.Return<Reference, PiSessionError> {
     const candidates = (yield* registry.get).sessions.filter(s => s.sessionId === sessionId);
     const matching = [];
@@ -120,15 +115,9 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     if (!entry && !create) return yield* rejected("This session is no longer registered. Refresh the folder list; deleted sessions cannot be restarted.");
     if (entry && create) return yield* rejected("This session ID is already registered.");
     const owner = entry?.cwd ?? directoryPath(cwd);
-    const files = new Map<string, string>();
-    for (const path of new Set([owner, directoryPath(cwd), physical])) {
-      for (const file of (yield* listSessions(path)).filter(s => s.sessionId === sessionId)) {
-        const real = yield* canonical(file.path);
-        files.set(real, file.path);
-      }
-    }
-    if (files.size > 1) return yield* rejected(`Conflicting Pi files for checkout aliases (${owner}, ${physical}). Piano has not merged or moved history. Resolve the conflicting session ID before starting it.`);
-    return { cwd: owner, file: files.values().next().value as string | undefined, stats: entry?.stats };
+    const history = yield* PiHistory.locate(sessionId, [owner, cwd, physical]).pipe(Effect.mapError(e => rejected(e.detail)));
+    if (history._tag === "conflict") return yield* rejected(`Conflicting Pi files for checkout aliases (${owner}, ${physical}). Piano has not merged or moved history. Resolve the conflicting session ID before starting it.`);
+    return { cwd: owner, file: history._tag === "file" ? history.path : undefined, stats: entry?.stats };
   });
 
   const list = Effect.gen(function* () {
@@ -279,7 +268,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   return SessionHosts.of({ open, release,
     get: (cwd, id) => resolved(cwd, id, ({ host }) => Effect.succeed(host?.session)),
     peek: (cwd, id) => resolved(cwd, id, ({ key, ref, missing }) => Effect.gen(function* () {
-      const snapshot = ref.file ? yield* peekSession(ref.file, id) : emptySnapshot(id);
+      const snapshot = yield* PiHistory.peek(id, ref.file);
       yield* mirror(ref.cwd, id, { sessionName: snapshot.state.sessionName });
       return { cwd: ref.cwd, snapshot: { ...snapshot, state: { ...snapshot.state, ...ref.stats, contextIsLastKnown: true, checkoutMissing: missing, closure: exits.get(key) } } };
     })),
