@@ -9,7 +9,6 @@ import { IconButton } from "@/components/IconButton";
 import { ModelSelect } from "@/components/ModelSelect";
 import { PianoMark } from "@/components/PianoMark";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
-import { activeProjects } from "@/components/Projects";
 import { SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,6 +19,7 @@ import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
 import { isSendKey } from "@/lib/keys";
 import { type DraftKey, NEW_SESSION_DRAFT, sendable } from "@/lib/messageDraft";
+import { canStartSessionIn, findProject, projectChoices, projectCommand } from "@/lib/projectCommands";
 import { completionTarget, directoryTrust, folderFor } from "@/lib/sessionContext";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
@@ -57,13 +57,14 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
   useTypeToFocus(textarea, useCallback((s: string) => onDraftChange(NEW_SESSION_DRAFT, text + s), [onDraftChange, text]));
 
   const folder = folderFor(state, cwd);
-  const project = projectId ? state.projects.find(p => p.id === projectId) : undefined;
+  const project = findProject(state, projectId);
+  const unarchive = project && projectCommand(state, project, "unarchive");
   const trust = directoryTrust(state, cwd);
   const catalog = state.catalogs[cwd] ?? null;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
   const choice = useModelChoice(catalog, NEW, cwd);
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
-  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!choice.model && sendable({ text, images: attachments }) && !project?.archived;
+  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!choice.model && sendable({ text, images: attachments }) && canStartSessionIn(state, projectId);
 
   const submit = () => {
     // Creating switches the main pane to the new session at once, so this page never shows a pending state.
@@ -126,11 +127,11 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
                 <AlertDescription>Git status unavailable. Open Worktrees to inspect and refresh.</AlertDescription>
               </Alert>
             )}
-            {project?.archived && (
+            {unarchive && (
               <Alert className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
                 <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>This project is archived.</span>
-                  <Button variant="link" size="sm" className="h-auto p-0" disabled={!state.connected} onClick={() => { if (project) send({ _tag: "archive_project", id: project.id, archived: false }); }}>Unarchive project</Button>
+                  <Button variant="link" size="sm" className="h-auto p-0" disabled={!unarchive.enabled} onClick={() => { if (unarchive.intent.kind === "send") send(unarchive.intent.command); }}>{unarchive.label}</Button>
                 </AlertDescription>
               </Alert>
             )}
@@ -146,9 +147,8 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
 function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; value?: string; onChange: (id?: string) => void; onCreate: () => void }) {
   const [open, setOpen] = useState(false);
   const search = useRef<HTMLInputElement>(null);
-  const current = value ? state.projects.find(p => p.id === value) : undefined;
-  const choices = activeProjects(state);
-  if (current?.archived) choices.push(current);
+  const current = findProject(state, value);
+  const choices = projectChoices(state, current);
   const pick = (id?: string) => { onChange(id); setOpen(false); };
   return (
     <Popover open={open} onOpenChange={setOpen}>

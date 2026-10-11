@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { projectChoices } from "@/lib/projectCommands";
 import { sessionProject } from "@/lib/sessionContext";
 import type { AppState } from "@/store";
 
@@ -13,8 +14,6 @@ type SessionRef = { cwd: string; sessionId: string };
 
 /** The one project dialog: create or rename a project. With `assign`, the saved project also takes that session. */
 export type ProjectDialog = { project?: Project; assign?: SessionRef };
-
-export const activeProjects = (state: AppState) => state.projects.filter(p => !p.archived);
 
 /**
  * Membership lives in the session's own menu, like Rename or Archive. Choosing a project is a radio
@@ -25,8 +24,7 @@ export function ProjectMenu({ state, send, session, onDialog }: {
   state: AppState; send: (command: ClientCommand) => void; session: SessionRef; onDialog: (dialog: ProjectDialog) => void;
 }) {
   const current = sessionProject(state, session);
-  const choices = activeProjects(state);
-  if (current && !choices.some(p => p.id === current.id)) choices.push(current);
+  const choices = projectChoices(state, current);
   const assign = (projectId: string | null) => send({ _tag: "assign_project", cwd: session.cwd, sessionId: session.sessionId, projectId });
   return <DropdownMenuSub>
     <DropdownMenuSubTrigger disabled={!state.connected}><TargetIcon /> Project{current && <span className="ml-1 min-w-0 max-w-32 truncate text-muted-foreground">{current.name}</span>}</DropdownMenuSubTrigger>
