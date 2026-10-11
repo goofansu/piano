@@ -100,22 +100,46 @@ test("INV-01: the title mirrors Pi's name, else the start name or first prompt; 
   assert.equal(await entry("unregistered"), undefined, "mirroring never creates a reference");
 });
 
+test("INV-01: initial membership never changes an existing reference or restricts later reassignment", async t => {
+  const f = fixture(t), cwd = join(f.root, "folder");
+  await f.run(Effect.gen(function* () {
+    const r = yield* Registry;
+    yield* r.saveProject({ id: "launch", name: "Launch" });
+    yield* r.addSession(cwd, "one", "Original", "launch");
+    yield* r.archiveProject("launch", true);
+    const before = yield* r.get;
+    for (const projectId of ["launch", "missing", undefined]) yield* r.addSession(cwd, "one", "Replacement", projectId);
+    assert.deepEqual(yield* r.get, before, "re-registering is a no-op, even after the initial project is archived");
+    yield* r.assignProject(cwd, "one", null);
+    yield* r.addSession(cwd, "one", undefined, "launch");
+    assert.equal((yield* r.get).sessions[0].projectId, undefined, "re-registration cannot restore removed membership");
+    yield* r.assignProject(cwd, "one", "launch");
+    assert.equal((yield* r.get).sessions[0].projectId, "launch", "existing sessions may still be assigned to an archived project");
+    const failure = yield* r.addSession(cwd, "missing-project", undefined, "missing").pipe(Effect.flip);
+    assert.equal(failure.detail, "Project is unavailable or archived. Choose a current project before starting.");
+    assert.equal((yield* r.get).sessions.length, 1);
+  }));
+});
+
 test("INV-01: a failed transaction publishes neither partial rows nor in-memory changes; retry succeeds", async t => {
   const f = fixture(t), runtime = ManagedRuntime.make(f.layer);
   try {
-    const r = await runtime.runPromise(Registry), before = await runtime.runPromise(r.get);
+    const r = await runtime.runPromise(Registry);
+    await runtime.runPromise(r.saveProject({ id: "launch", name: "Launch" }));
+    const before = await runtime.runPromise(r.get);
     // A real SQLite write failure after workspace creation must roll back the whole operation.
     const db = new DatabaseSync(f.dbPath);
     try { db.exec("CREATE TRIGGER reject_session BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT, 'test write failure'); END;"); }
     finally { db.close(); }
-    await assert.rejects(runtime.runPromise(r.addSession(join(f.root, "hidden"), "new")), /test write failure/);
+    await assert.rejects(runtime.runPromise(r.addSession(join(f.root, "hidden"), "new", undefined, "launch")), /test write failure/);
     assert.deepEqual(await runtime.runPromise(r.get), before);
     assert.deepEqual(await f.get(), before);
     const repaired = new DatabaseSync(f.dbPath);
     try { repaired.exec("DROP TRIGGER reject_session"); } finally { repaired.close(); }
-    await runtime.runPromise(r.addSession(join(f.root, "hidden"), "new"));
+    await runtime.runPromise(r.addSession(join(f.root, "hidden"), "new", undefined, "launch"));
     const saved = await f.get();
     assert.equal(saved.sessions.length, 1); assert.equal(saved.workspaces.length, 1);
+    assert.equal(saved.sessions[0].projectId, "launch");
   } finally { await runtime.dispose(); }
 });
 

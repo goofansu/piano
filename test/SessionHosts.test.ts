@@ -216,15 +216,20 @@ test('INV-02: concurrent public opens through real/symlink paths have one child 
 
 test('INV-02: a disconnected opener cannot interrupt or duplicate server-owned acquisition', { timeout: 10000 }, async () => {
   await run(Effect.gen(function* () {
-    const hosts = yield* SessionHosts;
-    const abandoned = yield* hosts.open({ cwd, sessionId: 'abandoned-open', create: true }).pipe(Effect.forkChild);
+    const hosts = yield* SessionHosts, registry = yield* Registry;
+    yield* registry.saveProject({ id: 'launch', name: 'Launch' });
+    const abandoned = yield* hosts.open({ cwd, sessionId: 'abandoned-open', create: true, projectId: 'launch' }).pipe(Effect.forkChild);
     yield* waitAudit('abandoned-open', rs => rs.some(r => r.command === 'get_state'));
     yield* Fiber.interrupt(abandoned);
-    const returning = yield* hosts.open({ cwd: alias, sessionId: 'abandoned-open' }).pipe(Effect.forkChild);
+    const entry = (yield* registry.get).sessions.find(s => s.sessionId === 'abandoned-open')!;
+    assert.deepEqual([entry.cwd, entry.projectId], [cwd, 'launch'], 'registration already includes membership while Pi is starting');
+    const returning = yield* hosts.open({ cwd: alias, sessionId: 'abandoned-open', projectId: 'ignored-on-reopen' }).pipe(Effect.forkChild);
     process.kill(records('abandoned-open')[0].pid, 'SIGCONT');
     const session = yield* Fiber.join(returning);
     assert.equal((yield* session.state).sessionId, 'abandoned-open');
     assert.equal(records('abandoned-open').filter(r => r.event === 'spawn').length, 1);
+    assert.equal('projectId' in session.spec, false);
+    assert.equal((yield* registry.get).sessions.find(s => s.sessionId === 'abandoned-open')?.projectId, 'launch');
     yield* hosts.release(cwd, 'abandoned-open');
   }), { holdReadiness: true });
 });

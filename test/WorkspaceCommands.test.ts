@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Fiber, Layer, type Scope, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
@@ -23,14 +23,14 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 const git = (dir: string, ...args: string[]) => execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { stdio: "pipe" });
 let databases = 0;
-const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry | DirectoryFacts | Scope.Scope>) => {
+const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry | DirectoryFacts | Scope.Scope>, path = join(root, `registry-${++databases}.db`)) => {
   const layer = WorkspaceCommandsLive.pipe(
     Layer.provide(SidebarViewLive()), Layer.provideMerge(DirectoryFactsLive),
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   return Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(layer),
     Effect.provideService(PiCli, { node: process.execPath, cli: new URL("./fake-pi.mjs", import.meta.url).pathname, extraArgs: [] }),
-    Effect.provideService(RegistryDatabasePath, join(root, `registry-${++databases}.db`)), Effect.timeout("10 seconds")));
+    Effect.provideService(RegistryDatabasePath, path), Effect.timeout("10 seconds")));
 };
 const firstSnapshot = (session: PiSession) => session.events.pipe(Stream.filter(e => e._tag === "snapshot"), Stream.take(1), Stream.runCollect,
   Effect.map(c => { const e = [...c][0]!; assert.ok(e._tag === "snapshot"); return e.snapshot; }));
@@ -65,7 +65,7 @@ test("INV-01/02: creating a session writes the reference and project before the 
     const log: string[] = [];
     const session = yield* commands.createSession({ cwd, projectId: "launch", options: {}, text: "  hello  " }, yield* recordingClient(log));
     const id = session.spec.sessionId;
-    assert.deepEqual(log, [`attach ${id}`, "published project=launch touched=false prompted=false", "published project=launch touched=true prompted=false"]);
+    assert.deepEqual(log, [`attach ${id}`, "published project=launch touched=true prompted=false"]);
     const entry = (yield* registry.get).sessions.find(s => s.sessionId === id)!;
     assert.equal(entry.cwd, cwd);
     assert.ok((yield* registry.get).folders.includes(cwd), "an unregistered directory becomes a folder");
@@ -74,13 +74,42 @@ test("INV-01/02: creating a session writes the reference and project before the 
   }));
 });
 
+test("INV-01/02/07: interrupted client creation retains its project membership before attachment completes", async () => {
+  const path = join(root, "interrupted-creation.db");
+  const id = await run(Effect.gen(function* () {
+    const commands = yield* WorkspaceCommands, registry = yield* Registry, hosts = yield* SessionHosts;
+    yield* registry.saveProject({ id: "launch", name: "Launch" });
+    const published: Array<string | undefined> = [];
+    yield* registry.onChange((before, after) => Effect.sync(() => {
+      for (const s of after.sessions) if (!before.sessions.some(b => b.cwd === s.cwd && b.sessionId === s.sessionId)) published.push(s.projectId);
+    }));
+    const opened = yield* Deferred.make<PiSession>();
+    // The browser has opened Pi but has not finished attaching its snapshot when it disconnects.
+    const creating = yield* commands.createSession({ cwd, projectId: "launch", options: {}, text: "must not reach Pi" }, {
+      attach: open => open.pipe(Effect.tap(session => Deferred.succeed(opened, session)), Effect.tap(() => Effect.never)),
+    }).pipe(Effect.forkChild);
+    const session = yield* Deferred.await(opened);
+    yield* Fiber.interrupt(creating);
+    const id = session.spec.sessionId;
+    assert.equal((yield* hosts.list).filter(h => h.sessionId === id).length, 1, "the server-owned child survives its requester");
+    assert.equal((yield* firstSnapshot(session)).messages.some(m => m.role === "user"), false, "no prompt is submitted without completing attachment");
+    assert.deepEqual((yield* registry.get).sessions.map(s => [s.cwd, s.sessionId, s.projectId]), [[cwd, id, "launch"]]);
+    assert.deepEqual(published, ["launch"], "the first published reference already belongs to its project");
+    assert.equal("projectId" in session.spec, false, "registry membership is not part of Pi's spec");
+    return id;
+  }), path);
+  const reopened = await Effect.runPromise(Effect.flatMap(Registry, r => r.get).pipe(
+    Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, path)));
+  assert.deepEqual(reopened.sessions.map(s => [s.cwd, s.sessionId, s.projectId]), [[cwd, id, "launch"]], "membership survives reopening SQLite");
+});
+
 test("an archived or unknown project is refused before any session or folder is registered", async () => {
   await run(Effect.gen(function* () {
     const commands = yield* WorkspaceCommands, registry = yield* Registry;
     yield* registry.saveProject({ id: "old", name: "Old" });
     yield* registry.archiveProject("old", true);
     const log: string[] = [];
-    for (const projectId of ["old", "missing"]) {
+    for (const projectId of ["old", "missing", ""]) {
       const error = yield* commands.createSession({ cwd, projectId, options: {}, text: "hello" }, yield* recordingClient(log)).pipe(Effect.flip);
       assert.ok(error instanceof RegistryLookupError);
       assert.equal(error.message, "Project is unavailable or archived. Choose a current project before starting.");
@@ -88,6 +117,26 @@ test("an archived or unknown project is refused before any session or folder is 
     assert.deepEqual(log, []);
     const data = yield* registry.get;
     assert.deepEqual([data.sessions.length, data.folders.length], [0, 0]);
+  }));
+});
+
+test("INV-01/02: project archive after preflight refuses session registration before Pi starts", async () => {
+  await run(Effect.gen(function* () {
+    const commands = yield* WorkspaceCommands, registry = yield* Registry, hosts = yield* SessionHosts;
+    yield* registry.saveProject({ id: "launch", name: "Launch" });
+    const checked = yield* Deferred.make<void>(), proceed = yield* Deferred.make<void>();
+    // Another tab archives the project after the early check but before server-owned registration.
+    const creating = yield* commands.createSession({ cwd, projectId: "launch", options: {}, text: "must not reach Pi" }, {
+      attach: open => Deferred.succeed(checked, undefined).pipe(Effect.andThen(Deferred.await(proceed)), Effect.andThen(open)),
+    }).pipe(Effect.result, Effect.forkChild);
+    yield* Deferred.await(checked);
+    yield* registry.archiveProject("launch", true);
+    yield* Deferred.succeed(proceed, undefined);
+    const result = yield* Fiber.join(creating);
+    assert.equal(result._tag, "Failure", "an archived project cannot admit a new session after preflight");
+    if (result._tag === "Failure") assert.equal(result.failure.detail, "Project is unavailable or archived. Choose a current project before starting.");
+    assert.deepEqual((yield* registry.get).sessions, [], "no rejected reference is inserted");
+    assert.deepEqual(yield* hosts.list, [], "no rejected child is started");
   }));
 });
 

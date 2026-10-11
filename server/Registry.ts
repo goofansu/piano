@@ -127,8 +127,8 @@ export class Registry extends Context.Service<
     readonly ensureFolder: (path: string) => Effect.Effect<string, RegistryError>;
     readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
     readonly addWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
-    /** Register a session started through piano. Idempotent. */
-    readonly addSession: (cwd: string, sessionId: string, title?: string) => Effect.Effect<void, RegistryError>;
+    /** Register a session and its initial, currently active project in one write. Existing references stay unchanged. */
+    readonly addSession: (cwd: string, sessionId: string, title?: string, projectId?: string) => Effect.Effect<void, RegistryError>;
     /** Bump a session's activity time; sets the title from the first prompt when neither a start name nor Pi's name gave one. */
     readonly touchSession: (cwd: string, sessionId: string, text?: string) => Effect.Effect<void, RegistryError>;
     /**
@@ -235,11 +235,12 @@ export const RegistryLive = Layer.effect(
       removeFolder: (path) => update((d) => ({ ...d, folders: d.folders.filter((p) => p !== path) })),
       addWorktree: (entry) =>
         update((d) => (d.worktrees.some((w) => w.path === entry.path) ? d : { ...d, worktrees: [...d.worktrees, entry] })),
-      addSession: (cwd, sessionId, title) =>
+      addSession: (cwd, sessionId, title, projectId) =>
         update((d) => {
           if (d.sessions.some(isSession(cwd, sessionId))) return d;
+          if (projectId !== undefined && !d.projects.some(p => p.id === projectId && !p.archived)) throw new RegistryError({ detail: "Project is unavailable or archived. Choose a current project before starting." });
           const t = now();
-          return { ...d, sessions: [...d.sessions, { cwd, sessionId, title: title?.trim() || undefined, createdAt: t, updatedAt: t, archived: false }] };
+          return { ...d, sessions: [...d.sessions, { cwd, sessionId, title: title?.trim() || undefined, projectId, createdAt: t, updatedAt: t, archived: false }] };
         }),
       touchSession: (cwd, sessionId, text) =>
         update((d) => ({
