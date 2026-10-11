@@ -81,13 +81,19 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
       return next;
     });
 
-  // The group holding the selected session is always open: its folder, or its project.
+  // Selecting a session opens the group holding it: its folder, or its project. Only a new
+  // selection, grouping or owning group reveals it, so a registry refresh never undoes a collapse.
+  const revealed = useRef<string | null>(null);
   useEffect(() => {
     if (!current) return;
     const owner = folderFor(state, current.cwd);
     const member = current.sessionId ? sessionReference(state, { cwd: current.cwd, sessionId: current.sessionId }) : undefined;
     const key = view.groupBy === "folder" ? owner?.path : view.groupBy === "project" ? projectKey(member?.projectId ?? "") : undefined;
-    if (key && !openGroups.has(key)) setOpen(key, true);
+    if (!key) return;
+    const target = JSON.stringify([current.cwd, current.sessionId, view.groupBy, key]);
+    if (revealed.current === target) return;
+    revealed.current = target;
+    if (!openGroups.has(key)) setOpen(key, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.cwd, current?.sessionId, state.folders, state.sessionReferences, view.groupBy]);
 
