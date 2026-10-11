@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, type Scope, Stream } from "effect";
 import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
-import { Registry, RegistryDatabasePath, RegistryLive, RegistryLookupError } from "../server/Registry.ts";
+import { Registry, type RegistryData, RegistryDatabasePath, RegistryLive, RegistryLookupError } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import { WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
 
@@ -21,7 +21,7 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 const git = (dir: string, ...args: string[]) => execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { stdio: "pipe" });
 let databases = 0;
-const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry>) => {
+const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry | Scope.Scope>) => {
   const layer = WorkspaceCommandsLive.pipe(
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
@@ -31,17 +31,23 @@ const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts 
 };
 const firstSnapshot = (session: PiSession) => session.events.pipe(Stream.filter(e => e._tag === "snapshot"), Stream.take(1), Stream.runCollect,
   Effect.map(c => { const e = [...c][0]!; assert.ok(e._tag === "snapshot"); return e.snapshot; }));
-/** A client that attaches nothing and records what the registry and Pi held at each publish. */
+/**
+ * A client that records what it attached, and what the registry and Pi held each time a registry
+ * write was announced; the sidebar view publishes from that same announcement.
+ */
 const recordingClient = (log: string[]) => Effect.gen(function* () {
   const registry = yield* Registry;
   let attached: PiSession | undefined;
+  const facts = (d: RegistryData) => JSON.stringify(d.sessions.map(s => [s.projectId, s.updatedAt]));
+  yield* registry.onChange((before, after) => Effect.gen(function* () {
+    // The folder and the reference itself are written while opening; cached Pi statistics may follow the prompt.
+    if (!attached || facts(before) === facts(after)) return;
+    const entry = after.sessions[0];
+    const prompted = (yield* firstSnapshot(attached)).messages.some(m => m.role === "user");
+    log.push(`published project=${entry?.projectId} touched=${entry?.updatedAt !== entry?.createdAt} prompted=${prompted}`);
+  }).pipe(Effect.orDie));
   return {
     attach: <E>(open: Effect.Effect<PiSession, E>) => open.pipe(Effect.tap(s => Effect.sync(() => { attached = s; log.push(`attach ${s.spec.sessionId}`); }))),
-    published: Effect.gen(function* () {
-      const entry = (yield* registry.get).sessions[0];
-      const prompted = attached ? (yield* firstSnapshot(attached)).messages.some(m => m.role === "user") : undefined;
-      log.push(`published project=${entry?.projectId} touched=${entry?.updatedAt !== entry?.createdAt} prompted=${prompted}`);
-    }),
   };
 });
 

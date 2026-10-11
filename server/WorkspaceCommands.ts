@@ -22,11 +22,10 @@ export interface CreateSessionRequest {
   readonly attachments?: ReadonlyArray<Attachment>;
 }
 
-/** How the requesting connection takes part: it attaches the opened session and signals that the sidebar changed. */
+/** How the requesting connection takes part: it attaches the opened session. Registry writes reach the sidebar on their own. */
 export interface SessionClient<E, R> {
   /** Opens the session and shows it if the client still has this new session selected. */
   readonly attach: (open: Effect.Effect<PiSession, PiSessionError>) => Effect.Effect<PiSession, E | PiSessionError, R>;
-  readonly published: Effect.Effect<void, E, R>;
 }
 
 export type RetireMode = "archive" | "delete";
@@ -77,12 +76,11 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
       const { model, thinkingLevel, name } = request.options;
       // Only a fresh server-generated ID may create a reference; SessionHosts keeps one child per ID.
       const session = yield* client.attach(hosts.open({ cwd, sessionId: randomUUID(), create: true, model, thinkingLevel, name }));
+      // Each registry write has reached the sidebar view by the time it returns.
       if (request.projectId) yield* registry.assignProject(session.spec.cwd, session.spec.sessionId, request.projectId);
-      yield* client.published;
       const text = request.text?.trim() ?? "";
       if (!text && !request.attachments?.length) return session;
       yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, text);
-      yield* client.published;
       yield* session.act({ _tag: "prompt", text, attachments: request.attachments });
       return session;
     }),

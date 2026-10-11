@@ -1,7 +1,8 @@
 /**
  * The sidebar view every browser shows: registered folders with their Git worktrees and
  * sessions, projects, workspaces and session references. One instance builds and publishes it
- * for all connections; callers only say that something changed or read the latest view.
+ * for all connections. It hears registry writes from the registry itself, so whoever writes
+ * (a browser request, a Pi rename mirrored by SessionHosts) needs no publish step of its own.
  *
  * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06)
  * and Pi history listings are the slow observations: they run single-flight in the background,
@@ -22,8 +23,9 @@ export type SidebarMessage = Extract<ServerMessage, { _tag: "registry" }>;
 
 export class SidebarView extends Context.Service<SidebarView, {
   /**
-   * The registry changed. Publishes promptly when no folder or worktree was added or removed,
-   * then rediscovers in the background. Never waits on Git.
+   * Something the view shows from outside the registry changed, such as Pi project trust.
+   * Registry writes announce themselves. Publishes promptly when no folder or worktree was
+   * added or removed, then rediscovers in the background. Never waits on Git.
    */
   readonly changed: Effect.Effect<void>;
   /** Rediscover in the background, for facts that change outside Piano (a page load, a Refresh). */
@@ -45,6 +47,8 @@ interface Observation {
 }
 
 const shapeOf = (data: RegistryData) => JSON.stringify([data.folders, data.worktrees.map(w => [w.folder, w.path])]);
+/** The registry facts the view shows. Cached Pi statistics and pull-request links are not among them. */
+const visibleOf = (data: RegistryData) => JSON.stringify({ ...data, sessions: data.sessions.map(({ stats: _stats, pullRequest: _pullRequest, ...shown }) => shown) });
 
 export interface SidebarViewOptions {
   /** Git worktree discovery for one folder; tests replace it to control timing. */
@@ -146,10 +150,14 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) => Layer.effec
     return Effect.asVoid(Effect.forkIn(runs, layerScope));
   });
 
+  const changed = publish(true).pipe(Effect.andThen(request()));
+  // Awaited by the writer, so a session reference is on its way to browsers before its prompt reaches Pi.
+  // A statistics or pull-request cache write changes nothing shown and must not start a Git run.
+  yield* registry.onChange((before, after) => visibleOf(before) === visibleOf(after) ? Effect.void : changed);
   yield* request();
 
   return SidebarView.of({
-    changed: publish(true).pipe(Effect.andThen(request())),
+    changed,
     refresh: request(),
     subscribe: PubSub.subscribe(pubsub).pipe(Effect.map(subscription => {
       const now = latest;

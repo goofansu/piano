@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { Context, Data, Effect, Layer, Ref, Schema, Semaphore } from "effect";
+import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
 import { Project, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
 import { expandHome } from "./PiEnv.ts";
 import { openRegistryDatabase } from "./RegistryDatabase.ts";
@@ -94,10 +94,19 @@ function decode(value: unknown): RegistryData {
 }
 const recovery = (path: string, error: unknown) => new RegistryError({ detail: `Cannot read or persist registry ${path}. It has not been reset. Restore a known-good backup or repair the database before restarting. ${String(error)}` });
 
+/** Told about each write that changed the data, with the data before and after it. */
+export type RegistryListener = (before: RegistryData, after: RegistryData) => Effect.Effect<void>;
+
 export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
+    /**
+     * Hear about every write that changes the data, for the listener's scope. The writer
+     * waits for its listeners, so whatever they publish is out before the write returns;
+     * a write that changes nothing is not announced.
+     */
+    readonly onChange: (listener: RegistryListener) => Effect.Effect<void, never, Scope.Scope>;
     /** The registered workspace with this ID. */
     readonly workspace: (id: string) => Effect.Effect<Workspace, RegistryLookupError>;
     /** A session reference registered at this workspace's exact path. */
@@ -139,16 +148,24 @@ export const RegistryLive = Layer.effect(
     );
     const state = yield* Ref.make(yield* Effect.try({ try: () => decode(database.data), catch: e => recovery(path, e) }));
     const lock = yield* Semaphore.make(1);
-    const update = (f: (d: RegistryData) => RegistryData) =>
-      Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
+    const listeners = new Set<RegistryListener>();
+    const update = (f: (d: RegistryData) => RegistryData) => Effect.gen(function* () {
+      const change = yield* Semaphore.withPermits(lock, 1)(Effect.gen(function* () {
         const current = yield* Ref.get(state);
         const next = yield* Effect.try({ try: () => f(current), catch: e => e instanceof RegistryError ? e : recovery(path, e) });
-        if (next === current) return;
+        if (next === current) return undefined;
         const data = withWorkspaces(next);
-        if (JSON.stringify(data) === JSON.stringify(current)) return;
+        if (JSON.stringify(data) === JSON.stringify(current)) return undefined;
         yield* Effect.try({ try: () => database.save(current, data), catch: e => recovery(path, e) });
         yield* Ref.set(state, data);
-      }).pipe(Effect.uninterruptible));
+        return { before: current, after: data };
+      }));
+      if (!change) return;
+      // Outside the lock, so a listener may read the registry; it reads at least this write.
+      // The write is saved either way: a failing listener is logged, never reported as a failed write.
+      yield* Effect.forEach([...listeners], listener => listener(change.before, change.after).pipe(
+        Effect.catchCause(cause => Effect.logWarning("registry change listener failed", cause))), { discard: true });
+    }).pipe(Effect.uninterruptible);
     const now = () => new Date().toISOString();
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) => t.cwd === cwd && t.sessionId === sessionId;
 
@@ -159,6 +176,7 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       get: Ref.get(state),
+      onChange: listener => Effect.acquireRelease(Effect.sync(() => { listeners.add(listener); }), () => Effect.sync(() => { listeners.delete(listener); })),
       workspace,
       sessionIn: (workspaceId, sessionId) => Effect.flatMap(Ref.get(state), d => {
         const found = d.workspaces.find(w => w.id === workspaceId);
