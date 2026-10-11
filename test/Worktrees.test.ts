@@ -10,7 +10,7 @@ import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
 import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
-import { createWorktree, listWorktrees, WorktrunkCommand } from "../server/Worktrees.ts";
+import { createWorktree, gitHeadSubject, listWorktrees, WorktrunkCommand } from "../server/Worktrees.ts";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } }).trim();
 function fixture(t: TestContext) {
@@ -56,6 +56,25 @@ test("INV-06: discovery reads Git worktrees without Worktrunk and reports failur
   writeFileSync(join(nonGit, ".git"), "gitdir: /not/a/repository\n");
   const broken = await observe(nonGit);
   assert.equal(broken.status, "error"); assert.equal("worktrees" in broken, false);
+});
+
+test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints", async t => {
+  const { root, repo } = fixture(t);
+  git(repo, "worktree", "add", "--quiet", "-b", "feature", join(root, "feature"));
+  const other = join(root, "other"); mkdirSync(other); git(other, "init", "--quiet", "-b", "elsewhere");
+  git(other, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "redirected");
+  const inherited = { GIT_DIR: join(other, ".git"), GIT_WORK_TREE: other, GIT_COMMON_DIR: join(other, ".git") };
+  const saved = Object.fromEntries(Object.keys(inherited).map(key => [key, process.env[key]]));
+  Object.assign(process.env, inherited);
+  try {
+    const result = await Effect.runPromise(listWorktrees(repo));
+    assert.ok(result.status === "ready", JSON.stringify(result));
+    assert.equal(result.currentPath, repo);
+    assert.deepEqual(result.worktrees.map(w => w.branch).sort(), ["feature", "main"]);
+    assert.equal(await Effect.runPromise(gitHeadSubject(repo)), "baseline");
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
 });
 
 test("INV-06: creation requires a complete structured new-branch result and never retries prose or bypasses approval", async t => {
