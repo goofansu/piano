@@ -8,6 +8,7 @@ import type { RadiusSetupState } from "../shared/radius.ts";
 import type { DirListing, Workspace } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
+import { errorText } from "./ErrorText.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup, type McpSetupError } from "./McpSetup.ts";
 import { directoryPath } from "./PiEnv.ts";
@@ -76,8 +77,7 @@ const failAs = (status: number, fallback: string | ((error: unknown) => string))
     return fail(status, typeof fallback === "string" ? fallback : fallback(error));
   }));
 
-const detailOr = (fallback: string) => (error: unknown) =>
-  error && typeof error === "object" && "detail" in error && typeof error.detail === "string" ? error.detail : fallback;
+const detailOr = (fallback: string) => (error: unknown) => errorText(error, fallback);
 
 /** What a handler receives: the decoded body, and the registered workspace and session its IDs name. */
 type Input<Q extends IdParam, B extends Json | undefined> =
