@@ -31,8 +31,9 @@ export function McpSettings({ onMenu }: { onMenu: () => void }) {
   const act = async (request: McpSetupRequest, done: string) => {
     setBusy(true); setActionError("");
     try {
-      await setup.mutate(async () => mcpSetup(request));
+      const next = await setup.mutate(async () => mcpSetup(request));
       toast.success(done);
+      return next;
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not change MCP setup. Refresh before retrying."); }
     finally { setBusy(false); setRemovalOpen(false); setSignOut(undefined); void setup.refresh(); }
   };
@@ -46,7 +47,11 @@ export function McpSettings({ onMenu }: { onMenu: () => void }) {
           : <ItemGroup className="gap-2">{MCP_CATALOG.map(server => {
             const state = servers.find(s => s.id === server.id);
             return state && <McpServerItem key={server.id} server={server} state={state} disabled={disabled}
-              install={() => void act({ action: "install", server: server.id }, `${server.name} MCP installed. Sign in to use it.`)}
+              install={() => void act({ action: "install", server: server.id }, `${server.name} MCP installed.`).then(next => {
+                // Installing is the decision to use it: go straight on to signing in.
+                const installed = next?.servers.find(s => s.id === server.id);
+                if (installed?.status === "ready" && installed.oauth && !installed.signedIn) setLogin({ server, key: crypto.randomUUID() });
+              })}
               uninstall={() => { setRemoval({ server, key: state.removalKey! }); setRemovalOpen(true); }}
               signIn={() => setLogin({ server, key: crypto.randomUUID() })}
               signOut={() => setSignOut(server)} />;
