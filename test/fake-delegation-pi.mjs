@@ -44,6 +44,7 @@ const defaultMessages = [
 // Run is delivered by wait, agent_result and its Notification; the other only by its Notification.
 const probeUsage = { input: 3518, output: 6, cacheRead: 0, cacheWrite: 0, cost: 0.007096 };
 const claudeUsage = { input: 10, output: 106, cacheRead: 0, cacheWrite: 20786, cost: 0.042112 };
+const waitAllUsage = { input: 1200, output: 30, cacheRead: 800, cacheWrite: 0, cost: 0.0025 };
 const zero = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
 const probeStart = (callId, agent, runId, subagentId, label) => [
   assistant(callId, 'agent_start', { agent, description: label, prompt: 'Reply with exactly: OK' }),
@@ -121,6 +122,23 @@ function handle(command) {
         out({ type: 'compaction_end', reason: 'manual' });
         out({ type: 'agent_start' });
         emit(notification('run-qbdd-3', 'subagent-qbdd-3', 'usage-probe-claude', 'later probe', { usage: claudeUsage, model: 'claude-haiku-4-5-20251001' }));
+        out({ type: 'agent_settled' });
+      }
+      if (command.message === '/usage-wait-all') {
+        // pi-subagent omits the Notification for a Run whose result a wait already delivered.
+        out({ type: 'agent_start' });
+        for (const message of probeStart('start-all', 'usage-probe-all', 'run-qbdd-4', 'subagent-qbdd-4', 'wait-all probe')) emit(message);
+        emit(assistant('wait-all', 'agent_wait_all', {}));
+        emit(result('wait-all', 'agent_wait_all', 'OK', { kind: 'collection', scope: 'all-active', runs: [
+          { runId: 'run-qbdd-4', agent: 'usage-probe-all', status: 'completed', usage: waitAllUsage, model: 'openai/gpt-6.1-sol' },
+        ], stillRunning: 0, unknown: 0, unavailable: 0, noActiveRuns: false }));
+        out({ type: 'agent_settled' });
+      }
+      if (command.message === '/usage-late-notice') {
+        // The waited Run's Notification arrives in a later read, after a Run that spent nothing.
+        out({ type: 'agent_start' });
+        emit(notification('run-qbdd-4', 'subagent-qbdd-4', 'usage-probe-all', 'wait-all probe', { usage: waitAllUsage, model: 'openai/gpt-6.1-sol' }));
+        emit(notification('run-idle-2', 'subagent-idle-2', 'usage-probe-idle', 'idle probe', { usage: zero }));
         out({ type: 'agent_settled' });
       }
       out({ type: 'extension_ui_request', id: 'notice', method: 'notify', message: `barrier ${command.message}` });
