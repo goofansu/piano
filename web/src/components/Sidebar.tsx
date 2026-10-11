@@ -19,26 +19,22 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { Navigation } from "@/lib/navigation";
 import { type SessionEntry, sessionCatalog } from "@/lib/sessionCatalog";
 import { pickCommands, SESSION_ROW_COMMANDS } from "@/lib/sessionCommands";
 import { folderFor, sessionReference } from "@/lib/sessionContext";
 import { dateGroups, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy, sortSessions } from "@/lib/sidebarView";
 import { readJson, writeJson } from "@/lib/storage";
+import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarView } from "@/lib/useSidebarView";
 import { type AppState, sessionKey } from "@/store";
 
 interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
-  select: (cwd: string, sessionId: string | null) => void;
-  /** The New page; with a project, the session started there joins it. */
-  openNew: (cwd?: string, projectId?: string) => void;
   onProjectDialog: (dialog: ProjectDialog) => void;
   /** Hide the sidebar (or close the sheet it is shown in). */
   onHide: () => void;
-  /** Open the command palette. */
-  onPalette: () => void;
-  openSettings: () => void;
 }
 
 const OPEN_KEY = "piano.openProjects";
@@ -53,7 +49,8 @@ const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hov
 const groupRow = cn(row, "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
 const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
-export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide, onPalette, openSettings }: Props) {
+export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
+  const { select, openNew, openSettings, setPalette } = useNavigation();
   const [openGroups, setOpenGroups] = useState<Set<string>>(loadOpen);
   const { view, setView } = useSidebarView();
   const current = state.session ?? state.selecting;
@@ -160,7 +157,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
   return (
     <div className="flex h-full flex-col">
       <LayoutHeader onHide={onHide}>
-        <IconButton label="Search sessions" tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>} onClick={onPalette}>
+        <IconButton label="Search sessions" tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>} onClick={() => setPalette(true)}>
           <SearchIcon />
         </IconButton>
         <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
@@ -180,7 +177,7 @@ export function Sidebar({ state, send, select, openNew, onProjectDialog, onHide,
       </nav>
       </ScrollArea>
       <div className="shrink-0 p-3">
-        <Button variant="ghost" className="w-full justify-start" onClick={openSettings}><SettingsIcon data-icon="inline-start" />Settings</Button>
+        <Button variant="ghost" className="w-full justify-start" onClick={() => openSettings()}><SettingsIcon data-icon="inline-start" />Settings</Button>
       </div>
     </div>
   );
@@ -280,11 +277,12 @@ function SidebarSkeleton() {
 }
 
 /** The collapsed sidebar: a vertical rail with the expand control and activity mark. */
-export function SidebarRail({ onShow, working, openSettings }: { onShow: () => void; working: boolean; openSettings: () => void }) {
-  return <LayoutRail onShow={onShow} working={working} footer={<IconButton label="Settings" side="right" onClick={openSettings}><SettingsIcon /></IconButton>} />;
+export function SidebarRail({ onShow, working }: { onShow: () => void; working: boolean }) {
+  const { openSettings } = useNavigation();
+  return <LayoutRail onShow={onShow} working={working} footer={<IconButton label="Settings" side="right" onClick={() => openSettings()}><SettingsIcon /></IconButton>} />;
 }
 
-interface GroupProps extends Pick<Props, "send" | "select" | "state" | "openNew" | "onProjectDialog"> {
+interface GroupProps extends Pick<Props, "send" | "state" | "onProjectDialog">, Pick<Navigation, "select" | "openNew"> {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reveal: () => string | undefined;

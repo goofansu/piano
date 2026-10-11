@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { sessionActivity, sessionContext } from "@/lib/sessionContext";
 import { useModelChoice } from "@/lib/useModelChoice";
+import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { type AppState, sessionKey } from "@/store";
@@ -25,14 +26,16 @@ interface Props {
   onDraftChange: (key: string, text: string) => void;
   onDraftAppend: (key: string, text: string) => void;
   openProject: (id: string) => void;
-  changesOpen: boolean;
-  onChangesOpenChange: (open: boolean) => void;
   pullRequest: ReturnType<typeof useSessionPullRequest>;
-  pullRequestOpen: boolean;
-  onPullRequestOpenChange: (open: boolean) => void;
 }
 
-export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openProject, changesOpen, onChangesOpenChange, pullRequest, pullRequestOpen, onPullRequestOpenChange }: Props) {
+export function SessionView({ state, send, onMenu, onDraftChange, onDraftAppend, openProject, pullRequest }: Props) {
+  // The selected session's Changes sheet and PR popover; hidden while Settings covers the view.
+  const { settings, panel, openPanel, closePanel } = useNavigation();
+  const changesOpen = !settings && panel === "changes";
+  const onChangesOpenChange = (open: boolean) => open ? openPanel("changes") : closePanel();
+  const pullRequestOpen = !settings && panel === "pr";
+  const onPullRequestOpenChange = (open: boolean) => open ? openPanel("pr") : closePanel();
   const [display] = useSessionDisplay();
   const t = state.session;
   const input = state.pendingCreate;

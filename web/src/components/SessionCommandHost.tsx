@@ -9,6 +9,7 @@ import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { type SessionCommand, type SessionCommandIcon, type SessionDisplay, type SessionTarget, sessionCommands } from "@/lib/sessionCommands";
 import { sessionCheckoutMissing, sessionMutable } from "@/lib/sessionContext";
+import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import type { AppState } from "@/store";
 
@@ -57,10 +58,8 @@ export function SessionCommandMenuItem({ command, run }: { command: SessionComma
  * The one owner of session command effects and their confirmations: a single Rename dialog and a
  * single Delete dialog, whichever surface asked for them.
  */
-export function SessionCommandHost({ state, send, openNew, openChanges, openPullRequest, children }: {
-  state: AppState; send: (command: ClientCommand) => void; openNew: (cwd: string) => void;
-  openChanges: () => void; openPullRequest: () => void; children: React.ReactNode;
-}) {
+export function SessionCommandHost({ state, send, children }: { state: AppState; send: (command: ClientCommand) => void; children: React.ReactNode }) {
+  const { openNew, openPanel } = useNavigation();
   const [display, setDisplay] = useSessionDisplay();
   const [renaming, setRenaming] = useState<SessionTarget | null>(null);
   const [deleting, setDeleting] = useState<SessionTarget | null>(null);
@@ -75,8 +74,8 @@ export function SessionCommandHost({ state, send, openNew, openChanges, openPull
     const intent = command.intent;
     switch (intent.kind) {
       case "copy": void copySessionValue(intent.value, intent.label); return;
-      case "changes": openChanges(); return;
-      case "pull-request": openPullRequest(); return;
+      case "changes": openPanel("changes"); return;
+      case "pull-request": openPanel("pr"); return;
       case "display": setDisplay(intent.display); return;
       case "new-session": openNew(intent.cwd); return;
       case "rename": if (intent.target) { setDraftTitle(intent.target.title ?? ""); setRenaming(intent.target); } return;
