@@ -71,7 +71,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) => Layer.effec
   let started = 0;
   let waiters: Array<{ readonly after: number; readonly done: Deferred.Deferred<void> }> = [];
 
-  const observe = (data: RegistryData) => Effect.gen(function* () {
+  const observe = Effect.fn("SidebarView.observe")(function* (data: RegistryData) {
     const discoveries = new Map(yield* Effect.forEach(data.folders, folder => Effect.map(discover(folder), d => [folder, d] as const), { concurrency: 4 }));
     const members = [...new Set(data.sessions.filter(s => s.projectId).map(s => s.cwd))];
     const histories = new Map(yield* Effect.forEach(members, cwd => Effect.map(listSessions(cwd), list => [cwd, new Set(list.map(h => h.sessionId))] as const), { concurrency: 4 }));
@@ -80,7 +80,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) => Layer.effec
   });
 
   /** Registry selects directories and sessions; discovery supplies current Git facts, never cached registry branches. */
-  const assemble = (data: RegistryData, running: ReadonlyArray<HostInfo>, seen: Observation) => Effect.gen(function* () {
+  const assemble = Effect.fn("SidebarView.assemble")(function* (data: RegistryData, running: ReadonlyArray<HostInfo>, seen: Observation) {
     const hostOf = (cwd: string, sessionId: string) => running.find(h => h.cwd === cwd && h.sessionId === sessionId);
     // A folder added after the run is left out until the next run, which its change already queued.
     const observed = data.folders.flatMap(path => { const d = seen.discoveries.get(path); return d ? [[path, d] as const] : []; });

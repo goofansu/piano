@@ -47,7 +47,7 @@ export interface SessionViewer {
 }
 
 /** Lives until the surrounding scope closes, which detaches the attachment. */
-export const makeSessionViewer = (output: ViewerOutput) => Effect.gen(function* () {
+export const makeSessionViewer = Effect.fn("SessionViewer.make")(function* (output: ViewerOutput) {
   const hosts = yield* SessionHosts;
   const { deliver } = output;
   let selected: Selection | null = null;
@@ -66,7 +66,7 @@ export const makeSessionViewer = (output: ViewerOutput) => Effect.gen(function* 
   yield* Effect.addFinalizer(() => detach);
 
   // Caller holds navigation; slow lookup/start happens before stale-result checks.
-  const attachTo = (session: PiSession, selection: Selection) => Effect.gen(function* () {
+  const attachTo = Effect.fn("SessionViewer.attachTo")(function* (session: PiSession, selection: Selection) {
     if (!current(selection)) return;
     yield* detach;
     const scope = yield* Scope.make();
@@ -94,7 +94,7 @@ export const makeSessionViewer = (output: ViewerOutput) => Effect.gen(function* 
   });
 
   // Caller holds navigation.
-  const attachOpened = <E>(selectionId: string, open: Effect.Effect<PiSession, E>) => Effect.gen(function* () {
+  const attachOpened = Effect.fn("SessionViewer.attachOpened")(function* <E>(selectionId: string, open: Effect.Effect<PiSession, E>) {
     const session = yield* open;
     const selection = { cwd: session.spec.cwd, sessionId: session.spec.sessionId, selectionId };
     if (current(selection)) {
@@ -104,7 +104,7 @@ export const makeSessionViewer = (output: ViewerOutput) => Effect.gen(function* 
     return session;
   });
 
-  const show = (selection: Selection) => Effect.gen(function* () {
+  const show = Effect.fn("SessionViewer.show")(function* (selection: Selection) {
     const { cwd, sessionId, selectionId } = selection;
     const running = sessionId ? yield* hosts.get(cwd, sessionId) : undefined;
     const view = running ? undefined : sessionId ? yield* hosts.peek(cwd, sessionId) : { cwd, snapshot: emptySnapshot("") };
@@ -131,7 +131,7 @@ export const makeSessionViewer = (output: ViewerOutput) => Effect.gen(function* 
       }));
       return { session, started: true };
     })),
-    forget: (cwd, sessionId, retire) => Effect.gen(function* () {
+    forget: Effect.fn("SessionViewer.forget")(function* <E>(cwd: string, sessionId: string, retire: Effect.Effect<void, E>) {
       yield* navigate(Effect.suspend(() =>
         attachment?.session.spec.cwd === cwd && attachment.session.spec.sessionId === sessionId ? detach : Effect.void));
       yield* retire;

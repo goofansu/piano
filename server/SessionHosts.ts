@@ -107,7 +107,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   }));
 
   /** Locate old alias-based references without moving or copying Pi history. */
-  const reference = (cwd: string, sessionId: string, physical: string, create = false): Effect.Effect<Reference, PiSessionError> => Effect.gen(function* () {
+  const reference = Effect.fn("SessionHosts.reference")(function* (cwd: string, sessionId: string, physical: string, create = false): Effect.fn.Return<Reference, PiSessionError> {
     const candidates = (yield* registry.get).sessions.filter(s => s.sessionId === sessionId);
     const matching = [];
     for (const entry of candidates) {
@@ -147,7 +147,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   const mirror = (cwd: string, id: string, facts: Parameters<typeof registry.mirrorSession>[2]) => registry.mirrorSession(cwd, id, facts).pipe(
     Effect.catchTag("RegistryError", error => Effect.logWarning(`Could not mirror the session into the registry: ${error.detail}`)));
 
-  const cacheStats = (session: PiSession) => Effect.gen(function* () {
+  const cacheStats = Effect.fn("SessionHosts.cacheStats")(function* (session: PiSession) {
     const state = yield* session.state;
     yield* mirror(session.spec.cwd, session.spec.sessionId, {
       sessionName: state.sessionName,
@@ -157,7 +157,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   });
 
   // Caller holds this key's lock through actual process exit, not just close intent.
-  const close = (key: string, host: Host, closure?: SessionClosure) => Effect.gen(function* () {
+  const close = Effect.fn("SessionHosts.close")(function* (key: string, host: Host, closure?: SessionClosure) {
     if (hosts.get(key) !== host) return;
     host.closing = true;
     yield* Scope.close(host.scope, Exit.void);
@@ -166,7 +166,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     yield* cacheStats(host.session);
     hosts.delete(key);
     yield* announce;
-  }).pipe(Effect.uninterruptible);
+  }, Effect.uninterruptible);
 
   /**
    * Resolve a session under its ownership lock, once: its registry reference and Pi file,
@@ -203,7 +203,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
       return yield* rejected("Piano is shutting down.");
     }
     const host: Host = { session: raw, scope, lastActivity: yield* Clock.currentTimeMillis, actions: 0, closing: false };
-    const session: PiSession = { ...raw, act: action => Effect.gen(function* () {
+    const session: PiSession = { ...raw, act: Effect.fn("SessionHosts.act")(function* (action) {
       if (host.closing) return yield* rejected("Pi is closing. Wait for shutdown before reopening history.");
       const lock = yield* lockFor(key);
       // Admit an action atomically against retirement, but don't hold the lock
