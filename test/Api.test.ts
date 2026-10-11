@@ -44,7 +44,7 @@ test("INV-07: changes address the workspace by ID and an unknown ID surfaces the
 });
 
 test("slash commands decode from a directory probe", async () => {
-  const commands = await slashCommands(repo, undefined);
+  const commands = await slashCommands(repo);
   assert.ok(commands.length > 0);
   assert.ok(commands.every(c => typeof c.name === "string" && ["extension", "prompt", "skill"].includes(c.source)));
 });

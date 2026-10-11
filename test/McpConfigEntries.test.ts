@@ -7,7 +7,6 @@ import { Effect, Layer } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { type McpCatalogEntry, McpConfigEntries } from "../server/McpConfigEntries.ts";
 import { PiSessions } from "../server/PiSessions.ts";
-import { SessionHosts } from "../server/SessionHosts.ts";
 
 const URL = "https://example.test/mcp";
 const DOCS: McpCatalogEntry = { id: "docs", name: "Docs", url: URL };
@@ -30,7 +29,7 @@ async function fixture(run: (entries: McpConfigEntries, file: string, probes: ()
       // Loads the catalog (cached unless invalidated) and reports how many probes have run.
       const probes = () => Effect.map(facts.catalog(cwd), () => count);
       yield* run(yield* McpConfigEntries(directory), join(directory, "mcp.json"), probes);
-    }).pipe(Effect.provide(DirectoryFactsLive.pipe(Layer.provide(sessions), Layer.provide(Layer.mock(SessionHosts, {})))), Effect.scoped));
+    }).pipe(Effect.provide(DirectoryFactsLive.pipe(Layer.provide(sessions))), Effect.scoped));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 

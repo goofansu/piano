@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
+import { SessionHosts } from "../server/SessionHosts.ts";
 import { WorkspaceRevisions } from "../server/WorkspaceRevisions.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
@@ -63,4 +64,19 @@ test("INV-04: a provider sign-in refusal reaches the browser with its own detail
     assert.deepEqual(await reply(await send(path, "DELETE", { id: "gone" })),
       { status: 409, body: { error: "This sign-in is no longer current." } }, path);
   }
+});
+
+test("INV-02: a session's slash commands come from its running child, addressed by IDs; a stopped one is not started to answer", async () => {
+  const sessionId = crypto.randomUUID();
+  const names = async (response: Response) => ((await response.json()) as { commands: { name: string }[] }).commands.map(c => c.name);
+  const commands = () => server.handle(`/api/session/commands?${new URLSearchParams({ workspaceId: server.workspaceId, sessionId })}`);
+  await server.run(Effect.flatMap(SessionHosts, hosts => hosts.open({ cwd: server.repo, sessionId, create: true })));
+  // The fake Pi lists `live-only` in a session and `probe-only` when started without one.
+  const live = await names(await commands());
+  assert.ok(live.includes("live-only") && !live.includes("probe-only"), live.join());
+  const probed = await names(await post("/api/commands", JSON.stringify({ cwd: server.repo })));
+  assert.ok(probed.includes("probe-only") && !probed.includes("live-only"), probed.join());
+  await server.run(Effect.flatMap(SessionHosts, hosts => hosts.release(server.repo, sessionId)));
+  assert.deepEqual(await reply(await commands()), { status: 409, body: { error: "Session is no longer running. Reopen the suggestions." } });
+  assert.deepEqual(await server.run(Effect.flatMap(SessionHosts, hosts => hosts.list)), []);
 });

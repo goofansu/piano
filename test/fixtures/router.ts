@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
 import { DirectoryFactsLive } from "../../server/DirectoryFacts.ts";
 import { McpSetupLive } from "../../server/McpSetup.ts";
@@ -15,7 +15,7 @@ import { ProviderLoginLive } from "../../server/ProviderLogin.ts";
 import { RadiusSetupLive } from "../../server/RadiusSetup.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../../server/Registry.ts";
 import { AppRouter } from "../../server/Router.ts";
-import { SessionHostsLive } from "../../server/SessionHosts.ts";
+import { type SessionHosts, SessionHostsLive } from "../../server/SessionHosts.ts";
 import { SessionPullRequestsLive } from "../../server/SessionPullRequests.ts";
 import { SidebarViewLive } from "../../server/SidebarView.ts";
 import { WorkspaceChangesLive } from "../../server/WorkspaceChanges.ts";
@@ -29,6 +29,8 @@ export interface RouterFixture {
   readonly workspaceId: string;
   /** Answer a request as the server would; a relative URL resolves against the server's origin. */
   readonly handle: (input: string, init?: RequestInit) => Promise<Response>;
+  /** Run against the same services the router answers from, e.g. to start a session it can see. */
+  readonly run: <A, X>(effect: Effect.Effect<A, X, SessionHosts>) => Promise<A>;
   readonly dispose: () => Promise<void>;
 }
 
@@ -52,7 +54,7 @@ export async function startRouter<Fakes = never>(prefix: string, services?: Laye
     NodeServices.layer,
   );
   const Services = Layer.mergeAll(PiSettingsLive, ProviderLoginLive, RadiusSetupLive, McpSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
-    Layer.provideMerge(DirectoryFactsLive), Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provideMerge(RegistryLive), Layer.provideMerge(PiSessionsLive), Layer.provide(Config));
+    Layer.provideMerge(DirectoryFactsLive), Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provideMerge(RegistryLive), Layer.provideMerge(PiSessionsLive), Layer.provideMerge(Config));
   const Core = WorkspaceCommandsLive.pipe(Layer.provideMerge(SidebarViewLive()), Layer.provideMerge(Services));
 
   const workspaceId = await Effect.runPromise(Effect.gen(function* () {
@@ -60,12 +62,15 @@ export async function startRouter<Fakes = never>(prefix: string, services?: Laye
     yield* registry.addFolder(repo);
     return (yield* registry.get).workspaces.find(w => w.path === repo)!.id;
   }).pipe(Effect.provide(RegistryLive.pipe(Layer.provide(Config)))));
-  const web = HttpRouter.toWebHandler(AppRouter.pipe(Layer.provideMerge(services ? Layer.merge(Core, services) : Core)), { disableLogger: true });
+  const runtime = ManagedRuntime.make(services ? Layer.merge(Core, services) : Core);
+  const web = HttpRouter.toWebHandler(AppRouter.pipe(Layer.provideMerge(Layer.succeedContext(await runtime.context()))), { disableLogger: true });
   return {
     root, repo, workspaceId,
     handle: (input, init) => web.handler(new Request(new URL(input, "http://piano.test"), init)),
+    run: effect => runtime.runPromise(effect),
     dispose: async () => {
       await web.dispose();
+      await runtime.dispose();
       rmSync(root, { recursive: true, force: true });
     },
   };

@@ -16,6 +16,7 @@ import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup, type RadiusSetupError } from "./RadiusSetup.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
+import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { SidebarView } from "./SidebarView.ts";
 import type { SignInError, SignInState } from "./SignInAttempts.ts";
@@ -168,13 +169,20 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.changeSessionPullRequest, ({ session, body }) =>
       Effect.flatMap(SessionPullRequests, prs => prs.change(session, body)).pipe(pullRequestFailure));
 
+    const commandsFailure = failAs(502, "Could not load commands. Reopen the suggestions to retry.");
     yield* serve(Endpoints.slashCommands, ({ body }) => Effect.gen(function* () {
       if (!body.cwd) return yield* fail(400, Endpoints.slashCommands.invalid);
       const facts = yield* DirectoryFacts;
-      return { commands: yield* facts.commands(body.cwd, body.sessionId) };
-    }).pipe(
-      Effect.catchTag("DirectoryCommandsError", error => fail(error.reason === "stopped" ? 409 : 502, error.detail)),
-      failAs(502, "Could not load commands. Reopen the suggestions to retry.")));
+      return { commands: yield* facts.commands(body.cwd) };
+    }).pipe(Effect.catchTag("DirectoryCommandsError", error => fail(502, error.detail)), commandsFailure));
+    // INV-02: discovery asks the running child and never opens a saved session or a second writer.
+    yield* serve(Endpoints.sessionCommands, ({ session }) => Effect.gen(function* () {
+      const running = yield* Effect.flatMap(SessionHosts, hosts => hosts.get(session.cwd, session.sessionId));
+      if (!running) return yield* fail(409, "Session is no longer running. Reopen the suggestions.");
+      const result = yield* running.act({ _tag: "commands" });
+      if (result?._tag !== "commands") return yield* fail(502, "Command catalog unavailable.");
+      return { commands: result.commands };
+    }).pipe(commandsFailure));
 
     yield* serve(Endpoints.saveDefaults, ({ body }) =>
       Effect.flatMap(PiSettings, settings => settings.saveDefaults(body)).pipe(

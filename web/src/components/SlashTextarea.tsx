@@ -3,13 +3,13 @@ import { cn } from "cn";
 import { type ComponentProps, type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { slashCommands } from "@/lib/api";
+import { sessionCommands, slashCommands } from "@/lib/api";
 import { useObservation } from "@/lib/useObservation";
 
 export interface CompletionContext {
   cwd: string;
-  /** Only supplied for a live child; discovery must not start a saved session. */
-  sessionId?: string;
+  /** Only supplied for a live child, which then answers; discovery must not start a saved session. */
+  session?: { workspaceId: string; sessionId: string };
   /** Invalidates pending discovery after replacement, reconnect or trust changes. */
   revision?: string;
 }
@@ -46,10 +46,11 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
   const position = JSON.stringify([key, value, selection]);
   const open = !!completion?.cwd && !props.disabled && focused && !composing && !!range && dismissed !== position;
   const cwd = completion?.cwd;
-  const sessionId = completion?.sessionId;
+  const session = completion?.session;
   // Fetch once per opening, not per keystroke. Reopening gets the live catalog
   // again, including changes made by a handled extension command.
-  const catalog = useObservation(open && cwd ? key : null, signal => slashCommands(cwd!, sessionId, { signal }));
+  const catalog = useObservation(open && cwd ? key : null, signal =>
+    session ? sessionCommands(session.workspaceId, session.sessionId, { signal }) : slashCommands(cwd!, { signal }));
   const current = catalog.value ? { commands: catalog.value } : catalog.error ? { commands: [], error: catalog.error } : undefined;
   const query = range?.query ?? "";
   const commands = (current?.commands ?? []).filter(command => command.source === "skill" && command.name.toLowerCase().includes(query))

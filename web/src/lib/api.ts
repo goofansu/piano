@@ -92,9 +92,13 @@ export const sessionPullRequest = (workspaceId: string, sessionId: string, actio
 
 // Composer
 
-/** A live session answers from its own child; otherwise the directory's probe does. */
-export const slashCommands = async (cwd: string, sessionId: string | undefined, options?: RequestOptions) =>
-  (await call(Endpoints.slashCommands, { body: { cwd, sessionId } }, options)).commands;
+/** Before a session starts, from the directory's probe. */
+export const slashCommands = async (cwd: string, options?: RequestOptions) =>
+  (await call(Endpoints.slashCommands, { body: { cwd } }, options)).commands;
+
+/** From the running session's own child; fails with 409 once it has stopped. */
+export const sessionCommands = async (workspaceId: string, sessionId: string, options?: RequestOptions) =>
+  (await call(Endpoints.sessionCommands, { query: { workspaceId, sessionId } }, options)).commands;
 
 export const saveDefaults = async (model: string | undefined, thinkingLevel: ThinkingLevel, options?: RequestOptions) =>
   (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;

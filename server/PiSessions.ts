@@ -18,12 +18,13 @@ type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
 import { imageType } from "../shared/attachments.ts";
 import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
-import type { Dialog, DialogResolution, PromptSubmission, SessionAction, SessionActionResult, SessionClosure, SessionEvent, SessionFrame, SessionState, SessionStats, SlashCommand, Snapshot } from "../shared/wire.ts";
+import type { Dialog, DialogResolution, ModelChoice, PromptSubmission, SessionAction, SessionActionResult, SessionClosure, SessionEvent, SessionFrame, SessionState, SessionStats, SlashCommand, Snapshot } from "../shared/wire.ts";
 import { Attachments } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { PiCli } from "./PiCli.ts";
-import { commandsOf, PiProjector, type PiRecord, queuedMessagesOf, type RawMessage, type RawState, type RawStats, type RefreshKind, stateFactsOf, statsOf } from "./PiRecords.ts";
+import { enabledModelPatterns } from "./PiEnv.ts";
+import { commandsOf, modelChoicesOf, PiProjector, type PiRecord, queuedMessagesOf, type RawMessage, type RawState, type RawStats, type RefreshKind, stateFactsOf, statsOf } from "./PiRecords.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
 
@@ -61,15 +62,8 @@ export interface PiSession {
 
 export interface ProbeResult {
   readonly commands: ReadonlyArray<SlashCommand>;
-  readonly models: ReadonlyArray<{
-    provider: string;
-    id: string;
-    name?: string;
-    reasoning: boolean;
-    contextWindow: number;
-    /** Pi's per-model effort table: null disables a level, a value enables xhigh or max. */
-    thinkingLevelMap?: Record<string, string | null | undefined>;
-  }>;
+  /** In Pi's order, each with the efforts Pi accepts for it and whether Pi's `enabledModels` scopes it in. */
+  readonly models: ReadonlyArray<ModelChoice>;
   readonly defaultModel?: string;
   readonly defaultThinkingLevel?: string;
 }
@@ -79,7 +73,10 @@ export class PiSessions extends Context.Service<
   {
     /** Spawn Pi for a session. The child lives as long as the calling Scope. */
     readonly open: (spec: PiSessionSpec) => Effect.Effect<PiSession, PiSessionError, Scope.Scope>;
-    /** One-shot `pi --mode rpc --no-session`: available models and Pi's default. */
+    /**
+     * One-shot `pi --mode rpc --no-session`: available models, slash commands and Pi's default.
+     * `globalSettingsOnly` ignores the directory's project resources, and scopes no model in.
+     */
     readonly probe: (cwd: string, options?: { globalSettingsOnly?: boolean }) => Effect.Effect<ProbeResult, PiSessionError>;
   }
 >()("piano/PiSessions") {}
@@ -741,10 +738,12 @@ const probe = (cwd: string, options?: { globalSettingsOnly?: boolean }): Effect.
         ),
       ),
     );
+    const choices = modelChoicesOf(models, options?.globalSettingsOnly ? [] : enabledModelPatterns(cwd));
+    if (!choices) return yield* new PiSessionError({ reason: "protocol", detail: "Pi returned an invalid model catalog." });
     const facts = stateFactsOf(state as RawState);
     return {
       commands,
-      models: ((models as { models?: ProbeResult["models"] }).models ?? []),
+      models: choices,
       defaultModel: facts.model,
       defaultThinkingLevel: facts.thinkingLevel,
     };

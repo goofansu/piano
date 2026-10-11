@@ -9,7 +9,6 @@ import { Effect, Layer } from "effect";
 import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { McpSetup, McpSetupEnvironment, McpSetupLive } from "../server/McpSetup.ts";
 import { PiSessions } from "../server/PiSessions.ts";
-import { SessionHosts } from "../server/SessionHosts.ts";
 import type { ProviderLoginState } from "../shared/wire.ts";
 
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
@@ -62,7 +61,7 @@ async function fixture(run: (setup: McpSetup["Service"], directory: string, url:
   }));
   try {
     await Effect.runPromise(Effect.gen(function* () { yield* run(yield* McpSetup, directory, fake.url); }).pipe(
-      Effect.provide(McpSetupLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(sessions), Layer.provide(Layer.mock(SessionHosts, {})))), Effect.scoped,
+      Effect.provide(McpSetupLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(sessions))), Effect.scoped,
       Effect.provideService(McpSetupEnvironment, { directory: () => directory, servers: () => [{ id: "linear", name: "Linear", url: fake.url }] }),
     ));
   } finally {
