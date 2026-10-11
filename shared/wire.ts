@@ -38,6 +38,13 @@ export const Usage = Schema.Struct({
 });
 export type Usage = typeof Usage.Type;
 
+/** One Subagent Run's spend as pi-subagent delivers it: no `totalTokens`, cost in unrounded USD. */
+export const RunUsage = Schema.Struct({
+  input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number, cost: Schema.Number,
+});
+export type RunUsage = typeof RunUsage.Type;
+const RunSpend = { usage: Schema.optional(RunUsage), model: Schema.optional(Schema.String) };
+
 const SubagentIdentity = {
   runId: Schema.optional(Schema.String),
   subagentId: Schema.optional(Schema.String),
@@ -72,7 +79,7 @@ export const SubagentCard = Schema.Union([
     ...SubagentIdentity,
     status: Schema.String,
     terminalStatus: Schema.optional(TerminalSubagentStatus),
-    runs: Schema.Array(Schema.Struct({ ...SubagentIdentity, runId: Schema.String, profile: Schema.String, status: TerminalSubagentStatus })),
+    runs: Schema.Array(Schema.Struct({ ...SubagentIdentity, runId: Schema.String, profile: Schema.String, status: TerminalSubagentStatus, ...RunSpend })),
     stillRunning: Schema.Number,
     unknown: Schema.Number,
     unavailable: Schema.Number,
@@ -85,6 +92,7 @@ export const SubagentCard = Schema.Union([
     status: Schema.String,
     terminalStatus: Schema.optional(TerminalSubagentStatus),
     durationMillis: Schema.optional(Schema.Number),
+    ...RunSpend,
   }),
   Schema.Struct({
     kind: Schema.Literal("cancellation"),

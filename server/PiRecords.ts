@@ -5,7 +5,7 @@
  * record's fields itself.
  */
 import { Schema } from 'effect';
-import type { Dialog, QueuedMessage, RenderMsg, SessionEvent, SessionState, SubagentCard, ToolExecution, Usage } from '../shared/wire.ts';
+import type { Dialog, QueuedMessage, RenderMsg, RunUsage, SessionEvent, SessionState, SubagentCard, ToolExecution, Usage } from '../shared/wire.ts';
 import { SlashCommand } from '../shared/wire.ts';
 import { projectDisplay, redactDisplay } from './DisplayProjection.ts';
 import { imagePreview } from './ImagePreviews.ts';
@@ -74,6 +74,18 @@ const terminal = (value: unknown): value is 'completed' | 'failed' | 'cancelled'
 const count = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
 const tone = (value: unknown, result = false) => value === 'toolTitle' || value === 'warning' || value === 'error' || (result && value === 'toolOutput');
 const titleStatus = (value: 'completed' | 'failed' | 'cancelled') => value[0].toUpperCase() + value.slice(1);
+const figure = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+/** A delivered Run's usage and model, each dropped alone when malformed so the card survives.
+ * Never Pi's message-level `usage`: pi-subagent leaves it unset so repeated deliveries do not add up. */
+const spendOf = (facts: DetailRecord): { usage?: RunUsage; model?: string } => {
+  const usage = recordOf(facts.usage);
+  const valid = usage && figure(usage.input) && figure(usage.output) && figure(usage.cacheRead) && figure(usage.cacheWrite) && figure(usage.cost);
+  const model = typeof facts.model === 'string' && facts.model.length > 0 && Buffer.byteLength(facts.model) <= 100 ? facts.model : undefined;
+  return {
+    ...(valid ? { usage: { input: usage.input as number, output: usage.output as number, cacheRead: usage.cacheRead as number, cacheWrite: usage.cacheWrite as number, cost: usage.cost as number } } : {}),
+    ...(model ? { model } : {}),
+  };
+};
 const parseArgs = (args: string | undefined): DetailRecord => {
   try { return recordOf(args ? JSON.parse(args) : undefined) ?? {}; } catch { return {}; }
 };
@@ -139,7 +151,7 @@ class SubagentProjection {
       if ((facts.scope !== 'named' && facts.scope !== 'all-active') || !Array.isArray(facts.runs) || !count(facts.stillRunning) || !count(facts.unknown) || !count(facts.unavailable) || typeof facts.noActiveRuns !== 'boolean') return undefined;
       const runs = facts.runs.flatMap(value => {
         const run = recordOf(value);
-        return run && identifier(run.runId) && bounded(run.agent) && terminal(run.status) ? [{ ...this.runs.get(run.runId), runId: run.runId, profile: run.agent, status: run.status }] : [];
+        return run && identifier(run.runId) && bounded(run.agent) && terminal(run.status) ? [{ ...this.runs.get(run.runId), runId: run.runId, profile: run.agent, status: run.status, ...spendOf(run) }] : [];
       });
       if (runs.length !== facts.runs.length) return undefined;
       const clauses = [runs.length ? `Delivered ${runs.length} ${runs.length === 1 ? 'result' : 'results'}` : '', facts.unavailable ? `${facts.unavailable} unavailable` : '', facts.stillRunning ? `${facts.stillRunning} still running when checked` : '', facts.unknown ? `${facts.unknown} unknown` : ''].filter(Boolean);
@@ -151,7 +163,7 @@ class SubagentProjection {
       if (facts.outcome === 'available') {
         const run = recordOf(facts.run);
         if (!run || !identifier(run.runId) || !bounded(run.agent) || !terminal(run.status)) return undefined;
-        return { kind: 'result', source: 'tool', ...this.runs.get(run.runId), runId: run.runId, profile: run.agent, status: titleStatus(run.status), terminalStatus: run.status };
+        return { kind: 'result', source: 'tool', ...this.runs.get(run.runId), runId: run.runId, profile: run.agent, status: titleStatus(run.status), terminalStatus: run.status, ...spendOf(run) };
       }
       if ((facts.outcome === 'still-running' || facts.outcome === 'unknown') && identifier(facts.runId)) return {
         kind: 'result', source: 'tool', runId: facts.runId, ...this.runs.get(facts.runId), status: facts.outcome === 'still-running' ? 'Still running when checked' : facts.rowPhrase,
@@ -186,7 +198,7 @@ class SubagentProjection {
     const meta = { subagentId: facts.subagentId, label: facts.label, profile: facts.agent };
     this.runs.set(facts.runId, meta);
     this.subagents.set(facts.subagentId, meta);
-    return { kind: 'result', source: 'notification', runId: facts.runId, ...meta, status: titleStatus(facts.status), terminalStatus: facts.status, durationMillis: facts.durationMillis };
+    return { kind: 'result', source: 'notification', runId: facts.runId, ...meta, status: titleStatus(facts.status), terminalStatus: facts.status, durationMillis: facts.durationMillis, ...spendOf(facts) };
   }
 }
 

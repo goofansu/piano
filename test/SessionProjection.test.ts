@@ -7,15 +7,17 @@ import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { NodeServices } from '@effect/platform-node';
 import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
 import { DirectoryFacts, DirectoryFactsLive } from '../server/DirectoryFacts.ts';
-import { PiCli } from '../server/PiCli.ts';
+import { PiCli, type PiCliConfig } from '../server/PiCli.ts';
 import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
 import { peekSession } from '../server/SessionFiles.ts';
 import { SessionHosts } from '../server/SessionHosts.ts';
-import type { SessionEvent } from '../shared/wire.ts';
+import type { RenderMsg, SessionEvent, SubagentCard } from '../shared/wire.ts';
+import { subagentUsage } from '../web/src/lib/subagentUsage.ts';
 
 const cli = { node: process.execPath, cli: new URL('./fake-projection-pi.mjs', import.meta.url).pathname, extraArgs: [] };
 const delegationCli = { node: process.execPath, cli: new URL('./fake-delegation-pi.mjs', import.meta.url).pathname, extraArgs: [] };
-const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>, selectedCli = cli) => Effect.runPromise(effect.pipe(
+const usageCli = { ...delegationCli, extraArgs: ['--usage'] };
+const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>, selectedCli: PiCliConfig = cli) => Effect.runPromise(effect.pipe(
   Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer))), Effect.provideService(PiCli, selectedCli),
 ));
 const snapshot = (session: PiSession) => session.events.pipe(Stream.take(1), Stream.runCollect, Effect.map(es => {
@@ -218,6 +220,77 @@ test('delegation fixture continues and persists an existing Pi JSONL session', a
       assert.match(persisted, /"runId":"run-live"/);
       assert.match(persisted, /"customType":"subagent-notification"/);
     }).pipe(Effect.timeout('5 seconds'), Effect.scoped), delegationCli);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+const card = (messages: ReadonlyArray<RenderMsg>, find: (card: SubagentCard) => boolean) => messages.find(message => message.subagent && find(message.subagent))?.subagent;
+const usageRows = (messages: ReadonlyArray<RenderMsg>) => {
+  const usage = subagentUsage(messages)!;
+  return {
+    profiles: usage.profiles.map(p => [p.profile, p.totalTokens, Number(p.cost.toFixed(6)), p.model ?? null, p.runs]),
+    total: [usage.total.totalTokens, Number(usage.total.cost.toFixed(6)), usage.total.runs],
+  };
+};
+const probe = { input: 3518, output: 6, cacheRead: 0, cacheWrite: 0, cost: 0.007096 };
+const claude = { input: 10, output: 106, cacheRead: 0, cacheWrite: 20786, cost: 0.042112 };
+
+test('delivered Run usage projects from waits, results and Notifications, live and from history', async () => {
+  await run(Effect.gen(function* () {
+    const session = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: 'usage-projection' });
+    const initial = (yield* snapshot(session)).messages;
+    const wait = card(initial, c => c.kind === 'collection');
+    assert.ok(wait?.kind === 'collection');
+    assert.deepEqual(wait.runs.map(r => [r.runId, r.usage, r.model]), [
+      ['run-qbdd-1', probe, 'openai/gpt-6.1-sol'],
+      ['run-idle', { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }, undefined],
+    ], 'valid zero usage is kept and distinct from absent usage');
+    const fetched = card(initial, c => c.kind === 'result' && c.source === 'tool' && c.runId === 'run-qbdd-1');
+    assert.ok(fetched?.kind === 'result');
+    assert.deepEqual([fetched.usage, fetched.model], [probe, 'openai/gpt-6.1-sol']);
+    const idleNotice = card(initial, c => c.kind === 'result' && c.source === 'notification' && c.runId === 'run-idle');
+    assert.ok(idleNotice?.kind === 'result' && idleNotice.usage === undefined && idleNotice.model === undefined);
+    const malformed = initial.find(message => message.toolCallId === 'result-bad')?.subagent;
+    assert.ok(malformed?.kind === 'result', 'malformed usage and model are dropped without losing the card');
+    assert.deepEqual([malformed.status, malformed.usage, malformed.model], ['Completed', undefined, undefined]);
+    assert.equal(initial.some(message => message.role === 'tool_result' && message.usage), false, 'message-level usage is not invented');
+
+    yield* observe(session, '/usage-live');
+    const live = (yield* snapshot(session)).messages;
+    const notice = card(live, c => c.kind === 'result' && c.runId === 'run-qbdd-2');
+    assert.ok(notice?.kind === 'result');
+    assert.deepEqual([notice.source, notice.usage, notice.model], ['notification', claude, 'claude-haiku-4-5-20251001']);
+    assert.deepEqual(usageRows(live), {
+      profiles: [['usage-probe-pi', 3524, 0.007096, 'openai/gpt-6.1-sol', 1], ['usage-probe-idle', 0, 0, null, 1], ['usage-probe-claude', 20902, 0.042112, 'claude-haiku-4-5-20251001', 1]],
+      total: [24426, 0.049208, 3],
+    });
+  }).pipe(Effect.timeout('5 seconds'), Effect.scoped), usageCli);
+});
+
+test('a reopened session file reconstructs Run usage from persisted Notifications and tool results', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'piano-usage-history-'));
+  try {
+    const manager = SessionManager.create(root, root);
+    const call = (id: string, name: string, args: unknown) => manager.appendMessage({ role: 'assistant', api: 'openai-completions', provider: 'openai', model: 'gpt-6.1-sol', content: [{ type: 'toolCall', id, name, arguments: args as never }], usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.001 } }, stopReason: 'toolUse', timestamp: 1 });
+    const done = (id: string, name: string, details: object) => manager.appendMessage({ role: 'toolResult', toolCallId: id, toolName: name, content: [{ type: 'text', text: 'OK' }], details: details as never, isError: false, timestamp: 2 });
+    const notify = (runId: string, subagentId: string, agent: string, usage: typeof probe, model: string) =>
+      manager.appendCustomMessageEntry('subagent-notification', 'OK', true, { runId, subagentId, agent, label: agent, status: 'completed', durationMillis: 2407, usage, model });
+    call('s1', 'agent_start', { agent: 'usage-probe-pi', description: 'waited probe', prompt: 'Reply with exactly: OK' });
+    done('s1', 'agent_start', { kind: 'start', rowPhrase: 'Started', tone: 'toolTitle', agent: 'usage-probe-pi', subagentId: 'subagent-qbdd-1', runId: 'run-qbdd-1' });
+    call('s2', 'agent_start', { agent: 'usage-probe-claude', description: 'unwaited probe', prompt: 'Reply with exactly: OK' });
+    done('s2', 'agent_start', { kind: 'start', rowPhrase: 'Started', tone: 'toolTitle', agent: 'usage-probe-claude', subagentId: 'subagent-qbdd-2', runId: 'run-qbdd-2' });
+    call('w', 'agent_wait', { ids: ['run-qbdd-1'] });
+    done('w', 'agent_wait', { kind: 'collection', scope: 'named', runs: [{ runId: 'run-qbdd-1', agent: 'usage-probe-pi', status: 'completed', usage: probe, model: 'openai/gpt-6.1-sol' }], stillRunning: 0, unknown: 0, unavailable: 0, noActiveRuns: false });
+    call('r', 'agent_result', { id: 'run-qbdd-1' });
+    done('r', 'agent_result', { kind: 'result', rowPhrase: '2 characters', tone: 'toolOutput', outcome: 'available', run: { runId: 'run-qbdd-1', agent: 'usage-probe-pi', status: 'completed', usage: probe, model: 'openai/gpt-6.1-sol' } });
+    notify('run-qbdd-1', 'subagent-qbdd-1', 'usage-probe-pi', probe, 'openai/gpt-6.1-sol');
+    notify('run-qbdd-2', 'subagent-qbdd-2', 'usage-probe-claude', claude, 'claude-haiku-4-5-20251001');
+    const file = manager.getSessionFile()!;
+    assert.match(readFileSync(file, 'utf8'), /"type":"custom_message"/, 'Notifications persist as custom_message entries');
+    const snap = await Effect.runPromise(peekSession(file, manager.getSessionId()));
+    assert.deepEqual(usageRows(snap.messages), {
+      profiles: [['usage-probe-pi', 3524, 0.007096, 'openai/gpt-6.1-sol', 1], ['usage-probe-claude', 20902, 0.042112, 'claude-haiku-4-5-20251001', 1]],
+      total: [24426, 0.049208, 2],
+    });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

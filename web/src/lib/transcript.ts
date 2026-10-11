@@ -132,7 +132,7 @@ function subagentFacts(card: SubagentCard, reported: TerminalStatus | undefined,
   const hasDetails = !!output || card.kind === "collection" || card.kind === "cancellation"
     || ("subagentId" in card && !!card.subagentId) || ("runId" in card && !!card.runId)
     || (card.kind === "delegation" && !!card.prompt) || (card.kind === "control" && !!card.message)
-    || (card.kind === "result" && card.durationMillis !== undefined);
+    || (card.kind === "result" && (card.durationMillis !== undefined || !!card.usage));
   return { card, ...(terminal ? { terminal } : {}), statusLabel, badge, failed, ...(output ? { output } : {}), hasDetails };
 }
 

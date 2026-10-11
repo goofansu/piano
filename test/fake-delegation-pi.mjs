@@ -40,7 +40,34 @@ const defaultMessages = [
   assistant('bad-start', 'agent_start', { agent: 'reviewer', description: 'Malformed details', prompt: 'Fallback' }),
   result('bad-start', 'agent_start', 'Readable malformed fallback', { kind: 'start', rowPhrase: '', agent: 'reviewer', runId: 123 }),
 ];
-const messages = entries.length ? entries.filter(entry => entry.type === 'message').map(entry => entry.message) : defaultMessages;
+// The two-Run shape of a real Pi 1.1.0 session with pi-subagent Run usage (sanitized): the waited
+// Run is delivered by wait, agent_result and its Notification; the other only by its Notification.
+const probeUsage = { input: 3518, output: 6, cacheRead: 0, cacheWrite: 0, cost: 0.007096 };
+const claudeUsage = { input: 10, output: 106, cacheRead: 0, cacheWrite: 20786, cost: 0.042112 };
+const zero = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+const probeStart = (callId, agent, runId, subagentId, label) => [
+  assistant(callId, 'agent_start', { agent, description: label, prompt: 'Reply with exactly: OK' }),
+  result(callId, 'agent_start', `Started ${runId}`, { kind: 'start', rowPhrase: 'Started', tone: 'toolTitle', agent, runId, subagentId }),
+];
+const notification = (runId, subagentId, agent, label, spend) => ({ role: 'custom', customType: 'subagent-notification', display: true, content: `Result of ${label}`, details: { runId, subagentId, agent, label, status: 'completed', durationMillis: 2407, ...spend } });
+const usageMessages = [
+  ...probeStart('start-pi', 'usage-probe-pi', 'run-qbdd-1', 'subagent-qbdd-1', 'waited probe'),
+  ...probeStart('start-claude', 'usage-probe-claude', 'run-qbdd-2', 'subagent-qbdd-2', 'unwaited probe'),
+  ...probeStart('start-idle', 'usage-probe-idle', 'run-idle', 'subagent-idle', 'idle probe'),
+  assistant('wait-pi', 'agent_wait', { ids: ['run-qbdd-1', 'run-idle'] }),
+  result('wait-pi', 'agent_wait', 'OK', { kind: 'collection', scope: 'named', runs: [
+    { runId: 'run-qbdd-1', agent: 'usage-probe-pi', status: 'completed', usage: probeUsage, model: 'openai/gpt-6.1-sol' },
+    { runId: 'run-idle', agent: 'usage-probe-idle', status: 'completed', usage: zero },
+  ], stillRunning: 0, unknown: 0, unavailable: 0, noActiveRuns: false }),
+  assistant('result-pi', 'agent_result', { id: 'run-qbdd-1' }),
+  result('result-pi', 'agent_result', 'OK', { kind: 'result', rowPhrase: '2 characters', tone: 'toolOutput', outcome: 'available', run: { runId: 'run-qbdd-1', agent: 'usage-probe-pi', status: 'completed', usage: probeUsage, model: 'openai/gpt-6.1-sol' } }),
+  notification('run-qbdd-1', 'subagent-qbdd-1', 'usage-probe-pi', 'waited probe', { usage: probeUsage, model: 'openai/gpt-6.1-sol' }),
+  notification('run-idle', 'subagent-idle', 'usage-probe-idle', 'idle probe', {}),
+  assistant('result-bad', 'agent_result', { id: 'run-idle' }),
+  result('result-bad', 'agent_result', 'Malformed usage', { kind: 'result', rowPhrase: '15 characters', tone: 'toolOutput', outcome: 'available', run: { runId: 'run-idle', agent: 'usage-probe-idle', status: 'completed', usage: { ...probeUsage, cost: -1 }, model: 'x'.repeat(101) } }),
+];
+const usageLive = notification('run-qbdd-2', 'subagent-qbdd-2', 'usage-probe-claude', 'unwaited probe', { usage: claudeUsage, model: 'claude-haiku-4-5-20251001' });
+const messages = entries.length ? entries.filter(entry => entry.type === 'message').map(entry => entry.message) : args.includes('--usage') ? usageMessages : defaultMessages;
 const historicalStart = messages.find(message => message.role === 'toolResult' && message.details?.kind === 'start' && typeof message.details.subagentId === 'string');
 const liveSubagentId = historicalStart?.details.subagentId ?? 'subagent-stable';
 const liveAgent = historicalStart?.details.agent ?? 'reviewer';
@@ -68,6 +95,11 @@ function handle(command) {
         emit(assistant('live-resume', 'agent_resume', { id: liveSubagentId, description: 'Live delegation', prompt: 'Continue the historical review.' }));
         emit(result('live-resume', 'agent_resume', 'Resumed run-live', { kind: 'resume', rowPhrase: 'Resumed', tone: 'toolTitle', subagentId: liveSubagentId, runId: 'run-live' }));
         emit({ role: 'custom', customType: 'subagent-notification', display: true, content: 'Live result', details: { runId: 'run-live', subagentId: liveSubagentId, agent: liveAgent, label: 'Live delegation', status: 'cancelled', durationMillis: 25 } });
+        out({ type: 'agent_settled' });
+      }
+      if (command.message === '/usage-live') {
+        out({ type: 'agent_start' });
+        emit(usageLive);
         out({ type: 'agent_settled' });
       }
       out({ type: 'extension_ui_request', id: 'notice', method: 'notify', message: `barrier ${command.message}` });
