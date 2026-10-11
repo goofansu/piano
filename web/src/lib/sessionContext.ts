@@ -7,6 +7,7 @@ import type { FolderView, Project, ProjectTrust, SessionClosure, SessionReferenc
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
+import { findProject } from "./projectCommands.ts";
 
 type SessionRef = { cwd: string; sessionId: string };
 
@@ -77,8 +78,7 @@ export function sessionReference(state: AppState, session: SessionRef): SessionR
 }
 
 export function sessionProject(state: AppState, session: SessionRef | null | undefined): Project | undefined {
-  const id = session && sessionReference(state, session)?.projectId;
-  return id ? state.projects.find(p => p.id === id) : undefined;
+  return findProject(state, session && sessionReference(state, session)?.projectId);
 }
 
 /** Session actions go out only on a current, settled attachment. */

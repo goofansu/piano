@@ -1,0 +1,81 @@
+/**
+ * Project policy for the client, described once: which projects a picker offers, what a project's
+ * row offers (each command with whether it is available now and what running it means), and
+ * whether a session can start in a project. The sidebar, the session's Project menu and the New
+ * session page render these instead of each deciding.
+ */
+import type { ClientCommand, Project } from "@shared/wire";
+import type { AppState } from "../store.ts";
+
+/** The one project lookup by ID. An unknown or missing ID has no project. */
+export function findProject(state: AppState, id: string | null | undefined): Project | undefined {
+  return id ? state.projects.find(p => p.id === id) : undefined;
+}
+
+/** Projects the sidebar lists and pickers offer: archived ones stay out until unarchived. */
+export function activeProjects(state: AppState): Project[] {
+  return state.projects.filter(p => !p.archived);
+}
+
+/**
+ * What a project picker offers when `current` is chosen: the active projects, plus `current` when
+ * it is archived, so the picker still names the present choice and can move away from it.
+ */
+export function projectChoices(state: AppState, current: Project | undefined): Project[] {
+  const choices = activeProjects(state);
+  if (current && !choices.some(p => p.id === current.id)) choices.push(current);
+  return choices;
+}
+
+/** A session can start in no project or in an active one; an archived project takes no new sessions. */
+export function canStartSessionIn(state: AppState, projectId: string | null | undefined): boolean {
+  return !findProject(state, projectId)?.archived;
+}
+
+export type ProjectCommandId = "new-session" | "edit" | "archive" | "unarchive";
+
+export type ProjectCommandIcon = "new" | "edit" | "archive" | "unarchive";
+
+export type ProjectCommandIntent =
+  /** Open the New session page as the project's home; it sends nothing. */
+  | { kind: "new-session"; projectId: string }
+  /** Open the project dialog to rename it. */
+  | { kind: "edit"; project: Project }
+  /** Send this registry change. */
+  | { kind: "send"; command: ClientCommand };
+
+export interface ProjectCommand {
+  id: ProjectCommandId;
+  label: string;
+  /** The button's accessible name where the row shows only an icon. */
+  ariaLabel?: string;
+  icon: ProjectCommandIcon;
+  enabled: boolean;
+  intent: ProjectCommandIntent;
+}
+
+/**
+ * What a project row offers, in order: New session in the project, Edit, then Archive or Unarchive
+ * (whichever applies). Enablement, one rule per command:
+ * - new session: `canStartSessionIn`; it only opens the New session page, whose send waits for a connection.
+ * - edit, archive, unarchive: connected, since each changes the registry.
+ */
+export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
+  const archive = !project.archived;
+  return [
+    {
+      id: "new-session", label: "New session in project", ariaLabel: `New session in ${project.name}`, icon: "new",
+      enabled: canStartSessionIn(state, project.id), intent: { kind: "new-session", projectId: project.id },
+    },
+    { id: "edit", label: "Edit project", icon: "edit", enabled: state.connected, intent: { kind: "edit", project } },
+    {
+      id: archive ? "archive" : "unarchive", label: archive ? "Archive project" : "Unarchive project", icon: archive ? "archive" : "unarchive",
+      enabled: state.connected, intent: { kind: "send", command: { _tag: "archive_project", id: project.id, archived: archive } },
+    },
+  ];
+}
+
+/** One command of `project`'s, when it currently applies (Archive and Unarchive exclude each other). */
+export function projectCommand(state: AppState, project: Project, id: ProjectCommandId): ProjectCommand | undefined {
+  return projectCommands(state, project).find(c => c.id === id);
+}

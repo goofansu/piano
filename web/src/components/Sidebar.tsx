@@ -1,6 +1,6 @@
 import type { ClientCommand as ClientMessage, FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, type LucideIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
@@ -20,6 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Navigation } from "@/lib/navigation";
+import { activeProjects, type ProjectCommand, type ProjectCommandIcon, projectCommands } from "@/lib/projectCommands";
 import { type SessionEntry, sessionCatalog } from "@/lib/sessionCatalog";
 import { pickCommands, SESSION_ROW_COMMANDS } from "@/lib/sessionCommands";
 import { projectKey } from "@/lib/sidebarGroups";
@@ -96,7 +97,7 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
     }
     if (view.groupBy === "project") {
       // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
-      const active = state.projects.filter(p => !p.archived);
+      const active = activeProjects(state);
       const all = projectGroups(active, listed, view.sortBy);
       if (active.length === 0 && all.every(g => g.sessions.length === 0)) return empty("No sessions yet. Start one and it appears here.");
       return groups(all.map(g => {
@@ -306,6 +307,9 @@ function SessionRow({ t, state, send, select, onProjectDialog, reveal }: {
   );
 }
 
+const PROJECT_ICONS: Record<ProjectCommandIcon, LucideIcon> = { new: PlusIcon, edit: PencilIcon, archive: ArchiveIcon, unarchive: ArchiveRestoreIcon };
+const ProjectCommandIconView = ({ icon }: { icon: ProjectCommandIcon }) => { const Icon = PROJECT_ICONS[icon]; return <Icon />; };
+
 const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} className="size-4" />;
 
 /** Session rows from the catalog; each entry already says how it appears. */
@@ -326,6 +330,14 @@ function SessionList({ sessions, state, send, select, reveal, onProjectDialog }:
 function ProjectGroup({ project, sessions, open, onOpenChange, state, send, select, openNew, reveal, onProjectDialog }: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
   const [enter] = useState(reveal);
   const members = sessions;
+  const commands = project ? projectCommands(state, project) : [];
+  const create = commands.find(c => c.id === "new-session");
+  const menu = commands.filter(c => c.id !== "new-session");
+  const run = ({ intent }: ProjectCommand) => {
+    if (intent.kind === "new-session") openNew(undefined, intent.projectId);
+    else if (intent.kind === "edit") onProjectDialog({ project: intent.project });
+    else send(intent.command);
+  };
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={cn(groupRow, enter)}>
@@ -335,9 +347,9 @@ function ProjectGroup({ project, sessions, open, onOpenChange, state, send, sele
             <span className={cn("min-w-0 flex-1 truncate text-sm font-medium", !project || project.archived ? "text-ink-3" : "text-ink-2")}>{project?.name ?? "No project"}</span>
           </button>
         </CollapsibleTrigger>
-        {project && !project.archived && (
-          <IconButton size="icon-xs" className={hoverSlot} label={`New session in ${project.name}`} tooltip="New session in project" onClick={() => openNew(undefined, project.id)}>
-            <PlusIcon />
+        {create?.enabled && (
+          <IconButton size="icon-xs" className={hoverSlot} label={create.ariaLabel ?? create.label} tooltip={create.label} onClick={() => run(create)}>
+            <ProjectCommandIconView icon={create.icon} />
           </IconButton>
         )}
         {project && <DropdownMenu>
@@ -348,10 +360,7 @@ function ProjectGroup({ project, sessions, open, onOpenChange, state, send, sele
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuGroup>
-              <DropdownMenuItem disabled={!state.connected} onSelect={() => onProjectDialog({ project })}><PencilIcon /> Edit project</DropdownMenuItem>
-              <DropdownMenuItem disabled={!state.connected} onSelect={() => send({ _tag: "archive_project", id: project.id, archived: !project.archived })}>
-                {project.archived ? <><ArchiveRestoreIcon /> Unarchive project</> : <><ArchiveIcon /> Archive project</>}
-              </DropdownMenuItem>
+              {menu.map(c => <DropdownMenuItem key={c.id} disabled={!c.enabled} onSelect={() => run(c)}><ProjectCommandIconView icon={c.icon} /> {c.label}</DropdownMenuItem>)}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>}

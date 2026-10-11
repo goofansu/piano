@@ -6,6 +6,7 @@
  */
 import type { FolderView, Project, SessionReference } from "@shared/wire";
 import { type AppState, sessionKey } from "../store.ts";
+import { findProject } from "./projectCommands.ts";
 
 /** Working: Pi is streaming. Done: finished while not on screen. Idle: running, waiting. Off: no process. */
 export type SessionActivity = "working" | "done" | "idle" | "off";
@@ -52,7 +53,6 @@ const HINTS = {
 function entries(state: AppState): SessionEntry[] {
   const folderOf = new Map<string, FolderView>();
   for (const f of state.folders) for (const w of f.worktrees) folderOf.set(w.path, f);
-  const projects = new Map(state.projects.map(p => [p.id, p]));
   const hosts = new Map(state.hosts.map(h => [sessionKey(h), h]));
   const done = new Set(state.done);
   const current = state.session ?? state.selecting;
@@ -60,7 +60,7 @@ function entries(state: AppState): SessionEntry[] {
     const key = sessionKey(ref);
     const folder = folderOf.get(ref.cwd);
     const checkout = folder?.worktrees.find(w => w.path === ref.cwd);
-    const project = ref.projectId ? projects.get(ref.projectId) : undefined;
+    const project = findProject(state, ref.projectId);
     const host = hosts.get(key);
     return {
       cwd: ref.cwd,
