@@ -1,10 +1,9 @@
-import type { ClientCommand as ClientMessage, ThinkingLevel } from "@shared/wire";
+import type { ClientCommand as ClientMessage } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, FolderIcon, FolderOpenIcon, GitBranchPlusIcon, PanelLeftOpenIcon, PlusIcon, ShieldCheckIcon, ShieldOffIcon, TargetIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { BranchLabel } from "@/components/BranchLabel";
-import { clampEffort, levelsFor } from "@/components/EffortSelect";
 import { FolderPicker } from "@/components/FolderPicker";
 import { IconButton } from "@/components/IconButton";
 import { ModelSelect } from "@/components/ModelSelect";
@@ -26,6 +25,7 @@ import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
+import { useModelChoice } from "@/lib/useModelChoice";
 import type { AppState } from "@/store";
 
 interface Props {
@@ -44,6 +44,7 @@ interface Props {
 }
 
 const LAST_DIR = "piano.lastDir";
+const NEW = { kind: "new" } as const;
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
 export function NewSession({ state, send, onDraftChange, initialCwd, projectId, onProjectChange, onNewProject, onMenu, onDirectoryChange }: Props) {
@@ -56,8 +57,6 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
   const text = state.drafts["new-session"] ?? "";
   const setText = (value: string) => onDraftChange("new-session", value);
   const attachments = useAttachments("new-session");
-  const [model, setModel] = useState<string | undefined>(undefined);
-  const [effort, setEffort] = useState<ThinkingLevel | undefined>(undefined);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -84,22 +83,18 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
   const project = projectId ? state.projects.find(p => p.id === projectId) : undefined;
   const trust = directoryTrust(state, cwd);
   const catalog = state.catalogs[cwd] ?? null;
-  useEffect(() => {
-    setModel(undefined); setEffort(undefined);
-  }, [cwd, state.connected]);
+  // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
+  const choice = useModelChoice(catalog, NEW, cwd);
   useEffect(() => {
     if (state.connected && cwd) { send({ _tag: "models", cwd }); send({ _tag: "trust", cwd }); }
   }, [cwd, state.connected, state.catalogRevision, send]);
-  const effectiveModel = model || catalog?.defaultModel;
-  const levels = levelsFor(catalog, effectiveModel);
-  const effectiveEffort = clampEffort(levels, effort || (catalog?.defaultThinkingLevel as ThinkingLevel | undefined) || "medium");
-  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!effectiveModel && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !project?.archived;
+  const ready = state.connected && !!catalog && !catalog.error && cwd.trim().length > 0 && !!choice.model && (text.trim().length > 0 || attachments.items.length > 0) && !creating && !attachments.busy && !project?.archived;
 
   const submit = () => {
     if (!ready) return;
     writeStorage(LAST_DIR, cwd.trim());
     setCreating(true);
-    send({ _tag: "create_session", cwd: cwd.trim(), projectId, options: { model: effectiveModel, thinkingLevel: effectiveEffort }, text: text.trim(), attachments: attachments.items });
+    send({ _tag: "create_session", cwd: cwd.trim(), projectId, options: choice.start(), text: text.trim(), attachments: attachments.items });
     setText("");
     attachments.clear();
   };
@@ -146,7 +141,7 @@ export function NewSession({ state, send, onDraftChange, initialCwd, projectId, 
               />
               <div className={composerToolbar}>
                 <AttachButton draft={attachments} disabled={creating || !state.connected} />
-                <ModelSelect catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={model} onChange={setModel} effort={effectiveEffort} onEffortChange={setEffort} noDirectory={!cwd} />
+                <ModelSelect catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={choice.model} onChange={choice.onModelChange} effort={choice.effort} onEffortChange={choice.onEffortChange} noDirectory={!cwd} />
                 <Button size="icon" className={composerAction} aria-label="Send" disabled={!ready} onClick={submit}>
                   <span key={creating ? "busy" : "send"} className="control-enter inline-flex">{creating ? <Spinner /> : <ArrowUpIcon />}</span>
                 </Button>
