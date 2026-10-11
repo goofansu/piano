@@ -123,7 +123,7 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
       const session = (yield* hosts.get(cwd, sessionId)) ?? (yield* hosts.open({ cwd, sessionId }));
       yield* session.act({ _tag: "set_name", name: title });
       const mirrored = (yield* session.state).sessionName ?? title;
-      yield* registry.renameSession(session.spec.cwd, session.spec.sessionId, mirrored);
+      yield* registry.mirrorSession(session.spec.cwd, session.spec.sessionId, { sessionName: mirrored });
       return mirrored;
     }),
 

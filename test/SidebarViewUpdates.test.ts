@@ -92,7 +92,7 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
 
     // A prompt or rename must not wait on discovery: hold Git and the new title still arrives.
     git.hold();
-    yield* registry.renameSession(first, "s1", "After");
+    yield* registry.mirrorSession(first, "s1", { sessionName: "After" });
     assert.equal(titleOf(yield* nextView(view, () => true)), "After");
     git.release();
 
@@ -118,7 +118,7 @@ test("INV-01: a registry write made outside any browser request reaches the side
     // A statistics cache write publishes nothing, so the next view after it is the next visible change.
     yield* view.fresh; // No discovery run is left to publish in between.
     const views = yield* view.subscribe.pipe(Effect.flatMap(s => s.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true }))));
-    yield* registry.cacheSessionStats(first, "pi-named", { cost: 1, statsUpdatedAt: Date.now() });
+    yield* registry.mirrorSession(first, "pi-named", { stats: { cost: 1, statsUpdatedAt: Date.now() } });
     yield* registry.touchSession(first, "pi-named");
     const [, next] = [...(yield* Fiber.join(views))];
     const updatedAt = (yield* registry.get).sessions[0]?.updatedAt;
