@@ -95,6 +95,17 @@ function handle(cmd) {
       { name: args.includes("--no-session") ? "probe-only" : "live-only", source: "extension" },
     ] });
     case "get_messages": return respond(cmd, { messages });
+    case "get_entries": {
+      // A Pi without pi-subagent: ordinary entries, plus near misses another extension could write.
+      const entries = [
+        { type: "custom_message", id: "e-other", customType: "todo-reminder", content: "Remember", display: true, details: { runId: "r", agent: "a", usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 1 } } },
+        { type: "message", id: "e-read", message: { role: "toolResult", toolCallId: "t", toolName: "read", content: [{ type: "text", text: "file" }], usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { total: 1 } }, details: { kind: "collection", runs: [] } } },
+        ...messages.map((message, i) => ({ type: "message", id: `e-${i}`, message })),
+      ];
+      const since = cmd.since === undefined ? -1 : entries.findIndex(entry => entry.id === cmd.since);
+      if (cmd.since !== undefined && since === -1) return respond(cmd, undefined, `Entry not found: ${cmd.since}`);
+      return respond(cmd, { entries: entries.slice(since + 1), leafId: entries.at(-1).id });
+    }
     case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: liveContext ?? { tokens: 1200 * messages.length, contextWindow: model.id === "beta" ? 400000 : 200000, percent: (model.id === "beta" ? 0.3 : 0.6) * messages.length } });
     case "get_available_models": return respond(cmd, { models: [
       { provider: "fake", id: "alpha", name: environmentFixture, reasoning: true, contextWindow: 1000, thinkingLevelMap: { minimal: null, xhigh: "xhigh" } },
