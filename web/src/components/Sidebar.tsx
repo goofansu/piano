@@ -2,7 +2,7 @@ import type { ClientCommand as ClientMessage, FolderView, Project } from "@share
 import { cn } from "cn";
 import { ArchiveIcon, ArchiveRestoreIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
@@ -22,10 +22,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { Navigation } from "@/lib/navigation";
 import { type SessionEntry, sessionCatalog } from "@/lib/sessionCatalog";
 import { pickCommands, SESSION_ROW_COMMANDS } from "@/lib/sessionCommands";
-import { folderFor, sessionReference } from "@/lib/sessionContext";
+import { projectKey } from "@/lib/sidebarGroups";
 import { dateGroups, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy, sortSessions } from "@/lib/sidebarView";
-import { readJson, writeJson } from "@/lib/storage";
 import { useNavigation } from "@/lib/useNavigation";
+import { useSidebarGroups } from "@/lib/useSidebarGroups";
 import { useSidebarView } from "@/lib/useSidebarView";
 import { type AppState, sessionKey } from "@/store";
 
@@ -37,11 +37,6 @@ interface Props {
   onHide: () => void;
 }
 
-const OPEN_KEY = "piano.openProjects";
-const loadOpen = (): Set<string> => new Set(readJson<string[]>(OPEN_KEY, []));
-/** Project groups share the open-state store with folders, keyed apart from paths; the empty id is the No project group. */
-const projectKey = (id: string) => `project:${id}`;
-
 /** Row heights: 36px with a pointer, 44px on a touch screen. */
 const row = "h-9 pointer-coarse:h-11";
 /** Row actions live in a fixed slot on the right and appear on hover, so nothing shifts. */
@@ -51,8 +46,8 @@ const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg
 
 export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
   const { select, openNew, openSettings, setPalette } = useNavigation();
-  const [openGroups, setOpenGroups] = useState<Set<string>>(loadOpen);
   const { view, setView } = useSidebarView();
+  const { openGroups, setOpen } = useSidebarGroups(state, view.groupBy);
   const current = state.session ?? state.selecting;
   const [dateNow, setDateNow] = useState(() => new Date());
 
@@ -71,41 +66,6 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
     window.addEventListener("focus", refresh);
     return () => { clearTimeout(timer); window.removeEventListener("focus", refresh); };
   }, [view.groupBy]);
-
-  const setOpen = (key: string, open: boolean) =>
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (open) next.add(key);
-      else next.delete(key);
-      writeJson(OPEN_KEY, [...next]);
-      return next;
-    });
-
-  // Selecting a session opens the group holding it: its folder, or its project. Only a new
-  // selection, grouping or owning group reveals it, so a registry refresh never undoes a collapse.
-  const revealed = useRef<string | null>(null);
-  useEffect(() => {
-    if (!current) return;
-    const owner = folderFor(state, current.cwd);
-    const member = current.sessionId ? sessionReference(state, { cwd: current.cwd, sessionId: current.sessionId }) : undefined;
-    const key = view.groupBy === "folder" ? owner?.path : view.groupBy === "project" ? projectKey(member?.projectId ?? "") : undefined;
-    if (!key) return;
-    const target = JSON.stringify([current.cwd, current.sessionId, view.groupBy, key]);
-    if (revealed.current === target) return;
-    revealed.current = target;
-    if (!openGroups.has(key)) setOpen(key, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.cwd, current?.sessionId, state.folders, state.sessionReferences, view.groupBy]);
-
-  // A project created in this view opens at once, so the session just filed in it is in sight.
-  const known = useRef<Set<string> | null>(null);
-  useEffect(() => {
-    if (!state.registryLoaded) return;
-    const ids = state.projects.map(p => p.id);
-    if (known.current) for (const id of ids) if (!known.current.has(id)) setOpen(projectKey(id), true);
-    known.current = new Set(ids);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.registryLoaded, state.projects]);
 
   // Rows already there when the list first loads appear at once, so a reload does not flash;
   // a row added later enters. Each row decides when it mounts (`useState(reveal)`).
