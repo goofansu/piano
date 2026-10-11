@@ -129,23 +129,27 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
   // external deletion/failure must not hide registered session references.
   const layer = SidebarViewLive().pipe(Layer.provideMerge(SessionHostsLive({ idleMs: 0 })), Layer.provide(PiSessionsLive), Layer.provideMerge(RegistryLive), Layer.provide(NodeServices.layer));
   await Effect.runPromise(Effect.gen(function* () {
-    const buildFolders = Effect.map((yield* SidebarView).fresh, view => view.folders);
+    const sidebar = yield* SidebarView;
+    const buildFolders = Effect.map(sidebar.fresh, view => view.folders);
+    const references = Effect.map(sidebar.fresh, view => view.sessionReferences ?? []);
     const registry = yield* Registry;
     yield* registry.addFolder(repo);
     yield* registry.addWorktree({ folder: repo, path: created.path, branch: "old-registry-branch" });
     yield* registry.addSession(created.path, "saved-history");
     let view = (yield* buildFolders)[0];
     assert.equal(view.worktrees.length, 2); // the unselected partial checkout is discovery only
-    assert.equal(view.sessions.length, 1);
     assert.equal(view.worktrees[1].branch, null); assert.equal(view.worktrees[1].facts?.detached, true);
+    let [saved] = yield* references;
+    // INV-07: the reference carries its workspace; its branch is Git's (detached: unknown), never the registry's cached name.
+    assert.equal(saved?.workspaceId, view.worktrees[1].workspace.id); assert.equal(saved?.branch, null);
     git(repo, "worktree", "remove", "--force", created.path);
     view = (yield* buildFolders)[0];
-    assert.equal(view.worktrees[1].status, "missing"); assert.equal(view.sessions[0].sessionId, "saved-history");
+    assert.equal(view.worktrees[1].status, "missing"); [saved] = yield* references; assert.equal(saved?.sessionId, "saved-history");
     // Unreadable repository metadata: Git fails, and nothing pretends the project is healthy.
     chmodSync(join(repo, ".git"), 0o000);
     try { view = (yield* buildFolders)[0]; } finally { chmodSync(join(repo, ".git"), 0o755); }
     assert.equal(view.discovery.status, "error"); assert.equal(view.worktrees[0].status, "unknown");
-    assert.equal(view.worktrees[0].branch, null); assert.equal(view.sessions.length, 1);
+    assert.equal(view.worktrees[0].branch, null); assert.equal((yield* references).length, 1);
     const data = yield* registry.get;
     assert.equal(data.worktrees[0].branch, "old-registry-branch"); // no silent migration
     assert.equal(data.worktrees.length, 1); assert.equal(data.sessions.length, 1);

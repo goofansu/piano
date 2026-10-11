@@ -6,6 +6,7 @@ import { type AddressBar, createNavigation, initialView } from "../web/src/lib/n
 import { parseRoute } from "../web/src/lib/routes.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 /** An address bar with a history stack: push, replace, back and forward, like the browser's. */
 function addressBar(start: string) {
@@ -45,8 +46,8 @@ function page(url: string) {
   const registry = () => server({
     _tag: "registry", folders: [], projects: [{ id: "p1", name: "Launch", archived: false }],
     sessionReferences: [
-      { cwd: "/scratch", sessionId: "a", title: "Alpha", archived: false },
-      { cwd: "/scratch", sessionId: "b", title: "Beta", archived: false },
+      sessionReference("/scratch", "a", { title: "Alpha" }),
+      sessionReference("/scratch", "b", { title: "Beta" }),
     ],
   });
   const selected = (sessionId: string) => server({

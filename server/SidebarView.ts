@@ -1,6 +1,6 @@
 /**
- * The sidebar view every browser shows: registered folders with their Git worktrees and
- * sessions, projects, workspaces and session references. One instance builds and publishes it
+ * The sidebar view every browser shows: registered folders with their Git worktrees, projects,
+ * workspaces and session references, the one session list. One instance builds and publishes it
  * for all connections. It hears registry writes from the registry itself, so whoever writes
  * (a browser request, a Pi rename mirrored by SessionHosts) needs no publish step of its own.
  *
@@ -12,7 +12,7 @@
  */
 import { existsSync } from "node:fs";
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
-import type { FolderView, HostInfo, ServerMessage, SessionInfo, SessionReference, WorktreeDiscovery, WorktreeView } from "../shared/wire.ts";
+import type { FolderView, HostInfo, ServerMessage, SessionReference, WorktreeDiscovery, WorktreeView } from "../shared/wire.ts";
 import { projectTrust } from "./ProjectTrust.ts";
 import { Registry, type RegistryData } from "./Registry.ts";
 import { listSessions } from "./SessionFiles.ts";
@@ -81,7 +81,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) => Layer.effec
 
   /** Registry selects directories and sessions; discovery supplies current Git facts, never cached registry branches. */
   const assemble = Effect.fn("SidebarView.assemble")(function* (data: RegistryData, running: ReadonlyArray<HostInfo>, seen: Observation) {
-    const hostOf = (cwd: string, sessionId: string) => running.find(h => h.cwd === cwd && h.sessionId === sessionId);
+    const hosted = (cwd: string, sessionId: string) => running.some(h => h.cwd === cwd && h.sessionId === sessionId);
     // A folder added after the run is left out until the next run, which its change already queued.
     const observed = data.folders.flatMap(path => { const d = seen.discoveries.get(path); return d ? [[path, d] as const] : []; });
     const folders = yield* Effect.forEach(observed, ([path, discovery]) => Effect.gen(function* () {
@@ -91,21 +91,16 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) => Layer.effec
         return { workspace: data.workspaces.find(w => w.path === cwd)!, trust, path: cwd, branch: facts?.branch ?? null, root: cwd === path, facts,
           status: facts ? "current" : !seen.paths.has(cwd) ? "unknown" : discovery.status === "ready" ? "missing" : discovery.status === "non-git" && cwd === path ? "non-git" : "unknown" };
       }));
-      const branchOf = new Map(worktrees.map(w => [w.path, w.branch]));
-      const sessions = data.sessions
-        .filter(t => !t.archived && branchOf.has(t.cwd))
-        .map((t): SessionInfo => {
-          const h = hostOf(t.cwd, t.sessionId);
-          return { sessionId: t.sessionId, workspaceId: data.workspaces.find(w => w.path === t.cwd)!.id, cwd: t.cwd, branch: branchOf.get(t.cwd) ?? "",
-            title: t.title, createdAt: t.createdAt, updatedAt: t.updatedAt, hosted: !!h, streaming: !!h?.streaming };
-        })
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-      return { path, name: path.split("/").filter(Boolean).pop() ?? path, worktrees, discovery, sessions } satisfies FolderView;
+      return { path, name: path.split("/").filter(Boolean).pop() ?? path, worktrees, discovery } satisfies FolderView;
     }));
-    // Group references survive closed directories and missing history; discovery never removes them.
+    // A session's branch is its open folder's discovery; a closed folder's session has none known.
+    const branchOf = new Map(folders.flatMap(f => f.worktrees.map(w => [w.path, w.branch] as const)));
+    // References survive closed directories and missing history; discovery never removes them.
     // A member not yet observed counts as available until the next run says otherwise.
-    const sessionReferences = data.sessions.map((s): SessionReference => ({ ...s,
-      unavailable: !s.projectId || hostOf(s.cwd, s.sessionId) ? undefined
+    const sessionReferences = data.sessions.map(({ stats: _stats, pullRequest: _pullRequest, ...s }): SessionReference => ({ ...s,
+      workspaceId: data.workspaces.find(w => w.path === s.cwd)!.id,
+      branch: branchOf.get(s.cwd) ?? null,
+      unavailable: !s.projectId || hosted(s.cwd, s.sessionId) ? undefined
         : seen.histories.get(s.cwd)?.has(s.sessionId) === false ? "history"
         : !existsSync(s.cwd) ? "checkout" : undefined,
     }));

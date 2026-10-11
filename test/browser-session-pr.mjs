@@ -73,8 +73,9 @@ try {
   }
   // HTTP boundary: only a registered workspace/session pair can be read or changed.
   const folders = (await (await fetch(`${backendUrl}/api/folders`)).json()).folders;
-  const workspaceId = folders.flatMap(p => p.sessions).find(s => s.sessionId === 'work').workspaceId;
-  const plainId = folders.flatMap(p => p.sessions).find(s => s.sessionId === 'notes').workspaceId;
+  const rootWorkspace = path => folders.find(p => p.path === path).worktrees.find(w => w.root).workspace.id;
+  const workspaceId = rootWorkspace(repo); // 'work' runs in the repo's own checkout
+  const plainId = rootWorkspace(plain); // 'notes' runs in the plain folder
   const endpoint = params => `${backendUrl}/api/session/pull-request?${new URLSearchParams(params)}`;
   observations.identityChecks = [];
   for (const method of ['GET', 'PUT']) {

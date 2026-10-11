@@ -152,7 +152,7 @@ function focusHarness(options: { remembered?: string | null; initial?: typeof in
   };
   const server = (m: ServerMessage) => handlers!.onMessage(m);
   const status = (connected: boolean) => handlers!.onStatus(connected);
-  const folder = (path: string) => ({ path, name: path.slice(1), worktrees: [], discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] }, sessions: [] }) as never;
+  const folder = (path: string) => ({ path, name: path.slice(1), worktrees: [], discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] } }) as never;
   const selected = (cwd: string, checkoutMissing = false): ServerMessage => ({
     _tag: "selected", cwd, sessionId: "s", selectionId: client.getState().selectionId!, hosted: false,
     cursor: { cwd, sessionId: "s", generation: "g1", sequence: 1 },

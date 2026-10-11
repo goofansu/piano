@@ -4,18 +4,18 @@ import type { FolderView } from "../shared/wire.ts";
 import { initialOpenGroups, nextOpenGroups, type OpenGroups, type OpenGroupsEvent, ownerGroupKey } from "../web/src/lib/sidebarGroups.ts";
 import type { GroupBy } from "../web/src/lib/sidebarView.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const folder = (path: string, worktrees: string[] = [path]): FolderView => ({
   path, name: path.slice(1),
   worktrees: worktrees.map(p => ({ workspace: { id: `ws:${p}`, folder: path, path: p }, trust: { required: false, trusted: true }, branch: "main", path: p, root: p === path, status: "current" })),
   discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] },
-  sessions: [],
 });
 const registry: AppState = {
   ...initialState, registryLoaded: true,
   folders: [folder("/repo", ["/repo", "/work/repo.feature"]), folder("/other")],
   projects: [{ id: "p1", name: "Launch", archived: false }],
-  sessionReferences: [{ cwd: "/work/repo.feature", sessionId: "s1", projectId: "p1", archived: false }],
+  sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p1" })],
 };
 const run = (groups: OpenGroups, ...events: OpenGroupsEvent[]) => events.reduce(nextOpenGroups, groups);
 const owner = (state: AppState, cwd: string, sessionId: string | null, groupBy: GroupBy): OpenGroupsEvent =>
@@ -51,7 +51,7 @@ test("sidebar groups: a new selection, grouping or owning group reveals the owne
   assert.deepEqual(open(run(collapsed, owner(registry, "/repo", "s9", "folder"))), ["/repo"], "another session in the same folder");
   assert.deepEqual(open(run(collapsed, owner(registry, "/work/repo.feature", "s1", "project"))), ["project:p1"],"switching to project grouping");
 
-  const filedElsewhere: AppState = { ...registry, projects: [...registry.projects, { id: "p2", name: "Other", archived: false }], sessionReferences: [{ cwd: "/work/repo.feature", sessionId: "s1", projectId: "p2", archived: false }] };
+  const filedElsewhere: AppState = { ...registry, projects: [...registry.projects, { id: "p2", name: "Other", archived: false }], sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p2" })] };
   const inProject = run(initialOpenGroups([]), owner(registry, "/work/repo.feature", "s1", "project"), { type: "toggle", key: "project:p1", open: false });
   assert.deepEqual(open(run(inProject, owner(filedElsewhere, "/work/repo.feature", "s1", "project"))), ["project:p2"], "moving the session to another project opens that one");
 });
