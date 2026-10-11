@@ -1,5 +1,6 @@
 /** Machine-wide Radius onboarding, not an MCP client. Pi owns auth, configuration
- * parsing and package installation. Nothing here mutates running sessions. */
+ * parsing and package installation. Nothing here mutates running sessions; a change to
+ * Pi's packages or MCP configuration invalidates every directory's model catalog and commands. */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import { Context, Data, Effect, Layer } from "effect";
 // Do not reproduce Pi's config loader or move configuration into Registry (INV-01/12).
 import { addMcpServerConfig, loadMcpConfig, removeMcpServerConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
 import type { RadiusSetupState, RadiusSetupStep } from "../shared/radius.ts";
+import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { agentDir } from "./PiEnv.ts";
 import { runAsync, SubprocessError } from "./Subprocess.ts";
 
@@ -52,6 +54,14 @@ export class RadiusSetup extends Context.Service<RadiusSetup, {
 
 export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* () {
   const environment = yield* RadiusSetupEnvironment;
+  const facts = yield* DirectoryFacts;
+  const invalidate = () => Effect.runPromise(facts.invalidate);
+  /** Runs a synchronous configuration change; `changed()` marks that Pi's files were written. */
+  const writing = <A>(change: (changed: () => void) => A, detail: string) => Effect.suspend(() => {
+    let wrote = false;
+    return Effect.try({ try: () => change(() => { wrote = true; }), catch: () => new RadiusSetupError({ detail }) })
+      .pipe(Effect.ensuring(Effect.suspend(() => wrote ? facts.invalidate : Effect.void)));
+  });
   let installation: RadiusSetupState["installation"] = { status: "idle" };
   let pending: { action: "install" | "uninstall"; key?: string; abort: AbortController; done: Promise<void> } | undefined;
   const directory = environment.directory();
@@ -134,7 +144,9 @@ export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* ()
       const timer = setTimeout(() => abort.abort(), 120_000);
       const done = (async () => {
         try {
-          await Promise.resolve().then(() => environment[action](source, directory, abort.signal));
+          // Even a failed operation may have changed Pi's packages; invalidate before reporting either outcome.
+          try { await Promise.resolve().then(() => environment[action](source, directory, abort.signal)); }
+          finally { await invalidate(); }
           const verified = action === "install" ? webSearchStep().status === "ready" : !packageState();
           if (abort.signal.aborted || !verified) throw new Error("Package operation not verified.");
           installation = { action, status: "success" };
@@ -149,38 +161,34 @@ export const RadiusSetupLive = Layer.effect(RadiusSetup, Effect.gen(function* ()
   });
   return RadiusSetup.of({
     state: Effect.sync(snapshot),
-    configureMcp: Effect.try({
-      try: () => {
-        const step = mcpStep();
-        if (step.status === "blocked") throw new Error(step.detail);
-        if (step.status !== "ready") {
-          const existing = mcp();
-          const config: McpServerConfig = { ...(existing?.config ?? {}), url: RADIUS_MCP_URL, auth: { provider: "radius" } };
-          if ("url" in config) {
-            delete config.oauth;
-            if (config.headers) config.headers = Object.fromEntries(Object.entries(config.headers).filter(([key]) => key.toLowerCase() !== "authorization"));
-          }
-          // Synchronous read/merge/write: no await at which another Piano tab can
-          // replace the entry. The Pi helper retains unrelated keys and indentation.
-          addMcpServerConfig(join(directory, "mcp.json"), existing?.name ?? "radius", config);
+    configureMcp: writing(changed => {
+      const step = mcpStep();
+      if (step.status === "blocked") throw new Error(step.detail);
+      if (step.status !== "ready") {
+        const existing = mcp();
+        const config: McpServerConfig = { ...(existing?.config ?? {}), url: RADIUS_MCP_URL, auth: { provider: "radius" } };
+        if ("url" in config) {
+          delete config.oauth;
+          if (config.headers) config.headers = Object.fromEntries(Object.entries(config.headers).filter(([key]) => key.toLowerCase() !== "authorization"));
         }
-        const state = snapshot();
-        if (state.mcp.status !== "ready") throw new Error("Configuration was not saved.");
-        return state;
-      },
-      catch: () => new RadiusSetupError({ detail: "Could not configure Radius MCP. Check Pi's global configuration and file permissions, then refresh." }),
-    }),
+        // Synchronous read/merge/write: no await at which another Piano tab can
+        // replace the entry. The Pi helper retains unrelated keys and indentation.
+        changed();
+        addMcpServerConfig(join(directory, "mcp.json"), existing?.name ?? "radius", config);
+      }
+      const state = snapshot();
+      if (state.mcp.status !== "ready") throw new Error("Configuration was not saved.");
+      return state;
+    }, "Could not configure Radius MCP. Check Pi's global configuration and file permissions, then refresh."),
     installWebSearch: changePackage("install"),
     uninstallWebSearch: key => changePackage("uninstall", key),
-    removeMcp: key => Effect.try({
-      try: () => {
-        const entry = mcp();
-        if (!entry || !key || removalKey([entry.name, entry.config]) !== key) throw new Error("MCP configuration changed since confirmation.");
-        removeMcpServerConfig(join(directory, "mcp.json"), entry.name);
-        if (mcp()) throw new Error("MCP removal not verified.");
-        return snapshot();
-      },
-      catch: () => new RadiusSetupError({ detail: "Could not remove Radius MCP. Its configuration may have changed. Refresh and confirm again." }),
-    }),
+    removeMcp: key => writing(changed => {
+      const entry = mcp();
+      if (!entry || !key || removalKey([entry.name, entry.config]) !== key) throw new Error("MCP configuration changed since confirmation.");
+      changed();
+      removeMcpServerConfig(join(directory, "mcp.json"), entry.name);
+      if (mcp()) throw new Error("MCP removal not verified.");
+      return snapshot();
+    }, "Could not remove Radius MCP. Its configuration may have changed. Refresh and confirm again."),
   });
 }));

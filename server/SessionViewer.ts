@@ -44,8 +44,6 @@ export interface SessionViewer {
     Effect.Effect<{ readonly session: PiSession; readonly started: boolean }, StaleSelection | Error | PiSessionError>;
   /** Detach a session before `retire` stops it, then clear the selection if it showed that session. */
   readonly forget: <E>(cwd: string, sessionId: string, retire: Effect.Effect<void, E>) => Effect.Effect<void, E>;
-  /** The selected checkout, if any. */
-  readonly cwd: Effect.Effect<string | undefined>;
 }
 
 /** Lives until the surrounding scope closes, which detaches the attachment. */
@@ -142,6 +140,5 @@ export const makeSessionViewer = (output: ViewerOutput) => Effect.gen(function* 
       selected = null;
       yield* deliver({ _tag: "selected", selectionId, cursor: null, cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
     }),
-    cwd: Effect.sync(() => selected?.cwd),
   } satisfies SessionViewer as SessionViewer;
 });

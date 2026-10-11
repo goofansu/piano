@@ -1,11 +1,11 @@
 /** Global OAuth orchestration only. Pi's SDK owns provider configuration, token
  * exchange and locked credential persistence; no agent/session is embedded here.
  * A completed sign-in or sign-out changes the usable models, so this service
- * invalidates the Catalog itself rather than relying on a client to poll. */
+ * invalidates the model catalogs itself rather than relying on a client to poll. */
 import { CredentialSynchronizationError, ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, Layer } from "effect";
 import type { OAuthProvider, ProviderLoginState } from "../shared/wire.ts";
-import { Catalog } from "./Catalog.ts";
+import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { agentDir } from "./PiEnv.ts";
 
 type Interaction = Parameters<ModelRuntime["login"]>[2];
@@ -28,9 +28,9 @@ export class ProviderLogin extends Context.Service<ProviderLogin, {
 
 export const ProviderLoginLive = Layer.effect(ProviderLogin, Effect.gen(function* () {
   const factory = yield* ProviderLoginRuntime;
-  const catalog = yield* Catalog;
+  const facts = yield* DirectoryFacts;
   // Invalidate before reporting success, so a client that sees success re-probes fresh models.
-  const invalidate = () => Effect.runPromise(catalog.invalidate);
+  const invalidate = () => Effect.runPromise(facts.invalidate);
   let current: { state: ProviderLoginState; abort: AbortController; done: Promise<void>; active: boolean } | undefined;
   let pending: { id: string; resolve: (value: string) => void; reject: (error: Error) => void } | undefined;
   let signingOut = false;

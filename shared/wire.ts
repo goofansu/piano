@@ -582,7 +582,7 @@ export const ClientMessage = Schema.Union([
   /** Rediscover one registered folder's worktrees; only the requesting client gets the answer. */
   Schema.TaggedStruct("worktrees", { folder: Schema.String }),
   /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
-  Schema.TaggedStruct("models", { cwd: Schema.optional(Schema.String), refresh: Schema.optional(Schema.Boolean) }),
+  Schema.TaggedStruct("models", { cwd: Schema.String, refresh: Schema.optional(Schema.Boolean) }),
   Schema.TaggedStruct("save_project", { project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }) }),
   Schema.TaggedStruct("archive_project", { id: Schema.String, archived: Schema.Boolean }),
   Schema.TaggedStruct("assign_project", { cwd: Schema.String, sessionId: Schema.String, projectId: Schema.NullOr(Schema.String) }),

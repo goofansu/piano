@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
-import { CatalogLive } from "./Catalog.ts";
+import { DirectoryFactsLive } from "./DirectoryFacts.ts";
 import { agentDir } from "./PiEnv.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
 import { PiSettingsLive } from "./PiSettings.ts";
@@ -47,8 +47,9 @@ process.once("SIGTERM", drain);
 const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds" });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-const Services = Layer.mergeAll(SessionHostsLive({ idleMs: IDLE_MS }), PiSettingsLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
-  Layer.provideMerge(CatalogLive),
+const Services = Layer.mergeAll(PiSettingsLive, ProviderLoginLive, RadiusSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
+  Layer.provideMerge(DirectoryFactsLive),
+  Layer.provideMerge(SessionHostsLive({ idleMs: IDLE_MS })),
   Layer.provideMerge(RegistryLive),
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),

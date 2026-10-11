@@ -4,19 +4,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
+import { PiSessions } from "../server/PiSessions.ts";
 import { RadiusSetup, RadiusSetupEnvironment, RadiusSetupLive } from "../server/RadiusSetup.ts";
+import { SessionHosts } from "../server/SessionHosts.ts";
 
 const PACKAGE = "npm:@earendil-works/pi-radius-web-search";
 const URL = "https://radius.pi.dev/mcp";
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringify(value, null, 2));
 type Installer = typeof RadiusSetupEnvironment.Service.install;
-async function fixture(run: (setup: RadiusSetup["Service"], directory: string) => Effect.Effect<void, unknown>, install?: Installer, uninstall?: Installer) {
+/** The real DirectoryFacts over a counting probe: a re-probe is the observable effect of invalidation. */
+type Probes = { facts: DirectoryFacts["Service"]; count: () => number };
+async function fixture(run: (setup: RadiusSetup["Service"], directory: string, probes: Probes) => Effect.Effect<void, unknown>, install?: Installer, uninstall?: Installer) {
   const directory = mkdtempSync(join(tmpdir(), "piano-radius-"));
+  let count = 0;
+  const sessions = Layer.succeed(PiSessions, PiSessions.of({
+    open: () => Effect.die("unused"),
+    probe: () => Effect.sync(() => { count++; return { models: [], commands: [] }; }),
+  }));
   try {
-    await Effect.runPromise(Effect.gen(function* () { yield* run(yield* RadiusSetup, directory); }).pipe(
-      Effect.provide(RadiusSetupLive), Effect.scoped,
+    await Effect.runPromise(Effect.gen(function* () { yield* run(yield* RadiusSetup, directory, { facts: yield* DirectoryFacts, count: () => count }); }).pipe(
+      Effect.provide(RadiusSetupLive.pipe(Layer.provideMerge(DirectoryFactsLive), Layer.provide(sessions), Layer.provide(Layer.mock(SessionHosts, {})))), Effect.scoped,
       Effect.provideService(RadiusSetupEnvironment, { directory: () => directory, install: install ?? (async () => { throw new Error("Unexpected install"); }), uninstall: uninstall ?? (async () => { throw new Error("Unexpected uninstall"); }) }),
     ));
   } finally { rmSync(directory, { recursive: true, force: true }); }
@@ -228,4 +238,24 @@ test("INV-02/10: uninstall is confirmation-bound, retryable and serialized with 
     await settings.flush();
     rmSync(join(directory, "npm/node_modules/@earendil-works/pi-radius-web-search"), { recursive: true });
   });
+});
+
+test("INV-12: changing Pi's packages or MCP configuration re-probes every directory's catalog", async () => {
+  await fixture((setup, _directory, { facts, count }) => Effect.gen(function* () {
+    const cwd = "/nonexistent/piano-radius-catalog";
+    yield* facts.catalog(cwd);
+    yield* facts.catalog(cwd);
+    assert.equal(count(), 1, "a cached catalog is not re-probed");
+    yield* setup.installWebSearch;
+    assert.equal((yield* settled(setup)).installation.status, "success");
+    yield* facts.catalog(cwd);
+    assert.equal(count(), 2, "a web-search install re-probes the catalog");
+    yield* setup.configureMcp;
+    yield* facts.catalog(cwd);
+    assert.equal(count(), 3, "saving the Radius MCP entry re-probes the catalog");
+    // Already configured: nothing is written, so the cache stays.
+    yield* setup.configureMcp;
+    yield* facts.catalog(cwd);
+    assert.equal(count(), 3);
+  }), installed);
 });

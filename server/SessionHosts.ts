@@ -3,11 +3,10 @@
  * key uses realpath. Incompatible alias references fail explicitly, never merge.
  */
 import { realpath, rm } from "node:fs/promises";
-import { resolve } from "node:path";
 import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
 import { isWorking } from "../shared/sessionProjection.ts";
 import type { HostInfo, SessionClosure, SessionStats, Snapshot } from "../shared/wire.ts";
-import { expandHome } from "./PiEnv.ts";
+import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, PiSessions } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 import { emptySnapshot, listSessions, peekSession } from "./SessionFiles.ts";
@@ -46,7 +45,7 @@ const hostKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, session
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 // A listed Pi file must resolve. Unlike a checkout, it has no missing state or alias memory.
 const canonical = (cwd: string) => Effect.tryPromise({
-  try: () => realpath(resolve(expandHome(cwd))),
+  try: () => realpath(directoryPath(cwd)),
   catch: error => rejected(`Cannot resolve checkout ${cwd}: ${String(error)}`),
 });
 
@@ -85,7 +84,7 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
   const identities = new Map<string, string>();
   const checkout = (cwd: string) => Effect.tryPromise({
     try: async () => {
-      const path = resolve(expandHome(cwd));
+      const path = directoryPath(cwd);
       try {
         const physical = await realpath(path);
         identities.set(path, physical);
@@ -120,9 +119,9 @@ export const SessionHostsLive = (options: { idleMs: number }) => Layer.effect(Se
     if (entry?.archived) return yield* rejected("This session is archived. Start a new session instead.");
     if (!entry && !create) return yield* rejected("This session is no longer registered. Refresh the folder list; deleted sessions cannot be restarted.");
     if (entry && create) return yield* rejected("This session ID is already registered.");
-    const owner = entry?.cwd ?? resolve(expandHome(cwd));
+    const owner = entry?.cwd ?? directoryPath(cwd);
     const files = new Map<string, string>();
-    for (const path of new Set([owner, resolve(expandHome(cwd)), physical])) {
+    for (const path of new Set([owner, directoryPath(cwd), physical])) {
       for (const file of (yield* listSessions(path)).filter(s => s.sessionId === sessionId)) {
         const real = yield* canonical(file.path);
         files.set(real, file.path);

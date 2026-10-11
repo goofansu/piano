@@ -6,10 +6,11 @@ import { test } from 'node:test';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { NodeServices } from '@effect/platform-node';
 import { Deferred, Effect, Fiber, Layer, Stream } from 'effect';
-import { Catalog, CatalogLive } from '../server/Catalog.ts';
+import { DirectoryFacts, DirectoryFactsLive } from '../server/DirectoryFacts.ts';
 import { PiCli } from '../server/PiCli.ts';
 import { type PiSession, PiSessions, PiSessionsLive } from '../server/PiSessions.ts';
 import { peekSession } from '../server/SessionFiles.ts';
+import { SessionHosts } from '../server/SessionHosts.ts';
 import type { SessionEvent } from '../shared/wire.ts';
 
 const cli = { node: process.execPath, cli: new URL('./fake-projection-pi.mjs', import.meta.url).pathname, extraArgs: [] };
@@ -224,12 +225,12 @@ test('catalog observations and caches belong to the requested cwd', async () => 
   const tmp = realpathSync(tmpdir()), root = mkdtempSync(join(tmp, 'piano-catalog-'));
   try {
     await run(Effect.gen(function* () {
-      const catalog = yield* Catalog;
-      const home = yield* catalog.get(tmp);
-      const project = yield* catalog.get(root);
+      const facts = yield* DirectoryFacts;
+      const home = yield* facts.catalog(tmp);
+      const project = yield* facts.catalog(root);
       assert.equal(project.cwd, root); assert.equal(project.models[0].name, root);
       assert.equal(home.cwd, tmp); assert.equal(home.models[0].name, tmp);
-      assert.equal((yield* catalog.get(root)).models[0].name, root);
-    }).pipe(Effect.provide(CatalogLive), Effect.scoped));
+      assert.equal((yield* facts.catalog(root)).models[0].name, root);
+    }).pipe(Effect.provide(DirectoryFactsLive.pipe(Layer.provide(Layer.mock(SessionHosts, {})))), Effect.scoped));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

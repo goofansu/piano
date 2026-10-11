@@ -3,8 +3,6 @@
  * delivers ServerMessages. SessionViewer keeps the client's selection and attachment;
  * domain steps live in WorkspaceCommands.
  */
-import { homedir } from "node:os";
-import { resolve } from "node:path";
 import { Cause, Effect, Stream } from "effect";
 import { Socket } from "effect/socket";
 import {
@@ -14,10 +12,8 @@ import {
   type ServerMessage,
 } from "../shared/wire.ts";
 import { makeSocketDelivery } from "./BoundedDelivery.ts";
-import { Catalog } from "./Catalog.ts";
+import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
-import { expandHome } from "./PiEnv.ts";
-import { projectTrust } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { makeSessionViewer } from "./SessionViewer.ts";
@@ -35,7 +31,7 @@ const describe = (e: unknown): string => {
 export const handleSocket = (socket: Socket.Socket) =>
   Effect.gen(function* () {
     const hosts = yield* SessionHosts;
-    const catalog = yield* Catalog;
+    const facts = yield* DirectoryFacts;
     const sidebar = yield* SidebarView;
     const registry = yield* Registry;
     const commands = yield* WorkspaceCommands;
@@ -58,10 +54,8 @@ export const handleSocket = (socket: Socket.Socket) =>
             return yield* sidebar.refresh;
           case "worktrees":
             return yield* send({ _tag: "worktrees", folder: msg.folder, discovery: yield* commands.discoverWorktrees(msg.folder) });
-          case "models": {
-            const cwd = resolve(expandHome(msg.cwd ?? (yield* viewer.cwd) ?? homedir()));
-            return yield* send({ _tag: "models", catalog: yield* (msg.refresh ? catalog.refresh(cwd) : catalog.get(cwd)) });
-          }
+          case "models":
+            return yield* send({ _tag: "models", catalog: yield* facts.catalog(msg.cwd, { refresh: msg.refresh }) });
           // Registry writes reach every client's sidebar on their own.
           case "save_project":
             return yield* registry.saveProject(msg.project);
@@ -73,17 +67,15 @@ export const handleSocket = (socket: Socket.Socket) =>
             return yield* registry.addFolder(msg.path);
           case "remove_folder":
             return yield* registry.removeFolder(msg.path);
-          case "trust": {
-            const cwd = resolve(expandHome(msg.cwd));
-            return yield* send({ _tag: "trust", cwd, trust: yield* projectTrust(cwd) });
-          }
+          case "trust":
+            return yield* send({ _tag: "trust", ...yield* facts.trust(msg.cwd) });
           case "set_trust":
             // Every client hears `catalogs_invalidated`; the requesting one also gets its answers at once.
             return yield* commands.setTrust(msg.path, msg.trusted).pipe(
-              Effect.flatMap(({ cwd, trust }) => Effect.gen(function* () {
-                yield* send({ _tag: "toast", level: "success", message: msg.trusted ? "Trusted. Sessions started from now load this folder's Pi settings and skills." : "Untrusted. Sessions started from now skip this folder's Pi settings and skills." });
+              Effect.flatMap(({ cwd, trust, catalog, notice }) => Effect.gen(function* () {
+                yield* send({ _tag: "toast", level: "success", message: notice });
                 yield* send({ _tag: "trust", cwd, trust });
-                yield* send({ _tag: "models", catalog: yield* catalog.get(cwd) });
+                yield* send({ _tag: "models", catalog });
               })),
               Effect.catchTag("ProjectTrustError", e => sendError(e.detail)));
           case "create_worktree":
@@ -128,10 +120,8 @@ export const handleSocket = (socket: Socket.Socket) =>
     // once and let a fresh one follow, so it never holds up the page or this socket's requests.
     const updates = yield* sidebar.subscribe;
     yield* send({ _tag: "hosts", hosts: yield* hosts.list });
-    // The browser requests models for its selected cwd; home cannot establish
-    // project-local providers/resources and must not stand in for that catalog.
     yield* updates.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
-    yield* catalog.changes.pipe(Stream.runForEach(() => send({ _tag: "catalogs_invalidated" })), Effect.ignore, Effect.forkScoped);
+    yield* facts.changes.pipe(Stream.runForEach(() => send({ _tag: "catalogs_invalidated" })), Effect.ignore, Effect.forkScoped);
     yield* sidebar.refresh;
     yield* hosts.changes.pipe(
       Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),

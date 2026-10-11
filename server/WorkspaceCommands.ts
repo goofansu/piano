@@ -6,13 +6,11 @@
  * client's SessionViewer attaches what it opens, through `SessionClient`.
  */
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import type { Attachment, ProjectTrust, SessionAction, SessionActionResult, StartOptions, WorktreeDiscovery, WorktreeResult } from "../shared/wire.ts";
-import { Catalog } from "./Catalog.ts";
-import { expandHome } from "./PiEnv.ts";
+import type { Attachment, ModelCatalog, ProjectTrust, SessionAction, SessionActionResult, StartOptions, WorktreeDiscovery, WorktreeResult } from "../shared/wire.ts";
+import { DirectoryFacts } from "./DirectoryFacts.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
-import { type ProjectTrustError, projectTrust, setProjectTrust } from "./ProjectTrust.ts";
+import type { ProjectTrustError } from "./ProjectTrust.ts";
 import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SidebarView } from "./SidebarView.ts";
@@ -34,6 +32,13 @@ export interface SessionClient<E, R> {
   readonly attach: (open: Effect.Effect<PiSession, PiSessionError>) => Effect.Effect<PiSession, E | PiSessionError, R>;
 }
 
+export interface TrustDecision {
+  readonly cwd: string;
+  readonly trust: ProjectTrust;
+  readonly catalog: ModelCatalog;
+  readonly notice: string;
+}
+
 export type RetireMode = "archive" | "delete";
 
 export class WorkspaceCommands extends Context.Service<WorkspaceCommands, {
@@ -43,8 +48,11 @@ export class WorkspaceCommands extends Context.Service<WorkspaceCommands, {
   readonly addWorktree: (folder: string, path: string) => Effect.Effect<ReadyWorktree, WorktreeError | RegistryError>;
   /** Create a new branch checkout through Worktrunk and register it. */
   readonly createWorktree: (folder: string, branch: string, options: { readonly hooks?: boolean }) => Effect.Effect<ReadyWorktree, WorktreeError | RegistryError>;
-  /** Save Pi's trust decision for a directory. Every client re-probes its models; returns what Pi will now do there. */
-  readonly setTrust: (path: string, trusted: boolean) => Effect.Effect<{ readonly cwd: string; readonly trust: ProjectTrust }, ProjectTrustError>;
+  /**
+   * Save Pi's trust decision for a directory. Every client re-probes its models and the sidebar
+   * shows the new trust; returns what Pi will now do there and the notice to show the requester.
+   */
+  readonly setTrust: (path: string, trusted: boolean) => Effect.Effect<TrustDecision, ProjectTrustError>;
   /** Start a new session; the registry reference and project are written before any prompt reaches Pi. */
   readonly createSession: <E, R>(request: CreateSessionRequest, client: SessionClient<E, R>) => Effect.Effect<PiSession, E | PiSessionError | RegistryError | RegistryLookupError, R>;
   /** Send input to a session. A prompt or steer is activity, recorded (with a first title) before Pi sees it. */
@@ -58,7 +66,7 @@ export class WorkspaceCommands extends Context.Service<WorkspaceCommands, {
 export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(function* () {
   const registry = yield* Registry;
   const hosts = yield* SessionHosts;
-  const catalog = yield* Catalog;
+  const facts = yield* DirectoryFacts;
   const sidebar = yield* SidebarView;
 
   const registered = (folder: string) => registry.requireFolder(folder).pipe(
@@ -78,13 +86,14 @@ export const WorkspaceCommandsLive = Layer.effect(WorkspaceCommands, Effect.gen(
       Effect.catchTag("RegistryLookupError", e => Effect.succeed({ status: "error" as const, observedAt: new Date().toISOString(), detail: e.detail }))),
 
     setTrust: (path, trusted) => Effect.gen(function* () {
-      const cwd = resolve(expandHome(path));
-      yield* setProjectTrust(cwd, trusted);
       // Pi's resources for this directory, and so its models and commands, change for sessions started from now.
-      yield* catalog.invalidate;
+      const decision = yield* facts.setTrust(path, trusted);
       // Trust lives in Pi's store, not the registry, so the sidebar hears of it here.
       yield* sidebar.changed;
-      return { cwd, trust: yield* projectTrust(cwd) };
+      const notice = trusted
+        ? "Trusted. Sessions started from now load this folder's Pi settings and skills."
+        : "Untrusted. Sessions started from now skip this folder's Pi settings and skills.";
+      return { ...decision, notice };
     }),
 
     act,
