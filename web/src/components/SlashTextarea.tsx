@@ -4,6 +4,7 @@ import { type ComponentProps, type RefObject, useEffect, useId, useLayoutEffect,
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { slashCommands } from "@/lib/api";
+import { useObservation } from "@/lib/useObservation";
 
 export interface CompletionContext {
   cwd: string;
@@ -39,7 +40,6 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
   const [composing, setComposing] = useState(false);
   const [dismissed, setDismissed] = useState<string>();
   const [selected, setSelected] = useState(0);
-  const [catalog, setCatalog] = useState<{ key: string; commands: readonly SlashCommand[]; error?: string }>();
   const list = useRef<HTMLUListElement>(null);
   const key = JSON.stringify(completion);
   const range = tokenAt(value, selection.start, selection.end);
@@ -49,18 +49,8 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
   const sessionId = completion?.sessionId;
   // Fetch once per opening, not per keystroke. Reopening gets the live catalog
   // again, including changes made by a handled extension command.
-  useEffect(() => {
-    if (!open || !cwd) return;
-    const controller = new AbortController();
-    setCatalog(undefined);
-    void slashCommands(cwd, sessionId, { signal: controller.signal }).then(commands => {
-      if (!controller.signal.aborted) setCatalog({ key, commands });
-    }).catch(error => {
-      if (!controller.signal.aborted) setCatalog({ key, commands: [], error: error.message });
-    });
-    return () => controller.abort();
-  }, [open, cwd, sessionId, key]);
-  const current = catalog?.key === key ? catalog : undefined;
+  const catalog = useObservation(open && cwd ? key : null, signal => slashCommands(cwd!, sessionId, { signal }));
+  const current = catalog.value ? { commands: catalog.value } : catalog.error ? { commands: [], error: catalog.error } : undefined;
   const query = range?.query ?? "";
   const commands = (current?.commands ?? []).filter(command => command.source === "skill" && command.name.toLowerCase().includes(query))
     .sort((a, b) => {
