@@ -14,7 +14,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { abbrevHome, clamp } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
 import { disclosureRow } from "@/lib/styles";
-import { messageAnchorId, STICK_EVENT, type ToolRow, type TranscriptRow, transcriptRows } from "@/lib/transcript";
+import { messageAnchorId, STICK_EVENT, type SubagentFacts, type ToolOutcome, type ToolRow, type TranscriptRow, transcriptRows } from "@/lib/transcript";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
@@ -99,7 +99,7 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
         {/* Adjacent tool rows keep one gap, even when the previous message also had text. */}
         <div className="flex flex-col gap-6 [&>[data-ends-with-tools]+[data-tools-only]]:-mt-3">
           {submittedInput && <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />}
-          {rows.map(row => <TranscriptRowView key={row.key} row={row} tools={tools} />)}
+          {rows.map(row => <TranscriptRowView key={row.key} row={row} />)}
           {activity && (
             <Row glyph={<Keys playing className="text-brand" />}>
               <span className="sr-only">{activity === "starting" ? "Starting" : "Pi is working"}</span>
@@ -137,11 +137,11 @@ function Row({ glyph, children, className }: { glyph: React.ReactNode; children:
   );
 }
 
-function TranscriptRowView({ row, tools }: { row: TranscriptRow; tools: Record<string, ToolExecution> }) {
-  if (row.kind === "subagent") return <SubagentCardView card={row.card} content={row.msg.text} markdown={row.msg.role === "context"} terminalStatus={row.terminalStatus} />;
+function TranscriptRowView({ row }: { row: TranscriptRow }) {
+  if (row.kind === "subagent") return <SubagentCardView {...row.subagent} markdown={row.msg.role === "context"} />;
   if (row.kind === "context") return <article><p className="text-xs text-ink-3">{row.msg.label}</p><pre className="whitespace-pre-wrap break-words text-sm">{row.msg.text}</pre></article>;
   if (row.kind === "user") return <UserMessage id={row.msg.id} text={row.text} skill={row.msg.skill} attachments={row.msg.attachments} />;
-  if (row.kind === "orphan") return <Tool {...row.tool} executions={tools} />;
+  if (row.kind === "orphan") return <Tool {...row.tool} />;
   const { msg, text, error, streaming } = row;
   const hasTools = row.tools.length > 0;
   return (
@@ -161,7 +161,7 @@ function TranscriptRowView({ row, tools }: { row: TranscriptRow; tools: Record<s
       )}
       {hasTools && (
         <div className="flex flex-col gap-3">
-          {row.tools.map(tool => <Tool key={tool.call.id} {...tool} executions={tools} />)}
+          {row.tools.map(tool => <Tool key={tool.call.id} {...tool} />)}
         </div>
       )}
     </article>}
@@ -320,26 +320,12 @@ function subagentAria(card: SubagentCard, title: string): string {
   return `Subagent operation: ${title}`;
 }
 
-function subagentBadge(card: SubagentCard, terminalStatus?: "completed" | "failed" | "cancelled"): "destructive" | "secondary" | "success" | "warning" {
-  const terminal = terminalStatus ?? ((card.kind === "delegation" || card.kind === "result" || card.kind === "collection") ? card.terminalStatus : undefined);
-  if (terminal === "completed") return "success";
-  if (terminal === "failed") return "destructive";
-  if (terminal === "cancelled") return "secondary";
-  if (card.kind === "delegation" && !card.admitted) return "destructive";
-  if (/unknown|unavailable|still running|cancell/i.test(card.status)) return "warning";
-  return "secondary";
-}
-
 /** Structured pi-subagent facts use the standard disclosure primitive. The
  * transcript row itself is intentionally quiet; identity and output stay on demand. */
-function SubagentCardView({ card, content, markdown = false, failed = false, terminalStatus }: { card: SubagentCard; content?: string; markdown?: boolean; failed?: boolean; terminalStatus?: "completed" | "failed" | "cancelled" }) {
+function SubagentCardView({ card, terminal, statusLabel, badge, failed, output, hasDetails, markdown = false }: SubagentFacts & { markdown?: boolean }) {
   const [open, setOpen] = useState(false);
   const title = subagentTitle(card);
   const runId = "runId" in card ? card.runId : undefined;
-  const visibleTerminal = terminalStatus ?? ((card.kind === "delegation" || card.kind === "result" || card.kind === "collection") ? card.terminalStatus : undefined);
-  const visibleStatus = terminalStatus ? terminalStatus[0].toUpperCase() + terminalStatus.slice(1) : card.status;
-  const hasOutput = !!content;
-  const hasDetails = hasOutput || card.kind === "collection" || card.kind === "cancellation" || ("subagentId" in card && !!card.subagentId) || !!runId || (card.kind === "delegation" && !!card.prompt) || (card.kind === "control" && !!card.message) || (card.kind === "result" && card.durationMillis !== undefined);
   return (
     <Collapsible
       open={open}
@@ -350,12 +336,12 @@ function SubagentCardView({ card, content, markdown = false, failed = false, ter
       data-run-id={runId}
       className="text-sm"
     >
-      <Row className="items-center" glyph={<span className={cn("block size-2 rounded-full", failed || visibleTerminal === "failed" ? "bg-err" : visibleTerminal === "completed" ? "bg-ok" : "bg-ink-3")} />}>
+      <Row className="items-center" glyph={<span className={cn("block size-2 rounded-full", failed || terminal === "failed" ? "bg-err" : terminal === "completed" ? "bg-ok" : "bg-ink-3")} />}>
         <CollapsibleTrigger asChild disabled={!hasDetails}>
           <button type="button" className={disclosureRow}>
             <span className="min-w-0 flex-1 truncate font-medium text-ink">{(card.kind === "result" || card.kind === "collection") && <span className="font-normal text-ink-3">Result · </span>}{title}</span>
             {"profile" in card && card.profile && <span className="max-w-28 shrink truncate text-ink-3">{card.profile}</span>}
-            <Badge variant={subagentBadge(card, terminalStatus)} className="max-w-56 truncate">{visibleStatus}</Badge>
+            <Badge variant={badge} className="max-w-56 truncate">{statusLabel}</Badge>
             {hasDetails && <DisclosureChevron open={open} />}
           </button>
         </CollapsibleTrigger>
@@ -376,7 +362,7 @@ function SubagentCardView({ card, content, markdown = false, failed = false, ter
               {card.kind === "collection" && <p className="text-xs text-ink-3">Delivered {card.runs.length} · Unavailable {card.unavailable} · Still running when checked {card.stillRunning} · Unknown {card.unknown}</p>}
               {card.kind === "collection" && card.runs.map(run => <p key={run.runId} className="break-all font-mono text-xs">{run.runId} · {run.profile} · {run.status}</p>)}
               {card.kind === "cancellation" && card.outcomes.map(outcome => <p key={`${outcome.kind}:${outcome.runId}`} className="break-all font-mono text-xs">{outcome.runId} · {outcome.kind}{outcome.kind === "already terminal" ? ` · ${outcome.phase}` : ""}</p>)}
-              {hasOutput && (markdown ? <Markdown text={content ?? ""} className="prose-chat" /> : <pre className={cn("whitespace-pre-wrap break-words", failed && "text-err")}>{clamp(content, 20000)}</pre>)}
+              {output && (markdown ? <Markdown text={output} className="prose-chat" /> : <pre className={cn("whitespace-pre-wrap break-words", failed && "text-err")}>{clamp(output, 20000)}</pre>)}
             </div>
           </Row>
         </CollapsibleContent>
@@ -385,44 +371,15 @@ function SubagentCardView({ card, content, markdown = false, failed = false, ter
   );
 }
 
-const VERBS: Record<string, [running: string, done: string]> = {
-  bash: ["Running", "Ran"],
-  read: ["Reading", "Read"],
-  write: ["Writing", "Wrote"],
-  edit: ["Editing", "Edited"],
-  grep: ["Searching", "Searched"],
-  find: ["Searching", "Searched"],
-  glob: ["Searching", "Searched"],
-  ls: ["Listing", "Listed"],
-};
-
-/** One line that says what a tool call did: the command, the path, or the pattern. */
-function summarize(args: string): string {
-  try {
-    const a = JSON.parse(args) as Record<string, unknown>;
-    const v = a.command ?? a.path ?? a.file_path ?? a.pattern ?? a.url ?? a.query;
-    if (typeof v === "string") return abbrevHome(v.split("\n")[0]).slice(0, 160);
-  } catch {
-    /* partial JSON while streaming */
-  }
-  return "";
-}
-
 const PREVIEW_LINES = 5;
 
-function Tool({ call, result, running, terminalStatus, executions = {} }: ToolRow & { executions?: Record<string, ToolExecution> }) {
-  const execution = executions[call.id];
-  const subagent = result?.subagent ?? execution?.subagent;
+const DOT: Record<ToolOutcome, string> = { running: "animate-live bg-busy", failed: "bg-err", done: "bg-ok", incomplete: "bg-ink-3", pending: "bg-ink-3" };
+
+function Tool({ call, outcome, output, nested, nestedComplete, verb, knownTool, summary, subagent }: ToolRow) {
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
-  if (subagent) return <SubagentCardView card={subagent} content={result?.text ?? execution?.text} failed={!!result?.isError || execution?.status === "error"} terminalStatus={terminalStatus} />;
-  const nested = new Map((result?.nestedCalls ?? []).map(c => [c.id, c]));
-  for (const child of Object.values(executions)) if (child.parentId === call.id || child.id.startsWith(`${call.id}/`)) nested.set(child.id, child);
-  const output = result?.text ?? execution?.text;
-  const [verbRunning, verbDone] = VERBS[call.name] ?? ["Calling", "Called"];
-  const failed = !!result?.isError || execution?.status === "error";
-  const verb = running ? verbRunning : failed ? "Failed" : execution?.status === "incomplete" ? "Incomplete" : verbDone;
-  const summary = summarize(call.args);
+  if (subagent) return <SubagentCardView {...subagent} />;
+  const failed = outcome === "failed";
   const lines = (output ?? "").split("\n");
   const shown = all ? lines : lines.slice(0, PREVIEW_LINES);
   const hidden = lines.length - shown.length;
@@ -433,7 +390,7 @@ function Tool({ call, result, running, terminalStatus, executions = {} }: ToolRo
         className="items-center"
         glyph={
           <span
-            className={cn("block size-2 rounded-full transition-colors duration-300", running ? "animate-live bg-busy" : failed ? "bg-err" : result ? "bg-ok" : "bg-ink-3")}
+            className={cn("block size-2 rounded-full transition-colors duration-300", DOT[outcome])}
           />
         }
       >
@@ -441,10 +398,10 @@ function Tool({ call, result, running, terminalStatus, executions = {} }: ToolRo
           <button type="button" className={disclosureRow}>
             <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
               {verb}
-              {(VERBS[call.name] ?? null) === null && <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>}
+              {!knownTool && <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>}
             </span>
             {summary && <span className="min-w-0 flex-1 truncate font-mono text-ink-2">{summary}</span>}
-            {VERBS[call.name] && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
+            {knownTool && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
             <DisclosureChevron open={open} className="ml-auto" />
           </button>
         </CollapsibleTrigger>
@@ -471,13 +428,13 @@ function Tool({ call, result, running, terminalStatus, executions = {} }: ToolRo
           )}
         </Row>
       )}
-      {open && [...nested.values()].map(child => /* biome-ignore lint/a11y/useSemanticElements: a <fieldset> is for form controls. */ <div key={child.id} role="group" aria-label={`${child.name} tool call`} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
+      {open && nested.map(child => /* biome-ignore lint/a11y/useSemanticElements: a <fieldset> is for form controls. */ <div key={child.id} role="group" aria-label={`${child.name} tool call`} className="ml-7 mt-2 border-l border-line pl-3 text-xs">
         <p className="flex items-center gap-2">{child.name} <Badge variant={child.status === "error" ? "destructive" : child.status === "success" ? "success" : child.status === "running" ? "warning" : "secondary"}>{{ running: "Running", success: "Done", error: "Failed", incomplete: "Incomplete" }[child.status]}</Badge></p>
         <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
         {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}
         {child.text && <pre className="whitespace-pre-wrap break-words">{clamp(child.text, 4000)}</pre>}
       </div>)}
-      {open && result?.nestedCallsComplete === false && <p className="pl-7 text-xs text-warning">Some tool details are unavailable.</p>}
+      {open && !nestedComplete && <p className="pl-7 text-xs text-warning">Some tool details are unavailable.</p>}
     </Collapsible>
   );
 }

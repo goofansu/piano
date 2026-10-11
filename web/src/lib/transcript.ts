@@ -1,5 +1,6 @@
 import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
 // Relative so node tests can load this pure module without the web alias.
+import { abbrevHome } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
 /** The transcript's scroll container; the jump list reads and moves it. */
@@ -16,13 +17,43 @@ export type JumpEntry =
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 export type TerminalStatus = "completed" | "failed" | "cancelled";
 
-/** A tool call folded together with the result it produced. */
+/** What became of a tool call: still running, settled with or without a result, or not heard from yet. */
+export type ToolOutcome = "running" | "failed" | "incomplete" | "done" | "pending";
+
+/** A pi-subagent card with what it means once every card in the transcript has been read. */
+export interface SubagentFacts {
+  card: SubagentCard;
+  /** The run's settled status: reported by a later card, else by this card itself. */
+  terminal?: TerminalStatus;
+  /** The badge text; it names `terminal` whenever there is one, so it agrees with `badge`. */
+  statusLabel: string;
+  badge: "destructive" | "secondary" | "success" | "warning";
+  /** The tool call that carried the card failed. */
+  failed: boolean;
+  output?: string;
+  /** Anything to show when opened: identity, prompt, guidance, outcomes or output. */
+  hasDetails: boolean;
+}
+
+/** A tool call folded together with the result it produced and the calls it made. */
 export interface ToolRow {
   call: ToolCall;
   result: RenderMsg | undefined;
-  running: boolean;
-  /** The settled status of the run a delegation card started, when another card reported it. */
-  terminalStatus?: TerminalStatus;
+  outcome: ToolOutcome;
+  /** The result's text, else the latest execution preview. */
+  output?: string;
+  /** Calls made inside this one: recorded with its result, then any still streaming in. */
+  nested: ToolExecution[];
+  /** False when the result says some nested calls were not recorded. */
+  nestedComplete: boolean;
+  /** What the call did, in the tense its outcome calls for ("Running", "Read", "Failed"). */
+  verb: string;
+  /** False for a tool without its own verb, whose name then follows the generic one. */
+  knownTool: boolean;
+  /** The command, path or pattern the call acted on. */
+  summary: string;
+  /** Set when the call delegated to, or reported on, a subagent: it renders as that card. */
+  subagent?: SubagentFacts;
 }
 
 /**
@@ -43,7 +74,7 @@ export type TranscriptRow =
       /** Set on a reply that ended a turn: it is offered for copying and listed in Jump to. */
       jump?: string;
     }
-  | { kind: "subagent"; key: string; msg: RenderMsg; card: SubagentCard; terminalStatus?: TerminalStatus }
+  | { kind: "subagent"; key: string; msg: RenderMsg; subagent: SubagentFacts }
   | { kind: "context"; key: string; msg: RenderMsg }
   /** A result whose call never reached us. */
   | { kind: "orphan"; key: string; msg: RenderMsg; tool: ToolRow };
@@ -60,6 +91,49 @@ export interface TranscriptOptions {
 export function messageLabel(text: string, max = 80): string {
   const line = text.replace(/\s+/g, " ").trim().replace(/^[#>*\-`\s]+/, "").trim();
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
+const VERBS: Record<string, [running: string, done: string]> = {
+  bash: ["Running", "Ran"],
+  read: ["Reading", "Read"],
+  write: ["Writing", "Wrote"],
+  edit: ["Editing", "Edited"],
+  grep: ["Searching", "Searched"],
+  find: ["Searching", "Searched"],
+  glob: ["Searching", "Searched"],
+  ls: ["Listing", "Listed"],
+};
+
+/** One line that says what a tool call did: the command, the path, or the pattern. */
+function summarize(args: string): string {
+  try {
+    const a = JSON.parse(args) as Record<string, unknown>;
+    const v = a.command ?? a.path ?? a.file_path ?? a.pattern ?? a.url ?? a.query;
+    if (typeof v === "string") return abbrevHome(v.split("\n")[0]).slice(0, 160);
+  } catch {
+    /* partial JSON while streaming */
+  }
+  return "";
+}
+
+const titleCase = (s: string) => s[0]!.toUpperCase() + s.slice(1);
+
+/** A card's facts, given the settled status another card reported for its run. */
+function subagentFacts(card: SubagentCard, reported: TerminalStatus | undefined, output: string | undefined, failed: boolean): SubagentFacts {
+  const terminal = reported ?? ("terminalStatus" in card ? card.terminalStatus : undefined);
+  // The card's own text may add to the status ("Failed · Result unavailable"); keep it when it agrees.
+  const statusLabel = terminal && !card.status.startsWith(titleCase(terminal)) ? titleCase(terminal) : card.status;
+  const badge = terminal === "completed" ? "success"
+    : terminal === "failed" ? "destructive"
+    : terminal === "cancelled" ? "secondary"
+    : card.kind === "delegation" && !card.admitted ? "destructive"
+    : /unknown|unavailable|still running|cancell/i.test(card.status) ? "warning"
+    : "secondary";
+  const hasDetails = !!output || card.kind === "collection" || card.kind === "cancellation"
+    || ("subagentId" in card && !!card.subagentId) || ("runId" in card && !!card.runId)
+    || (card.kind === "delegation" && !!card.prompt) || (card.kind === "control" && !!card.message)
+    || (card.kind === "result" && card.durationMillis !== undefined);
+  return { card, ...(terminal ? { terminal } : {}), statusLabel, badge, failed, ...(output ? { output } : {}), hasDetails };
 }
 
 const turnLabel = (m: RenderMsg) => messageLabel(m.skill ? `/skill:${m.skill.name} ${m.text}` : m.text) || (m.attachments?.length ? "Image" : "");
@@ -93,9 +167,32 @@ export function transcriptRows(messages: ReadonlyArray<RenderMsg>, { pending = n
     if (card?.kind === "cancellation") for (const outcome of card.outcomes) if (outcome.kind === "already terminal") terminalRuns.set(outcome.runId, outcome.phase);
   }
   const cardStatus = (card: SubagentCard | undefined) => card?.kind === "delegation" && card.runId ? terminalRuns.get(card.runId) : undefined;
+  // Live calls made inside another call, by the call that made them: named as its parent, or
+  // under its id as a "parent/child" path. Built once so each row finds its own in one lookup.
+  const children = new Map<string, ToolExecution[]>();
+  const adopt = (parent: string, child: ToolExecution) => children.set(parent, [...children.get(parent) ?? [], child]);
+  for (const execution of Object.values(tools)) {
+    const parents = new Set(execution.parentId ? [execution.parentId] : []);
+    for (let i = execution.id.indexOf("/"); i > 0; i = execution.id.indexOf("/", i + 1)) parents.add(execution.id.slice(0, i));
+    for (const parent of parents) adopt(parent, execution);
+  }
   const toolRow = (call: ToolCall, result: RenderMsg | undefined, running: boolean): ToolRow => {
-    const terminalStatus = cardStatus(result?.subagent ?? tools[call.id]?.subagent);
-    return { call, result, running, ...(terminalStatus ? { terminalStatus } : {}) };
+    const execution = tools[call.id];
+    const failed = !!result?.isError || execution?.status === "error";
+    const outcome: ToolOutcome = running ? "running" : failed ? "failed" : execution?.status === "incomplete" ? "incomplete" : result ? "done" : "pending";
+    const output = result?.text ?? execution?.text;
+    const nested = new Map((result?.nestedCalls ?? []).map(c => [c.id, c]));
+    for (const child of children.get(call.id) ?? []) nested.set(child.id, child);
+    const verbs = VERBS[call.name];
+    const [verbRunning, verbDone] = verbs ?? ["Calling", "Called"];
+    const verb = outcome === "running" ? verbRunning : outcome === "failed" ? "Failed" : outcome === "incomplete" ? "Incomplete" : verbDone;
+    const card = result?.subagent ?? execution?.subagent;
+    return {
+      call, result, outcome, ...(output !== undefined ? { output } : {}),
+      nested: [...nested.values()], nestedComplete: result?.nestedCallsComplete !== false,
+      verb, knownTool: !!verbs, summary: summarize(call.args),
+      ...(card ? { subagent: subagentFacts(card, cardStatus(card), output, failed) } : {}),
+    };
   };
   const noResults = new Map<string, RenderMsg>();
   const active = new Set(Object.values(tools).filter(t => t.status === "running").map(t => t.id));
@@ -105,8 +202,7 @@ export function transcriptRows(messages: ReadonlyArray<RenderMsg>, { pending = n
     if (!showTools && (m.subagent || m.role === "tool_result" || m.role === "context")) return;
     const text = showTools || jump ? m.text : "";
     if (m.subagent) {
-      const terminalStatus = cardStatus(m.subagent);
-      rows.push({ kind: "subagent", key, msg: m, card: m.subagent, ...(terminalStatus ? { terminalStatus } : {}) });
+      rows.push({ kind: "subagent", key, msg: m, subagent: subagentFacts(m.subagent, cardStatus(m.subagent), m.text || undefined, false) });
     } else if (m.role === "context") {
       rows.push({ kind: "context", key, msg: m });
     } else if (m.role === "user") {
