@@ -1,14 +1,16 @@
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpDownIcon, CheckIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlugIcon, PlusIcon, RadiusIcon, ServerIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon } from "lucide-react";
+import { ArrowUpDownIcon, CheckIcon, HomeIcon, LayoutListIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PlusIcon, SettingsIcon, ShieldCheckIcon, ShieldOffIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { CommandIcon, useSessionCommands } from "@/components/SessionCommandHost";
+import { SettingsSectionIcon } from "@/components/SettingsSectionFrame";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { abbrevPath } from "@/lib/format";
 import { hasMod } from "@/lib/keys";
+import { SETTINGS_SECTIONS } from "@/lib/routes";
 import { recentSessions } from "@/lib/sessionCatalog";
 import { directoryTrust, focusedDirectory } from "@/lib/sessionContext";
 import { GROUP_BY, SORT_BY } from "@/lib/sidebarView";
@@ -95,15 +97,11 @@ export function CommandPalette({ state, toggleSidebar, send }: Props) {
           </CommandItem> : <CommandItem value="Settings" onSelect={() => run(openSettings)}>
             <SettingsIcon /> Settings
           </CommandItem>}
-          <CommandItem value="Providers" keywords={["settings", "oauth", "sign in"]} onSelect={() => run(() => openSettings("providers"))}>
-            <PlugIcon /> Providers
-          </CommandItem>
-          <CommandItem value="Radius" keywords={["settings", "setup", "oauth", "mcp", "web search"]} onSelect={() => run(() => openSettings("radius"))}>
-            <RadiusIcon /> Radius
-          </CommandItem>
-          <CommandItem value="MCP" keywords={["settings", "servers", "tools", "linear", "install", "sign in"]} onSelect={() => run(() => openSettings("mcp"))}>
-            <ServerIcon /> MCP
-          </CommandItem>
+          {SETTINGS_SECTIONS.map(section => (
+            <CommandItem key={`settings-${section.id}`} value={section.label} keywords={[...section.keywords]} onSelect={() => run(() => openSettings(section.id))}>
+              <SettingsSectionIcon icon={section.icon} /> {section.label}
+            </CommandItem>
+          ))}
           <CommandItem value="new session" onSelect={() => run(() => openNew())}>
             <PlusIcon /> New session
           </CommandItem>
