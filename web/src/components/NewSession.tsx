@@ -17,10 +17,11 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
+import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { isSendKey } from "@/lib/keys";
 import { type DraftKey, NEW_SESSION_DRAFT, sendable } from "@/lib/messageDraft";
 import { canStartSessionIn, findProject, projectChoices, projectCommand } from "@/lib/projectCommands";
-import { completionTarget, directoryTrust, folderFor } from "@/lib/sessionContext";
+import { completionTarget, folderFor } from "@/lib/sessionContext";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
@@ -59,7 +60,7 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
   const folder = folderFor(state, cwd);
   const project = findProject(state, projectId);
   const unarchive = project && projectCommand(state, project, "unarchive");
-  const trust = directoryTrust(state, cwd);
+  const trust = trustCommand(state, cwd);
   const catalog = state.catalogs[cwd] ?? null;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
   const choice = useModelChoice(catalog, NEW, cwd);
@@ -91,9 +92,7 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
               <div className="min-w-0 shrink">
                 <DirectorySelect state={state} value={cwd} onChange={chooseDirectory} onBrowse={() => setPickerOpen(true)} send={send} />
               </div>
-              {trust?.required && (
-                <TrustToggle trusted={trust.trusted} onChange={trusted => send({ _tag: "set_trust", path: cwd, trusted })} />
-              )}
+              {trust && <TrustToggle command={trust} send={send} />}
               <ProjectSelect state={state} value={projectId} onChange={onProjectChange} onCreate={onNewProject} />
             </div>
             <div className={cn(composerCard, "welcome-enter welcome-composer")} {...attachmentEvents(attachments, !state.connected)}>
@@ -202,15 +201,18 @@ function ProjectSelect({ state, value, onChange, onCreate }: { state: AppState; 
   );
 }
 
-/** Shown only for directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted. */
-
-function TrustToggle({ trusted, onChange }: { trusted: boolean; onChange: (trusted: boolean) => void }) {
+/**
+ * The palette's Trust folder command as a toggle that shows the directory's state; offered only for
+ * directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted.
+ */
+function TrustToggle({ command, send }: { command: GlobalCommand; send: (m: ClientMessage) => void }) {
+  const trusted = !!command.pressed;
   return (
     <Button
-      variant="ghost" size="sm" aria-pressed={trusted} aria-label="Directory trust"
+      variant="ghost" size="sm" aria-pressed={trusted} aria-label="Directory trust" disabled={!command.enabled}
       className={cn(picker, "shrink-0", trusted ? "text-ink-3" : "text-ink-2")}
       title={trusted ? "Pi loads this folder's .pi settings, extensions and skills. Click to untrust." : "Pi skips this folder's .pi settings, extensions and skills. Click to trust."}
-      onClick={() => onChange(!trusted)}
+      onClick={() => { if (command.intent.kind === "send") send(command.intent.command); }}
     >
       {trusted ? <ShieldCheckIcon /> : <ShieldOffIcon />}
       <span className="max-[360px]:hidden">{trusted ? "Trusted" : "Untrusted"}</span>

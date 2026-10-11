@@ -115,7 +115,7 @@ try {
   const newActions = await evaluate(`(() => {
     return [...document.querySelectorAll('[cmdk-item]')].filter(e => e.getBoundingClientRect().height > 0).map(e => ({ value: e.getAttribute('data-value'), icon: e.querySelector('svg')?.outerHTML, fits: e.scrollWidth <= e.clientWidth }));
   })()`);
-  assert.deepEqual(newActions.map(a => a.value), ['new session', 'New session here'], 'no directory-specific actions');
+  assert.deepEqual(newActions.map(a => a.value), ['New session', 'New session here'], 'no directory-specific actions');
   assert.ok(newActions.every(a => a.fits), 'new session actions fit mobile width');
   assert.ok(newActions[0].icon.includes('lucide-plus'));
   assert.equal(newActions[0].icon, newActions[1].icon, 'new session actions use the same icon');

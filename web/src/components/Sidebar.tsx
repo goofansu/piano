@@ -1,10 +1,11 @@
 import type { ClientCommand as ClientMessage, FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
-import { ArchiveIcon, ArchiveRestoreIcon, type LucideIcon, MonitorIcon, MoonIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, SunIcon, XIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, type LucideIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { DisclosureChevron } from "@/components/Disclosure";
+import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { IconButton } from "@/components/IconButton";
 import { Keys } from "@/components/PianoMark";
 import { type ProjectDialog, ProjectMenu } from "@/components/Projects";
@@ -19,12 +20,13 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { type GlobalCommand, type GlobalCommandGroup, globalCommands } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
 import { activeProjects, type ProjectCommand, type ProjectCommandIcon, projectCommands } from "@/lib/projectCommands";
 import { type SessionEntry, sessionCatalog } from "@/lib/sessionCatalog";
 import { pickCommands, SESSION_ROW_COMMANDS } from "@/lib/sessionCommands";
 import { projectKey } from "@/lib/sidebarGroups";
-import { dateGroups, folderGroups, GROUP_BY, type GroupBy, projectGroups, SORT_BY, type SortBy, sortSessions } from "@/lib/sidebarView";
+import { dateGroups, folderGroups, projectGroups, type SidebarView, sortSessions } from "@/lib/sidebarView";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarGroups } from "@/lib/useSidebarGroups";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -127,7 +129,7 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
         <IconButton label="Search sessions" tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>} onClick={() => setPalette(true)}>
           <SearchIcon />
         </IconButton>
-        <ViewMenu groupBy={view.groupBy} sortBy={view.sortBy} onChange={setView} />
+        <ViewMenu state={state} view={view} onChange={setView} />
       </LayoutHeader>
       <div className="px-3 pb-3">
         <Button
@@ -150,18 +152,24 @@ export function Sidebar({ state, send, onProjectDialog, onHide }: Props) {
   );
 }
 
-const APPEARANCES = [
-  { value: "light", label: "Light", icon: SunIcon },
-  { value: "dark", label: "Dark", icon: MoonIcon },
-  { value: "system", label: "System", icon: MonitorIcon },
-] as const;
-
-/** One menu for grouping and sorting the list; appearance lives here too. */
-function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: SortBy; onChange: (change: { groupBy?: GroupBy; sortBy?: SortBy }) => void }) {
+/** One menu for grouping and sorting the list; appearance lives here too. Each choice is a global command, as the palette offers it. */
+function ViewMenu({ state, view, onChange }: { state: AppState; view: SidebarView; onChange: (change: Partial<SidebarView>) => void }) {
   const { setTheme, theme } = useTheme();
-  const sortLabel = SORT_BY.find(s => s.value === sortBy)?.label ?? "";
+  const commands = globalCommands(state, { settingsOpen: false, view, theme: theme ?? "system" });
+  const choices = (group: GlobalCommandGroup) => commands.filter(c => c.group === group);
+  const run = (c: GlobalCommand | undefined) => {
+    if (c?.intent.kind === "view") onChange(c.intent.change);
+    else if (c?.intent.kind === "appearance") setTheme(c.intent.appearance);
+  };
   // The label takes the slack so the current value sits beside the trigger's own chevron.
-  const choice = (label: string, value: string) => <><span className="flex-1">{label}</span><span className="text-muted-foreground">{value}</span></>;
+  const choice = (label: string, group: GlobalCommandGroup) => (
+    <><span className="flex-1">{label}</span><span className="text-muted-foreground">{choices(group).find(c => c.checked)?.menuLabel ?? ""}</span></>
+  );
+  const radio = (group: GlobalCommandGroup, item: (c: GlobalCommand) => React.ReactNode) => (
+    <DropdownMenuRadioGroup value={choices(group).find(c => c.checked)?.id ?? ""} onValueChange={id => run(commands.find(c => c.id === id))}>
+      {choices(group).map(item)}
+    </DropdownMenuRadioGroup>
+  );
   return (
     <DropdownMenu>
       <Tooltip>
@@ -176,31 +184,27 @@ function ViewMenu({ groupBy, sortBy, onChange }: { groupBy: GroupBy; sortBy: Sor
       </Tooltip>
       <DropdownMenuContent align="end" className="min-w-48">
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Group by", GROUP_BY.find(g => g.value === groupBy)?.label ?? "")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>{choice("Group by", "group-by")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup value={groupBy} onValueChange={value => onChange({ groupBy: value as GroupBy })}>
-              {GROUP_BY.filter(g => g.value !== "none").map(g => <DropdownMenuRadioItem key={g.value} value={g.value}>{g.label}</DropdownMenuRadioItem>)}
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioItem value="none">None</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
+            {/* No grouping comes last, set apart from the groupings. */}
+            {radio("group-by", c => <Fragment key={c.id}>
+              {c.id === "group-none" && <DropdownMenuSeparator />}
+              <DropdownMenuRadioItem value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>
+            </Fragment>)}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Sort by", sortLabel)}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>{choice("Sort by", "sort-by")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup value={sortBy} onValueChange={value => onChange({ sortBy: value as SortBy })}>
-              {SORT_BY.map(s => <DropdownMenuRadioItem key={s.value} value={s.value}>{s.label}</DropdownMenuRadioItem>)}
-            </DropdownMenuRadioGroup>
+            {radio("sort-by", c => <DropdownMenuRadioItem key={c.id} value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>)}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Appearance", APPEARANCES.find(a => a.value === (theme ?? "system"))?.label ?? "")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>{choice("Appearance", "appearance")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {/* The chosen mode carries the check; the icons say what each one does. */}
-            <DropdownMenuRadioGroup value={theme ?? "system"} onValueChange={setTheme}>
-              {APPEARANCES.map(({ value, label, icon: Icon }) => <DropdownMenuRadioItem key={value} value={value}><Icon /> {label}</DropdownMenuRadioItem>)}
-            </DropdownMenuRadioGroup>
+            {radio("appearance", c => <DropdownMenuRadioItem key={c.id} value={c.id}><GlobalCommandIcon icon={c.icon} /> {c.menuLabel}</DropdownMenuRadioItem>)}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       </DropdownMenuContent>
