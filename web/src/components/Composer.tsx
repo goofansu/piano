@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { AttachButton, AttachmentDraftView, attachmentEvents, useAttachments } from "@/components/Attachments";
 import { ContextDetails } from "@/components/ContextDetails";
 import { JumpTo } from "@/components/JumpTo";
+import { KeyboardDiagnostics } from "@/components/KeyboardDiagnostics";
 import { ModelSelect } from "@/components/ModelSelect";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
 import { Button } from "@/components/ui/button";
@@ -181,6 +182,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
           </Tooltip>
         </div>
       </div>
+      <KeyboardDiagnostics textarea={ref} />
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">
         {/* biome-ignore lint/a11y/useSemanticElements: a <fieldset> brings form semantics and min-content sizing to a row of status buttons. */}
         <div className="ml-auto flex shrink-0 items-center gap-2" role="group" aria-label="Session usage">
