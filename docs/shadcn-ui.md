@@ -29,18 +29,19 @@ narrow. The scroll rule deliberately overrides inline display; the reduced-motio
 wins over all overlay motion. The sidebar's existing selected-row CSS already owns its color;
 no duplicate class patch is needed.
 
-### The one retained patch
+### Stock sidebar shortcut
 
-`ui/sidebar.tsx` omits the built-in Mod+B listener and its constant. Upstream has no opt-out prop.
-Preserve the `piano:` comment and omitted listener; do not intercept browser keyboard events to
-cancel it. Mod+K remains Piano's only global shortcut.
+There are no intentional patches left in `ui/`. Keep Sidebar's built-in Mod+B listener alongside
+Piano's Mod+K command palette. Its controlled `open` prop connects the shortcut to Piano's desktop
+sidebar, including the saved collapsed preference. Piano's separate mobile sheet still uses its
+layout controls; stock `openMobile` is not connected to that sheet.
 
 ## Upgrade procedure
 
 1. From `web/`, preview `npx shadcn@latest add <component> --dry-run`, then
    `npx shadcn@latest add <component> --dry-run --diff <file>`. Include transitive components,
    dependency and CSS changes in the review.
-2. Take reviewed upstream source changes; preserve only the sidebar shortcut patch. Avoid
+2. Take reviewed upstream source changes without carrying local component patches. Avoid
    overwriting `index.css`, app wrappers or unrelated dependencies as a side effect.
 3. Check changed props, slots and internal composition against app wrappers. In particular,
    upstream composites import their own `ui/` children: they do not automatically use Piano

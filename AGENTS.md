@@ -120,8 +120,8 @@ standard component exists, and says so in a comment.
 Keep `web/src/components/ui/` upstream-owned. Piano's variants, overlay styling and focus policy
 live in the `Piano*` wrappers, `StatusBadge` and `PickerRadioItem` in `web/src/components/`; use
 those for customized controls, and raw `ui/` imports for standard controls. Tokens and the few
-internal-slot CSS exceptions live in `web/src/index.css`. The only retained `piano:` patch in
-`ui/` disables Sidebar's Mod+B shortcut. When adding a customization or upgrading shadcn, read
+internal-slot CSS exceptions live in `web/src/index.css`; no intentional patches remain in
+`ui/`. When adding a customization or upgrading shadcn, read
 [the ownership and upgrade guide](docs/shadcn-ui.md). Preview with
 `add <name> --dry-run --diff <file>`; never `--overwrite` unreviewed.
 
@@ -129,7 +129,8 @@ The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the ke
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands,
 and Session commands (only with a selected session). A feature that adds an action the sidebar or
 header offers also adds a row in the appropriate command group, named as its button is.
-Mod+K stays the only global shortcut; other actions are reached through the palette or their control.
+Keep Mod+K for the palette and stock Sidebar's Mod+B shortcut; other actions are reached through
+the palette or their control.
 
 `server/PiSessions.ts` is the deep module: `open`, `probe`, and per session `events`, `act`,
 `state`, all in the browser's wire vocabulary from `shared/wire.ts`. Add capabilities as new

@@ -185,12 +185,19 @@ async function checkPianoControls() {
   await ab("set", "viewport", "1440", "1000");
   const view = '[aria-label="View options"]';
   const directory = '[role="combobox"][aria-label="Directory"]';
-  await ab("press", process.platform === "darwin" ? "Meta+b" : "Control+b");
-  assert.equal(
-    await evaluate(`document.querySelector('[data-slot="layout-sidebar"]').dataset.state`),
-    "expanded",
-    "Mod+B remains unassigned",
-  );
+  for (const state of ["collapsed", "expanded"]) {
+    await ab("press", process.platform === "darwin" ? "Meta+b" : "Control+b");
+    await ab(
+      "wait",
+      "--fn",
+      `document.querySelector('[data-slot="layout-sidebar"]').dataset.state === '${state}'`,
+    );
+    assert.equal(
+      await evaluate(`localStorage.getItem('piano.sidebar')`),
+      state === "collapsed" ? "hidden" : "shown",
+      "stock Mod+B toggles the desktop sidebar and saves its preference",
+    );
+  }
   for (const theme of ["Dark", "Light"]) {
     await ab("click", view);
     await ab("find", "role", "menuitem", "hover", "--name", "Appearance");
@@ -434,7 +441,7 @@ try {
   );
   assert.equal(await ab("errors"), "");
   console.log(
-    "PASS: search viewport resets; keyboard scrolling; eight newest across projects; full active-session search; archive exclusion; clear/reopen reset; keyboard selection; mobile new session actions; equal row heights; light/dark pickers; trailing checks; pointer and keyboard focus; no Mod+B; touch sizing/focus; sheet timing and reduced motion",
+    "PASS: search viewport resets; keyboard scrolling; eight newest across projects; full active-session search; archive exclusion; clear/reopen reset; keyboard selection; mobile new session actions; equal row heights; light/dark pickers; trailing checks; pointer and keyboard focus; stock Mod+B toggle; touch sizing/focus; sheet timing and reduced motion",
   );
   writeFileSync(
     join(evidence, "result.json"),
