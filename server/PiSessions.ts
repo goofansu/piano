@@ -120,6 +120,61 @@ export class PiSessions extends Context.Service<
   }
 >()("piano/PiSessions") {}
 
+/** How the server admits and sequences one kind of {@link SessionAction}. */
+export interface SessionActionPolicy {
+  /**
+   * Admitted ahead of ordinary work when inbound capacity is saturated, so a
+   * saturated session can still be answered, aborted, stopped or have its queue restored.
+   */
+  readonly priority: boolean;
+  /**
+   * Starts a new operation, invalidating readbacks owed to earlier ones. Answer, abort and
+   * queue restoration do not: they unblock the command whose dialog is open.
+   */
+  readonly supersedes: boolean;
+  /** Rejected while Stop is in progress; delaying it could start new work once Stop completes. */
+  readonly blockedWhileStopping: boolean;
+  /** Requires the session's checkout to still exist. Abort and Stop must work without one. */
+  readonly needsCheckout: boolean;
+}
+
+/**
+ * Every action kind's admission policy. Exhaustive by type, so a new
+ * SessionAction variant cannot be sent until it is classified here.
+ */
+export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], SessionActionPolicy>> = {
+  prompt: { priority: false, supersedes: true, blockedWhileStopping: true, needsCheckout: true },
+  steer: { priority: false, supersedes: true, blockedWhileStopping: true, needsCheckout: true },
+  abort: { priority: true, supersedes: false, blockedWhileStopping: true, needsCheckout: false },
+  stop: { priority: true, supersedes: false, blockedWhileStopping: true, needsCheckout: false },
+  restore_queue: {
+    priority: true,
+    supersedes: false,
+    blockedWhileStopping: true,
+    needsCheckout: true,
+  },
+  commands: {
+    priority: false,
+    supersedes: false,
+    blockedWhileStopping: false,
+    needsCheckout: true,
+  },
+  set_model: {
+    priority: false,
+    supersedes: true,
+    blockedWhileStopping: false,
+    needsCheckout: true,
+  },
+  set_thinking_level: {
+    priority: false,
+    supersedes: true,
+    blockedWhileStopping: false,
+    needsCheckout: true,
+  },
+  set_name: { priority: false, supersedes: true, blockedWhileStopping: false, needsCheckout: true },
+  answer: { priority: true, supersedes: false, blockedWhileStopping: false, needsCheckout: true },
+};
+
 // ── Implementation ───────────────────────────────────────────────────────────
 
 const commandOf = (translation: PiTranslation): Effect.Effect<PiCommand, PiSessionError> =>
@@ -653,14 +708,9 @@ const openSession = (spec: PiSessionSpec) =>
           });
         // Answer/abort/queue restoration do not supersede the command whose
         // dialog they unblock. Keep its subsequent model/effort readback valid.
-        const operation =
-          action._tag === "prompt" ||
-          action._tag === "steer" ||
-          action._tag === "set_model" ||
-          action._tag === "set_thinking_level" ||
-          action._tag === "set_name"
-            ? ++operationVersion
-            : operationVersion;
+        const operation = sessionActionPolicy[action._tag].supersedes
+          ? ++operationVersion
+          : operationVersion;
         switch (action._tag) {
           case "commands":
             return { _tag: "commands", commands: yield* child.read(piReadbacks.commands) };
@@ -849,10 +899,7 @@ const openSession = (spec: PiSessionSpec) =>
           Effect.suspend(() => {
             // Reject rather than delay input: delayed submissions could accidentally
             // start new work as soon as Stop completes. Answers must remain available.
-            if (
-              stopping &&
-              ["prompt", "steer", "stop", "abort", "restore_queue"].includes(action._tag)
-            ) {
+            if (stopping && sessionActionPolicy[action._tag].blockedWhileStopping) {
               return Effect.fail(
                 new PiSessionError({
                   reason: "rejected",
@@ -862,7 +909,7 @@ const openSession = (spec: PiSessionSpec) =>
             }
             const release = actionCapacity.acquire(
               Buffer.byteLength(JSON.stringify(action)),
-              ["answer", "abort", "stop", "restore_queue"].includes(action._tag),
+              sessionActionPolicy[action._tag].priority,
             );
             if (!release)
               return Effect.fail(

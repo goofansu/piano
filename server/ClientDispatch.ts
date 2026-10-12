@@ -11,6 +11,7 @@ import { type ClientOutput, makeClientSessions } from "./ClientSessions.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
+import { sessionActionPolicy } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SidebarView } from "./SidebarView.ts";
@@ -195,9 +196,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       yield* answered(request)(handle(request));
       return Effect.void;
     }
-    const priority =
-      request._tag === "act" &&
-      ["answer", "abort", "stop", "restore_queue"].includes(request.action._tag);
+    const priority = request._tag === "act" && sessionActionPolicy[request.action._tag].priority;
     const release = capacity.acquire(Buffer.byteLength(JSON.stringify(request)), priority);
     if (!release) {
       // Reject before claiming a selection or mutating anything. The receive loop
