@@ -29,6 +29,7 @@ import { ProjectDialogView } from "@/components/Projects";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { answerForm } from "@/lib/commandForms";
 import { type Command, type CommandEffects, type CommandForm, runCommand } from "@/lib/commands";
 import {
   type SessionCommand,
@@ -37,7 +38,6 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
-import { sessionCheckoutMissing, sessionMutable } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -138,14 +138,12 @@ export function CommandHost({
   const closing = form?.kind === "close-folder" ? form.folder : null;
   const close = () => setForm(null);
   // Forms re-check the rule when they are answered: the attachment or connection may have changed since.
-  const canRename =
-    !!renaming &&
-    sessionMutable(state, renaming) &&
-    !sessionCheckoutMissing(state, renaming) &&
-    !!draftTitle.trim() &&
-    draftTitle.trim() !== (renaming.title ?? "");
-  const canDelete = !!deleting && sessionMutable(state, deleting);
-  const canClose = !!closing && state.connected;
+  const answer = form && form.kind !== "project" ? answerForm(state, form, draftTitle) : null;
+  /** Send the open form's answer, if it is allowed now. */
+  const submit = () => {
+    if (answer?.command) send(answer.command);
+    return !!answer?.allowed;
+  };
 
   const effects: CommandEffects = {
     send,
@@ -182,14 +180,7 @@ export function CommandHost({
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (!renaming || !canRename) return;
-              send({
-                _tag: "rename_session",
-                cwd: renaming.cwd,
-                sessionId: renaming.sessionId,
-                title: draftTitle.trim(),
-              });
-              close();
+              if (submit()) close();
             }}
             className="flex flex-col gap-4"
           >
@@ -215,7 +206,7 @@ export function CommandHost({
               <Button type="button" variant="outline" onClick={close}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!canRename}>
+              <Button type="submit" disabled={!answer?.allowed}>
                 Rename
               </Button>
             </DialogFooter>
@@ -237,14 +228,9 @@ export function CommandHost({
             </Button>
             <Button
               variant="destructive"
-              disabled={!canDelete}
+              disabled={!answer?.allowed}
               onClick={() => {
-                if (deleting && canDelete)
-                  send({
-                    _tag: "delete_session",
-                    cwd: deleting.cwd,
-                    sessionId: deleting.sessionId,
-                  });
+                submit();
                 close();
               }}
             >
@@ -267,11 +253,9 @@ export function CommandHost({
               Cancel
             </Button>
             <Button
-              disabled={!canClose}
+              disabled={!answer?.allowed}
               onClick={() => {
-                if (!closing || !canClose) return;
-                send({ _tag: "remove_folder", path: closing.path });
-                close();
+                if (submit()) close();
               }}
             >
               Close

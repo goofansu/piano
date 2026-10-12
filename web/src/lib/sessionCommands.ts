@@ -100,6 +100,14 @@ export function pickCommands<Id extends SessionCommandId>(
 }
 
 /**
+ * Rename's rule, for its descriptor and for the answer to its form: the session is mutable and its
+ * checkout is present, since renaming starts Pi there.
+ */
+export function canRenameSession(state: AppState, target: SessionTarget): boolean {
+  return sessionMutable(state, target) && !sessionCheckoutMissing(state, target);
+}
+
+/**
  * Commands for `target`, or for the selected session when it is omitted. The selected session gets
  * every command; any other session only the management actions (rename, pin, archive, delete).
  *
@@ -212,7 +220,7 @@ export function sessionCommands(
         label: "Rename",
         icon: "rename",
         group: "manage",
-        enabled: mutable && !!subject && !sessionCheckoutMissing(state, subject),
+        enabled: !!subject && canRenameSession(state, subject),
         intent: { kind: "rename", target: subject },
       },
       ...(subject
