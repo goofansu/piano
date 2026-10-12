@@ -27,6 +27,8 @@ export interface SessionView extends Snapshot {
 
 /** Browser-only submitted input, never part of Pi's transcript or registry. */
 export interface PendingCreate {
+  /** The creation request, not a later attachment to the same session. */
+  selectionId: string;
   cwd: string;
   text: string;
   attachments?: RenderMsg["attachments"];
@@ -186,7 +188,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         selecting: { cwd: a.cwd, sessionId: a.sessionId },
         selectionFailure: null,
         pendingCreate: a.firstMessage
-          ? { cwd: a.cwd, ...a.firstMessage, outcome: "starting" }
+          ? { selectionId: a.selectionId, cwd: a.cwd, ...a.firstMessage, outcome: "starting" }
           : s.session && sessionKey(s.session) === sessionKey(a)
             ? s.pendingCreate
             : null,
@@ -342,9 +344,10 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         selectionId: null,
         selectionFailure: { ...s.selecting, message: m.message },
         selecting: null,
-        pendingCreate: s.pendingCreate
-          ? { ...s.pendingCreate, outcome: "rejected", detail: m.message }
-          : null,
+        pendingCreate:
+          s.pendingCreate?.selectionId === m.selectionId
+            ? { ...s.pendingCreate, outcome: "rejected", detail: m.message }
+            : s.pendingCreate,
       };
     case "error":
       if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;

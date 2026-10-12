@@ -250,6 +250,43 @@ test("create_session mints a selection and shows the first message until Pi reco
   assert.equal(h.client.getState().view.kind, "session");
 });
 
+test("rejected reattachment preserves uncertain first-message delivery and never resends creation", () => {
+  const h = harness();
+  h.status(true);
+  h.client.send({ _tag: "create_session", cwd: "/scratch", options: {}, text: "might execute" });
+  const selected = h.selected("a");
+  assert.ok(selected._tag === "selected");
+  h.server({ ...selected, snapshot: { ...selected.snapshot, messages: [] } });
+  h.status(false);
+  const uncertain = h.client.getState().pendingCreate;
+  assert.equal(uncertain?.outcome, "uncertain");
+  h.status(true);
+  h.server({
+    _tag: "selection_rejected",
+    selectionId: h.client.getState().selectionId!,
+    message: "Attachment was not started",
+  });
+  assert.deepEqual(h.client.getState().pendingCreate, uncertain);
+  assert.equal(h.client.getState().selecting, null);
+  assert.equal(h.client.getState().selectionFailure?.message, "Attachment was not started");
+  h.client.select("/scratch", "a");
+  assert.deepEqual(h.client.getState().pendingCreate, uncertain);
+  assert.equal(h.sent.filter((m) => m._tag === "create_session").length, 1);
+});
+
+test("rejected creation marks only its own first message as not started", () => {
+  const h = harness();
+  h.status(true);
+  h.client.send({ _tag: "create_session", cwd: "/scratch", options: {}, text: "not sent" });
+  h.server({
+    _tag: "selection_rejected",
+    selectionId: h.client.getState().selectionId!,
+    message: "Creation was not started",
+  });
+  assert.equal(h.client.getState().pendingCreate?.outcome, "rejected");
+  assert.equal(h.client.getState().pendingCreate?.detail, "Creation was not started");
+});
+
 /** What the client asked Pi about, as `tag cwd` pairs, since the last call. */
 function focusHarness(options: { remembered?: string | null; initial?: typeof initialState } = {}) {
   const sent: ClientMessage[] = [];

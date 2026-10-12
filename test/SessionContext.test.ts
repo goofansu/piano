@@ -131,7 +131,7 @@ test("readiness needs a connected, settled attachment", () => {
 
 test("status precedence: startup, delivery, reconnecting, read-only, exited, then activity", () => {
   const status = (state: AppState) => sessionActivity(state, "everything").status;
-  const pending = { cwd: "/repo", text: "hi", outcome: "starting" as const };
+  const pending = { selectionId: "create", cwd: "/repo", text: "hi", outcome: "starting" as const };
   assert.equal(status({ ...base, pendingCreate: pending }), "Starting");
   assert.equal(
     status({
@@ -190,7 +190,10 @@ test("reply activity yields to visible pending text, except in Messages display"
   assert.equal(sessionActivity(streaming, "messages").replyActivity, "working");
   assert.equal(
     sessionActivity(
-      { ...base, pendingCreate: { cwd: "/repo", text: "", outcome: "starting" } },
+      {
+        ...base,
+        pendingCreate: { selectionId: "create", cwd: "/repo", text: "", outcome: "starting" },
+      },
       "everything",
     ).replyActivity,
     "starting",

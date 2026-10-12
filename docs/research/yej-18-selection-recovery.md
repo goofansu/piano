@@ -30,5 +30,28 @@ Verification:
   `npm run lint` passed after formatting the new browser script. `git diff --check` passed.
 - Detailed local logs: `/tmp/piano-issue-audit/selection-*.log` and `browser-selection.log`.
 
+## Review follow-up: preserve creation delivery across failed reattachment
+
+At `af52a15`, review reproduced disconnect after session creation but before first-message
+confirmation, followed by a rejected reattachment. The rejection incorrectly relabeled the
+original uncertain input as rejected/not started. The follow-up retains the original creation
+selection ID with browser-held input; only a rejection for that creation request may change
+its outcome. Attachment failure still ends loading and remains retryable. This also preserves
+INV-03's distinction between rejected and uncertain delivery.
+
+Verification on `af52a15` plus the follow-up diff, same Node/npm environment:
+
+- New Client regression failed before the fix with `uncertain` → `rejected`; after the fix it
+  preserves the original outcome/detail through rejection and explicit retry, with exactly one
+  create request. A separate case confirms genuine creation rejection remains rejected.
+- `node test/browser-reattachment-delivery.mjs /tmp/piano-reattach-browser` passed through
+  agent-browser on scratch 7171/7172. A real create/disconnect/reconnect journey replaces only
+  the reconnect snapshot with a correlated rejection to control timing. The UI shows both
+  attachment failure and Delivery uncertain, with no creation replay or browser errors.
+  This is a browser projection check, not a new admission-saturation claim; the original
+  saturation journey above covers that boundary. Commands, wire and screenshot retained there.
+- `npm test`: 391 passed, zero skips; typecheck, lint and diff whitespace checks passed.
+  Local logs: `/tmp/piano-issue-audit/reattach-*.log`.
+
 Only scratch processes/files were used and cleaned up. No deployment. Normal execution errors
 remain separate from this pre-execution admission outcome; no Pi runtime/protocol upgrade.
