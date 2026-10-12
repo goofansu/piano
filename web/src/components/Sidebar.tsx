@@ -43,23 +43,17 @@ import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, type GlobalCommandGroup, globalCommands } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
 import {
-  activeProjects,
   assignProjectCommand,
   newProjectCommand,
   projectChoices,
   projectCommands,
 } from "@/lib/projectCommands";
-import { type SessionEntry, sessionCatalog } from "@/lib/sessionCatalog";
+import type { SessionEntry } from "@/lib/sessionCatalog";
 import { pickCommands, SESSION_ROW_COMMANDS, type SessionTarget } from "@/lib/sessionCommands";
 import { sessionProject } from "@/lib/sessionContext";
 import { projectKey } from "@/lib/sidebarGroups";
-import {
-  dateGroups,
-  folderGroups,
-  projectGroups,
-  type SidebarView,
-  sortSessions,
-} from "@/lib/sidebarView";
+import { sidebarSections } from "@/lib/sidebarSections";
+import type { SidebarView } from "@/lib/sidebarView";
 import { readJson, writeJson } from "@/lib/storage";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarGroups } from "@/lib/useSidebarGroups";
@@ -122,81 +116,72 @@ export function Sidebar({ state, onHide }: Props) {
   }, [state.registryLoaded]);
   const reveal = () => (settled ? "reveal-row" : undefined);
 
-  // One catalog for every grouping, so switching the grouping never changes which sessions are listed.
-  const catalog = useMemo(() => sessionCatalog(state), [state]);
-  const pinned = sortSessions(
-    catalog.filter((s) => s.pinned),
-    view.sortBy,
+  const { pinned, body } = useMemo(
+    () => sidebarSections(state, view, dateNow),
+    [state, view, dateNow],
   );
-  const listed = catalog.filter((s) => s.listed && !s.pinned);
   const groupProps = { state, select, reveal };
-  const empty = (text: string) =>
-    pinned.length > 0 ? null : (
-      <Empty className="view-enter py-8">
-        <EmptyHeader>
-          <EmptyDescription>{text}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
   const groups = (children: React.ReactNode) => (
     <div className="flex flex-col gap-1">{children}</div>
   );
   const list = () => {
-    if (!state.registryLoaded) return <SidebarSkeleton />;
-    if (view.groupBy === "folder") {
-      if (state.folders.length === 0)
-        return empty("No folders yet. Start a session in any folder and it appears here.");
-      return groups(
-        folderGroups(state.folders, listed, view.sortBy).map(({ folder, sessions }) => (
-          <FolderGroup
-            key={folder.path}
-            folder={folder}
-            sessions={sessions}
-            open={openGroups.has(folder.path)}
-            onOpenChange={(open) => setOpen(folder.path, open)}
-            {...groupProps}
-          />
-        )),
-      );
-    }
-    if (view.groupBy === "project") {
-      // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
-      const active = activeProjects(state);
-      const all = projectGroups(active, listed, view.sortBy);
-      if (active.length === 0 && all.every((g) => g.sessions.length === 0))
-        return empty("No sessions yet. Start one and it appears here.");
-      return groups(
-        all.map((g) => {
-          const key = projectKey(g.project?.id ?? "");
-          return (
-            <ProjectGroup
-              key={key}
-              project={g.project}
-              sessions={g.sessions}
-              open={openGroups.has(key)}
-              onOpenChange={(open) => setOpen(key, open)}
+    switch (body?.kind) {
+      case undefined:
+        return null;
+      case "loading":
+        return <SidebarSkeleton />;
+      case "empty":
+        return (
+          <Empty className="view-enter py-8">
+            <EmptyHeader>
+              <EmptyDescription>{body.text}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        );
+      case "folders":
+        return groups(
+          body.groups.map(({ folder, sessions }) => (
+            <FolderGroup
+              key={folder.path}
+              folder={folder}
+              sessions={sessions}
+              open={openGroups.has(folder.path)}
+              onOpenChange={(open) => setOpen(folder.path, open)}
               {...groupProps}
             />
-          );
-        }),
-      );
+          )),
+        );
+      case "projects":
+        return groups(
+          body.groups.map((g) => {
+            const key = projectKey(g.project?.id ?? "");
+            return (
+              <ProjectGroup
+                key={key}
+                project={g.project}
+                sessions={g.sessions}
+                open={openGroups.has(key)}
+                onOpenChange={(open) => setOpen(key, open)}
+                {...groupProps}
+              />
+            );
+          }),
+        );
+      case "dates":
+        return groups(
+          body.groups.map((g) => (
+            <section key={g.label} aria-label={g.label}>
+              {/* No standalone shadcn heading fits this noninteractive list section. */}
+              <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">
+                {g.label}
+              </h2>
+              <SessionList sessions={g.sessions} {...groupProps} />
+            </section>
+          )),
+        );
+      case "list":
+        return <SessionList sessions={body.sessions} {...groupProps} />;
     }
-    if (view.groupBy === "date") {
-      const dated = dateGroups(listed, view.sortBy, dateNow);
-      if (dated.length === 0) return empty("No sessions yet. Start one and it appears here.");
-      return groups(
-        dated.map((g) => (
-          <section key={g.label} aria-label={g.label}>
-            {/* No standalone shadcn heading fits this noninteractive list section. */}
-            <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">{g.label}</h2>
-            <SessionList sessions={g.sessions} {...groupProps} />
-          </section>
-        )),
-      );
-    }
-    const sessions = sortSessions(listed, view.sortBy);
-    if (sessions.length === 0) return empty("No sessions yet. Start one and it appears here.");
-    return <SessionList sessions={sessions} {...groupProps} />;
   };
 
   return (
@@ -222,7 +207,7 @@ export function Sidebar({ state, onHide }: Props) {
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <nav className="relative px-3 pb-4" aria-label="Sessions">
-          {state.registryLoaded && pinned.length > 0 && (
+          {pinned.length > 0 && (
             <Collapsible
               open={pinnedOpen}
               onOpenChange={togglePinned}
