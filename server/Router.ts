@@ -11,6 +11,7 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { errorText } from "./ErrorText.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup, type McpSetupError } from "./McpSetup.ts";
+import { AllowedOrigins } from "./OriginPolicy.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
@@ -131,6 +132,19 @@ const route = (router: HttpRouter.HttpRouter) => <Q extends IdParam, B extends J
 
 export const AppRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
+    const allowedOrigins = yield* AllowedOrigins;
+    // INV-11: run before body decoding, side effects, and WebSocket upgrade/dispatch.
+    yield* router.addGlobalMiddleware((handler) => Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const path = new URL(request.url, "http://localhost").pathname;
+      if (path === "/ws" || request.headers.upgrade !== undefined || !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+        const origin = request.headers.origin;
+        if (!origin || !allowedOrigins.has(origin)) {
+          return HttpServerResponse.text("Request origin is not allowed.", { status: 403 });
+        }
+      }
+      return yield* handler;
+    }));
     yield* router.add(
       "GET",
       "/ws",

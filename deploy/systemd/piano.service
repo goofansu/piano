@@ -11,6 +11,8 @@ Environment=HOME=/home/exedev
 Environment=PATH=/home/exedev/.local/bin:/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOST=127.0.0.1
 Environment=PORT=8001
+# Replace before installing: the browser-facing HTTPS origin, without a trailing slash.
+Environment=PIANO_ALLOWED_ORIGINS=https://<your-piano-domain>
 ExecStart=/home/exedev/.local/bin/node server/main.ts
 Restart=on-failure
 RestartSec=2

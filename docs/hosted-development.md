@@ -28,7 +28,7 @@ and a separate Vite development process as described in root AGENTS.md and
 [the development handoff](development-on-exe-dev.md#scratch-verification):
 
 ```bash
-HOST=127.0.0.1 PIANO_DB_PATH=<scratch-path>/piano.db PORT=7171 node server/main.ts
+HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 PIANO_DB_PATH=<scratch-path>/piano.db PORT=7171 node server/main.ts
 PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort
 npx agent-browser open http://127.0.0.1:7172
 ```
@@ -134,6 +134,29 @@ ssh exe.dev share port yejun-dev 8000
 
 This is trusted-developer hosting, not general remote-product security compliance.
 The proxy port remains 8000; the public URL does not change.
+
+## Origin configuration
+
+`PIANO_ALLOWED_ORIGINS` names the browser-facing origins explicitly. The production unit contains
+`https://<your-piano-domain>`: replace this placeholder with your actual HTTPS origin before
+installing it, without a trailing slash. The placeholder intentionally fails application startup
+validation until replaced. The production allowlist includes no local origins; the backend still
+binds to loopback for the private proxy connection. Local development defaults and scratch origin
+configuration are separate from this unit.
+
+Origins are not inferred from Host or forwarded headers: neither Piano nor the TCP forwarder uses proxy identity headers
+as authorization. exe.dev remains responsible for private HTTP/WebSocket access (YEJ-5); browser
+origin checks are a separate control (YEJ-12, INV-11).
+
+When deliberately deploying this change, install the configured `piano.service` unit (or configure
+the equivalent environment in a drop-in), daemon-reload, and restart under the authorized deployment
+workflow. Merely updating the code without the origin setting will reject the hosted browser's
+mutations and WebSocket connection. Installing a unit is a deployment step, not part of development
+verification. Adapt the exact HTTPS origin on other machines; do not add preview origins.
+
+Missing and `null` origins are rejected on `/ws` and non-GET/HEAD/OPTIONS requests, even for local
+scripts. Scripts can send an allowed Origin explicitly; that header is not a credential. Ordinary
+read-only health checks need no Origin. Invalid/empty origin configuration fails startup.
 
 ## Built-UI switch verification — 2026-10-04
 

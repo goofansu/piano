@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/main.ts",
     "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "node --watch server/main.ts",
+    "dev:server": "PIANO_ALLOWED_ORIGINS=${PIANO_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://[::1]:5173} node --watch server/main.ts",
     "dev:web": "npm --prefix web run dev --",
     "build": "npm --prefix web run build",
     "test": "node --test --import ./test/setup.ts 'test/**/*.test.ts'",
