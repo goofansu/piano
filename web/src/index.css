@@ -32,6 +32,34 @@
 
 @custom-variant dark (&:is(.dark *));
 
+.slash-textarea {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  flex: 1;
+}
+
+.slash-textarea-mirror {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  border: solid transparent;
+  color: transparent;
+}
+
+.slash-command-token {
+  border-radius: var(--radius-sm);
+  box-decoration-break: clone;
+}
+
+.slash-command-token[data-hovered="true"] {
+  background: var(--brand-soft);
+}
+
 :root {
   --radius: 0.625rem;
 

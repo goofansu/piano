@@ -34,7 +34,7 @@ writeFileSync(
 writeFileSync(
   join(root, "fake.mjs"),
   readFileSync("test/fake-pi.mjs", "utf8").replace(
-    'out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });',
+    /out\(\{\s*type: "extension_ui_request",\s*id: "live1",\s*method: "input",\s*title: "Running after response",?\s*\}\);/,
     "// Hold the run without a modal over the composer.",
   ),
 );
@@ -423,6 +423,76 @@ try {
     draft(),
     "/skill:research xkeep this\nand this",
     "continued typing starts the argument, not the command name",
+  );
+  // An accepted command reads as one token: hover marks it, and Backspace at its end
+  // selects the whole token once before a second Backspace removes it from the draft.
+  await suggestions("/re");
+  ab("press", "Tab");
+  assert.equal(draft(), "/skill:research ");
+  ab("keyboard", "type", "keep args");
+  assert.equal(draft(), "/skill:research keep args");
+  ab("press", "Backspace");
+  assert.equal(draft(), "/skill:research keep arg", "arguments delete one character at a time");
+  ab("keyboard", "type", "s");
+  const token = ".slash-command-token";
+  await until(`!!document.querySelector('${token}')`);
+  const tokenCentre = evaluate(`(() => {
+    const { x, y, width, height } = document.querySelector('${token}').getBoundingClientRect();
+    return { x: Math.round(x + width / 2), y: Math.round(y + height / 2) };
+  })()`);
+  const tokenBackground = () =>
+    evaluate(`getComputedStyle(document.querySelector('${token}')).backgroundColor`);
+  const restingBackground = tokenBackground();
+  ab("mouse", "move", String(tokenCentre.x), String(tokenCentre.y));
+  await until(`document.querySelector('${token}')?.dataset.hovered === 'true'`);
+  const hoveredBackground = tokenBackground();
+  assert.notEqual(
+    hoveredBackground,
+    restingBackground,
+    "hovering the accepted command token gives it a background",
+  );
+  assert.equal(
+    /^(transparent|rgba\(0, 0, 0, 0\))$/.test(hoveredBackground),
+    false,
+    "the hovered token background is painted, not transparent",
+  );
+  capture("accepted-token-hover");
+  ab("mouse", "move", "720", "40");
+  await until(`document.querySelector('${token}')?.dataset.hovered !== 'true'`);
+  assert.equal(tokenBackground(), restingBackground, "leaving the token clears its background");
+  ab("click", input);
+  evaluate(`document.querySelector('textarea').setSelectionRange(15,15); true`);
+  ab("press", "Backspace");
+  assert.equal(
+    draft(),
+    "/skill:research keep args",
+    "Backspace at the token end selects it without changing the draft",
+  );
+  assert.deepEqual(
+    evaluate(`(() => {
+      const field = document.querySelector('textarea');
+      return { start: field.selectionStart, end: field.selectionEnd };
+    })()`),
+    { start: 0, end: 15 },
+    "the first Backspace selects the whole command token",
+  );
+  assert.ok(
+    evaluate(`!!document.querySelector('${token}')`),
+    "the selected token is still part of the draft",
+  );
+  capture("accepted-token-selected");
+  ab("press", "Backspace");
+  const afterToken = draft();
+  assert.equal(
+    afterToken.includes("/skill:research"),
+    false,
+    "the second Backspace removes the command token",
+  );
+  assert.equal(afterToken.trimStart(), "keep args", "removing the token keeps its arguments");
+  assert.equal(
+    evaluate(`!!document.querySelector('${token}')`),
+    false,
+    "no token remains once the command is removed",
   );
   for (const text of ["Prose /skill:re", "Prose\n/re", "/etc/pass", "`/re`"]) {
     await fill(text);

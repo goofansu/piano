@@ -61,8 +61,64 @@ export function SlashTextarea({
   const [dismissed, setDismissed] = useState<string>();
   const [selected, setSelected] = useState(0);
   const list = useRef<HTMLUListElement>(null);
+  const mirror = useRef<HTMLDivElement>(null);
+  const tokenElement = useRef<HTMLSpanElement>(null);
+  const [accepted, setAccepted] = useState<string>();
+  const [hovered, setHovered] = useState(false);
   const key = JSON.stringify(completion);
   const range = tokenAt(value, selection.start, selection.end);
+  const leading = /^\s*\/([^\s/]+)(?=\s|$)/.exec(value);
+  const token =
+    accepted && leading?.[1] === accepted
+      ? { from: leading[0].indexOf("/"), to: leading[0].length }
+      : null;
+  // The native textarea remains the editor (selection, undo, IME and accessibility).
+  // A non-interactive mirror only paints the command's hover treatment.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: resync DOM metrics when draft text or input styling changes, not on streaming renders.
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const overlay = mirror.current;
+    if (!element || !overlay) return;
+    const sync = () => {
+      const style = getComputedStyle(element);
+      for (const property of [
+        "font-family",
+        "font-size",
+        "font-weight",
+        "font-style",
+        "font-variant",
+        "direction",
+        "line-height",
+        "letter-spacing",
+        "padding",
+        "border-width",
+        "box-sizing",
+        "text-indent",
+        "tab-size",
+        "word-spacing",
+        "text-align",
+      ])
+        overlay.style.setProperty(property, style.getPropertyValue(property));
+      overlay.style.width = `${element.clientWidth + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)}px`;
+      overlay.style.height = `${element.clientHeight + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)}px`;
+      overlay.scrollTop = element.scrollTop;
+      overlay.scrollLeft = element.scrollLeft;
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(element);
+    const onScroll = () => {
+      sync();
+      setHovered(false);
+    };
+    element.addEventListener("scroll", onScroll);
+    window.addEventListener("resize", sync);
+    return () => {
+      observer.disconnect();
+      element.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", sync);
+    };
+  }, [ref, value, props.className, props.style]);
   const position = JSON.stringify([key, value, selection]);
   const open =
     !!completion?.cwd &&
@@ -125,6 +181,7 @@ export function SlashTextarea({
     // Reuse an existing separator, but leave the caret after it so the next
     // character becomes an argument rather than extending the command name.
     const caret = range.from + inserted.length + (hasSeparator ? 1 : 0);
+    setAccepted(command.name);
     onValueChange(next);
     setDismissed(JSON.stringify([key, next, { start: caret, end: caret }]));
     requestAnimationFrame(() => {
@@ -142,70 +199,125 @@ export function SlashTextarea({
       }}
     >
       <PopoverAnchor asChild>
-        <Textarea
-          {...props}
-          ref={ref}
-          value={value}
-          role="combobox"
-          aria-autocomplete="list"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-controls={open ? id : undefined}
-          aria-activedescendant={open && commands.length ? `${id}-${active}` : undefined}
-          onChange={(event) => {
-            syncSelection(event.currentTarget);
-            onValueChange(event.currentTarget.value);
-          }}
-          onSelect={(event) => {
-            syncSelection(event.currentTarget);
-            onSelect?.(event);
-          }}
-          onFocus={(event) => {
-            setFocused(true);
-            setDismissed(undefined);
-            syncSelection(event.currentTarget);
-            onFocus?.(event);
-          }}
-          onBlur={(event) => {
-            setFocused(false);
-            onBlur?.(event);
-          }}
-          onCompositionStart={(event) => {
-            setComposing(true);
-            onCompositionStart?.(event);
-          }}
-          onCompositionEnd={(event) => {
-            setComposing(false);
-            syncSelection(event.currentTarget);
-            onCompositionEnd?.(event);
-          }}
-          onKeyDown={(event) => {
-            if (composing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
-              return;
-            if (open && event.key === "Escape") {
-              event.preventDefault();
-              event.stopPropagation();
-              close();
-              return;
-            }
-            if (open && commands.length && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-              if (!event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+        <div className="slash-textarea">
+          <Textarea
+            {...props}
+            ref={ref}
+            value={value}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-controls={open ? id : undefined}
+            aria-activedescendant={open && commands.length ? `${id}-${active}` : undefined}
+            onPointerMove={(event) => {
+              const rects = tokenElement.current?.getClientRects();
+              setHovered(
+                !!rects &&
+                  Array.from(rects).some(
+                    (rect) =>
+                      event.clientX >= rect.left &&
+                      event.clientX <= rect.right &&
+                      event.clientY >= rect.top &&
+                      event.clientY <= rect.bottom,
+                  ),
+              );
+              props.onPointerMove?.(event);
+            }}
+            onPointerLeave={(event) => {
+              setHovered(false);
+              props.onPointerLeave?.(event);
+            }}
+            onChange={(event) => {
+              setHovered(false);
+              syncSelection(event.currentTarget);
+              onValueChange(event.currentTarget.value);
+            }}
+            onSelect={(event) => {
+              syncSelection(event.currentTarget);
+              onSelect?.(event);
+            }}
+            onFocus={(event) => {
+              setFocused(true);
+              setDismissed(undefined);
+              syncSelection(event.currentTarget);
+              onFocus?.(event);
+            }}
+            onBlur={(event) => {
+              setFocused(false);
+              onBlur?.(event);
+            }}
+            onCompositionStart={(event) => {
+              setComposing(true);
+              onCompositionStart?.(event);
+            }}
+            onCompositionEnd={(event) => {
+              setComposing(false);
+              syncSelection(event.currentTarget);
+              onCompositionEnd?.(event);
+            }}
+            onKeyDown={(event) => {
+              if (composing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+                return;
+              const element = event.currentTarget;
+              if (
+                token &&
+                !props.readOnly &&
+                event.key === "Backspace" &&
+                !event.metaKey &&
+                !event.ctrlKey &&
+                !event.altKey &&
+                element.selectionEnd === token.to &&
+                (element.selectionStart === token.to ||
+                  (event.repeat && element.selectionStart === token.from))
+              ) {
                 event.preventDefault();
-                setSelected(
-                  (active + (event.key === "ArrowDown" ? 1 : -1) + commands.length) %
-                    commands.length,
-                );
+                element.setSelectionRange(token.from, token.to);
+                syncSelection(element);
+                close();
                 return;
               }
-              if ((event.key === "Tab" && !event.altKey) || event.key === "Enter") {
+              if (open && event.key === "Escape") {
                 event.preventDefault();
-                if (!event.repeat) accept(commands[active]);
+                event.stopPropagation();
+                close();
                 return;
               }
-            }
-            onKeyDown?.(event);
-          }}
-        />
+              if (open && commands.length && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                if (!event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+                  event.preventDefault();
+                  setSelected(
+                    (active + (event.key === "ArrowDown" ? 1 : -1) + commands.length) %
+                      commands.length,
+                  );
+                  return;
+                }
+                if ((event.key === "Tab" && !event.altKey) || event.key === "Enter") {
+                  event.preventDefault();
+                  if (!event.repeat) accept(commands[active]);
+                  return;
+                }
+              }
+              onKeyDown?.(event);
+            }}
+          />
+          {/* No shadcn primitive paints inline ranges inside a native textarea. */}
+          <div ref={mirror} className="slash-textarea-mirror" aria-hidden="true">
+            {token && (
+              <>
+                {value.slice(0, token.from)}
+                <span
+                  ref={tokenElement}
+                  className="slash-command-token"
+                  data-hovered={hovered && !props.disabled}
+                >
+                  {value.slice(token.from, token.to)}
+                </span>
+                {value.slice(token.to)}
+              </>
+            )}
+          </div>
+        </div>
       </PopoverAnchor>
       <PopoverContent
         side="top"
