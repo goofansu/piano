@@ -1,7 +1,11 @@
 # Radius setup in Piano
 
-Open **Settings → Radius**, or choose **Radius** from Mod+K. Setup is machine-wide
-for the OS account running Piano, not a browser account or a Project.
+Open **Settings → Providers** and use the **Radius** section, or choose **Radius** from
+Mod+K. `/settings/radius` stays a working address: it opens Providers with the Radius
+section revealed, as the palette row does. Radius appears there once, with no separate
+provider row, because signing in is only the first of its steps. **Tools and web search** folds the
+MCP and web-search steps away and reports where they stand while folded. Setup is
+machine-wide for the OS account running Piano, not a browser account or a Project.
 
 1. **Sign in to Radius.** Uses the existing Pi-backed provider OAuth dialog. Pi owns
    credential storage and refresh; no token is returned to the settings page.
@@ -33,6 +37,9 @@ apply configuration to them. Do not send `/reload` as a Piano prompt: stock Pi
 
 ## Boundaries and recovery
 
+- Radius lives on the Providers page rather than in its own Settings page; the provider list
+  excludes it so it is offered once. Settings navigation lists one row per page, while the
+  palette keeps a Radius row.
 - Provider OAuth continues to use `ProviderLogin`. Sign-in and sign-out are both
   available directly in step 1; switching accounts does not require leaving Radius.
   Signing out removes the provider credential, not the saved MCP or extension setup.
@@ -80,13 +87,20 @@ Relevant invariants: INV-01/02/04/07/09/10/11/12.
   confirmation to the reviewed configuration, refuse stale/conflicting targets, preserve
   credentials and unrelated entries, and serialize installs against uninstalls. Existing
   `ProviderLogin` tests cover OAuth interaction/persistence and terminal claims.
+- `test/Routes.test.ts` and `test/GlobalCommands.test.ts`: Radius addresses the Providers page,
+  navigation lists one row per page, and the palette still offers Radius by name.
 - `test/browser-radius-setup.mjs`: agent-browser against an isolated scratch backend
   and Vite; real config writes and Pi install CLI with a controlled fake npm executable.
   Only the browser OAuth HTTP boundary is simulated. Checks sign-in, MCP setup,
   install navigation/duplicate requests, failure/retry, reload readback, Mod+K,
-  request failure recovery, and mobile descriptions without truncation. Removal checks
+  request failure recovery, progress reported while the tools are folded away (including mid-install),
+  the `/settings/radius` address and palette row revealing the section, a Radius-only catalog showing
+  no empty-list placeholder, and mobile descriptions without truncation. Removal checks
   cover cancellation, changed-target rejection, signed-out cleanup, real Pi remove CLI
   through fake npm, uninstall failure/retry and duplicate/opposing requests.
+
+### Original setup and removal evidence
+
 - Baseline gates: `npm test` passed all 130 tests; `npm run typecheck` and
   `npm run lint` passed. Changes were tested on base `f523ee6` plus this feature;
   command output and the tested patch are retained with the evidence.
@@ -99,6 +113,24 @@ Removal follow-up: verified on `f8db26c` plus the removal changes, with the same
 Node/Pi environment and scratch ports 7171/7172. All 132 module tests, typecheck,
 lint and the extended browser journey passed. Evidence is retained under
 `/tmp/piano-radius-removal-evidence/`; no real credentials or packages were removed.
+
+### Providers-section follow-up
+
+Verified on base `e083eda` plus this refactor, with Node 24.19.0, Pi 1.1.0 and
+agent-browser 0.38.1 on macOS. `npm test` passed all 394 tests; typecheck and lint
+passed (Biome retains one unrelated informational finding in `ClientDispatch.test.ts`).
+The scratch browser journey on 7171/7172 observed one Radius account surface,
+collapsible tools with ongoing installation progress, setup/removal and recovery,
+repeat palette reveal, the old address, and mobile deep-link scrolling after the
+full provider catalog loads. Desktop 1280×900 and mobile dark 390×844 screenshots,
+command output and the tested patch are retained in
+`.scratch/radius-providers-evidence/final/`. Scratch processes and files were cleaned up.
+The harness now explicitly permits its frontend origin, including direct mutation
+requests, to comply with the backend's origin policy.
+
+After rebasing onto `ce4f5bb` (upstream removed three dependency-audit tests), all
+391 remaining tests, typecheck, lint and the same browser journey passed again.
+Post-rebase output, screenshots and patch are in `.scratch/radius-providers-evidence/rebased/`.
 
 This verifies the setup boundary, not a real Radius authorization, live MCP tool call,
 organization search enablement or the published extension's runtime behavior. No

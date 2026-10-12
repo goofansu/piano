@@ -71,6 +71,7 @@ const backend = spawn(process.execPath, ["server/main.ts"], {
     ...process.env,
     HOST: "127.0.0.1",
     PORT: backendPort,
+    PIANO_ALLOWED_ORIGINS: frontendUrl,
     PIANO_DB_PATH: join(root, "piano.db"),
     PI_CODING_AGENT_DIR: agent,
     PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
@@ -133,6 +134,23 @@ const chooseDeviceCode = async () => {
   await ab("wait", "--fn", `!document.querySelector('[role="listbox"]')`);
   await button("Continue");
 };
+// Radius is a section of the Providers page; its tools fold open on request, so a visit that did
+// not reveal them unfolds them first.
+const tools = '[data-slot="collapsible-trigger"]';
+const toolsState = `document.querySelector('${tools}')?.dataset.state`;
+const palette = async (name) => {
+  await ab("press", process.platform === "darwin" ? "Meta+k" : "Control+k");
+  await ab("fill", '[aria-label="Search sessions and commands"]', name);
+  await ab("find", "role", "option", "click", "--name", name, "--exact");
+};
+// The Settings pane scrolls inside the page, so where Radius sits is measured against it.
+const scroller = `document.querySelector('#settings-providers').parentElement`;
+const openRadius = async () => {
+  await button("Providers");
+  await ab("wait", "--text", "Radius account");
+  if ((await evaluate(toolsState)) !== "open") await ab("click", tools);
+  await ab("wait", "--text", "Radius MCP");
+};
 const capture = async (name) => {
   await ab("screenshot", join(evidence, `${name}.png`));
   writeFileSync(join(evidence, `${name}.txt`), await ab("snapshot"));
@@ -175,8 +193,19 @@ try {
   })()`,
   );
   await button("Settings");
-  await button("Radius");
-  await ab("wait", "--text", "Radius MCP");
+  await openRadius();
+  assert.equal(
+    await evaluate(`document.querySelectorAll('[aria-label="Sign in to Radius"]').length`),
+    1,
+    "Radius is offered once: its own section, not also a provider row",
+  );
+  assert.equal(
+    await evaluate(
+      `document.querySelector('main').textContent.includes('No OAuth providers available')`,
+    ),
+    false,
+    "a catalog of Radius alone is covered by its section, not an empty-list placeholder",
+  );
   assert.equal(
     await evaluate(`document.querySelector('main').textContent.includes('Configured')`),
     false,
@@ -189,7 +218,7 @@ try {
     false,
   );
   assert.equal(
-    await evaluate(`!!document.querySelector('header button[aria-label="Refresh setup"]')`),
+    await evaluate(`!!document.querySelector('main button[aria-label="Refresh setup"]')`),
     true,
   );
   assert.equal(
@@ -228,13 +257,23 @@ try {
   await ab("wait", "--text", "Installing…");
   await fetch(`${backendUrl}/api/settings/radius`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: frontendUrl },
     body: JSON.stringify({ action: "install-web-search" }),
   });
-  await button("Providers");
-  await button("Radius");
+  await button("MCP");
+  await openRadius();
   await ab("wait", "--text", "Installing…");
   await capture("03-installing");
+  // Folded away mid-install, the section still reports the step that is running, and folding
+  // neither cancels it nor starts another installer.
+  await ab("click", tools);
+  await ab("wait", "--fn", `!document.body.textContent.includes('Let Pi search the web')`);
+  await ab("wait", "--text", "Installing web search…");
+  await capture("03-installing-folded");
+  assert.equal(readFileSync(audit, "utf8").trim().split("\n").length, 1);
+  await ab("click", tools);
+  await ab("wait", "--text", "Let Pi search the web");
+  await ab("wait", "--text", "Installing…");
   rmSync(hold);
   await ab("wait", "--text", "Web search was not installed");
   await capture("04-install-error");
@@ -251,12 +290,43 @@ try {
   await ab("wait", "--text", "All set. New Pi sessions can use Radius tools and web search.");
   await capture("05-complete");
   assert.match(await ab("snapshot"), /must enable Web search separately in Radius/);
+  // Folded away, the steps still report where setup stands.
+  await ab("click", tools);
+  await ab("wait", "--fn", `!document.body.textContent.includes('Give Pi your Radius tools')`);
+  assert.equal(
+    await evaluate(`document.body.textContent.includes('MCP added \u00b7 Web search installed')`),
+    true,
+    "the folded tools still report where setup stands",
+  );
+  await capture("05-complete-folded");
+  await ab("click", tools);
+  await ab("wait", "--text", "Give Pi your Radius tools");
   // Mod+K is the same navigation surface as the settings sidebar.
   await button("Home");
-  await ab("press", process.platform === "darwin" ? "Meta+k" : "Control+k");
-  await ab("fill", '[aria-label="Search sessions and commands"]', "Radius");
-  await ab("find", "role", "option", "click", "--name", "Radius", "--exact");
+  await palette("Radius");
   await ab("wait", "--text", "Give Pi your Radius tools");
+  // The palette's Radius row keeps its own address and reveals the section, tools unfolded.
+  assert.equal(await evaluate("location.pathname"), "/settings/radius");
+  assert.equal(await evaluate(toolsState), "open");
+  assert.equal(
+    await evaluate(`document.querySelector('#settings-providers-title').textContent`),
+    "Providers",
+  );
+  assert.deepEqual(
+    await evaluate(
+      `[...document.querySelectorAll('nav[aria-label="Settings sections"] [aria-current="page"]')].map(row => row.getAttribute('aria-label'))`,
+    ),
+    ["Providers"],
+    "Radius is current through the page it belongs to",
+  );
+  // Asking for the same row again, already at this address and with the tools folded away,
+  // reveals Radius again: each request counts, not the address.
+  await ab("click", tools);
+  await ab("wait", "--fn", `${toolsState} === 'closed'`);
+  await palette("Radius");
+  await ab("wait", "--fn", `${toolsState} === 'open'`);
+  assert.equal(await evaluate("location.pathname"), "/settings/radius");
+  await capture("05-palette-repeat");
   await ab("set", "viewport", "390", "844");
   await ab(
     "eval",
@@ -309,7 +379,7 @@ try {
   await ab("wait", "--text", "Could not sign out. Try again.");
   assert.equal(await evaluate("window.radiusFixture.signedIn"), true);
   assert.equal(
-    await evaluate(`document.querySelector('#settings-section-title')?.textContent`),
+    await evaluate(`document.querySelector('#settings-radius-title')?.textContent`),
     "Radius",
   );
   await capture("08-sign-out-error");
@@ -336,7 +406,7 @@ try {
   await button("Done");
   await ab("wait", "--fn", readyMark("Signed in"));
   assert.equal(
-    await evaluate(`document.querySelector('#settings-section-title')?.textContent`),
+    await evaluate(`document.querySelector('#settings-radius-title')?.textContent`),
     "Radius",
   );
   assert.deepEqual(JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8")), config);
@@ -346,15 +416,26 @@ try {
     "signing back in must not reinstall tools",
   );
   await capture("10-signed-back-in");
-  // Persistence readback after a full browser reload, with no mock signed-in claim.
-  await ab("reload");
-  await button("Settings");
-  await button("Radius");
+  // Persistence readback after a full browser navigation, with no mock signed-in claim. The old
+  // Radius address still works: it opens Providers with the Radius section revealed.
+  await ab("set", "viewport", "1280", "900");
+  await ab("open", `${frontendUrl}/settings/radius`);
+  await ab("wait", "--text", "Radius MCP");
+  assert.equal(await evaluate("location.pathname"), "/settings/radius");
+  assert.equal(
+    await evaluate(toolsState),
+    "open",
+    "the old address reveals the tools without a click",
+  );
+  assert.equal(
+    await evaluate(`document.querySelector('#settings-providers-title').textContent`),
+    "Providers",
+  );
+  await capture("10-old-address");
   await ab("wait", "--fn", readyMark("Added"));
   assert.equal(await evaluate(readyMark("Installed")), true);
   // Removal works while signed out, requires confirmation, and never removes
   // unrelated configuration. A changed target invalidates an open confirmation.
-  await ab("set", "viewport", "1280", "900");
   await button("Remove Radius MCP");
   await ab("wait", "--text", "Remove Radius MCP?");
   assert.equal(
@@ -418,7 +499,7 @@ try {
   const action = (body) =>
     fetch(`${backendUrl}/api/settings/radius`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: frontendUrl },
       body: JSON.stringify(body),
     });
   assert.equal((await action({ action: "install-web-search" })).status, 409);
@@ -453,6 +534,22 @@ try {
   assert(!existsSync(join(agent, "npm/node_modules", packageName)));
   assert.equal(readFileSync(audit, "utf8").trim().split("\n").length, 4);
   await capture("14-removed");
+  // A cold deep link with Pi's own provider catalog: the list above Radius loads after the first
+  // paint and pushes the page past one screen, so the scroll has to wait for it.
+  await ab("open", `${frontendUrl}/settings/radius`);
+  await ab("wait", "--text", "Radius MCP");
+  assert.equal(
+    await evaluate(`(() => { const s = ${scroller}; return s.scrollHeight > s.clientHeight; })()`),
+    true,
+    "the provider list must push Radius past one screen for this check to mean anything",
+  );
+  await ab(
+    "wait",
+    "--fn",
+    `(() => { const s = ${scroller}; const box = s.getBoundingClientRect(); const heading = document.querySelector('#settings-radius-title').getBoundingClientRect(); return s.scrollTop > 0 && heading.top >= box.top - 1 && heading.bottom <= box.bottom; })()`,
+  );
+  assert.equal(await evaluate(toolsState), "open");
+  await capture("15-mobile-deep-link");
   assert.equal(await ab("errors"), "");
   writeFileSync(join(evidence, "observed-config.json"), JSON.stringify(config, null, 2));
   writeFileSync(join(evidence, "installer-argv.jsonl"), readFileSync(audit));

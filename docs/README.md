@@ -34,8 +34,9 @@ Pi 1.0.0 findings and citations. Its implementation audit is dated, and its phas
 registry-based evidence proposal and broad Worktrunk ownership wording are superseded by the documents above.
 The [MCP management research](research/2026-10-09-mcp-management.md) documents setup through Pi,
 current RPC/browser limitations and a proposed management surface; it does not claim that surface exists.
-[Radius setup](radius-setup.md) describes the implemented, narrower Settings section for
-provider OAuth, provider-auth MCP configuration and web-search extension installation.
+[Radius setup](radius-setup.md) describes the implemented, narrower Radius section of the
+Providers settings page, covering provider OAuth, provider-auth MCP configuration and
+web-search extension installation.
 [MCP setup](mcp-setup.md) describes the Settings section that installs catalog MCP servers
 (Linear first) and signs in to them through Pi's MCP OAuth.
 

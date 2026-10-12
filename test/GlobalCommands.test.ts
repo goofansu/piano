@@ -118,3 +118,13 @@ test("one list of appearances serves the palette and the View menu", () => {
     ["light", "dark", "system"].map((appearance) => ({ kind: "appearance", appearance })),
   );
 });
+
+test("the palette keeps a Radius row, which opens Providers", () => {
+  const radius = globalCommands(onNewPage, ctx).find((command) => command.label === "Radius");
+  assert.deepEqual(radius?.intent, { kind: "settings", section: "radius" });
+  assert.equal(
+    labels(onNewPage).filter((label) => label === "Radius").length,
+    1,
+    "Radius is offered once",
+  );
+});

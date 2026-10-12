@@ -207,7 +207,12 @@ test("a session's panel closes when another session is selected, and opening one
   p.selected("a");
   p.navigation.openSettings();
   p.navigation.openPanel("changes");
-  assert.deepEqual(p.navigation.getState(), { settings: null, panel: "changes", palette: false });
+  assert.deepEqual(p.navigation.getState(), {
+    settings: null,
+    settingsRequest: 1,
+    panel: "changes",
+    palette: false,
+  });
   assert.equal(p.path(), "/s/a");
 
   p.navigation.select("/scratch", "b");
@@ -216,4 +221,28 @@ test("a session's panel closes when another session is selected, and opening one
   p.navigation.openPanel("pr");
   p.navigation.openNew();
   assert.equal(p.navigation.getState().panel, null, "the New page has no session panel");
+});
+
+test("each request to open Settings is counted, so a repeat reveals its section again", () => {
+  const p = page("/new");
+  p.registry();
+  const requests = () => p.navigation.getState().settingsRequest;
+  assert.equal(requests(), 0, "no Settings route, nothing asked for");
+  p.navigation.openSettings("radius");
+  const first = requests();
+  assert.ok(first > 0);
+  p.navigation.openSettings("radius");
+  assert.equal(
+    requests(),
+    first + 1,
+    "asking for the section already open is a request of its own",
+  );
+  p.navigation.closeSettings();
+  p.back();
+  assert.equal(p.navigation.getState().settings, "radius", "history returns to the section");
+  assert.ok(requests() > first + 1, "applying a settings route is a request too");
+  const deepLink = page("/settings/radius");
+  deepLink.registry();
+  assert.equal(deepLink.navigation.getState().settings, "radius");
+  assert.ok(deepLink.navigation.getState().settingsRequest > 0, "a cold deep link asks once");
 });

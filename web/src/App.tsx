@@ -60,7 +60,10 @@ export default function App() {
   const { closeMobile, show: showSidebar, toggle: toggleSidebar } = layout;
 
   const navigation = useNavigationController(client, closeMobile);
-  const { settings } = useSyncExternalStore(navigation.subscribe, navigation.getState);
+  const { settings, settingsRequest } = useSyncExternalStore(
+    navigation.subscribe,
+    navigation.getState,
+  );
   const { openNew, openSettings, closeSettings } = navigation;
   // One PR projection feeds the header, menu, and palette for the selected session.
   const prSession = state.view.kind === "session" ? state.session : null;
@@ -155,7 +158,7 @@ export default function App() {
               </LayoutView>
               {settings && (
                 <LayoutView>
-                  <SettingsPage section={settings} onMenu={showSidebar} />
+                  <SettingsPage section={settings} request={settingsRequest} onMenu={showSidebar} />
                 </LayoutView>
               )}
             </>

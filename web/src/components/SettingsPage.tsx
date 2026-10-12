@@ -8,7 +8,7 @@ import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoS
 import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
-import { RadiusSettings } from "@/components/RadiusSettings";
+import { RadiusSection } from "@/components/RadiusSection";
 import {
   SettingsAlert,
   SettingsSectionFrame,
@@ -40,13 +40,19 @@ import {
 } from "@/components/ui/sidebar";
 
 import { oauthProviders, providerLogout } from "@/lib/api";
-import { SETTINGS_SECTIONS, type SettingsSection } from "@/lib/routes";
+import {
+  SETTINGS_PAGES,
+  type SettingsPage as SettingsPageId,
+  type SettingsSection,
+  settingsPage,
+} from "@/lib/routes";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 export type { SettingsSection } from "@/lib/routes";
 
-// Pi owns the provider catalog; unknown/custom providers intentionally have no logo.
+// Pi owns the provider catalog; unknown/custom providers intentionally have no logo. Radius is
+// absent because its own section, not a list row, carries it.
 const PROVIDER_LOGOS: Readonly<Record<string, string | undefined>> = {
   anthropic: "anthropic",
   openai: "openai",
@@ -54,7 +60,6 @@ const PROVIDER_LOGOS: Readonly<Record<string, string | undefined>> = {
   "kimi-coding": "kimi",
   meta: "meta",
   openrouter: "openrouter",
-  radius: "radius",
   xai: "xai",
 };
 
@@ -73,14 +78,16 @@ export function SettingsNavigation({
   onSelect: (section: SettingsSection) => void;
   onHome: () => void;
 }) {
+  // Radius addresses the Providers page, so its row stays the current one while Radius shows.
+  const current = settingsPage(section);
   const menu = (
     <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
       <SidebarMenu>
-        {SETTINGS_SECTIONS.map((item) => (
+        {SETTINGS_PAGES.map((item) => (
           <SidebarMenuItem key={item.id}>
             <SidebarMenuButton
-              isActive={section === item.id}
-              aria-current={section === item.id ? "page" : undefined}
+              isActive={current === item.id}
+              aria-current={current === item.id ? "page" : undefined}
               aria-label={item.label}
               tooltip={item.label}
               className={compact ? "size-8 justify-center p-2" : "h-9 pointer-coarse:h-11"}
@@ -125,32 +132,46 @@ export function SettingsNavigation({
 
 export function SettingsPage({
   section,
+  request,
   onMenu,
 }: {
   section: SettingsSection;
+  /** Navigation's request count, so asking for Radius again reveals it again. */
+  request: number;
   onMenu: () => void;
 }) {
-  // Kept while another section shows; returning to Providers reads them again.
+  const page = settingsPage(section);
+  // Kept while another page shows; returning to Providers reads them again.
   const providers = useObservation("providers", (signal) => oauthProviders({ signal }), {
-    enabled: section === "providers",
+    enabled: page === "providers",
   });
-  // Each section's page; a section in SETTINGS_SECTIONS without one fails to typecheck.
-  const pages: Record<SettingsSection, () => React.ReactNode> = {
-    providers: () => <ProvidersSettings observed={providers} onMenu={onMenu} />,
-    radius: () => <RadiusSettings onMenu={onMenu} />,
+  // Each page; a page named in SETTINGS_SECTIONS without one here fails to typecheck.
+  const pages: Record<SettingsPageId, () => React.ReactNode> = {
+    providers: () => (
+      <ProvidersSettings
+        observed={providers}
+        revealRadius={section === "radius" ? request : undefined}
+        onMenu={onMenu}
+      />
+    ),
     mcp: () => <McpSettings onMenu={onMenu} />,
   };
-  return pages[section]();
+  return pages[page]();
 }
 
 function ProvidersSettings({
   observed,
+  revealRadius,
   onMenu,
 }: {
   observed: ReturnType<typeof useObservation<readonly OAuthProvider[]>>;
+  /** The request that asked for Radius, or `undefined` when the page was opened for itself. */
+  revealRadius: number | undefined;
   onMenu: () => void;
 }) {
-  const providers = observed.value && [...observed.value];
+  // Radius has its own section below, with the steps that sign-in alone does not cover.
+  const providers = observed.value?.filter((provider) => provider.id !== "radius");
+  const catalogEmpty = observed.value?.length === 0;
   const error = observed.error && !observed.loading ? "Could not load providers." : "";
   // Signing in or out changes the usable models; the server invalidates every catalog itself.
   const actions = useSetupActions<OAuthProvider, string>({
@@ -209,15 +230,19 @@ function ProvidersSettings({
           ))}
         </SettingsSkeleton>
       ) : providers.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <PlugIcon />
-            </EmptyMedia>
-            <EmptyTitle>No OAuth providers available</EmptyTitle>
-            <EmptyDescription>Providers supported by Pi will appear here.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        // Radius alone is already covered by its own section below; only a catalog with nothing
+        // in it needs explaining.
+        catalogEmpty && (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <PlugIcon />
+              </EmptyMedia>
+              <EmptyTitle>No OAuth providers available</EmptyTitle>
+              <EmptyDescription>Providers supported by Pi will appear here.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )
       ) : (
         <ItemGroup className="gap-2">
           {providers.map((provider) => (
@@ -263,6 +288,8 @@ function ProvidersSettings({
           ))}
         </ItemGroup>
       )}
+      {/* Radius is reached last, so it waits for the list above to take its height before scrolling. */}
+      <RadiusSection reveal={revealRadius} listed={!!providers || !!error} />
     </SettingsSectionFrame>
   );
 }
