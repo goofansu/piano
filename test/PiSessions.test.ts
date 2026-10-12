@@ -609,6 +609,41 @@ test("model switch and child crash", async () => {
   assert.equal(result.failed.reason, "exited");
 });
 
+test("a write failing as Pi crashes closes with the exit, not a transport failure", async () => {
+  const closure = await run(
+    Effect.gen(function* () {
+      const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "s-stdin" });
+      const closed = yield* collectUntil(t.events, (e) => e._tag === "closed").pipe(
+        Effect.forkChild,
+      );
+      yield* t.act({ _tag: "prompt", text: "close stdin then crash" });
+      // Pi has closed its stdin; this write fails while the process is still exiting.
+      yield* t.act({ _tag: "set_thinking_level", level: "high" }).pipe(Effect.ignore);
+      const events = yield* Fiber.join(closed);
+      return (events[events.length - 1] as Extract<SessionEvent, { _tag: "closed" }>).closure;
+    }).pipe(Effect.scoped),
+  );
+  assert.equal(closure._tag === "exited" && closure.code, 3, JSON.stringify(closure));
+  assert.match(closure.detail, /code 3: boom/);
+});
+
+test("Pi that keeps running with unusable stdin closes as a transport failure", async () => {
+  const closure = await run(
+    Effect.gen(function* () {
+      const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "s-stdin-alive" });
+      const closed = yield* collectUntil(t.events, (e) => e._tag === "closed").pipe(
+        Effect.forkChild,
+      );
+      yield* t.act({ _tag: "prompt", text: "close stdin and keep running" });
+      yield* t.act({ _tag: "set_thinking_level", level: "high" }).pipe(Effect.ignore);
+      const events = yield* Fiber.join(closed);
+      return (events[events.length - 1] as Extract<SessionEvent, { _tag: "closed" }>).closure;
+    }).pipe(Effect.scoped),
+  );
+  assert.equal(closure._tag, "failed");
+  assert.match(closure.detail, /Pi stdin failed/);
+});
+
 test("Pi's steering and follow-up queues remain paused after abort and can be restored without starting work", async () => {
   await run(
     Effect.gen(function* () {

@@ -304,7 +304,10 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
         }
         writes.clear();
         for (const d of pending.values()) yield* Deferred.fail(d, transportError);
-        yield* failOutput(transportError.detail);
+        // A write usually fails because Pi just exited; its exit, observed shortly after, is the
+        // closure. Only a child that keeps running with unusable stdin is a transport failure.
+        const exit = yield* Deferred.await(exited).pipe(Effect.timeoutOption("1 second"));
+        if (exit._tag === "None") yield* failOutput(transportError.detail);
       }),
     ),
     Effect.forkScoped,

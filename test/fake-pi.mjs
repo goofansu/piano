@@ -1,5 +1,6 @@
 // A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
 // exercise PiSessions through its interface. Behaviour is driven by the prompt text.
+import { closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
@@ -490,6 +491,20 @@ function handle(cmd) {
       if (cmd.message.startsWith("crash")) {
         process.stderr.write("boom\n");
         process.exit(3);
+      }
+      if (cmd.message.startsWith("close stdin then crash")) {
+        // Piano's next write fails before the exit it precedes is observed.
+        process.stdin.destroy();
+        closeSync(0);
+        process.stderr.write("boom\n");
+        setTimeout(() => process.exit(3), 300);
+        return;
+      }
+      if (cmd.message.startsWith("close stdin and keep running")) {
+        process.stdin.destroy();
+        closeSync(0);
+        setInterval(() => {}, 1000);
+        return;
       }
       const text = `echo: ${cmd.message}`;
       out({
