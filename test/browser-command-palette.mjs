@@ -417,15 +417,15 @@ try {
   await capture("touch-picker");
   await ab("press", "Escape");
   await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
-  await ab("wait", '[data-slot="sheet-content"]');
+  await ab("wait", '[data-slot="mobile-sidebar"]');
   const sheet = await evaluate(`(() => {
-    const content = getComputedStyle(document.querySelector('[data-slot="sheet-content"]'));
-    const overlay = getComputedStyle(document.querySelector('[data-slot="sheet-overlay"]'));
-    return { duration: content.animationDuration, overlayDuration: overlay.animationDuration, scrim: overlay.backgroundColor };
+    const content = document.querySelector('[data-slot="sidebar-reveal-navigation"]');
+    const overlay = getComputedStyle(document.querySelector('[data-slot="sidebar-scrim"]'));
+    return { ratio: content.getBoundingClientRect().width / innerWidth, duration: overlay.transitionDuration, scrim: overlay.backgroundColor };
   })()`);
   ui.push({ sheet });
-  assert.equal(sheet.duration, "0.3s");
-  assert.equal(sheet.overlayDuration, "0.3s");
+  assert.equal(sheet.ratio, 0.75);
+  assert.equal(sheet.duration, "0.3s, 0.3s, 0.3s");
   await capture("touch-sidebar");
   await ab("press", "Escape");
   await ab("wait", "--fn", `document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
@@ -445,7 +445,7 @@ try {
       }
       const send = (type, px, py) => {
         const touch = new Touch({ identifier: 1, target, clientX: px, clientY: py });
-        target.dispatchEvent(new TouchEvent(type, { bubbles: true,
+        target.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true,
           touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] }));
       };
       send('touchstart', ${x}, 300);
@@ -465,32 +465,168 @@ try {
   ]) {
     await swipe(main, x, dx, dy, fixture);
     assert.equal(
-      await evaluate(`!!document.querySelector('[data-slot="sheet-content"][data-state="open"]')`),
+      await evaluate(`!!document.querySelector('[data-slot="mobile-sidebar"][data-state="open"]')`),
       false,
     );
   }
-  await swipe(main, 40, 100);
-  await ab("wait", '[data-slot="sheet-content"][data-state="open"]');
+  // Separate events let React paint before release: this is the regression the old shortcut missed.
+  await evaluate(`(() => {
+    window.sidebarTouch = (type, x, y = 300) => {
+      if (type === 'touchstart') window.sidebarTarget = document.querySelector('[data-slot="mobile-sidebar"]') ?? document.querySelector('[data-slot="layout-main"]');
+      const target = window.sidebarTarget;
+      const touch = new Touch({ identifier: 9, target, clientX: x, clientY: y });
+      target.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true,
+        touches: ['touchend', 'touchcancel'].includes(type) ? [] : [touch], changedTouches: [touch] }));
+    };
+    return true;
+  })()`);
+  const touch = (type, x, y = 300) =>
+    evaluate(`(window.sidebarTouch('${type}', ${x}, ${y}), true)`);
+  const position = () =>
+    evaluate(`document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left`);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  await touch("touchstart", 40);
+  await touch("touchmove", 140);
+  assert.ok(Math.abs((await position()) - 100) < 1, "page follows finger before touchend");
+  await capture("swipe-preview");
+  await touch("touchmove", 80);
+  assert.ok(Math.abs((await position()) - 40) < 1, "reversal follows finger");
+  await touch("touchend", 80);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  assert.ok(Math.abs(await position()) < 1, "short slow drag settles closed");
+  await touch("touchstart", 40);
+  await touch("touchmove", 140);
+  await ab("press", "Escape");
+  await touch("touchend", 140);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  assert.ok(Math.abs(await position()) < 1, "Escape cancels an unfinished preview");
+  // Fast, short flick commits even before the halfway point (deterministic event timestamps).
+  await evaluate(`(() => {
+    const target = document.querySelector('[data-slot="layout-main"]');
+    for (const [type, x, time] of [['touchstart', 40, 0], ['touchmove', 90, 40], ['touchend', 90, 50]]) {
+      const touch = new Touch({ identifier: 3, target, clientX: x, clientY: 300 });
+      const event = new TouchEvent(type, { bubbles: true, cancelable: true,
+        touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] });
+      Object.defineProperty(event, 'timeStamp', { value: time });
+      target.dispatchEvent(event);
+    }
+    return true;
+  })()`);
+  await ab(
+    "wait",
+    "--fn",
+    `Math.abs(document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left - innerWidth * .75) < 1`,
+  );
   await capture("swipe-open");
-  await swipe('[data-slot="sheet-content"]', 250, -100);
-  await ab("wait", "--fn", `!document.querySelector('[data-slot="sheet-content"]')`);
+  await ab("press", "Tab");
+  assert.equal(
+    await evaluate(
+      `document.querySelector('[data-slot="mobile-sidebar"]').contains(document.activeElement)`,
+    ),
+    true,
+    "focus stays within the open navigation",
+  );
+  await touch("touchstart", 250);
+  await touch("touchmove", 170);
+  assert.ok(Math.abs((await position()) - 212.5) < 1, "closing also tracks finger");
+  await touch("touchcancel", 170);
+  await ab(
+    "wait",
+    "--fn",
+    `Math.abs(document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left - innerWidth * .75) < 1`,
+  );
+  await touch("touchstart", 250);
+  await touch("touchmove", 50);
+  await touch("touchend", 50);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
   await capture("swipe-closed");
+  await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
+  await ab("wait", '[data-slot="mobile-sidebar"]');
+  await ab("click", '[data-slot="sidebar-scrim"]');
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
   await ab("set", "viewport", "1200", "844");
   await swipe(main, 40, 100);
-  assert.equal(await evaluate(`!!document.querySelector('[data-slot="sheet-content"]')`), false);
+  assert.equal(await evaluate(`!!document.querySelector('[data-slot="mobile-sidebar"]')`), false);
   await ab("set", "viewport", "390", "844");
+  // Trusted Chromium touch input verifies that modal mounting doesn't interrupt the gesture,
+  // and that the non-passive listener actually prevents native horizontal panning.
+  const cdp = new WebSocket(await ab("get", "cdp-url"));
+  await new Promise((resolve, reject) => {
+    cdp.addEventListener("open", resolve, { once: true });
+    cdp.addEventListener("error", reject, { once: true });
+  });
+  let messageId = 0;
+  const send = (method, params = {}, sessionId) =>
+    new Promise((resolve, reject) => {
+      const id = ++messageId;
+      const timer = setTimeout(() => {
+        cdp.removeEventListener("message", listener);
+        reject(new Error(`CDP timeout: ${method}`));
+      }, 10000);
+      const listener = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.id !== id) return;
+        clearTimeout(timer);
+        cdp.removeEventListener("message", listener);
+        if (message.error) reject(new Error(JSON.stringify(message.error)));
+        else resolve(message.result);
+      };
+      cdp.addEventListener("message", listener);
+      cdp.send(JSON.stringify({ id, method, params, sessionId }));
+    });
+  try {
+    const { targetInfos } = await send("Target.getTargets");
+    const target = targetInfos.find(
+      (target) => target.type === "page" && target.url.startsWith(`http://127.0.0.1:${webPort}`),
+    );
+    assert.ok(target);
+    const { sessionId } = await send("Target.attachToTarget", {
+      targetId: target.targetId,
+      flatten: true,
+    });
+    await send("Emulation.setTouchEmulationEnabled", { enabled: true }, sessionId);
+    const nativeTouch = (type, x) =>
+      send(
+        "Input.dispatchTouchEvent",
+        {
+          type,
+          touchPoints: type === "touchEnd" ? [] : [{ x, y: 300, id: 1 }],
+        },
+        sessionId,
+      );
+    await nativeTouch("touchStart", 40);
+    await nativeTouch("touchMove", 140);
+    assert.ok(Math.abs((await position()) - 100) < 2, "trusted touch previews before release");
+    await capture("native-touch-preview");
+    await nativeTouch("touchMove", 240);
+    await nativeTouch("touchEnd", 240);
+    await ab(
+      "wait",
+      "--fn",
+      `Math.abs(document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left - innerWidth * .75) < 1`,
+    );
+    // Start on the dimmed content, not the navigation, to cover both dismiss surfaces.
+    await nativeTouch("touchStart", 340);
+    await nativeTouch("touchMove", 240);
+    assert.ok(Math.abs((await position()) - 192.5) < 2, "scrim drag follows finger");
+    await nativeTouch("touchMove", 100);
+    await nativeTouch("touchEnd", 100);
+    await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  } finally {
+    cdp.close();
+  }
   console.log(
-    "PASS: sidebar swipes open/close; edge, middle, short, vertical, horizontal scroller, input and desktop gestures ignored",
+    "PASS: 75% reveal, trusted touch preview/open/scrim dismissal, reversal, cancellation, tap dismissal; edge, vertical, horizontal scroller, input and desktop exclusions",
   );
   await ab("set", "media", "light", "reduced-motion");
   await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
-  await ab("wait", '[data-slot="sheet-content"]');
+  await ab("wait", '[data-slot="mobile-sidebar"]');
   assert.equal(
     await evaluate(
-      `getComputedStyle(document.querySelector('[data-slot="sheet-content"]')).animationName`,
+      `getComputedStyle(document.querySelector('[data-slot="layout-main"]')).transitionDuration`,
     ),
-    "none",
-    "reduced-motion beats app overlay styling",
+    "0s",
+    "reduced-motion skips settling animations",
   );
   assert.equal(await ab("errors"), "");
   console.log(

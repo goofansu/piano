@@ -374,6 +374,80 @@
   transition-timing-function: var(--ease-exit);
 }
 
+/* PianoSidebarReveal owns these surfaces, not upstream Sheet internals. The page remains
+ * mounted at full width; only its position changes, so composer and scroll state survive. */
+[data-slot="mobile-sidebar"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  outline: none;
+}
+[data-slot="mobile-sidebar"][data-state="closed"] {
+  /* Keep Radix Presence mounted while the children and live page settle closed. */
+  animation: sidebar-reveal-exit var(--dur-layout) linear;
+}
+@keyframes sidebar-reveal-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+[data-slot="sidebar-reveal-navigation"] {
+  width: 75vw;
+  height: 100dvh;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  background: var(--surface-0);
+  clip-path: inset(0 calc((1 - var(--sidebar-progress)) * 100%) 0 0);
+  transition: clip-path var(--dur-layout) var(--ease-layout);
+}
+[data-slot="sidebar-scrim"] {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  background: var(--scrim);
+  opacity: var(--sidebar-progress);
+  transform: translateX(calc(var(--sidebar-progress) * 75vw));
+  border-radius: calc(var(--sidebar-progress) * 2rem) 0 0 calc(var(--sidebar-progress) * 2rem);
+  transition:
+    transform var(--dur-layout) var(--ease-layout),
+    opacity var(--dur-layout) var(--ease-layout),
+    border-radius var(--dur-layout) var(--ease-layout);
+}
+@starting-style {
+  [data-slot="mobile-sidebar"][data-dragging="false"] [data-slot="sidebar-reveal-navigation"] {
+    clip-path: inset(0 100% 0 0);
+  }
+  [data-slot="mobile-sidebar"][data-dragging="false"] [data-slot="sidebar-scrim"] {
+    transform: translateX(0);
+    opacity: 0;
+    border-radius: 0;
+  }
+}
+@media (width < 48rem) {
+  [data-slot="layout-main"] {
+    transform: translateX(calc(var(--sidebar-progress, 0) * 75vw));
+    border-radius: calc(var(--sidebar-progress, 0) * 2rem) 0 0
+      calc(var(--sidebar-progress, 0) * 2rem);
+    transition:
+      transform var(--dur-layout) var(--ease-layout),
+      border-radius var(--dur-layout) var(--ease-layout);
+  }
+}
+@media (width >= 48rem) {
+  [data-slot="mobile-sidebar"] {
+    display: none;
+  }
+}
+[data-slot="layout-main"][data-sidebar-dragging="true"],
+[data-slot="mobile-sidebar"][data-dragging="true"] [data-slot="sidebar-reveal-navigation"],
+[data-slot="mobile-sidebar"][data-dragging="true"] [data-slot="sidebar-scrim"] {
+  transition: none;
+}
+
 /* Radix's inline display: table widens this internal wrapper to the longest line, defeating
  * truncation. There is no shadcn prop for it; preserve the existing block-layout fix. */
 [data-slot="scroll-area-viewport"] > div {
