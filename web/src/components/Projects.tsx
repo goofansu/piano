@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { answerForm } from "@/lib/commandForms";
 import type { ProjectCommandIcon, ProjectDialog } from "@/lib/projectCommands";
 import type { AppState } from "@/store";
 
@@ -52,7 +53,7 @@ export function ProjectDialogView({
 }) {
   const [name, setName] = useState(dialog.project?.name ?? "");
   const editing = !!dialog.project;
-  const ready = state.connected && !!name.trim();
+  const answer = answerForm(state, { kind: "project", dialog }, name);
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent className="sm:max-w-md">
@@ -60,19 +61,10 @@ export function ProjectDialogView({
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!ready) return;
-            const id = dialog.project?.id ?? crypto.randomUUID();
-            // One message, so the project and its new session arrive in one registry write.
-            send({
-              _tag: "save_project",
-              project: { id, name: name.trim() },
-              assign: dialog.assign && {
-                cwd: dialog.assign.cwd,
-                sessionId: dialog.assign.sessionId,
-              },
-            });
+            if (!answer.command) return;
+            send(answer.command);
             close();
-            if (!editing && !dialog.assign) openProject(id);
+            if (answer.openProject) openProject(answer.openProject);
           }}
         >
           <DialogHeader>
@@ -100,7 +92,7 @@ export function ProjectDialogView({
             <Button type="button" variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!ready}>
+            <Button type="submit" disabled={!answer.allowed}>
               {editing ? "Save" : dialog.assign ? "Create and add session" : "Create project"}
             </Button>
           </DialogFooter>

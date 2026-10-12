@@ -15,7 +15,7 @@ import type { SidebarView } from "./sidebarView.ts";
 
 export type Command = GlobalCommand | ProjectCommand | FolderCommand | SessionCommand;
 
-/** A form the host owns, which asks before anything changes; its answer re-checks the rule. */
+/** A form the host owns, which asks before anything changes; `answerForm` re-checks its rule. */
 export type CommandForm =
   | { kind: "rename-session"; target: SessionTarget }
   | { kind: "delete-session"; target: SessionTarget }
