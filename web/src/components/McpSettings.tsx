@@ -1,5 +1,5 @@
 import { MCP_CATALOG, type McpServerSetup, type McpSetupRequest } from "@shared/mcp";
-import { CheckCircle2Icon, ServerIcon } from "lucide-react";
+import { CheckCircle2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
@@ -25,6 +25,10 @@ import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 type Server = (typeof MCP_CATALOG)[number];
+// Locally bundled Simple Icons logos; omit media for servers without a matching logo.
+const SERVER_LOGOS: Partial<Record<Server["id"], string>> = {
+  linear: "/mcp-logos.svg#linear",
+};
 type Confirmation =
   | { kind: "sign-out"; server: Server }
   | { kind: "uninstall"; server: Server; key: string };
@@ -165,12 +169,17 @@ function McpServerItem({
   signOut: () => void;
 }) {
   const ready = state.status === "ready";
+  const logo = SERVER_LOGOS[server.id];
   // Only the name and its actions; a line appears only for a configuration problem the user must fix in Pi.
   return (
     <Item variant="outline" className="flex-nowrap rounded-xl px-4 sm:px-5">
-      <ItemMedia variant="icon">
-        <ServerIcon />
-      </ItemMedia>
+      {logo && (
+        <ItemMedia variant="icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <use href={logo} />
+          </svg>
+        </ItemMedia>
+      )}
       <ItemContent className="min-w-0">
         <ItemTitle>
           {server.name}
