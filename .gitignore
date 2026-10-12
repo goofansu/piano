@@ -1,7 +1,6 @@
 node_modules
 web/node_modules
 web/dist
-audit-reports/
 
 # Claude Code worktrees carry their own biome.json
 .claude/worktrees/
