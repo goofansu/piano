@@ -292,6 +292,12 @@ try {
   assert.equal(readFileSync(audit, "utf8").trim().split("\n").length, 2);
   // Completing the last step announces it once.
   await ab("wait", "--text", "All set. New Pi sessions can use Radius tools and web search.");
+  await ab("hover", tools);
+  await ab(
+    "wait",
+    "--fn",
+    `(() => { const style = getComputedStyle(document.querySelector('${tools}')); return style.borderBottomLeftRadius === '0px' && style.borderBottomRightRadius === '0px' && parseFloat(style.borderTopLeftRadius) > 0; })()`,
+  );
   await capture("05-complete");
   assert.match(await ab("snapshot"), /must enable Web search separately in Radius/);
   // Folded away, the steps still report where setup stands.
@@ -301,6 +307,11 @@ try {
     await evaluate(`document.body.textContent.includes('MCP added \u00b7 Web search installed')`),
     true,
     "the folded tools still report where setup stands",
+  );
+  await ab(
+    "wait",
+    "--fn",
+    `(() => { const style = getComputedStyle(document.querySelector('${tools}')); return parseFloat(style.borderBottomLeftRadius) > 0 && parseFloat(style.borderBottomRightRadius) > 0; })()`,
   );
   await capture("05-complete-folded");
   await ab("click", tools);

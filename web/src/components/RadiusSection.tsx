@@ -249,7 +249,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
             <CollapsibleTrigger asChild>
               <Button
                 variant="ghost"
-                className="h-auto w-full justify-start gap-3 rounded-xl px-4 py-3 text-left whitespace-normal sm:px-5"
+                className="h-auto w-full justify-start gap-3 rounded-xl px-4 py-3 text-left whitespace-normal data-[state=open]:rounded-b-none sm:px-5"
               >
                 <DisclosureChevron open={toolsOpen} />
                 <span className="min-w-0 flex-1">
