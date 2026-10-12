@@ -30,7 +30,7 @@ for (const id of ['work', 'other', 'notes']) writeFileSync(join(sessions, `${id}
   { type: 'message', id: 'm0', parentId: null, timestamp, message: { role: 'user', content: 'Research references: https://github.com/unrelated/project/pull/999 and https://github.com/example/repo/issues/1 and http://localhost:9999. These are not session deliverables.', timestamp: 0 } },
 ].map(JSON.stringify).join('\n') + '\n');
 writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: [repo, plain], worktrees: [], sessions: ['work', 'other', 'notes'].map(id => ({ cwd: id === 'notes' ? plain : repo, sessionId: id, title: id === 'work' ? 'Current work' : id === 'other' ? 'Other work' : 'Notes', createdAt: timestamp, updatedAt: timestamp, archived: false, ...(id === 'other' ? { pullRequest: null } : {}) })) }));
-const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PIANO_TEST_GH_FIXTURE: forge, HOST: '127.0.0.1', PORT: backendPort, ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
+const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PIANO_TEST_GH_FIXTURE: forge, HOST: '127.0.0.1', PORT: backendPort, PIANO_ALLOWED_ORIGINS: frontendUrl, ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', frontendPort, '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: backendUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';
 for (const p of [backend, frontend]) { p.stdout.on('data', d => processLog += d); p.stderr.on('data', d => processLog += d); }
@@ -85,7 +85,7 @@ try {
       [{ workspaceId: plainId, sessionId: 'work' }, 404],
       [{ workspaceId, sessionId: 'missing' }, 404],
     ]) {
-      const response = await fetch(endpoint(params), { method, ...(method === 'PUT' ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'remove' }) } : {}) });
+      const response = await fetch(endpoint(params), { method, ...(method === 'PUT' ? { headers: { 'content-type': 'application/json', Origin: frontendUrl }, body: JSON.stringify({ action: 'remove' }) } : {}) });
       assert.equal(response.status, status);
       const body = await response.text(); assert.ok(!body.includes(repo) && !body.includes(plain));
       observations.identityChecks.push({ method, status });
@@ -94,7 +94,7 @@ try {
   // An extra caller-supplied path cannot redirect a valid ID pair to another workspace.
   const own = await (await fetch(endpoint({ workspaceId, sessionId: 'work', cwd: plain }))).json();
   assert.equal(own.pullRequest?.number, 42);
-  const notes = await fetch(endpoint({ workspaceId: plainId, sessionId: 'notes' }), { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'link', url: prs[1].url }) });
+  const notes = await fetch(endpoint({ workspaceId: plainId, sessionId: 'notes' }), { method: 'PUT', headers: { 'content-type': 'application/json', Origin: frontendUrl }, body: JSON.stringify({ action: 'link', url: prs[1].url }) });
   assert.equal(notes.status, 200); assert.equal((await notes.json()).link?.url, prs[1].url);
   await ab('set', 'viewport', '1280', '900'); await ab('open', `${frontendUrl}/s/work`);
   await ab('wait', '--text', 'These are not session deliverables.'); await waitBadge(42);
@@ -129,6 +129,8 @@ try {
   assert.equal(await evaluate(`document.querySelector('[role="tooltip"]').textContent`), 'The session deliverable', 'Hover shows only the title, not status/checks/review');
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('[role="tooltip"] p')).textWrapStyle`), 'auto', 'PR title uses normal wrapping, not balanced lines');
   await ab('mouse', 'move', '0', '0');
+  // A new observation replaces the hook's refresh closure. It must not retrigger the opening effect.
+  await evaluate(`window.openRefreshes = 0; window.beforeRefreshFetch = window.fetch; window.fetch = (...args) => { if (String(args[0]).includes('/api/session/pull-request')) window.openRefreshes++; return window.beforeRefreshFetch(...args); }; true`);
   const refreshGate = { operation: 'view', started: join(root, 'refresh-started'), release: join(root, 'refresh-release') };
   control({ prs, gate: refreshGate });
   await openDetails();
@@ -139,6 +141,8 @@ try {
   await editLink();
   assert.equal(await evaluate(`document.querySelector('#session-pr-url').value`), prs[0].url, 'Editing remains available after a background refresh');
   await button('Cancel');
+  assert.equal(await evaluate('window.openRefreshes'), 1, 'One opening refresh; observation and edit-state updates do not cause a request loop');
+  await evaluate('window.fetch = window.beforeRefreshFetch; true');
   observations.backgroundRefreshActions = 'pass';
   assert.equal(await evaluate(`!!document.querySelector('#session-pr-url')`), false, 'Linked PR opens details, not a form');
   assert.equal(await evaluate(`document.querySelector('${popover}').contains(document.activeElement)`), true);

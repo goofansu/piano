@@ -50,7 +50,6 @@ export function Sidebar({ state, onHide }: Props) {
   const { select, openNew, openSettings, setPalette } = useNavigation();
   const { view } = useSidebarView();
   const { openGroups, setOpen } = useSidebarGroups(state, view.groupBy);
-  const current = state.session ?? state.selecting;
   const [dateNow, setDateNow] = useState(() => new Date());
 
   // Refresh an idle date view at local midnight; focus also catches sleep and clock changes.
@@ -76,9 +75,7 @@ export function Sidebar({ state, onHide }: Props) {
   const reveal = () => (settled ? "reveal-row" : undefined);
 
   // One catalog for every grouping, so switching the grouping never changes which sessions are listed.
-  const catalog = useMemo(() => sessionCatalog(state),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, current?.cwd, current?.sessionId]);
+  const catalog = useMemo(() => sessionCatalog(state), [state]);
   const pinned = sortSessions(catalog.filter(s => s.pinned), view.sortBy);
   const listed = catalog.filter(s => s.listed && !s.pinned);
   const groupProps = { state, select, reveal };

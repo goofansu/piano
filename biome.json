@@ -24,7 +24,7 @@
     "rules": {
       "preset": "recommended",
       "correctness": {
-        "useExhaustiveDependencies": "off"
+        "useExhaustiveDependencies": "error"
       },
       "style": {
         "useTemplate": "off",

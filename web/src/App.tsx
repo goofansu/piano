@@ -51,10 +51,10 @@ export default function App() {
   const prWorkspaceId = workspaceFor(state, prSession?.cwd)?.id;
   const pullRequest = useSessionPullRequest(prWorkspaceId, prSession?.sessionId, !!prSession && isWorking(prSession.state));
 
-  const chooseDirectory = useCallback((cwd: string) => dispatch({ type: "new_directory", cwd }), []);
-  const onDraftChange = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_changed", key, text }), []);
-  const onDraftAppend = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_appended", key, text }), []);
-  const onDraftParagraph = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_paragraph_appended", key, text }), []);
+  const chooseDirectory = useCallback((cwd: string) => dispatch({ type: "new_directory", cwd }), [dispatch]);
+  const onDraftChange = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_changed", key, text }), [dispatch]);
+  const onDraftAppend = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_appended", key, text }), [dispatch]);
+  const onDraftParagraph = useCallback((key: DraftKey, text: string) => dispatch({ type: "draft_paragraph_appended", key, text }), [dispatch]);
   const anyWorking = state.hosts.some((h) => h.streaming);
 
   return (
