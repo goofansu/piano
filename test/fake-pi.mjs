@@ -156,6 +156,15 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
+      if (cmd.message.startsWith("protocol raw:")) {
+        process.stdout.write(`${cmd.message.slice("protocol raw:".length)}\n`);
+        return;
+      }
+      if (cmd.message === "protocol eof") {
+        process.stdout.end();
+        return;
+      }
+      if (cmd.message === "protocol future") out({ type: "future_event", extra: { version: 2 } });
       // Extension commands run before busy checks. Never accept these through follow_up.
       if (cmd.message === "/handled") {
         model = { provider: "fake", id: "beta" }; thinkingLevel = "high";
