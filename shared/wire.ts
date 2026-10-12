@@ -7,19 +7,35 @@
  * sides decode with the same definitions.
  */
 import { Schema, type Types } from "effect";
-import { base64Bytes, IMAGE_TYPES, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES } from "./attachments.ts";
+import {
+  base64Bytes,
+  IMAGE_TYPES,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
+  MAX_IMAGE_BYTES,
+} from "./attachments.ts";
 
 /** Browser input, not a Pi protocol block. Future files get a distinct kind. */
 export const Attachment = Schema.Struct({
   kind: Schema.Literal("image"),
   name: Schema.String.check(Schema.isMaxLength(255)),
   mimeType: Schema.Literals(IMAGE_TYPES),
-  data: Schema.String.check(Schema.isMaxLength(4 * Math.ceil(MAX_IMAGE_BYTES / 3)), Schema.isPattern(/^[A-Za-z0-9+/]*={0,2}$/)),
-}).check(Schema.makeFilter(a => a.data.length % 4 === 0 && base64Bytes(a.data) > 0 && base64Bytes(a.data) <= MAX_IMAGE_BYTES));
+  data: Schema.String.check(
+    Schema.isMaxLength(4 * Math.ceil(MAX_IMAGE_BYTES / 3)),
+    Schema.isPattern(/^[A-Za-z0-9+/]*={0,2}$/),
+  ),
+}).check(
+  Schema.makeFilter(
+    (a) =>
+      a.data.length % 4 === 0 && base64Bytes(a.data) > 0 && base64Bytes(a.data) <= MAX_IMAGE_BYTES,
+  ),
+);
 export type Attachment = typeof Attachment.Type;
 export const Attachments = Schema.Array(Attachment).check(
   Schema.isMaxLength(MAX_ATTACHMENTS),
-  Schema.makeFilter(items => items.reduce((sum, a) => sum + base64Bytes(a.data), 0) <= MAX_ATTACHMENT_BYTES),
+  Schema.makeFilter(
+    (items) => items.reduce((sum, a) => sum + base64Bytes(a.data), 0) <= MAX_ATTACHMENT_BYTES,
+  ),
 );
 const attachmentInput = Schema.optional(Attachments);
 
@@ -33,19 +49,31 @@ export const ToolCall = Schema.Struct({
 
 /** Latest cumulative usage for ONE response/result, never a streaming delta. */
 export const Usage = Schema.Struct({
-  input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number,
-  totalTokens: Schema.Number, cost: Schema.Number,
+  input: Schema.Number,
+  output: Schema.Number,
+  cacheRead: Schema.Number,
+  cacheWrite: Schema.Number,
+  totalTokens: Schema.Number,
+  cost: Schema.Number,
 });
 export type Usage = typeof Usage.Type;
 
 /** One Subagent Run's spend as pi-subagent delivers it: no `totalTokens`, cost in unrounded USD. */
 export const RunUsage = Schema.Struct({
-  input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number, cost: Schema.Number,
+  input: Schema.Number,
+  output: Schema.Number,
+  cacheRead: Schema.Number,
+  cacheWrite: Schema.Number,
+  cost: Schema.Number,
 });
 export type RunUsage = typeof RunUsage.Type;
 const RunSpend = { usage: Schema.optional(RunUsage), model: Schema.optional(Schema.String) };
 /** Delivered Runs' spend summed, with its token total and how many Runs it counts. */
-const RunTotal = Schema.Struct({ ...RunUsage.fields, totalTokens: Schema.Number, runs: Schema.Number });
+const RunTotal = Schema.Struct({
+  ...RunUsage.fields,
+  totalTokens: Schema.Number,
+  runs: Schema.Number,
+});
 export const ProfileUsage = Schema.Struct({
   ...RunTotal.fields,
   profile: Schema.String,
@@ -96,7 +124,15 @@ export const SubagentCard = Schema.Union([
     ...SubagentIdentity,
     status: Schema.String,
     terminalStatus: Schema.optional(TerminalSubagentStatus),
-    runs: Schema.Array(Schema.Struct({ ...SubagentIdentity, runId: Schema.String, profile: Schema.String, status: TerminalSubagentStatus, ...RunSpend })),
+    runs: Schema.Array(
+      Schema.Struct({
+        ...SubagentIdentity,
+        runId: Schema.String,
+        profile: Schema.String,
+        status: TerminalSubagentStatus,
+        ...RunSpend,
+      }),
+    ),
     stillRunning: Schema.Number,
     unknown: Schema.Number,
     unavailable: Schema.Number,
@@ -114,10 +150,19 @@ export const SubagentCard = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("cancellation"),
     status: Schema.String,
-    outcomes: Schema.Array(Schema.Union([
-      Schema.Struct({ kind: Schema.Literals(["requested", "already requested", "unknown"]), runId: Schema.String }),
-      Schema.Struct({ kind: Schema.Literal("already terminal"), runId: Schema.String, phase: TerminalSubagentStatus }),
-    ])),
+    outcomes: Schema.Array(
+      Schema.Union([
+        Schema.Struct({
+          kind: Schema.Literals(["requested", "already requested", "unknown"]),
+          runId: Schema.String,
+        }),
+        Schema.Struct({
+          kind: Schema.Literal("already terminal"),
+          runId: Schema.String,
+          phase: TerminalSubagentStatus,
+        }),
+      ]),
+    ),
   }),
 ]);
 export type SubagentCard = typeof SubagentCard.Type;
@@ -137,7 +182,13 @@ export type ToolExecution = typeof ToolExecution.Type;
 
 export const ExtensionState = Schema.Struct({
   statuses: Schema.Array(Schema.Struct({ key: Schema.String, text: Schema.String })),
-  widgets: Schema.Array(Schema.Struct({ key: Schema.String, lines: Schema.Array(Schema.String), placement: Schema.Literals(["aboveEditor", "belowEditor"]) })),
+  widgets: Schema.Array(
+    Schema.Struct({
+      key: Schema.String,
+      lines: Schema.Array(Schema.String),
+      placement: Schema.Literals(["aboveEditor", "belowEditor"]),
+    }),
+  ),
   title: Schema.optional(Schema.String),
   editorRequest: Schema.optional(Schema.Struct({ id: Schema.String, text: Schema.String })),
 });
@@ -147,9 +198,13 @@ export const RenderMsg = Schema.Struct({
   id: Schema.String,
   role: Schema.Literals(["user", "assistant", "tool_result", "context"]),
   text: Schema.String,
-  attachments: Schema.optional(Schema.Array(Schema.Struct({ kind: Schema.Literal("image"), url: Schema.String }))),
+  attachments: Schema.optional(
+    Schema.Array(Schema.Struct({ kind: Schema.Literal("image"), url: Schema.String })),
+  ),
   /** A `/skill:name` prompt as Pi expanded it. `text` is then only what the user typed after the command. */
-  skill: Schema.optional(Schema.Struct({ name: Schema.String, location: Schema.String, body: Schema.String })),
+  skill: Schema.optional(
+    Schema.Struct({ name: Schema.String, location: Schema.String, body: Schema.String }),
+  ),
   toolCalls: Schema.optional(Schema.Array(ToolCall)),
   toolName: Schema.optional(Schema.String),
   toolCallId: Schema.optional(Schema.String),
@@ -223,7 +278,15 @@ export type PromptSubmission = typeof PromptSubmission.Type;
 export const SessionStats = Schema.Struct({
   context: Schema.optional(ContextUsage),
   cost: Schema.optional(Schema.Number),
-  tokens: Schema.optional(Schema.Struct({ input: Schema.Number, output: Schema.Number, cacheRead: Schema.Number, cacheWrite: Schema.Number, total: Schema.Number })),
+  tokens: Schema.optional(
+    Schema.Struct({
+      input: Schema.Number,
+      output: Schema.Number,
+      cacheRead: Schema.Number,
+      cacheWrite: Schema.Number,
+      total: Schema.Number,
+    }),
+  ),
   statsUpdatedAt: Schema.Number,
 });
 export type SessionStats = typeof SessionStats.Type;
@@ -303,19 +366,33 @@ export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("tool_update", { tool: ToolExecution }),
   Schema.TaggedStruct("dialog", { dialog: Dialog }),
   Schema.TaggedStruct("dialog_resolved", { resolution: DialogResolution }),
-  Schema.TaggedStruct("notice", { level: Schema.Literals(["info", "warning", "error"]), message: Schema.String }),
+  Schema.TaggedStruct("notice", {
+    level: Schema.Literals(["info", "warning", "error"]),
+    message: Schema.String,
+  }),
   Schema.TaggedStruct("closed", { closure: SessionClosure }),
 ]);
 export type SessionEvent = typeof SessionEvent.Type;
 
 /** Ordered within one child incarnation, never a historical replay cursor. */
 export const SessionCursor = Schema.Struct({
-  cwd: Schema.String, sessionId: Schema.String, generation: Schema.String, sequence: Schema.Number,
+  cwd: Schema.String,
+  sessionId: Schema.String,
+  generation: Schema.String,
+  sequence: Schema.Number,
 });
 export type SessionCursor = typeof SessionCursor.Type;
 export type SessionFrame = SessionEvent & { readonly cursor: SessionCursor };
 
-export const ThinkingLevel = Schema.Literals(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+export const ThinkingLevel = Schema.Literals([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
 export type ThinkingLevel = typeof ThinkingLevel.Type;
 
 export const SlashCommand = Schema.Struct({
@@ -326,14 +403,26 @@ export const SlashCommand = Schema.Struct({
 export type SlashCommand = typeof SlashCommand.Type;
 
 /** Global provider sign-in; never part of a session transcript or registry. */
-export const OAuthProvider = Schema.Struct({ id: Schema.String, name: Schema.String, signedIn: Schema.Boolean });
+export const OAuthProvider = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  signedIn: Schema.Boolean,
+});
 export type OAuthProvider = typeof OAuthProvider.Type;
 export const LoginPrompt = Schema.Struct({
   id: Schema.String,
   type: Schema.Literals(["text", "secret", "select", "manual_code"]),
   message: Schema.String,
   placeholder: Schema.optional(Schema.String),
-  options: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String, description: Schema.optional(Schema.String) }))),
+  options: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        label: Schema.String,
+        description: Schema.optional(Schema.String),
+      }),
+    ),
+  ),
 });
 export type LoginPrompt = typeof LoginPrompt.Type;
 export const ProviderLoginState = Schema.Struct({
@@ -372,35 +461,62 @@ export type SessionAction = typeof SessionAction.Type;
 
 /** A command result for its caller, not a broadcast session event. */
 export const SessionActionResult = Schema.Union([
-  Schema.TaggedStruct("queue_restored", { messages: Schema.Array(QueuedMessage), stopError: Schema.optional(Schema.String) }),
+  Schema.TaggedStruct("queue_restored", {
+    messages: Schema.Array(QueuedMessage),
+    stopError: Schema.optional(Schema.String),
+  }),
   Schema.TaggedStruct("commands", { commands: Schema.Array(SlashCommand) }),
 ]);
 export type SessionActionResult = typeof SessionActionResult.Type;
 
 // ── Workspace captures ──────────────────────────────────────────────────────
 
-export const Workspace = Schema.Struct({ id: Schema.String, folder: Schema.String, path: Schema.String });
+export const Workspace = Schema.Struct({
+  id: Schema.String,
+  folder: Schema.String,
+  path: Schema.String,
+});
 export type Workspace = typeof Workspace.Type;
 export const RevisionFile = Schema.Struct({
-  path: Schema.String, mode: Schema.Literals(["100644", "100755", "120000"]),
-  sha256: Schema.String, bytes: Schema.Number,
+  path: Schema.String,
+  mode: Schema.Literals(["100644", "100755", "120000"]),
+  sha256: Schema.String,
+  bytes: Schema.Number,
 });
 export type RevisionFile = typeof RevisionFile.Type;
 export const RevisionManifest = Schema.Struct({
-  version: Schema.Literal(1), baseHead: Schema.String,
-  scope: Schema.Struct({ included: Schema.String, excluded: Schema.Array(Schema.String), ignored: Schema.Array(Schema.String) }),
-  base: Schema.Array(RevisionFile), index: Schema.Array(RevisionFile), files: Schema.Array(RevisionFile),
+  version: Schema.Literal(1),
+  baseHead: Schema.String,
+  scope: Schema.Struct({
+    included: Schema.String,
+    excluded: Schema.Array(Schema.String),
+    ignored: Schema.Array(Schema.String),
+  }),
+  base: Schema.Array(RevisionFile),
+  index: Schema.Array(RevisionFile),
+  files: Schema.Array(RevisionFile),
 });
 export type RevisionManifest = typeof RevisionManifest.Type;
 export const WorkspaceCapture = Schema.Struct({
-  workspace: Workspace, observedAt: Schema.String,
+  workspace: Workspace,
+  observedAt: Schema.String,
   result: Schema.Union([
-    Schema.Struct({ status: Schema.Literal("captured"), revision: Schema.String, physicalPath: Schema.String,
-      branch: Schema.NullOr(Schema.String), manifest: RevisionManifest,
+    Schema.Struct({
+      status: Schema.Literal("captured"),
+      revision: Schema.String,
+      physicalPath: Schema.String,
+      branch: Schema.NullOr(Schema.String),
+      manifest: RevisionManifest,
       /** Base HEAD to captured working files, untracked included: what a reviewer reads as one list. */
       diff: Schema.String,
-      stagedDiff: Schema.String, unstagedDiff: Schema.String, limitations: Schema.Array(Schema.String) }),
-    Schema.Struct({ status: Schema.Literals(["error", "unsupported", "inconclusive"]), detail: Schema.String }),
+      stagedDiff: Schema.String,
+      unstagedDiff: Schema.String,
+      limitations: Schema.Array(Schema.String),
+    }),
+    Schema.Struct({
+      status: Schema.Literals(["error", "unsupported", "inconclusive"]),
+      detail: Schema.String,
+    }),
   ]),
 });
 export type WorkspaceCapture = typeof WorkspaceCapture.Type;
@@ -411,15 +527,24 @@ export const CHANGES_FILE_PATCH_BYTES = 1024 * 1024;
 
 /** Live Git observations, not immutable revisions or verification evidence. */
 export const ChangeFile = Schema.Struct({
-  path: Schema.String, additions: Schema.Number, deletions: Schema.Number, binary: Schema.Boolean,
+  path: Schema.String,
+  additions: Schema.Number,
+  deletions: Schema.Number,
+  binary: Schema.Boolean,
 });
 export type ChangeFile = typeof ChangeFile.Type;
 export const WorkspaceChanges = Schema.Struct({
-  workspace: Workspace, observedAt: Schema.String,
+  workspace: Workspace,
+  observedAt: Schema.String,
   result: Schema.Union([
-    Schema.Struct({ status: Schema.Literal("ready"), head: Schema.NullOr(Schema.String),
-      branch: Schema.NullOr(Schema.String), files: Schema.Array(ChangeFile),
-      diff: Schema.String, truncated: Schema.Boolean }),
+    Schema.Struct({
+      status: Schema.Literal("ready"),
+      head: Schema.NullOr(Schema.String),
+      branch: Schema.NullOr(Schema.String),
+      files: Schema.Array(ChangeFile),
+      diff: Schema.String,
+      truncated: Schema.Boolean,
+    }),
     Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
   ]),
 });
@@ -438,12 +563,15 @@ export type Project = typeof Project.Type;
  * travels separately in `hosts`.
  */
 export const SessionReference = Schema.Struct({
-  cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
+  cwd: Schema.String,
+  sessionId: Schema.String,
+  title: Schema.optional(Schema.String),
   /** Registry identity of the session's directory (INV-07). */
   workspaceId: Schema.String,
   /** Git's branch for that directory from the last discovery; null when unknown, detached, non-Git or its folder is closed. */
   branch: Schema.NullOr(Schema.String),
-  projectId: Schema.optional(Schema.String), archived: Schema.Boolean,
+  projectId: Schema.optional(Schema.String),
+  archived: Schema.Boolean,
   pinned: Schema.optional(Schema.Boolean),
   createdAt: Schema.String,
   /** Registry's last-update time, so a project's recency follows its members. */
@@ -454,15 +582,26 @@ export type SessionReference = typeof SessionReference.Type;
 
 /** What picking a worktree needs, from Git; not exact revisions or verification evidence. */
 export const WorktreeFacts = Schema.Struct({
-  path: Schema.String, branch: Schema.NullOr(Schema.String), detached: Schema.Boolean,
+  path: Schema.String,
+  branch: Schema.NullOr(Schema.String),
+  detached: Schema.Boolean,
   /** Git can prune it: the checkout directory is gone. */
   prunable: Schema.Boolean,
 });
 export type WorktreeFacts = typeof WorktreeFacts.Type;
 export const WorktreeDiscovery = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("ready"), observedAt: Schema.String, currentPath: Schema.String, worktrees: Schema.Array(WorktreeFacts) }),
+  Schema.Struct({
+    status: Schema.Literal("ready"),
+    observedAt: Schema.String,
+    currentPath: Schema.String,
+    worktrees: Schema.Array(WorktreeFacts),
+  }),
   Schema.Struct({ status: Schema.Literal("non-git"), observedAt: Schema.String }),
-  Schema.Struct({ status: Schema.Literal("error"), observedAt: Schema.String, detail: Schema.String }),
+  Schema.Struct({
+    status: Schema.Literal("error"),
+    observedAt: Schema.String,
+    detail: Schema.String,
+  }),
 ]);
 export type WorktreeDiscovery = typeof WorktreeDiscovery.Type;
 /** Pi's project-trust outcome for a directory. `required` is false when it holds no protected resources. */
@@ -475,7 +614,8 @@ export type ProjectTrust = typeof ProjectTrust.Type;
 export const WorktreeView = Schema.Struct({
   workspace: Workspace,
   trust: ProjectTrust,
-  branch: Schema.NullOr(Schema.String), path: Schema.String,
+  branch: Schema.NullOr(Schema.String),
+  path: Schema.String,
   /** Registry folder root, not necessarily Git's primary worktree. */
   root: Schema.Boolean,
   status: Schema.Literals(["current", "missing", "unknown", "non-git"]),
@@ -586,7 +726,11 @@ export const SessionPullRequestAction = Schema.Union([
 ]);
 export type SessionPullRequestAction = typeof SessionPullRequestAction.Type;
 
-export const HostInfo = Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, streaming: Schema.Boolean });
+export const HostInfo = Schema.Struct({
+  cwd: Schema.String,
+  sessionId: Schema.String,
+  streaming: Schema.Boolean,
+});
 export type HostInfo = typeof HostInfo.Type;
 
 // ── WebSocket protocol ──────────────────────────────────────────────────────
@@ -605,30 +749,68 @@ export const ClientMessage = Schema.Union([
   /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
   Schema.TaggedStruct("models", { cwd: Schema.String, refresh: Schema.optional(Schema.Boolean) }),
   /** Create or rename a project; with `assign`, that session joins it in the same registry write. */
-  Schema.TaggedStruct("save_project", { project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }),
-    assign: Schema.optional(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String })) }),
+  Schema.TaggedStruct("save_project", {
+    project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }),
+    assign: Schema.optional(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String })),
+  }),
   Schema.TaggedStruct("archive_project", { id: Schema.String, archived: Schema.Boolean }),
-  Schema.TaggedStruct("assign_project", { cwd: Schema.String, sessionId: Schema.String, projectId: Schema.NullOr(Schema.String) }),
+  Schema.TaggedStruct("assign_project", {
+    cwd: Schema.String,
+    sessionId: Schema.String,
+    projectId: Schema.NullOr(Schema.String),
+  }),
   Schema.TaggedStruct("add_folder", { path: Schema.String }),
   Schema.TaggedStruct("remove_folder", { path: Schema.String }),
   /** Save Pi's project-trust decision for a directory; Pi applies it when a session starts there. */
   Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),
   /** Pi's trust outcome for any directory, registered or not. */
   Schema.TaggedStruct("trust", { cwd: Schema.String }),
-  Schema.TaggedStruct("create_worktree", { requestId: Schema.String, folder: Schema.String, branch: Schema.String, hooks: Schema.Boolean }),
-  Schema.TaggedStruct("add_worktree", { requestId: Schema.String, folder: Schema.String, path: Schema.String }),
-  Schema.TaggedStruct("select", { selectionId: Schema.String, cwd: Schema.String, sessionId: Schema.NullOr(Schema.String) }),
+  Schema.TaggedStruct("create_worktree", {
+    requestId: Schema.String,
+    folder: Schema.String,
+    branch: Schema.String,
+    hooks: Schema.Boolean,
+  }),
+  Schema.TaggedStruct("add_worktree", {
+    requestId: Schema.String,
+    folder: Schema.String,
+    path: Schema.String,
+  }),
+  Schema.TaggedStruct("select", {
+    selectionId: Schema.String,
+    cwd: Schema.String,
+    sessionId: Schema.NullOr(Schema.String),
+  }),
   /** Create and start a session in a directory (registering it as a folder when needed) and send its first prompt. */
-  Schema.TaggedStruct("create_session", { selectionId: Schema.String, cwd: Schema.String, projectId: Schema.optional(Schema.String), options: StartOptions, text: Schema.optional(Schema.String), attachments: attachmentInput }),
+  Schema.TaggedStruct("create_session", {
+    selectionId: Schema.String,
+    cwd: Schema.String,
+    projectId: Schema.optional(Schema.String),
+    options: StartOptions,
+    text: Schema.optional(Schema.String),
+    attachments: attachmentInput,
+  }),
   /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
-  Schema.TaggedStruct("act", { selectionId: Schema.String, action: SessionAction, start: Schema.optional(StartOptions) }),
+  Schema.TaggedStruct("act", {
+    selectionId: Schema.String,
+    action: SessionAction,
+    start: Schema.optional(StartOptions),
+  }),
   /** Round-trip liveness, independent of incoming session activity. */
   Schema.TaggedStruct("ping", { nonce: Schema.String }),
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),
   /** Name a session through Pi (starting it when not running); the registry title follows Pi's name. */
-  Schema.TaggedStruct("rename_session", { cwd: Schema.String, sessionId: Schema.String, title: Schema.String }),
+  Schema.TaggedStruct("rename_session", {
+    cwd: Schema.String,
+    sessionId: Schema.String,
+    title: Schema.String,
+  }),
   /** Set a sidebar preference without starting or stopping Pi. */
-  Schema.TaggedStruct("pin_session", { cwd: Schema.String, sessionId: Schema.String, pinned: Schema.Boolean }),
+  Schema.TaggedStruct("pin_session", {
+    cwd: Schema.String,
+    sessionId: Schema.String,
+    pinned: Schema.Boolean,
+  }),
   /** Hide a session from the sidebar (and stop Pi for it if running). */
   Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),
   /** Stop Pi for a session, delete its file from Pi's session store, and forget it. */
@@ -636,18 +818,34 @@ export const ClientMessage = Schema.Union([
 ]);
 export type ClientMessage = typeof ClientMessage.Type;
 /** UI intent; the connection's selection controller supplies correlation. */
-export type ClientCommand = ClientMessage extends infer M ? M extends ClientMessage ? Omit<M, "selectionId"> : never : never;
+export type ClientCommand = ClientMessage extends infer M
+  ? M extends ClientMessage
+    ? Omit<M, "selectionId">
+    : never
+  : never;
 
 export const WorktreeResult = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("ready"), folder: Schema.String, path: Schema.String, branch: Schema.NullOr(Schema.String),
-    creation: Schema.optional(Schema.Struct({ baseBranch: Schema.String, hooks: Schema.Literals(["enabled", "skipped"]) })) }),
+  Schema.Struct({
+    status: Schema.Literal("ready"),
+    folder: Schema.String,
+    path: Schema.String,
+    branch: Schema.NullOr(Schema.String),
+    creation: Schema.optional(
+      Schema.Struct({ baseBranch: Schema.String, hooks: Schema.Literals(["enabled", "skipped"]) }),
+    ),
+  }),
   Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
 ]);
 export type WorktreeResult = typeof WorktreeResult.Type;
 
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("pong", { nonce: Schema.String }),
-  Schema.TaggedStruct("registry", { folders: Schema.Array(FolderView), projects: Schema.optional(Schema.Array(Project)), sessionReferences: Schema.optional(Schema.Array(SessionReference)), workspaces: Schema.optional(Schema.Array(Workspace)) }),
+  Schema.TaggedStruct("registry", {
+    folders: Schema.Array(FolderView),
+    projects: Schema.optional(Schema.Array(Project)),
+    sessionReferences: Schema.optional(Schema.Array(SessionReference)),
+    workspaces: Schema.optional(Schema.Array(Workspace)),
+  }),
   Schema.TaggedStruct("models", { catalog: ModelCatalog }),
   Schema.TaggedStruct("catalogs_invalidated", {}),
   Schema.TaggedStruct("worktrees", { folder: Schema.String, discovery: WorktreeDiscovery }),
@@ -662,12 +860,26 @@ export const ServerMessage = Schema.Union([
     hosted: Schema.Boolean,
     snapshot: Snapshot,
   }),
-  Schema.TaggedStruct("session", { selectionId: Schema.String, cursor: SessionCursor, event: SessionEvent }),
-  Schema.TaggedStruct("action_result", { cwd: Schema.String, sessionId: Schema.String, result: SessionActionResult }),
+  Schema.TaggedStruct("session", {
+    selectionId: Schema.String,
+    cursor: SessionCursor,
+    event: SessionEvent,
+  }),
+  Schema.TaggedStruct("action_result", {
+    cwd: Schema.String,
+    sessionId: Schema.String,
+    result: SessionActionResult,
+  }),
   Schema.TaggedStruct("worktree_result", { requestId: Schema.String, result: WorktreeResult }),
-  Schema.TaggedStruct("error", { message: Schema.String, selectionId: Schema.optional(Schema.String) }),
+  Schema.TaggedStruct("error", {
+    message: Schema.String,
+    selectionId: Schema.optional(Schema.String),
+  }),
   /** A notice for the person; `level` picks the icon. */
-  Schema.TaggedStruct("toast", { message: Schema.String, level: Schema.optional(Schema.Literals(["success", "info", "warning", "error"])) }),
+  Schema.TaggedStruct("toast", {
+    message: Schema.String,
+    level: Schema.optional(Schema.Literals(["success", "info", "warning", "error"])),
+  }),
 ]);
 export type ServerMessage = typeof ServerMessage.Type;
 
@@ -675,9 +887,13 @@ export const ClientMessageJson = Schema.fromJsonString(ClientMessage);
 export const ServerMessageJson = Schema.fromJsonString(ServerMessage);
 export const decodeClientMessage = Schema.decodeUnknownSync(ClientMessageJson);
 const decodePayload = Schema.decodeUnknownSync(ServerMessageJson);
-const decodeDelivery = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ deliveryId: Schema.Number })));
+const decodeDelivery = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ deliveryId: Schema.Number })),
+);
 export const encodeServerMessage = (message: ServerMessage, deliveryId: number) =>
   JSON.stringify({ ...JSON.parse(Schema.encodeSync(ServerMessageJson)(message)), deliveryId });
-export const decodeServerMessage = (text: string): ServerMessage & { deliveryId: number } =>
-  ({ ...decodePayload(text), ...decodeDelivery(text) });
+export const decodeServerMessage = (text: string): ServerMessage & { deliveryId: number } => ({
+  ...decodePayload(text),
+  ...decodeDelivery(text),
+});
 export const encodeClientMessage = Schema.encodeSync(ClientMessageJson);

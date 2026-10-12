@@ -15,7 +15,11 @@ interface Props {
 /** A toggle group inside the model picker: no second popup, and only Pi-supported levels. */
 export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, disabled }: Props) {
   return (
-    <FieldSet disabled={disabled || levels.length <= 1} aria-label="Effort" className="min-w-0 gap-2">
+    <FieldSet
+      disabled={disabled || levels.length <= 1}
+      aria-label="Effort"
+      className="min-w-0 gap-2"
+    >
       <FieldLegend variant="label">Reasoning effort</FieldLegend>
       <ToggleGroup
         type="single"
@@ -24,19 +28,24 @@ export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, 
         size="sm"
         spacing={1}
         value={value}
-        onValueChange={(next) => { if (next) onChange(next as ThinkingLevel); }}
+        onValueChange={(next) => {
+          if (next) onChange(next as ThinkingLevel);
+        }}
         className="w-full flex-wrap"
       >
         {levels.map((level) => (
           <ToggleGroupItem
             key={level}
             value={level}
-            onKeyDown={event => {
+            onKeyDown={(event) => {
               if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
               if (event.key === "Enter" && onCommit) {
                 event.preventDefault();
                 event.stopPropagation();
-                if (!event.repeat) { onChange(level); onCommit(); }
+                if (!event.repeat) {
+                  onChange(level);
+                  onCommit();
+                }
               }
             }}
             aria-description={level === defaultLevel ? "Default effort" : undefined}

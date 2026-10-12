@@ -1,6 +1,12 @@
 export function abbrevHome(p: string | undefined, home?: string): string {
   if (!p) return "";
-  const h = home ?? (p.startsWith("/Users/") ? `/Users/${p.split("/")[2]}` : p.startsWith("/home/") ? `/home/${p.split("/")[2]}` : "");
+  const h =
+    home ??
+    (p.startsWith("/Users/")
+      ? `/Users/${p.split("/")[2]}`
+      : p.startsWith("/home/")
+        ? `/home/${p.split("/")[2]}`
+        : "");
   if (h && p === h) return "~";
   if (h && p.startsWith(`${h}/`)) return `~${p.slice(h.length)}`;
   return p;
@@ -28,7 +34,7 @@ export function formatTokenCount(tokens: number): string {
 }
 
 export function modelShort(ref: string | undefined): string {
-  return ref ? ref.split("/").pop() ?? ref : "";
+  return ref ? (ref.split("/").pop() ?? ref) : "";
 }
 
 /** Hydro-style path: `~` for home, every segment but the last shortened to its first character (a leading dot kept). */
@@ -36,5 +42,11 @@ export function abbrevPath(p: string | undefined, home?: string): string {
   const full = abbrevHome(p, home);
   if (!full) return "";
   const parts = full.split("/");
-  return parts.map((part, i) => (i === parts.length - 1 || part === "~" || part === "" ? part : part.match(/^\.?./)?.[0] ?? part)).join("/");
+  return parts
+    .map((part, i) =>
+      i === parts.length - 1 || part === "~" || part === ""
+        ? part
+        : (part.match(/^\.?./)?.[0] ?? part),
+    )
+    .join("/");
 }

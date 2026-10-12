@@ -3,7 +3,9 @@ import { Schema } from "effect";
 /** MCP servers Piano can set up from Settings. Pi owns the configuration and the sign-in. */
 export const MCP_CATALOG: readonly { id: McpCatalogId; name: string; url: string }[] = [
   {
-    id: "linear", name: "Linear", url: "https://mcp.linear.app/mcp",
+    id: "linear",
+    name: "Linear",
+    url: "https://mcp.linear.app/mcp",
   },
 ];
 export const McpCatalogId = Schema.Literals(["linear"]);
@@ -26,6 +28,10 @@ export type McpSetupState = typeof McpSetupState.Type;
 
 export const McpSetupRequest = Schema.Union([
   Schema.Struct({ action: Schema.Literals(["install", "sign-out"]), server: McpCatalogId }),
-  Schema.Struct({ action: Schema.Literal("uninstall"), server: McpCatalogId, removalKey: Schema.String }),
+  Schema.Struct({
+    action: Schema.Literal("uninstall"),
+    server: McpCatalogId,
+    removalKey: Schema.String,
+  }),
 ]);
 export type McpSetupRequest = typeof McpSetupRequest.Type;

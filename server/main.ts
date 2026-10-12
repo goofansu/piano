@@ -49,21 +49,39 @@ const drain = () => {
 process.once("SIGINT", drain);
 process.once("SIGTERM", drain);
 // ws enforces the complete-message limit while assembling fragments, before JSON parsing.
-const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds",
+const Infra = NodeHttpServer.layer(() => server, {
+  port: PORT,
+  host: HOST,
+  gracefulShutdownTimeout: "3 seconds",
   websocket: { maxPayload: inboundLimits.frameBytes, perMessageDeflate: false },
 });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-const Services = Layer.mergeAll(PiSettingsLive, ProviderLoginLive, RadiusSetupLive, McpSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(
+const Services = Layer.mergeAll(
+  PiSettingsLive,
+  ProviderLoginLive,
+  RadiusSetupLive,
+  McpSetupLive,
+  WorkspaceRevisionsLive,
+  WorkspaceChangesLive,
+  SessionPullRequestsLive,
+).pipe(
   Layer.provideMerge(DirectoryFactsLive),
   Layer.provideMerge(SessionHostsLive({ idleMs: IDLE_MS })),
   Layer.provideMerge(RegistryLive),
   Layer.provideMerge(PiSessionsLive),
   Layer.provide(Infra),
 );
-const Core = WorkspaceCommandsLive.pipe(Layer.provideMerge(SidebarViewLive()), Layer.provideMerge(Services));
+const Core = WorkspaceCommandsLive.pipe(
+  Layer.provideMerge(SidebarViewLive()),
+  Layer.provideMerge(Services),
+);
 
-const Routes = Layer.mergeAll(AppRouter, HttpStaticServer.layer({ root: WEB_DIST, index: "index.html", spa: true }), Drain);
+const Routes = Layer.mergeAll(
+  AppRouter,
+  HttpStaticServer.layer({ root: WEB_DIST, index: "index.html", spa: true }),
+  Drain,
+);
 
 const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog: true }).pipe(
   Layer.provide(Core),
@@ -71,10 +89,10 @@ const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog:
   Layer.provide(Infra),
 );
 
-const main = Layer.launch(Server).pipe(
-  Effect.tap(() => Effect.void),
-);
+const main = Layer.launch(Server).pipe(Effect.tap(() => Effect.void));
 
 console.log(`[piano] http://${HOST}:${PORT}`);
-console.log(`[piano] database ${RegistryDatabasePath.defaultValue()}; Pi agent dir ${agentDir()}; web ${WEB_DIST}`);
+console.log(
+  `[piano] database ${RegistryDatabasePath.defaultValue()}; Pi agent dir ${agentDir()}; web ${WEB_DIST}`,
+);
 NodeRuntime.runMain(main);

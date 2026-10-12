@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Attachment } from "../shared/wire.ts";
-import { type ComposerSituation, composerControl, deliveryAction } from "../web/src/lib/composerControl.ts";
+import {
+  type ComposerSituation,
+  composerControl,
+  deliveryAction,
+} from "../web/src/lib/composerControl.ts";
 
 const image: Attachment = { kind: "image", name: "a.png", mimeType: "image/png", data: "AA==" };
-const idle: ComposerSituation = { text: "", images: { items: [], busy: false }, disabled: false, streaming: false, compacting: false, stopping: false, queued: 0, mode: "steering" };
+const idle: ComposerSituation = {
+  text: "",
+  images: { items: [], busy: false },
+  disabled: false,
+  streaming: false,
+  compacting: false,
+  stopping: false,
+  queued: 0,
+  mode: "steering",
+};
 const at = (over: Partial<ComposerSituation>) => composerControl({ ...idle, ...over });
 
 test("an idle session sends visible text with Enter, and nothing when the draft is blank or an image is still being read", () => {
@@ -14,21 +27,55 @@ test("an idle session sends visible text with Enter, and nothing when the draft 
   assert.deepEqual(ready.hint, { lead: "Send", key: "Enter" });
   assert.equal(ready.enabled, true);
   assert.equal(ready.escape, "none");
-  for (const blocked of [at({ text: "  \n" }), at({ text: "hi", images: { items: [], busy: true } }), at({ text: "hi", disabled: true }), at({ text: "hi", stopping: true })]) {
+  for (const blocked of [
+    at({ text: "  \n" }),
+    at({ text: "hi", images: { items: [], busy: true } }),
+    at({ text: "hi", disabled: true }),
+    at({ text: "hi", stopping: true }),
+  ]) {
     assert.equal(blocked.primary, "send");
     assert.equal(blocked.enabled, false);
-    assert.equal(blocked.delivery(false), null, "the send key sends nothing the button would refuse");
+    assert.equal(
+      blocked.delivery(false),
+      null,
+      "the send key sends nothing the button would refuse",
+    );
   }
 });
 
 test("the send key delivers exactly when the button is enabled", () => {
   const flags = [false, true];
-  for (const streaming of flags) for (const compacting of flags) for (const stopping of flags) for (const disabled of flags)
-    for (const text of ["", "hi"]) for (const items of [[], [image]]) for (const busy of flags) {
-      const control = at({ text, images: { items, busy }, streaming, compacting: streaming && compacting, stopping, disabled });
-      if (control.primary === "stop") assert.equal(control.delivery(false), null);
-      else assert.equal(control.delivery(false) !== null, control.enabled, JSON.stringify({ streaming, compacting, stopping, disabled, text, items: items.length, busy }));
-    }
+  for (const streaming of flags)
+    for (const compacting of flags)
+      for (const stopping of flags)
+        for (const disabled of flags)
+          for (const text of ["", "hi"])
+            for (const items of [[], [image]])
+              for (const busy of flags) {
+                const control = at({
+                  text,
+                  images: { items, busy },
+                  streaming,
+                  compacting: streaming && compacting,
+                  stopping,
+                  disabled,
+                });
+                if (control.primary === "stop") assert.equal(control.delivery(false), null);
+                else
+                  assert.equal(
+                    control.delivery(false) !== null,
+                    control.enabled,
+                    JSON.stringify({
+                      streaming,
+                      compacting,
+                      stopping,
+                      disabled,
+                      text,
+                      items: items.length,
+                      busy,
+                    }),
+                  );
+              }
 });
 
 test("while Pi works an empty draft makes the button Stop, and Stop is refused while loading or already stopping", () => {
@@ -37,7 +84,11 @@ test("while Pi works an empty draft makes the button Stop, and Stop is refused w
   assert.equal(stop.label, "Stop");
   assert.equal(stop.enabled, true);
   assert.deepEqual(stop.hint, { lead: "Stop", key: "Esc" });
-  assert.deepEqual(at({ streaming: true, queued: 2 }).hint, { lead: "Stop and move queued input to the draft.", key: "Esc", tail: " edits without stopping." });
+  assert.deepEqual(at({ streaming: true, queued: 2 }).hint, {
+    lead: "Stop and move queued input to the draft.",
+    key: "Esc",
+    tail: " edits without stopping.",
+  });
   assert.equal(at({ streaming: true, stopping: true }).enabled, false);
   assert.equal(at({ streaming: true, disabled: true }).enabled, false);
 });
@@ -52,7 +103,10 @@ test("while Pi works a draft is queued in the chosen mode, and Alt+Enter uses th
   assert.equal(steer.delivery(true), "follow-up");
   const followUp = at({ streaming: true, text: "hi", mode: "follow-up" });
   assert.equal(followUp.label, "follow-up");
-  assert.deepEqual(followUp.hint, { lead: "follow-up: Add work after the current task.", key: "Enter" });
+  assert.deepEqual(followUp.hint, {
+    lead: "follow-up: Add work after the current task.",
+    key: "Enter",
+  });
   assert.equal(followUp.delivery(false), "follow-up");
   assert.equal(followUp.delivery(true), "steering");
 });
@@ -72,7 +126,11 @@ test("images wait for Pi to finish", () => {
   const waiting = at({ streaming: true, text: "hi", images: { items: [image], busy: false } });
   assert.equal(waiting.imagesWaiting, true);
   assert.equal(waiting.enabled, false);
-  assert.equal(at({ images: { items: [image], busy: false } }).enabled, true, "an image alone is sendable when idle");
+  assert.equal(
+    at({ images: { items: [image], busy: false } }).enabled,
+    true,
+    "an image alone is sendable when idle",
+  );
 });
 
 test("Esc returns queued messages to the draft first, then stops Pi, and does nothing while loading or stopping", () => {

@@ -12,16 +12,36 @@
  */
 export const SETTINGS_SECTIONS = [
   { id: "providers", label: "Providers", icon: "plug", keywords: ["settings", "oauth", "sign in"] },
-  { id: "radius", label: "Radius", icon: "radius", keywords: ["settings", "setup", "oauth", "mcp", "web search"] },
-  { id: "mcp", label: "MCP", icon: "server", keywords: ["settings", "servers", "tools", "linear", "install", "sign in"] },
-] as const satisfies readonly { id: string; label: string; icon: string; keywords: readonly string[] }[];
+  {
+    id: "radius",
+    label: "Radius",
+    icon: "radius",
+    keywords: ["settings", "setup", "oauth", "mcp", "web search"],
+  },
+  {
+    id: "mcp",
+    label: "MCP",
+    icon: "server",
+    keywords: ["settings", "servers", "tools", "linear", "install", "sign in"],
+  },
+] as const satisfies readonly {
+  id: string;
+  label: string;
+  icon: string;
+  keywords: readonly string[];
+}[];
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["id"];
 export type SettingsSectionIconName = (typeof SETTINGS_SECTIONS)[number]["icon"];
-export type Route = { kind: "new"; projectId?: string } | { kind: "session"; sessionId: string } | { kind: "settings"; section: SettingsSection };
+export type Route =
+  | { kind: "new"; projectId?: string }
+  | { kind: "session"; sessionId: string }
+  | { kind: "settings"; section: SettingsSection };
 
 const settingsSection = (id: string | undefined): SettingsSection | undefined =>
-  id === undefined ? SETTINGS_SECTIONS[0].id : SETTINGS_SECTIONS.find(section => section.id === id)?.id;
+  id === undefined
+    ? SETTINGS_SECTIONS[0].id
+    : SETTINGS_SECTIONS.find((section) => section.id === id)?.id;
 
 export function parseRoute(loc: { pathname: string }): Route {
   const settings = loc.pathname.match(/^\/settings(?:\/([^/]+))?\/?$/);

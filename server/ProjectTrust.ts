@@ -6,7 +6,12 @@
  * it is "always". Piano never passes `--approve`; it records the decision.
  */
 
-import { getAgentDir, hasTrustRequiringProjectResources, ProjectTrustStore, SettingsManager } from "@earendil-works/pi-coding-agent";
+import {
+  getAgentDir,
+  hasTrustRequiringProjectResources,
+  ProjectTrustStore,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
 import type { ProjectTrust } from "../shared/wire.ts";
 
@@ -20,18 +25,29 @@ export const projectTrust = (cwd: string): Effect.Effect<ProjectTrust> =>
       if (!required) return { required: false, trusted: true };
       const saved = store().get(cwd);
       if (saved !== null) return { required: true, trusted: saved };
-      return { required: true, trusted: SettingsManager.create(cwd, getAgentDir()).getDefaultProjectTrust() === "always" };
+      return {
+        required: true,
+        trusted: SettingsManager.create(cwd, getAgentDir()).getDefaultProjectTrust() === "always",
+      };
     } catch {
       // An unreadable directory or trust file means Pi skips protected resources.
       return { required: true, trusted: false };
     }
   });
 
-export class ProjectTrustError extends Data.TaggedError("ProjectTrustError")<{ readonly detail: string }> {}
+export class ProjectTrustError extends Data.TaggedError("ProjectTrustError")<{
+  readonly detail: string;
+}> {}
 
 /** Save an explicit decision for `cwd` in Pi's trust file; applies to sessions started afterwards. */
-export const setProjectTrust = (cwd: string, trusted: boolean): Effect.Effect<void, ProjectTrustError> =>
+export const setProjectTrust = (
+  cwd: string,
+  trusted: boolean,
+): Effect.Effect<void, ProjectTrustError> =>
   Effect.try({
     try: () => store().set(cwd, trusted),
-    catch: (e) => new ProjectTrustError({ detail: `Could not save the trust decision: ${e instanceof Error ? e.message : String(e)}` }),
+    catch: (e) =>
+      new ProjectTrustError({
+        detail: `Could not save the trust decision: ${e instanceof Error ? e.message : String(e)}`,
+      }),
   });

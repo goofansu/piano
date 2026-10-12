@@ -25,6 +25,9 @@ export function imagePreview(data: string, mimeType: string): string | undefined
 }
 export function getImagePreview(id: string) {
   const image = previews.get(id);
-  if (image) { previews.delete(id); previews.set(id, image); }
+  if (image) {
+    previews.delete(id);
+    previews.set(id, image);
+  }
   return image;
 }

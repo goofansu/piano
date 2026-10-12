@@ -1,10 +1,10 @@
-import path from "node:path"
-import tailwindcss from "@tailwindcss/vite"
-import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import path from "node:path";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // Keep the default local workflow; hosted development can use a separate backend.
-const backend = process.env.PIANO_DEV_BACKEND ?? "http://127.0.0.1:7070"
+const backend = process.env.PIANO_DEV_BACKEND ?? "http://127.0.0.1:7070";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -23,4 +23,4 @@ export default defineConfig({
     },
   },
   build: { outDir: "dist", emptyOutDir: true },
-})
+});

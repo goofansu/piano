@@ -1,6 +1,18 @@
 let pointer = false;
-document.addEventListener("pointerdown", () => { pointer = true; }, true);
-document.addEventListener("keydown", () => { pointer = false; }, true);
+document.addEventListener(
+  "pointerdown",
+  () => {
+    pointer = true;
+  },
+  true,
+);
+document.addEventListener(
+  "keydown",
+  () => {
+    pointer = false;
+  },
+  true,
+);
 
 /**
  * Radix returns focus to an overlay's trigger when it closes, and browsers draw that focus as a

@@ -6,7 +6,13 @@
  */
 import type { Attachment } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
-import { base64Bytes, imageType, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES } from "../../../shared/attachments.ts";
+import {
+  base64Bytes,
+  imageType,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
+  MAX_IMAGE_BYTES,
+} from "../../../shared/attachments.ts";
 
 /** Identifies one draft; built only here, so a bare string cannot address one. */
 export type DraftKey = string & { readonly __draft: unique symbol };
@@ -14,14 +20,16 @@ export type DraftKey = string & { readonly __draft: unique symbol };
 /** The New page's single draft. */
 export const NEW_SESSION_DRAFT = "new-session" as DraftKey;
 /** A session's draft. Paths are absolute, so no session key can equal the New page's. */
-export const sessionDraftKey = (s: { cwd: string; sessionId: string | null }) => `${s.cwd}\n${s.sessionId ?? ""}` as DraftKey;
+export const sessionDraftKey = (s: { cwd: string; sessionId: string | null }) =>
+  `${s.cwd}\n${s.sessionId ?? ""}` as DraftKey;
 
 /**
  * Appends text as a new paragraph. A draft with visible text gets a blank line before the
  * addition; a blank or whitespace-only draft gets none, so added text never starts with an empty
  * paragraph. The existing text is kept as typed.
  */
-export const appendParagraph = (existing: string, text: string) => `${existing}${existing.trim() ? "\n\n" : ""}${text}`;
+export const appendParagraph = (existing: string, text: string) =>
+  `${existing}${existing.trim() ? "\n\n" : ""}${text}`;
 
 export interface ImageDraft {
   items: readonly Attachment[];
@@ -32,9 +40,11 @@ export interface ImageDraft {
 }
 
 /** The draft has something to send: visible text or an image. */
-export const hasContent = (draft: { text: string; images: Pick<ImageDraft, "items"> }) => draft.text.trim().length > 0 || draft.images.items.length > 0;
+export const hasContent = (draft: { text: string; images: Pick<ImageDraft, "items"> }) =>
+  draft.text.trim().length > 0 || draft.images.items.length > 0;
 /** The draft has content and no image is still being read. */
-export const sendable = (draft: { text: string; images: Pick<ImageDraft, "items" | "busy"> }) => !draft.images.busy && hasContent(draft);
+export const sendable = (draft: { text: string; images: Pick<ImageDraft, "items" | "busy"> }) =>
+  !draft.images.busy && hasContent(draft);
 
 /** What a file says about itself before it is read in full: its first bytes are enough to recognize it. */
 export interface ImageCandidate {
@@ -48,21 +58,36 @@ export interface ImageCandidate {
 }
 export const IMAGE_HEAD_BYTES = 12;
 
-export type ImageCheck = { ok: true; mimeTypes: Attachment["mimeType"][] } | { ok: false; reason: string };
+export type ImageCheck =
+  | { ok: true; mimeTypes: Attachment["mimeType"][] }
+  | { ok: false; reason: string };
 
 /**
  * Whether `files` may join a draft that already holds `current`, per docs/image-attachments.md:
  * at most four images and 20 MiB together, each non-empty, up to 10 MiB, with a PNG, JPEG, GIF
  * or WebP signature its declared type (if any) agrees with. All or none are accepted.
  */
-export function checkImages(current: readonly Attachment[], files: readonly ImageCandidate[]): ImageCheck {
-  if (current.length + files.length > MAX_ATTACHMENTS) return { ok: false, reason: "Attach up to 4 images per message." };
-  if (current.reduce((n, a) => n + base64Bytes(a.data), 0) + files.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENT_BYTES) return { ok: false, reason: "Images must total 20 MiB or less." };
+export function checkImages(
+  current: readonly Attachment[],
+  files: readonly ImageCandidate[],
+): ImageCheck {
+  if (current.length + files.length > MAX_ATTACHMENTS)
+    return { ok: false, reason: "Attach up to 4 images per message." };
+  if (
+    current.reduce((n, a) => n + base64Bytes(a.data), 0) + files.reduce((n, f) => n + f.size, 0) >
+    MAX_ATTACHMENT_BYTES
+  )
+    return { ok: false, reason: "Images must total 20 MiB or less." };
   const mimeTypes: Attachment["mimeType"][] = [];
   for (const file of files) {
-    if (!file.size || file.size > MAX_IMAGE_BYTES) return { ok: false, reason: `${file.name}: choose an image up to 10 MiB.` };
+    if (!file.size || file.size > MAX_IMAGE_BYTES)
+      return { ok: false, reason: `${file.name}: choose an image up to 10 MiB.` };
     const mimeType = imageType(file.head);
-    if (!mimeType || (file.type && file.type !== mimeType)) return { ok: false, reason: `${file.name}: use PNG, JPEG, GIF or WebP. Other files aren't supported yet.` };
+    if (!mimeType || (file.type && file.type !== mimeType))
+      return {
+        ok: false,
+        reason: `${file.name}: use PNG, JPEG, GIF or WebP. Other files aren't supported yet.`,
+      };
     mimeTypes.push(mimeType);
   }
   return { ok: true, mimeTypes };
@@ -72,31 +97,59 @@ const EMPTY: ImageDraft = { items: [], busy: false, error: "" };
 const images = new Map<DraftKey, ImageDraft>();
 const listeners = new Set<() => void>();
 function put(key: DraftKey, value: ImageDraft) {
-  if (value.items.length || value.busy || value.error) images.set(key, value); else images.delete(key);
+  if (value.items.length || value.busy || value.error) images.set(key, value);
+  else images.delete(key);
   for (const notify of listeners) notify();
 }
 
 /** Each draft's images, kept in memory for this page load only; a reload discards them. */
 export const imageDrafts = {
   get: (key: DraftKey | null): ImageDraft => (key && images.get(key)) || EMPTY,
-  subscribe(notify: () => void) { listeners.add(notify); return () => { listeners.delete(notify); }; },
+  subscribe(notify: () => void) {
+    listeners.add(notify);
+    return () => {
+      listeners.delete(notify);
+    };
+  },
   /** Checks and reads `files` into the draft; `encode` returns a file's base64 content. */
   async add(key: DraftKey | null, files: readonly File[], encode: (file: File) => Promise<string>) {
     const before = imageDrafts.get(key);
     if (!key || !files.length || before.busy) return;
     put(key, { ...before, busy: true, error: "" });
     try {
-      const candidates = await Promise.all(files.map(async (f) => ({ name: f.name, size: f.size, type: f.type, head: new Uint8Array(await f.slice(0, IMAGE_HEAD_BYTES).arrayBuffer()) })));
+      const candidates = await Promise.all(
+        files.map(async (f) => ({
+          name: f.name,
+          size: f.size,
+          type: f.type,
+          head: new Uint8Array(await f.slice(0, IMAGE_HEAD_BYTES).arrayBuffer()),
+        })),
+      );
       const check = checkImages(before.items, candidates);
       if (!check.ok) throw new Error(check.reason);
       const added: Attachment[] = [];
-      for (const [i, file] of files.entries()) added.push({ kind: "image", name: file.name.slice(0, 255), mimeType: check.mimeTypes[i], data: await encode(file) });
+      for (const [i, file] of files.entries())
+        added.push({
+          kind: "image",
+          name: file.name.slice(0, 255),
+          mimeType: check.mimeTypes[i],
+          data: await encode(file),
+        });
       put(key, { items: [...before.items, ...added], busy: false, error: "" });
-    } catch (e) { put(key, { ...before, busy: false, error: e instanceof Error ? e.message : "Could not read images." }); }
+    } catch (e) {
+      put(key, {
+        ...before,
+        busy: false,
+        error: e instanceof Error ? e.message : "Could not read images.",
+      });
+    }
   },
   remove(key: DraftKey | null, index: number) {
     const draft = imageDrafts.get(key);
-    if (key && !draft.busy) put(key, { ...draft, items: draft.items.filter((_, i) => i !== index) });
+    if (key && !draft.busy)
+      put(key, { ...draft, items: draft.items.filter((_, i) => i !== index) });
   },
-  clear(key: DraftKey | null) { if (key && !imageDrafts.get(key).busy) put(key, EMPTY); },
+  clear(key: DraftKey | null) {
+    if (key && !imageDrafts.get(key).busy) put(key, EMPTY);
+  },
 };

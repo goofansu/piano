@@ -55,13 +55,13 @@ const HINTS = {
 function entries(state: AppState): SessionEntry[] {
   const folderOf = new Map<string, FolderView>();
   for (const f of state.folders) for (const w of f.worktrees) folderOf.set(w.path, f);
-  const hosts = new Map(state.hosts.map(h => [sessionKey(h), h]));
+  const hosts = new Map(state.hosts.map((h) => [sessionKey(h), h]));
   const done = new Set(state.done);
   const current = state.session ?? state.selecting;
-  return state.sessionReferences.map(ref => {
+  return state.sessionReferences.map((ref) => {
     const key = sessionKey(ref);
     const folder = folderOf.get(ref.cwd);
-    const checkout = folder?.worktrees.find(w => w.path === ref.cwd);
+    const checkout = folder?.worktrees.find((w) => w.path === ref.cwd);
     const project = findProject(state, ref.projectId);
     const host = hosts.get(key);
     return {
@@ -90,15 +90,17 @@ function entries(state: AppState): SessionEntry[] {
 
 /** Every session that is not archived, display-ready. `listed` says which ones the sidebar shows. */
 export function sessionCatalog(state: AppState): SessionEntry[] {
-  return entries(state).filter(s => !s.archived);
+  return entries(state).filter((s) => !s.archived);
 }
 
 /** The palette's order: every session that is not archived, newest created first, wherever its folder is. */
 export function recentSessions(state: AppState): SessionEntry[] {
-  return sessionCatalog(state).sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
+  return sessionCatalog(state).sort(
+    (a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
+  );
 }
 
 /** One session by its ID, archived or not: what a `/s/<id>` address resolves to. */
 export function catalogEntry(state: AppState, sessionId: string): SessionEntry | undefined {
-  return entries(state).find(s => s.sessionId === sessionId);
+  return entries(state).find((s) => s.sessionId === sessionId);
 }

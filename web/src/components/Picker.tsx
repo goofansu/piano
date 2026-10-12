@@ -9,17 +9,25 @@ import { PopoverContent } from "@/components/ui/popover";
  * inside the viewport, no padding of its own. Opening focuses the search field with a keyboard, and
  * the panel itself on a touch screen, so no software keyboard appears.
  */
-export function PickerContent({ className, searchRef, ...props }: ComponentProps<typeof PopoverContent> & { searchRef?: RefObject<HTMLInputElement | null> }) {
+export function PickerContent({
+  className,
+  searchRef,
+  ...props
+}: ComponentProps<typeof PopoverContent> & { searchRef?: RefObject<HTMLInputElement | null> }) {
   const content = useRef<HTMLDivElement>(null);
   return (
     <PopoverContent
       ref={content}
       align="start"
       tabIndex={-1}
-      className={cn("max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0", className)}
+      className={cn(
+        "max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0",
+        className,
+      )}
       onOpenAutoFocus={(event) => {
         event.preventDefault();
-        if (window.matchMedia("(pointer: coarse)").matches) content.current?.focus({ preventScroll: true });
+        if (window.matchMedia("(pointer: coarse)").matches)
+          content.current?.focus({ preventScroll: true });
         else searchRef?.current?.focus({ preventScroll: true });
       }}
       {...props}
@@ -39,5 +47,7 @@ export function PickerSearch({ children, ...props }: ComponentProps<typeof Comma
 
 /** The trailing check on a picker option: shown on the chosen one, invisible but space-keeping on the others. */
 export function PickerCheck({ selected }: { selected: boolean }) {
-  return <CheckIcon aria-hidden className={cn("ml-auto", selected ? "opacity-100" : "opacity-0")} />;
+  return (
+    <CheckIcon aria-hidden className={cn("ml-auto", selected ? "opacity-100" : "opacity-0")} />
+  );
 }

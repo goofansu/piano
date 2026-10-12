@@ -5,7 +5,12 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { isSelectedSession, sessionCheckoutMissing, sessionContext, sessionMutable } from "./sessionContext.ts";
+import {
+  isSelectedSession,
+  sessionCheckoutMissing,
+  sessionContext,
+  sessionMutable,
+} from "./sessionContext.ts";
 
 export type SessionDisplay = "everything" | "messages";
 export const SESSION_DISPLAYS = [
@@ -16,16 +21,35 @@ export const SESSION_DISPLAYS = [
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
 export type SessionCommandId =
-  | "copy-working-directory" | "copy-branch" | "copy-session-id" | "copy-all"
-  | "changes" | "pull-request"
-  | "display-everything" | "display-messages"
-  | "rename" | "pin" | "archive" | "delete"
+  | "copy-working-directory"
+  | "copy-branch"
+  | "copy-session-id"
+  | "copy-all"
+  | "changes"
+  | "pull-request"
+  | "display-everything"
+  | "display-messages"
+  | "rename"
+  | "pin"
+  | "archive"
+  | "delete"
   | "new-session-here";
 
 /** Sections a menu separates; the palette lists them in this order under Session commands. */
 export type SessionCommandGroup = "copy" | "open" | "display" | "manage" | "destructive" | "create";
 
-export type SessionCommandIcon = "copy" | "changes" | "pull-request" | "everything" | "messages" | "rename" | "pin" | "unpin" | "archive" | "delete" | "new";
+export type SessionCommandIcon =
+  | "copy"
+  | "changes"
+  | "pull-request"
+  | "everything"
+  | "messages"
+  | "rename"
+  | "pin"
+  | "unpin"
+  | "archive"
+  | "delete"
+  | "new";
 
 export type SessionCommandIntent =
   | { kind: "send"; command: ClientCommand }
@@ -53,12 +77,26 @@ export interface SessionCommand {
 }
 
 /** What the sidebar's session row menu offers, in its order. */
-export const SESSION_ROW_COMMANDS = ["rename", "pin", "archive", "delete"] as const satisfies readonly SessionCommandId[];
+export const SESSION_ROW_COMMANDS = [
+  "rename",
+  "pin",
+  "archive",
+  "delete",
+] as const satisfies readonly SessionCommandId[];
 /** What the session header menu offers, in order. */
-export const SESSION_HEADER_COMMANDS = ["copy-all", "changes", "pull-request", "display-everything", "display-messages"] as const satisfies readonly SessionCommandId[];
+export const SESSION_HEADER_COMMANDS = [
+  "copy-all",
+  "changes",
+  "pull-request",
+  "display-everything",
+  "display-messages",
+] as const satisfies readonly SessionCommandId[];
 
-export function pickCommands<Id extends SessionCommandId>(commands: readonly SessionCommand[], ids: readonly Id[]): (SessionCommand & { id: Id })[] {
-  return ids.flatMap(id => commands.filter((c): c is SessionCommand & { id: Id } => c.id === id));
+export function pickCommands<Id extends SessionCommandId>(
+  commands: readonly SessionCommand[],
+  ids: readonly Id[],
+): (SessionCommand & { id: Id })[] {
+  return ids.flatMap((id) => commands.filter((c): c is SessionCommand & { id: Id } => c.id === id));
 }
 
 /**
@@ -74,44 +112,158 @@ export function pickCommands<Id extends SessionCommandId>(commands: readonly Ses
  * - new session here: the checkout is present.
  * - copy and display commands: always.
  */
-export function sessionCommands(state: AppState, target?: SessionTarget, options: { display?: SessionDisplay } = {}): SessionCommand[] {
+export function sessionCommands(
+  state: AppState,
+  target?: SessionTarget,
+  options: { display?: SessionDisplay } = {},
+): SessionCommand[] {
   const session = state.session;
   const ctx = sessionContext(state);
   const selected = !!session && (!target || isSelectedSession(state, target));
-  const subject = target ?? (session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId, title: ctx.title } : undefined);
+  const subject =
+    target ??
+    (session?.sessionId
+      ? { cwd: session.cwd, sessionId: session.sessionId, title: ctx.title }
+      : undefined);
   const commands: SessionCommand[] = [];
   if (selected && session) {
     const display = options.display ?? "everything";
-    const all = [`Working directory: ${session.cwd}`, ...(ctx.sessionId ? [`Session ID: ${ctx.sessionId}`] : [])].join("\n");
+    const all = [
+      `Working directory: ${session.cwd}`,
+      ...(ctx.sessionId ? [`Session ID: ${ctx.sessionId}`] : []),
+    ].join("\n");
     commands.push(
-      { id: "copy-working-directory", label: "Copy working directory", icon: "copy", group: "copy", enabled: true, intent: { kind: "copy", value: session.cwd, label: "Working directory" } },
-      ...(ctx.branch ? [{ id: "copy-branch", label: "Copy git branch", icon: "copy", group: "copy", enabled: true, intent: { kind: "copy", value: ctx.branch, label: "Git branch" } } as const] : []),
-      { id: "copy-session-id", label: "Copy session ID", icon: "copy", group: "copy", enabled: !!ctx.sessionId, intent: { kind: "copy", value: ctx.sessionId ?? "", label: "Session ID" } },
-      { id: "copy-all", label: "Copy all", icon: "copy", group: "copy", enabled: true, intent: { kind: "copy", value: all, label: "Session details" } },
-      { id: "changes", label: "Changes", icon: "changes", group: "open", enabled: ctx.canOpenChanges, keywords: ["diff", "review", "working tree"], intent: { kind: "changes" } },
-      { id: "pull-request", label: "Pull request", icon: "pull-request", group: "open", enabled: !!session.sessionId, keywords: ["github", "link", "pr"], intent: { kind: "pull-request" } },
-      ...SESSION_DISPLAYS.map(d => ({
-        id: `display-${d.value}` as const, label: d.label, icon: d.value, group: "display" as const, enabled: true, checked: display === d.value,
-        keywords: ["display", "view", "messages", "transcript"], intent: { kind: "display" as const, display: d.value },
+      {
+        id: "copy-working-directory",
+        label: "Copy working directory",
+        icon: "copy",
+        group: "copy",
+        enabled: true,
+        intent: { kind: "copy", value: session.cwd, label: "Working directory" },
+      },
+      ...(ctx.branch
+        ? [
+            {
+              id: "copy-branch",
+              label: "Copy git branch",
+              icon: "copy",
+              group: "copy",
+              enabled: true,
+              intent: { kind: "copy", value: ctx.branch, label: "Git branch" },
+            } as const,
+          ]
+        : []),
+      {
+        id: "copy-session-id",
+        label: "Copy session ID",
+        icon: "copy",
+        group: "copy",
+        enabled: !!ctx.sessionId,
+        intent: { kind: "copy", value: ctx.sessionId ?? "", label: "Session ID" },
+      },
+      {
+        id: "copy-all",
+        label: "Copy all",
+        icon: "copy",
+        group: "copy",
+        enabled: true,
+        intent: { kind: "copy", value: all, label: "Session details" },
+      },
+      {
+        id: "changes",
+        label: "Changes",
+        icon: "changes",
+        group: "open",
+        enabled: ctx.canOpenChanges,
+        keywords: ["diff", "review", "working tree"],
+        intent: { kind: "changes" },
+      },
+      {
+        id: "pull-request",
+        label: "Pull request",
+        icon: "pull-request",
+        group: "open",
+        enabled: !!session.sessionId,
+        keywords: ["github", "link", "pr"],
+        intent: { kind: "pull-request" },
+      },
+      ...SESSION_DISPLAYS.map((d) => ({
+        id: `display-${d.value}` as const,
+        label: d.label,
+        icon: d.value,
+        group: "display" as const,
+        enabled: true,
+        checked: display === d.value,
+        keywords: ["display", "view", "messages", "transcript"],
+        intent: { kind: "display" as const, display: d.value },
       })),
     );
   }
   if (selected || subject) {
     const mutable = !!subject && sessionMutable(state, subject);
-    const reference = subject && state.sessionReferences.find(s => s.cwd === subject.cwd && s.sessionId === subject.sessionId);
+    const reference =
+      subject &&
+      state.sessionReferences.find(
+        (s) => s.cwd === subject.cwd && s.sessionId === subject.sessionId,
+      );
     commands.push(
-      { id: "rename", label: "Rename", icon: "rename", group: "manage", enabled: mutable && !!subject && !sessionCheckoutMissing(state, subject), intent: { kind: "rename", target: subject } },
-      ...(subject ? [{
-        id: "pin" as const, label: reference?.pinned ? "Unpin" : "Pin", icon: reference?.pinned ? "unpin" as const : "pin" as const,
-        group: "manage" as const, enabled: state.connected && !!reference && !reference.archived,
-        intent: { kind: "send" as const, command: { _tag: "pin_session" as const, cwd: subject.cwd, sessionId: subject.sessionId, pinned: !reference?.pinned } },
-      }] : []),
-      { id: "archive", label: "Archive", icon: "archive", group: "manage", enabled: mutable, intent: { kind: "archive", target: subject } },
-      { id: "delete", label: "Delete", icon: "delete", group: "destructive", enabled: mutable, intent: { kind: "delete", target: subject } },
+      {
+        id: "rename",
+        label: "Rename",
+        icon: "rename",
+        group: "manage",
+        enabled: mutable && !!subject && !sessionCheckoutMissing(state, subject),
+        intent: { kind: "rename", target: subject },
+      },
+      ...(subject
+        ? [
+            {
+              id: "pin" as const,
+              label: reference?.pinned ? "Unpin" : "Pin",
+              icon: reference?.pinned ? ("unpin" as const) : ("pin" as const),
+              group: "manage" as const,
+              enabled: state.connected && !!reference && !reference.archived,
+              intent: {
+                kind: "send" as const,
+                command: {
+                  _tag: "pin_session" as const,
+                  cwd: subject.cwd,
+                  sessionId: subject.sessionId,
+                  pinned: !reference?.pinned,
+                },
+              },
+            },
+          ]
+        : []),
+      {
+        id: "archive",
+        label: "Archive",
+        icon: "archive",
+        group: "manage",
+        enabled: mutable,
+        intent: { kind: "archive", target: subject },
+      },
+      {
+        id: "delete",
+        label: "Delete",
+        icon: "delete",
+        group: "destructive",
+        enabled: mutable,
+        intent: { kind: "delete", target: subject },
+      },
     );
   }
   if (selected && session) {
-    commands.push({ id: "new-session-here", label: "New session here", icon: "new", group: "create", enabled: !session.state.checkoutMissing, keywords: ["new", "here", "directory"], detail: session.cwd, intent: { kind: "new-session", cwd: session.cwd } });
+    commands.push({
+      id: "new-session-here",
+      label: "New session here",
+      icon: "new",
+      group: "create",
+      enabled: !session.state.checkoutMissing,
+      keywords: ["new", "here", "directory"],
+      detail: session.cwd,
+      intent: { kind: "new-session", cwd: session.cwd },
+    });
   }
   return commands;
 }

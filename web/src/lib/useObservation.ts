@@ -16,14 +16,20 @@ export interface UseObservationOptions<T> {
  * A live observation of `key` while mounted; `null` is idle. The returned value is only ever the
  * current key's, even during the render in which the key changes (INV-07).
  */
-export function useObservation<T>(key: string | null, load: (signal: AbortSignal, key: string) => Promise<T>, options: UseObservationOptions<T> = {}) {
+export function useObservation<T>(
+  key: string | null,
+  load: (signal: AbortSignal, key: string) => Promise<T>,
+  options: UseObservationOptions<T> = {},
+) {
   const latest = useRef({ load, interval: options.interval });
   latest.current = { load, interval: options.interval };
-  const [observation] = useState<Observation<T>>(() => createObservation<T>({
-    load: (signal, k) => latest.current.load(signal, k),
-    interval: value => latest.current.interval?.(value),
-    focus: options.focus,
-  }));
+  const [observation] = useState<Observation<T>>(() =>
+    createObservation<T>({
+      load: (signal, k) => latest.current.load(signal, k),
+      interval: (value) => latest.current.interval?.(value),
+      focus: options.focus,
+    }),
+  );
   useEffect(() => observation.start(), [observation]);
   const enabled = options.enabled ?? true;
   useEffect(() => observation.observe(key, enabled), [observation, key, enabled]);

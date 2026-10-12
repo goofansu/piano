@@ -5,12 +5,21 @@
 import type { ProfileUsage, RenderMsg, RunUsage, SubagentUsage } from "../shared/wire.ts";
 import { type RawMessage, serializeMessages } from "./PiRecords.ts";
 
-interface RunRecord { profile: string; usage: RunUsage; model?: string }
+interface RunRecord {
+  profile: string;
+  usage: RunUsage;
+  model?: string;
+}
 
 const total = (records: ReadonlyArray<RunRecord>) => {
   const sum = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
-  for (const { usage } of records) for (const key of Object.keys(sum) as (keyof RunUsage)[]) sum[key] += usage[key];
-  return { ...sum, totalTokens: sum.input + sum.output + sum.cacheRead + sum.cacheWrite, runs: records.length };
+  for (const { usage } of records)
+    for (const key of Object.keys(sum) as (keyof RunUsage)[]) sum[key] += usage[key];
+  return {
+    ...sum,
+    totalTokens: sum.input + sum.output + sum.cacheRead + sum.cacheWrite,
+    runs: records.length,
+  };
 };
 
 /**
@@ -21,20 +30,27 @@ const total = (records: ReadonlyArray<RunRecord>) => {
  */
 export function subagentUsage(messages: ReadonlyArray<RenderMsg>): SubagentUsage | undefined {
   const runs = new Map<string, RunRecord>();
-  const deliver = (runId: string | undefined, profile: string | undefined, usage: RunUsage | undefined, model: string | undefined) => {
+  const deliver = (
+    runId: string | undefined,
+    profile: string | undefined,
+    usage: RunUsage | undefined,
+    model: string | undefined,
+  ) => {
     if (!runId || !profile || !usage) return;
     runs.set(runId, { profile, usage, ...(model ? { model } : {}) });
   };
   for (const { subagent: card } of messages) {
     if (card?.kind === "result") deliver(card.runId, card.profile, card.usage, card.model);
-    if (card?.kind === "collection") for (const run of card.runs) deliver(run.runId, run.profile, run.usage, run.model);
+    if (card?.kind === "collection")
+      for (const run of card.runs) deliver(run.runId, run.profile, run.usage, run.model);
   }
   if (runs.size === 0) return undefined;
   const byProfile = new Map<string, RunRecord[]>();
-  for (const record of runs.values()) byProfile.set(record.profile, [...byProfile.get(record.profile) ?? [], record]);
+  for (const record of runs.values())
+    byProfile.set(record.profile, [...(byProfile.get(record.profile) ?? []), record]);
   const profiles = [...byProfile].map(([profile, records]): ProfileUsage => {
-    const models = [...new Set(records.flatMap(record => record.model ? [record.model] : []))];
-    const single = models.length === 1 && records.every(record => record.model);
+    const models = [...new Set(records.flatMap((record) => (record.model ? [record.model] : [])))];
+    const single = models.length === 1 && records.every((record) => record.model);
     return { profile, ...total(records), models, ...(single ? { model: models[0] } : {}) };
   });
   return { profiles, total: total([...runs.values()]) };
@@ -43,9 +59,26 @@ export function subagentUsage(messages: ReadonlyArray<RenderMsg>): SubagentUsage
 const deliveries = new Set(["agent_wait", "agent_wait_all", "agent_result"]);
 /** The entries that can deliver a Run, as the messages Pi's context builder would make of them. */
 const deliveryOf = (value: unknown): RawMessage | undefined => {
-  const entry = value as { type?: unknown; message?: RawMessage; customType?: string; content?: RawMessage["content"]; details?: unknown } | null;
-  if (entry?.type === "message" && entry.message?.role === "toolResult" && deliveries.has(entry.message.toolName ?? "")) return entry.message;
-  if (entry?.type === "custom_message" && entry.customType === "subagent-notification") return { role: "custom", customType: entry.customType, content: entry.content ?? "", details: entry.details };
+  const entry = value as {
+    type?: unknown;
+    message?: RawMessage;
+    customType?: string;
+    content?: RawMessage["content"];
+    details?: unknown;
+  } | null;
+  if (
+    entry?.type === "message" &&
+    entry.message?.role === "toolResult" &&
+    deliveries.has(entry.message.toolName ?? "")
+  )
+    return entry.message;
+  if (entry?.type === "custom_message" && entry.customType === "subagent-notification")
+    return {
+      role: "custom",
+      customType: entry.customType,
+      content: entry.content ?? "",
+      details: entry.details,
+    };
   return undefined;
 };
 
@@ -55,8 +88,8 @@ export class RunLedger {
   since: string | undefined;
 
   add(entries: ReadonlyArray<unknown>) {
-    const messages = entries.flatMap(entry => deliveryOf(entry) ?? []);
-    this.delivered.push(...serializeMessages(messages).filter(message => message.subagent));
+    const messages = entries.flatMap((entry) => deliveryOf(entry) ?? []);
+    this.delivered.push(...serializeMessages(messages).filter((message) => message.subagent));
     const last = entries.at(-1) as { id?: unknown } | undefined;
     if (typeof last?.id === "string") this.since = last.id;
     return this;
@@ -67,5 +100,7 @@ export class RunLedger {
     this.since = undefined;
   }
 
-  get usage() { return subagentUsage(this.delivered); }
+  get usage() {
+    return subagentUsage(this.delivered);
+  }
 }

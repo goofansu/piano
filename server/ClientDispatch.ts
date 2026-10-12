@@ -30,7 +30,9 @@ export interface ClientDispatch {
 }
 
 /** Sends the current hosts and sidebar, then forwards updates until the surrounding scope closes. */
-export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (output: ClientOutput) {
+export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
+  output: ClientOutput,
+) {
   const hosts = yield* SessionHosts;
   const facts = yield* DirectoryFacts;
   const sidebar = yield* SidebarView;
@@ -41,7 +43,9 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
 
   const report = (error: unknown, selectionId?: string) => {
     const message = errorText(error);
-    return Effect.logWarning(`client error: ${message}`).pipe(Effect.andThen(send({ _tag: "error", message, selectionId })));
+    return Effect.logWarning(`client error: ${message}`).pipe(
+      Effect.andThen(send({ _tag: "error", message, selectionId })),
+    );
   };
 
   const handle = (request: Exclude<ClientRequest, { _tag: "select" | "create_session" | "act" }>) =>
@@ -50,9 +54,16 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
         case "registry":
           return yield* sidebar.refresh;
         case "worktrees":
-          return yield* send({ _tag: "worktrees", folder: request.folder, discovery: yield* commands.discoverWorktrees(request.folder) });
+          return yield* send({
+            _tag: "worktrees",
+            folder: request.folder,
+            discovery: yield* commands.discoverWorktrees(request.folder),
+          });
         case "models":
-          return yield* send({ _tag: "models", catalog: yield* facts.catalog(request.cwd, { refresh: request.refresh }) });
+          return yield* send({
+            _tag: "models",
+            catalog: yield* facts.catalog(request.cwd, { refresh: request.refresh }),
+          });
         // Registry writes reach every client's sidebar on their own.
         case "save_project":
           return yield* registry.saveProject(request.project, request.assign);
@@ -65,20 +76,28 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
         case "remove_folder":
           return yield* registry.removeFolder(request.path);
         case "trust":
-          return yield* send({ _tag: "trust", ...yield* facts.trust(request.cwd) });
+          return yield* send({ _tag: "trust", ...(yield* facts.trust(request.cwd)) });
         case "set_trust": {
           // Every client hears `catalogs_invalidated`; the requesting one also gets its answers at once.
-          const { cwd, trust, catalog, notice } = yield* commands.setTrust(request.path, request.trusted);
+          const { cwd, trust, catalog, notice } = yield* commands.setTrust(
+            request.path,
+            request.trusted,
+          );
           yield* send({ _tag: "toast", level: "success", message: notice });
           yield* send({ _tag: "trust", cwd, trust });
           return yield* send({ _tag: "models", catalog });
         }
         case "create_worktree":
         case "add_worktree": {
-          const result = yield* (request._tag === "create_worktree"
-            ? commands.createWorktree(request.folder, request.branch, { hooks: request.hooks })
-            : commands.addWorktree(request.folder, request.path)
-          ).pipe(Effect.catchTag("WorktreeError", e => Effect.succeed({ status: "error" as const, detail: e.detail })));
+          const result = yield* (
+            request._tag === "create_worktree"
+              ? commands.createWorktree(request.folder, request.branch, { hooks: request.hooks })
+              : commands.addWorktree(request.folder, request.path)
+          ).pipe(
+            Effect.catchTag("WorktreeError", (e) =>
+              Effect.succeed({ status: "error" as const, detail: e.detail }),
+            ),
+          );
           yield* send({ _tag: "worktree_result", requestId: request.requestId, result });
           // Failure may have left a checkout behind. Rediscover rather than retrying a mutation.
           return yield* sidebar.refresh;
@@ -96,22 +115,33 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
       }
     });
 
-  const answered = <A, E>(work: Effect.Effect<A, E>, selectionId?: string): Effect.Effect<void> => work.pipe(
-    Effect.asVoid,
-    Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : report(Cause.squash(cause), selectionId)),
-  );
+  const answered = <A, E>(work: Effect.Effect<A, E>, selectionId?: string): Effect.Effect<void> =>
+    work.pipe(
+      Effect.asVoid,
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause) ? Effect.void : report(Cause.squash(cause), selectionId),
+      ),
+    );
 
   const capacity = makeInboundCapacity(inboundLimits.client);
   const receive = Effect.fn("ClientDispatch.receive")(function* (request: ClientRequest) {
     // Heartbeats are immediate transport liveness, not Pi work. Rejecting one
     // during saturation makes a healthy browser reconnect and abandon controls.
-    if (request._tag === "ping") { yield* answered(handle(request)); return Effect.void; }
-    const priority = request._tag === "act" && ["answer", "abort", "stop", "restore_queue"].includes(request.action._tag);
+    if (request._tag === "ping") {
+      yield* answered(handle(request));
+      return Effect.void;
+    }
+    const priority =
+      request._tag === "act" &&
+      ["answer", "abort", "stop", "restore_queue"].includes(request.action._tag);
     const release = capacity.acquire(Buffer.byteLength(JSON.stringify(request)), priority);
     if (!release) {
       // Reject before claiming a selection or mutating anything. The receive loop
       // remains available for acknowledgements, dialog answers and cancellation.
-      yield* report("Client input capacity is full. Request was not started; wait for pending work before trying again.", "selectionId" in request ? request.selectionId : undefined);
+      yield* report(
+        "Client input capacity is full. Request was not started; wait for pending work before trying again.",
+        "selectionId" in request ? request.selectionId : undefined,
+      );
       return Effect.void;
     }
     const work = yield* Effect.gen(function* () {
@@ -121,7 +151,10 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
         case "create_session":
           return answered(yield* sessions.create(request), request.selectionId);
         case "act":
-          return answered(sessions.act(request.selectionId, request.action, request.start), request.selectionId);
+          return answered(
+            sessions.act(request.selectionId, request.action, request.start),
+            request.selectionId,
+          );
         default:
           return answered(handle(request));
       }
@@ -135,9 +168,17 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
   const updates = yield* sidebar.subscribe;
   yield* send({ _tag: "hosts", hosts: yield* hosts.list });
   yield* updates.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
-  yield* facts.changes.pipe(Stream.runForEach(() => send({ _tag: "catalogs_invalidated" })), Effect.ignore, Effect.forkScoped);
+  yield* facts.changes.pipe(
+    Stream.runForEach(() => send({ _tag: "catalogs_invalidated" })),
+    Effect.ignore,
+    Effect.forkScoped,
+  );
   yield* sidebar.refresh;
-  yield* hosts.changes.pipe(Stream.runForEach(list => send({ _tag: "hosts", hosts: list })), Effect.ignore, Effect.forkScoped);
+  yield* hosts.changes.pipe(
+    Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),
+    Effect.ignore,
+    Effect.forkScoped,
+  );
 
   return { receive, report } satisfies ClientDispatch as ClientDispatch;
 });

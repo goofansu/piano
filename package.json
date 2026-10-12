@@ -12,6 +12,8 @@
     "build": "npm --prefix web run build",
     "test": "node --test --import ./test/setup.ts 'test/**/*.test.ts'",
     "typecheck": "tsc -p tsconfig.json && npm --prefix web run typecheck",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "lint": "biome check . && npm run lint:tailwind",
     "lint:tailwind": "eslint --no-inline-config --max-warnings 0 web/src",
     "lint:fix": "biome check --write . && npm run lint:tailwind",

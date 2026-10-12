@@ -10,19 +10,11 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "paths": {
       "@shared/*": ["./shared/*.ts"]
     },
-    "lib": [
-      "es2023"
-    ]
+    "lib": ["es2023"]
   },
-  "include": [
-    "server/**/*.ts",
-    "shared/**/*.ts",
-    "test/**/*.ts"
-  ]
+  "include": ["server/**/*.ts", "shared/**/*.ts", "test/**/*.ts"]
 }

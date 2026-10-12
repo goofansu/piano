@@ -1,5 +1,18 @@
 /** Client state: one reducer over ServerMessages plus local UI actions. */
-import type { FolderView, HostInfo, ModelCatalog, Project, ProjectTrust, RenderMsg, ServerMessage, SessionCursor, SessionReference, Snapshot, Workspace, WorktreeDiscovery } from "@shared/wire";
+import type {
+  FolderView,
+  HostInfo,
+  ModelCatalog,
+  Project,
+  ProjectTrust,
+  RenderMsg,
+  ServerMessage,
+  SessionCursor,
+  SessionReference,
+  Snapshot,
+  Workspace,
+  WorktreeDiscovery,
+} from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { applySessionEvent } from "../../shared/sessionProjection.ts";
 import { appendParagraph, type DraftKey, sessionDraftKey } from "./lib/messageDraft.ts";
@@ -28,7 +41,10 @@ export interface AppState {
   selectionId: string | null;
   resync: boolean;
   /** What the main pane shows. The New page's `cwd` is the directory a session started there runs in; it has no other owner. */
-  view: { kind: "session" } | { kind: "new"; cwd?: string; projectId?: string } | { kind: "missing-session"; sessionId: string };
+  view:
+    | { kind: "session" }
+    | { kind: "new"; cwd?: string; projectId?: string }
+    | { kind: "missing-session"; sessionId: string };
   folders: FolderView[];
   projects: Project[];
   sessionReferences: SessionReference[];
@@ -54,7 +70,8 @@ export interface AppState {
   drafts: Record<DraftKey, string>;
 }
 
-export const sessionKey = (s: { cwd: string; sessionId: string | null }) => `${s.cwd}\n${s.sessionId ?? ""}`;
+export const sessionKey = (s: { cwd: string; sessionId: string | null }) =>
+  `${s.cwd}\n${s.sessionId ?? ""}`;
 
 export const initialState: AppState = {
   connected: false,
@@ -82,7 +99,13 @@ export const initialState: AppState = {
 export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
-  | { type: "selecting"; selectionId: string; cwd: string; sessionId: string | null; firstMessage?: Pick<PendingCreate, "text" | "attachments"> }
+  | {
+      type: "selecting";
+      selectionId: string;
+      cwd: string;
+      sessionId: string | null;
+      firstMessage?: Pick<PendingCreate, "text" | "attachments">;
+    }
   /** Opens the New page; without a directory it keeps the one already chosen there. */
   | { type: "new"; cwd?: string; projectId?: string }
   /** Picks the New page's directory; ignored on any other view. */
@@ -102,20 +125,35 @@ export function reduce(s: AppState, a: Action): AppState {
   if (!input || !t) return next;
   // Pi may expand slash commands, so reconcile by the new session's first user
   // message, not text equality. Never insert the local input into history.
-  if (t.messages.some(m => m.role === "user") || t.pending?.role === "user") return { ...next, pendingCreate: null };
+  if (t.messages.some((m) => m.role === "user") || t.pending?.role === "user")
+    return { ...next, pendingCreate: null };
   const submission = t.state.submission;
   if (submission) {
-    if (input.submissionId !== undefined && submission.id > input.submissionId) return { ...next, pendingCreate: null };
+    if (input.submissionId !== undefined && submission.id > input.submissionId)
+      return { ...next, pendingCreate: null };
     if (input.submissionId === undefined) {
       input = { ...input, submissionId: submission.id };
       next = { ...next, pendingCreate: input };
     }
   }
-  if (submission && (submission.outcome === "handled" || submission.outcome === "rejected" || submission.outcome === "uncertain")) {
-    return { ...next, pendingCreate: { ...input, outcome: submission.outcome, detail: submission.detail } };
+  if (
+    submission &&
+    (submission.outcome === "handled" ||
+      submission.outcome === "rejected" ||
+      submission.outcome === "uncertain")
+  ) {
+    return {
+      ...next,
+      pendingCreate: { ...input, outcome: submission.outcome, detail: submission.detail },
+    };
   }
-  if (submission?.outcome === "started" || submission?.outcome === "queued") return { ...next, pendingCreate: { ...input, outcome: "submitted", detail: undefined } };
-  if (t.state.closure && input.outcome !== "submitted") return { ...next, pendingCreate: { ...input, outcome: "uncertain", detail: t.state.closure.detail } };
+  if (submission?.outcome === "started" || submission?.outcome === "queued")
+    return { ...next, pendingCreate: { ...input, outcome: "submitted", detail: undefined } };
+  if (t.state.closure && input.outcome !== "submitted")
+    return {
+      ...next,
+      pendingCreate: { ...input, outcome: "uncertain", detail: t.state.closure.detail },
+    };
   return next;
 }
 
@@ -123,38 +161,94 @@ function reduceAction(s: AppState, a: Action): AppState {
   switch (a.type) {
     case "connected":
       // A reopened socket is not attached until it receives a new selection snapshot.
-      return { ...s, connected: a.connected, selectionId: a.connected ? s.selectionId : null,
+      return {
+        ...s,
+        connected: a.connected,
+        selectionId: a.connected ? s.selectionId : null,
         selecting: !a.connected && s.pendingCreate ? null : s.selecting,
-        pendingCreate: !a.connected && s.pendingCreate?.outcome === "starting"
-          ? { ...s.pendingCreate, outcome: "uncertain", detail: "Connection lost before delivery was confirmed." } : s.pendingCreate };
+        pendingCreate:
+          !a.connected && s.pendingCreate?.outcome === "starting"
+            ? {
+                ...s.pendingCreate,
+                outcome: "uncertain",
+                detail: "Connection lost before delivery was confirmed.",
+              }
+            : s.pendingCreate,
+      };
     case "selecting":
-      return { ...s, selectionId: a.selectionId, resync: false, view: { kind: "session" }, selecting: { cwd: a.cwd, sessionId: a.sessionId },
-        pendingCreate: a.firstMessage ? { cwd: a.cwd, ...a.firstMessage, outcome: "starting" }
-          : s.session && sessionKey(s.session) === sessionKey(a) ? s.pendingCreate : null,
+      return {
+        ...s,
+        selectionId: a.selectionId,
+        resync: false,
+        view: { kind: "session" },
+        selecting: { cwd: a.cwd, sessionId: a.sessionId },
+        pendingCreate: a.firstMessage
+          ? { cwd: a.cwd, ...a.firstMessage, outcome: "starting" }
+          : s.session && sessionKey(s.session) === sessionKey(a)
+            ? s.pendingCreate
+            : null,
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
-        done: s.done.filter((k) => k !== sessionKey(a)) };
+        done: s.done.filter((k) => k !== sessionKey(a)),
+      };
     case "new":
       // Picking a project, or New session again, on the New page keeps the directory chosen there.
-      return { ...s, selectionId: null, resync: false, view: { kind: "new", cwd: a.cwd ?? (s.view.kind === "new" ? s.view.cwd : undefined), projectId: a.projectId }, selecting: null, session: null, pendingCreate: null };
+      return {
+        ...s,
+        selectionId: null,
+        resync: false,
+        view: {
+          kind: "new",
+          cwd: a.cwd ?? (s.view.kind === "new" ? s.view.cwd : undefined),
+          projectId: a.projectId,
+        },
+        selecting: null,
+        session: null,
+        pendingCreate: null,
+      };
     case "new_directory":
-      return s.view.kind === "new" && s.view.cwd !== a.cwd ? { ...s, view: { ...s.view, cwd: a.cwd } } : s;
+      return s.view.kind === "new" && s.view.cwd !== a.cwd
+        ? { ...s, view: { ...s.view, cwd: a.cwd } }
+        : s;
     case "missing-session":
-      return { ...s, selectionId: null, resync: false, view: { kind: "missing-session", sessionId: a.sessionId }, selecting: null, session: null, pendingCreate: null };
+      return {
+        ...s,
+        selectionId: null,
+        resync: false,
+        view: { kind: "missing-session", sessionId: a.sessionId },
+        selecting: null,
+        session: null,
+        pendingCreate: null,
+      };
     case "draft_changed":
       return { ...s, drafts: { ...s.drafts, [a.key]: a.text } };
     case "draft_appended":
       return { ...s, drafts: { ...s.drafts, [a.key]: (s.drafts[a.key] ?? "") + a.text } };
     case "draft_paragraph_appended":
-      return { ...s, drafts: { ...s.drafts, [a.key]: appendParagraph(s.drafts[a.key] ?? "", a.text) } };
+      return {
+        ...s,
+        drafts: { ...s.drafts, [a.key]: appendParagraph(s.drafts[a.key] ?? "", a.text) },
+      };
     case "server":
       return applyServer(s, a.message);
   }
 }
 
 /** Shared by projection and notifications: rejected frames cannot toast either. */
-export function sessionDelivery(s: AppState, m: Extract<ServerMessage, { _tag: "session" }>): "apply" | "ignore" | "resync" {
+export function sessionDelivery(
+  s: AppState,
+  m: Extract<ServerMessage, { _tag: "session" }>,
+): "apply" | "ignore" | "resync" {
   const t = s.session;
-  if (!t || !s.connected || s.resync || s.selecting || m.selectionId !== s.selectionId || m.cursor.cwd !== t.cwd || m.cursor.sessionId !== t.sessionId) return "ignore";
+  if (
+    !t ||
+    !s.connected ||
+    s.resync ||
+    s.selecting ||
+    m.selectionId !== s.selectionId ||
+    m.cursor.cwd !== t.cwd ||
+    m.cursor.sessionId !== t.sessionId
+  )
+    return "ignore";
   if (!t.cursor || m.cursor.generation !== t.cursor.generation) return "resync";
   if (m.cursor.sequence <= t.cursor.sequence) return "ignore";
   return m.cursor.sequence === t.cursor.sequence + 1 ? "apply" : "resync";
@@ -163,10 +257,21 @@ export function sessionDelivery(s: AppState, m: Extract<ServerMessage, { _tag: "
 function applyServer(s: AppState, m: ServerMessage): AppState {
   switch (m._tag) {
     case "registry":
-      return { ...s, folders: [...m.folders], projects: [...m.projects ?? []], sessionReferences: [...m.sessionReferences ?? []], workspaces: [...m.workspaces ?? []], registryLoaded: true };
+      return {
+        ...s,
+        folders: [...m.folders],
+        projects: [...(m.projects ?? [])],
+        sessionReferences: [...(m.sessionReferences ?? [])],
+        workspaces: [...(m.workspaces ?? [])],
+        registryLoaded: true,
+      };
     case "hosts": {
       // A host that was working and no longer is has finished a turn. Unless it is on screen, remember that.
-      const viewing = s.session ? sessionKey(s.session) : s.selecting ? sessionKey(s.selecting) : null;
+      const viewing = s.session
+        ? sessionKey(s.session)
+        : s.selecting
+          ? sessionKey(s.selecting)
+          : null;
       const done = new Set(s.done);
       for (const prev of s.hosts) {
         if (!prev.streaming) continue;
@@ -189,7 +294,13 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       return { ...s, worktrees: { ...s.worktrees, [m.folder]: m.discovery } };
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
-      if (m.cursor && (m.cursor.cwd !== m.cwd || m.cursor.sessionId !== m.sessionId || m.snapshot.state.sessionId !== m.sessionId)) return { ...s, resync: true };
+      if (
+        m.cursor &&
+        (m.cursor.cwd !== m.cwd ||
+          m.cursor.sessionId !== m.sessionId ||
+          m.snapshot.state.sessionId !== m.sessionId)
+      )
+        return { ...s, resync: true };
       // The first snapshot for a new attachment may have the same sequence or
       // a new host generation. Only compare cursors within an established attachment.
       if (!s.selecting && s.session?.cursor && m.cursor) {
@@ -198,22 +309,43 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       }
       // A selection without a session (what the server answers after archiving the one
       // being viewed) has nothing to show; sessions start from the New page.
-      if (m.sessionId === null) return { ...s, view: { kind: "new", cwd: m.cwd }, selecting: null, session: null, pendingCreate: null };
+      if (m.sessionId === null)
+        return {
+          ...s,
+          view: { kind: "new", cwd: m.cwd },
+          selecting: null,
+          session: null,
+          pendingCreate: null,
+        };
       return {
         ...s,
         view: { kind: "session" },
         selecting: null,
         done: s.done.filter((k) => k !== sessionKey(m)),
-        session: { ...m.snapshot, cwd: m.cwd, sessionId: m.sessionId, hosted: m.hosted, cursor: m.cursor },
+        session: {
+          ...m.snapshot,
+          cwd: m.cwd,
+          sessionId: m.sessionId,
+          hosted: m.hosted,
+          cursor: m.cursor,
+        },
       };
     case "error":
       if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;
-      return { ...s, selecting: null, pendingCreate: { ...s.pendingCreate, outcome: "uncertain", detail: m.message } };
+      return {
+        ...s,
+        selecting: null,
+        pendingCreate: { ...s.pendingCreate, outcome: "uncertain", detail: m.message },
+      };
     case "action_result": {
       if (m.result._tag !== "queue_restored") return s;
       const restored = m.result.messages.map((message) => message.text).join("\n\n");
       if (!restored) return s;
-      return reduceAction(s, { type: "draft_paragraph_appended", key: sessionDraftKey(m), text: restored });
+      return reduceAction(s, {
+        type: "draft_paragraph_appended",
+        key: sessionDraftKey(m),
+        text: restored,
+      });
     }
     case "session": {
       const disposition = sessionDelivery(s, m);
@@ -223,7 +355,16 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       const e = m.event;
       // Advance the cursor even for a notice or an intentionally ignored fact.
       const hosted = e._tag === "snapshot" ? true : e._tag === "closed" ? false : t.hosted;
-      return { ...s, session: { ...applySessionEvent(t, e), cwd: t.cwd, sessionId: t.sessionId, hosted, cursor: m.cursor } };
+      return {
+        ...s,
+        session: {
+          ...applySessionEvent(t, e),
+          cwd: t.cwd,
+          sessionId: t.sessionId,
+          hosted,
+          cursor: m.cursor,
+        },
+      };
     }
     default:
       return s;

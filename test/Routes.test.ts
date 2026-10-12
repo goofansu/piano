@@ -9,6 +9,9 @@ test("settings URLs preserve each section and accept the Providers alias", () =>
     assert.deepEqual(parseRoute({ pathname: `/settings/${section}` }), route);
     assert.deepEqual(parseRoute({ pathname: `/settings/${section}/` }), route);
   }
-  assert.deepEqual(parseRoute({ pathname: "/settings" }), { kind: "settings", section: "providers" });
+  assert.deepEqual(parseRoute({ pathname: "/settings" }), {
+    kind: "settings",
+    section: "providers",
+  });
   assert.deepEqual(parseRoute({ pathname: "/settings/unknown" }), { kind: "new" });
 });

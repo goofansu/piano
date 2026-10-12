@@ -24,11 +24,16 @@ export type HistoryLocation =
   /** Distinct physical files with the same session ID, as Pi listed them. */
   | { readonly _tag: "conflict"; readonly paths: ReadonlyArray<string> };
 
-export class PiHistoryError extends Data.TaggedError("PiHistoryError")<{ readonly detail: string }> {}
+export class PiHistoryError extends Data.TaggedError("PiHistoryError")<{
+  readonly detail: string;
+}> {}
 
 export interface PiHistory {
   /** Find a session's file under any of these checkout spellings, without moving or copying it. */
-  readonly locate: (sessionId: string, checkouts: Iterable<string>) => Effect.Effect<HistoryLocation, PiHistoryError>;
+  readonly locate: (
+    sessionId: string,
+    checkouts: Iterable<string>,
+  ) => Effect.Effect<HistoryLocation, PiHistoryError>;
   /** The session IDs Pi has history for in this directory. An unreadable store has none. */
   readonly sessionIds: (cwd: string) => Effect.Effect<ReadonlySet<string>>;
   /** The active branch of a session file as a Snapshot, with Run usage from every entry, or an empty
@@ -45,9 +50,14 @@ export const emptySnapshot = (sessionId: string): Snapshot => ({
 
 // Pi filters a shared session directory by the header's cwd, so each spelling lists its own files.
 const listed = (cwd: string) =>
-  Effect.promise(() => SessionManager.list(cwd, sessionDirFor(cwd))).pipe(Effect.orElseSucceed(() => []));
+  Effect.promise(() => SessionManager.list(cwd, sessionDirFor(cwd))).pipe(
+    Effect.orElseSucceed(() => []),
+  );
 
-const locate = Effect.fn("PiHistory.locate")(function* (sessionId: string, checkouts: Iterable<string>): Effect.fn.Return<HistoryLocation, PiHistoryError> {
+const locate = Effect.fn("PiHistory.locate")(function* (
+  sessionId: string,
+  checkouts: Iterable<string>,
+): Effect.fn.Return<HistoryLocation, PiHistoryError> {
   // One physical file can be listed through several spellings; count it once.
   const files = new Map<string, string>();
   for (const cwd of new Set([...checkouts].map(directoryPath))) {
@@ -56,17 +66,24 @@ const locate = Effect.fn("PiHistory.locate")(function* (sessionId: string, check
       // A listed file must resolve; unlike a checkout it has no missing state to fall back on.
       const physical = yield* Effect.tryPromise({
         try: () => realpath(info.path),
-        catch: error => new PiHistoryError({ detail: `Cannot resolve Pi history ${info.path}: ${String(error)}` }),
+        catch: (error) =>
+          new PiHistoryError({
+            detail: `Cannot resolve Pi history ${info.path}: ${String(error)}`,
+          }),
       });
       files.set(physical, info.path);
     }
   }
   const paths = [...files.values()];
-  return paths.length === 0 ? { _tag: "missing" } : paths.length === 1 ? { _tag: "file", path: paths[0] } : { _tag: "conflict", paths };
+  return paths.length === 0
+    ? { _tag: "missing" }
+    : paths.length === 1
+      ? { _tag: "file", path: paths[0] }
+      : { _tag: "conflict", paths };
 });
 
 const sessionIds = (cwd: string): Effect.Effect<ReadonlySet<string>> =>
-  Effect.map(listed(directoryPath(cwd)), infos => new Set(infos.map(info => info.id)));
+  Effect.map(listed(directoryPath(cwd)), (infos) => new Set(infos.map((info) => info.id)));
 
 const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
   Effect.sync(() => {
@@ -77,18 +94,37 @@ const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
     // Pi's context builder uses the last assistant's physical model. Selection
     // is recorded separately; this read-only peek cannot check whether a virtual
     // model is still registered. The next CLI open confirms/falls back itself.
-    const selection = sm.getBranch().findLast(entry => entry.type === "model_change");
-    const model = selection?.type === "model_change" ? { provider: selection.provider, id: selection.modelId }
-      : context.model ? { provider: context.model.provider, id: context.model.modelId } : undefined;
+    const selection = sm.getBranch().findLast((entry) => entry.type === "model_change");
+    const model =
+      selection?.type === "model_change"
+        ? { provider: selection.provider, id: selection.modelId }
+        : context.model
+          ? { provider: context.model.provider, id: context.model.modelId }
+          : undefined;
     return projectDisplay({
-      state: { ...stateFactsOf({ sessionId, sessionFile: path, sessionName: sm.getSessionName(), model, thinkingLevel: context.thinkingLevel, isStreaming: false }),
-        subagents: new RunLedger().add(sm.getEntries()).usage },
+      state: {
+        ...stateFactsOf({
+          sessionId,
+          sessionFile: path,
+          sessionName: sm.getSessionName(),
+          model,
+          thinkingLevel: context.thinkingLevel,
+          isStreaming: false,
+        }),
+        subagents: new RunLedger().add(sm.getEntries()).usage,
+      },
       messages: serializeMessages(context.messages as RawMessage[]),
       dialogs: [],
     });
   }).pipe(
     Effect.orElseSucceed(() => ({
-      state: { sessionId, sessionFile: path, isStreaming: false, projectionError: "Could not read Pi's current context. History was not replaced or repaired." },
+      state: {
+        sessionId,
+        sessionFile: path,
+        isStreaming: false,
+        projectionError:
+          "Could not read Pi's current context. History was not replaced or repaired.",
+      },
       messages: [],
       dialogs: [],
     })),
@@ -97,5 +133,6 @@ const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
 export const PiHistory: PiHistory = {
   locate,
   sessionIds,
-  peek: (sessionId, file) => file ? peekFile(file, sessionId) : Effect.succeed(emptySnapshot(sessionId)),
+  peek: (sessionId, file) =>
+    file ? peekFile(file, sessionId) : Effect.succeed(emptySnapshot(sessionId)),
 };

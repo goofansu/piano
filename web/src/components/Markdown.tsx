@@ -52,7 +52,9 @@ export function Markdown({ text, className }: { text: string; className?: string
         // A failed lazy chunk load must not hide the response.
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [html, resolvedTheme]);
   // Custom prose host: shadcn has no Markdown/Mermaid renderer. HTML is escaped by renderMarkdown.
   // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes the source before adding markup.
