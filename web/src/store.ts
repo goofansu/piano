@@ -11,7 +11,6 @@ import type {
   SessionReference,
   Snapshot,
   Workspace,
-  WorktreeDiscovery,
 } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { applySessionEvent } from "../../shared/sessionProjection.ts";
@@ -59,10 +58,6 @@ export interface AppState {
   /** Pi's trust outcome per directory asked about, including directories that are not registered yet. */
   trusts: Record<string, ProjectTrust>;
   session: SessionView | null;
-  /** Correlated result; only the requesting directory picker may change its selection. */
-  worktreeResult: Extract<ServerMessage, { _tag: "worktree_result" }> | null;
-  /** The picker's latest discovery per folder; requested by this client, never broadcast. */
-  worktrees: Record<string, WorktreeDiscovery>;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
   selectionFailure: { cwd: string; sessionId: string | null; message: string } | null;
@@ -91,8 +86,6 @@ export const initialState: AppState = {
   catalogRevision: 0,
   trusts: {},
   session: null,
-  worktreeResult: null,
-  worktrees: {},
   selecting: null,
   selectionFailure: null,
   pendingCreate: null,
@@ -295,10 +288,6 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       return { ...s, catalogRevision: s.catalogRevision + 1 };
     case "trust":
       return { ...s, trusts: { ...s.trusts, [m.cwd]: m.trust } };
-    case "worktree_result":
-      return { ...s, worktreeResult: m };
-    case "worktrees":
-      return { ...s, worktrees: { ...s.worktrees, [m.folder]: m.discovery } };
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
       if (

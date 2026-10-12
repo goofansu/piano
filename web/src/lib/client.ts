@@ -53,6 +53,8 @@ export interface Client {
   /** Selects a session unless it is already the one on screen or being fetched. */
   select: (cwd: string, sessionId: string | null) => void;
   dispatch: (action: LocalAction) => void;
+  /** Hears each server frame after it is projected, for a caller correlating its own requests; returns the unsubscribe function. */
+  listen: (listener: (message: ServerMessage) => void) => () => void;
 }
 
 export function createClient({
@@ -74,6 +76,7 @@ export function createClient({
   /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
+  const messageListeners = new Set<(message: ServerMessage) => void>();
 
   /**
    * One models and trust request per focused directory, catalog revision and connection: a
@@ -164,6 +167,7 @@ export function createClient({
       closureNeedsAttention(m.event.closure)
     )
       notify(`Pi stopped: ${m.event.closure.detail}`, "warning");
+    for (const listener of messageListeners) listener(m);
   };
 
   return {
@@ -196,5 +200,11 @@ export function createClient({
       send({ _tag: "select", cwd, sessionId });
     },
     dispatch: apply,
+    listen: (listener) => {
+      messageListeners.add(listener);
+      return () => {
+        messageListeners.delete(listener);
+      };
+    },
   };
 }

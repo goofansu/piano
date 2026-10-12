@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Queue, type Scope } from "effect";
-import { makeClientDispatch } from "../server/ClientDispatch.ts";
+import { type ClientRequest, makeClientDispatch } from "../server/ClientDispatch.ts";
 import { type DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PiCli } from "../server/PiCli.ts";
@@ -16,9 +16,12 @@ import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
 import { WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
 import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
-import { initialWorktreeRequest, transition } from "../web/src/lib/worktreeRequest.ts";
+import {
+  createWorktreeOperation,
+  type WorktreeOperation,
+} from "../web/src/lib/worktreeOperation.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
-import { initialState, reduce } from "../web/src/store.ts";
+import { initialState } from "../web/src/store.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-dispatch-")));
 const cwd = join(root, "checkout");
@@ -283,7 +286,45 @@ test("a trust decision answers the requester with a notice, the new trust and th
   }
 });
 
-test("INV-06: rejected worktree operations settle browser state immediately without replay", async () => {
+/**
+ * A browser page's worktree picker against `receive`: `exchange` dispatches what the picker last
+ * sent and delivers this client's answers to the page, as the socket would.
+ */
+function worktreePicker(receive: (m: ClientRequest) => Effect.Effect<Effect.Effect<void>>) {
+  const commands: ClientRequest[] = [];
+  let handlers: ConnectionHandlers | undefined;
+  const page = createClient({
+    initial: initialState,
+    connect: (h) => {
+      handlers = h;
+      return { send: (m) => m._tag !== "ack" && commands.push(m), close: () => {} };
+    },
+    notify: () => {},
+    lastDirectory: { read: () => null, write: () => {} },
+  });
+  page.start();
+  handlers!.onStatus(true);
+  let ids = 0;
+  const operation = createWorktreeOperation({ client: page, newRequestId: () => `r${++ids}` });
+  operation.start();
+  const sentByPicker = () =>
+    commands.filter((m) => m._tag !== "models" && m._tag !== "trust" && m._tag !== "ping");
+  const exchange = Effect.gen(function* () {
+    const command = sentByPicker().at(-1);
+    assert.ok(command, "the picker sent a command");
+    const from = sent.length;
+    yield* yield* receive(command);
+    for (const message of answers(from)) handlers!.onMessage(message);
+  });
+  return { operation, sentByPicker, exchange };
+}
+
+const failure = (operation: WorktreeOperation) => {
+  const { request } = operation.getState();
+  return request.status === "failed" ? request.detail : undefined;
+};
+
+test("INV-06: rejected worktree operations settle the picker immediately without replay", async () => {
   await run(
     Effect.gen(function* () {
       const { receive } = yield* client;
@@ -292,55 +333,27 @@ test("INV-06: rejected worktree operations settle browser state immediately with
       for (let n = 0; n < inboundLimits.client.messages; n++)
         held.push(yield* receive({ _tag: "registry" }));
       const before = yield* (yield* Registry).get;
-      for (const kind of ["create", "select"] as const) {
-        const started = transition(initialWorktreeRequest, {
-          type: "start",
-          requestId: kind,
-          intent:
-            kind === "create"
-              ? { kind, folder: cwd, branch: "must-not-exist", hooks: false }
-              : { kind, folder: cwd, path: cwd },
-        });
-        assert.ok(
-          started.command?._tag === "create_worktree" || started.command?._tag === "add_worktree",
-        );
-        const from = sent.length;
-        yield* yield* receive(started.command);
-        let browser = initialState;
-        for (const message of answers(from)) browser = reduce(browser, { type: "server", message });
-        assert.equal(browser.worktreeResult?.requestId, kind);
-        const unrelated = transition(started.state, {
-          type: "receipt",
-          receipt: {
-            _tag: "worktree_result",
-            requestId: "other",
-            result: { status: "error", detail: "stale" },
-          },
-        });
-        assert.equal(unrelated.state, started.state);
-        const settled = transition(started.state, {
-          type: "receipt",
-          receipt: browser.worktreeResult,
-        });
-        assert.equal(settled.state.request.status, "failed");
-        if (settled.state.request.status === "failed")
-          assert.match(settled.state.request.detail, /not started/);
-        assert.equal(settled.command, undefined, "mutations are never replayed");
-      }
-      const refresh = transition(initialWorktreeRequest, { type: "refresh", folder: cwd });
-      assert.ok(refresh.command?._tag === "worktrees");
-      const from = sent.length;
-      yield* yield* receive(refresh.command);
-      let browser = initialState;
-      for (const message of answers(from)) browser = reduce(browser, { type: "server", message });
-      assert.equal(browser.worktrees["unrelated"], undefined);
-      const discovery = browser.worktrees[cwd];
+      const { operation, sentByPicker, exchange } = worktreePicker(receive);
+
+      operation.open(cwd);
+      yield* exchange;
+      assert.equal(operation.getState().refreshing, false, "the rejected discovery answered");
+      const discovery = operation.getState().discovery;
       assert.equal(discovery?.status, "error");
       if (discovery?.status === "error") assert.match(discovery.detail, /not started/);
-      const completed = discovery
-        ? transition(refresh.state, { type: "answered" })
-        : { state: refresh.state };
-      assert.equal(completed.state.refreshing, false);
+
+      operation.create("must-not-exist", false);
+      yield* exchange;
+      assert.match(failure(operation) ?? "", /not started/);
+      operation.dismiss();
+      operation.select(cwd);
+      yield* exchange;
+      assert.match(failure(operation) ?? "", /not started/);
+      assert.deepEqual(
+        sentByPicker().map((m) => m._tag),
+        ["worktrees", "create_worktree", "add_worktree"],
+        "mutations are never replayed",
+      );
       assert.deepEqual(
         yield* (yield* Registry).get,
         before,
@@ -390,42 +403,31 @@ test("INV-06: a worktree request failing outside the lifecycle adapter still set
     registry: Effect.fail(new RegistryError({ detail: "Registry write failed." })),
     defect: Effect.die(new Error("Unexpected failure.")),
   };
-  for (const [kind, failure] of Object.entries(failures))
+  for (const [kind, failed] of Object.entries(failures))
     await run(
       Effect.gen(function* () {
         const commands = yield* WorkspaceCommands;
         const { receive } = yield* client.pipe(
           Effect.provideService(WorkspaceCommands, {
             ...commands,
-            createWorktree: () => failure,
-            addWorktree: () => failure,
+            createWorktree: () => failed,
+            addWorktree: () => failed,
           }),
         );
-        for (const intent of [
-          { kind: "create", folder: cwd, branch: "feature", hooks: false },
-          { kind: "select", folder: cwd, path: cwd },
-        ] as const) {
-          const requestId = `${kind}-${intent.kind}`;
-          const started = transition(initialWorktreeRequest, { type: "start", requestId, intent });
-          assert.ok(
-            started.command?._tag === "create_worktree" || started.command?._tag === "add_worktree",
+        const { operation, exchange } = worktreePicker(receive);
+        operation.open(cwd);
+        yield* exchange;
+        for (const start of [
+          () => operation.create("feature", false),
+          () => operation.select(cwd),
+        ]) {
+          operation.dismiss();
+          start();
+          yield* exchange;
+          assert.match(
+            failure(operation) ?? "",
+            kind === "registry" ? /Registry write failed/ : /Unexpected failure/,
           );
-          const from = sent.length;
-          yield* yield* receive(started.command);
-          let browser = initialState;
-          for (const message of answers(from))
-            browser = reduce(browser, { type: "server", message });
-          assert.equal(browser.worktreeResult?.requestId, requestId);
-          const settled = transition(started.state, {
-            type: "receipt",
-            receipt: browser.worktreeResult,
-          });
-          assert.equal(settled.state.request.status, "failed");
-          if (settled.state.request.status === "failed")
-            assert.match(
-              settled.state.request.detail,
-              kind === "registry" ? /Registry write failed/ : /Unexpected failure/,
-            );
         }
       }),
     );

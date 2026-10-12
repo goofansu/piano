@@ -115,7 +115,7 @@ export default function App() {
                   {state.view.kind === "new" ? (
                     <NewSession
                       state={state}
-                      send={send}
+                      client={client}
                       chooseDirectory={chooseDirectory}
                       projectId={state.view.projectId}
                       onProjectChange={(id) => openNew(undefined, id)}

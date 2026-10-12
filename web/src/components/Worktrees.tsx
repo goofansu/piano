@@ -1,6 +1,5 @@
-import type { ClientCommand } from "@shared/wire";
 import { ArrowLeftIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertDetails } from "@/components/Banner";
 import { IconButton } from "@/components/IconButton";
 import {
@@ -20,41 +19,35 @@ import { Spinner } from "@/components/ui/spinner";
 import { folderFor } from "@/lib/sessionContext";
 import {
   filterWorktrees,
-  initialWorktreeRequest,
-  RECEIPT_TIMEOUT_MS,
-  transition,
-  type WorktreeEvent,
+  type WorktreeOperation,
+  type WorktreeOperationState,
   worktreeLabel,
-} from "@/lib/worktreeRequest";
+} from "@/lib/worktreeOperation";
 import type { AppState } from "@/store";
 
-/** The current folder's repository only: opening or refreshing rediscovers that one repository. One deliberate selection or new-branch operation; never automatic retries. */
+/**
+ * The current folder's repository only: opening or refreshing rediscovers that one repository. One
+ * deliberate selection or new-branch operation; never automatic retries. The operation
+ * (lib/worktreeOperation) owns requests, receipts and discovery; this renders it and keeps the
+ * form's own fields.
+ */
 export function WorktreesPopover({
-  onOpenChange,
-  onPendingChange,
+  operation,
   state,
   currentCwd,
-  send,
-  onSelect,
 }: {
-  onOpenChange: (o: boolean) => void;
-  onPendingChange: (pending: boolean) => void;
+  operation: WorktreeOperation & WorktreeOperationState;
   state: AppState;
   currentCwd: string;
-  send: (m: ClientCommand) => void;
-  onSelect: (cwd: string) => void;
 }) {
   const folder = folderFor(state, currentCwd);
   // The sidebar snapshot stands in only until this picker's own discovery answers.
-  const discovery = folder && (state.worktrees[folder.path] ?? folder.discovery);
+  const discovery = folder && (operation.discovery ?? folder.discovery);
   const [query, setQuery] = useState("");
   const [branch, setBranch] = useState("");
   const [hooks, setHooks] = useState(false);
   // Picking is the common case; the creation form opens on request.
   const [creating, setCreating] = useState(false);
-  // The ref is the operation's current state, so an event never reads a stale render; the state re-renders.
-  const operationRef = useRef(initialWorktreeRequest);
-  const [operation, setOperation] = useState(initialWorktreeRequest);
   const errorRef = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const error = operation.request.status === "failed" ? operation.request.detail : null;
@@ -64,61 +57,18 @@ export function WorktreesPopover({
   const { refreshing } = operation;
   const target = discovery?.status === "ready" ? folder : undefined;
   const pending = operation.request.status === "pending";
-  useEffect(() => {
-    onPendingChange(pending);
-  }, [pending, onPendingChange]);
-  const step = useCallback(
-    (event: WorktreeEvent) => {
-      const next = transition(operationRef.current, event);
-      operationRef.current = next.state;
-      setOperation(next.state);
-      if (next.command) send(next.command);
-      return next;
-    },
-    [send],
-  );
-  const rediscover = useCallback(() => {
-    step({ type: "refresh", folder: folder?.path });
-  }, [folder?.path, step]);
-  useEffect(() => {
-    setCreating(false);
-    step({ type: "rediscover", folder: folder?.path });
-  }, [folder?.path, step]);
-  const answered = folder && state.worktrees[folder.path];
-  useEffect(() => {
-    if (answered) step({ type: "answered" });
-  }, [answered, step]);
-  useEffect(() => {
-    const opened = step({ type: "receipt", receipt: state.worktreeResult }).ready;
-    if (opened === undefined) return;
-    setBranch("");
-    setCreating(false);
-    onSelect(opened);
-    onOpenChange(false);
-  }, [state.worktreeResult, step, onSelect, onOpenChange]);
-  useEffect(() => {
-    if (!pending) return;
-    // A disconnected client has no durable job receipt. Never resend automatically.
-    const timer = setTimeout(() => step({ type: "timeout" }), RECEIPT_TIMEOUT_MS);
-    if (!state.connected) step({ type: "disconnected" });
-    return () => clearTimeout(timer);
-  }, [pending, state.connected, step]);
   const submit = () => {
     if (!state.connected || !branch.trim() || !target) return;
-    step({
-      type: "start",
-      requestId: crypto.randomUUID(),
-      intent: { kind: "create", folder: target.path, branch: branch.trim(), hooks },
-    });
+    operation.create(branch, hooks);
   };
   const startCreating = (initialBranch = "") => {
-    step({ type: "dismiss" });
+    operation.dismiss();
     setBranch(initialBranch);
     setCreating(true);
   };
   const showList = () => {
     setCreating(false);
-    step({ type: "dismiss" });
+    operation.dismiss();
   };
   const all = discovery?.status === "ready" ? discovery.worktrees : [];
   const visible = filterWorktrees(all, query);
@@ -241,7 +191,7 @@ export function WorktreesPopover({
                   <PlusIcon aria-hidden />
                 </IconButton>
               )}
-              <IconButton label="Refresh worktrees" disabled={busy} onClick={rediscover}>
+              <IconButton label="Refresh worktrees" disabled={busy} onClick={operation.refresh}>
                 {refreshing ? <Spinner /> : <RefreshCwIcon aria-hidden />}
               </IconButton>
             </PickerSearch>
@@ -268,13 +218,7 @@ export function WorktreesPopover({
                       key={worktree.path}
                       value={worktree.path}
                       disabled={busy || worktree.prunable}
-                      onSelect={() =>
-                        step({
-                          type: "start",
-                          requestId: crypto.randomUUID(),
-                          intent: { kind: "select", folder: target.path, path: worktree.path },
-                        })
-                      }
+                      onSelect={() => operation.select(worktree.path)}
                     >
                       <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">
                         {worktreeLabel(worktree)}
