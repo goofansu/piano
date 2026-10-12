@@ -1,6 +1,6 @@
 // Critical path 2: continue a session. Click it in the sidebar to read its transcript, jump to an
-// earlier message, send a follow-up and see the reply, read the session's cost, then stop a
-// running reply.
+// earlier message, read the session's cost, send a follow-up and see the reply and the updated
+// cost, then stop a running reply.
 // node test/browser/open-session.mjs [evidence-directory]
 import assert from "node:assert/strict";
 import { run } from "./harness.mjs";
@@ -36,20 +36,22 @@ await run(
   ({ repository, history }) => {
     const cwd = repository("api");
     const now = new Date().toISOString();
-    const reference = (sessionId, title) => ({
+    const reference = (sessionId, title, cost) => ({
       sessionId,
       title,
       cwd,
       createdAt: now,
       updatedAt: now,
+      // Pi's last statistics, which Piano keeps for each session it has run.
+      stats: { cost, statsUpdatedAt: Date.now() },
     });
     history({ sessionId: "login-bug", cwd, messages: [1, 2, 3, 4, 5, 6].flatMap(exchange) });
     history({ sessionId: "release-notes", cwd, messages: exchange(1) });
     return {
       folders: [cwd],
       sessions: [
-        reference("login-bug", "Fix the login bug"),
-        reference("release-notes", "Release notes"),
+        reference("login-bug", "Fix the login bug", 0.063),
+        reference("release-notes", "Release notes", 0.0105),
       ],
     };
   },
@@ -85,20 +87,35 @@ await run(
     })()`);
     await page.capture("2-jumped");
 
+    const sessionCost = async (step) => {
+      await page.click("button", "Context usage");
+      await page.until(`!!document.querySelector('[aria-label="Token and cost breakdown"]')`);
+      const row = await page.evaluate(
+        `[...document.querySelectorAll('[aria-label="Token and cost breakdown"] tr')].find(r => r.innerText.startsWith('Cost'))?.innerText`,
+      );
+      await page.capture(step);
+      await page.ab("press", "Escape");
+      await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
+      return row;
+    };
+    // Before Pi runs it: the last response's cost and Pi's last total for the session.
+    assert.match(
+      await sessionCost("3-cost"),
+      /\$0\.0105\s+\$0\.0630/,
+      "the session's cost when opened",
+    );
+
     await page.ab("fill", '[aria-label="Message"]', "Add a regression test");
     await page.ab("press", "Enter");
     await page.see("echo: Add a regression test");
-    await page.capture("3-follow-up");
+    await page.capture("4-follow-up");
 
-    await page.click("button", "Context usage");
-    await page.until(`!!document.querySelector('[aria-label="Token and cost breakdown"]')`);
-    const cost = await page.evaluate(
-      `[...document.querySelectorAll('[aria-label="Token and cost breakdown"] tr')].find(r => r.innerText.startsWith('Cost'))?.innerText`,
+    // Pi now runs the session, so its fresh total includes the follow-up.
+    assert.match(
+      await sessionCost("5-cost-after-reply"),
+      /\$0\.0063\s+\$0\.0693/,
+      "the cost updates after the reply",
     );
-    // Pi reports the session total once it runs the session; the follow-up started it.
-    assert.match(cost, /\$0\.0063\s+\$0\.0693/, "the last response's and the session's cost");
-    await page.capture("4-cost");
-    await page.ab("press", "Escape");
 
     await page.ab("fill", '[aria-label="Message"]', "hold");
     await page.ab("press", "Enter");
@@ -113,6 +130,6 @@ await run(
       ["Add a regression test", "hold"],
       "each message is sent once",
     );
-    await page.capture("5-stopped");
+    await page.capture("6-stopped");
   },
 );

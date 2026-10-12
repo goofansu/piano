@@ -92,7 +92,8 @@ critical paths, which must keep working on every change and run in CI:
 - `test/browser/start-session.mjs`: choose a folder, model, effort and project; send the first
   message; see the reply; reload without resending.
 - `test/browser/open-session.mjs`: open a session from the sidebar; read its transcript; jump to an
-  earlier message; send a follow-up; read the session cost; stop a running reply.
+  earlier message; read the session cost; send a follow-up and see the reply and updated cost;
+  stop a running reply.
 
 `npm run test:browser` runs both (about 6 seconds each) against a scratch registry, Pi history and
 `test/browser/fake-pi.mjs`, with no model calls. They drive the UI by role and accessible name and
