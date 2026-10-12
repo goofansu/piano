@@ -876,6 +876,11 @@ export const ServerMessage = Schema.Union([
     selectionId: Schema.String,
     message: Schema.String,
   }),
+  /** An admitted attachment failed. Makes no claim about prior creation or message delivery. */
+  Schema.TaggedStruct("selection_failed", {
+    selectionId: Schema.String,
+    message: Schema.String,
+  }),
   Schema.TaggedStruct("error", {
     message: Schema.String,
     selectionId: Schema.optional(Schema.String),

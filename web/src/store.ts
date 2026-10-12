@@ -337,6 +337,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           cursor: m.cursor,
         },
       };
+    case "selection_failed":
     case "selection_rejected":
       if (m.selectionId !== s.selectionId || !s.selecting) return s;
       return {
@@ -345,7 +346,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         selectionFailure: { ...s.selecting, message: m.message },
         selecting: null,
         pendingCreate:
-          s.pendingCreate?.selectionId === m.selectionId
+          m._tag === "selection_rejected" && s.pendingCreate?.selectionId === m.selectionId
             ? { ...s.pendingCreate, outcome: "rejected", detail: m.message }
             : s.pendingCreate,
       };

@@ -215,6 +215,48 @@ test("INV-05: browser client recovers from dispatch saturation with a fresh expl
   );
 });
 
+test("INV-05: an admitted selection failure settles the browser and permits explicit retry", async () => {
+  await run(
+    Effect.gen(function* () {
+      const requests: ClientMessage[] = [];
+      let handlers: ConnectionHandlers | undefined;
+      const browser = createClient({
+        initial: initialState,
+        connect: (h) => {
+          handlers = h;
+          return { send: (m) => requests.push(m), close: () => {} };
+        },
+        notify: () => {},
+      });
+      browser.start();
+      handlers!.onStatus(true);
+      const dispatch = yield* makeClientDispatch({
+        send: (m) => Effect.sync(() => handlers!.onMessage(m)),
+        overflow: (e) => Effect.die(e),
+      });
+      // Real host resolution rejects an unregistered reference, without saturation.
+      const sessionId = "admitted-retry";
+      browser.select(cwd, sessionId);
+      const first = requests.find((m) => m._tag === "select")!;
+      yield* yield* dispatch.receive(first);
+      assert.equal(browser.getState().selecting, null);
+      assert.equal(browser.getState().selectionId, null);
+      assert.ok(browser.getState().selectionFailure?.message);
+      assert.equal(requests.filter((m) => m._tag === "select").length, 1, "no automatic retry");
+      // Remove the resolution failure, then retry the exact same reference explicitly.
+      yield* (yield* SessionHosts).open({ cwd, sessionId, create: true });
+      browser.select(cwd, sessionId);
+      const selections = requests.filter((m) => m._tag === "select");
+      assert.equal(selections.length, 2);
+      assert.notEqual(selections[0].selectionId, selections[1].selectionId);
+      yield* yield* dispatch.receive(selections[1]);
+      assert.equal(browser.getState().session?.sessionId, sessionId);
+      assert.equal(browser.getState().selecting, null);
+      assert.equal(browser.getState().selectionFailure, null);
+    }),
+  );
+});
+
 test("a trust decision answers the requester with a notice, the new trust and the new models, in that order", async () => {
   // A project skill makes the directory's trust matter to Pi.
   mkdirSync(join(cwd, ".agents/skills/hello"), { recursive: true });
