@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+import { access, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Cause, Data, Effect, Schema } from "effect";
@@ -27,27 +28,25 @@ import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { handleSocket } from "./WsClient.ts";
 
 /** Subdirectories for the folder picker, with git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
-const listDirectory = (raw: string) =>
-  Effect.gen(function* () {
+const listDirectory = Effect.fn("Router.listDirectory")(function* (raw: string) {
     const path = directoryPath(raw || "~");
-    if (!existsSync(path)) return yield* Effect.fail(new Error(`No such directory: ${path}`));
-    if (!statSync(path).isDirectory()) return yield* Effect.fail(new Error(`${path} is a file, not a directory`));
-    const names: string[] = [];
-    for (const name of readdirSync(path)) {
-      if (name.startsWith(".")) continue;
-      try {
-        if (statSync(join(path, name)).isDirectory()) names.push(name);
-      } catch {
-        /* unreadable entry */
-      }
-    }
+    const directory = yield* Effect.tryPromise({ try: () => stat(path), catch: error =>
+      (error as NodeJS.ErrnoException).code === "ENOENT" ? new Error(`No such directory: ${path}`) : error });
+    if (!directory.isDirectory()) return yield* Effect.fail(new Error(`${path} is a file, not a directory`));
+    const children = (yield* Effect.tryPromise({ try: () => readdir(path), catch: error => error })).filter(name => !name.startsWith("."));
+    // Follow directory symlinks as before, with bounded IO and no synchronous filesystem waits.
+    const directories = yield* Effect.forEach(children, name =>
+      Effect.tryPromise(() => stat(join(path, name))).pipe(
+        Effect.map(entry => entry.isDirectory()), Effect.orElseSucceed(() => false)), { concurrency: 8 });
+    const names = children.filter((_, i) => directories[i]);
     names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
     const entries = yield* Effect.forEach(
       names,
       (name) =>
         Effect.gen(function* () {
           const full = join(path, name);
-          const gitSubject = existsSync(join(full, ".git")) ? yield* gitHeadSubject(full) : undefined;
+          const hasGit = yield* Effect.tryPromise(() => access(join(full, ".git"))).pipe(Effect.as(true), Effect.orElseSucceed(() => false));
+          const gitSubject = hasGit ? yield* gitHeadSubject(full) : undefined;
           return { name, path: full, gitSubject: gitSubject || undefined };
         }),
       { concurrency: 8 },
