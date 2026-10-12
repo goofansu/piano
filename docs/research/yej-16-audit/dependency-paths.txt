@@ -1,0 +1,13 @@
+piano@0.1.0 /home/exedev/piano
+└─┬ web@0.0.0 -> ./web
+  └─┬ shadcn@4.21.3
+    ├─┬ @shadcn/registry@0.1.2
+    │ ├── fast-glob@3.3.3 deduped
+    │ └── ts-morph@26.0.0 deduped
+    ├─┬ fast-glob@3.3.3
+    │ └─┬ micromatch@4.0.8
+    │   └── braces@3.0.3
+    └─┬ ts-morph@26.0.0
+      └─┬ @ts-morph/common@0.27.0
+        └── fast-glob@3.3.3 deduped
+

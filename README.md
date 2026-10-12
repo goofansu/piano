@@ -69,6 +69,7 @@ logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credent
 
 - Tests use fake Pi and need no model credentials. The Worktrunk integration test requires `wt` **0.80.0** on `PATH`.
 - [Quality CI](.github/workflows/quality.yml) runs on every PR, pushes to `main`, and merge-queue candidates using Node 24: `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, then `npm run build`. It installs checksum-pinned Worktrunk 0.80.0; no model secrets are supplied.
+- `npm run audit:check` enforces high/critical production and full-tree dependency findings, with one expiring development-only exception. See [audit policy and triage](docs/research/yej-16-audit.md); raw current reports are written to `audit-reports/`.
 - The stable required-check name is **Quality gates**. A repository administrator must require this check on `main` with up-to-date branches (or a merge queue), preserving any existing protection. A workflow alone does not block merges. Verify enforcement with a failing PR before claiming it is enabled. During YEJ-6 setup, the GitHub integration returned 403 for branch protection (permissions) and rulesets (private-repository plan restriction); enforcement remains unverified until the owner resolves these blockers. Do not make the repository public as a workaround.
 - Main directories: `server/` (backend), `web/` (React UI), `shared/` (wire schemas), `test/` (tests).
 - See [development docs](docs/README.md) for architecture, invariants, and verification guidance.
