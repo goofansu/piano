@@ -1,6 +1,14 @@
 import type { FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
-import { MoreHorizontalIcon, PlusIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, TargetIcon, XIcon } from "lucide-react";
+import {
+  MoreHorizontalIcon,
+  PlusIcon,
+  SearchIcon,
+  SettingsIcon,
+  SlidersHorizontalIcon,
+  TargetIcon,
+  XIcon,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
@@ -14,7 +22,19 @@ import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,12 +42,24 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, type GlobalCommandGroup, globalCommands } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import { activeProjects, assignProjectCommand, newProjectCommand, projectChoices, projectCommands } from "@/lib/projectCommands";
+import {
+  activeProjects,
+  assignProjectCommand,
+  newProjectCommand,
+  projectChoices,
+  projectCommands,
+} from "@/lib/projectCommands";
 import { type SessionEntry, sessionCatalog } from "@/lib/sessionCatalog";
 import { pickCommands, SESSION_ROW_COMMANDS, type SessionTarget } from "@/lib/sessionCommands";
 import { sessionProject } from "@/lib/sessionContext";
 import { projectKey } from "@/lib/sidebarGroups";
-import { dateGroups, folderGroups, projectGroups, type SidebarView, sortSessions } from "@/lib/sidebarView";
+import {
+  dateGroups,
+  folderGroups,
+  projectGroups,
+  type SidebarView,
+  sortSessions,
+} from "@/lib/sidebarView";
 import { readJson, writeJson } from "@/lib/storage";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarGroups } from "@/lib/useSidebarGroups";
@@ -43,9 +75,14 @@ interface Props {
 /** Row heights: 36px with a pointer, 44px on touch desktops, 48px on phones. */
 const row = "h-9 pointer-coarse:h-11 max-md:h-12";
 /** Row actions live in a fixed slot on the right and appear on hover, so nothing shifts. */
-const hoverSlot = "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
-const groupRow = cn(row, "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover");
-const groupTrigger = "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+const hoverSlot =
+  "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
+const groupRow = cn(
+  row,
+  "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover",
+);
+const groupTrigger =
+  "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 export function Sidebar({ state, onHide }: Props) {
   const { select, openNew, openSettings, setPalette } = useNavigation();
@@ -71,56 +108,91 @@ export function Sidebar({ state, onHide }: Props) {
     };
     refresh();
     window.addEventListener("focus", refresh);
-    return () => { clearTimeout(timer); window.removeEventListener("focus", refresh); };
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", refresh);
+    };
   }, [view.groupBy]);
 
   // Rows already there when the list first loads appear at once, so a reload does not flash;
   // a row added later enters. Each row decides when it mounts (`useState(reveal)`).
   const [settled, setSettled] = useState(false);
-  useEffect(() => { if (state.registryLoaded) setSettled(true); }, [state.registryLoaded]);
+  useEffect(() => {
+    if (state.registryLoaded) setSettled(true);
+  }, [state.registryLoaded]);
   const reveal = () => (settled ? "reveal-row" : undefined);
 
   // One catalog for every grouping, so switching the grouping never changes which sessions are listed.
   const catalog = useMemo(() => sessionCatalog(state), [state]);
-  const pinned = sortSessions(catalog.filter(s => s.pinned), view.sortBy);
-  const listed = catalog.filter(s => s.listed && !s.pinned);
-  const groupProps = { state, select, reveal };
-  const empty = (text: string) => pinned.length > 0 ? null : (
-    <Empty className="view-enter py-8">
-      <EmptyHeader>
-        <EmptyDescription>{text}</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+  const pinned = sortSessions(
+    catalog.filter((s) => s.pinned),
+    view.sortBy,
   );
-  const groups = (children: React.ReactNode) => <div className="flex flex-col gap-1">{children}</div>;
+  const listed = catalog.filter((s) => s.listed && !s.pinned);
+  const groupProps = { state, select, reveal };
+  const empty = (text: string) =>
+    pinned.length > 0 ? null : (
+      <Empty className="view-enter py-8">
+        <EmptyHeader>
+          <EmptyDescription>{text}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  const groups = (children: React.ReactNode) => (
+    <div className="flex flex-col gap-1">{children}</div>
+  );
   const list = () => {
     if (!state.registryLoaded) return <SidebarSkeleton />;
     if (view.groupBy === "folder") {
-      if (state.folders.length === 0) return empty("No folders yet. Start a session in any folder and it appears here.");
-      return groups(folderGroups(state.folders, listed, view.sortBy).map(({ folder, sessions }) => (
-        <FolderGroup key={folder.path} folder={folder} sessions={sessions} open={openGroups.has(folder.path)} onOpenChange={(open) => setOpen(folder.path, open)} {...groupProps} />
-      )));
+      if (state.folders.length === 0)
+        return empty("No folders yet. Start a session in any folder and it appears here.");
+      return groups(
+        folderGroups(state.folders, listed, view.sortBy).map(({ folder, sessions }) => (
+          <FolderGroup
+            key={folder.path}
+            folder={folder}
+            sessions={sessions}
+            open={openGroups.has(folder.path)}
+            onOpenChange={(open) => setOpen(folder.path, open)}
+            {...groupProps}
+          />
+        )),
+      );
     }
     if (view.groupBy === "project") {
       // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
       const active = activeProjects(state);
       const all = projectGroups(active, listed, view.sortBy);
-      if (active.length === 0 && all.every(g => g.sessions.length === 0)) return empty("No sessions yet. Start one and it appears here.");
-      return groups(all.map(g => {
-        const key = projectKey(g.project?.id ?? "");
-        return <ProjectGroup key={key} project={g.project} sessions={g.sessions} open={openGroups.has(key)} onOpenChange={open => setOpen(key, open)} {...groupProps} />;
-      }));
+      if (active.length === 0 && all.every((g) => g.sessions.length === 0))
+        return empty("No sessions yet. Start one and it appears here.");
+      return groups(
+        all.map((g) => {
+          const key = projectKey(g.project?.id ?? "");
+          return (
+            <ProjectGroup
+              key={key}
+              project={g.project}
+              sessions={g.sessions}
+              open={openGroups.has(key)}
+              onOpenChange={(open) => setOpen(key, open)}
+              {...groupProps}
+            />
+          );
+        }),
+      );
     }
     if (view.groupBy === "date") {
       const dated = dateGroups(listed, view.sortBy, dateNow);
       if (dated.length === 0) return empty("No sessions yet. Start one and it appears here.");
-      return groups(dated.map(g => (
-        <section key={g.label} aria-label={g.label}>
-          {/* No standalone shadcn heading fits this noninteractive list section. */}
-          <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">{g.label}</h2>
-          <SessionList sessions={g.sessions} {...groupProps} />
-        </section>
-      )));
+      return groups(
+        dated.map((g) => (
+          <section key={g.label} aria-label={g.label}>
+            {/* No standalone shadcn heading fits this noninteractive list section. */}
+            <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">{g.label}</h2>
+            <SessionList sessions={g.sessions} {...groupProps} />
+          </section>
+        )),
+      );
     }
     const sessions = sortSessions(listed, view.sortBy);
     if (sessions.length === 0) return empty("No sessions yet. Start one and it appears here.");
@@ -130,7 +202,11 @@ export function Sidebar({ state, onHide }: Props) {
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader onHide={onHide}>
-        <IconButton label="Search sessions" tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>} onClick={() => setPalette(true)}>
+        <IconButton
+          label="Search sessions"
+          tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>}
+          onClick={() => setPalette(true)}
+        >
           <SearchIcon />
         </IconButton>
         <ViewMenu state={state} view={view} />
@@ -145,27 +221,41 @@ export function Sidebar({ state, onHide }: Props) {
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-      <nav className="relative px-3 pb-4" aria-label="Sessions">
-        {state.registryLoaded && pinned.length > 0 && (
-          <Collapsible open={pinnedOpen} onOpenChange={togglePinned} aria-label="Pinned" className="mb-1">
-            <div className={groupRow}>
-              <CollapsibleTrigger asChild>
-                <button type="button" className={groupTrigger}>
-                  <Chevron open={pinnedOpen} />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">Pinned</span>
-                </button>
-              </CollapsibleTrigger>
-            </div>
-            <CollapsibleContent className="disclosure-content">
-              <SessionRows className="flex flex-col gap-1 py-1" sessions={pinned} {...groupProps} />
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-        {list()}
-      </nav>
+        <nav className="relative px-3 pb-4" aria-label="Sessions">
+          {state.registryLoaded && pinned.length > 0 && (
+            <Collapsible
+              open={pinnedOpen}
+              onOpenChange={togglePinned}
+              aria-label="Pinned"
+              className="mb-1"
+            >
+              <div className={groupRow}>
+                <CollapsibleTrigger asChild>
+                  <button type="button" className={groupTrigger}>
+                    <Chevron open={pinnedOpen} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">
+                      Pinned
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent className="disclosure-content">
+                <SessionRows
+                  className="flex flex-col gap-1 py-1"
+                  sessions={pinned}
+                  {...groupProps}
+                />
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+          {list()}
+        </nav>
       </ScrollArea>
       <div className="shrink-0 p-3">
-        <Button variant="ghost" className="w-full justify-start" onClick={() => openSettings()}><SettingsIcon data-icon="inline-start" />Settings</Button>
+        <Button variant="ghost" className="w-full justify-start" onClick={() => openSettings()}>
+          <SettingsIcon data-icon="inline-start" />
+          Settings
+        </Button>
       </div>
     </div>
   );
@@ -176,13 +266,24 @@ function ViewMenu({ state, view }: { state: AppState; view: SidebarView }) {
   const { theme } = useTheme();
   const { run } = useCommands();
   const commands = globalCommands(state, { settingsOpen: false, view, theme: theme ?? "system" });
-  const choices = (group: GlobalCommandGroup) => commands.filter(c => c.group === group);
+  const choices = (group: GlobalCommandGroup) => commands.filter((c) => c.group === group);
   // The label takes the slack so the current value sits beside the trigger's own chevron.
   const choice = (label: string, group: GlobalCommandGroup) => (
-    <><span className="flex-1">{label}</span><span className="text-muted-foreground">{choices(group).find(c => c.checked)?.menuLabel ?? ""}</span></>
+    <>
+      <span className="flex-1">{label}</span>
+      <span className="text-muted-foreground">
+        {choices(group).find((c) => c.checked)?.menuLabel ?? ""}
+      </span>
+    </>
   );
   const radio = (group: GlobalCommandGroup, item: (c: GlobalCommand) => React.ReactNode) => (
-    <DropdownMenuRadioGroup value={choices(group).find(c => c.checked)?.id ?? ""} onValueChange={id => { const c = commands.find(c => c.id === id); if (c) run(c); }}>
+    <DropdownMenuRadioGroup
+      value={choices(group).find((c) => c.checked)?.id ?? ""}
+      onValueChange={(id) => {
+        const c = commands.find((c) => c.id === id);
+        if (c) run(c);
+      }}
+    >
       {choices(group).map(item)}
     </DropdownMenuRadioGroup>
   );
@@ -203,16 +304,22 @@ function ViewMenu({ state, view }: { state: AppState; view: SidebarView }) {
           <DropdownMenuSubTrigger>{choice("Group by", "group-by")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {/* No grouping comes last, set apart from the groupings. */}
-            {radio("group-by", c => <Fragment key={c.id}>
-              {c.id === "group-none" && <DropdownMenuSeparator />}
-              <DropdownMenuRadioItem value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>
-            </Fragment>)}
+            {radio("group-by", (c) => (
+              <Fragment key={c.id}>
+                {c.id === "group-none" && <DropdownMenuSeparator />}
+                <DropdownMenuRadioItem value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>
+              </Fragment>
+            ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>{choice("Sort by", "sort-by")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            {radio("sort-by", c => <DropdownMenuRadioItem key={c.id} value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>)}
+            {radio("sort-by", (c) => (
+              <DropdownMenuRadioItem key={c.id} value={c.id}>
+                {c.menuLabel}
+              </DropdownMenuRadioItem>
+            ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
@@ -220,7 +327,11 @@ function ViewMenu({ state, view }: { state: AppState; view: SidebarView }) {
           <DropdownMenuSubTrigger>{choice("Appearance", "appearance")}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {/* The chosen mode carries the check; the icons say what each one does. */}
-            {radio("appearance", c => <DropdownMenuRadioItem key={c.id} value={c.id}><GlobalCommandIcon icon={c.icon} /> {c.menuLabel}</DropdownMenuRadioItem>)}
+            {radio("appearance", (c) => (
+              <DropdownMenuRadioItem key={c.id} value={c.id}>
+                <GlobalCommandIcon icon={c.icon} /> {c.menuLabel}
+              </DropdownMenuRadioItem>
+            ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       </DropdownMenuContent>
@@ -231,7 +342,12 @@ function ViewMenu({ state, view }: { state: AppState; view: SidebarView }) {
 /** shadcn's Empty composed down to one list row, so an empty group keeps the list's rhythm and indent. */
 function ListEmpty({ children }: { children: React.ReactNode }) {
   return (
-    <Empty className={cn(row, "items-start justify-center gap-0 rounded-none p-0 pl-7 text-left md:p-0 md:pl-7")}>
+    <Empty
+      className={cn(
+        row,
+        "items-start justify-center gap-0 rounded-none p-0 pl-7 text-left md:p-0 md:pl-7",
+      )}
+    >
       <EmptyDescription className="text-sm/normal">{children}</EmptyDescription>
     </Empty>
   );
@@ -251,7 +367,9 @@ function SidebarSkeleton() {
             <ul className="flex flex-col gap-1 py-1">
               {[36, 44].map((w) => (
                 <li key={w} className={cn(row, "flex items-center gap-2 pl-2")}>
-                  <span className="flex size-4 items-center justify-center"><Skeleton className="size-2 rounded-full" /></span>
+                  <span className="flex size-4 items-center justify-center">
+                    <Skeleton className="size-2 rounded-full" />
+                  </span>
                   <Skeleton className="h-3.5" style={{ width: `${w}%` }} />
                 </li>
               ))}
@@ -266,7 +384,17 @@ function SidebarSkeleton() {
 /** The collapsed sidebar: a vertical rail with the expand control and activity mark. */
 export function SidebarRail({ onShow, working }: { onShow: () => void; working: boolean }) {
   const { openSettings } = useNavigation();
-  return <LayoutRail onShow={onShow} working={working} footer={<IconButton label="Settings" side="right" onClick={() => openSettings()}><SettingsIcon /></IconButton>} />;
+  return (
+    <LayoutRail
+      onShow={onShow}
+      working={working}
+      footer={
+        <IconButton label="Settings" side="right" onClick={() => openSettings()}>
+          <SettingsIcon />
+        </IconButton>
+      }
+    />
+  );
 }
 
 interface GroupProps extends Pick<Props, "state">, Pick<Navigation, "select"> {
@@ -276,20 +404,32 @@ interface GroupProps extends Pick<Props, "state">, Pick<Navigation, "select"> {
 }
 
 /** One line per session: the title alone. Location and project live in the session header and the groupings. */
-function SessionRow({ t, state, select, reveal }: {
+function SessionRow({
+  t,
+  state,
+  select,
+  reveal,
+}: {
   t: SessionEntry;
 } & Pick<GroupProps, "state" | "select" | "reveal">) {
   const [enter] = useState(reveal);
   const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
   const { commands, run } = useSessionCommands(target);
   const menu = pickCommands(commands, SESSION_ROW_COMMANDS);
-  const item = (c: (typeof menu)[number]) => <SessionCommandMenuItem key={c.id} command={c} run={run} />;
+  const item = (c: (typeof menu)[number]) => (
+    <SessionCommandMenuItem key={c.id} command={c} run={run} />
+  );
   const { selected, disabled, hint, activity } = t;
   // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
   const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
   return (
     <li
-      className={cn(row, enter, "group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover", selected && "bg-(--selected) hover:bg-(--selected)")}
+      className={cn(
+        row,
+        enter,
+        "group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover",
+        selected && "bg-(--selected) hover:bg-(--selected)",
+      )}
     >
       <button
         type="button"
@@ -300,25 +440,53 @@ function SessionRow({ t, state, select, reveal }: {
         className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
       >
         <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-          {activity === "working" ? <Keys playing className="text-brand" /> : dot && <span className={cn("size-2 rounded-full transition-[background-color,border-color] duration-300", dot)} />}
+          {activity === "working" ? (
+            <Keys playing className="text-brand" />
+          ) : (
+            dot && (
+              <span
+                className={cn(
+                  "size-2 rounded-full transition-[background-color,border-color] duration-300",
+                  dot,
+                )}
+              />
+            )
+          )}
         </span>
-        <span className={cn("min-w-0 flex-1 truncate", selected && "font-medium", !t.title && "text-ink-3")}>{t.title || "Untitled"}</span>
-        {activity === "working" ? <span className="sr-only">working</span> : activity === "done" ? <span className="sr-only">done</span> : null}
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            selected && "font-medium",
+            !t.title && "text-ink-3",
+          )}
+        >
+          {t.title || "Untitled"}
+        </span>
+        {activity === "working" ? (
+          <span className="sr-only">working</span>
+        ) : activity === "done" ? (
+          <span className="sr-only">done</span>
+        ) : null}
         {hint && <span className="sr-only">{hint}</span>}
       </button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Session menu for ${t.title || t.sessionId}`}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className={hoverSlot}
+            aria-label={`Session menu for ${t.title || t.sessionId}`}
+          >
             <MoreHorizontalIcon />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
-            {menu.filter(c => c.id === "rename" || c.id === "pin").map(item)}
+            {menu.filter((c) => c.id === "rename" || c.id === "pin").map(item)}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            {menu.filter(c => c.id === "archive" || c.id === "delete").map(item)}
+            {menu.filter((c) => c.id === "archive" || c.id === "delete").map(item)}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
@@ -340,81 +508,175 @@ function ProjectMenu({ state, session }: { state: AppState; session: SessionTarg
   const current = sessionProject(state, session);
   const choices = projectChoices(state, current);
   const create = newProjectCommand(state, session);
-  return <DropdownMenuSub>
-    <DropdownMenuSubTrigger disabled={!create.enabled}><TargetIcon /> Project{current && <span className="ml-1 min-w-0 max-w-32 truncate text-muted-foreground">{current.name}</span>}</DropdownMenuSubTrigger>
-    <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
-      {choices.length > 0 && <>
-        <DropdownMenuRadioGroup value={current?.id ?? ""} onValueChange={id => run(assignProjectCommand(state, session, id || null))}>
-          {choices.map(p => <DropdownMenuRadioItem key={p.id} value={p.id}><span className="truncate">{p.name}</span>{p.archived && <span className="ml-1 text-muted-foreground">· Archived</span>}</DropdownMenuRadioItem>)}
-          <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-      </>}
-      <DropdownMenuItem disabled={!create.enabled} onSelect={() => run(create)}><ProjectCommandIconView icon={create.icon} /> {create.label}…</DropdownMenuItem>
-    </DropdownMenuSubContent>
-  </DropdownMenuSub>;
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger disabled={!create.enabled}>
+        <TargetIcon /> Project
+        {current && (
+          <span className="ml-1 min-w-0 max-w-32 truncate text-muted-foreground">
+            {current.name}
+          </span>
+        )}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
+        {choices.length > 0 && (
+          <>
+            <DropdownMenuRadioGroup
+              value={current?.id ?? ""}
+              onValueChange={(id) => run(assignProjectCommand(state, session, id || null))}
+            >
+              {choices.map((p) => (
+                <DropdownMenuRadioItem key={p.id} value={p.id}>
+                  <span className="truncate">{p.name}</span>
+                  {p.archived && <span className="ml-1 text-muted-foreground">· Archived</span>}
+                </DropdownMenuRadioItem>
+              ))}
+              <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem disabled={!create.enabled} onSelect={() => run(create)}>
+          <ProjectCommandIconView icon={create.icon} /> {create.label}…
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
 }
 
-const Chevron = ({ open }: { open: boolean }) => <DisclosureChevron open={open} className="size-4" />;
+const Chevron = ({ open }: { open: boolean }) => (
+  <DisclosureChevron open={open} className="size-4" />
+);
 
 /** Session rows from the catalog; each entry already says how it appears. */
-function SessionRows({ sessions, className, ...row }: Pick<GroupProps, "state" | "select" | "reveal"> & { sessions: readonly SessionEntry[]; className: string }) {
+function SessionRows({
+  sessions,
+  className,
+  ...row
+}: Pick<GroupProps, "state" | "select" | "reveal"> & {
+  sessions: readonly SessionEntry[];
+  className: string;
+}) {
   return (
     <ul className={className}>
-      {sessions.map(s => <SessionRow key={sessionKey(s)} t={s} {...row} />)}
+      {sessions.map((s) => (
+        <SessionRow key={sessionKey(s)} t={s} {...row} />
+      ))}
     </ul>
   );
 }
 
 /** Every listed session in one list. */
-function SessionList({ sessions, state, select, reveal }: Omit<GroupProps, "open" | "onOpenChange"> & { sessions: readonly SessionEntry[] }) {
-  return <SessionRows className="flex flex-col gap-1" sessions={sessions} state={state} select={select} reveal={reveal} />;
+function SessionList({
+  sessions,
+  state,
+  select,
+  reveal,
+}: Omit<GroupProps, "open" | "onOpenChange"> & { sessions: readonly SessionEntry[] }) {
+  return (
+    <SessionRows
+      className="flex flex-col gap-1"
+      sessions={sessions}
+      state={state}
+      select={select}
+      reveal={reveal}
+    />
+  );
 }
 
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
-function ProjectGroup({ project, sessions, open, onOpenChange, state, select, reveal }: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
+function ProjectGroup({
+  project,
+  sessions,
+  open,
+  onOpenChange,
+  state,
+  select,
+  reveal,
+}: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
   const [enter] = useState(reveal);
   const { run } = useCommands();
   const members = sessions;
   const commands = project ? projectCommands(state, project) : [];
-  const create = commands.find(c => c.id === "new-session");
-  const menu = commands.filter(c => c.id !== "new-session");
+  const create = commands.find((c) => c.id === "new-session");
+  const menu = commands.filter((c) => c.id !== "new-session");
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={cn(groupRow, enter)}>
         <CollapsibleTrigger asChild>
           <button type="button" className={groupTrigger}>
             <Chevron open={open} />
-            <span className={cn("min-w-0 flex-1 truncate text-sm font-medium", !project || project.archived ? "text-ink-3" : "text-ink-2")}>{project?.name ?? "No project"}</span>
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-sm font-medium",
+                !project || project.archived ? "text-ink-3" : "text-ink-2",
+              )}
+            >
+              {project?.name ?? "No project"}
+            </span>
           </button>
         </CollapsibleTrigger>
         {create?.enabled && (
-          <IconButton size="icon-xs" className={hoverSlot} label={create.ariaLabel ?? create.label} tooltip={create.label} onClick={() => run(create)}>
+          <IconButton
+            size="icon-xs"
+            className={hoverSlot}
+            label={create.ariaLabel ?? create.label}
+            tooltip={create.label}
+            onClick={() => run(create)}
+          >
             <ProjectCommandIconView icon={create.icon} />
           </IconButton>
         )}
-        {project && <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Project menu for ${project.name}`}>
-              <MoreHorizontalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              {menu.map(c => <DropdownMenuItem key={c.id} disabled={!c.enabled} onSelect={() => run(c)}><ProjectCommandIconView icon={c.icon} /> {c.label}</DropdownMenuItem>)}
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>}
+        {project && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className={hoverSlot}
+                aria-label={`Project menu for ${project.name}`}
+              >
+                <MoreHorizontalIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuGroup>
+                {menu.map((c) => (
+                  <DropdownMenuItem key={c.id} disabled={!c.enabled} onSelect={() => run(c)}>
+                    <ProjectCommandIconView icon={c.icon} /> {c.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
       <CollapsibleContent className="disclosure-content">
-        {members.length === 0 ? <ListEmpty>No sessions yet</ListEmpty>
-          : <SessionRows className="flex flex-col gap-1 py-1" sessions={members} state={state} select={select} reveal={reveal} />}
+        {members.length === 0 ? (
+          <ListEmpty>No sessions yet</ListEmpty>
+        ) : (
+          <SessionRows
+            className="flex flex-col gap-1 py-1"
+            sessions={members}
+            state={state}
+            select={select}
+            reveal={reveal}
+          />
+        )}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function FolderGroup({ folder, sessions, open, onOpenChange, state, select, reveal }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
+function FolderGroup({
+  folder,
+  sessions,
+  open,
+  onOpenChange,
+  state,
+  select,
+  reveal,
+}: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const [enter] = useState(reveal);
   const { run } = useCommands();
   const [create, close] = folderCommands(state, folder);
@@ -425,15 +687,28 @@ function FolderGroup({ folder, sessions, open, onOpenChange, state, select, reve
         <CollapsibleTrigger asChild>
           <button type="button" className={groupTrigger} title={folder.path}>
             <Chevron open={open} />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{folder.name}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">
+              {folder.name}
+            </span>
           </button>
         </CollapsibleTrigger>
-        <IconButton size="icon-xs" className={hoverSlot} label={create.ariaLabel ?? create.label} tooltip={create.label} onClick={() => run(create)}>
+        <IconButton
+          size="icon-xs"
+          className={hoverSlot}
+          label={create.ariaLabel ?? create.label}
+          tooltip={create.label}
+          onClick={() => run(create)}
+        >
           <PlusIcon />
         </IconButton>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" className={hoverSlot} aria-label={`Folder menu for ${folder.name}`}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className={hoverSlot}
+              aria-label={`Folder menu for ${folder.name}`}
+            >
               <MoreHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -446,11 +721,32 @@ function FolderGroup({ folder, sessions, open, onOpenChange, state, select, reve
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {folder.discovery.status === "error" && <Badge variant="destructive" className="ml-7 animate-in fade-in-0" title={folder.discovery.detail}>Git status unavailable</Badge>}
-      {folder.discovery.status === "non-git" && <Badge variant="secondary" className="ml-7">Non-Git</Badge>}
+      {folder.discovery.status === "error" && (
+        <Badge
+          variant="destructive"
+          className="ml-7 animate-in fade-in-0"
+          title={folder.discovery.detail}
+        >
+          Git status unavailable
+        </Badge>
+      )}
+      {folder.discovery.status === "non-git" && (
+        <Badge variant="secondary" className="ml-7">
+          Non-Git
+        </Badge>
+      )}
       <CollapsibleContent className="disclosure-content">
-        {sessions.length === 0 ? <ListEmpty>No sessions yet</ListEmpty>
-          : <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} state={state} select={select} reveal={reveal} />}
+        {sessions.length === 0 ? (
+          <ListEmpty>No sessions yet</ListEmpty>
+        ) : (
+          <SessionRows
+            className="flex flex-col gap-1 py-1"
+            sessions={sessions}
+            state={state}
+            select={select}
+            reveal={reveal}
+          />
+        )}
       </CollapsibleContent>
     </Collapsible>
   );

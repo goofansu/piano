@@ -62,7 +62,9 @@ logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credent
   npm run lint
   ```
 
-- `npm run lint` runs Biome and `@shadcn/lint` via ESLint. Run `npm run lint:tailwind` for Tailwind checks alone. Configure rules in `eslint.config.mjs`; currently it rejects unknown classes using the UI's Tailwind theme, including inside `components/ui`. Inline ESLint directives are ignored for this dedicated check so legacy React Hooks directives do not interfere.
+- `npm run format` applies the pinned Biome formatter; `npm run format:check` checks without writing. The convention is two spaces, LF, a 100-column target, double quotes (including JSX), semicolons and trailing commas. `biome.json` is authoritative.
+- Formatting covers application/test source and maintained JS/JSON configuration. Generated `web/src/components/ui` stays excluded from Biome to keep upstream updates reviewable and preserve `piano:` customizations; Tailwind checks still cover it. Lockfiles, captured evidence, vendored skills, Markdown and YAML are not reformatted. Keep mechanical formatting commits separate from behavior changes.
+- `npm run lint` checks formatting as well as Biome rules and `@shadcn/lint` via ESLint. Run `npm run lint:tailwind` for Tailwind checks alone. Configure rules in `eslint.config.mjs`; currently it rejects unknown classes using the UI's Tailwind theme, including inside `components/ui`. Inline ESLint directives are ignored for this dedicated check so legacy React Hooks directives do not interfere.
 - `npm install` sets up a Husky pre-commit hook that runs `npm run lint`; a lint error blocks the commit.
 
 - Tests use fake Pi and need no model credentials. The Worktrunk integration test requires `wt` **0.80.0** on `PATH`.

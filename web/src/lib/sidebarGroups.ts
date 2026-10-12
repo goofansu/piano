@@ -20,18 +20,34 @@ export type OpenGroupsEvent =
   /** The user opened or collapsed a group. */
   | { type: "toggle"; key: string; open: boolean }
   /** The selected session, the grouping or the group owning the selection, as of this render. */
-  | { type: "owner"; cwd: string; sessionId: string | null; groupBy: GroupBy; key: string | undefined }
+  | {
+      type: "owner";
+      cwd: string;
+      sessionId: string | null;
+      groupBy: GroupBy;
+      key: string | undefined;
+    }
   /** The registry's project ids, once loaded. */
   | { type: "projects"; ids: readonly string[] };
 
 /** Project groups share the open set with folders, keyed apart from paths; the empty id is the No project group. */
 export const projectKey = (id: string) => `project:${id}`;
 
-export const initialOpenGroups = (open: Iterable<string>): OpenGroups => ({ open: new Set(open), revealed: null, projects: null });
+export const initialOpenGroups = (open: Iterable<string>): OpenGroups => ({
+  open: new Set(open),
+  revealed: null,
+  projects: null,
+});
 
 /** The group holding a session: pinned sessions live only in Pinned, never in their folder/project group. */
-export function ownerGroupKey(state: AppState, session: { cwd: string; sessionId: string | null }, groupBy: GroupBy): string | undefined {
-  const member = session.sessionId ? sessionReference(state, { cwd: session.cwd, sessionId: session.sessionId }) : undefined;
+export function ownerGroupKey(
+  state: AppState,
+  session: { cwd: string; sessionId: string | null },
+  groupBy: GroupBy,
+): string | undefined {
+  const member = session.sessionId
+    ? sessionReference(state, { cwd: session.cwd, sessionId: session.sessionId })
+    : undefined;
   if (member?.pinned) return undefined;
   if (groupBy === "folder") return folderFor(state, session.cwd)?.path;
   if (groupBy !== "project") return undefined;
@@ -39,7 +55,7 @@ export function ownerGroupKey(state: AppState, session: { cwd: string; sessionId
 }
 
 const withOpen = (groups: OpenGroups, keys: readonly string[]): ReadonlySet<string> => {
-  const missing = keys.filter(k => !groups.open.has(k));
+  const missing = keys.filter((k) => !groups.open.has(k));
   return missing.length === 0 ? groups.open : new Set([...groups.open, ...missing]);
 };
 
@@ -66,8 +82,9 @@ export function nextOpenGroups(prev: OpenGroups, event: OpenGroupsEvent): OpenGr
     }
     case "projects": {
       const seen = prev.projects;
-      if (seen && event.ids.length === seen.size && event.ids.every(id => seen.has(id))) return prev;
-      const added = seen ? event.ids.filter(id => !seen.has(id)).map(projectKey) : [];
+      if (seen && event.ids.length === seen.size && event.ids.every((id) => seen.has(id)))
+        return prev;
+      const added = seen ? event.ids.filter((id) => !seen.has(id)).map(projectKey) : [];
       return { ...prev, projects: new Set(event.ids), open: withOpen(prev, added) };
     }
   }

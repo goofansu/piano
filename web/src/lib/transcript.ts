@@ -90,7 +90,11 @@ export interface TranscriptOptions {
 
 /** One line of a message, with markdown prefixes and extra whitespace folded away. */
 export function messageLabel(text: string, max = 80): string {
-  const line = text.replace(/\s+/g, " ").trim().replace(/^[#>*\-`\s]+/, "").trim();
+  const line = text
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[#>*\-`\s]+/, "")
+    .trim();
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
@@ -120,31 +124,61 @@ function summarize(args: string): string {
 const titleCase = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
 /** A card's facts, given the settled status another card reported for its run. */
-function subagentFacts(card: SubagentCard, reported: TerminalStatus | undefined, output: string | undefined, failed: boolean): SubagentFacts {
+function subagentFacts(
+  card: SubagentCard,
+  reported: TerminalStatus | undefined,
+  output: string | undefined,
+  failed: boolean,
+): SubagentFacts {
   const terminal = reported ?? ("terminalStatus" in card ? card.terminalStatus : undefined);
   // The card's own text may add to the status ("Failed · Result unavailable"); keep it when it agrees.
-  const statusLabel = terminal && !card.status.startsWith(titleCase(terminal)) ? titleCase(terminal) : card.status;
-  const badge = terminal === "completed" ? "success"
-    : terminal === "failed" ? "destructive"
-    : terminal === "cancelled" ? "secondary"
-    : card.kind === "delegation" && !card.admitted ? "destructive"
-    : /unknown|unavailable|still running|cancell/i.test(card.status) ? "warning"
-    : "secondary";
-  const hasDetails = !!output || card.kind === "collection" || card.kind === "cancellation"
-    || ("subagentId" in card && !!card.subagentId) || ("runId" in card && !!card.runId)
-    || (card.kind === "delegation" && !!card.prompt) || (card.kind === "control" && !!card.message)
-    || (card.kind === "result" && card.durationMillis !== undefined);
-  return { card, ...(terminal ? { terminal } : {}), statusLabel, badge, failed, ...(output ? { output } : {}), hasDetails };
+  const statusLabel =
+    terminal && !card.status.startsWith(titleCase(terminal)) ? titleCase(terminal) : card.status;
+  const badge =
+    terminal === "completed"
+      ? "success"
+      : terminal === "failed"
+        ? "destructive"
+        : terminal === "cancelled"
+          ? "secondary"
+          : card.kind === "delegation" && !card.admitted
+            ? "destructive"
+            : /unknown|unavailable|still running|cancell/i.test(card.status)
+              ? "warning"
+              : "secondary";
+  const hasDetails =
+    !!output ||
+    card.kind === "collection" ||
+    card.kind === "cancellation" ||
+    ("subagentId" in card && !!card.subagentId) ||
+    ("runId" in card && !!card.runId) ||
+    (card.kind === "delegation" && !!card.prompt) ||
+    (card.kind === "control" && !!card.message) ||
+    (card.kind === "result" && card.durationMillis !== undefined);
+  return {
+    card,
+    ...(terminal ? { terminal } : {}),
+    statusLabel,
+    badge,
+    failed,
+    ...(output ? { output } : {}),
+    hasDetails,
+  };
 }
 
-const turnLabel = (m: RenderMsg) => messageLabel(m.skill ? `/skill:${m.skill.name} ${m.text}` : m.text) || (m.attachments?.length ? "Image" : "");
+const turnLabel = (m: RenderMsg) =>
+  messageLabel(m.skill ? `/skill:${m.skill.name} ${m.text}` : m.text) ||
+  (m.attachments?.length ? "Image" : "");
 
 /**
  * The transcript as rows, in one pass over history. Tool results are folded under the call
  * that produced them; a prompt, and a reply that ended a turn, are Jump to destinations.
  * Tool-only replies and intermediate reasoning text are not destinations.
  */
-export function transcriptRows(messages: ReadonlyArray<RenderMsg>, { pending = null, tools = {}, showTools = true }: TranscriptOptions = {}): TranscriptRow[] {
+export function transcriptRows(
+  messages: ReadonlyArray<RenderMsg>,
+  { pending = null, tools = {}, showTools = true }: TranscriptOptions = {},
+): TranscriptRow[] {
   const results = new Map<string, RenderMsg>();
   const callIds = new Set<string>();
   const cardStatus = reportedSubagentStatus(messages);
@@ -166,52 +200,117 @@ export function transcriptRows(messages: ReadonlyArray<RenderMsg>, { pending = n
   // Live calls made inside another call, by the call that made them: named as its parent, or
   // under its id as a "parent/child" path. Built once so each row finds its own in one lookup.
   const children = new Map<string, ToolExecution[]>();
-  const adopt = (parent: string, child: ToolExecution) => children.set(parent, [...children.get(parent) ?? [], child]);
+  const adopt = (parent: string, child: ToolExecution) =>
+    children.set(parent, [...(children.get(parent) ?? []), child]);
   for (const execution of Object.values(tools)) {
     const parents = new Set(execution.parentId ? [execution.parentId] : []);
-    for (let i = execution.id.indexOf("/"); i > 0; i = execution.id.indexOf("/", i + 1)) parents.add(execution.id.slice(0, i));
+    for (let i = execution.id.indexOf("/"); i > 0; i = execution.id.indexOf("/", i + 1))
+      parents.add(execution.id.slice(0, i));
     for (const parent of parents) adopt(parent, execution);
   }
   const toolRow = (call: ToolCall, result: RenderMsg | undefined, running: boolean): ToolRow => {
     const execution = tools[call.id];
     const failed = !!result?.isError || execution?.status === "error";
-    const outcome: ToolOutcome = running ? "running" : failed ? "failed" : execution?.status === "incomplete" ? "incomplete" : result ? "done" : "pending";
+    const outcome: ToolOutcome = running
+      ? "running"
+      : failed
+        ? "failed"
+        : execution?.status === "incomplete"
+          ? "incomplete"
+          : result
+            ? "done"
+            : "pending";
     const output = result?.text ?? execution?.text;
-    const nested = new Map((result?.nestedCalls ?? []).map(c => [c.id, c]));
+    const nested = new Map((result?.nestedCalls ?? []).map((c) => [c.id, c]));
     for (const child of children.get(call.id) ?? []) nested.set(child.id, child);
     const verbs = VERBS[call.name];
     const [verbRunning, verbDone] = verbs ?? ["Calling", "Called"];
-    const verb = outcome === "running" ? verbRunning : outcome === "failed" ? "Failed" : outcome === "incomplete" ? "Incomplete" : verbDone;
+    const verb =
+      outcome === "running"
+        ? verbRunning
+        : outcome === "failed"
+          ? "Failed"
+          : outcome === "incomplete"
+            ? "Incomplete"
+            : verbDone;
     const card = result?.subagent ?? execution?.subagent;
     return {
-      call, result, outcome, ...(output !== undefined ? { output } : {}),
-      nested: [...nested.values()], nestedComplete: result?.nestedCallsComplete !== false,
-      verb, knownTool: !!verbs, summary: summarize(call.args),
+      call,
+      result,
+      outcome,
+      ...(output !== undefined ? { output } : {}),
+      nested: [...nested.values()],
+      nestedComplete: result?.nestedCallsComplete !== false,
+      verb,
+      knownTool: !!verbs,
+      summary: summarize(call.args),
       ...(card ? { subagent: subagentFacts(card, cardStatus(card), output, failed) } : {}),
     };
   };
   const noResults = new Map<string, RenderMsg>();
-  const active = new Set(Object.values(tools).filter(t => t.status === "running").map(t => t.id));
+  const active = new Set(
+    Object.values(tools)
+      .filter((t) => t.status === "running")
+      .map((t) => t.id),
+  );
 
   const rows: TranscriptRow[] = [];
-  const add = (m: RenderMsg, key: string, jump: string | undefined, streaming: boolean, preceding: () => readonly RenderMsg[]) => {
+  const add = (
+    m: RenderMsg,
+    key: string,
+    jump: string | undefined,
+    streaming: boolean,
+    preceding: () => readonly RenderMsg[],
+  ) => {
     if (!showTools && (m.subagent || m.role === "tool_result" || m.role === "context")) return;
     const text = showTools || jump ? m.text : "";
     if (m.subagent) {
-      rows.push({ kind: "subagent", key, msg: m, subagent: subagentFacts(m.subagent, cardStatus(m.subagent), m.text || undefined, false) });
+      rows.push({
+        kind: "subagent",
+        key,
+        msg: m,
+        subagent: subagentFacts(m.subagent, cardStatus(m.subagent), m.text || undefined, false),
+      });
     } else if (m.role === "context") {
       rows.push({ kind: "context", key, msg: m });
     } else if (m.role === "user") {
       rows.push({ kind: "user", key, msg: m, text, ...(jump ? { jump } : {}) });
     } else if (m.role === "assistant") {
-      const error = m.errorMessage ? messageError(m, showTools ? preceding() : [], showTools ? results : noResults, showTools ? tools : {}) : undefined;
-      const calls = showTools ? m.toolCalls ?? [] : [];
+      const error = m.errorMessage
+        ? messageError(
+            m,
+            showTools ? preceding() : [],
+            showTools ? results : noResults,
+            showTools ? tools : {},
+          )
+        : undefined;
+      const calls = showTools ? (m.toolCalls ?? []) : [];
       // Pi starts a message before its first visible text or tool block arrives.
       if (!text && !error && !calls.length) return;
-      const toolRows = calls.map(call => toolRow(call, results.get(call.id), active.has(call.id) || (streaming && !results.has(call.id) && !tools[call.id])));
-      rows.push({ kind: "reply", key, msg: m, text, tools: toolRows, ...(error ? { error } : {}), streaming, ...(jump ? { jump } : {}) });
+      const toolRows = calls.map((call) =>
+        toolRow(
+          call,
+          results.get(call.id),
+          active.has(call.id) || (streaming && !results.has(call.id) && !tools[call.id]),
+        ),
+      );
+      rows.push({
+        kind: "reply",
+        key,
+        msg: m,
+        text,
+        tools: toolRows,
+        ...(error ? { error } : {}),
+        streaming,
+        ...(jump ? { jump } : {}),
+      });
     } else {
-      rows.push({ kind: "orphan", key, msg: m, tool: toolRow({ id: m.toolCallId ?? m.id, name: m.toolName ?? "tool", args: "" }, m, false) });
+      rows.push({
+        kind: "orphan",
+        key,
+        msg: m,
+        tool: toolRow({ id: m.toolCallId ?? m.id, name: m.toolName ?? "tool", args: "" }, m, false),
+      });
     }
   };
   messages.forEach((m, index) => {
@@ -230,7 +329,12 @@ export function jumpEntries(rows: ReadonlyArray<TranscriptRow>): JumpEntry[] {
   const entries: JumpEntry[] = [{ kind: "top", id: "top", label: "Top of conversation" }];
   for (const row of rows) {
     if ((row.kind === "user" || row.kind === "reply") && row.jump) {
-      entries.push({ kind: row.kind === "user" ? "user" : "assistant", id: row.msg.id, label: row.jump, messageId: row.msg.id });
+      entries.push({
+        kind: row.kind === "user" ? "user" : "assistant",
+        id: row.msg.id,
+        label: row.jump,
+        messageId: row.msg.id,
+      });
     }
   }
   entries.push({ kind: "bottom", id: "bottom", label: "End of conversation" });
@@ -251,14 +355,20 @@ export function currentEntry(container: HTMLElement, entries: ReadonlyArray<Jump
   return current;
 }
 
-const motion = () => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth") as ScrollBehavior;
+const motion = () =>
+  (window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth") as ScrollBehavior;
 
 /** Fired on the transcript container when a jump should leave the reader pinned to the bottom. */
 export const STICK_EVENT = "piano:stick";
 
 /** The scroll offset that puts an element just under the container's top edge. */
 const offsetWithin = (container: HTMLElement, el: HTMLElement, margin: number) =>
-  el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - margin;
+  el.getBoundingClientRect().top -
+  container.getBoundingClientRect().top +
+  container.scrollTop -
+  margin;
 
 /**
  * Scroll the transcript to an entry and flash the message it landed on. Only the transcript
@@ -269,7 +379,10 @@ export function jumpTo(entry: JumpEntry): boolean {
   if (!container) return false;
   if (entry.kind === "top" || entry.kind === "bottom") {
     if (entry.kind === "bottom") container.dispatchEvent(new CustomEvent(STICK_EVENT));
-    container.scrollTo({ top: entry.kind === "top" ? 0 : container.scrollHeight, behavior: motion() });
+    container.scrollTo({
+      top: entry.kind === "top" ? 0 : container.scrollHeight,
+      behavior: motion(),
+    });
     return true;
   }
   const el = document.getElementById(messageAnchorId(entry.messageId));

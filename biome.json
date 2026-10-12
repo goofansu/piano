@@ -8,6 +8,12 @@
   "files": {
     "ignoreUnknown": false,
     "includes": [
+      "biome.json",
+      "package.json",
+      "tsconfig.json",
+      "eslint.config.mjs",
+      ".husky/install.mjs",
+      "web/*.json",
       "server/**/*.ts",
       "shared/**/*.ts",
       "test/**",
@@ -17,7 +23,19 @@
     ]
   },
   "formatter": {
-    "enabled": false
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
   },
   "linter": {
     "enabled": true,

@@ -18,7 +18,11 @@ import { emptySnapshot } from "./PiHistory.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
 import type { RegistryError, RegistryLookupError } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
-import { type CreateSessionRequest, type RetireMode, WorkspaceCommands } from "./WorkspaceCommands.ts";
+import {
+  type CreateSessionRequest,
+  type RetireMode,
+  WorkspaceCommands,
+} from "./WorkspaceCommands.ts";
 
 export interface Selection {
   readonly cwd: string;
@@ -45,7 +49,8 @@ const refused = {
   not_running: "Session is not running; start it first.",
   no_session: "No session is selected. Create a session before sending to it.",
 } as const;
-const refuse = (reason: ActRefused["reason"]) => Effect.fail(new ActRefused({ reason, detail: refused[reason] }));
+const refuse = (reason: ActRefused["reason"]) =>
+  Effect.fail(new ActRefused({ reason, detail: refused[reason] }));
 
 export interface ClientSessions {
   /** Claims the selection at once; the returned effect loads it and shows it if it is still current. */
@@ -54,20 +59,30 @@ export interface ClientSessions {
    * Claims a new-session selection at once; the returned effect creates the session (folder,
    * reference and project first) and shows it if this selection is still current.
    */
-  readonly create: (request: CreateSessionRequest & { readonly selectionId: string }) =>
-    Effect.Effect<Effect.Effect<void, PiSessionError | RegistryError | RegistryLookupError>>;
+  readonly create: (
+    request: CreateSessionRequest & { readonly selectionId: string },
+  ) => Effect.Effect<Effect.Effect<void, PiSessionError | RegistryError | RegistryLookupError>>;
   /**
    * Sends `action` to the selected session, starting it with `start` when it is not running,
    * and delivers any `action_result`. Never creates a session.
    */
-  readonly act: (selectionId: string, action: SessionAction, start?: StartOptions) =>
-    Effect.Effect<void, ActRefused | PiSessionError | RegistryError>;
+  readonly act: (
+    selectionId: string,
+    action: SessionAction,
+    start?: StartOptions,
+  ) => Effect.Effect<void, ActRefused | PiSessionError | RegistryError>;
   /** Detaches a session, stops Pi and archives or deletes it, then clears the selection if it showed that session. */
-  readonly retire: (cwd: string, sessionId: string, mode: RetireMode) => Effect.Effect<void, PiSessionError>;
+  readonly retire: (
+    cwd: string,
+    sessionId: string,
+    mode: RetireMode,
+  ) => Effect.Effect<void, PiSessionError>;
 }
 
 /** Lives until the surrounding scope closes, which detaches the attachment. */
-export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (output: ClientOutput) {
+export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
+  output: ClientOutput,
+) {
   const hosts = yield* SessionHosts;
   const commands = yield* WorkspaceCommands;
   const { send } = output;
@@ -77,7 +92,10 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (ou
   const navigation = yield* Semaphore.make(1);
   const navigate = Semaphore.withPermits(navigation, 1);
   const current = (selection: Selection) => selected?.selectionId === selection.selectionId;
-  const claim = (selection: Selection) => Effect.sync(() => { selected = selection; });
+  const claim = (selection: Selection) =>
+    Effect.sync(() => {
+      selected = selection;
+    });
 
   const detach = Effect.suspend(() => {
     const a = attachment;
@@ -87,7 +105,10 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (ou
   yield* Effect.addFinalizer(() => detach);
 
   // Caller holds navigation; slow lookup/start happens before stale-result checks.
-  const attachTo = Effect.fn("ClientSessions.attachTo")(function* (session: PiSession, selection: Selection) {
+  const attachTo = Effect.fn("ClientSessions.attachTo")(function* (
+    session: PiSession,
+    selection: Selection,
+  ) {
     if (!current(selection)) return;
     yield* detach;
     const scope = yield* Scope.make();
@@ -95,18 +116,36 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (ou
     attachment = mine;
     const ready = yield* Deferred.make<void>();
     yield* session.events.pipe(
-      Stream.runForEach(event => Effect.gen(function* () {
-        if (current(selection)) yield* event._tag === "snapshot"
-          ? send({ _tag: "selected", selectionId: selection.selectionId, cursor: event.cursor, cwd: session.spec.cwd, sessionId: session.spec.sessionId, hosted: !event.snapshot.state.closure, snapshot: event.snapshot })
-          : send({ _tag: "session", selectionId: selection.selectionId, cursor: event.cursor, event });
-        if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
-      })),
+      Stream.runForEach((event) =>
+        Effect.gen(function* () {
+          if (current(selection))
+            yield* event._tag === "snapshot"
+              ? send({
+                  _tag: "selected",
+                  selectionId: selection.selectionId,
+                  cursor: event.cursor,
+                  cwd: session.spec.cwd,
+                  sessionId: session.spec.sessionId,
+                  hosted: !event.snapshot.state.closure,
+                  snapshot: event.snapshot,
+                })
+              : send({
+                  _tag: "session",
+                  selectionId: selection.selectionId,
+                  cursor: event.cursor,
+                  event,
+                });
+          if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
+        }),
+      ),
       Effect.catchTag("DeliveryOverflow", output.overflow),
       Effect.ensuring(Deferred.succeed(ready, undefined)),
       // The stream ends when Pi is gone; the next action will start it again.
-      Effect.ensuring(Effect.sync(() => {
-        if (attachment === mine) attachment = null;
-      })),
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (attachment === mine) attachment = null;
+        }),
+      ),
       Effect.ignore,
       Effect.forkIn(scope),
     );
@@ -115,7 +154,10 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (ou
   });
 
   // Caller holds navigation.
-  const attachOpened = Effect.fn("ClientSessions.attachOpened")(function* <E>(selectionId: string, open: Effect.Effect<PiSession, E>) {
+  const attachOpened = Effect.fn("ClientSessions.attachOpened")(function* <E>(
+    selectionId: string,
+    open: Effect.Effect<PiSession, E>,
+  ) {
     const session = yield* open;
     const selection = { cwd: session.spec.cwd, sessionId: session.spec.sessionId, selectionId };
     if (current(selection)) {
@@ -128,50 +170,110 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (ou
   const show = Effect.fn("ClientSessions.show")(function* (selection: Selection) {
     const { cwd, sessionId, selectionId } = selection;
     const running = sessionId ? yield* hosts.get(cwd, sessionId) : undefined;
-    const view = running ? undefined : sessionId ? yield* hosts.peek(cwd, sessionId) : { cwd, snapshot: emptySnapshot("") };
-    yield* navigate(Effect.gen(function* () {
-      if (!current(selection)) return;
-      if (running) return yield* attachTo(running, selection);
-      yield* detach;
-      yield* send({ _tag: "selected", selectionId, cursor: null, cwd: view!.cwd, sessionId, hosted: false, snapshot: view!.snapshot });
-    }));
+    const view = running
+      ? undefined
+      : sessionId
+        ? yield* hosts.peek(cwd, sessionId)
+        : { cwd, snapshot: emptySnapshot("") };
+    yield* navigate(
+      Effect.gen(function* () {
+        if (!current(selection)) return;
+        if (running) return yield* attachTo(running, selection);
+        yield* detach;
+        yield* send({
+          _tag: "selected",
+          selectionId,
+          cursor: null,
+          cwd: view!.cwd,
+          sessionId,
+          hosted: false,
+          snapshot: view!.snapshot,
+        });
+      }),
+    );
   });
 
   // The attached session for this selection, or the selected one started with `start`.
-  const target = (selectionId: string, start: StartOptions | undefined) => navigate(Effect.gen(function* () {
-    if (!selected || selected.selectionId !== selectionId) return yield* refuse("stale");
-    if (attachment?.selectionId === selectionId) return attachment.session;
-    const { cwd, sessionId } = selected;
-    // Creating belongs to `create`, which registers the folder and project first.
-    if (sessionId === null) return yield* refuse("no_session");
-    if (!start) return yield* refuse("not_running");
-    // A start reaches browsers as a `hosts` update.
-    return yield* attachOpened(selectionId, hosts.open({ cwd, sessionId, model: start.model, thinkingLevel: start.thinkingLevel, name: start.name }));
-  }));
+  const target = (selectionId: string, start: StartOptions | undefined) =>
+    navigate(
+      Effect.gen(function* () {
+        if (!selected || selected.selectionId !== selectionId) return yield* refuse("stale");
+        if (attachment?.selectionId === selectionId) return attachment.session;
+        const { cwd, sessionId } = selected;
+        // Creating belongs to `create`, which registers the folder and project first.
+        if (sessionId === null) return yield* refuse("no_session");
+        if (!start) return yield* refuse("not_running");
+        // A start reaches browsers as a `hosts` update.
+        return yield* attachOpened(
+          selectionId,
+          hosts.open({
+            cwd,
+            sessionId,
+            model: start.model,
+            thinkingLevel: start.thinkingLevel,
+            name: start.name,
+          }),
+        );
+      }),
+    );
 
-  const act = Effect.fn("ClientSessions.act")(function* (selectionId: string, action: SessionAction, start?: StartOptions) {
+  const act = Effect.fn("ClientSessions.act")(function* (
+    selectionId: string,
+    action: SessionAction,
+    start?: StartOptions,
+  ) {
     const session = yield* target(selectionId, start);
     const result = yield* commands.act(session, action);
-    if (result) yield* send({ _tag: "action_result", cwd: session.spec.cwd, sessionId: session.spec.sessionId, result });
+    if (result)
+      yield* send({
+        _tag: "action_result",
+        cwd: session.spec.cwd,
+        sessionId: session.spec.sessionId,
+        result,
+      });
   });
 
-  const retire = Effect.fn("ClientSessions.retire")(function* (cwd: string, sessionId: string, mode: RetireMode) {
+  const retire = Effect.fn("ClientSessions.retire")(function* (
+    cwd: string,
+    sessionId: string,
+    mode: RetireMode,
+  ) {
     // Detach first, so this client sees no frames from a session being stopped.
-    yield* navigate(Effect.suspend(() =>
-      attachment?.session.spec.cwd === cwd && attachment.session.spec.sessionId === sessionId ? detach : Effect.void));
+    yield* navigate(
+      Effect.suspend(() =>
+        attachment?.session.spec.cwd === cwd && attachment.session.spec.sessionId === sessionId
+          ? detach
+          : Effect.void,
+      ),
+    );
     yield* commands.retireSession(cwd, sessionId, mode);
     if (selected?.cwd === cwd && selected.sessionId === sessionId) {
       const selectionId = selected.selectionId;
       selected = null;
-      yield* send({ _tag: "selected", selectionId, cursor: null, cwd, sessionId: null, hosted: false, snapshot: emptySnapshot("") });
+      yield* send({
+        _tag: "selected",
+        selectionId,
+        cursor: null,
+        cwd,
+        sessionId: null,
+        hosted: false,
+        snapshot: emptySnapshot(""),
+      });
     }
-    if (mode === "delete") yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
+    if (mode === "delete")
+      yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
   });
 
   return {
-    select: selection => claim(selection).pipe(Effect.as(show(selection))),
-    create: ({ selectionId, ...request }) => claim({ cwd: request.cwd, sessionId: null, selectionId }).pipe(
-      Effect.as(commands.createSession(request, { attach: open => navigate(attachOpened(selectionId, open)) }).pipe(Effect.asVoid))),
+    select: (selection) => claim(selection).pipe(Effect.as(show(selection))),
+    create: ({ selectionId, ...request }) =>
+      claim({ cwd: request.cwd, sessionId: null, selectionId }).pipe(
+        Effect.as(
+          commands
+            .createSession(request, { attach: (open) => navigate(attachOpened(selectionId, open)) })
+            .pipe(Effect.asVoid),
+        ),
+      ),
     act,
     retire,
   } satisfies ClientSessions as ClientSessions;

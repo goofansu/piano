@@ -53,11 +53,20 @@ export interface SetupActions<C, S> {
   clearError: () => void;
 }
 
-const message = (cause: unknown, fallback: string) => cause instanceof Error && cause.message ? cause.message : fallback;
+const message = (cause: unknown, fallback: string) =>
+  cause instanceof Error && cause.message ? cause.message : fallback;
 
-export function createSetupActions<C = never, S = never>(options: SetupActionsOptions): SetupActions<C, S> {
+export function createSetupActions<C = never, S = never>(
+  options: SetupActionsOptions,
+): SetupActions<C, S> {
   const newKey = options.newKey ?? (() => crypto.randomUUID());
-  let state: SetupActionsState<C, S> = { running: undefined, error: "", confirmation: undefined, confirming: false, signIn: undefined };
+  let state: SetupActionsState<C, S> = {
+    running: undefined,
+    error: "",
+    confirmation: undefined,
+    confirming: false,
+    signIn: undefined,
+  };
   const listeners = new Set<() => void>();
   const set = (patch: Partial<SetupActionsState<C, S>>) => {
     state = { ...state, ...patch };
@@ -65,8 +74,13 @@ export function createSetupActions<C = never, S = never>(options: SetupActionsOp
   };
   return {
     getState: () => state,
-    subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    run: async change => {
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    run: async (change) => {
       if (state.running !== undefined) return undefined;
       set({ running: change.id, error: "" });
       try {
@@ -85,10 +99,16 @@ export function createSetupActions<C = never, S = never>(options: SetupActionsOp
         set({ running: undefined, confirming: false });
       }
     },
-    confirm: confirmation => set({ confirmation, confirming: true }),
-    cancel: () => { if (state.running === undefined && state.confirming) set({ confirming: false }); },
-    openSignIn: subject => set({ signIn: { subject, key: newKey() } }),
-    closeSignIn: () => { if (state.signIn) set({ signIn: undefined }); },
-    clearError: () => { if (state.error) set({ error: "" }); },
+    confirm: (confirmation) => set({ confirmation, confirming: true }),
+    cancel: () => {
+      if (state.running === undefined && state.confirming) set({ confirming: false });
+    },
+    openSignIn: (subject) => set({ signIn: { subject, key: newKey() } }),
+    closeSignIn: () => {
+      if (state.signIn) set({ signIn: undefined });
+    },
+    clearError: () => {
+      if (state.error) set({ error: "" });
+    },
   };
 }

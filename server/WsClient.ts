@@ -5,7 +5,12 @@
  */
 import { Cause, Effect } from "effect";
 import { Socket } from "effect/socket";
-import { type ClientMessage, decodeClientMessage, encodeServerMessage, type ServerMessage } from "../shared/wire.ts";
+import {
+  type ClientMessage,
+  decodeClientMessage,
+  encodeServerMessage,
+  type ServerMessage,
+} from "../shared/wire.ts";
 import { makeSocketDelivery } from "./BoundedDelivery.ts";
 import { makeClientDispatch } from "./ClientDispatch.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
@@ -17,10 +22,13 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket
   const writer = yield* socket.writer;
 
   // Bound both host queues and the transport; the window and close codes live in BoundedDelivery.
-  const delivery = yield* makeSocketDelivery((text: string) => writer.write(text), (m: ServerMessage, id) => encodeServerMessage(projectDisplay(m), id));
+  const delivery = yield* makeSocketDelivery(
+    (text: string) => writer.write(text),
+    (m: ServerMessage, id) => encodeServerMessage(projectDisplay(m), id),
+  );
   const client = yield* makeClientDispatch({
     send: delivery.offer,
-    overflow: error => delivery.close(error.detail, error.oversized ? 1009 : 1013),
+    overflow: (error) => delivery.close(error.detail, error.oversized ? 1009 : 1013),
   });
 
   const decoder = new TextDecoder();
@@ -29,7 +37,10 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket
     for (const chunk of chunks) {
       const size = typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.byteLength;
       if (size > inboundLimits.frameBytes) {
-        yield* delivery.close("Input exceeds the WebSocket message byte limit. Reduce it before reconnecting.", 1009);
+        yield* delivery.close(
+          "Input exceeds the WebSocket message byte limit. Reduce it before reconnecting.",
+          1009,
+        );
         return yield* Effect.never;
       }
       const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
@@ -48,13 +59,31 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket
       // that opens an extension dialog only gets its response after the dialog is answered.
       yield* Effect.forkScoped(yield* client.receive(msg));
     }
-  }).pipe(Effect.forever,
+  }).pipe(
+    Effect.forever,
     // Peer close already ends this client scope; a failed reader must explicitly
     // close an otherwise live socket. Never replay work or stop its Pi session.
-    Effect.catchTag("SocketError", error => error.reason._tag === "SocketCloseError" ? Effect.void : Effect.fail(error)),
-    Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void :
-      writer.write(new Socket.CloseEvent(1011, "Socket reader failed; reconnect for a current snapshot.")).pipe(Effect.ignore)),
+    Effect.catchTag("SocketError", (error) =>
+      error.reason._tag === "SocketCloseError" ? Effect.void : Effect.fail(error),
+    ),
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.void
+        : writer
+            .write(
+              new Socket.CloseEvent(
+                1011,
+                "Socket reader failed; reconnect for a current snapshot.",
+              ),
+            )
+            .pipe(Effect.ignore),
+    ),
     Effect.raceFirst(
-    delivery.closed.pipe(Effect.flatMap(({ reason, code }) => writer.write(new Socket.CloseEvent(code, reason)).pipe(Effect.ignore))),
-  ));
+      delivery.closed.pipe(
+        Effect.flatMap(({ reason, code }) =>
+          writer.write(new Socket.CloseEvent(code, reason)).pipe(Effect.ignore),
+        ),
+      ),
+    ),
+  );
 }, Effect.scoped);

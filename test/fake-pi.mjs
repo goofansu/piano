@@ -6,22 +6,42 @@ const args = process.argv.slice(2);
 const verifyChildEnvironment = args.includes("--verify-child-environment");
 let verifiedImage = false;
 if (verifyChildEnvironment) {
-  if ("WATCH_REPORT_DEPENDENCIES" in process.env) throw new Error("Pi child inherited WATCH_REPORT_DEPENDENCIES");
-  if (process.env.PIANO_TEST_PRESERVED_ENV !== "preserved") throw new Error("Pi child lost an unrelated environment variable");
-  const { processImage } = await import(new URL("../node_modules/@earendil-works/pi-coding-agent/dist/utils/image-process.js", import.meta.url).href);
+  if ("WATCH_REPORT_DEPENDENCIES" in process.env)
+    throw new Error("Pi child inherited WATCH_REPORT_DEPENDENCIES");
+  if (process.env.PIANO_TEST_PRESERVED_ENV !== "preserved")
+    throw new Error("Pi child lost an unrelated environment variable");
+  const { processImage } = await import(
+    new URL(
+      "../node_modules/@earendil-works/pi-coding-agent/dist/utils/image-process.js",
+      import.meta.url,
+    ).href
+  );
   // Valid 1×1 RGBA PNG, including chunk CRCs, for the installed Pi decoder.
-  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==", "base64");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+    "base64",
+  );
   const image = await processImage(png, "image/png");
   if (!image.ok) throw new Error(image.message);
   verifiedImage = true;
 }
-const environmentFixture = verifyChildEnvironment ? `env:${process.env.PIANO_TEST_PRESERVED_ENV};image:${verifiedImage ? "accepted" : "omitted"}` : undefined;
+const environmentFixture = verifyChildEnvironment
+  ? `env:${process.env.PIANO_TEST_PRESERVED_ENV};image:${verifiedImage ? "accepted" : "omitted"}`
+  : undefined;
 const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";
 const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "fake/alpha";
 let model = { provider: modelArg.split("/")[0], id: modelArg.split("/")[1] };
 let thinkingLevel = "medium";
 let sessionName = environmentFixture ?? "fake";
-const state = () => ({ model, thinkingLevel, isStreaming: streaming, isCompacting: compacting, sessionFile: `/tmp/${sessionId}.jsonl`, sessionId, sessionName });
+const state = () => ({
+  model,
+  thinkingLevel,
+  isStreaming: streaming,
+  isCompacting: compacting,
+  sessionFile: `/tmp/${sessionId}.jsonl`,
+  sessionId,
+  sessionName,
+});
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 let streaming = false;
 let compacting = false;
@@ -39,17 +59,25 @@ let liveStage = 0;
 const steering = [];
 const followUp = [];
 const messages = [];
-const queueUpdate = () => out({ type: "queue_update", steering: [...steering], followUp: [...followUp] });
+const queueUpdate = () =>
+  out({ type: "queue_update", steering: [...steering], followUp: [...followUp] });
 const settle = (last) => {
   out({ type: "agent_end", messages: last ? [last] : [], willRetry: false });
   while (steering.length || followUp.length) {
     const text = steering.length ? steering.shift() : followUp.shift();
     queueUpdate(); // Pi removes a pending message before it starts appearing in history.
     const user = { role: "user", content: text, timestamp: Date.now() };
-    const assistant = { role: "assistant", content: [{ type: "text", text: `echo: ${text}` }], model: model.id, provider: model.provider, timestamp: Date.now() };
+    const assistant = {
+      role: "assistant",
+      content: [{ type: "text", text: `echo: ${text}` }],
+      model: model.id,
+      provider: model.provider,
+      timestamp: Date.now(),
+    };
     out({ type: "agent_start" });
     messages.push(user);
-    out({ type: "message_start", message: user }); out({ type: "message_end", message: user });
+    out({ type: "message_start", message: user });
+    out({ type: "message_end", message: user });
     messages.push(assistant);
     out({ type: "message_end", message: assistant });
     out({ type: "agent_end", messages: [assistant], willRetry: false });
@@ -71,13 +99,24 @@ let buf = "";
 process.stdin.on("data", (d) => {
   buf += dec.write(d);
   for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
-    const line = buf.slice(0, i); buf = buf.slice(i + 1);
+    const line = buf.slice(0, i);
+    buf = buf.slice(i + 1);
     if (line.trim()) handle(JSON.parse(line));
   }
 });
-process.stdin.on("end", () => { out({ type: "bye" }); process.exit(0); });
+process.stdin.on("end", () => {
+  out({ type: "bye" });
+  process.exit(0);
+});
 
-const respond = (cmd, data, error) => out({ id: cmd.id, type: "response", command: cmd.type, success: !error, ...(error ? { error } : { data }) });
+const respond = (cmd, data, error) =>
+  out({
+    id: cmd.id,
+    type: "response",
+    command: cmd.type,
+    success: !error,
+    ...(error ? { error } : { data }),
+  });
 
 function handle(cmd) {
   switch (cmd.type) {
@@ -87,61 +126,138 @@ function handle(cmd) {
         return; // No readiness response: nothing consumes records until open completes.
       }
       if (sessionId === "capacity-record-bytes") {
-        for (let n = 0; n < 3; n++) out({ type: "future_event", text: "x".repeat(12 * 1024 * 1024) });
+        for (let n = 0; n < 3; n++)
+          out({ type: "future_event", text: "x".repeat(12 * 1024 * 1024) });
         return;
       }
       if (args.includes("--silence-readiness")) return; // alive, but never ready
       if (holdNextState) {
-        holdNextState = false; heldState = { cmd, data: state() };
-        out({ type: "extension_ui_request", id: "held-state", method: "notify", message: "Fixture captured an old state response" });
+        holdNextState = false;
+        heldState = { cmd, data: state() };
+        out({
+          type: "extension_ui_request",
+          id: "held-state",
+          method: "notify",
+          message: "Fixture captured an old state response",
+        });
         return;
       }
       return respond(cmd, state());
     case "get_commands":
-      if (heldClear) { respond(heldClear.cmd, heldClear.restored); heldClear = undefined; }
-      return respond(cmd, { commands: [
-      { name: "handled", description: "Handle without a model call", source: "extension" },
-      { name: "handled", description: "Shadowed template", source: "prompt" },
-      { name: "skill:research", description: "Investigate a question", source: "skill" },
-      { name: args.includes("--no-session") ? "skill:probe-only" : "skill:live-only", source: "skill" },
-      { name: "review", description: "Review changes", source: "prompt" },
-      { name: args.includes("--no-session") ? "probe-only" : "live-only", source: "extension" },
-    ] });
-    case "get_messages": return respond(cmd, { messages });
+      if (heldClear) {
+        respond(heldClear.cmd, heldClear.restored);
+        heldClear = undefined;
+      }
+      return respond(cmd, {
+        commands: [
+          { name: "handled", description: "Handle without a model call", source: "extension" },
+          { name: "handled", description: "Shadowed template", source: "prompt" },
+          { name: "skill:research", description: "Investigate a question", source: "skill" },
+          {
+            name: args.includes("--no-session") ? "skill:probe-only" : "skill:live-only",
+            source: "skill",
+          },
+          { name: "review", description: "Review changes", source: "prompt" },
+          { name: args.includes("--no-session") ? "probe-only" : "live-only", source: "extension" },
+        ],
+      });
+    case "get_messages":
+      return respond(cmd, { messages });
     case "get_entries": {
       // A Pi without pi-subagent: ordinary entries, plus near misses another extension could write.
       const entries = [
-        { type: "custom_message", id: "e-other", customType: "todo-reminder", content: "Remember", display: true, details: { runId: "r", agent: "a", usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 1 } } },
-        { type: "message", id: "e-read", message: { role: "toolResult", toolCallId: "t", toolName: "read", content: [{ type: "text", text: "file" }], usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { total: 1 } }, details: { kind: "collection", runs: [] } } },
+        {
+          type: "custom_message",
+          id: "e-other",
+          customType: "todo-reminder",
+          content: "Remember",
+          display: true,
+          details: {
+            runId: "r",
+            agent: "a",
+            usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 1 },
+          },
+        },
+        {
+          type: "message",
+          id: "e-read",
+          message: {
+            role: "toolResult",
+            toolCallId: "t",
+            toolName: "read",
+            content: [{ type: "text", text: "file" }],
+            usage: {
+              input: 1,
+              output: 1,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 2,
+              cost: { total: 1 },
+            },
+            details: { kind: "collection", runs: [] },
+          },
+        },
         ...messages.map((message, i) => ({ type: "message", id: `e-${i}`, message })),
       ];
-      const since = cmd.since === undefined ? -1 : entries.findIndex(entry => entry.id === cmd.since);
-      if (cmd.since !== undefined && since === -1) return respond(cmd, undefined, `Entry not found: ${cmd.since}`);
+      const since =
+        cmd.since === undefined ? -1 : entries.findIndex((entry) => entry.id === cmd.since);
+      if (cmd.since !== undefined && since === -1)
+        return respond(cmd, undefined, `Entry not found: ${cmd.since}`);
       return respond(cmd, { entries: entries.slice(since + 1), leafId: entries.at(-1).id });
     }
-    case "get_session_stats": return respond(cmd, { cost: 0.01 * messages.length, contextUsage: liveContext ?? { tokens: 1200 * messages.length, contextWindow: model.id === "beta" ? 400000 : 200000, percent: (model.id === "beta" ? 0.3 : 0.6) * messages.length } });
-    case "get_available_models": return respond(cmd, { models: [
-      { provider: "fake", id: "alpha", name: environmentFixture, reasoning: true, contextWindow: 1000, thinkingLevelMap: { minimal: null, xhigh: "xhigh" } },
-      { provider: "fake", id: "beta", reasoning: false, contextWindow: 2000 } ] });
-    case "set_model": model = { provider: cmd.provider, id: cmd.modelId }; return respond(cmd, model);
-    case "set_thinking_level": thinkingLevel = cmd.level; out({ type: "thinking_level_changed", level: cmd.level }); return respond(cmd, undefined);
+    case "get_session_stats":
+      return respond(cmd, {
+        cost: 0.01 * messages.length,
+        contextUsage: liveContext ?? {
+          tokens: 1200 * messages.length,
+          contextWindow: model.id === "beta" ? 400000 : 200000,
+          percent: (model.id === "beta" ? 0.3 : 0.6) * messages.length,
+        },
+      });
+    case "get_available_models":
+      return respond(cmd, {
+        models: [
+          {
+            provider: "fake",
+            id: "alpha",
+            name: environmentFixture,
+            reasoning: true,
+            contextWindow: 1000,
+            thinkingLevelMap: { minimal: null, xhigh: "xhigh" },
+          },
+          { provider: "fake", id: "beta", reasoning: false, contextWindow: 2000 },
+        ],
+      });
+    case "set_model":
+      model = { provider: cmd.provider, id: cmd.modelId };
+      return respond(cmd, model);
+    case "set_thinking_level":
+      thinkingLevel = cmd.level;
+      out({ type: "thinking_level_changed", level: cmd.level });
+      return respond(cmd, undefined);
     case "abort":
       releaseCapacity();
       if (sessionId === "stop-abort-exit") return process.exit(3);
-      if (sessionId === "stop-abort-failure") return respond(cmd, undefined, "fixture abort failed");
-      if (sessionId.startsWith("stop-") && (steering.length || followUp.length)) return respond(cmd, undefined, "abort before clear");
+      if (sessionId === "stop-abort-failure")
+        return respond(cmd, undefined, "fixture abort failed");
+      if (sessionId.startsWith("stop-") && (steering.length || followUp.length))
+        return respond(cmd, undefined, "abort before clear");
       // Pi 1.0.2 abort pauses pending work; it does not consume its queues.
       streaming = false;
       out({ type: "agent_end", messages: [], willRetry: false });
       out({ type: "agent_settled" });
       return respond(cmd, undefined);
     case "clear_queue": {
-      if (sessionId === "stop-clear-failure") return respond(cmd, undefined, "fixture clear failed");
+      if (sessionId === "stop-clear-failure")
+        return respond(cmd, undefined, "fixture clear failed");
       const restored = { steering: [...steering], followUp: [...followUp] };
       steering.length = 0;
       followUp.length = 0;
       queueUpdate();
-      if (sessionId === "stop-concurrent") { heldClear = { cmd, restored }; return; }
+      if (sessionId === "stop-concurrent") {
+        heldClear = { cmd, restored };
+        return;
+      }
       return respond(cmd, restored);
     }
     case "follow_up": {
@@ -153,22 +269,52 @@ function handle(cmd) {
     }
     case "extension_ui_response": {
       if (cmd.id.startsWith("capacity-")) {
-        releaseCapacity(); streaming = false;
-        out({ type: "extension_ui_request", id: "capacity-answered", method: "notify", message: "Capacity dialog answered" });
-        settle(); return;
+        releaseCapacity();
+        streaming = false;
+        out({
+          type: "extension_ui_request",
+          id: "capacity-answered",
+          method: "notify",
+          message: "Capacity dialog answered",
+        });
+        settle();
+        return;
       }
       if (liveStage === 1) {
         liveStage = 2;
         liveContext = { tokens: null, contextWindow: 200000, percent: null };
-        out({ type: "compaction_end", reason: "threshold", result: { summary: "compacted", tokensBefore: 42000 }, aborted: false, willRetry: false });
-        out({ type: "extension_ui_request", id: "live2", method: "input", title: "After compaction" });
+        out({
+          type: "compaction_end",
+          reason: "threshold",
+          result: { summary: "compacted", tokensBefore: 42000 },
+          aborted: false,
+          willRetry: false,
+        });
+        out({
+          type: "extension_ui_request",
+          id: "live2",
+          method: "input",
+          title: "After compaction",
+        });
         return;
       }
-      out({ type: "extension_ui_request", id: "n1", method: "notify", message: `answered ${cmd.id} with ${cmd.value ?? cmd.confirmed ?? "cancel"}`, notifyType: "info" });
+      out({
+        type: "extension_ui_request",
+        id: "n1",
+        method: "notify",
+        message: `answered ${cmd.id} with ${cmd.value ?? cmd.confirmed ?? "cancel"}`,
+        notifyType: "info",
+      });
       // A dialog released after native abort must not fabricate an assistant
       // reply or drain the queue that real Pi has paused.
       if (cmd.cancelled && !streaming) return;
-      const asst = { role: "assistant", content: [{ type: "text", text: `you said ${cmd.value ?? ""}` }], model: model.id, provider: model.provider, timestamp: Date.now() };
+      const asst = {
+        role: "assistant",
+        content: [{ type: "text", text: `you said ${cmd.value ?? ""}` }],
+        model: model.id,
+        provider: model.provider,
+        timestamp: Date.now(),
+      };
       messages.push(asst);
       out({ type: "message_end", message: asst });
       settle(asst);
@@ -176,9 +322,21 @@ function handle(cmd) {
     }
     case "prompt": {
       if (cmd.message === "capacity hold") {
-        if (capacityHeld.length === 0) out({ type: "extension_ui_request", id: `capacity-${++capacityRound}`, method: "input", title: "Release capacity" });
-        capacityHeld.push(cmd); streaming = true;
-        out({ type: "extension_ui_request", id: "capacity-count", method: "notify", message: `Capacity held: ${capacityHeld.length}` });
+        if (capacityHeld.length === 0)
+          out({
+            type: "extension_ui_request",
+            id: `capacity-${++capacityRound}`,
+            method: "input",
+            title: "Release capacity",
+          });
+        capacityHeld.push(cmd);
+        streaming = true;
+        out({
+          type: "extension_ui_request",
+          id: "capacity-count",
+          method: "notify",
+          message: `Capacity held: ${capacityHeld.length}`,
+        });
         return;
       }
       if (cmd.message === "capacity oversized-line") {
@@ -186,10 +344,20 @@ function handle(cmd) {
         return; // Intentionally no newline and no response.
       }
       if (cmd.message === "capacity fragmented") {
-        const bytes = Buffer.from(JSON.stringify({ type: "extension_ui_request", id: "unicode", method: "notify", message: "Fragmented € record" }) + "\n");
+        const bytes = Buffer.from(
+          JSON.stringify({
+            type: "extension_ui_request",
+            id: "unicode",
+            method: "notify",
+            message: "Fragmented € record",
+          }) + "\n",
+        );
         const split = bytes.indexOf(Buffer.from("€")) + 1;
         process.stdout.write(bytes.subarray(0, split));
-        setImmediate(() => { process.stdout.write(bytes.subarray(split)); respond(cmd, { disposition: "handled" }); });
+        setImmediate(() => {
+          process.stdout.write(bytes.subarray(split));
+          respond(cmd, { disposition: "handled" });
+        });
         return;
       }
       if (cmd.message.startsWith("protocol raw:")) {
@@ -203,31 +371,53 @@ function handle(cmd) {
       if (cmd.message === "protocol future") out({ type: "future_event", extra: { version: 2 } });
       // Extension commands run before busy checks. Never accept these through follow_up.
       if (cmd.message === "/handled") {
-        model = { provider: "fake", id: "beta" }; thinkingLevel = "high";
+        model = { provider: "fake", id: "beta" };
+        thinkingLevel = "high";
         return respond(cmd, { disposition: "handled" });
       }
-      if (cmd.message === "handled input" || cmd.message === "handled queue") return respond(cmd, { disposition: "handled" });
-      if (cmd.message === "/hold-state") { holdNextState = true; return respond(cmd, { disposition: "handled" }); }
+      if (cmd.message === "handled input" || cmd.message === "handled queue")
+        return respond(cmd, { disposition: "handled" });
+      if (cmd.message === "/hold-state") {
+        holdNextState = true;
+        return respond(cmd, { disposition: "handled" });
+      }
       if (cmd.message === "/release-state") {
         respond(cmd, { disposition: "handled" });
-        if (heldState) { respond(heldState.cmd, heldState.data); heldState = undefined; }
+        if (heldState) {
+          respond(heldState.cmd, heldState.data);
+          heldState = undefined;
+        }
         return;
       }
       if (cmd.message === "withhold acknowledgement") {
         delayedPrompt = cmd;
         streaming = true;
         out({ type: "agent_start" });
-        out({ type: "extension_ui_request", id: "withheld", method: "notify", message: "Fixture received input without acknowledging it" });
+        out({
+          type: "extension_ui_request",
+          id: "withheld",
+          method: "notify",
+          message: "Fixture received input without acknowledging it",
+        });
         return;
       }
       if (cmd.message === "/release-ack") {
         respond(cmd, { disposition: "handled" });
-        if (delayedPrompt) { respond(delayedPrompt, { disposition: "started" }); delayedPrompt = undefined; }
+        if (delayedPrompt) {
+          respond(delayedPrompt, { disposition: "started" });
+          delayedPrompt = undefined;
+        }
         return;
       }
       if (cmd.message === "/retry") {
         out({ type: "agent_end", messages: [], willRetry: true });
-        out({ type: "auto_retry_start", attempt: 1, maxAttempts: 3, delayMs: 2000, errorMessage: "fixture overload" });
+        out({
+          type: "auto_retry_start",
+          attempt: 1,
+          maxAttempts: 3,
+          delayMs: 2000,
+          errorMessage: "fixture overload",
+        });
         return respond(cmd, { disposition: "handled" });
       }
       if (cmd.message === "/compact") {
@@ -237,7 +427,13 @@ function handle(cmd) {
         return respond(cmd, { disposition: "handled" });
       }
       if (cmd.message === "/summary-retry") {
-        out({ type: "summarization_retry_scheduled", attempt: 1, maxAttempts: 3, delayMs: 1000, errorMessage: "fixture summary error" });
+        out({
+          type: "summarization_retry_scheduled",
+          attempt: 1,
+          maxAttempts: 3,
+          delayMs: 1000,
+          errorMessage: "fixture summary error",
+        });
         return respond(cmd, { disposition: "handled" });
       }
       if (cmd.message === "/recover") {
@@ -248,43 +444,93 @@ function handle(cmd) {
         settle();
         return respond(cmd, { disposition: "handled" });
       }
-      if (cmd.message === "reject queue" || cmd.message === "reject input" || compacting) return respond(cmd, undefined, compacting ? "Cannot prompt during compaction" : "input rejected");
+      if (cmd.message === "reject queue" || cmd.message === "reject input" || compacting)
+        return respond(
+          cmd,
+          undefined,
+          compacting ? "Cannot prompt during compaction" : "input rejected",
+        );
       if (streaming) {
-        if (!["followUp", "steer"].includes(cmd.streamingBehavior)) return respond(cmd, undefined, "Agent is streaming; specify streamingBehavior");
+        if (!["followUp", "steer"].includes(cmd.streamingBehavior))
+          return respond(cmd, undefined, "Agent is streaming; specify streamingBehavior");
         const queue = cmd.streamingBehavior === "steer" ? steering : followUp;
-        queue.push(cmd.message === "expand queue" ? (cmd.streamingBehavior === "steer" ? "expanded steering" : "expanded follow-up") : cmd.message);
+        queue.push(
+          cmd.message === "expand queue"
+            ? cmd.streamingBehavior === "steer"
+              ? "expanded steering"
+              : "expanded follow-up"
+            : cmd.message,
+        );
         queueUpdate();
         return respond(cmd, { disposition: "queued" });
       }
       respond(cmd, { disposition: "started" });
       streaming = true;
       const expanded = expandSkill(cmd.message);
-      const user = { role: "user", content: cmd.images?.length ? [{ type: "text", text: expanded }, ...cmd.images] : expanded, timestamp: Date.now() };
+      const user = {
+        role: "user",
+        content: cmd.images?.length ? [{ type: "text", text: expanded }, ...cmd.images] : expanded,
+        timestamp: Date.now(),
+      };
       messages.push(user);
-      out({ type: "agent_start" }); out({ type: "turn_start" });
-      out({ type: "message_start", message: user }); out({ type: "message_end", message: user });
+      out({ type: "agent_start" });
+      out({ type: "turn_start" });
+      out({ type: "message_start", message: user });
+      out({ type: "message_end", message: user });
       if (cmd.message.startsWith("ask")) {
-        out({ type: "extension_ui_request", id: "d1", method: "input", title: "Enter a value", placeholder: "type" });
+        out({
+          type: "extension_ui_request",
+          id: "d1",
+          method: "input",
+          title: "Enter a value",
+          placeholder: "type",
+        });
         return; // stays streaming until answered (see extension_ui_response below is fire-and-forget; finish on answer)
       }
-      if (cmd.message.startsWith("crash")) { process.stderr.write("boom\n"); process.exit(3); }
+      if (cmd.message.startsWith("crash")) {
+        process.stderr.write("boom\n");
+        process.exit(3);
+      }
       const text = `echo: ${cmd.message}`;
-      out({ type: "message_start", message: { role: "assistant", content: [], model: model.id, provider: model.provider } });
-      for (const ch of text) out({ type: "message_update", usage: {}, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: ch } });
-      const asst = { role: "assistant", content: [{ type: "text", text }], model: model.id, provider: model.provider, timestamp: Date.now() };
+      out({
+        type: "message_start",
+        message: { role: "assistant", content: [], model: model.id, provider: model.provider },
+      });
+      for (const ch of text)
+        out({
+          type: "message_update",
+          usage: {},
+          assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: ch },
+        });
+      const asst = {
+        role: "assistant",
+        content: [{ type: "text", text }],
+        model: model.id,
+        provider: model.provider,
+        timestamp: Date.now(),
+      };
       messages.push(asst);
-      if (cmd.message === "live context") liveContext = { tokens: 42000, contextWindow: 200000, percent: 21 };
+      if (cmd.message === "live context")
+        liveContext = { tokens: 42000, contextWindow: 200000, percent: 21 };
       out({ type: "message_end", message: asst });
       out({ type: "turn_end", message: asst, toolResults: [] });
       if (cmd.message === "live context") {
         liveStage = 1;
-        out({ type: "extension_ui_request", id: "live1", method: "input", title: "Running after response" });
+        out({
+          type: "extension_ui_request",
+          id: "live1",
+          method: "input",
+          title: "Running after response",
+        });
         return; // deterministic pause before the next response, not agent_settled
       }
       settle(asst);
       return;
     }
-    case "set_session_name": sessionName = cmd.name; return respond(cmd, {});
-    default: return respond(cmd, undefined, `unknown ${cmd.type}`);
+    case "set_session_name":
+      sessionName = cmd.name;
+      return respond(cmd, {});
+    default:
+      return respond(cmd, undefined, `unknown ${cmd.type}`);
   }
 }

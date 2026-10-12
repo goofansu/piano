@@ -1,28 +1,50 @@
 import { type RefObject, useEffect } from "react";
 
 const editable = (el: EventTarget | null) =>
-  el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  el instanceof HTMLElement &&
+  (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 
 /** Something else is taking keys: a menu, a listbox, a dialog. */
-const overlayOpen = () => !!document.querySelector('[role="dialog"], [role="menu"], [role="listbox"], [cmdk-root]');
+const overlayOpen = () =>
+  !!document.querySelector('[role="dialog"], [role="menu"], [role="listbox"], [cmdk-root]');
 
 /**
  * Typing anywhere on the page goes into the composer, as in ChatGPT. A printable key or a paste
  * that lands outside any field focuses the textarea and inserts the text there.
  */
-export function useTypeToFocus(ref: RefObject<HTMLTextAreaElement | null>, insert: (text: string) => void, enabled = true) {
+export function useTypeToFocus(
+  ref: RefObject<HTMLTextAreaElement | null>,
+  insert: (text: string) => void,
+  enabled = true,
+) {
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
-      if (e.key.length !== 1 || editable(e.target) || overlayOpen() || !ref.current || ref.current.disabled || !ref.current.getClientRects().length) return;
+      if (
+        e.key.length !== 1 ||
+        editable(e.target) ||
+        overlayOpen() ||
+        !ref.current ||
+        ref.current.disabled ||
+        !ref.current.getClientRects().length
+      )
+        return;
       e.preventDefault();
       ref.current.focus();
       insert(e.key);
     };
     const onPaste = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData("text/plain");
-      if (!text || editable(e.target) || overlayOpen() || !ref.current || ref.current.disabled || !ref.current.getClientRects().length) return;
+      if (
+        !text ||
+        editable(e.target) ||
+        overlayOpen() ||
+        !ref.current ||
+        ref.current.disabled ||
+        !ref.current.getClientRects().length
+      )
+        return;
       e.preventDefault();
       ref.current.focus();
       insert(text);

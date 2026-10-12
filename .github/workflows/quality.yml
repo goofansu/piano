@@ -43,7 +43,8 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run typecheck
-      - name: Lint
+      # biome check also enforces the formatter; do not run auto-fixes in CI.
+      - name: Lint and formatting
         run: npm run lint
       - name: Test (fake Pi, no model credentials)
         run: npm test

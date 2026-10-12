@@ -17,10 +17,12 @@ export const DELIVERY: Record<DeliveryMode, { label: string; detail: string }> =
 };
 export const DELIVERY_MODES: readonly DeliveryMode[] = ["steering", "follow-up"];
 /** The mode Alt+Enter uses: always the one not chosen. */
-export const otherMode = (mode: DeliveryMode): DeliveryMode => (mode === "steering" ? "follow-up" : "steering");
+export const otherMode = (mode: DeliveryMode): DeliveryMode =>
+  mode === "steering" ? "follow-up" : "steering";
 
 /** The session action that delivers a message of this kind. */
-export const deliveryAction = (kind: DeliveryMode): "steer" | "prompt" => (kind === "steering" ? "steer" : "prompt");
+export const deliveryAction = (kind: DeliveryMode): "steer" | "prompt" =>
+  kind === "steering" ? "steer" : "prompt";
 
 export interface ComposerSituation {
   text: string;
@@ -37,7 +39,11 @@ export interface ComposerSituation {
 }
 
 /** A tooltip reads `lead`, then the key, then `tail`. */
-export interface ControlHint { lead: string; key: "Enter" | "Esc"; tail?: string }
+export interface ControlHint {
+  lead: string;
+  key: "Enter" | "Esc";
+  tail?: string;
+}
 
 export interface ComposerControl {
   primary: "send" | "queue" | "stop";
@@ -67,7 +73,14 @@ export function composerControl(s: ComposerSituation): ComposerControl {
       primary: "stop",
       enabled: idle,
       label: "Stop",
-      hint: s.queued > 0 ? { lead: "Stop and move queued input to the draft.", key: "Esc", tail: " edits without stopping." } : { lead: "Stop", key: "Esc" },
+      hint:
+        s.queued > 0
+          ? {
+              lead: "Stop and move queued input to the draft.",
+              key: "Esc",
+              tail: " edits without stopping.",
+            }
+          : { lead: "Stop", key: "Esc" },
       showDelivery,
       imagesWaiting,
       escape: escapeAction(s, idle),
@@ -80,13 +93,21 @@ export function composerControl(s: ComposerSituation): ComposerControl {
     primary: s.streaming ? "queue" : "send",
     enabled,
     label: showDelivery ? DELIVERY[s.mode].label : s.streaming ? "Queue message" : "Send",
-    hint: { lead: showDelivery ? `${DELIVERY[s.mode].label}: ${DELIVERY[s.mode].detail}` : s.streaming ? "Send after compaction finishes" : "Send", key: "Enter" },
+    hint: {
+      lead: showDelivery
+        ? `${DELIVERY[s.mode].label}: ${DELIVERY[s.mode].detail}`
+        : s.streaming
+          ? "Send after compaction finishes"
+          : "Send",
+      key: "Enter",
+    },
     showDelivery,
     imagesWaiting,
     escape: escapeAction(s, idle),
     canRestoreQueue: idle,
     // Nothing can steer a compaction; whatever is sent then waits for it to finish.
-    delivery: (alt) => (!enabled ? null : s.compacting ? "follow-up" : alt ? otherMode(s.mode) : s.mode),
+    delivery: (alt) =>
+      !enabled ? null : s.compacting ? "follow-up" : alt ? otherMode(s.mode) : s.mode,
   };
 }
 

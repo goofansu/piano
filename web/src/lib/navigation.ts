@@ -54,7 +54,9 @@ export interface Navigation {
 
 /** The client's first view for a route, so a session URL never renders the New page while the registry loads. */
 export function initialView(route: Route): AppState["view"] {
-  return route.kind === "session" ? { kind: "session" } : { kind: "new", projectId: route.kind === "new" ? route.projectId : undefined };
+  return route.kind === "session"
+    ? { kind: "session" }
+    : { kind: "new", projectId: route.kind === "new" ? route.projectId : undefined };
 }
 
 export type RouteDecision =
@@ -69,10 +71,15 @@ export type RouteDecision =
 /** What applying a route to the current state means. A session needs its directory, which only the registry knows. */
 export function decideRoute(route: Route, state: AppState): RouteDecision {
   if (route.kind === "settings") return { kind: "settings", section: route.section };
-  if (route.kind === "new") return state.view.kind === "new" && state.view.projectId === route.projectId ? { kind: "keep" } : { kind: "new", projectId: route.projectId };
+  if (route.kind === "new")
+    return state.view.kind === "new" && state.view.projectId === route.projectId
+      ? { kind: "keep" }
+      : { kind: "new", projectId: route.projectId };
   if (!state.registryLoaded) return { kind: "wait" };
   const session = catalogEntry(state, route.sessionId);
-  return session ? { kind: "select", cwd: session.cwd, sessionId: session.sessionId } : { kind: "missing", sessionId: route.sessionId };
+  return session
+    ? { kind: "select", cwd: session.cwd, sessionId: session.sessionId }
+    : { kind: "missing", sessionId: route.sessionId };
 }
 
 export interface Address {
@@ -83,30 +90,53 @@ export interface Address {
 }
 
 /** The URL and title for the screen, or null while there is nothing to address (a new session not yet created). */
-export function addressFor(state: AppState, settings: SettingsSection | null, currentPathname: string): Address | null {
+export function addressFor(
+  state: AppState,
+  settings: SettingsSection | null,
+  currentPathname: string,
+): Address | null {
   const current = state.session ?? state.selecting;
-  const route: Route | null = state.view.kind === "new"
-    ? { kind: "new", projectId: state.view.projectId }
-    : state.view.kind === "missing-session"
-      ? { kind: "session", sessionId: state.view.sessionId }
-      : current?.sessionId ? { kind: "session", sessionId: current.sessionId } : null;
+  const route: Route | null =
+    state.view.kind === "new"
+      ? { kind: "new", projectId: state.view.projectId }
+      : state.view.kind === "missing-session"
+        ? { kind: "session", sessionId: state.view.sessionId }
+        : current?.sessionId
+          ? { kind: "session", sessionId: current.sessionId }
+          : null;
   if (!route) return null;
   const path = routePath(settings ? { kind: "settings", section: settings } : route);
   // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
-  const mode = currentPathname === "/" || currentPathname === "/settings" || currentPathname === path ? "replace" : "push";
-  const title = settings ? "Settings"
-    : state.view.kind === "missing-session" ? "Session not found"
-    : route.kind === "new" ? (route.projectId && state.projects.find(p => p.id === route.projectId)?.name) || "New session"
-    : catalogEntry(state, route.sessionId)?.title || "Session";
+  const mode =
+    currentPathname === "/" || currentPathname === "/settings" || currentPathname === path
+      ? "replace"
+      : "push";
+  const title = settings
+    ? "Settings"
+    : state.view.kind === "missing-session"
+      ? "Session not found"
+      : route.kind === "new"
+        ? (route.projectId && state.projects.find((p) => p.id === route.projectId)?.name) ||
+          "New session"
+        : catalogEntry(state, route.sessionId)?.title || "Session";
   return { path, mode, title: `${title} - Piano` };
 }
 
-const panelOwner = (s: AppState) => s.session ? `${s.session.cwd}\n${s.session.sessionId ?? ""}` : null;
+const panelOwner = (s: AppState) =>
+  s.session ? `${s.session.cwd}\n${s.session.sessionId ?? ""}` : null;
 
-export function createNavigation({ client, address, moved = () => {} }: NavigationOptions): Navigation {
+export function createNavigation({
+  client,
+  address,
+  moved = () => {},
+}: NavigationOptions): Navigation {
   // A route read from the address bar (on start, or on back/forward) that has not been applied yet.
   let wanted: Route | null = parseRoute(address.location());
-  let state: NavigationState = { settings: wanted.kind === "settings" ? wanted.section : null, panel: null, palette: false };
+  let state: NavigationState = {
+    settings: wanted.kind === "settings" ? wanted.section : null,
+    panel: null,
+    palette: false,
+  };
   let notified = state;
   let owner = panelOwner(client.getState());
   let depth = 0;
@@ -115,21 +145,28 @@ export function createNavigation({ client, address, moved = () => {} }: Navigati
   let synced: unknown[] = [];
   const listeners = new Set<() => void>();
 
-  const set = (patch: Partial<NavigationState>) => { state = { ...state, ...patch }; };
+  const set = (patch: Partial<NavigationState>) => {
+    state = { ...state, ...patch };
+  };
 
   /** Runs one move; the route, panels and address settle once at the end, as one history entry. */
   const batch = (fn: () => void) => {
     moving = true;
     depth++;
-    try { fn(); } finally { depth--; }
+    try {
+      fn();
+    } finally {
+      depth--;
+    }
     if (depth === 0) settle();
   };
 
-  const select = (cwd: string, sessionId: string | null) => batch(() => {
-    moved();
-    set({ settings: null });
-    client.select(cwd, sessionId);
-  });
+  const select = (cwd: string, sessionId: string | null) =>
+    batch(() => {
+      moved();
+      set({ settings: null });
+      client.select(cwd, sessionId);
+    });
 
   const applyWanted = () => {
     if (!wanted) return;
@@ -137,9 +174,11 @@ export function createNavigation({ client, address, moved = () => {} }: Navigati
     if (decision.kind === "wait") return;
     wanted = null;
     if (decision.kind === "settings") set({ settings: decision.section });
-    else if (decision.kind === "new") client.dispatch({ type: "new", projectId: decision.projectId });
+    else if (decision.kind === "new")
+      client.dispatch({ type: "new", projectId: decision.projectId });
     else if (decision.kind === "select") select(decision.cwd, decision.sessionId);
-    else if (decision.kind === "missing") client.dispatch({ type: "missing-session", sessionId: decision.sessionId });
+    else if (decision.kind === "missing")
+      client.dispatch({ type: "missing-session", sessionId: decision.sessionId });
   };
 
   function settle() {
@@ -147,12 +186,25 @@ export function createNavigation({ client, address, moved = () => {} }: Navigati
     try {
       applyWanted();
       const next = panelOwner(client.getState());
-      if (next !== owner) { owner = next; set({ panel: null }); }
-    } finally { depth--; }
+      if (next !== owner) {
+        owner = next;
+        set({ panel: null });
+      }
+    } finally {
+      depth--;
+    }
     // The address bar follows the screen; a route that is still being applied already matches it.
     // Changes elsewhere in the client (drafts, hosts, catalogs) leave both URL and title as they are.
     const c = client.getState();
-    const inputs = [c.view, c.session, c.selecting, c.folders, c.projects, c.sessionReferences, state.settings];
+    const inputs = [
+      c.view,
+      c.session,
+      c.selecting,
+      c.folders,
+      c.projects,
+      c.sessionReferences,
+      state.settings,
+    ];
     const changed = moving || inputs.some((input, i) => input !== synced[i]);
     moving = false;
     if (!wanted && changed) {
@@ -160,7 +212,8 @@ export function createNavigation({ client, address, moved = () => {} }: Navigati
       const { pathname, search } = address.location();
       const target = addressFor(client.getState(), state.settings, pathname);
       if (target) {
-        if (target.path !== pathname + search) (target.mode === "replace" ? address.replace : address.push)(target.path);
+        if (target.path !== pathname + search)
+          (target.mode === "replace" ? address.replace : address.push)(target.path);
         address.setTitle(target.title);
       }
     }
@@ -170,34 +223,56 @@ export function createNavigation({ client, address, moved = () => {} }: Navigati
     }
   }
 
-  const closeSettings = () => batch(() => { set({ settings: null }); moved(); });
+  const closeSettings = () =>
+    batch(() => {
+      set({ settings: null });
+      moved();
+    });
 
   return {
     getState: () => state,
     subscribe: (listener) => {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     start: () => {
-      const stopClient = client.subscribe(() => { if (depth === 0) settle(); });
-      const stopPop = address.onPop(() => batch(() => {
-        moved();
-        const route = parseRoute(address.location());
-        set({ settings: route.kind === "settings" ? route.section : null });
-        wanted = route;
-      }));
+      const stopClient = client.subscribe(() => {
+        if (depth === 0) settle();
+      });
+      const stopPop = address.onPop(() =>
+        batch(() => {
+          moved();
+          const route = parseRoute(address.location());
+          set({ settings: route.kind === "settings" ? route.section : null });
+          wanted = route;
+        }),
+      );
       settle();
-      return () => { stopClient(); stopPop(); };
+      return () => {
+        stopClient();
+        stopPop();
+      };
     },
     select,
-    openNew: (cwd, projectId) => batch(() => {
-      set({ settings: null });
-      client.dispatch({ type: "new", cwd, projectId });
-      moved();
-    }),
-    openSettings: (section = "providers") => batch(() => { set({ settings: section }); moved(); }),
+    openNew: (cwd, projectId) =>
+      batch(() => {
+        set({ settings: null });
+        client.dispatch({ type: "new", cwd, projectId });
+        moved();
+      }),
+    openSettings: (section = "providers") =>
+      batch(() => {
+        set({ settings: section });
+        moved();
+      }),
     closeSettings,
-    openPanel: (panel) => batch(() => { set({ settings: null, panel }); moved(); }),
+    openPanel: (panel) =>
+      batch(() => {
+        set({ settings: null, panel });
+        moved();
+      }),
     closePanel: () => batch(() => set({ panel: null })),
     setPalette: (open) => batch(() => set({ palette: open })),
   };
@@ -208,7 +283,9 @@ export const browserAddressBar: AddressBar = {
   location: () => location,
   push: (path) => history.pushState(null, "", path),
   replace: (path) => history.replaceState(null, "", path),
-  setTitle: (title) => { document.title = title; },
+  setTitle: (title) => {
+    document.title = title;
+  },
   onPop: (listener) => {
     addEventListener("popstate", listener);
     return () => removeEventListener("popstate", listener);

@@ -19,15 +19,36 @@ export const APPEARANCES = [
 ] as const satisfies readonly { value: Appearance; label: string }[];
 
 export type GlobalCommandId =
-  | "home" | "settings" | `settings-${SettingsSection}` | "new-session" | "trust" | "toggle-sidebar"
-  | `appearance-${Appearance}` | `group-${GroupBy}` | `sort-${SortBy}`;
+  | "home"
+  | "settings"
+  | `settings-${SettingsSection}`
+  | "new-session"
+  | "trust"
+  | "toggle-sidebar"
+  | `appearance-${Appearance}`
+  | `group-${GroupBy}`
+  | `sort-${SortBy}`;
 
 /** Sections a menu separates; the palette lists them in this order under Global commands. */
-export type GlobalCommandGroup = "navigate" | "trust" | "sidebar" | "appearance" | "group-by" | "sort-by";
+export type GlobalCommandGroup =
+  | "navigate"
+  | "trust"
+  | "sidebar"
+  | "appearance"
+  | "group-by"
+  | "sort-by";
 
 export type GlobalCommandIcon =
-  | "home" | "settings" | SettingsSectionIconName | "new" | "trusted" | "untrusted" | "sidebar"
-  | Appearance | "group" | "sort";
+  | "home"
+  | "settings"
+  | SettingsSectionIconName
+  | "new"
+  | "trusted"
+  | "untrusted"
+  | "sidebar"
+  | Appearance
+  | "group"
+  | "sort";
 
 export type GlobalCommandIntent =
   | { kind: "home" }
@@ -77,8 +98,13 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   const trust = directoryTrust(state, cwd);
   if (!trust?.required) return undefined;
   return {
-    id: "trust", label: trust.trusted ? "Untrust folder" : "Trust folder", icon: trust.trusted ? "untrusted" : "trusted", group: "trust",
-    enabled: state.connected, pressed: trust.trusted, keywords: ["trust", "pi settings", "skills"],
+    id: "trust",
+    label: trust.trusted ? "Untrust folder" : "Trust folder",
+    icon: trust.trusted ? "untrusted" : "trusted",
+    group: "trust",
+    enabled: state.connected,
+    pressed: trust.trusted,
+    keywords: ["trust", "pi settings", "skills"],
     intent: { kind: "send", command: { _tag: "set_trust", path: cwd, trusted: !trust.trusted } },
   };
 }
@@ -93,25 +119,89 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
   const theme = ctx.theme;
   return [
     ctx.settingsOpen
-      ? { id: "home", label: "Home", icon: "home", group: "navigate", enabled: true, keywords: ["back", "session"], intent: { kind: "home" } }
-      : { id: "settings", label: "Settings", icon: "settings", group: "navigate", enabled: true, intent: { kind: "settings" } },
-    ...SETTINGS_SECTIONS.map((s): GlobalCommand => ({
-      id: `settings-${s.id}`, label: s.label, icon: s.icon, group: "navigate", enabled: true, keywords: s.keywords, intent: { kind: "settings", section: s.id },
-    })),
-    { id: "new-session", label: "New session", icon: "new", group: "navigate", enabled: true, intent: { kind: "new-session" } },
+      ? {
+          id: "home",
+          label: "Home",
+          icon: "home",
+          group: "navigate",
+          enabled: true,
+          keywords: ["back", "session"],
+          intent: { kind: "home" },
+        }
+      : {
+          id: "settings",
+          label: "Settings",
+          icon: "settings",
+          group: "navigate",
+          enabled: true,
+          intent: { kind: "settings" },
+        },
+    ...SETTINGS_SECTIONS.map(
+      (s): GlobalCommand => ({
+        id: `settings-${s.id}`,
+        label: s.label,
+        icon: s.icon,
+        group: "navigate",
+        enabled: true,
+        keywords: s.keywords,
+        intent: { kind: "settings", section: s.id },
+      }),
+    ),
+    {
+      id: "new-session",
+      label: "New session",
+      icon: "new",
+      group: "navigate",
+      enabled: true,
+      intent: { kind: "new-session" },
+    },
     ...(trust ? [trust] : []),
-    { id: "toggle-sidebar", label: "Toggle sidebar", icon: "sidebar", group: "sidebar", enabled: true, intent: { kind: "toggle-sidebar" } },
-    ...APPEARANCES.map((a): GlobalCommand => ({
-      id: `appearance-${a.value}`, label: `${a.label} appearance`, menuLabel: a.label, icon: a.value, group: "appearance", enabled: true,
-      ...(theme ? { checked: theme === a.value } : {}), keywords: ["appearance", "theme"], intent: { kind: "appearance", appearance: a.value },
-    })),
-    ...GROUP_BY.map((g): GlobalCommand => ({
-      id: `group-${g.value}`, label: g.value === "none" ? "No grouping" : `Group by ${g.label.toLowerCase()}`, menuLabel: g.label, icon: "group", group: "group-by",
-      enabled: true, checked: ctx.view.groupBy === g.value, keywords: ["group", "sidebar", "view"], intent: { kind: "view", change: { groupBy: g.value } },
-    })),
-    ...SORT_BY.map((s): GlobalCommand => ({
-      id: `sort-${s.value}`, label: `Sort by ${s.label.toLowerCase()}`, menuLabel: s.label, icon: "sort", group: "sort-by",
-      enabled: true, checked: ctx.view.sortBy === s.value, keywords: ["sort", "order", "sidebar", "view"], intent: { kind: "view", change: { sortBy: s.value } },
-    })),
+    {
+      id: "toggle-sidebar",
+      label: "Toggle sidebar",
+      icon: "sidebar",
+      group: "sidebar",
+      enabled: true,
+      intent: { kind: "toggle-sidebar" },
+    },
+    ...APPEARANCES.map(
+      (a): GlobalCommand => ({
+        id: `appearance-${a.value}`,
+        label: `${a.label} appearance`,
+        menuLabel: a.label,
+        icon: a.value,
+        group: "appearance",
+        enabled: true,
+        ...(theme ? { checked: theme === a.value } : {}),
+        keywords: ["appearance", "theme"],
+        intent: { kind: "appearance", appearance: a.value },
+      }),
+    ),
+    ...GROUP_BY.map(
+      (g): GlobalCommand => ({
+        id: `group-${g.value}`,
+        label: g.value === "none" ? "No grouping" : `Group by ${g.label.toLowerCase()}`,
+        menuLabel: g.label,
+        icon: "group",
+        group: "group-by",
+        enabled: true,
+        checked: ctx.view.groupBy === g.value,
+        keywords: ["group", "sidebar", "view"],
+        intent: { kind: "view", change: { groupBy: g.value } },
+      }),
+    ),
+    ...SORT_BY.map(
+      (s): GlobalCommand => ({
+        id: `sort-${s.value}`,
+        label: `Sort by ${s.label.toLowerCase()}`,
+        menuLabel: s.label,
+        icon: "sort",
+        group: "sort-by",
+        enabled: true,
+        checked: ctx.view.sortBy === s.value,
+        keywords: ["sort", "order", "sidebar", "view"],
+        intent: { kind: "view", change: { sortBy: s.value } },
+      }),
+    ),
   ];
 }

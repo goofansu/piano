@@ -24,7 +24,10 @@ export interface LastDirectory {
 }
 
 const LAST_DIR = "piano.lastDir";
-const storedLastDirectory: LastDirectory = { read: () => readStorage(LAST_DIR), write: (cwd) => writeStorage(LAST_DIR, cwd) };
+const storedLastDirectory: LastDirectory = {
+  read: () => readStorage(LAST_DIR),
+  write: (cwd) => writeStorage(LAST_DIR, cwd),
+};
 
 export interface ClientOptions {
   initial: AppState;
@@ -48,7 +51,13 @@ export interface Client {
   dispatch: (action: LocalAction) => void;
 }
 
-export function createClient({ initial, connect, notify, newSelectionId = () => crypto.randomUUID(), lastDirectory = storedLastDirectory }: ClientOptions): Client {
+export function createClient({
+  initial,
+  connect,
+  notify,
+  newSelectionId = () => crypto.randomUUID(),
+  lastDirectory = storedLastDirectory,
+}: ClientOptions): Client {
   /** A New page opened without a directory or project starts in the last one used, else the first folder. */
   const withNewPageDirectory = (s: AppState) => {
     if (s.view.kind !== "new" || s.view.cwd || s.view.projectId) return s;
@@ -68,7 +77,10 @@ export function createClient({ initial, connect, notify, newSelectionId = () => 
    * A removed checkout has nothing to ask about.
    */
   const askAboutFocus = () => {
-    if (!state.connected) { asked = null; return; }
+    if (!state.connected) {
+      asked = null;
+      return;
+    }
     const focus = focusedDirectory(state);
     if (!focus || focus.checkoutMissing) return;
     const key = `${focus.cwd}\0${state.catalogRevision}`;
@@ -90,13 +102,27 @@ export function createClient({ initial, connect, notify, newSelectionId = () => 
     if (m._tag === "select" || m._tag === "create_session") {
       if (m._tag === "create_session") lastDirectory.write(m.cwd);
       const selectionId = newSelectionId();
-      apply({ type: "selecting", selectionId, cwd: m.cwd, sessionId: m._tag === "select" ? m.sessionId : null,
-        firstMessage: m._tag === "create_session" && (m.text?.trim() || m.attachments?.length)
-          ? { text: m.text ?? "", attachments: m.attachments?.map(a => ({ kind: "image" as const, url: `data:${a.mimeType};base64,${a.data}` })) } : undefined });
+      apply({
+        type: "selecting",
+        selectionId,
+        cwd: m.cwd,
+        sessionId: m._tag === "select" ? m.sessionId : null,
+        firstMessage:
+          m._tag === "create_session" && (m.text?.trim() || m.attachments?.length)
+            ? {
+                text: m.text ?? "",
+                attachments: m.attachments?.map((a) => ({
+                  kind: "image" as const,
+                  url: `data:${a.mimeType};base64,${a.data}`,
+                })),
+              }
+            : undefined,
+      });
       connection?.send({ ...m, selectionId });
     } else if (m._tag === "act") {
       // An action belongs to the attachment it was aimed at; never send it on a stale or pending one.
-      if (sessionReady(state) && state.selectionId) connection?.send({ ...m, selectionId: state.selectionId });
+      if (sessionReady(state) && state.selectionId)
+        connection?.send({ ...m, selectionId: state.selectionId });
     } else connection?.send(m);
   };
 
@@ -118,17 +144,31 @@ export function createClient({ initial, connect, notify, newSelectionId = () => 
     if (!wasResync && state.resync && state.connected) reselect(state.session);
     if (m._tag === "error") notify(m.message, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
-    else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError) notify(m.result.stopError, "error");
-    else if (m._tag === "worktree_result" && m.result.status === "ready" && m.result.creation) notify(`Created ${m.result.branch} from ${m.result.creation.baseBranch} · hooks ${m.result.creation.hooks}`, "success");
-    else if (notifySession && m._tag === "session" && m.event._tag === "notice") notify(m.event.message, m.event.level);
-    else if (notifySession && m._tag === "session" && m.event._tag === "closed" && closureNeedsAttention(m.event.closure)) notify(`Pi stopped: ${m.event.closure.detail}`, "warning");
+    else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError)
+      notify(m.result.stopError, "error");
+    else if (m._tag === "worktree_result" && m.result.status === "ready" && m.result.creation)
+      notify(
+        `Created ${m.result.branch} from ${m.result.creation.baseBranch} · hooks ${m.result.creation.hooks}`,
+        "success",
+      );
+    else if (notifySession && m._tag === "session" && m.event._tag === "notice")
+      notify(m.event.message, m.event.level);
+    else if (
+      notifySession &&
+      m._tag === "session" &&
+      m.event._tag === "closed" &&
+      closureNeedsAttention(m.event.closure)
+    )
+      notify(`Pi stopped: ${m.event.closure.detail}`, "warning");
   };
 
   return {
     getState: () => state,
     subscribe: (listener) => {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     start: () => {
       const opened = connect({ onMessage, onStatus });
@@ -141,7 +181,13 @@ export function createClient({ initial, connect, notify, newSelectionId = () => 
     send,
     select: (cwd, sessionId) => {
       const current = state.session ?? state.selecting;
-      if (current && current.cwd === cwd && current.sessionId === sessionId && state.view.kind === "session") return;
+      if (
+        current &&
+        current.cwd === cwd &&
+        current.sessionId === sessionId &&
+        state.view.kind === "session"
+      )
+        return;
       send({ _tag: "select", cwd, sessionId });
     },
     dispatch: apply,

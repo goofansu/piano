@@ -55,25 +55,37 @@ export interface Observation<T> {
    * `undefined`) becomes the value unless the key changed or another mutation started meanwhile;
    * it resolves with that applied value. A failure rejects and leaves the value alone.
    */
-  mutate: (run: (signal: AbortSignal, previous: T | undefined) => Promise<T | undefined>) => Promise<T | undefined>;
+  mutate: (
+    run: (signal: AbortSignal, previous: T | undefined) => Promise<T | undefined>,
+  ) => Promise<T | undefined>;
   /** Installs focus and resumes reading; returns the stop function, which aborts all work. */
   start: () => () => void;
 }
 
 export const browserEnvironment: ObservationEnvironment = {
   setTimeout: (run, ms) => globalThis.setTimeout(run, ms),
-  clearTimeout: timer => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>),
-  onFocus: listener => { window.addEventListener("focus", listener); return () => window.removeEventListener("focus", listener); },
+  clearTimeout: (timer) => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>),
+  onFocus: (listener) => {
+    window.addEventListener("focus", listener);
+    return () => window.removeEventListener("focus", listener);
+  },
   hidden: () => document.hidden,
 };
 
-const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function createObservation<T>(options: ObservationOptions<T>): Observation<T> {
   const env = options.environment ?? browserEnvironment;
-  let state: ObservationState<T> = { key: null, value: undefined, error: undefined, loading: false, mutating: false };
+  let state: ObservationState<T> = {
+    key: null,
+    value: undefined,
+    error: undefined,
+    loading: false,
+    mutating: false,
+  };
   const listeners = new Set<() => void>();
-  let enabled = false, running = false;
+  let enabled = false,
+    running = false;
   /** The in-flight read or mutation; only the current one may publish. */
   let work: { controller: AbortController; mutation: boolean } | null = null;
   let poll: unknown, soon: unknown, unfocus: (() => void) | undefined;
@@ -89,13 +101,18 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
     poll = soon = undefined;
   };
   const cancel = () => {
-    work?.controller.abort(); work = null;
+    work?.controller.abort();
+    work = null;
     clearTimers();
     if (state.loading || state.mutating) set({ loading: false, mutating: false });
   };
   /** Pausing keeps a change in flight; it still belongs to this key. */
   const stopReading = () => {
-    if (work && !work.mutation) { work.controller.abort(); work = null; set({ loading: false }); }
+    if (work && !work.mutation) {
+      work.controller.abort();
+      work = null;
+      set({ loading: false });
+    }
     clearTimers();
   };
   const schedule = () => {
@@ -106,7 +123,10 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
     poll = env.setTimeout(function tick() {
       poll = undefined;
       if (!live()) return;
-      if (env.hidden()) { poll = env.setTimeout(tick, ms); return; }
+      if (env.hidden()) {
+        poll = env.setTimeout(tick, ms);
+        return;
+      }
       void refresh();
     }, ms);
   };
@@ -134,11 +154,14 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
     }
   };
 
-  const mutate: Observation<T>["mutate"] = async run => {
+  const mutate: Observation<T>["mutate"] = async (run) => {
     if (state.key === null) return undefined;
     const key = state.key;
     work?.controller.abort();
-    if (soon !== undefined) { env.clearTimeout(soon); soon = undefined; }
+    if (soon !== undefined) {
+      env.clearTimeout(soon);
+      soon = undefined;
+    }
     const mine = { controller: new AbortController(), mutation: true };
     work = mine;
     set({ mutating: true, loading: false });
@@ -160,30 +183,47 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
 
   return {
     getState: () => state,
-    subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     observe: (key, nextEnabled = true) => {
       if (key === state.key && nextEnabled === enabled) return;
-      if (key !== state.key) { cancel(); set({ key, value: undefined, error: undefined }); }
-      else stopReading();
+      if (key !== state.key) {
+        cancel();
+        set({ key, value: undefined, error: undefined });
+      } else stopReading();
       enabled = nextEnabled;
       void refresh();
     },
     refresh,
-    refreshSoon: ms => {
+    refreshSoon: (ms) => {
       if (!live()) return;
       if (soon !== undefined) env.clearTimeout(soon);
       soon = undefined;
-      if (ms <= 0) { void refresh(); return; }
-      soon = env.setTimeout(() => { soon = undefined; void refresh(); }, ms);
+      if (ms <= 0) {
+        void refresh();
+        return;
+      }
+      soon = env.setTimeout(() => {
+        soon = undefined;
+        void refresh();
+      }, ms);
     },
     mutate,
     start: () => {
       running = true;
-      if (options.focus) unfocus = env.onFocus(() => { void refresh(); });
+      if (options.focus)
+        unfocus = env.onFocus(() => {
+          void refresh();
+        });
       void refresh();
       return () => {
         running = false;
-        unfocus?.(); unfocus = undefined;
+        unfocus?.();
+        unfocus = undefined;
         cancel();
       };
     },

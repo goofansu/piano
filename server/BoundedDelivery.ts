@@ -2,38 +2,61 @@
  * backpressuring the producer. Limits count serialized bytes, not just frames. */
 import { Data, Deferred, type Duration, Effect, Queue, Stream } from "effect";
 
-export class DeliveryOverflow extends Data.TaggedError("DeliveryOverflow")<{ readonly detail: string; readonly oversized: boolean }> {}
+export class DeliveryOverflow extends Data.TaggedError("DeliveryOverflow")<{
+  readonly detail: string;
+  readonly oversized: boolean;
+}> {}
 
-export const makeDelivery = Effect.fnUntraced(function* <A>(limits = { messages: 256, bytes: 8 * 1024 * 1024 }) {
+export const makeDelivery = Effect.fnUntraced(function* <A>(
+  limits = { messages: 256, bytes: 8 * 1024 * 1024 },
+) {
   const queue = yield* Queue.dropping<{ value: A; bytes: number }>(limits.messages);
   const failed = yield* Deferred.make<never, DeliveryOverflow>();
-  let bytes = 0, stopped = false;
+  let bytes = 0,
+    stopped = false;
   return {
     /** Also race a consumer's blocked external write/ack, not only its next pull. */
     failure: Deferred.await(failed),
-    offer: (value: A) => Effect.sync(() => {
-      if (stopped) return;
-      const size = Buffer.byteLength(JSON.stringify(value));
-      if (size + bytes > limits.bytes || !Queue.offerUnsafe(queue, { value, bytes: size })) {
-        stopped = true;
-        return size > limits.bytes;
-      }
-      bytes += size;
-    }).pipe(Effect.flatMap(oversized => oversized !== undefined
-      ? Deferred.fail(failed, new DeliveryOverflow({ oversized, detail: oversized
-        ? "Session view exceeds the delivery byte limit. Reduce the context before reconnecting."
-        : "Delivery limit exceeded; reconnect for a current snapshot. Some live notices may have been missed." })).pipe(Effect.asVoid)
-      : Effect.void)),
+    offer: (value: A) =>
+      Effect.sync(() => {
+        if (stopped) return;
+        const size = Buffer.byteLength(JSON.stringify(value));
+        if (size + bytes > limits.bytes || !Queue.offerUnsafe(queue, { value, bytes: size })) {
+          stopped = true;
+          return size > limits.bytes;
+        }
+        bytes += size;
+      }).pipe(
+        Effect.flatMap((oversized) =>
+          oversized !== undefined
+            ? Deferred.fail(
+                failed,
+                new DeliveryOverflow({
+                  oversized,
+                  detail: oversized
+                    ? "Session view exceeds the delivery byte limit. Reduce the context before reconnecting."
+                    : "Delivery limit exceeded; reconnect for a current snapshot. Some live notices may have been missed.",
+                }),
+              ).pipe(Effect.asVoid)
+            : Effect.void,
+        ),
+      ),
     // fromQueue drains a whole chunk; one-at-a-time pulls keep only one frame
     // outside the accounted queue when the consumer waits for socket credit.
     stream: Stream.fromEffectRepeat(Queue.take(queue)).pipe(
-      Stream.map(item => { bytes -= item.bytes; return item.value; }),
+      Stream.map((item) => {
+        bytes -= item.bytes;
+        return item.value;
+      }),
       Stream.interruptWhen(Deferred.await(failed)),
     ),
   };
 });
 
-export interface SocketClose { readonly reason: string; readonly code: number }
+export interface SocketClose {
+  readonly reason: string;
+  readonly code: number;
+}
 
 /** Socket close codes: 1009 a single frame or view is too large to ever deliver;
  * 1013 the client fell behind and should reconnect for a current snapshot. */
@@ -73,20 +96,35 @@ export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
   let pendingBytes = 0;
   let credit = yield* Deferred.make<void>();
   yield* outbox.stream.pipe(
-    Stream.runForEach(value => Effect.gen(function* () {
-      const text = encode(value, ++deliveryId);
-      const bytes = Buffer.byteLength(text);
-      if (bytes > limits.frameBytes) return yield* close(`Session view exceeds the ${limits.frameBytes / (1024 * 1024)} MiB delivery limit. Reduce the context before reconnecting.`, CloseCode.tooLarge);
-      while (pending.size >= limits.window.frames || pendingBytes + bytes > limits.window.bytes) yield* Deferred.await(credit);
-      const done = yield* Deferred.make<void>();
-      pending.set(deliveryId, { bytes, done }); pendingBytes += bytes;
-      yield* Effect.orDie(write(text)); // a failed write ends delivery below, like any defect
-      // A tail shorter than the window also has a deadline; never retain it forever.
-      yield* Deferred.await(done).pipe(Effect.timeout(limits.ackTimeout),
-        Effect.catchCause(() => close("Delivery acknowledgement timed out; reconnect for a current snapshot.")), Effect.forkScoped);
-    })),
+    Stream.runForEach((value) =>
+      Effect.gen(function* () {
+        const text = encode(value, ++deliveryId);
+        const bytes = Buffer.byteLength(text);
+        if (bytes > limits.frameBytes)
+          return yield* close(
+            `Session view exceeds the ${limits.frameBytes / (1024 * 1024)} MiB delivery limit. Reduce the context before reconnecting.`,
+            CloseCode.tooLarge,
+          );
+        while (pending.size >= limits.window.frames || pendingBytes + bytes > limits.window.bytes)
+          yield* Deferred.await(credit);
+        const done = yield* Deferred.make<void>();
+        pending.set(deliveryId, { bytes, done });
+        pendingBytes += bytes;
+        yield* Effect.orDie(write(text)); // a failed write ends delivery below, like any defect
+        // A tail shorter than the window also has a deadline; never retain it forever.
+        yield* Deferred.await(done).pipe(
+          Effect.timeout(limits.ackTimeout),
+          Effect.catchCause(() =>
+            close("Delivery acknowledgement timed out; reconnect for a current snapshot."),
+          ),
+          Effect.forkScoped,
+        );
+      }),
+    ),
     Effect.raceFirst(outbox.failure),
-    Effect.catchTag("DeliveryOverflow", error => close(error.detail, error.oversized ? CloseCode.tooLarge : CloseCode.tryAgainLater)),
+    Effect.catchTag("DeliveryOverflow", (error) =>
+      close(error.detail, error.oversized ? CloseCode.tooLarge : CloseCode.tryAgainLater),
+    ),
     Effect.catchCause(() => close("Delivery interrupted; reconnect for a current snapshot.")),
     Effect.forkScoped,
   );
@@ -96,10 +134,12 @@ export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
     /** Cumulative: acknowledges every pending frame up to `id`. Unknown or stale IDs are ignored. */
     ack: Effect.fnUntraced(function* (id: number) {
       if (!pending.has(id)) return;
-      for (const [pendingId, item] of pending) if (pendingId <= id) {
-        pending.delete(pendingId); pendingBytes -= item.bytes;
-        yield* Deferred.succeed(item.done, undefined);
-      }
+      for (const [pendingId, item] of pending)
+        if (pendingId <= id) {
+          pending.delete(pendingId);
+          pendingBytes -= item.bytes;
+          yield* Deferred.succeed(item.done, undefined);
+        }
       const available = credit;
       credit = yield* Deferred.make<void>();
       yield* Deferred.succeed(available, undefined);

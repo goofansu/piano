@@ -21,7 +21,10 @@ export interface WorktreeRequest {
   refreshing: boolean;
 }
 
-export const initialWorktreeRequest: WorktreeRequest = { request: { status: "idle" }, refreshing: false };
+export const initialWorktreeRequest: WorktreeRequest = {
+  request: { status: "idle" },
+  refreshing: false,
+};
 
 /** How long a pending operation waits for its receipt before failing. */
 export const RECEIPT_TIMEOUT_MS = 75_000;
@@ -53,32 +56,54 @@ export interface WorktreeTransition {
   ready?: string;
 }
 
-const NO_RECEIPT = "No creation/selection receipt. Refresh discovery and inspect the checkout before retrying; it may already exist.";
-const CONNECTION_LOST = "Connection lost. Refresh discovery after reconnecting before retrying; the operation may have changed the checkout.";
+const NO_RECEIPT =
+  "No creation/selection receipt. Refresh discovery and inspect the checkout before retrying; it may already exist.";
+const CONNECTION_LOST =
+  "Connection lost. Refresh discovery after reconnecting before retrying; the operation may have changed the checkout.";
 
-const command = (intent: WorktreeIntent, requestId: string): ClientCommand => intent.kind === "create"
-  ? { _tag: "create_worktree", requestId, folder: intent.folder, branch: intent.branch, hooks: intent.hooks }
-  : { _tag: "add_worktree", requestId, folder: intent.folder, path: intent.path };
+const command = (intent: WorktreeIntent, requestId: string): ClientCommand =>
+  intent.kind === "create"
+    ? {
+        _tag: "create_worktree",
+        requestId,
+        folder: intent.folder,
+        branch: intent.branch,
+        hooks: intent.hooks,
+      }
+    : { _tag: "add_worktree", requestId, folder: intent.folder, path: intent.path };
 
 const discover = (state: WorktreeRequest, folder: string | undefined): WorktreeTransition =>
-  folder ? { state: { ...state, refreshing: true }, command: { _tag: "worktrees", folder } } : { state };
+  folder
+    ? { state: { ...state, refreshing: true }, command: { _tag: "worktrees", folder } }
+    : { state };
 
 export function transition(state: WorktreeRequest, event: WorktreeEvent): WorktreeTransition {
   const pending = state.request.status === "pending" ? state.request : undefined;
   switch (event.type) {
     case "start":
       if (pending) return { state };
-      return { state: { ...state, request: { status: "pending", requestId: event.requestId, kind: event.intent.kind } }, command: command(event.intent, event.requestId) };
+      return {
+        state: {
+          ...state,
+          request: { status: "pending", requestId: event.requestId, kind: event.intent.kind },
+        },
+        command: command(event.intent, event.requestId),
+      };
     case "receipt": {
       if (!pending || event.receipt?.requestId !== pending.requestId) return { state };
       const { result } = event.receipt;
-      if (result.status === "error") return { state: { ...state, request: { status: "failed", detail: result.detail } } };
+      if (result.status === "error")
+        return { state: { ...state, request: { status: "failed", detail: result.detail } } };
       return { state: { ...state, request: { status: "idle" } }, ready: result.path };
     }
     case "timeout":
-      return pending ? { state: { ...state, request: { status: "failed", detail: NO_RECEIPT } } } : { state };
+      return pending
+        ? { state: { ...state, request: { status: "failed", detail: NO_RECEIPT } } }
+        : { state };
     case "disconnected":
-      return pending ? { state: { ...state, request: { status: "failed", detail: CONNECTION_LOST } } } : { state };
+      return pending
+        ? { state: { ...state, request: { status: "failed", detail: CONNECTION_LOST } } }
+        : { state };
     case "refresh":
       return discover(state, event.folder);
     case "rediscover":
@@ -86,14 +111,24 @@ export function transition(state: WorktreeRequest, event: WorktreeEvent): Worktr
     case "answered":
       return { state: { ...state, refreshing: false } };
     case "dismiss":
-      return state.request.status === "failed" ? { state: { ...state, request: { status: "idle" } } } : { state };
+      return state.request.status === "failed"
+        ? { state: { ...state, request: { status: "idle" } } }
+        : { state };
   }
 }
 
-export const worktreeLabel = (worktree: WorktreeFacts) => worktree.branch ?? worktree.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD";
+export const worktreeLabel = (worktree: WorktreeFacts) =>
+  worktree.branch ?? worktree.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD";
 
 /** Literal matching avoids unrelated fuzzy hits and preserves discovery order. */
-export function filterWorktrees(all: readonly WorktreeFacts[], query: string): readonly WorktreeFacts[] {
+export function filterWorktrees(
+  all: readonly WorktreeFacts[],
+  query: string,
+): readonly WorktreeFacts[] {
   const needle = query.trim().toLowerCase();
-  return needle ? all.filter(w => [worktreeLabel(w), w.path].some(text => text.toLowerCase().includes(needle))) : all;
+  return needle
+    ? all.filter((w) =>
+        [worktreeLabel(w), w.path].some((text) => text.toLowerCase().includes(needle)),
+      )
+    : all;
 }

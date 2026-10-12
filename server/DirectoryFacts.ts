@@ -32,13 +32,21 @@ export class DirectoryFacts extends Context.Service<
     /** What Pi will do with the directory's protected resources when a session starts there. */
     readonly trust: (raw: string) => Effect.Effect<DirectoryTrust>;
     /** The directory's cached model catalog, loading it on first use; `refresh` re-runs the probe. */
-    readonly catalog: (raw: string, options?: { readonly refresh?: boolean }) => Effect.Effect<ModelCatalog>;
+    readonly catalog: (
+      raw: string,
+      options?: { readonly refresh?: boolean },
+    ) => Effect.Effect<ModelCatalog>;
     /** Global resources only, for machine-wide settings. */
     readonly global: Effect.Effect<ModelCatalog>;
     /** Slash commands from the directory's cached probe, for a session not yet started. */
-    readonly commands: (raw: string) => Effect.Effect<ReadonlyArray<SlashCommand>, DirectoryCommandsError>;
+    readonly commands: (
+      raw: string,
+    ) => Effect.Effect<ReadonlyArray<SlashCommand>, DirectoryCommandsError>;
     /** Save Pi's trust decision for sessions started from now; answers with fresh trust and catalog. */
-    readonly setTrust: (raw: string, trusted: boolean) => Effect.Effect<DirectoryTrust & { readonly catalog: ModelCatalog }, ProjectTrustError>;
+    readonly setTrust: (
+      raw: string,
+      trusted: boolean,
+    ) => Effect.Effect<DirectoryTrust & { readonly catalog: ModelCatalog }, ProjectTrustError>;
     /** Pi's resources changed (credentials, defaults, packages, MCP config); every catalog must re-probe. */
     readonly invalidate: Effect.Effect<void>;
     /** Fires after each invalidation; every client re-requests its pickers. */
@@ -55,47 +63,82 @@ export const DirectoryFactsLive = Layer.effect(
     const locks = new Map<string | null, Semaphore.Semaphore>();
     const changes = yield* PubSub.sliding<void>(1);
     let epoch = 0;
-    const locked = Effect.fn("DirectoryFacts.locked")(function* (key: string | null, refresh = false) {
+    const locked = Effect.fn("DirectoryFacts.locked")(function* (
+      key: string | null,
+      refresh = false,
+    ) {
       let lock = locks.get(key);
-      if (!lock) { lock = yield* Semaphore.make(1); locks.set(key, lock); }
-      return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() =>
-        !refresh && cache.has(key) ? Effect.succeed(cache.get(key)!) : load(key)));
+      if (!lock) {
+        lock = yield* Semaphore.make(1);
+        locks.set(key, lock);
+      }
+      return yield* Semaphore.withPermits(
+        lock,
+        1,
+      )(
+        Effect.suspend(() =>
+          !refresh && cache.has(key) ? Effect.succeed(cache.get(key)!) : load(key),
+        ),
+      );
     });
 
-    const load: (key: string | null) => Effect.Effect<ModelCatalog> = Effect.fn("DirectoryFacts.load")(function* (key: string | null) {
-      const loadingEpoch = epoch;
-      const cwd = key ?? homedir();
-      const probe = yield* sessions.probe(cwd, { globalSettingsOnly: key === null });
-      // An invalidation while Pi was starting must not return or cache old defaults.
-      if (loadingEpoch !== epoch) return yield* load(key);
-      const catalog: ModelCatalog = {
-        cwd, models: probe.models, commands: probe.commands,
-        defaultModel: probe.defaultModel,
-        defaultThinkingLevel: probe.defaultThinkingLevel,
-        fetchedAt: new Date().toISOString(),
-      };
-      cache.set(key, catalog);
-      return catalog;
-    }, (effect, key) => effect.pipe(
-      Effect.catchTag("PiSessionError", (e) => {
-        const failed: ModelCatalog = { cwd: key ?? homedir(), models: [], fetchedAt: new Date().toISOString(), error: e.detail };
-        return Effect.succeed(failed);
-      }),
-      // A failed probe is not cached, so the next request retries it.
-      Effect.tap((c) => Effect.sync(() => { if (c.error) cache.delete(key); })),
-      Effect.tap((c) =>
-        c.error
-          ? Effect.logWarning(`model catalog: ${c.error}`)
-          : Effect.logInfo(`${c.models.length} models available, default ${c.defaultModel ?? "(none)"}`),
-      ),
-    ));
+    const load: (key: string | null) => Effect.Effect<ModelCatalog> = Effect.fn(
+      "DirectoryFacts.load",
+    )(
+      function* (key: string | null) {
+        const loadingEpoch = epoch;
+        const cwd = key ?? homedir();
+        const probe = yield* sessions.probe(cwd, { globalSettingsOnly: key === null });
+        // An invalidation while Pi was starting must not return or cache old defaults.
+        if (loadingEpoch !== epoch) return yield* load(key);
+        const catalog: ModelCatalog = {
+          cwd,
+          models: probe.models,
+          commands: probe.commands,
+          defaultModel: probe.defaultModel,
+          defaultThinkingLevel: probe.defaultThinkingLevel,
+          fetchedAt: new Date().toISOString(),
+        };
+        cache.set(key, catalog);
+        return catalog;
+      },
+      (effect, key) =>
+        effect.pipe(
+          Effect.catchTag("PiSessionError", (e) => {
+            const failed: ModelCatalog = {
+              cwd: key ?? homedir(),
+              models: [],
+              fetchedAt: new Date().toISOString(),
+              error: e.detail,
+            };
+            return Effect.succeed(failed);
+          }),
+          // A failed probe is not cached, so the next request retries it.
+          Effect.tap((c) =>
+            Effect.sync(() => {
+              if (c.error) cache.delete(key);
+            }),
+          ),
+          Effect.tap((c) =>
+            c.error
+              ? Effect.logWarning(`model catalog: ${c.error}`)
+              : Effect.logInfo(
+                  `${c.models.length} models available, default ${c.defaultModel ?? "(none)"}`,
+                ),
+          ),
+        ),
+    );
 
-    const invalidate = Effect.sync(() => { epoch++; cache.clear(); }).pipe(Effect.andThen(PubSub.publish(changes, undefined)), Effect.asVoid);
+    const invalidate = Effect.sync(() => {
+      epoch++;
+      cache.clear();
+    }).pipe(Effect.andThen(PubSub.publish(changes, undefined)), Effect.asVoid);
     const trust = (raw: string) => {
       const cwd = directoryPath(raw);
       return Effect.map(projectTrust(cwd), (trust): DirectoryTrust => ({ cwd, trust }));
     };
-    const catalog = (raw: string, options?: { readonly refresh?: boolean }) => locked(directoryPath(raw), options?.refresh);
+    const catalog = (raw: string, options?: { readonly refresh?: boolean }) =>
+      locked(directoryPath(raw), options?.refresh);
 
     return DirectoryFacts.of({
       trust,

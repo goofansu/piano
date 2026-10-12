@@ -132,8 +132,12 @@
   --fill-hover: oklch(0.85 0.021 53 / 6%);
   --fill-active: oklch(0.85 0.021 53 / 8%);
   --shadow-1: 0 1px 2px oklch(0.1 0.02 257 / 30%), 0 8px 24px -16px oklch(0.1 0.02 257 / 55%);
-  --shadow-2: 0 2px 6px oklch(0.1 0.02 257 / 35%), 0 16px 40px -18px oklch(0.1 0.02 257 / 65%), inset 0 1px oklch(0.85 0.021 53 / 5%);
-  --shadow-3: 0 8px 20px oklch(0.1 0.02 257 / 40%), 0 32px 80px -24px oklch(0.1 0.02 257 / 75%), inset 0 1px oklch(0.85 0.021 53 / 6%);
+  --shadow-2:
+    0 2px 6px oklch(0.1 0.02 257 / 35%), 0 16px 40px -18px oklch(0.1 0.02 257 / 65%),
+    inset 0 1px oklch(0.85 0.021 53 / 5%);
+  --shadow-3:
+    0 8px 20px oklch(0.1 0.02 257 / 40%), 0 32px 80px -24px oklch(0.1 0.02 257 / 75%),
+    inset 0 1px oklch(0.85 0.021 53 / 6%);
   --scrim: oklch(0.1 0.02 257 / 62%);
 
   /* warm-10 ink, softer than white; secondary and tertiary stay readable on raised, filled layers */
@@ -338,22 +342,44 @@
   line-height: 1.3;
   margin-top: 1.1em;
 }
-.prose-chat h1 { font-size: 1.25rem; }
-.prose-chat h2 { font-size: 1.125rem; }
-.prose-chat h3 { font-size: 1rem; }
+.prose-chat h1 {
+  font-size: 1.25rem;
+}
+.prose-chat h2 {
+  font-size: 1.125rem;
+}
+.prose-chat h3 {
+  font-size: 1rem;
+}
 .prose-chat h4,
 .prose-chat h5,
-.prose-chat h6 { font-size: 1rem; color: var(--ink-2); }
-.prose-chat > :first-child { margin-top: 0; }
+.prose-chat h6 {
+  font-size: 1rem;
+  color: var(--ink-2);
+}
+.prose-chat > :first-child {
+  margin-top: 0;
+}
 .prose-chat ul,
 .prose-chat ol {
   padding-left: 1.4em;
 }
-.prose-chat ul { list-style: disc; }
-.prose-chat ol { list-style: decimal; }
-.prose-chat li + li { margin-top: 0.25em; }
-.prose-chat li::marker { color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.prose-chat strong { font-weight: 600; }
+.prose-chat ul {
+  list-style: disc;
+}
+.prose-chat ol {
+  list-style: decimal;
+}
+.prose-chat li + li {
+  margin-top: 0.25em;
+}
+.prose-chat li::marker {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.prose-chat strong {
+  font-weight: 600;
+}
 /* A continuous underline: skipping descenders left gaps under p and g. */
 .prose-chat a {
   color: var(--brand);
@@ -362,7 +388,9 @@
   text-decoration-skip-ink: none;
   text-underline-offset: 0.15em;
 }
-.prose-chat a:hover { text-decoration-color: var(--brand); }
+.prose-chat a:hover {
+  text-decoration-color: var(--brand);
+}
 .prose-chat .github-link {
   display: inline-block;
   max-width: 100%;
@@ -388,7 +416,9 @@
   overflow-x: auto;
   line-height: 1.5;
 }
-.dark .prose-chat pre { background: var(--fill); }
+.dark .prose-chat pre {
+  background: var(--fill);
+}
 .prose-chat pre code {
   background: none;
   padding: 0;
@@ -423,7 +453,10 @@
   border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
-.prose-chat th { font-weight: 600; color: var(--ink-2); }
+.prose-chat th {
+  font-weight: 600;
+  color: var(--ink-2);
+}
 
 /* Landscape/short windows must leave space for the composer, not desktop welcome chrome. */
 @media (max-height: 500px) {
@@ -431,11 +464,22 @@
     padding-top: 3.5rem;
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
-  .new-session-welcome { margin-bottom: 0.5rem; padding-block: 0.5rem; }
+  .new-session-welcome {
+    margin-bottom: 0.5rem;
+    padding-block: 0.5rem;
+  }
   .new-session-welcome > [aria-hidden],
-  .new-session-welcome > p { display: none; }
-  .new-session-welcome h1 { font-size: var(--text-xl); }
-  .new-session-input { min-height: 3.5rem; max-height: min(12rem, 30dvh); padding-top: 1rem; }
+  .new-session-welcome > p {
+    display: none;
+  }
+  .new-session-welcome h1 {
+    font-size: var(--text-xl);
+  }
+  .new-session-input {
+    min-height: 3.5rem;
+    max-height: min(12rem, 30dvh);
+    padding-top: 1rem;
+  }
 }
 
 /* Motion. Every state change is answered by motion that explains what changed, at a tempo
@@ -459,74 +503,151 @@
   border: 1px solid var(--line-strong);
   background: var(--surface-1);
   box-shadow: var(--shadow-1);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 .composer-card[data-dragging="true"] {
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--brand-soft), var(--shadow-1);
+  box-shadow:
+    0 0 0 3px var(--brand-soft),
+    var(--shadow-1);
 }
 .composer-card:focus-within {
   border-color: color-mix(in oklab, var(--brand) 45%, var(--line-strong));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 7%, transparent), var(--shadow-1);
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--brand) 7%, transparent),
+    var(--shadow-1);
 }
 .welcome-enter {
   animation: welcome-enter 420ms var(--ease-enter) both;
 }
-.welcome-composer { animation-delay: 65ms; }
+.welcome-composer {
+  animation-delay: 65ms;
+}
 /* A reload shows the page as it is: no entrance replay while it starts. Zero duration rather than
  * none, so clearing data-loading later does not start the animation afresh. */
-[data-loading] :is(.welcome-enter, .view-enter) { animation-duration: 0s; animation-delay: 0s; }
-.control-enter { animation: control-enter 180ms var(--ease-enter); }
+[data-loading] :is(.welcome-enter, .view-enter) {
+  animation-duration: 0s;
+  animation-delay: 0s;
+}
+.control-enter {
+  animation: control-enter 180ms var(--ease-enter);
+}
 /* A jumped-to message announces itself, then settles. */
-.message-highlight { animation: message-highlight 2.2s var(--ease-enter) both; }
-.disclosure-content { overflow: hidden; }
-.disclosure-content[data-state="open"] { animation: disclosure-open 220ms var(--ease-enter); }
-.disclosure-content[data-state="closed"] { animation: disclosure-close 160ms var(--ease-exit); }
+.message-highlight {
+  animation: message-highlight 2.2s var(--ease-enter) both;
+}
+.disclosure-content {
+  overflow: hidden;
+}
+.disclosure-content[data-state="open"] {
+  animation: disclosure-open 220ms var(--ease-enter);
+}
+.disclosure-content[data-state="closed"] {
+  animation: disclosure-close 160ms var(--ease-exit);
+}
 
 /* The main sheet's content fades and rises when the view changes (New ↔ Session). */
-.view-enter { animation: view-enter var(--dur-enter) var(--ease-enter) both; }
+.view-enter {
+  animation: view-enter var(--dur-enter) var(--ease-enter) both;
+}
 /* A sidebar row added after the list loaded; rows present at load appear at once. */
-.reveal-row { animation: row-enter var(--dur-enter) var(--ease-enter) both; }
+.reveal-row {
+  animation: row-enter var(--dur-enter) var(--ease-enter) both;
+}
 /* A reconnecting notice or loading placeholder waits a moment before showing, so a quick load never flashes it. */
-.late-enter { animation: fade-enter var(--dur-enter) var(--ease-enter) 600ms both; }
+.late-enter {
+  animation: fade-enter var(--dur-enter) var(--ease-enter) 600ms both;
+}
 /* A transcript fades in over its skeleton as the skeleton fades out. */
-.transcript-enter { animation: fade-enter var(--dur-enter) var(--ease-enter) both; }
+.transcript-enter {
+  animation: fade-enter var(--dur-enter) var(--ease-enter) both;
+}
 .skeleton-layer {
   transition: opacity var(--dur-exit) var(--ease-exit);
 }
-.skeleton-layer[data-hidden="true"] { opacity: 0; pointer-events: none; }
+.skeleton-layer[data-hidden="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
 
 @keyframes welcome-enter {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes view-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes row-enter {
-  from { opacity: 0; transform: translateX(-4px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 @keyframes fade-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes message-highlight {
-  0%, 30% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 35%, transparent); }
-  100% { box-shadow: 0 0 0 3px transparent; }
+  0%,
+  30% {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 35%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
 }
 @keyframes control-enter {
-  from { opacity: 0; transform: scale(0.85); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 @keyframes disclosure-open {
-  from { height: 0; opacity: 0; }
-  to { height: var(--radix-collapsible-content-height); opacity: 1; }
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
 }
 @keyframes disclosure-close {
-  from { height: var(--radix-collapsible-content-height); opacity: 1; }
-  to { height: 0; opacity: 0; }
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
 }
 
 /* The keys. The three-key mark is the instrument's live signal: while Pi works the three keys
@@ -537,14 +658,29 @@
 .keys[data-playing="true"] [data-key] {
   animation: key-press 1.2s ease-in-out infinite;
 }
-.keys[data-playing="true"] [data-key="1"] { animation-delay: 0.4s; }
-.keys[data-playing="true"] [data-key="2"] { animation-delay: 0.8s; }
+.keys[data-playing="true"] [data-key="1"] {
+  animation-delay: 0.4s;
+}
+.keys[data-playing="true"] [data-key="2"] {
+  animation-delay: 0.8s;
+}
 @keyframes key-press {
-  0%, 60%, 100% { transform: translateY(0); opacity: 1; }
-  25% { transform: translateY(1px); opacity: 0.55; }
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  25% {
+    transform: translateY(1px);
+    opacity: 0.55;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .keys[data-playing="true"] [data-key] { transform: translateY(1px); opacity: 0.6; }
+  .keys[data-playing="true"] [data-key] {
+    transform: translateY(1px);
+    opacity: 0.6;
+  }
 }
 
 /* Toasts carry a thin line that drains while they wait to leave; hovering the stack pauses it.
@@ -563,14 +699,28 @@
   transform-origin: left;
   animation: toast-drain var(--toast-life, 4s) linear both;
 }
-[data-sonner-toast][data-expanded="true"] > [data-content]::after { animation-play-state: paused; }
-[data-sonner-toaster]:hover [data-sonner-toast] > [data-content]::after { animation-play-state: paused; }
-[data-sonner-toast][data-type="error"] { --toast-line: color-mix(in oklab, var(--err) 55%, transparent); }
-[data-sonner-toast][data-type="success"] { --toast-line: color-mix(in oklab, var(--brand) 55%, transparent); }
-[data-sonner-toast][data-type="warning"] { --toast-line: color-mix(in oklab, var(--warn) 65%, transparent); }
+[data-sonner-toast][data-expanded="true"] > [data-content]::after {
+  animation-play-state: paused;
+}
+[data-sonner-toaster]:hover [data-sonner-toast] > [data-content]::after {
+  animation-play-state: paused;
+}
+[data-sonner-toast][data-type="error"] {
+  --toast-line: color-mix(in oklab, var(--err) 55%, transparent);
+}
+[data-sonner-toast][data-type="success"] {
+  --toast-line: color-mix(in oklab, var(--brand) 55%, transparent);
+}
+[data-sonner-toast][data-type="warning"] {
+  --toast-line: color-mix(in oklab, var(--warn) 65%, transparent);
+}
 @keyframes toast-drain {
-  from { transform: scaleX(1); }
-  to { transform: scaleX(0); }
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
 }
 
 /* Live signals: a streaming caret and a gently breathing activity dot. The caret sits at the end
@@ -586,17 +736,30 @@
   background: var(--brand);
   animation: caret 1s steps(2) infinite;
 }
-.streaming-caret > pre:last-child::after { display: none; }
+.streaming-caret > pre:last-child::after {
+  display: none;
+}
 @keyframes caret {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 @keyframes live {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.8); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   /* biome-ignore-start lint/complexity/noImportantStyles: the reduced-motion reset must beat every component's own motion. */
-  *, ::before, ::after {
+  *,
+  ::before,
+  ::after {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;

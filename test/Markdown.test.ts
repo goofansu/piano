@@ -4,55 +4,102 @@ import { renderMarkdown } from "../web/src/lib/markdown.ts";
 
 test("GitHub issue, PR and repository links are compact without changing destinations or custom labels", () => {
   const url = "https://github.com/goofansu/herdr-hunk/issues/2?x=1&y=2#issuecomment-3";
-  const html = renderMarkdown(`Follow ${url}, then [#3799](https://github.com/example/herdr/pull/3799). [**Review**](https://github.com/example/herdr/pull/4) <https://github.com/example/herdr>`);
+  const html = renderMarkdown(
+    `Follow ${url}, then [#3799](https://github.com/example/herdr/pull/3799). [**Review**](https://github.com/example/herdr/pull/4) <https://github.com/example/herdr>`,
+  );
   assert.equal((html.match(/class="github-link"/g) ?? []).length, 4);
-  assert.ok(html.includes('href="https://github.com/goofansu/herdr-hunk/issues/2?x=1&amp;y=2#issuecomment-3"'));
-  assert.ok(html.includes('title="https://github.com/goofansu/herdr-hunk/issues/2?x=1&amp;y=2#issuecomment-3"'));
-  assert.ok(html.includes('</svg>herdr-hunk#2</a>,'));
-  assert.ok(html.includes('</svg>#3799</a>'));
-  assert.ok(html.includes('</svg><strong>Review</strong></a>'));
-  assert.ok(html.includes('</svg>example/herdr</a>'));
-  assert.ok(renderMarkdown(`[https://github.com/a/b/pull/1](https://github.com/a/b/pull/1)`).includes('</svg>b#1</a>'));
-  assert.ok(renderMarkdown('[`code`](https://github.com/a/b/issues/1)').includes('</svg><code>code</code></a>'));
+  assert.ok(
+    html.includes(
+      'href="https://github.com/goofansu/herdr-hunk/issues/2?x=1&amp;y=2#issuecomment-3"',
+    ),
+  );
+  assert.ok(
+    html.includes(
+      'title="https://github.com/goofansu/herdr-hunk/issues/2?x=1&amp;y=2#issuecomment-3"',
+    ),
+  );
+  assert.ok(html.includes("</svg>herdr-hunk#2</a>,"));
+  assert.ok(html.includes("</svg>#3799</a>"));
+  assert.ok(html.includes("</svg><strong>Review</strong></a>"));
+  assert.ok(html.includes("</svg>example/herdr</a>"));
+  assert.ok(
+    renderMarkdown(`[https://github.com/a/b/pull/1](https://github.com/a/b/pull/1)`).includes(
+      "</svg>b#1</a>",
+    ),
+  );
+  assert.ok(
+    renderMarkdown("[`code`](https://github.com/a/b/issues/1)").includes(
+      "</svg><code>code</code></a>",
+    ),
+  );
 });
 
 test("GitHub rendering leaves code and unrelated URLs alone and escapes untrusted input", () => {
   const url = "https://github.com/a/b/issues/1";
   const code = renderMarkdown(`\`${url}\`\n\n\`\`\`\n${url}\n\`\`\``);
-  assert.ok(!code.includes('<a'));
-  for (const other of ['https://example.test/a', 'https://github.com.evil.test/a/b/issues/1', 'https://github.com@evil.test/a/b/issues/1', 'https://user@github.com/a/b/issues/1']) {
+  assert.ok(!code.includes("<a"));
+  for (const other of [
+    "https://example.test/a",
+    "https://github.com.evil.test/a/b/issues/1",
+    "https://github.com@evil.test/a/b/issues/1",
+    "https://user@github.com/a/b/issues/1",
+  ]) {
     assert.equal(renderMarkdown(other), `<p>${other}</p>`);
-    assert.ok(!renderMarkdown(`[link](${other})`).includes('github-link'));
+    assert.ok(!renderMarkdown(`[link](${other})`).includes("github-link"));
   }
-  const html = renderMarkdown('[<img src=x onerror=alert>](https://github.com/a/b/issues/1?x="onclick="bad)');
-  assert.ok(!html.includes('<img'));
-  assert.ok(html.includes('&quot;onclick=&quot;bad'));
+  const html = renderMarkdown(
+    '[<img src=x onerror=alert>](https://github.com/a/b/issues/1?x="onclick="bad)',
+  );
+  assert.ok(!html.includes("<img"));
+  assert.ok(html.includes("&quot;onclick=&quot;bad"));
   assert.ok(!html.includes('"onclick="'));
-  assert.ok(!renderMarkdown(`[javascript](javascript:alert(1))`).includes('<a'));
+  assert.ok(!renderMarkdown(`[javascript](javascript:alert(1))`).includes("<a"));
 });
 
 test("ordered lists continue across blank lines and retain their starting number", () => {
-  assert.equal(renderMarkdown('1. **Yes**\n\n2. Link is accurate\n\n3. Hide the control\n\nFollowing paragraph.'),
-    '<ol><li><strong>Yes</strong></li><li>Link is accurate</li><li>Hide the control</li></ol><p>Following paragraph.</p>');
-  assert.equal(renderMarkdown('4. Fourth\n\n5. Fifth'), '<ol start="4"><li>Fourth</li><li>Fifth</li></ol>');
+  assert.equal(
+    renderMarkdown(
+      "1. **Yes**\n\n2. Link is accurate\n\n3. Hide the control\n\nFollowing paragraph.",
+    ),
+    "<ol><li><strong>Yes</strong></li><li>Link is accurate</li><li>Hide the control</li></ol><p>Following paragraph.</p>",
+  );
+  assert.equal(
+    renderMarkdown("4. Fourth\n\n5. Fifth"),
+    '<ol start="4"><li>Fourth</li><li>Fifth</li></ol>',
+  );
   // Markdown takes the first marker as the start; repeated 1s still form a numbered list.
-  assert.equal(renderMarkdown('1. First\n\n1. Second'), '<ol><li>First</li><li>Second</li></ol>');
-  assert.equal(renderMarkdown('1. First\n\nSeparate paragraph\n\n3. Third'),
-    '<ol><li>First</li></ol><p>Separate paragraph</p><ol start="3"><li>Third</li></ol>');
-  assert.equal(renderMarkdown('1. First\n\n- Bullet\n\n2. Second'),
-    '<ol><li>First</li></ol><ul><li>Bullet</li></ul><ol start="2"><li>Second</li></ol>');
+  assert.equal(renderMarkdown("1. First\n\n1. Second"), "<ol><li>First</li><li>Second</li></ol>");
+  assert.equal(
+    renderMarkdown("1. First\n\nSeparate paragraph\n\n3. Third"),
+    '<ol><li>First</li></ol><p>Separate paragraph</p><ol start="3"><li>Third</li></ol>',
+  );
+  assert.equal(
+    renderMarkdown("1. First\n\n- Bullet\n\n2. Second"),
+    '<ol><li>First</li></ol><ul><li>Bullet</li></ul><ol start="2"><li>Second</li></ol>',
+  );
 });
 
 test("only closed Mermaid fences are eligible for diagram rendering", () => {
-  assert.equal(renderMarkdown("```mermaid\ngraph LR\nA-->B"), "<pre><code>graph LR\nA--&gt;B</code></pre>");
-  assert.equal(renderMarkdown("```mermaid\ngraph LR\nA-->B\n```"), '<pre data-mermaid=""><code>graph LR\nA--&gt;B</code></pre>');
-  assert.equal(renderMarkdown("```js\n<script>alert(1)</script>\n```"), "<pre><code>&lt;script&gt;alert(1)&lt;/script&gt;</code></pre>");
-  assert.ok(!renderMarkdown('<pre data-mermaid="">bad</pre>').includes('<pre'));
+  assert.equal(
+    renderMarkdown("```mermaid\ngraph LR\nA-->B"),
+    "<pre><code>graph LR\nA--&gt;B</code></pre>",
+  );
+  assert.equal(
+    renderMarkdown("```mermaid\ngraph LR\nA-->B\n```"),
+    '<pre data-mermaid=""><code>graph LR\nA--&gt;B</code></pre>',
+  );
+  assert.equal(
+    renderMarkdown("```js\n<script>alert(1)</script>\n```"),
+    "<pre><code>&lt;script&gt;alert(1)&lt;/script&gt;</code></pre>",
+  );
+  assert.ok(!renderMarkdown('<pre data-mermaid="">bad</pre>').includes("<pre"));
 });
 
 test("Mermaid source stays escaped and surrounding Markdown keeps its order", () => {
-  const html = renderMarkdown('| Before |\n| --- |\n| table |\n```mermaid\ngraph LR\nA["<img src=x onerror=alert(1)>"]\n```\n\nAfter');
-  assert.ok(html.indexOf('</table>') < html.indexOf('<pre data-mermaid'));
-  assert.ok(html.endsWith('</code></pre><p>After</p>'));
-  assert.ok(!html.includes('<img'));
+  const html = renderMarkdown(
+    '| Before |\n| --- |\n| table |\n```mermaid\ngraph LR\nA["<img src=x onerror=alert(1)>"]\n```\n\nAfter',
+  );
+  assert.ok(html.indexOf("</table>") < html.indexOf("<pre data-mermaid"));
+  assert.ok(html.endsWith("</code></pre><p>After</p>"));
+  assert.ok(!html.includes("<img"));
 });

@@ -8,7 +8,13 @@
  */
 import { Schema } from "effect";
 // Relative so module tests can load the Schemas under plain Node, which has no `@shared` alias.
-import { type Endpoint, Endpoints, type IdParam, type Json, type RadiusSetupAction } from "../../../shared/http.ts";
+import {
+  type Endpoint,
+  Endpoints,
+  type IdParam,
+  type Json,
+  type RadiusSetupAction,
+} from "../../../shared/http.ts";
 import type { McpSetupRequest } from "../../../shared/mcp.ts";
 import type { SessionPullRequestAction, ThinkingLevel } from "../../../shared/wire.ts";
 
@@ -32,33 +38,47 @@ export interface RequestOptions {
 }
 
 /** What a call sends: the endpoint's ID parameters and, when it has one, its body. */
-type Input<Q extends IdParam, B extends Json | undefined> =
-  & ([Q] extends [never] ? unknown : { readonly query: Readonly<Record<Q, string>> })
-  & (B extends Json ? { readonly body: B["Type"] } : unknown);
+type Input<Q extends IdParam, B extends Json | undefined> = ([Q] extends [never]
+  ? unknown
+  : { readonly query: Readonly<Record<Q, string>> }) &
+  (B extends Json ? { readonly body: B["Type"] } : unknown);
 
 async function call<Q extends IdParam, B extends Json | undefined, R extends Json>(
-  endpoint: Endpoint<Q, B, R>, input: Input<Q, B>, { signal }: RequestOptions = {},
+  endpoint: Endpoint<Q, B, R>,
+  input: Input<Q, B>,
+  { signal }: RequestOptions = {},
 ): Promise<R["Type"]> {
   const { method, path, noStore, fallback } = endpoint;
   const { query, body } = input as { query?: Record<string, string>; body?: unknown };
-  const failure = (status: number) => typeof fallback === "string" ? fallback : fallback(status);
+  const failure = (status: number) => (typeof fallback === "string" ? fallback : fallback(status));
   let response: Response;
   try {
     response = await fetch(query ? `${path}?${new URLSearchParams(query)}` : path, {
-      method, signal, ...(noStore ? { cache: "no-store" as const } : {}),
-      ...(endpoint.body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      method,
+      signal,
+      ...(noStore ? { cache: "no-store" as const } : {}),
+      ...(endpoint.body === undefined
+        ? {}
+        : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
     });
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new ApiError(failure(0), 0);
   }
   // A proxy or crashed server may answer with something other than JSON.
-  const json: unknown = await response.json().catch(error => {
+  const json: unknown = await response.json().catch((error) => {
     if (signal?.aborted) throw error;
     return undefined;
   });
   if (!response.ok) {
-    const message = json && typeof json === "object" && "error" in json && typeof json.error === "string" && json.error ? json.error : failure(response.status);
+    const message =
+      json &&
+      typeof json === "object" &&
+      "error" in json &&
+      typeof json.error === "string" &&
+      json.error
+        ? json.error
+        : failure(response.status);
     throw new ApiError(message, response.status);
   }
   const decoded = Schema.decodeUnknownExit(endpoint.response)(json);
@@ -85,9 +105,18 @@ export const workspaceChangedFile = (workspaceId: string, path: string, options?
 // Session pull request
 
 /** Reads always bypass the HTTP cache: GitHub facts are live. */
-export const sessionPullRequest = (workspaceId: string, sessionId: string, action?: SessionPullRequestAction, options?: RequestOptions) =>
+export const sessionPullRequest = (
+  workspaceId: string,
+  sessionId: string,
+  action?: SessionPullRequestAction,
+  options?: RequestOptions,
+) =>
   action
-    ? call(Endpoints.changeSessionPullRequest, { query: { workspaceId, sessionId }, body: action }, options)
+    ? call(
+        Endpoints.changeSessionPullRequest,
+        { query: { workspaceId, sessionId }, body: action },
+        options,
+      )
     : call(Endpoints.sessionPullRequest, { query: { workspaceId, sessionId } }, options);
 
 // Composer
@@ -97,11 +126,18 @@ export const slashCommands = async (cwd: string, options?: RequestOptions) =>
   (await call(Endpoints.slashCommands, { body: { cwd } }, options)).commands;
 
 /** From the running session's own child; fails with 409 once it has stopped. */
-export const sessionCommands = async (workspaceId: string, sessionId: string, options?: RequestOptions) =>
+export const sessionCommands = async (
+  workspaceId: string,
+  sessionId: string,
+  options?: RequestOptions,
+) =>
   (await call(Endpoints.sessionCommands, { query: { workspaceId, sessionId } }, options)).commands;
 
-export const saveDefaults = async (model: string | undefined, thinkingLevel: ThinkingLevel, options?: RequestOptions) =>
-  (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;
+export const saveDefaults = async (
+  model: string | undefined,
+  thinkingLevel: ThinkingLevel,
+  options?: RequestOptions,
+) => (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;
 
 // Settings
 
@@ -119,29 +155,56 @@ export type ProviderLoginRequest =
   | { method: "PUT"; body: typeof Endpoints.answerProviderLogin.body.Type }
   | { method: "DELETE"; body: typeof Endpoints.cancelProviderLogin.body.Type };
 
-export const providerLogin = async (request: ProviderLoginRequest = { method: "GET" }, options?: RequestOptions) => {
+export const providerLogin = async (
+  request: ProviderLoginRequest = { method: "GET" },
+  options?: RequestOptions,
+) => {
   switch (request.method) {
-    case "GET": return (await call(Endpoints.providerLoginState, {}, options)).state;
-    case "POST": return (await call(Endpoints.startProviderLogin, request, options)).state;
-    case "PUT": return (await call(Endpoints.answerProviderLogin, request, options)).state;
-    case "DELETE": return (await call(Endpoints.cancelProviderLogin, request, options)).state;
+    case "GET":
+      return (await call(Endpoints.providerLoginState, {}, options)).state;
+    case "POST":
+      return (await call(Endpoints.startProviderLogin, request, options)).state;
+    case "PUT":
+      return (await call(Endpoints.answerProviderLogin, request, options)).state;
+    case "DELETE":
+      return (await call(Endpoints.cancelProviderLogin, request, options)).state;
   }
 };
 
 /** The same sign-in attempt as providers', run by Pi's MCP OAuth for a catalog server. */
-export const mcpLogin = async (request: ProviderLoginRequest = { method: "GET" }, options?: RequestOptions) => {
+export const mcpLogin = async (
+  request: ProviderLoginRequest = { method: "GET" },
+  options?: RequestOptions,
+) => {
   switch (request.method) {
-    case "GET": return (await call(Endpoints.mcpLoginState, {}, options)).state;
-    case "POST": return (await call(Endpoints.startMcpLogin, { body: { server: request.body.provider } }, options)).state;
-    case "PUT": return (await call(Endpoints.answerMcpLogin, request, options)).state;
-    case "DELETE": return (await call(Endpoints.cancelMcpLogin, request, options)).state;
+    case "GET":
+      return (await call(Endpoints.mcpLoginState, {}, options)).state;
+    case "POST":
+      return (
+        await call(Endpoints.startMcpLogin, { body: { server: request.body.provider } }, options)
+      ).state;
+    case "PUT":
+      return (await call(Endpoints.answerMcpLogin, request, options)).state;
+    case "DELETE":
+      return (await call(Endpoints.cancelMcpLogin, request, options)).state;
   }
 };
 
 export const mcpSetup = async (request?: McpSetupRequest, options?: RequestOptions) =>
-  (request ? await call(Endpoints.changeMcpSetup, { body: request }, options) : await call(Endpoints.mcpSetup, {}, options)).state;
+  (request
+    ? await call(Endpoints.changeMcpSetup, { body: request }, options)
+    : await call(Endpoints.mcpSetup, {}, options)
+  ).state;
 
-export const radiusSetup = async (action?: { action: RadiusSetupAction; removalKey?: string }, options?: RequestOptions) =>
+export const radiusSetup = async (
+  action?: { action: RadiusSetupAction; removalKey?: string },
+  options?: RequestOptions,
+) =>
   (action
-    ? await call(Endpoints.changeRadiusSetup, { body: action as typeof Endpoints.changeRadiusSetup.body.Type }, options)
-    : await call(Endpoints.radiusSetup, {}, options)).state;
+    ? await call(
+        Endpoints.changeRadiusSetup,
+        { body: action as typeof Endpoints.changeRadiusSetup.body.Type },
+        options,
+      )
+    : await call(Endpoints.radiusSetup, {}, options)
+  ).state;

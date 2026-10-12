@@ -42,23 +42,65 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
   if (!command.enabled) return false;
   const intent = command.intent;
   switch (intent.kind) {
-    case "send": effects.send(intent.command); break;
-    case "home": effects.closeSettings(); break;
-    case "settings": effects.openSettings(intent.section); break;
-    case "new-session": effects.openNew("cwd" in intent ? intent.cwd : undefined, "projectId" in intent ? intent.projectId : undefined); break;
-    case "toggle-sidebar": effects.toggleSidebar(); break;
-    case "appearance": effects.setAppearance(intent.appearance); break;
-    case "view": effects.setView(intent.change); break;
-    case "project-dialog": effects.openForm({ kind: "project", dialog: intent.dialog }); break;
-    case "close-folder": effects.openForm({ kind: "close-folder", folder: intent.folder }); break;
-    case "copy": effects.copy(intent.value, intent.label); break;
-    case "changes": effects.openPanel("changes"); break;
-    case "pull-request": effects.openPanel("pr"); break;
-    case "display": effects.setDisplay(intent.display); break;
+    case "send":
+      effects.send(intent.command);
+      break;
+    case "home":
+      effects.closeSettings();
+      break;
+    case "settings":
+      effects.openSettings(intent.section);
+      break;
+    case "new-session":
+      effects.openNew(
+        "cwd" in intent ? intent.cwd : undefined,
+        "projectId" in intent ? intent.projectId : undefined,
+      );
+      break;
+    case "toggle-sidebar":
+      effects.toggleSidebar();
+      break;
+    case "appearance":
+      effects.setAppearance(intent.appearance);
+      break;
+    case "view":
+      effects.setView(intent.change);
+      break;
+    case "project-dialog":
+      effects.openForm({ kind: "project", dialog: intent.dialog });
+      break;
+    case "close-folder":
+      effects.openForm({ kind: "close-folder", folder: intent.folder });
+      break;
+    case "copy":
+      effects.copy(intent.value, intent.label);
+      break;
+    case "changes":
+      effects.openPanel("changes");
+      break;
+    case "pull-request":
+      effects.openPanel("pr");
+      break;
+    case "display":
+      effects.setDisplay(intent.display);
+      break;
     // An enabled session command always has its target; the guard only narrows the type.
-    case "rename": if (!intent.target) return false; effects.openForm({ kind: "rename-session", target: intent.target }); break;
-    case "delete": if (!intent.target) return false; effects.openForm({ kind: "delete-session", target: intent.target }); break;
-    case "archive": if (!intent.target) return false; effects.send({ _tag: "archive_session", cwd: intent.target.cwd, sessionId: intent.target.sessionId }); break;
+    case "rename":
+      if (!intent.target) return false;
+      effects.openForm({ kind: "rename-session", target: intent.target });
+      break;
+    case "delete":
+      if (!intent.target) return false;
+      effects.openForm({ kind: "delete-session", target: intent.target });
+      break;
+    case "archive":
+      if (!intent.target) return false;
+      effects.send({
+        _tag: "archive_session",
+        cwd: intent.target.cwd,
+        sessionId: intent.target.sessionId,
+      });
+      break;
   }
   return true;
 }

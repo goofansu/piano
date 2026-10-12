@@ -28,31 +28,50 @@ export interface ContextFigures {
 const LOW_PERCENT_LEFT = 15;
 
 /** Derive the context figures from the session's usage, falling back to the catalog's window for `model`. */
-export function contextFigures(context: SessionUsage["context"], catalog: ModelCatalog | null, model: string | undefined): ContextFigures {
+export function contextFigures(
+  context: SessionUsage["context"],
+  catalog: ModelCatalog | null,
+  model: string | undefined,
+): ContextFigures {
   const tokens = context?.tokens ?? null;
-  const fallback = catalog?.models.find((m) => m.ref === (model || catalog.defaultModel))?.contextWindow;
+  const fallback = catalog?.models.find(
+    (m) => m.ref === (model || catalog.defaultModel),
+  )?.contextWindow;
   const known = context?.contextWindow ?? fallback;
   const window = known !== undefined && known > 0 ? known : undefined;
-  const percent = tokens === null ? null : context?.percent ?? null;
+  const percent = tokens === null ? null : (context?.percent ?? null);
   const left = percent === null ? null : Math.max(0, 100 - percent);
-  const usedLabel = percent !== null ? `${Math.round(percent)}%` : tokens !== null ? formatTokenCount(tokens) : null;
+  const usedLabel =
+    percent !== null
+      ? `${Math.round(percent)}%`
+      : tokens !== null
+        ? formatTokenCount(tokens)
+        : null;
   const windowLabel = window === undefined ? null : formatTokenCount(window);
   return {
     tokens,
     window,
     // Before the first reply only the window is known, so it stands alone rather than reading as "—/1k".
-    label: usedLabel && windowLabel ? `${usedLabel}/${windowLabel}` : usedLabel ?? windowLabel ?? "—",
-    description: tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`,
-    heading: tokens === null ? "Context usage unavailable" : `Context: ${tokens.toLocaleString()} tokens`,
+    label:
+      usedLabel && windowLabel ? `${usedLabel}/${windowLabel}` : (usedLabel ?? windowLabel ?? "—"),
+    description:
+      tokens === null ? "Context usage unavailable" : `${tokens.toLocaleString()} tokens`,
+    heading:
+      tokens === null ? "Context usage unavailable" : `Context: ${tokens.toLocaleString()} tokens`,
     low: left !== null && left < LOW_PERCENT_LEFT,
-    used: percent === null ? null : { value: Math.max(0, Math.min(100, percent)), text: `${percent.toFixed(1)}% used` },
+    used:
+      percent === null
+        ? null
+        : { value: Math.max(0, Math.min(100, percent)), text: `${percent.toFixed(1)}% used` },
     left: left === null ? null : `${left < 1 ? left.toFixed(1) : Math.round(left)}% left`,
   };
 }
 
 /** The share of input tokens served from cache, as a whole percentage; absent without input. */
-export function cacheHit(usage?: Pick<NonNullable<SessionStats["tokens"]>, "input" | "cacheRead" | "cacheWrite">): number | undefined {
+export function cacheHit(
+  usage?: Pick<NonNullable<SessionStats["tokens"]>, "input" | "cacheRead" | "cacheWrite">,
+): number | undefined {
   if (!usage) return undefined;
   const input = usage.input + usage.cacheRead + usage.cacheWrite;
-  return input > 0 ? Math.round(100 * usage.cacheRead / input) : undefined;
+  return input > 0 ? Math.round((100 * usage.cacheRead) / input) : undefined;
 }

@@ -20,7 +20,8 @@ export function renderDiagram(source: string, dark: boolean): Promise<string> {
       maxEdges: 500,
     });
     const container = document.createElement("div");
-    container.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;left:-100000px";
+    container.style.cssText =
+      "position:absolute;visibility:hidden;pointer-events:none;left:-100000px";
     document.body.append(container);
     try {
       const { svg } = await mermaid.render(`piano-mermaid-${++sequence}`, source, container);
