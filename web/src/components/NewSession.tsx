@@ -4,7 +4,6 @@ import {
   FolderIcon,
   FolderOpenIcon,
   GitBranchPlusIcon,
-  PanelLeftOpenIcon,
   PlusIcon,
   ShieldCheckIcon,
   ShieldOffIcon,
@@ -27,6 +26,7 @@ import {
 import { PianoMark } from "@/components/PianoMark";
 import { Popover, PopoverTrigger } from "@/components/PianoPopover";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
+import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -60,20 +60,12 @@ interface Props {
   /** The project a session started here joins; the page is that project's home. */
   projectId?: string;
   onProjectChange: (projectId?: string) => void;
-  onMenu: () => void;
 }
 
 const NEW = { kind: "new" } as const;
 
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
-export function NewSession({
-  state,
-  client,
-  chooseDirectory,
-  projectId,
-  onProjectChange,
-  onMenu,
-}: Props) {
+export function NewSession({ state, client, chooseDirectory, projectId, onProjectChange }: Props) {
   const { send } = client;
   const { run } = useCommands();
   // The client starts a fresh page in the last directory used, else the first folder; opened for a project, it starts without one.
@@ -118,15 +110,7 @@ export function NewSession({
   return (
     <>
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="absolute top-2 left-2 md:hidden"
-        aria-label="Show sidebar"
-        onClick={onMenu}
-      >
-        <PanelLeftOpenIcon />
-      </Button>
+      <ShowSidebarButton className="absolute top-2 left-2" />
       <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">

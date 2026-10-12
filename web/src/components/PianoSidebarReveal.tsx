@@ -1,6 +1,7 @@
 import { Dialog } from "radix-ui";
 import { type CSSProperties, type ReactNode, type RefObject, useEffect } from "react";
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
+import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
 export function sidebarRevealStyle(
   progress: number,
@@ -24,7 +25,6 @@ export function PianoSidebarReveal({
   settleDuration,
   settleEasing,
   onOpenChange,
-  returnFocus,
   contentRef: content,
   title,
   children,
@@ -35,11 +35,11 @@ export function PianoSidebarReveal({
   settleDuration: number;
   settleEasing: string;
   onOpenChange: (open: boolean) => void;
-  returnFocus: RefObject<HTMLElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
   title: string;
   children: ReactNode;
 }) {
+  const { restoreFocus } = useSidebarLayout();
   useEffect(() => {
     if (open && !dragging && !content.current?.contains(document.activeElement)) {
       content.current?.focus({ preventScroll: true });
@@ -59,15 +59,9 @@ export function PianoSidebarReveal({
             if (!dragging) content.current?.focus({ preventScroll: true });
           }}
           onCloseAutoFocus={(event) => {
+            // The layout knows what had focus before the sheet opened, and which control to fall back to.
             event.preventDefault();
-            const target = returnFocus.current;
-            returnFocus.current = null;
-            const fallback = [
-              ...document.querySelectorAll<HTMLElement>('button[aria-label="Show sidebar"]'),
-            ].find((element) => element.checkVisibility({ visibilityProperty: true }));
-            if (target?.isConnected && target.checkVisibility({ visibilityProperty: true }))
-              target.focus({ preventScroll: true });
-            else fallback?.focus({ preventScroll: true });
+            restoreFocus();
           }}
         >
           <SheetTitle className="sr-only">{title}</SheetTitle>

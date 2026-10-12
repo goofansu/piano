@@ -1,4 +1,4 @@
-import { GitBranchIcon, MoreHorizontalIcon, PanelLeftOpenIcon, SplitIcon } from "lucide-react";
+import { GitBranchIcon, MoreHorizontalIcon, SplitIcon } from "lucide-react";
 import { useRef } from "react";
 import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
+import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Button } from "@/components/ui/button";
 import { pickCommands, SESSION_HEADER_COMMANDS } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
@@ -21,12 +22,10 @@ import type { AppState } from "@/store";
 
 export function SessionHeader({
   state,
-  onMenu,
   status,
   pullRequest,
 }: {
   state: AppState;
-  onMenu: () => void;
   status: string;
   /** Renders the PR control, given the session menu it returns focus to while no PR is linked. */
   pullRequest: (menuTrigger: React.RefObject<HTMLButtonElement | null>) => React.ReactNode;
@@ -52,15 +51,7 @@ export function SessionHeader({
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
       <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 md:px-6">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="-ml-2 md:hidden"
-          aria-label="Show sidebar"
-          onClick={onMenu}
-        >
-          <PanelLeftOpenIcon />
-        </Button>
+        <ShowSidebarButton className="-ml-2" />
         <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
           {cwd ? (
             <>

@@ -34,7 +34,7 @@ type Confirmation =
   | { kind: "uninstall"; server: Server; key: string };
 
 /** Catalog MCP servers on this machine: install, sign in, sign out and uninstall, all through Pi. */
-export function McpSettings({ onMenu }: { onMenu: () => void }) {
+export function McpSettings() {
   const setup = useObservation("mcp", (signal) => mcpSetup(undefined, { signal }));
   const actions = useSetupActions<Confirmation, Server>({
     refresh: () => void setup.refresh(),
@@ -59,7 +59,6 @@ export function McpSettings({ onMenu }: { onMenu: () => void }) {
   return (
     <SettingsSectionFrame
       title="MCP"
-      onMenu={onMenu}
       dialogs={
         <>
           {/* Keeps the last removal's wording while it animates closed. */}

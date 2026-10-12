@@ -33,10 +33,9 @@ import { type AppState, sessionKey } from "@/store";
 interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
-  onMenu: () => void;
 }
 
-export function SessionView({ state, send, onMenu }: Props) {
+export function SessionView({ state, send }: Props) {
   const { paragraph } = useDraftStore();
   // The selected session's Changes sheet and PR popover; hidden while Settings covers the view.
   const { settings, panel, openPanel, closePanel } = useNavigation();
@@ -81,7 +80,6 @@ export function SessionView({ state, send, onMenu }: Props) {
     <>
       <SessionHeader
         state={state}
-        onMenu={onMenu}
         status={status}
         pullRequest={(menuTrigger) =>
           t?.sessionId && (
