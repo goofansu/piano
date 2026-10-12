@@ -65,7 +65,9 @@ logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credent
 - `npm run lint` runs Biome and `@shadcn/lint` via ESLint. Run `npm run lint:tailwind` for Tailwind checks alone. Configure rules in `eslint.config.mjs`; currently it rejects unknown classes using the UI's Tailwind theme, including inside `components/ui`. Inline ESLint directives are ignored for this dedicated check so legacy React Hooks directives do not interfere.
 - `npm install` sets up a Husky pre-commit hook that runs `npm run lint`; a lint error blocks the commit.
 
-- Tests use fake Pi and need no model credentials.
+- Tests use fake Pi and need no model credentials. The Worktrunk integration test requires `wt` **0.80.0** on `PATH`.
+- [Quality CI](.github/workflows/quality.yml) runs on every PR, pushes to `main`, and merge-queue candidates using Node 24: `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, then `npm run build`. It installs checksum-pinned Worktrunk 0.80.0; no model secrets are supplied.
+- The stable required-check name is **Quality gates**. A repository administrator must require this check on `main` with up-to-date branches (or a merge queue), preserving any existing protection. A workflow alone does not block merges. Verify enforcement with a failing PR before claiming it is enabled. During YEJ-6 setup, the GitHub integration returned 403 for branch protection (permissions) and rulesets (private-repository plan restriction); enforcement remains unverified until the owner resolves these blockers. Do not make the repository public as a workaround.
 - Main directories: `server/` (backend), `web/` (React UI), `shared/` (wire schemas), `test/` (tests).
 - See [development docs](docs/README.md) for architecture, invariants, and verification guidance.
 - For the hosted exe.dev instance, use the [separate scratch development setup](docs/hosted-development.md#develop-and-verify-separately); do not develop against the running user instance.

@@ -1,0 +1,51 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      # The module suite includes a real Worktrunk lifecycle test, not just fake CLI tests.
+      - name: Install Worktrunk 0.80.0
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/worktrunk.tar.xz"
+          curl --fail --location --silent --show-error --retry 3 \
+            https://github.com/max-sixty/worktrunk/releases/download/v0.80.0/worktrunk-x86_64-unknown-linux-musl.tar.xz \
+            --output "$archive"
+          echo "532ce3ed5eecb1be274c925b5887f61671e2434a4ca2561b9a8ac9379dbba199  $archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/worktrunk"
+          tar -xJf "$archive" --strip-components=1 -C "$RUNNER_TEMP/worktrunk"
+          echo "$RUNNER_TEMP/worktrunk" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/worktrunk/wt" --version
+      - name: Clean install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test (fake Pi, no model credentials)
+        run: npm test
+      - name: Build
+        run: npm run build
