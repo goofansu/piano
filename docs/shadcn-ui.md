@@ -46,7 +46,10 @@ modal primitive as Sheet, but exposes stationary navigation under a translated l
 than moving a sheet over it. The sidebar occupies 75% of the mobile viewport; only a claimed
 horizontal drag anywhere on the main content overrides touch scrolling, with browser edges,
 editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; settling
-duration adapts to release speed and remaining distance.
+duration adapts to release speed and remaining distance. During a drag, `useSidebarSwipe` batches
+surface-only style writes into animation frames; React owns mounting and the settled endpoint.
+Do not update inherited motion variables per frame: that invalidates styles across the transcript
+and navigation. Cancellation discards pending frames and returns the surfaces to CSS settling.
 
 ## Upgrade procedure
 
@@ -63,7 +66,9 @@ duration adapts to release speed and remaining distance.
    navigation, row sizing, light/dark pickers, trailing checks, pointer/keyboard focus, Mod+B,
    touch focus, mobile reveal proportions, finger tracking (including trusted Chromium touch),
    cancellation, dismissal and reduced motion. It uses fake Pi and no paid model calls. Physical
-   Safari browser-edge navigation still requires a device check.
+   Safari browser-edge navigation still requires a device check. For comparative drag timing,
+   run with `PIANO_SWIPE_PROFILE=1`; it retains visible-position update gaps under 4x Chromium
+   CPU throttling. Its reference-host median budget is not an iPhone/Safari FPS guarantee.
 
 Upgrades still need review: clean upstream files eliminate customization merges, not API or
 visual regressions. Compare against CLI-generated source for this project's registry and aliases,

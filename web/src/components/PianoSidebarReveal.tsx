@@ -1,5 +1,5 @@
 import { Dialog } from "radix-ui";
-import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, useEffect } from "react";
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 
 export function sidebarRevealStyle(progress: number, duration: number): CSSProperties {
@@ -19,6 +19,7 @@ export function PianoSidebarReveal({
   settleDuration,
   onOpenChange,
   returnFocus,
+  contentRef: content,
   title,
   children,
 }: {
@@ -28,15 +29,15 @@ export function PianoSidebarReveal({
   settleDuration: number;
   onOpenChange: (open: boolean) => void;
   returnFocus: RefObject<HTMLElement | null>;
+  contentRef: RefObject<HTMLDivElement | null>;
   title: string;
   children: ReactNode;
 }) {
-  const content = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (open && !dragging && !content.current?.contains(document.activeElement)) {
       content.current?.focus({ preventScroll: true });
     }
-  }, [open, dragging]);
+  }, [open, dragging, content]);
   return (
     <Sheet open={open || dragging} onOpenChange={onOpenChange}>
       <Dialog.Portal>

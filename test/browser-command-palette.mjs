@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { registryEnv } from "./fixtures/registry.ts";
+import { sidebarDragPerformance } from "./fixtures/sidebar-drag-performance.mjs";
 
 const evidence = resolve(process.argv[2] ?? "/tmp/piano-palette-evidence");
 mkdirSync(evidence, { recursive: true });
@@ -491,11 +492,26 @@ try {
     "swipe from the middle follows finger before touchend",
   );
   await capture("swipe-preview");
-  await touch("touchmove", 220);
-  assert.ok(Math.abs((await position()) - 40) < 1, "reversal follows finger");
-  await touch("touchend", 220);
+  await evaluate(`(() => {
+    window.sidebarTouch('touchmove', 250);
+    window.sidebarTouch('touchmove', 240);
+    window.sidebarTouch('touchmove', 220);
+    return true;
+  })()`);
+  assert.ok(
+    Math.abs((await position()) - 40) < 1,
+    "a burst of moves paints the latest finger position",
+  );
+  await evaluate(`(() => {
+    window.sidebarTouch('touchmove', 250);
+    window.sidebarTouch('touchcancel', 250);
+    return true;
+  })()`);
   await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
-  assert.ok(Math.abs(await position()) < 1, "short slow drag settles closed");
+  assert.ok(
+    Math.abs(await position()) < 1,
+    "cancellation discards the pending frame and settles closed",
+  );
   await touch("touchstart", 40);
   await touch("touchmove", 140);
   await ab("press", "Escape");
@@ -614,6 +630,19 @@ try {
     await nativeTouch("touchMove", 100);
     await nativeTouch("touchEnd", 100);
     await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+    if (process.env.PIANO_SWIPE_PROFILE === "1") {
+      const profile = await sidebarDragPerformance((method, params) =>
+        send(method, params, sessionId),
+      );
+      writeFileSync(join(evidence, "drag-performance.json"), JSON.stringify(profile, null, 2));
+      console.log(
+        `Drag timing: median ${profile.median.toFixed(1)}ms, p95 ${profile.p95.toFixed(1)}ms`,
+      );
+      assert.ok(
+        profile.median < 50,
+        "sustained drag avoids long visible stalls on the reference host",
+      );
+    }
   } finally {
     cdp.close();
   }

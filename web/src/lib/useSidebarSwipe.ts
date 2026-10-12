@@ -1,7 +1,31 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 
 const mobile = () => !matchMedia("(min-width: 768px)").matches;
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
+
+// Do not animate an inherited CSS variable: that invalidates styles throughout the transcript
+// and sidebar on every frame. Update only the three moving/painted surfaces instead.
+function paintPosition(
+  main: HTMLElement | null,
+  reveal: HTMLElement | null,
+  progress: number | null,
+) {
+  const transform = progress === null ? "" : `translate3d(${progress * 75}vw, 0, 0)`;
+  const radius = progress === null ? "" : `${progress * 2}rem 0 0 ${progress * 2}rem`;
+  if (main) {
+    main.style.transform = transform;
+    main.style.borderRadius = radius;
+  }
+  const navigation = reveal?.querySelector<HTMLElement>('[data-slot="sidebar-reveal-navigation"]');
+  const scrim = reveal?.querySelector<HTMLElement>('[data-slot="sidebar-scrim"]');
+  if (navigation)
+    navigation.style.clipPath = progress === null ? "" : `inset(0 ${(1 - progress) * 100}% 0 0)`;
+  if (scrim) {
+    scrim.style.transform = transform;
+    scrim.style.borderRadius = radius;
+    scrim.style.opacity = progress === null ? "" : String(progress);
+  }
+}
 
 /** Owns only the transient drag; the layout still owns the committed open state. */
 export function useSidebarSwipe({
@@ -13,11 +37,18 @@ export function useSidebarSwipe({
   onOpenChange: (open: boolean) => void;
   onPreview: () => void;
 }) {
+  // React mounts the modal once per drag; pixel updates must not re-render its navigation.
   const [progress, setProgress] = useState<number | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
+  const revealRef = useRef<HTMLDivElement | null>(null);
   const [settle, setSettle] = useState<{ target: boolean; duration: number } | null>(null);
   const current = useEffectEvent(() => ({ open, onOpenChange, onPreview }));
   const cancelGesture = useRef<() => void>(() => {});
   const cancelDrag = useCallback(() => cancelGesture.current(), []);
+  useLayoutEffect(() => {
+    // Hand the surfaces back to CSS settling only after React commits the endpoint.
+    if (progress === null) paintPosition(mainRef.current, revealRef.current, null);
+  }, [progress]);
   // A command or navigation can change the committed state while a finger is still down.
   // biome-ignore lint/correctness/useExhaustiveDependencies: open is the external cancellation signal.
   useEffect(cancelDrag, [open, cancelDrag]);
@@ -36,7 +67,18 @@ export function useSidebarSwipe({
       velocity: number;
     } | null = null;
     let suppressClickUntil = 0;
+    let frame: number | null = null;
+    const cancelFrame = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+    };
+    const paint = () => {
+      frame = null;
+      if (!gesture?.claimed) return;
+      paintPosition(mainRef.current, revealRef.current, gesture.position);
+    };
     const cancel = () => {
+      cancelFrame();
       gesture = null;
       setProgress(null);
     };
@@ -96,6 +138,7 @@ export function useSidebarSwipe({
         if ((g.initial === 0 ? dx : -dx) < 0 || !event.cancelable) return cancel();
         g.claimed = true;
         if (!g.initial) current().onPreview();
+        setProgress(clamp(g.initial + dx / g.width));
       }
       // A native, non-passive listener is necessary: React's touch listeners are passive.
       // Only a claimed horizontal drag suppresses scrolling; the browser retains edge gestures.
@@ -111,7 +154,7 @@ export function useSidebarSwipe({
       g.lastX = touch.clientX;
       g.lastTime = event.timeStamp;
       g.position = clamp(g.initial + dx / g.width);
-      setProgress(g.position);
+      if (frame === null) frame = requestAnimationFrame(paint);
       suppressClickUntil = performance.now() + 500;
     };
     const end = (event: TouchEvent) => {
@@ -146,6 +189,7 @@ export function useSidebarSwipe({
     window.addEventListener("blur", cancel);
     return () => {
       cancelGesture.current = () => {};
+      cancelFrame();
       document.removeEventListener("touchstart", start, true);
       document.removeEventListener("touchmove", move, true);
       document.removeEventListener("touchend", end, true);
@@ -159,6 +203,8 @@ export function useSidebarSwipe({
   return {
     progress: progress ?? (open ? 1 : 0),
     dragging: progress !== null,
+    mainRef,
+    revealRef,
     settleDuration: settle?.target === open ? settle.duration : 300,
     cancelDrag,
   };

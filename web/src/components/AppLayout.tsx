@@ -229,12 +229,14 @@ export function AppLayout({
             setMobileOpen(open);
           }}
           returnFocus={layout.returnFocus}
+          contentRef={swipe.revealRef}
           title={navigationTitle}
         >
           {navigation(false)}
         </PianoSidebarReveal>
         {/* A viewport landmark, not a shadcn content Card with header/footer padding. */}
         <main
+          ref={swipe.mainRef}
           data-slot="layout-main"
           data-sidebar-dragging={swipe.dragging}
           style={sidebarRevealStyle(swipe.progress, swipe.settleDuration)}
