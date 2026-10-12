@@ -62,8 +62,6 @@ import { type AppState, sessionKey } from "@/store";
 
 interface Props {
   state: AppState;
-  /** Hide the sidebar (or close the sheet it is shown in). */
-  onHide: () => void;
 }
 
 /** Row heights: 36px with a pointer, 44px on touch desktops, 48px on phones. */
@@ -78,7 +76,7 @@ const groupRow = cn(
 const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
-export function Sidebar({ state, onHide }: Props) {
+export function Sidebar({ state }: Props) {
   const { select, openNew, openSettings, setPalette } = useNavigation();
   const { view } = useSidebarView();
   const { openGroups, setOpen } = useSidebarGroups(state, view.groupBy);
@@ -186,7 +184,7 @@ export function Sidebar({ state, onHide }: Props) {
 
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
-      <LayoutHeader onHide={onHide}>
+      <LayoutHeader>
         <IconButton
           label="Search sessions"
           tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>}
@@ -367,11 +365,10 @@ function SidebarSkeleton() {
 }
 
 /** The collapsed sidebar: a vertical rail with the expand control and activity mark. */
-export function SidebarRail({ onShow, working }: { onShow: () => void; working: boolean }) {
+export function SidebarRail({ working }: { working: boolean }) {
   const { openSettings } = useNavigation();
   return (
     <LayoutRail
-      onShow={onShow}
       working={working}
       footer={
         <IconButton label="Settings" side="right" onClick={() => openSettings()}>

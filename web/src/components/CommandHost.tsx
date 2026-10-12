@@ -40,6 +40,7 @@ import {
 } from "@/lib/sessionCommands";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
+import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
 import type { AppState } from "@/store";
 
@@ -118,18 +119,17 @@ export function SessionCommandMenuItem({
 export function CommandHost({
   state,
   send,
-  toggleSidebar,
   children,
 }: {
   state: AppState;
   send: (command: ClientCommand) => void;
-  toggleSidebar: () => void;
   children: React.ReactNode;
 }) {
   const { openNew, openPanel, openSettings, closeSettings } = useNavigation();
   const [display, setDisplay] = useSessionDisplay();
   const { setView } = useSidebarView();
   const { setTheme } = useTheme();
+  const sidebar = useSidebarLayout();
   const [form, setForm] = useState<CommandForm | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -151,7 +151,7 @@ export function CommandHost({
     openSettings,
     openNew,
     openPanel,
-    toggleSidebar,
+    toggleSidebar: sidebar.toggle,
     setView,
     setDisplay,
     setAppearance: setTheme,

@@ -23,7 +23,6 @@ export function SettingsSectionFrame({
   title,
   titleId = "settings-section-title",
   sectionId,
-  onMenu,
   actions,
   dialogs,
   children,
@@ -31,14 +30,13 @@ export function SettingsSectionFrame({
   title: string;
   titleId?: string;
   sectionId?: string;
-  onMenu: () => void;
   actions?: React.ReactNode;
   dialogs?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
-      <SettingsHeader title={title} titleId={titleId} onMenu={onMenu}>
+      <SettingsHeader title={title} titleId={titleId}>
         {actions}
       </SettingsHeader>
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">

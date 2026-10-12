@@ -66,15 +66,11 @@ const PROVIDER_LOGOS: Readonly<Record<string, string | undefined>> = {
 export function SettingsNavigation({
   compact,
   section,
-  onShow,
-  onHide,
   onSelect,
   onHome,
 }: {
   compact: boolean;
   section: SettingsSection;
-  onShow: () => void;
-  onHide: () => void;
   onSelect: (section: SettingsSection) => void;
   onHome: () => void;
 }) {
@@ -103,7 +99,6 @@ export function SettingsNavigation({
   );
   return compact ? (
     <LayoutRail
-      onShow={onShow}
       footer={
         <IconButton label="Home" side="right" onClick={onHome}>
           <HomeIcon />
@@ -114,7 +109,7 @@ export function SettingsNavigation({
     </LayoutRail>
   ) : (
     <div className="flex h-full flex-col">
-      <LayoutHeader title="Settings" onHide={onHide} />
+      <LayoutHeader title="Settings" />
       <SidebarContent>
         <SidebarGroup className="px-3">
           <SidebarGroupContent>{menu}</SidebarGroupContent>
@@ -133,12 +128,10 @@ export function SettingsNavigation({
 export function SettingsPage({
   section,
   request,
-  onMenu,
 }: {
   section: SettingsSection;
   /** Navigation's request count, so asking for Radius again reveals it again. */
   request: number;
-  onMenu: () => void;
 }) {
   const page = settingsPage(section);
   // Kept while another page shows; returning to Providers reads them again.
@@ -151,10 +144,9 @@ export function SettingsPage({
       <ProvidersSettings
         observed={providers}
         revealRadius={section === "radius" ? request : undefined}
-        onMenu={onMenu}
       />
     ),
-    mcp: () => <McpSettings onMenu={onMenu} />,
+    mcp: () => <McpSettings />,
   };
   return pages[page]();
 }
@@ -162,12 +154,10 @@ export function SettingsPage({
 function ProvidersSettings({
   observed,
   revealRadius,
-  onMenu,
 }: {
   observed: ReturnType<typeof useObservation<readonly OAuthProvider[]>>;
   /** The request that asked for Radius, or `undefined` when the page was opened for itself. */
   revealRadius: number | undefined;
-  onMenu: () => void;
 }) {
   // Radius has its own section below, with the steps that sign-in alone does not cover.
   const providers = observed.value?.filter((provider) => provider.id !== "radius");
@@ -193,7 +183,6 @@ function ProvidersSettings({
       title="Providers"
       titleId="settings-providers-title"
       sectionId="settings-providers"
-      onMenu={onMenu}
       dialogs={
         <>
           {confirming && signOutTarget && (

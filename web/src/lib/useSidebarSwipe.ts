@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 
-const mobile = () => !matchMedia("(min-width: 768px)").matches;
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
 // Do not animate an inherited CSS variable: that invalidates styles throughout the transcript
@@ -27,15 +26,18 @@ function paintPosition(
   }
 }
 
-/** Owns only the transient drag; the layout still owns the committed open state. */
+/** Owns only the transient swipe; the sidebar layout owns the committed open state and the breakpoint. */
 export function useSidebarSwipe({
   open,
   onOpenChange,
   onPreview,
+  mobile,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPreview: () => void;
+  /** Whether the sheet applies now; swipes do nothing above the breakpoint. */
+  mobile: () => boolean;
 }) {
   // React mounts the modal once per drag; pixel updates must not re-render its navigation.
   const [progress, setProgress] = useState<number | null>(null);
@@ -46,7 +48,7 @@ export function useSidebarSwipe({
     duration: number;
     easing: string;
   } | null>(null);
-  const current = useEffectEvent(() => ({ open, onOpenChange, onPreview }));
+  const current = useEffectEvent(() => ({ open, onOpenChange, onPreview, mobile }));
   const cancelGesture = useRef<() => void>(() => {});
   const cancelDrag = useCallback(() => cancelGesture.current(), []);
   useLayoutEffect(() => {
@@ -91,7 +93,7 @@ export function useSidebarSwipe({
       cancel();
       setSettle(null);
       suppressClickUntil = 0; // A new deliberate tap is not the preceding drag's compatibility click.
-      if (!mobile() || event.touches.length !== 1) return;
+      if (!current().mobile() || event.touches.length !== 1) return;
       const touch = event.touches[0];
       const target = event.target;
       if (!(target instanceof Element)) return;
