@@ -224,13 +224,7 @@ function ProvidersSettings({
             <Item key={provider.id} role="listitem" variant="outline" className="flex-nowrap">
               {Object.hasOwn(PROVIDER_LOGOS, provider.id) && PROVIDER_LOGOS[provider.id] && (
                 <ItemMedia variant="icon">
-                  {/* Optical sizing: SpaceX's wide, shallow mark needs more width than square logos. */}
-                  <svg
-                    viewBox="0 0 24 24"
-                    className={provider.id === "xai" ? "size-6" : undefined}
-                    aria-hidden="true"
-                    focusable="false"
-                  >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <use href={`/provider-logos/${PROVIDER_LOGOS[provider.id]}.svg#logo`} />
                   </svg>
                 </ItemMedia>

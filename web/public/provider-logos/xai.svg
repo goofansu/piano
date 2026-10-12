@@ -1,2 +1,6 @@
-<!-- Copied from https://cdn.jsdelivr.net/npm/simple-icons@16.35.0/icons/spacex.svg (CC0-1.0). -->
-<svg xmlns="http://www.w3.org/2000/svg" id="logo" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M24 7.417C8.882 8.287 1.89 14.75.321 16.28L0 16.583h2.797C10.356 9.005 21.222 7.663 24 7.417zm-17.046 6.35c-.472.321-.945.68-1.398 1.02l2.457 1.796h2.778zM2.948 10.8H.189l3.25 2.381c.473-.321 1.02-.661 1.512-.945Z"/></svg>
+<!-- xAI logomark from the original official xAI_Grok_Assets.zip.
+     Source: https://data.x.ai/logos/xAI_Grok_Assets.zip
+     Archived official pack: https://web.archive.org/web/20250910134422/https://data.x.ai/logos/xAI_Grok_Assets.zip -->
+<svg id="logo" width="24" height="24" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M128.22 388.746L513.844 932.571H685.252L299.584 388.746H128.22ZM299.452 690.789L128 932.571H299.54L385.2 811.702L299.452 690.789ZM724.46 91.4286L428.096 509.355L513.844 630.311L896 91.4286H724.46ZM755.501 350.032V932.571H896V151.907L755.501 350.032Z" fill="currentColor"/>
+</svg>
