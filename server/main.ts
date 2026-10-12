@@ -9,6 +9,7 @@ import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
 import { DirectoryFactsLive } from "./DirectoryFacts.ts";
+import { inboundLimits } from "./InboundCapacity.ts";
 import { McpSetupLive } from "./McpSetup.ts";
 import { AllowedOrigins, configuredOrigins } from "./OriginPolicy.ts";
 import { agentDir } from "./PiEnv.ts";
@@ -47,7 +48,10 @@ const drain = () => {
 };
 process.once("SIGINT", drain);
 process.once("SIGTERM", drain);
-const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds" });
+// ws enforces the complete-message limit while assembling fragments, before JSON parsing.
+const Infra = NodeHttpServer.layer(() => server, { port: PORT, host: HOST, gracefulShutdownTimeout: "3 seconds",
+  websocket: { maxPayload: inboundLimits.frameBytes, perMessageDeflate: false },
+});
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
 const Services = Layer.mergeAll(PiSettingsLive, ProviderLoginLive, RadiusSetupLive, McpSetupLive, WorkspaceRevisionsLive, WorkspaceChangesLive, SessionPullRequestsLive).pipe(

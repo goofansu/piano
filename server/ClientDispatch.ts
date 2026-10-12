@@ -9,6 +9,7 @@ import type { ClientMessage } from "../shared/wire.ts";
 import { type ClientOutput, makeClientSessions } from "./ClientSessions.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
+import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SidebarView } from "./SidebarView.ts";
@@ -100,18 +101,33 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
     Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : report(Cause.squash(cause), selectionId)),
   );
 
+  const capacity = makeInboundCapacity(inboundLimits.client);
   const receive = Effect.fn("ClientDispatch.receive")(function* (request: ClientRequest) {
-    switch (request._tag) {
-      case "select":
-        return answered(yield* sessions.select(request), request.selectionId);
-      case "create_session":
-        return answered(yield* sessions.create(request), request.selectionId);
-      case "act":
-        return answered(sessions.act(request.selectionId, request.action, request.start), request.selectionId);
-      default:
-        return answered(handle(request));
+    // Heartbeats are immediate transport liveness, not Pi work. Rejecting one
+    // during saturation makes a healthy browser reconnect and abandon controls.
+    if (request._tag === "ping") { yield* answered(handle(request)); return Effect.void; }
+    const priority = request._tag === "act" && ["answer", "abort", "stop", "restore_queue"].includes(request.action._tag);
+    const release = capacity.acquire(Buffer.byteLength(JSON.stringify(request)), priority);
+    if (!release) {
+      // Reject before claiming a selection or mutating anything. The receive loop
+      // remains available for acknowledgements, dialog answers and cancellation.
+      yield* report("Client input capacity is full. Request was not started; wait for pending work before trying again.", "selectionId" in request ? request.selectionId : undefined);
+      return Effect.void;
     }
-  });
+    const work = yield* Effect.gen(function* () {
+      switch (request._tag) {
+        case "select":
+          return answered(yield* sessions.select(request), request.selectionId);
+        case "create_session":
+          return answered(yield* sessions.create(request), request.selectionId);
+        case "act":
+          return answered(sessions.act(request.selectionId, request.action, request.start), request.selectionId);
+        default:
+          return answered(handle(request));
+      }
+    });
+    return work.pipe(Effect.ensuring(Effect.sync(release)));
+  }, Effect.uninterruptible);
 
   // ── initial state and global updates ──
   // Worktree discovery can take seconds in a large repository. Show the last observation at

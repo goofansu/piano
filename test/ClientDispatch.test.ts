@@ -4,16 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer, Queue, type Scope } from "effect";
+import { Effect, Fiber, Layer, Queue, type Scope } from "effect";
 import { makeClientDispatch } from "../server/ClientDispatch.ts";
 import { type DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
+import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { type SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
+import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
 import { type WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
-import type { ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
+import type { Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-dispatch-")));
 const cwd = join(root, "checkout");
@@ -45,6 +46,47 @@ const run = <A, E>(effect: Effect.Effect<A, E, WorkspaceCommands | SidebarView |
 const client = makeClientDispatch({ send: m => Effect.sync(() => { sent.push(m); }), overflow: e => Effect.die(e) });
 /** What this client was answered, without the hosts, sidebar and catalog updates every client hears. */
 const answers = (from: number) => sent.slice(from).filter(m => m._tag !== "hosts" && m._tag !== "registry" && m._tag !== "catalogs_invalidated");
+
+for (const control of ["answer", "abort"] as const) {
+  test(`INV-02/04/05: client saturation rejects before selection changes and leaves ${control} live`, async () => {
+    await run(Effect.gen(function* () {
+      const session = yield* (yield* SessionHosts).open({ cwd, sessionId: `client-capacity-${control}`, create: true });
+      const queue = yield* Queue.unbounded<ServerMessage>();
+      const { receive } = yield* makeClientDispatch({ send: m => Queue.offer(queue, m).pipe(Effect.asVoid), overflow: e => Effect.die(e) });
+      yield* yield* receive({ _tag: "select", selectionId: "current", cwd, sessionId: session.spec.sessionId });
+      const pending = [];
+      for (let n = 0; n < inboundLimits.client.messages; n++) pending.push(yield* (yield* receive({ _tag: "act", selectionId: "current", action: { _tag: "prompt", text: "capacity hold" } })).pipe(Effect.forkChild));
+      let dialog: Dialog | undefined;
+      for (;;) {
+        const m = yield* Queue.take(queue);
+        if (m._tag !== "session") continue;
+        if (m.event._tag === "dialog") dialog = m.event.dialog;
+        if (m.event._tag === "notice" && m.event.message === `Capacity held: ${inboundLimits.client.messages}`) break;
+      }
+      yield* yield* receive({ _tag: "ping", nonce: "saturated" });
+      for (;;) {
+        const m = yield* Queue.take(queue);
+        if (m._tag === "error") assert.fail(m.message);
+        if (m._tag === "pong") { assert.equal(m.nonce, "saturated"); break; }
+      }
+      yield* yield* receive({ _tag: "select", selectionId: "excess", cwd, sessionId: null });
+      for (;;) {
+        const m = yield* Queue.take(queue);
+        if (m._tag !== "error") continue;
+        assert.equal(m.selectionId, "excess"); assert.match(m.message, /capacity.*not started/); break;
+      }
+      assert.ok(dialog);
+      yield* yield* receive({ _tag: "act", selectionId: "current", action: control === "answer" ? { _tag: "answer", id: dialog.id, generation: dialog.generation, value: "release" } : { _tag: "abort" } });
+      for (const fiber of pending) yield* Fiber.join(fiber);
+      yield* yield* receive({ _tag: "act", selectionId: "current", action: { _tag: "commands" } });
+      for (;;) {
+        const m = yield* Queue.take(queue);
+        if (m._tag === "error") assert.fail(m.message);
+        if (m._tag === "action_result" && m.result._tag === "commands") { assert.equal(m.sessionId, session.spec.sessionId); break; }
+      }
+    }));
+  });
+}
 
 test("a trust decision answers the requester with a notice, the new trust and the new models, in that order", async () => {
   // A project skill makes the directory's trust matter to Pi.

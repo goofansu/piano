@@ -20,6 +20,7 @@ import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
 import type { Dialog, DialogResolution, ModelChoice, PromptSubmission, SessionAction, SessionActionResult, SessionClosure, SessionEvent, SessionFrame, SessionState, SessionStats, SlashCommand, Snapshot } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
+import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { PiCli } from "./PiCli.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import { dialogCancellation, dispositionOf, type PiCommand, PiProjector, type PiReadback, type PiRecord, type PiTranslation, piCommandFor, piReadbacks, queuedMessagesOf, type RefreshKind, sessionArgs, stateFactsOf } from "./PiRecords.ts";
@@ -117,7 +118,7 @@ interface Child {
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
   readonly write: (record: Record<string, unknown>) => Effect.Effect<void, PiSessionError>;
   /** Every non-response record, in stdout order. Ends when the child exits. */
-  readonly records: Queue.Dequeue<{ record: PiRecord; receivedAt: number }, Cause.Done>;
+  readonly records: Stream.Stream<{ record: PiRecord; receivedAt: number }>;
   readonly exited: Deferred.Deferred<SessionClosure>;
   /** Includes queued records, so readbacks cannot race output not yet projected. */
   readonly observationVersion: () => number;
@@ -131,9 +132,12 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     const cli = yield* PiCli;
     const timeoutMs = yield* PiRequestTimeoutMs;
     debug("spawning", cli.node, cli.cli, args);
-    const stdin = yield* Queue.unbounded<{ bytes: Uint8Array; done: Deferred.Deferred<void, PiSessionError> }, Cause.Done>();
-    const records = yield* Queue.unbounded<{ record: PiRecord; receivedAt: number }, Cause.Done>();
-    const writes = new Set<Deferred.Deferred<void, PiSessionError>>();
+    const stdin = yield* Queue.dropping<{ bytes: Uint8Array; done: Deferred.Deferred<void, PiSessionError> }, Cause.Done>(inboundLimits.writes.messages + inboundLimits.control.messages);
+    const records = yield* Queue.dropping<{ record: PiRecord; receivedAt: number; bytes: number }, Cause.Done>(inboundLimits.records.messages);
+    let recordBytes = 0;
+    const requestCapacity = makeInboundCapacity(inboundLimits.requests);
+    const writeCapacity = makeInboundCapacity(inboundLimits.writes);
+    const writes = new Map<Deferred.Deferred<void, PiSessionError>, () => void>();
     let transportError: PiSessionError | undefined;
     const pending = new Map<string, Deferred.Deferred<unknown, PiSessionError>>();
     const exited = yield* Deferred.make<SessionClosure>();
@@ -178,8 +182,12 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         }
         return;
       }
+      const bytes = Buffer.byteLength(line);
+      if (recordBytes + bytes > inboundLimits.records.bytes || !Queue.offerUnsafe(records, { record, receivedAt: yield* Clock.currentTimeMillis, bytes })) {
+        return yield* new PiSessionError({ reason: "protocol", detail: "Pi output exceeded the pending record limit. Reopen history before continuing; do not automatically resend input." });
+      }
+      recordBytes += bytes;
       observationVersion += 1;
-      yield* Queue.offer(records, { record, receivedAt: yield* Clock.currentTimeMillis });
     });
 
     yield* handle.stderr.pipe(
@@ -201,7 +209,8 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
           yield* Deferred.fail(d, new PiSessionError({ reason: "exited", detail: reason }));
         }
         pending.clear();
-        for (const done of writes) yield* Deferred.fail(done, new PiSessionError({ reason: "exited", detail: reason }));
+        for (const [done, release] of writes) { release(); yield* Deferred.fail(done, new PiSessionError({ reason: "exited", detail: reason })); }
+        writes.clear();
         yield* Queue.end(records);
       });
 
@@ -214,13 +223,38 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       yield* handle.kill({ forceKillAfter: "1 second" }).pipe(Effect.ignore);
     });
 
-    yield* handle.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.runForEach(onLine)).pipe(
+    // Frame bytes before decoding or parsing. A newline-free producer cannot grow
+    // splitLines' internal string without bound; multibyte UTF-8 may span chunks.
+    let partial = Buffer.alloc(0), partialLength = 0;
+    const onChunk = Effect.fnUntraced(function* (chunk: Uint8Array) {
+      let start = 0;
+      for (let end = 0; end <= chunk.length; end++) {
+        if (end < chunk.length && chunk[end] !== 10) continue;
+        const length = partialLength + end - start;
+        if (length > inboundLimits.rpcLineBytes) return yield* new PiSessionError({ reason: "protocol", detail: "Pi stdout exceeded the RPC line byte limit. Reopen history before continuing; do not automatically resend input." });
+        if (partial.length < length) {
+          const next = Buffer.allocUnsafe(Math.min(inboundLimits.rpcLineBytes, Math.max(length, partial.length * 2, 65536)));
+          partial.copy(next, 0, 0, partialLength); partial = next;
+        }
+        partial.set(chunk.subarray(start, end), partialLength);
+        partialLength = length;
+        if (end < chunk.length) {
+          yield* onLine(partial.toString("utf8", 0, partialLength));
+          partialLength = 0;
+        }
+        start = end + 1;
+      }
+    });
+    yield* handle.stdout.pipe(Stream.runForEach(onChunk),
+      Effect.andThen(Effect.suspend(() => partialLength ? onLine(partial.toString("utf8", 0, partialLength)) : Effect.void)),
+    ).pipe(
       // Normal EOF usually precedes exitCode notification. A child that closes
       // stdout but stays alive cannot acknowledge further commands.
       Effect.andThen(Deferred.await(exited).pipe(
         Effect.timeoutOption("1 second"),
         Effect.flatMap(result => result._tag === "None" ? failOutput("Pi stdout closed while the process was still running.") : Effect.void),
       )),
+      Effect.catchTag("PiSessionError", error => failOutput(error.detail)),
       Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : failOutput("Pi stdout reader failed: malformed RPC output or unreadable transport. Reopen history before continuing; do not automatically resend input.")),
       Effect.forkScoped,
     );
@@ -235,12 +269,13 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     // them with backpressure. This still cannot prove Pi consumed a UI response.
     yield* Stream.fromQueue(stdin).pipe(
       Stream.flatMap(({ bytes, done }) => Stream.make(bytes).pipe(
-        Stream.concat(Stream.fromEffect(Deferred.succeed(done, undefined)).pipe(Stream.drain)),
+        Stream.concat(Stream.fromEffect(Effect.sync(() => { writes.get(done)?.(); writes.delete(done); }).pipe(Effect.andThen(Deferred.succeed(done, undefined)))).pipe(Stream.drain)),
       )),
       Stream.run(handle.stdin),
       Effect.catchCause((cause) => Effect.gen(function* () {
         transportError = new PiSessionError({ reason: "transport", detail: `Pi stdin failed; delivery is uncertain: ${String(cause)}` });
-        for (const done of writes) yield* Deferred.fail(done, transportError);
+        for (const [done, release] of writes) { release(); yield* Deferred.fail(done, transportError); }
+        writes.clear();
         for (const d of pending.values()) yield* Deferred.fail(d, transportError);
       })),
       Effect.forkScoped,
@@ -256,25 +291,38 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       }),
     );
 
-    const write = (record: Record<string, unknown>) =>
-      Effect.gen(function* () {
+    const write = Effect.fn("PiSessions.write")(function* (record: Record<string, unknown>) {
         if (closed) return yield* new PiSessionError({ reason: "exited", detail: (yield* Deferred.await(exited)).detail });
         if (transportError) return yield* transportError;
+        const text = `${JSON.stringify(record)}\n`;
+        const size = Buffer.byteLength(text);
+        if (size > inboundLimits.rpcLineBytes) return yield* new PiSessionError({ reason: "rejected", detail: "Input exceeds the Pi RPC byte limit. Nothing was sent." });
         const done = yield* Deferred.make<void, PiSessionError>();
-        writes.add(done);
-        yield* Queue.offer(stdin, { bytes: encoder.encode(`${JSON.stringify(record)}\n`), done });
+        const release = writeCapacity.acquire(size, record.type === "abort" || record.type === "clear_queue" || record.type === "extension_ui_response");
+        if (!release) return yield* new PiSessionError({ reason: "rejected", detail: "Pi input capacity is full. Nothing was sent; wait for pending work before trying again." });
+        writes.set(done, release);
+        if (!Queue.offerUnsafe(stdin, { bytes: encoder.encode(text), done })) {
+          release(); writes.delete(done);
+          return yield* new PiSessionError({ reason: "rejected", detail: "Pi input queue is closed or full. Nothing was sent." });
+        }
         yield* Deferred.await(done).pipe(
           Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => Effect.fail(new PiSessionError({ reason: "transport", detail: "Pi stdin write timed out; delivery is uncertain. Do not resend this response." })) }),
           Effect.tapError(() => Effect.sync(() => { uncertainWrite = true; })),
-          Effect.ensuring(Effect.sync(() => { writes.delete(done); })),
+          // Queued bytes keep their capacity lease after caller timeout/interruption
+          // until the sink accepts them or the transport closes (delivery is uncertain).
         );
       });
 
-    const request = (command: Record<string, unknown>, dispatched?: Deferred.Deferred<void>) =>
-      Effect.gen(function* () {
+    const request = Effect.fn("PiSessions.request")(function* (command: Record<string, unknown>, dispatched?: Deferred.Deferred<void>) {
+        const size = Buffer.byteLength(JSON.stringify(command));
+        const d = yield* Deferred.make<unknown, PiSessionError>();
+        const release = requestCapacity.acquire(size, command.type === "abort" || command.type === "clear_queue");
+        if (!release) {
+          if (dispatched) yield* Deferred.succeed(dispatched, undefined);
+          return yield* new PiSessionError({ reason: "rejected", detail: "Pi command capacity is full. Nothing was sent; wait for pending work before trying again." });
+        }
         seq += 1;
         const id = `q${seq}`;
-        const d = yield* Deferred.make<unknown, PiSessionError>();
         pending.set(id, d);
         debug("request", id, command.type);
         return yield* write({ id, ...command }).pipe(
@@ -289,7 +337,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
             // establish that an older, unacknowledged mutation stopped running.
             if (!String(command.type).startsWith("get_") && error.reason !== "rejected") uncertainMutation = true;
           })),
-          Effect.ensuring(Effect.sync(() => { pending.delete(id); })),
+          Effect.ensuring(Effect.sync(() => { pending.delete(id); release(); })),
         );
       });
 
@@ -298,7 +346,11 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       return value === undefined ? Effect.fail(new PiSessionError({ reason: "protocol", detail: readback.invalid })) : Effect.succeed(value);
     }));
 
-    const child: Child = { request, read, write, records, exited, observationVersion: () => observationVersion,
+    const recordStream = Stream.fromEffectRepeat(Queue.take(records)).pipe(Stream.map(item => {
+      recordBytes -= item.bytes;
+      return item;
+    }));
+    const child: Child = { request, read, write, records: recordStream, exited, observationVersion: () => observationVersion,
       hasPendingWork: () => pending.size > 0 || writes.size > 0 || uncertainMutation || uncertainWrite,
     };
     return child;
@@ -537,7 +589,7 @@ const openSession = (spec: PiSessionSpec) =>
       });
 
     const recordsDrained = yield* Deferred.make<void>();
-    yield* Stream.fromQueue(child.records).pipe(
+    yield* child.records.pipe(
       Stream.runForEach(item => onRecord(item).pipe(Effect.ensuring(Effect.sync(() => { processedVersion++; })))), Effect.ignore,
       Effect.ensuring(Deferred.succeed(recordsDrained, undefined)), Effect.forkScoped,
     );
@@ -722,15 +774,19 @@ const openSession = (spec: PiSessionSpec) =>
     // Uncached sessions retain the initial statistics readiness contract.
     if (spec.lastKnownStats) yield* scheduleRefresh("stats");
     else yield* refreshStats;
+    const actionCapacity = makeInboundCapacity(inboundLimits.requests);
     const session: PiSession = { spec, events,
-      act: action => Effect.suspend(() => {
+      act: action => Effect.uninterruptibleMask(restore => Effect.suspend(() => {
         // Reject rather than delay input: delayed submissions could accidentally
         // start new work as soon as Stop completes. Answers must remain available.
         if (stopping && ["prompt", "steer", "stop", "abort", "restore_queue"].includes(action._tag)) {
           return Effect.fail(new PiSessionError({ reason: "rejected", detail: "Stop is in progress. Wait before sending input or changing the queue." }));
         }
-        return act(action);
-      }).pipe(Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
+        const release = actionCapacity.acquire(Buffer.byteLength(JSON.stringify(action)), ["answer", "abort", "stop", "restore_queue"].includes(action._tag));
+        if (!release) return Effect.fail(new PiSessionError({ reason: "rejected", detail: "Session input capacity is full. Nothing was sent; wait for pending work before trying again." }));
+        // Admission follows session-owned work, not the lifetime of a browser join.
+        return act(action).pipe(Effect.ensuring(Effect.sync(release)), Effect.forkIn(sessionScope, { uninterruptible: false }), Effect.flatMap(fiber => restore(Fiber.join(fiber))));
+      })).pipe(Effect.map(projectDisplay), Effect.mapError(error => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }))),
       state: Semaphore.withPermits(lock, 1)(currentState).pipe(Effect.map(projectDisplay)),
     };
     return session;
