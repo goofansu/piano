@@ -1,4 +1,3 @@
-import { isWorking } from "@shared/sessionProjection";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { AppLayout, LayoutView, useAppLayout } from "@/components/AppLayout";
@@ -23,11 +22,10 @@ import { type DraftStore, DraftStoreContext } from "@/lib/draftStore";
 import type { DraftKey } from "@/lib/messageDraft";
 import { initialView } from "@/lib/navigation";
 import { parseRoute } from "@/lib/routes";
-import { sessionReady, workspaceFor } from "@/lib/sessionContext";
+import { sessionReady } from "@/lib/sessionContext";
 import { readJson, writeJson } from "@/lib/storage";
 import { useClient } from "@/lib/useClient";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
-import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { type AppState, initialState } from "@/store";
 
 /** Model catalogs outlive reloads so the picker opens at once; its refresh button re-probes Pi. */
@@ -66,15 +64,6 @@ export default function App() {
     navigation.getState,
   );
   const { openNew, openSettings, closeSettings } = navigation;
-  // One PR projection feeds the header, menu, and palette for the selected session.
-  const prSession = state.view.kind === "session" ? state.session : null;
-  // The registry's workspace for the directory, like Changes: it outlives a closed folder.
-  const prWorkspaceId = workspaceFor(state, prSession?.cwd)?.id;
-  const pullRequest = useSessionPullRequest(
-    prWorkspaceId,
-    prSession?.sessionId,
-    !!prSession && isWorking(prSession.state),
-  );
 
   const chooseDirectory = useCallback(
     (cwd: string) => dispatch({ type: "new_directory", cwd }),
@@ -148,12 +137,7 @@ export default function App() {
                       </EmptyContent>
                     </Empty>
                   ) : (
-                    <SessionView
-                      state={state}
-                      send={send}
-                      onMenu={showSidebar}
-                      pullRequest={pullRequest}
-                    />
+                    <SessionView state={state} send={send} onMenu={showSidebar} />
                   )}
                 </LayoutView>
                 {settings && (

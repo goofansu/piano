@@ -1,4 +1,3 @@
-import type { PullRequest, SessionPullRequest } from "@shared/wire";
 import {
   ArrowRightIcon,
   BookMarkedIcon,
@@ -10,6 +9,7 @@ import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
+  type LucideIcon,
   MessageSquareIcon,
   XCircleIcon,
   XIcon,
@@ -32,32 +32,42 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { type PullRequestView, pullRequestView, type SignalOutcome } from "@/lib/pullRequestView";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
 const states = {
-  open: { label: "Open", Icon: GitPullRequestIcon, color: "text-ok", variant: "success" },
-  draft: {
-    label: "Draft",
-    Icon: GitPullRequestDraftIcon,
-    color: "text-muted-foreground",
-    variant: "secondary",
-  },
-  merged: { label: "Merged", Icon: GitMergeIcon, color: "text-merged", variant: "merged" },
-  closed: { label: "Closed", Icon: GitPullRequestClosedIcon, color: "text-err", variant: "error" },
+  open: { Icon: GitPullRequestIcon, color: "text-ok", variant: "success" },
+  draft: { Icon: GitPullRequestDraftIcon, color: "text-muted-foreground", variant: "secondary" },
+  merged: { Icon: GitMergeIcon, color: "text-merged", variant: "merged" },
+  closed: { Icon: GitPullRequestClosedIcon, color: "text-err", variant: "error" },
 } as const;
 
+const signalIcons: Record<SignalOutcome, { Icon: LucideIcon; color: string }> = {
+  pending: { Icon: ClockIcon, color: "text-muted-foreground" },
+  success: { Icon: CheckIcon, color: "text-ok" },
+  failure: { Icon: XCircleIcon, color: "text-err" },
+  approved: { Icon: CheckIcon, color: "text-ok" },
+  changes_requested: { Icon: MessageSquareIcon, color: "text-err" },
+  review_required: { Icon: MessageSquareIcon, color: "text-muted-foreground" },
+};
+
 /** One associated PR, not transcript references or a decorative link stack. */
-function SessionPullRequestTrigger({ value }: { value: SessionPullRequest | undefined }) {
+function SessionPullRequestTrigger({
+  view,
+  ref,
+}: {
+  view: PullRequestView;
+  ref: React.Ref<HTMLButtonElement>;
+}) {
   const mobile = useIsMobile();
-  const pr = value?.pullRequest;
-  const status = pr ? states[pr.state] : undefined;
-  const Icon = status?.Icon ?? GitPullRequestIcon;
-  const number = pr?.number ?? value?.link?.url.split("/").pop();
+  const { number, status } = view;
+  const Icon = status ? states[status.state].Icon : GitPullRequestIcon;
   return (
     <Tooltip>
       <PopoverTrigger asChild>
         <TooltipTrigger asChild>
           <Button
+            ref={ref}
             variant="ghost"
             size={mobile ? "xs" : "lg"}
             aria-label={number ? `Pull request #${number}` : "PR"}
@@ -65,7 +75,7 @@ function SessionPullRequestTrigger({ value }: { value: SessionPullRequest | unde
           >
             <Icon
               data-icon="inline-start"
-              className={status?.color ?? "text-muted-foreground"}
+              className={status ? states[status.state].color : "text-muted-foreground"}
               aria-hidden
             />{" "}
             {number ? `#${number}` : "PR"}
@@ -73,73 +83,15 @@ function SessionPullRequestTrigger({ value }: { value: SessionPullRequest | unde
         </TooltipTrigger>
       </PopoverTrigger>
       <TooltipContent className="max-w-80">
-        <p className="text-wrap">{pr?.title ?? "Pull request"}</p>
+        <p className="text-wrap">{view.title ?? "Pull request"}</p>
       </TooltipContent>
     </Tooltip>
   );
 }
 
-/** Checks and reviews matter while work is open, not after its final disposition. */
-function PullRequestSignals({ pr }: { pr: PullRequest }) {
-  if (pr.state !== "open" && pr.state !== "draft") return null;
-  const checks = {
-    none: null,
-    pending: { label: "Checks running", Icon: ClockIcon, color: "text-muted-foreground" },
-    success: { label: "Checks passed", Icon: CheckIcon, color: "text-ok" },
-    failure: { label: "Checks failed", Icon: XCircleIcon, color: "text-err" },
-  }[pr.checks];
-  const review = {
-    none: null,
-    approved: { label: "Approved", Icon: CheckIcon, color: "text-ok" },
-    changes_requested: { label: "Changes requested", Icon: MessageSquareIcon, color: "text-err" },
-    review_required: {
-      label: "Review required",
-      Icon: MessageSquareIcon,
-      color: "text-muted-foreground",
-    },
-  }[pr.review];
-  if (!checks && !review) return null;
-  // Plain supporting facts, rather than competing status badges; only the icon carries the outcome color.
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-      {[checks, review].map(
-        (signal) =>
-          signal && (
-            <span key={signal.label} className="flex items-center gap-1.5">
-              <signal.Icon className={`size-3 shrink-0 ${signal.color}`} aria-hidden />
-              {signal.label}
-            </span>
-          ),
-      )}
-    </div>
-  );
-}
-
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-function ago(iso: string) {
-  const seconds = (new Date(iso).getTime() - Date.now()) / 1000;
-  for (const [unit, size] of [
-    ["year", 31536000],
-    ["month", 2592000],
-    ["week", 604800],
-    ["day", 86400],
-    ["hour", 3600],
-    ["minute", 60],
-  ] as const)
-    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
-  return "just now";
-}
-
 /** Size of the change, as GitHub's PR header puts it: files changed, then lines added and removed. */
-function DiffStat({
-  additions,
-  deletions,
-  changedFiles,
-}: {
-  additions: number;
-  deletions: number;
-  changedFiles: number;
-}) {
+function DiffStat({ diff }: { diff: NonNullable<PullRequestView["diff"]> }) {
+  const { additions, deletions, changedFiles } = diff;
   return (
     <div className="flex items-center gap-1.5 text-xs tabular-nums">
       <FileDiffIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
@@ -157,34 +109,48 @@ function DiffStat({
 }
 
 /** Where, how big and how ready: the facts that decide whether to open the PR. */
-function PullRequestFacts({ pr }: { pr: PullRequest }) {
-  const hasDiff =
-    pr.additions !== undefined && pr.deletions !== undefined && pr.changedFiles !== undefined;
-  const signals =
-    (pr.state === "open" || pr.state === "draft") && (pr.checks !== "none" || pr.review !== "none");
-  if (!pr.head && !hasDiff && !signals) return null;
+function PullRequestFacts({ view }: { view: PullRequestView }) {
+  const { branches, diff, signals } = view;
+  if (!branches && !diff && !signals.length) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      {pr.head && pr.base && (
+      {branches && (
         <div
           className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted-foreground"
-          title={`${pr.head} into ${pr.base}`}
+          title={`${branches.head} into ${branches.base}`}
         >
           <GitBranchIcon className="size-3 shrink-0" aria-hidden />
-          <span className="truncate">{pr.head}</span>
+          <span className="truncate">{branches.head}</span>
           <ArrowRightIcon className="size-3 shrink-0" aria-label="into" />
-          <span className="shrink-0">{pr.base}</span>
+          <span className="shrink-0">{branches.base}</span>
         </div>
       )}
-      {hasDiff && (
-        <DiffStat
-          additions={pr.additions!}
-          deletions={pr.deletions!}
-          changedFiles={pr.changedFiles!}
-        />
+      {diff && <DiffStat diff={diff} />}
+      {signals.length > 0 && (
+        // Plain supporting facts, rather than competing status badges; only the icon carries the outcome color.
+        <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+          {signals.map((signal) => {
+            const { Icon, color } = signalIcons[signal.outcome];
+            return (
+              <span key={signal.label} className="flex items-center gap-1.5">
+                <Icon className={`size-3 shrink-0 ${color}`} aria-hidden />
+                {signal.label}
+              </span>
+            );
+          })}
+        </div>
       )}
-      <PullRequestSignals pr={pr} />
     </div>
+  );
+}
+
+function PullRequestStatusBadge({ status }: { status: NonNullable<PullRequestView["status"]> }) {
+  const { Icon, variant } = states[status.state];
+  return (
+    <Badge variant={variant}>
+      <Icon data-icon="inline-start" aria-hidden />
+      {status.label}
+    </Badge>
   );
 }
 
@@ -194,22 +160,22 @@ export function SessionPullRequestControl({
   open,
   onOpenChange,
   pr,
+  menuTrigger,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pr: PullRequestControl;
+  /** The session menu, which opens this control while no PR is linked. */
+  menuTrigger: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [editing, setEditing] = useState(false);
   const [linking, setLinking] = useState(false);
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const link = pr.value?.link;
-  const pullRequest = pr.value?.pullRequest;
-  const showingDetails = !!link && !editing;
-  const status = pullRequest ? states[pullRequest.state] : undefined;
-  const repo =
-    pullRequest?.repo ?? (link ? new URL(link.url).pathname.split("/").slice(1, 3).join("/") : "");
-  const number = pullRequest?.number ?? link?.url.split("/").pop();
+  const view = pullRequestView(pr.value);
+  const showingDetails = !!view && !editing;
   // Opening samples the latest link and refresh function. Background observations must not
   // restart linking, reset an edit, or trigger a refresh -> observation -> refresh loop.
   const opened = useEffectEvent(() => {
@@ -231,12 +197,10 @@ export function SessionPullRequestControl({
     if (open && showingDetails) closeRef.current?.focus();
   }, [open, showingDetails]);
   const close = () => onOpenChange(false);
+  // Closing returns to whichever control can reopen this: the PR button once linked, else the menu.
   const restoreFocus = (event: Event) => {
     event.preventDefault();
-    const selector = pr.value?.link
-      ? 'header [data-slot="popover-trigger"]'
-      : 'header [aria-label="Session information and actions"]';
-    document.querySelector<HTMLButtonElement>(selector)?.focus();
+    (link ? triggerRef : menuTrigger).current?.focus();
   };
   return (
     <>
@@ -253,7 +217,7 @@ export function SessionPullRequestControl({
         </DialogContent>
       </Dialog>
       <Popover open={open && !!link && !linking} onOpenChange={onOpenChange}>
-        {link && <SessionPullRequestTrigger value={pr.value} />}
+        {view && <SessionPullRequestTrigger view={view} ref={triggerRef} />}
         <PopoverContent
           onCloseAutoFocus={restoreFocus}
           align="start"
@@ -263,11 +227,12 @@ export function SessionPullRequestControl({
           className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto"
         >
           <PopoverHeader className="flex-row items-center justify-between gap-2">
-            {showingDetails ? (
+            {view && showingDetails ? (
               <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
                 <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
                 <span className="min-w-0 break-all">
-                  {repo} <span className="whitespace-nowrap">· #{number}</span>
+                  {view.repo}{" "}
+                  {view.number && <span className="whitespace-nowrap">· #{view.number}</span>}
                 </span>
               </p>
             ) : (
@@ -283,57 +248,46 @@ export function SessionPullRequestControl({
               <XIcon />
             </Button>
           </PopoverHeader>
-          {link && showingDetails ? (
+          {view && showingDetails ? (
             <>
               {/* Plain PR facts, not a second card inside the popover. */}
               <div className="flex min-w-0 flex-col gap-2">
                 <PopoverTitle id={titleId}>
                   <a
-                    href={link.url}
+                    href={view.url}
                     target="_blank"
                     rel="noreferrer"
                     className="break-words hover:underline"
                   >
-                    {pullRequest?.title ?? "View pull request"}
+                    {view.title ?? "View pull request"}
                   </a>
                 </PopoverTitle>
                 <div className="flex flex-wrap items-center gap-2">
-                  {status ? (
-                    <Badge variant={status.variant}>
-                      <status.Icon data-icon="inline-start" aria-hidden />
-                      {status.label}
-                    </Badge>
+                  {view.status ? (
+                    <PullRequestStatusBadge status={view.status} />
                   ) : (
                     <Badge variant="secondary">Status unavailable</Badge>
                   )}
-                  {pullRequest && (pullRequest.author || pullRequest.at) && (
+                  {(view.author || view.timeLabel) && (
                     <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                      {pullRequest.author && (
+                      {view.author && (
                         <>
                           <Avatar size="sm" className="size-4" aria-hidden>
                             <AvatarImage
-                              src={`https://github.com/${pullRequest.author}.png?size=40`}
+                              src={`https://github.com/${view.author}.png?size=40`}
                               alt=""
                             />
-                            <AvatarFallback>
-                              {pullRequest.author.charAt(0).toUpperCase()}
-                            </AvatarFallback>
+                            <AvatarFallback>{view.author.charAt(0).toUpperCase()}</AvatarFallback>
                           </Avatar>
-                          <span className="truncate text-foreground">{pullRequest.author}</span>
+                          <span className="truncate text-foreground">{view.author}</span>
                         </>
                       )}
-                      {pullRequest.at && (
-                        <span className="shrink-0">
-                          {pullRequest.state === "open" || pullRequest.state === "draft"
-                            ? `updated ${ago(pullRequest.at)}`
-                            : ago(pullRequest.at)}
-                        </span>
-                      )}
+                      {view.timeLabel && <span className="shrink-0">{view.timeLabel}</span>}
                     </span>
                   )}
                 </div>
               </div>
-              {pullRequest && <PullRequestFacts pr={pullRequest} />}
+              <PullRequestFacts view={view} />
               <Separator className="opacity-50" />
               {/* Pull the ghost buttons' padding out so their labels meet the content edge. */}
               <div className="-mr-2 -mb-1 flex justify-end gap-1">

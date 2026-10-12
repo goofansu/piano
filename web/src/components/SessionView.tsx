@@ -1,3 +1,4 @@
+import { isWorking } from "@shared/sessionProjection";
 import type { ClientCommand as ClientMessage, ExtensionState } from "@shared/wire";
 import { cn } from "cn";
 import { useEffect, useMemo, useState } from "react";
@@ -21,17 +22,16 @@ import { useCheckoutRefresh } from "@/lib/useCheckoutRefresh";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
-import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
+import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { type AppState, sessionKey } from "@/store";
 
 interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
   onMenu: () => void;
-  pullRequest: ReturnType<typeof useSessionPullRequest>;
 }
 
-export function SessionView({ state, send, onMenu, pullRequest }: Props) {
+export function SessionView({ state, send, onMenu }: Props) {
   const { paragraph } = useDraftStore();
   // The selected session's Changes sheet and PR popover; hidden while Settings covers the view.
   const { settings, panel, openPanel, closePanel } = useNavigation();
@@ -48,7 +48,9 @@ export function SessionView({ state, send, onMenu, pullRequest }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { ready, changesWorkspace } = sessionContext(state);
+  const { ready, workspace, changesWorkspace } = sessionContext(state);
+  // The registry's workspace for the directory, like Changes: it outlives a closed folder.
+  const pullRequest = useSessionPullRequest(workspace?.id, t?.sessionId, !!t && isWorking(t.state));
   const { status, streaming, replyActivity, firstMessageOnItsWay } = sessionActivity(
     state,
     display,
@@ -78,13 +80,14 @@ export function SessionView({ state, send, onMenu, pullRequest }: Props) {
         state={state}
         onMenu={onMenu}
         status={status}
-        pullRequest={
+        pullRequest={(menuTrigger) =>
           t?.sessionId && (
             <SessionPullRequestControl
               key={sessionKey(t)}
               open={pullRequestOpen}
               onOpenChange={onPullRequestOpenChange}
               pr={pullRequest}
+              menuTrigger={menuTrigger}
             />
           )
         }

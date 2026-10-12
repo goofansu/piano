@@ -1,4 +1,5 @@
 import { GitBranchIcon, MoreHorizontalIcon, PanelLeftOpenIcon, SplitIcon } from "lucide-react";
+import { useRef } from "react";
 import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import {
   DropdownMenu,
@@ -27,9 +28,11 @@ export function SessionHeader({
   state: AppState;
   onMenu: () => void;
   status: string;
-  pullRequest: React.ReactNode;
+  /** Renders the PR control, given the session menu it returns focus to while no PR is linked. */
+  pullRequest: (menuTrigger: React.RefObject<HTMLButtonElement | null>) => React.ReactNode;
 }) {
   const { openNew } = useNavigation();
+  const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
   // `folder ⇄ worktree / ⑂ branch`; omit the redundant worktree segment for the root checkout.
   const {
@@ -107,7 +110,7 @@ export function SessionHeader({
                 </div>
               </div>
               <div className="col-start-2 row-start-2 shrink-0 justify-self-end md:row-span-2 md:row-start-1">
-                {pullRequest}
+                {pullRequest(menuTrigger)}
               </div>
             </>
           ) : (
@@ -123,6 +126,7 @@ export function SessionHeader({
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button
+              ref={menuTrigger}
               variant="ghost"
               size="icon-sm"
               aria-label="Session information and actions"
