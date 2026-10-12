@@ -48,10 +48,26 @@
   white-space: pre-wrap;
   overflow-wrap: break-word;
   border: solid transparent;
+  color: var(--ink);
+}
+
+/* The mirror paints the text; the native editor still paints its caret and selection. */
+.slash-textarea[data-command="true"] > textarea {
   color: transparent;
+  caret-color: var(--ink);
+}
+
+.slash-textarea[data-command="true"] > textarea::selection {
+  color: transparent;
+  background: var(--brand-soft);
+}
+
+.slash-textarea > textarea:disabled + .slash-textarea-mirror {
+  opacity: 0.5;
 }
 
 .slash-command-token {
+  color: var(--brand);
   border-radius: var(--radius-sm);
   box-decoration-break: clone;
 }

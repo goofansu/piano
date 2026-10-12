@@ -73,7 +73,7 @@ export function SlashTextarea({
       ? { from: leading[0].indexOf("/"), to: leading[0].length }
       : null;
   // The native textarea remains the editor (selection, undo, IME and accessibility).
-  // A non-interactive mirror only paints the command's hover treatment.
+  // A non-interactive mirror paints command color and hover without replacing native editing.
   // biome-ignore lint/correctness/useExhaustiveDependencies: resync DOM metrics when draft text or input styling changes, not on streaming renders.
   useLayoutEffect(() => {
     const element = ref.current;
@@ -199,7 +199,7 @@ export function SlashTextarea({
       }}
     >
       <PopoverAnchor asChild>
-        <div className="slash-textarea">
+        <div className="slash-textarea" data-command={!!token}>
           <Textarea
             {...props}
             ref={ref}
@@ -314,6 +314,7 @@ export function SlashTextarea({
                   {value.slice(token.from, token.to)}
                 </span>
                 {value.slice(token.to)}
+                {"\u200b"}
               </>
             )}
           </div>

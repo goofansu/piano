@@ -436,6 +436,27 @@ try {
   ab("keyboard", "type", "s");
   const token = ".slash-command-token";
   await until(`!!document.querySelector('${token}')`);
+  ab("mouse", "move", "720", "40");
+  for (const dark of [false, true]) {
+    evaluate(`document.documentElement.classList.toggle('dark', ${dark}); true`);
+    const colors = evaluate(`(() => {
+      const field = document.querySelector('textarea');
+      const token = document.querySelector('.slash-command-token');
+      return {
+        token: getComputedStyle(token).color,
+        prose: getComputedStyle(token.parentElement).color,
+        editor: getComputedStyle(field).color,
+        caret: getComputedStyle(field).caretColor,
+        hovered: token.dataset.hovered,
+      };
+    })()`);
+    assert.notEqual(colors.token, colors.prose, "command color differs from prose at rest");
+    assert.notEqual(colors.hovered, "true", "resting color does not depend on hover");
+    assert.equal(colors.editor, "rgba(0, 0, 0, 0)", "native text does not double-paint the mirror");
+    assert.equal(colors.caret, colors.prose, "native caret stays visible");
+    capture(`accepted-token-resting-${dark ? "dark" : "light"}`);
+  }
+  evaluate("document.documentElement.classList.remove('dark'); true");
   const tokenCentre = evaluate(`(() => {
     const { x, y, width, height } = document.querySelector('${token}').getBoundingClientRect();
     return { x: Math.round(x + width / 2), y: Math.round(y + height / 2) };
@@ -493,6 +514,11 @@ try {
     evaluate(`!!document.querySelector('${token}')`),
     false,
     "no token remains once the command is removed",
+  );
+  assert.notEqual(
+    evaluate("getComputedStyle(document.querySelector('textarea')).color"),
+    "rgba(0, 0, 0, 0)",
+    "ordinary text becomes visible in the native editor after token removal",
   );
   for (const text of ["Prose /skill:re", "Prose\n/re", "/etc/pass", "`/re`"]) {
     await fill(text);
