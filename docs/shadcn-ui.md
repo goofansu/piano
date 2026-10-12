@@ -4,6 +4,12 @@
 Radix/new-york registry. Standard controls import from `ui/`; customized controls import the
 app components below. App wrappers forward props and refs and compose caller event handlers.
 
+`web/components.json` deliberately sets `rsc: true` to preserve upstream `"use client"` directives
+in generated files. Piano is still a client-side Vite app: this CLI option does not enable React
+Server Components, and those directives do not change its runtime behavior. Keep the directives
+as generated rather than stripping them. This also avoids the order-dependent stripping observed
+with shadcn CLI 4.21.4's `rsc: false` transformer.
+
 ## Where customizations belong
 
 | Concern | Owner outside `ui/` |
@@ -52,5 +58,5 @@ layout controls; stock `openMobile` is not connected to that sheet.
    touch focus, sheet timing and reduced motion. It uses fake Pi and no paid model calls.
 
 Upgrades still need review: clean upstream files eliminate customization merges, not API or
-visual regressions. Formatting and `"use client"` differences in legacy files are not product
-customizations.
+visual regressions. Compare against CLI-generated source for this project's registry and aliases,
+not raw registry templates with untransformed imports.
