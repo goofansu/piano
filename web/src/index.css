@@ -385,7 +385,7 @@
 }
 [data-slot="mobile-sidebar"][data-state="closed"] {
   /* Keep Radix Presence mounted while the children and live page settle closed. */
-  animation: sidebar-reveal-exit var(--dur-layout) linear;
+  animation: sidebar-reveal-exit var(--sidebar-duration, var(--dur-layout)) linear;
 }
 @keyframes sidebar-reveal-exit {
   from {
@@ -401,7 +401,7 @@
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   background: var(--surface-0);
   clip-path: inset(0 calc((1 - var(--sidebar-progress)) * 100%) 0 0);
-  transition: clip-path var(--dur-layout) var(--ease-layout);
+  transition: clip-path var(--sidebar-duration, var(--dur-layout)) var(--ease-layout);
 }
 [data-slot="sidebar-scrim"] {
   position: absolute;
@@ -413,9 +413,9 @@
   transform: translateX(calc(var(--sidebar-progress) * 75vw));
   border-radius: calc(var(--sidebar-progress) * 2rem) 0 0 calc(var(--sidebar-progress) * 2rem);
   transition:
-    transform var(--dur-layout) var(--ease-layout),
-    opacity var(--dur-layout) var(--ease-layout),
-    border-radius var(--dur-layout) var(--ease-layout);
+    transform var(--sidebar-duration, var(--dur-layout)) var(--ease-layout),
+    opacity var(--sidebar-duration, var(--dur-layout)) var(--ease-layout),
+    border-radius var(--sidebar-duration, var(--dur-layout)) var(--ease-layout);
 }
 @starting-style {
   [data-slot="mobile-sidebar"][data-dragging="false"] [data-slot="sidebar-reveal-navigation"] {
@@ -433,8 +433,8 @@
     border-radius: calc(var(--sidebar-progress, 0) * 2rem) 0 0
       calc(var(--sidebar-progress, 0) * 2rem);
     transition:
-      transform var(--dur-layout) var(--ease-layout),
-      border-radius var(--dur-layout) var(--ease-layout);
+      transform var(--sidebar-duration, var(--dur-layout)) var(--ease-layout),
+      border-radius var(--sidebar-duration, var(--dur-layout)) var(--ease-layout);
   }
 }
 @media (width >= 48rem) {

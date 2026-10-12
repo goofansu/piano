@@ -223,6 +223,7 @@ export function AppLayout({
           open={layout.mobileOpen}
           dragging={swipe.dragging}
           progress={swipe.progress}
+          settleDuration={swipe.settleDuration}
           onOpenChange={(open) => {
             swipe.cancelDrag();
             setMobileOpen(open);
@@ -236,7 +237,7 @@ export function AppLayout({
         <main
           data-slot="layout-main"
           data-sidebar-dragging={swipe.dragging}
-          style={sidebarRevealStyle(swipe.progress)}
+          style={sidebarRevealStyle(swipe.progress, swipe.settleDuration)}
           className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
         >
           {content}

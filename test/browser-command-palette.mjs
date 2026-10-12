@@ -457,7 +457,6 @@ try {
   const main = '[data-slot="layout-main"]';
   for (const [x, dx, dy, fixture] of [
     [5, 100, 0, ""],
-    [150, 100, 0, ""],
     [40, 20, 0, ""],
     [40, 100, 120, ""],
     [40, 100, 0, "scroll"],
@@ -485,13 +484,16 @@ try {
   const position = () =>
     evaluate(`document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left`);
   await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
-  await touch("touchstart", 40);
-  await touch("touchmove", 140);
-  assert.ok(Math.abs((await position()) - 100) < 1, "page follows finger before touchend");
+  await touch("touchstart", 180);
+  await touch("touchmove", 280);
+  assert.ok(
+    Math.abs((await position()) - 100) < 1,
+    "swipe from the middle follows finger before touchend",
+  );
   await capture("swipe-preview");
-  await touch("touchmove", 80);
+  await touch("touchmove", 220);
   assert.ok(Math.abs((await position()) - 40) < 1, "reversal follows finger");
-  await touch("touchend", 80);
+  await touch("touchend", 220);
   await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
   assert.ok(Math.abs(await position()) < 1, "short slow drag settles closed");
   await touch("touchstart", 40);
@@ -594,12 +596,12 @@ try {
         },
         sessionId,
       );
-    await nativeTouch("touchStart", 40);
-    await nativeTouch("touchMove", 140);
+    await nativeTouch("touchStart", 150);
+    await nativeTouch("touchMove", 250);
     assert.ok(Math.abs((await position()) - 100) < 2, "trusted touch previews before release");
     await capture("native-touch-preview");
-    await nativeTouch("touchMove", 240);
-    await nativeTouch("touchEnd", 240);
+    await nativeTouch("touchMove", 350);
+    await nativeTouch("touchEnd", 350);
     await ab(
       "wait",
       "--fn",
@@ -615,8 +617,32 @@ try {
   } finally {
     cdp.close();
   }
+  // Same travel, different release speed: a fast flick must settle sooner than a slow drag.
+  const durations = [];
+  for (const elapsed of [500, 40]) {
+    await evaluate(`(() => {
+      const target = document.querySelector('[data-slot="layout-main"]');
+      for (const [type, x, time] of [['touchstart', 150, 0], ['touchmove', 350, ${elapsed}], ['touchend', 350, ${elapsed + 10}]]) {
+        const touch = new Touch({ identifier: 3, target, clientX: x, clientY: 300 });
+        const event = new TouchEvent(type, { bubbles: true, cancelable: true,
+          touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] });
+        Object.defineProperty(event, 'timeStamp', { value: time });
+        target.dispatchEvent(event);
+      }
+      return true;
+    })()`);
+    durations.push(
+      await evaluate(
+        `parseFloat(getComputedStyle(document.querySelector('[data-slot="layout-main"]')).transitionDuration)`,
+      ),
+    );
+    await ab("press", "Escape");
+    await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  }
+  assert.ok(durations[1] < durations[0], "faster flick has a shorter settling animation");
+  ui.push({ swipeSettleSeconds: durations });
   console.log(
-    "PASS: 75% reveal, trusted touch preview/open/scrim dismissal, reversal, cancellation, tap dismissal; edge, vertical, horizontal scroller, input and desktop exclusions",
+    "PASS: 75% reveal, swipe anywhere with trusted touch, finger tracking, speed-aware settling, reversal, cancellation, scrim/tap dismissal; edge, vertical, horizontal scroller, input and desktop exclusions",
   );
   await ab("set", "media", "light", "reduced-motion");
   await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");

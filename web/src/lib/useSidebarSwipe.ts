@@ -14,6 +14,7 @@ export function useSidebarSwipe({
   onPreview: () => void;
 }) {
   const [progress, setProgress] = useState<number | null>(null);
+  const [settle, setSettle] = useState<{ target: boolean; duration: number } | null>(null);
   const current = useEffectEvent(() => ({ open, onOpenChange, onPreview }));
   const cancelGesture = useRef<() => void>(() => {});
   const cancelDrag = useCallback(() => cancelGesture.current(), []);
@@ -42,6 +43,7 @@ export function useSidebarSwipe({
     cancelGesture.current = cancel;
     const start = (event: TouchEvent) => {
       cancel();
+      setSettle(null);
       suppressClickUntil = 0; // A new deliberate tap is not the preceding drag's compatibility click.
       if (!mobile() || event.touches.length !== 1) return;
       const touch = event.touches[0];
@@ -52,7 +54,6 @@ export function useSidebarSwipe({
       const { open } = current();
       if (open !== surface.matches('[data-slot="mobile-sidebar"]')) return;
       if (touch.clientX < 24 || touch.clientX > innerWidth - 24) return;
-      if (!open && touch.clientX > 80) return;
       if (
         !target.closest('[data-slot="sidebar-scrim"]') &&
         target.closest(
@@ -100,7 +101,13 @@ export function useSidebarSwipe({
       // Only a claimed horizontal drag suppresses scrolling; the browser retains edge gestures.
       if (event.cancelable) event.preventDefault();
       const elapsed = event.timeStamp - g.lastTime;
-      if (elapsed > 0) g.velocity = (touch.clientX - g.lastX) / elapsed;
+      if (elapsed > 0) {
+        const sample = (touch.clientX - g.lastX) / elapsed;
+        // Smooth event-to-event jitter, but respond immediately to a deliberate reversal.
+        const weight = Math.min(1, elapsed / 50);
+        g.velocity =
+          sample * g.velocity <= 0 ? sample : g.velocity + weight * (sample - g.velocity);
+      }
       g.lastX = touch.clientX;
       g.lastTime = event.timeStamp;
       g.position = clamp(g.initial + dx / g.width);
@@ -115,6 +122,12 @@ export function useSidebarSwipe({
       const next = moved >= 24 && Math.abs(velocity) > 0.5 ? velocity > 0 : g.position >= 0.5;
       suppressClickUntil = performance.now() + 500;
       cancel();
+      const remaining = Math.abs(Number(next) - g.position) * g.width;
+      // Tracking is always 1:1 with no easing. Only the release is animated: preserve the
+      // flick's pace, then decelerate, instead of imposing a fixed 300ms on every gesture.
+      const speed = velocity * (Number(next) - g.position) > 0 ? Math.abs(velocity) : 0;
+      const duration = Math.round(Math.min(300, Math.max(120, remaining / Math.max(0.5, speed))));
+      setSettle({ target: next, duration });
       const state = current();
       if (next !== state.open) state.onOpenChange(next);
     };
@@ -143,5 +156,10 @@ export function useSidebarSwipe({
     };
   }, []);
 
-  return { progress: progress ?? (open ? 1 : 0), dragging: progress !== null, cancelDrag };
+  return {
+    progress: progress ?? (open ? 1 : 0),
+    dragging: progress !== null,
+    settleDuration: settle?.target === open ? settle.duration : 300,
+    cancelDrag,
+  };
 }

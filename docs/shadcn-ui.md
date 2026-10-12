@@ -44,7 +44,9 @@ sidebar, including the saved collapsed preference. Piano's separate mobile revea
 layout controls; stock `openMobile` is not connected to that reveal. It composes the same Radix
 modal primitive as Sheet, but exposes stationary navigation under a translated live page rather
 than moving a sheet over it. The sidebar occupies 75% of the mobile viewport; only a claimed
-horizontal drag overrides touch scrolling, with browser edges and horizontal scrollers excluded.
+horizontal drag anywhere on the main content overrides touch scrolling, with browser edges,
+editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; settling
+duration adapts to release speed and remaining distance.
 
 ## Upgrade procedure
 
