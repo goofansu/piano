@@ -5,6 +5,9 @@ import {
   type ComposerSituation,
   composerControl,
   deliveryAction,
+  modelPickerAvailable,
+  type NewSessionSituation,
+  newSessionReady,
 } from "../web/src/lib/composerControl.ts";
 
 const image: Attachment = { kind: "image", name: "a.png", mimeType: "image/png", data: "AA==" };
@@ -148,4 +151,47 @@ test("Esc returns queued messages to the draft first, then stops Pi, and does no
 test("steering is delivered as a steer, a follow-up as a prompt", () => {
   assert.equal(deliveryAction("steering"), "steer");
   assert.equal(deliveryAction("follow-up"), "prompt");
+});
+
+const firstMessage: NewSessionSituation = {
+  text: "hi",
+  images: { items: [], busy: false },
+  connected: true,
+  catalog: {},
+  cwd: "/repo",
+  model: "fake/alpha",
+  projectOpen: true,
+};
+
+test("the New page sends its first message only with a connection, a directory whose models loaded, a model, an open project and a sendable draft", () => {
+  assert.equal(newSessionReady(firstMessage), true);
+  assert.equal(
+    newSessionReady({ ...firstMessage, text: "", images: { items: [image], busy: false } }),
+    true,
+    "an image alone starts a session",
+  );
+  const blocked: [string, Partial<NewSessionSituation>][] = [
+    ["disconnected", { connected: false }],
+    ["models still loading", { catalog: null }],
+    ["models failed to load", { catalog: { error: "pi exited" } }],
+    ["no directory", { cwd: "  " }],
+    ["no model", { model: undefined }],
+    ["archived project", { projectOpen: false }],
+    ["blank draft", { text: " \n" }],
+    ["image still being read", { images: { items: [image], busy: true } }],
+  ];
+  for (const [why, over] of blocked)
+    assert.equal(newSessionReady({ ...firstMessage, ...over }), false, why);
+});
+
+test("Mod+/ opens the model picker only with a model to pick or a refresh to find one, and never while the editor is disabled", () => {
+  const models = { models: [{ ref: "fake/alpha" }] } as unknown as Parameters<
+    typeof modelPickerAvailable
+  >[0]["catalog"];
+  const empty = { models: [] };
+  assert.equal(modelPickerAvailable({ disabled: false, catalog: models, canRefresh: false }), true);
+  assert.equal(modelPickerAvailable({ disabled: false, catalog: empty, canRefresh: true }), true);
+  assert.equal(modelPickerAvailable({ disabled: false, catalog: empty, canRefresh: false }), false);
+  assert.equal(modelPickerAvailable({ disabled: false, catalog: null, canRefresh: true }), false);
+  assert.equal(modelPickerAvailable({ disabled: true, catalog: models, canRefresh: true }), false);
 });
