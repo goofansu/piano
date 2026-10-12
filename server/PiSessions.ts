@@ -136,6 +136,8 @@ export interface SessionActionPolicy {
   readonly blockedWhileStopping: boolean;
   /** Requires the session's checkout to still exist. Abort and Stop must work without one. */
   readonly needsCheckout: boolean;
+  /** Counts as user activity on the session reference, recorded before admission. */
+  readonly activity: boolean;
 }
 
 /**
@@ -143,36 +145,76 @@ export interface SessionActionPolicy {
  * SessionAction variant cannot be sent until it is classified here.
  */
 export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], SessionActionPolicy>> = {
-  prompt: { priority: false, supersedes: true, blockedWhileStopping: true, needsCheckout: true },
-  steer: { priority: false, supersedes: true, blockedWhileStopping: true, needsCheckout: true },
-  abort: { priority: true, supersedes: false, blockedWhileStopping: true, needsCheckout: false },
-  stop: { priority: true, supersedes: false, blockedWhileStopping: true, needsCheckout: false },
+  prompt: {
+    priority: false,
+    supersedes: true,
+    blockedWhileStopping: true,
+    needsCheckout: true,
+    activity: true,
+  },
+  steer: {
+    priority: false,
+    supersedes: true,
+    blockedWhileStopping: true,
+    needsCheckout: true,
+    activity: true,
+  },
+  abort: {
+    priority: true,
+    supersedes: false,
+    blockedWhileStopping: true,
+    needsCheckout: false,
+    activity: false,
+  },
+  stop: {
+    priority: true,
+    supersedes: false,
+    blockedWhileStopping: true,
+    needsCheckout: false,
+    activity: false,
+  },
   restore_queue: {
     priority: true,
     supersedes: false,
     blockedWhileStopping: true,
     needsCheckout: true,
+    activity: false,
   },
   commands: {
     priority: false,
     supersedes: false,
     blockedWhileStopping: false,
     needsCheckout: true,
+    activity: false,
   },
   set_model: {
     priority: false,
     supersedes: true,
     blockedWhileStopping: false,
     needsCheckout: true,
+    activity: false,
   },
   set_thinking_level: {
     priority: false,
     supersedes: true,
     blockedWhileStopping: false,
     needsCheckout: true,
+    activity: false,
   },
-  set_name: { priority: false, supersedes: true, blockedWhileStopping: false, needsCheckout: true },
-  answer: { priority: true, supersedes: false, blockedWhileStopping: false, needsCheckout: true },
+  set_name: {
+    priority: false,
+    supersedes: true,
+    blockedWhileStopping: false,
+    needsCheckout: true,
+    activity: false,
+  },
+  answer: {
+    priority: true,
+    supersedes: false,
+    blockedWhileStopping: false,
+    needsCheckout: true,
+    activity: false,
+  },
 };
 
 // ── Implementation ───────────────────────────────────────────────────────────

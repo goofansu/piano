@@ -1,7 +1,10 @@
-/** Canonical execution ownership. Browser lifetimes never own acquisition or shutdown.
+/** Canonical execution ownership and the session lifecycle around it: create (folder, project
+ * and reference before Pi starts), act (activity recorded before Pi sees it), rename, archive and
+ * delete. Browser lifetimes never own acquisition or shutdown.
  * Registry references and Pi files keep their original identity; only the ownership
  * key uses realpath. Incompatible alias references fail explicitly, never merge.
  */
+import { randomUUID } from "node:crypto";
 import { realpath, rm } from "node:fs/promises";
 import {
   Clock,
@@ -23,11 +26,12 @@ import type {
   SessionReference,
   SessionStats,
   Snapshot,
+  StartOptions,
 } from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiHistory } from "./PiHistory.ts";
 import { type PiSession, PiSessionError, PiSessions, sessionActionPolicy } from "./PiSessions.ts";
-import { Registry } from "./Registry.ts";
+import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
 
 export interface OpenSpec {
   readonly cwd: string;
@@ -35,10 +39,17 @@ export interface OpenSpec {
   readonly model?: string;
   readonly thinkingLevel?: string;
   readonly name?: string;
-  /** Only a newly generated server ID may create a registry reference. */
+  /** Only a newly generated server ID may create a registry reference; `SessionHosts.create` generates one. */
   readonly create?: boolean;
   /** Initial registry membership for creation only; never passed to Pi or applied on reopen. */
   readonly projectId?: string;
+}
+/** A new session in a directory, which becomes a folder if it is not registered yet. */
+export interface CreateSpec {
+  readonly cwd: string;
+  /** Initial project; it must be active, checked before anything is registered. */
+  readonly projectId?: string;
+  readonly options: StartOptions;
 }
 interface Host {
   session: PiSession;
@@ -72,6 +83,19 @@ export class SessionHosts extends Context.Service<
       sessionId: string,
     ) => Effect.Effect<PiSession | undefined, PiSessionError>;
     readonly open: (spec: OpenSpec) => Effect.Effect<PiSession, PiSessionError>;
+    /**
+     * Start a new session under a fresh server-generated ID. The project is checked before the
+     * folder is registered; the folder, reference and project are written before Pi starts.
+     */
+    readonly create: (
+      spec: CreateSpec,
+    ) => Effect.Effect<PiSession, PiSessionError | RegistryError | RegistryLookupError>;
+    /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
+    readonly rename: (
+      cwd: string,
+      sessionId: string,
+      title: string,
+    ) => Effect.Effect<string, PiSessionError | RegistryError>;
     /** Release keeps history and registration; it is not abort-current or archive. */
     readonly release: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly peek: (
@@ -383,6 +407,16 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                     return yield* rejected(
                       "Pi is closing. Wait for shutdown before reopening history.",
                     );
+                  // Outside the ownership lock, like the work itself: the reference and its
+                  // project already exist, so activity is recorded before Pi sees the input.
+                  if (sessionActionPolicy[action._tag].activity)
+                    yield* registry
+                      .touchSession(
+                        raw.spec.cwd,
+                        raw.spec.sessionId,
+                        "text" in action ? action.text : undefined,
+                      )
+                      .pipe(Effect.mapError((e) => rejected(e.detail)));
                   const lock = yield* lockFor(key);
                   // Admit an action atomically against retirement, but don't hold the lock
                   // while awaiting a command whose dialog another action must answer.
@@ -462,6 +496,42 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           spec.create,
         );
 
+      const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
+        // Registry writes run before the ownership lock; an unavailable project registers nothing.
+        if (spec.projectId !== undefined) yield* registry.requireActiveProject(spec.projectId);
+        const cwd = yield* registry.ensureFolder(spec.cwd);
+        const { model, thinkingLevel, name } = spec.options;
+        // Only a fresh server-generated ID may create a reference. Registration and initial
+        // membership survive a disconnected requester, as acquisition is server-owned.
+        return yield* open({
+          cwd,
+          sessionId: randomUUID(),
+          create: true,
+          projectId: spec.projectId,
+          model,
+          thinkingLevel,
+          name,
+        });
+      });
+
+      const get = (cwd: string, id: string) =>
+        resolved(cwd, id, ({ host }) => Effect.succeed(host?.session));
+
+      const rename = Effect.fn("SessionHosts.rename")(function* (
+        cwd: string,
+        sessionId: string,
+        title: string,
+      ) {
+        // The idle deadline releases a session started only for this.
+        const session = (yield* get(cwd, sessionId)) ?? (yield* open({ cwd, sessionId }));
+        yield* session.act({ _tag: "set_name", name: title });
+        const mirrored = (yield* session.state).sessionName ?? title;
+        yield* registry.mirrorSession(session.spec.cwd, session.spec.sessionId, {
+          sessionName: mirrored,
+        });
+        return mirrored;
+      });
+
       const release = (cwd: string, id: string) =>
         keyed(cwd, id, (key) => {
           const host = hosts.get(key);
@@ -521,8 +591,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       );
       return SessionHosts.of({
         open,
+        create,
+        rename,
         release,
-        get: (cwd, id) => resolved(cwd, id, ({ host }) => Effect.succeed(host?.session)),
+        get,
         peek: (cwd, id) =>
           resolved(cwd, id, ({ key, ref, missing }) =>
             Effect.gen(function* () {

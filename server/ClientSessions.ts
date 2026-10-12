@@ -1,28 +1,31 @@
 /**
  * One browser client's sessions: which session it has selected, the live attachment that
  * forwards that session's frames, and the session requests it makes — create, act and retire.
- * Each request runs its WorkspaceCommands step and delivers its results (`action_result`,
- * toasts) to this client through its output.
+ * Each request runs its SessionHosts step and delivers its results (`action_result`, toasts) to
+ * this client through its output.
  *
  * Selections are claimed in receive order, so a slow lookup for an older selection never shows
  * or acts on a newer one. Attaching delivers the snapshot, then contiguous frames (INV-05), and
  * returns only once the snapshot is delivered, so a fast first prompt is observed. Only `create`
- * creates a session: it goes through WorkspaceCommands, which registers the folder, the
- * reference and its project first (INV-01). `act` may restart an existing session, through
- * SessionHosts, which keeps one child per session (INV-02).
+ * creates a session: SessionHosts registers the folder, the reference and its project first, and
+ * records each prompt's activity before Pi sees it (INV-01). `act` may restart an existing
+ * session; SessionHosts keeps one child per session (INV-02).
  */
 import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
-import type { ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
+import type { Attachment, ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { emptySnapshot } from "./PiHistory.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
 import type { RegistryError, RegistryLookupError } from "./Registry.ts";
-import { SessionHosts } from "./SessionHosts.ts";
-import {
-  type CreateSessionRequest,
-  type RetireMode,
-  WorkspaceCommands,
-} from "./WorkspaceCommands.ts";
+import { type CreateSpec, SessionHosts } from "./SessionHosts.ts";
+
+/** A new session and the first message to send it, if any. */
+export interface CreateSessionRequest extends CreateSpec {
+  readonly text?: string;
+  readonly attachments?: ReadonlyArray<Attachment>;
+}
+
+export type RetireMode = "archive" | "delete";
 
 export interface Selection {
   readonly cwd: string;
@@ -70,7 +73,7 @@ export interface ClientSessions {
     selectionId: string,
     action: SessionAction,
     start?: StartOptions,
-  ) => Effect.Effect<void, ActRefused | PiSessionError | RegistryError>;
+  ) => Effect.Effect<void, ActRefused | PiSessionError>;
   /** Detaches a session, stops Pi and archives or deletes it, then clears the selection if it showed that session. */
   readonly retire: (
     cwd: string,
@@ -84,7 +87,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   output: ClientOutput,
 ) {
   const hosts = yield* SessionHosts;
-  const commands = yield* WorkspaceCommands;
   const { send } = output;
   let selected: Selection | null = null;
   let attachment: { session: PiSession; scope: Scope.Closeable; selectionId: string } | null = null;
@@ -223,7 +225,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     start?: StartOptions,
   ) {
     const session = yield* target(selectionId, start);
-    const result = yield* commands.act(session, action);
+    const result = yield* session.act(action);
     if (result)
       yield* send({
         _tag: "action_result",
@@ -246,7 +248,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
           : Effect.void,
       ),
     );
-    yield* commands.retireSession(cwd, sessionId, mode);
+    yield* mode === "delete" ? hosts.delete(cwd, sessionId) : hosts.archive(cwd, sessionId);
     if (selected?.cwd === cwd && selected.sessionId === sessionId) {
       const selectionId = selected.selectionId;
       selected = null;
@@ -264,15 +266,23 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
   });
 
+  // Caller has claimed the new-session selection.
+  const create = Effect.fn("ClientSessions.create")(function* (
+    selectionId: string,
+    { text, attachments, ...spec }: CreateSessionRequest,
+  ) {
+    const session = yield* navigate(attachOpened(selectionId, hosts.create(spec)));
+    const trimmed = text?.trim() ?? "";
+    if (!trimmed && !attachments?.length) return;
+    // Sent only once this client has attached, so it observes the prompt.
+    yield* session.act({ _tag: "prompt", text: trimmed, attachments });
+  });
+
   return {
     select: (selection) => claim(selection).pipe(Effect.as(show(selection))),
     create: ({ selectionId, ...request }) =>
       claim({ cwd: request.cwd, sessionId: null, selectionId }).pipe(
-        Effect.as(
-          commands
-            .createSession(request, { attach: (open) => navigate(attachOpened(selectionId, open)) })
-            .pipe(Effect.asVoid),
-        ),
+        Effect.as(create(selectionId, request)),
       ),
     act,
     retire,

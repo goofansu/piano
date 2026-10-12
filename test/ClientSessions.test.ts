@@ -4,15 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer, Queue, type Scope } from "effect";
+import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
 import { makeClientSessions } from "../server/ClientSessions.ts";
-import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { PiSessionsLive } from "../server/PiSessions.ts";
+import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
-import { SidebarViewLive } from "../server/SidebarView.ts";
-import { type WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
 import type { ServerMessage } from "../shared/wire.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-sessions-")));
@@ -25,12 +22,10 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 let databases = 0;
 const run = <A, E>(
-  effect: Effect.Effect<A, E, WorkspaceCommands | SessionHosts | Registry | Scope.Scope>,
+  effect: Effect.Effect<A, E, SessionHosts | Registry | Scope.Scope>,
+  path = join(root, `registry-${++databases}.db`),
 ) => {
-  const layer = WorkspaceCommandsLive.pipe(
-    Layer.provide(SidebarViewLive()),
-    Layer.provide(DirectoryFactsLive),
-    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
+  const layer = SessionHostsLive({ idleMs: 0 }).pipe(
     Layer.provide(PiSessionsLive),
     Layer.provideMerge(RegistryLive),
     Layer.provide(NodeServices.layer),
@@ -44,7 +39,7 @@ const run = <A, E>(
         cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
         extraArgs: [],
       }),
-      Effect.provideService(RegistryDatabasePath, join(root, `registry-${++databases}.db`)),
+      Effect.provideService(RegistryDatabasePath, path),
       Effect.timeout("10 seconds"),
     ),
   );
@@ -268,9 +263,145 @@ test("INV-02: retiring the selected session detaches before Pi stops, clears the
       yield* sessions.retire(cwd, b.spec.sessionId, "delete");
       assert.deepEqual(yield* hosts.list, []);
       assert.deepEqual(
+        (yield* (yield* Registry).get).sessions.map((s) => [s.sessionId, s.archived]),
+        [[a.spec.sessionId, true]],
+        "archive keeps the reference; delete forgets it",
+      );
+      assert.deepEqual(
         sent.filter((m) => m._tag === "toast").map((m) => m._tag === "toast" && m.message),
         ["Session deleted"],
       );
     }),
+  );
+});
+
+const firstSnapshot = (session: PiSession) =>
+  session.events.pipe(
+    Stream.filter((e) => e._tag === "snapshot"),
+    Stream.take(1),
+    Stream.runCollect,
+    Effect.map((c) => {
+      const e = [...c][0]!;
+      assert.ok(e._tag === "snapshot");
+      return e.snapshot;
+    }),
+  );
+const prompted = (session: PiSession) =>
+  firstSnapshot(session).pipe(Effect.map((s) => s.messages.some((m) => m.role === "user")));
+
+test("INV-01/02: creating registers the folder, reference and project, attaches, then records the first prompt before Pi sees it", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      const log: string[] = [];
+      yield* registry.onChange((before, after) =>
+        Effect.gen(function* () {
+          for (const s of after.sessions) {
+            const was = before.sessions.find((b) => b.sessionId === s.sessionId);
+            if (!was)
+              log.push(`registered project=${s.projectId} folder=${after.folders.includes(cwd)}`);
+            else if (was.updatedAt !== s.updatedAt)
+              log.push(
+                `activity prompted=${yield* prompted((yield* hosts.get(s.cwd, s.sessionId))!)}`,
+              );
+          }
+        }).pipe(Effect.orDie),
+      );
+      const queue = yield* Queue.unbounded<ServerMessage>();
+      const sessions = yield* makeClientSessions({
+        send: (m) =>
+          Effect.sync(() => {
+            if (m._tag === "selected" && m.sessionId) log.push("attached");
+          }).pipe(Effect.andThen(Queue.offer(queue, m)), Effect.asVoid),
+        overflow: (e) => Effect.die(e),
+      });
+      yield* yield* sessions.create({
+        selectionId: "new",
+        cwd,
+        projectId: "launch",
+        options: {},
+        text: "  hello  ",
+      });
+      assert.deepEqual(log, [
+        "registered project=launch folder=true",
+        "attached",
+        "activity prompted=false",
+      ]);
+      // The trimmed prompt reaches Pi and this client observes it.
+      for (;;) {
+        const m = yield* Queue.take(queue);
+        if (
+          m._tag === "session" &&
+          m.event._tag === "message_end" &&
+          m.event.message.role === "user"
+        ) {
+          assert.equal(m.event.message.text, "hello");
+          break;
+        }
+      }
+      const [entry] = (yield* registry.get).sessions;
+      assert.equal(entry.cwd, cwd);
+      assert.equal((yield* hosts.list).filter((h) => h.sessionId === entry.sessionId).length, 1);
+    }),
+  );
+});
+
+test("INV-01/02/07: an interrupted creation keeps its project membership and sends no prompt", async () => {
+  const path = join(root, "interrupted-creation.db");
+  const id = await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      const published: Array<string | undefined> = [];
+      yield* registry.onChange((before, after) =>
+        Effect.sync(() => {
+          for (const s of after.sessions)
+            if (!before.sessions.some((b) => b.sessionId === s.sessionId))
+              published.push(s.projectId);
+        }),
+      );
+      // The browser has opened Pi but disconnects before its snapshot is delivered.
+      const opened = yield* Deferred.make<string>();
+      const sessions = yield* makeClientSessions({
+        send: (m) =>
+          m._tag === "selected" && m.sessionId
+            ? Deferred.succeed(opened, m.sessionId).pipe(Effect.andThen(Effect.never))
+            : Effect.void,
+        overflow: (e) => Effect.die(e),
+      });
+      const creating = yield* (yield* sessions.create({
+        selectionId: "new",
+        cwd,
+        projectId: "launch",
+        options: {},
+        text: "must not reach Pi",
+      })).pipe(Effect.forkChild);
+      const id = yield* Deferred.await(opened);
+      yield* Fiber.interrupt(creating);
+      const session = (yield* hosts.get(cwd, id))!;
+      assert.ok(session, "the server-owned child survives its requester");
+      assert.equal(yield* prompted(session), false, "no prompt without a completed attachment");
+      assert.deepEqual(
+        (yield* registry.get).sessions.map((s) => [s.cwd, s.sessionId, s.projectId]),
+        [[cwd, id, "launch"]],
+      );
+      assert.deepEqual(published, ["launch"], "the first published reference has its project");
+      return id;
+    }),
+    path,
+  );
+  const reopened = await Effect.runPromise(
+    Effect.flatMap(Registry, (r) => r.get).pipe(
+      Effect.provide(RegistryLive),
+      Effect.provideService(RegistryDatabasePath, path),
+    ),
+  );
+  assert.deepEqual(
+    reopened.sessions.map((s) => [s.cwd, s.sessionId, s.projectId]),
+    [[cwd, id, "launch"]],
+    "membership survives reopening SQLite",
   );
 });

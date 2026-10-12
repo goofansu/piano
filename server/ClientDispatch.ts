@@ -1,9 +1,9 @@
 /**
  * One browser client's requests and the server-wide updates it hears, without the socket.
- * Session requests go to the client's ClientSessions; the rest run their WorkspaceCommands,
- * Registry or DirectoryFacts step here and answer through the client's output. A request that
- * capacity refuses or that fails gets the one reply its sender awaits (`unansweredReply`); it
- * never ends the connection.
+ * Session requests go to the client's ClientSessions; the rest run their SessionHosts,
+ * WorkspaceCommands, Registry or DirectoryFacts step here and answer through the client's
+ * output. A request that capacity refuses or that fails gets the one reply its sender awaits
+ * (`unansweredReply`); it never ends the connection.
  */
 import { Cause, Effect, Stream } from "effect";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
@@ -178,7 +178,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         case "ping":
           return yield* send({ _tag: "pong", nonce: request.nonce });
         case "rename_session":
-          return yield* commands.renameSession(request.cwd, request.sessionId, request.title);
+          return yield* hosts.rename(request.cwd, request.sessionId, request.title);
         case "pin_session":
           return yield* registry.pinSession(request.cwd, request.sessionId, request.pinned);
         case "archive_session":
