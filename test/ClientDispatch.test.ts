@@ -10,10 +10,10 @@ import { type DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFact
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
+import { Registry, RegistryDatabasePath, RegistryError, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
-import { type WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
+import { WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
 import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { initialWorktreeRequest, transition } from "../web/src/lib/worktreeRequest.ts";
@@ -382,6 +382,53 @@ test("INV-06: a failed worktree request is answered, then the sidebar is redisco
       );
     }),
   );
+});
+
+test("INV-06: a worktree request failing outside the lifecycle adapter still settles its request", async () => {
+  // Recording the checkout in the registry, or a defect, fails after Worktrunk or Git answered.
+  const failures = {
+    registry: Effect.fail(new RegistryError({ detail: "Registry write failed." })),
+    defect: Effect.die(new Error("Unexpected failure.")),
+  };
+  for (const [kind, failure] of Object.entries(failures))
+    await run(
+      Effect.gen(function* () {
+        const commands = yield* WorkspaceCommands;
+        const { receive } = yield* client.pipe(
+          Effect.provideService(WorkspaceCommands, {
+            ...commands,
+            createWorktree: () => failure,
+            addWorktree: () => failure,
+          }),
+        );
+        for (const intent of [
+          { kind: "create", folder: cwd, branch: "feature", hooks: false },
+          { kind: "select", folder: cwd, path: cwd },
+        ] as const) {
+          const requestId = `${kind}-${intent.kind}`;
+          const started = transition(initialWorktreeRequest, { type: "start", requestId, intent });
+          assert.ok(
+            started.command?._tag === "create_worktree" || started.command?._tag === "add_worktree",
+          );
+          const from = sent.length;
+          yield* yield* receive(started.command);
+          let browser = initialState;
+          for (const message of answers(from))
+            browser = reduce(browser, { type: "server", message });
+          assert.equal(browser.worktreeResult?.requestId, requestId);
+          const settled = transition(started.state, {
+            type: "receipt",
+            receipt: browser.worktreeResult,
+          });
+          assert.equal(settled.state.request.status, "failed");
+          if (settled.state.request.status === "failed")
+            assert.match(
+              settled.state.request.detail,
+              kind === "registry" ? /Registry write failed/ : /Unexpected failure/,
+            );
+        }
+      }),
+    );
 });
 
 test("a request that fails reaches the client as an error for its selection, and the next request is still served", async () => {
