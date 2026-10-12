@@ -119,6 +119,15 @@ export function ModelSelect({ open: controlledOpen, onOpenChange, returnFocusRef
         </Button>
       </PopoverTrigger>
       <PickerContent aria-label="Model and effort" className="font-mono" searchRef={search}
+        onKeyDown={event => {
+          if (event.defaultPrevented || event.key !== "/" || event.repeat || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+          const input = search.current;
+          if (!input || document.activeElement === input) return;
+          event.preventDefault();
+          setFocusModel(null); // A later hosted selection must not steal focus back to effort.
+          input.focus({ preventScroll: true });
+          input.select();
+        }}
         onEscapeKeyDown={event => {
           if (event.isComposing || event.keyCode === 229) { event.preventDefault(); return; }
           restoreFocus.current = true;

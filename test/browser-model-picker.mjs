@@ -76,6 +76,40 @@ try {
   await pick('project');
   await ab('wait', '--fn', `document.activeElement.getAttribute('role') === 'radio'`);
   assert.equal(await focusText(), 'low');
+  // Make the defaults action reachable without saving or changing fixture defaults.
+  await ab('press', 'ArrowRight'); await ab('press', 'Space');
+  // Slash works throughout this overlay, not only in the effort group.
+  const query = 'piano-phase0/project';
+  const controls = [
+    [`${panel} [role="radio"][aria-checked="true"]`, 'medium'],
+    ['button[aria-label="Refresh models"]', 'Refresh models'],
+    [null, 'Use for new sessions'],
+    [null, 'Done'],
+    [panel, 'Model and effort'],
+  ];
+  for (const [control, label] of controls) {
+    if (control === null) {
+      await evaluate(`(() => { const button = [...document.querySelectorAll('${panel} button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}); button.focus(); return true; })()`);
+    } else await ab('focus', control);
+    assert.equal(await evaluate('document.activeElement.getAttribute("aria-label") ?? document.activeElement.textContent.trim()'), label, `focus reaches ${label}`);
+    // Synthetic events exercise flags that a normal browser press cannot express.
+    for (const flags of [{ isComposing: true }, { keyCode: 229 }, { metaKey: true }, { ctrlKey: true }, { altKey: true }, { shiftKey: true }, { repeat: true }]) {
+      assert.equal(await evaluate(`(() => { const before = document.activeElement; const e = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true, ...${JSON.stringify(flags)} }); before.dispatchEvent(e); return !e.defaultPrevented && document.activeElement === before; })()`), true, `${label}: ${JSON.stringify(flags)} must be ignored`);
+    }
+    await ab('press', '/');
+    assert.deepEqual(await evaluate(`(() => { const s = document.querySelector('${search}'); return { focused: document.activeElement === s, query: s.value, start: s.selectionStart, end: s.selectionEnd }; })()`), { focused: true, query, start: 0, end: query.length }, `slash from ${label} preserves and selects the query`);
+  }
+  // In search, slash is query text, never a shortcut (including provider/model queries).
+  assert.equal(await evaluate(`(() => { const e = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true }); document.activeElement.dispatchEvent(e); return e.defaultPrevented; })()`), false);
+  await ab('press', '/');
+  assert.equal(await evaluate('document.activeElement.value'), '/', 'typing replaces the selected query');
+  await ab('fill', search, 'piano-phase0'); await ab('press', 'End'); await ab('press', '/');
+  assert.equal(await evaluate('document.activeElement.value'), 'piano-phase0/', 'literal provider separator is preserved');
+  await ab('screenshot', join(evidence, '00-slash-search.png'));
+  assert.equal(fixture.observe().requests.length, 0, 'slash navigation never sends the draft');
+  await ab('fill', search, query);
+  await ab('focus', `${panel} [role="radio"][aria-checked="true"]`);
+  await ab('press', 'ArrowLeft'); await ab('press', 'Space');
   await ab('press', 'ArrowRight');
   assert.equal(await focusText(), 'medium');
   await ab('press', 'Enter'); // No Space required.
@@ -100,8 +134,10 @@ try {
   await ab('fill', 'input[aria-label="Search folders"]', ''); await ab('press', shortcut);
   assert.equal(await evaluate(`!!document.querySelector('${panel}')`), false);
   await ab('press', 'Escape');
+  await ab('wait', '--fn', `!document.querySelector('input[aria-label="Search folders"]')`);
   // Start only the synthetic fixture request, then exercise the hosted/server-owned choice.
-  await ab('focus', 'textarea[aria-label="First message"]');
+  await ab('click', 'textarea[aria-label="First message"]');
+  await ab('wait', '--fn', `document.activeElement.getAttribute('aria-label') === 'First message'`);
   await evaluate('document.activeElement.setSelectionRange(0, document.activeElement.value.length); true'); await ab('press', 'Backspace');
   await ab('fill', 'textarea[aria-label="First message"]', 'PHASE0_WAIT');
   assert.equal(await evaluate('document.activeElement.value'), 'PHASE0_WAIT');
@@ -113,9 +149,19 @@ try {
   await ab('wait', '--fn', `document.activeElement.textContent === 'Done'`);
   assert.match(await evaluate(`document.querySelector('${picker}').getAttribute('aria-label')`), /plain; effort: off$/);
   await ab('press', 'Escape'); await resumed('Message', 'Hosted draft');
-  await ab('press', shortcut); await pick('project');
-  await ab('wait', '--fn', `document.activeElement.getAttribute('role') === 'radio'`);
-  assert.match(await evaluate(`document.querySelector('${picker}').getAttribute('aria-label')`), /project;/);
+  await ab('press', shortcut); await ab('fill', search, 'piano-phase0/project');
+  // In one browser task, jump before Pi's authoritative response can arrive.
+  assert.equal(await evaluate(`(() => {
+    const s = document.querySelector('${search}'), overlay = document.querySelector('${panel}');
+    s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    overlay.focus();
+    const slash = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true });
+    overlay.dispatchEvent(slash);
+    return slash.defaultPrevented && document.activeElement === s;
+  })()`), true);
+  await ab('wait', '--fn', `document.querySelector('${picker}').getAttribute('aria-label').includes('/project;')`);
+  assert.deepEqual(await evaluate(`(() => { const s = document.querySelector('${search}'); return [document.activeElement === s, s.value, s.selectionStart, s.selectionEnd]; })()`), [true, 'piano-phase0/project', 0, 20], 'late hosted response must not steal search focus');
+  await ab('focus', `${panel} [role="radio"][aria-checked="true"]`);
   assert.equal(await focusText(), 'low', 'Pi restores the supported default effort for the reasoning model');
   await ab('press', 'ArrowRight'); await ab('press', 'Enter');
   await resumed('Message', 'Hosted draft');
@@ -125,7 +171,7 @@ try {
   await evaluate('document.activeElement.setSelectionRange(0, document.activeElement.value.length); true');
   await ab('press', 'Backspace');
   await ab('find', 'role', 'button', 'click', '--name', 'Stop', '--exact');
-  console.log('PASS: local shortcut in both composers; IME ignored; model-to-effort focus; native arrows, Space, direct Enter; mouse list stays visible; plain model focuses Done; Escape/Done restore focus and preserve drafts; hosted authoritative model/effort updates; no accidental sends.');
+  console.log('PASS: overlay slash from effort, refresh, defaults, Done and panel preserves/selects query; search accepts literal slash; composition, keyCode229, modifiers and repeats ignored; no draft send; local shortcut in both composers; IME ignored; model-to-effort focus; native arrows, Space, direct Enter; mouse list stays visible; plain model focuses Done; Escape/Done restore focus and preserve drafts; hosted authoritative model/effort updates; no accidental sends.');
 } finally {
   try { await ab('close'); } catch {}
   for (const p of [frontend, backend]) if (p.exitCode === null) { p.kill('SIGTERM'); await new Promise(res => p.once('exit', res)); }
