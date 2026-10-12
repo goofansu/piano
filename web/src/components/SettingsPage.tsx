@@ -50,12 +50,12 @@ export type { SettingsSection } from "@/lib/routes";
 const PROVIDER_LOGOS: Readonly<Record<string, string | undefined>> = {
   anthropic: "anthropic",
   openai: "openai",
-  "openai-codex": "openai",
-  "openai-chatgpt": "openai",
-  "github-copilot": "githubcopilot",
-  "google-gemini-cli": "googlegemini",
-  "google-antigravity": "googlegemini",
+  "github-copilot": "github-copilot",
+  "kimi-coding": "kimi",
   meta: "meta",
+  openrouter: "openrouter",
+  radius: "radius",
+  xai: "xai",
 };
 
 export function SettingsNavigation({
@@ -224,8 +224,14 @@ function ProvidersSettings({
             <Item key={provider.id} role="listitem" variant="outline" className="flex-nowrap">
               {Object.hasOwn(PROVIDER_LOGOS, provider.id) && PROVIDER_LOGOS[provider.id] && (
                 <ItemMedia variant="icon">
-                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <use href={`/provider-logos.svg#${PROVIDER_LOGOS[provider.id]}`} />
+                  {/* Optical sizing: SpaceX's wide, shallow mark needs more width than square logos. */}
+                  <svg
+                    viewBox="0 0 24 24"
+                    className={provider.id === "xai" ? "size-6" : undefined}
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <use href={`/provider-logos/${PROVIDER_LOGOS[provider.id]}.svg#logo`} />
                   </svg>
                 </ItemMedia>
               )}
