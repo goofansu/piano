@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, type Scope, Stream } from "effect";
+import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
@@ -57,9 +58,10 @@ const slowGit = () => {
 let databases = 0;
 const run = <A, E>(
   git: ReturnType<typeof slowGit>,
-  effect: Effect.Effect<A, E, SidebarView | Registry | SessionHosts | Scope.Scope>,
+  effect: Effect.Effect<A, E, SidebarView | DirectoryFacts | Registry | SessionHosts | Scope.Scope>,
 ) => {
   const layer = SidebarViewLive({ discover: git.discover }).pipe(
+    Layer.provideMerge(DirectoryFactsLive),
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provide(PiSessionsLive),
     Layer.provideMerge(RegistryLive),
@@ -221,6 +223,39 @@ test("INV-01/INV-07: a session reference keeps its registry creation time and wo
         workspaceId,
         null,
       ]);
+    }),
+  );
+});
+
+test("INV-01: a trust decision reaches the sidebar without a registry write", async () => {
+  const skilled = join(root, "skilled");
+  // A project skill makes the directory's trust matter to Pi.
+  mkdirSync(join(skilled, ".agents/skills/hello"), { recursive: true });
+  writeFileSync(
+    join(skilled, ".agents/skills/hello/SKILL.md"),
+    "---\nname: hello\ndescription: say hello\n---\nSay hello.\n",
+  );
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView,
+        facts = yield* DirectoryFacts;
+      yield* registry.addFolder(skilled);
+      const trustIn = (m: SidebarMessage) => m.folders[0]?.worktrees[0]?.trust;
+      assert.deepEqual(trustIn(yield* view.fresh), { required: true, trusted: false });
+      const runs = git.calls;
+
+      // Pi's store is not the registry: DirectoryFacts announces the decision, and the view follows without Git.
+      git.hold();
+      const next = yield* nextView(view, (m) => trustIn(m)?.trusted === true).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* facts.setTrust(skilled, true);
+      assert.deepEqual(trustIn(yield* Fiber.join(next)), { required: true, trusted: true });
+      assert.equal(git.calls, runs, "no discovery run was needed");
+      git.release();
     }),
   );
 });

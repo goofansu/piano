@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
+import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHostsLive } from "../server/SessionHosts.ts";
@@ -271,6 +272,7 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
   // Through the actual view caller: registry names never become Git facts and
   // external deletion/failure must not hide registered session references.
   const layer = SidebarViewLive().pipe(
+    Layer.provide(DirectoryFactsLive),
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provide(PiSessionsLive),
     Layer.provideMerge(RegistryLive),

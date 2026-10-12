@@ -11,7 +11,6 @@ import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { type SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
-import { SidebarViewLive } from "../server/SidebarView.ts";
 import { WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-commands-")));
@@ -36,7 +35,6 @@ const run = <A, E>(
   path = join(root, `registry-${++databases}.db`),
 ) => {
   const layer = WorkspaceCommandsLive.pipe(
-    Layer.provide(SidebarViewLive()),
     Layer.provideMerge(DirectoryFactsLive),
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provide(PiSessionsLive),
