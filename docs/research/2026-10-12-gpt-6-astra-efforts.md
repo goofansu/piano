@@ -116,4 +116,28 @@ returned no comments or linked PRs. That does not establish the upstream extensi
   map, including `null` entries. Updating Pi alone or refreshing a catalog cannot repair a
   translator that discards the field.
 - This is documentation-only research. No application tests/build were rerun; document/source
-  review and the two focused probes cover the research claim. No fix was applied.
+  review and the two focused probes cover the research claim. No fix was applied during research.
+
+## Follow-up: align yejun-dev with pi-chat (user-requested)
+
+The user subsequently identified `pi-chat.exe.xyz` as the extension reference and requested
+correction of yejun-dev's divergence. Comparison found that pi-chat's adapter matches
+pi-piano's unpatched copy. Of the extension's TypeScript files, `package.json` and
+`catalog.json`, only three files differed on yejun-dev: `integration_catalog.ts`,
+`integration_catalog.test.ts` and `catalog.json`. The sidecar on pi-chat also lacks Astra's map.
+
+Those three files were restored byte-for-byte from pi-chat after checking their expected
+pre-change hashes and backing up yejun-dev's originals to:
+`/home/exedev/.pi/agent/extension-backups/exe-dev-before-pi-chat-align-20261012T060708Z`.
+No credentials, preferences, unrelated extension files or backend processes were changed.
+This removes the local workaround; it **does not fix issue #2**.
+
+Observed separate offline, non-persisted terminal Pi 1.1.0 RPC processes before and after:
+`python3 .scratch/reasoning-effort/pi-chat-reference/verify.py before` reported divergence;
+`... verify.py after` passed, with all three hashes and Astra's metadata matching pi-chat.
+Both now advertise `reasoning: true`, no map and `off, minimal, low, medium, high`.
+Evidence: `.scratch/reasoning-effort/pi-chat-reference/{before,after}.json`.
+The restored extension's `node --test *.test.ts` passed **26/26**; output is
+`.scratch/reasoning-effort/pi-chat-reference/extension-tests.txt`.
+Existing Piano catalogs and already-running Pi sessions were not refreshed or browser-tested;
+they may retain their previous metadata until refreshed/recreated. No deployment or restart.
