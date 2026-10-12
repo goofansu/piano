@@ -13,7 +13,6 @@ import type {
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import type { ProjectTrustError } from "./ProjectTrust.ts";
 import { Registry, type RegistryError } from "./Registry.ts";
-import { SidebarView } from "./SidebarView.ts";
 import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
 
 export type ReadyWorktree = Extract<WorktreeResult, { status: "ready" }>;
@@ -57,7 +56,6 @@ export const WorkspaceCommandsLive = Layer.effect(
   Effect.gen(function* () {
     const registry = yield* Registry;
     const facts = yield* DirectoryFacts;
-    const sidebar = yield* SidebarView;
 
     const registered = (folder: string) =>
       registry
@@ -90,10 +88,9 @@ export const WorkspaceCommandsLive = Layer.effect(
         ),
 
       setTrust: Effect.fn("WorkspaceCommands.setTrust")(function* (path, trusted) {
-        // Pi's resources for this directory, and so its models and commands, change for sessions started from now.
+        // Pi's resources for this directory, and so its models and commands, change for sessions
+        // started from now. DirectoryFacts announces it; every client and the sidebar hear it there.
         const decision = yield* facts.setTrust(path, trusted);
-        // Trust lives in Pi's store, not the registry, so the sidebar hears of it here.
-        yield* sidebar.changed;
         const notice = trusted
           ? "Trusted. Sessions started from now load this folder's Pi settings and skills."
           : "Untrusted. Sessions started from now skip this folder's Pi settings and skills.";

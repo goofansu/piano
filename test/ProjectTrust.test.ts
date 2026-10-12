@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
+import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { setProjectTrust } from "../server/ProjectTrust.ts";
 import { RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
@@ -62,6 +63,7 @@ function fixture(t: TestContext) {
 test("INV-01: project trust is read from and written to Pi's trust file, per directory", async (t) => {
   const { root, skilled, plain, agent } = fixture(t);
   const layer = SidebarViewLive().pipe(
+    Layer.provide(DirectoryFactsLive),
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provide(PiSessionsLive),
     Layer.provideMerge(RegistryLive),

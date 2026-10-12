@@ -4,22 +4,26 @@
  * for all connections. It hears registry writes from the registry itself, so whoever writes
  * (a browser request, a Pi rename mirrored by SessionHosts) needs no publish step of its own.
  *
- * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06)
- * and session availability (SessionHosts' judgement of Pi history and checkouts) are the slow observations: they run single-flight in the background,
+ * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06),
+ * session availability (SessionHosts' judgement of Pi history and checkouts) and Pi project trust
+ * (through DirectoryFacts) are the observations: discovery runs single-flight in the background,
  * and changes that arrive during a run cause at most one more. A change that keeps the set of
  * registered folders and worktrees publishes at once from the last observation, so a prompt or
- * rename never waits on Git.
+ * rename never waits on Git or reads Pi's trust store. DirectoryFacts announces trust decisions;
+ * the view re-reads trust then and on each run, so a decision made in a terminal Pi shows after
+ * the next run.
  */
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import type {
   FolderView,
   HostInfo,
+  ProjectTrust,
   ServerMessage,
   SessionReference,
   WorktreeDiscovery,
   WorktreeView,
 } from "../shared/wire.ts";
-import { projectTrust } from "./ProjectTrust.ts";
+import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { Registry, type RegistryData } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { listWorktrees } from "./Worktrees.ts";
@@ -29,12 +33,6 @@ export type SidebarMessage = Extract<ServerMessage, { _tag: "registry" }>;
 export class SidebarView extends Context.Service<
   SidebarView,
   {
-    /**
-     * Something the view shows from outside the registry changed, such as Pi project trust.
-     * Registry writes announce themselves. Publishes promptly when no folder or worktree was
-     * added or removed, then rediscovers in the background. Never waits on Git.
-     */
-    readonly changed: Effect.Effect<void>;
     /** Rediscover in the background, for facts that change outside Piano (a page load, a Refresh). */
     readonly refresh: Effect.Effect<void>;
     /** The latest view, if one exists, then every later one. Subscribes now, so nothing published after this returns is missed. */
@@ -44,7 +42,7 @@ export class SidebarView extends Context.Service<
   }
 >()("piano/SidebarView") {}
 
-/** The slow facts, as of one discovery run. */
+/** The facts from outside the registry, as of one discovery run and any later trust change. */
 interface Observation {
   /** Registered folders and worktrees the run looked at; a publish from it is current only while these hold. */
   readonly shape: string;
@@ -52,6 +50,8 @@ interface Observation {
   readonly discoveries: ReadonlyMap<string, WorktreeDiscovery>;
   /** Why a project member cannot be opened, as SessionHosts judges it; a member not yet observed is available. */
   readonly unavailable: (cwd: string, sessionId: string) => SessionReference["unavailable"];
+  /** Pi's trust for each of `paths`, re-read whenever DirectoryFacts reports a change. */
+  readonly trust: ReadonlyMap<string, ProjectTrust>;
 }
 
 const shapeOf = (data: RegistryData) =>
@@ -74,10 +74,12 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
     Effect.gen(function* () {
       const registry = yield* Registry;
       const hosts = yield* SessionHosts;
+      const facts = yield* DirectoryFacts;
       const discover = options.discover ?? listWorktrees;
       const layerScope = yield* Effect.scope;
       const pubsub = yield* PubSub.sliding<SidebarMessage>(1);
       // Publishes read the registry under this lock, so they leave in the order they read it.
+      // Trust is read and installed under it too, so a later read never loses to an earlier one.
       const publishing = yield* Semaphore.make(1);
 
       let latest: SidebarMessage | undefined;
@@ -87,6 +89,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       let started = 0;
       let waiters: Array<{ readonly after: number; readonly done: Deferred.Deferred<void> }> = [];
 
+      /** Discovery and availability; trust is read under the publishing lock when this is installed. */
       const observe = Effect.fn("SidebarView.observe")(function* (data: RegistryData) {
         const discoveries = new Map(
           yield* Effect.forEach(
@@ -97,7 +100,15 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         );
         const unavailable = yield* hosts.availability(data.sessions.filter((s) => s.projectId));
         const paths = new Set([...data.folders, ...data.worktrees.map((w) => w.path)]);
-        return { shape: shapeOf(data), paths, discoveries, unavailable } satisfies Observation;
+        return { shape: shapeOf(data), paths, discoveries, unavailable };
+      });
+
+      const trustOf = Effect.fn("SidebarView.trustOf")(function* (paths: Iterable<string>) {
+        return new Map(
+          yield* Effect.forEach(paths, (cwd) =>
+            Effect.map(facts.trust(cwd), ({ trust }) => [cwd, trust] as const),
+          ),
+        );
       });
 
       /** Registry selects directories and sessions; discovery supplies current Git facts, never cached registry branches. */
@@ -121,8 +132,13 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
                 ...data.worktrees.filter((w) => w.folder === path).map((w) => w.path),
               ]),
             ];
+            // A worktree registered after the run has no observed trust yet; ask Pi for that one.
+            const trustAt = (cwd: string) => {
+              const known = seen.trust.get(cwd);
+              return known ? Effect.succeed(known) : Effect.map(facts.trust(cwd), (d) => d.trust);
+            };
             const worktrees = yield* Effect.forEach(paths, (cwd) =>
-              Effect.map(projectTrust(cwd), (trust): WorktreeView => {
+              Effect.map(trustAt(cwd), (trust): WorktreeView => {
                 const facts =
                   discovery.status === "ready"
                     ? discovery.worktrees.find(
@@ -182,22 +198,35 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         } satisfies SidebarMessage;
       });
 
-      /** Publish from the current registry and the last observation; `sameShape` skips it when that observation no longer covers the registry. */
-      const publish = (sameShape: boolean) =>
-        Semaphore.withPermits(
-          publishing,
-          1,
-        )(
+      const locked = Semaphore.withPermits(publishing, 1);
+      /** Publish from the current registry and the last observation; `sameShape` skips it when that observation no longer covers the registry. Holds the lock. */
+      const send = Effect.fnUntraced(function* (sameShape: boolean) {
+        const seen = observation;
+        if (!seen) return;
+        const data = yield* registry.get;
+        if (sameShape && shapeOf(data) !== seen.shape) return;
+        const message = yield* assemble(data, yield* hosts.list, seen);
+        latest = message;
+        yield* PubSub.publish(pubsub, message);
+      });
+      const publish = (sameShape: boolean) => locked(send(sameShape));
+      /** Install a run's observation with trust read now, then publish from it. */
+      const install = (run: Omit<Observation, "trust">) =>
+        locked(
           Effect.gen(function* () {
-            const seen = observation;
-            if (!seen) return;
-            const data = yield* registry.get;
-            if (sameShape && shapeOf(data) !== seen.shape) return;
-            const message = yield* assemble(data, yield* hosts.list, seen);
-            latest = message;
-            yield* PubSub.publish(pubsub, message);
+            observation = { ...run, trust: yield* trustOf(run.paths) };
+            yield* send(false);
           }),
         );
+      /** Pi's resources changed, perhaps trust: re-read it for the observed paths and publish. Git is not asked again. */
+      const retrust = locked(
+        Effect.gen(function* () {
+          const seen = observation;
+          if (!seen) return;
+          observation = { ...seen, trust: yield* trustOf(seen.paths) };
+          yield* send(true);
+        }),
+      );
 
       const runs: Effect.Effect<void> = Effect.gen(function* () {
         while (true) {
@@ -210,10 +239,9 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             return ++started;
           });
           if (!run) return;
-          yield* Effect.gen(function* () {
-            observation = yield* observe(yield* registry.get);
-            yield* publish(false);
-          }).pipe(
+          yield* registry.get.pipe(
+            Effect.flatMap(observe),
+            Effect.flatMap(install),
             Effect.catchCause((cause) => Effect.logWarning("sidebar discovery failed", cause)),
           );
           const done = waiters.filter((w) => w.after < run);
@@ -238,10 +266,18 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       yield* registry.onChange((before, after) =>
         visibleOf(before) === visibleOf(after) ? Effect.void : changed,
       );
+      // Started now, so a trust decision made once the layer is built is not missed.
+      yield* facts.changes.pipe(
+        Stream.runForEach(() =>
+          retrust.pipe(
+            Effect.catchCause((cause) => Effect.logWarning("sidebar trust update failed", cause)),
+          ),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      );
       yield* request();
 
       return SidebarView.of({
-        changed,
         refresh: request(),
         subscribe: PubSub.subscribe(pubsub).pipe(
           Effect.map((subscription) => {
