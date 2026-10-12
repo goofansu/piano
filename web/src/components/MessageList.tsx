@@ -32,7 +32,7 @@ interface Props {
   tools: Record<string, ToolExecution>;
   /** Startup or Pi work awaiting reply text: the keys play in the reply area. */
   activity?: "starting" | "working";
-  /** Shown while the transcript is empty; omitted while something is on its way. */
+  /** Shown above an empty transcript; the caller decides when (see `sessionPane`). */
   placeholder?: string;
   className?: string;
   /** Show only jump-list messages and errors without changing authoritative history. */
@@ -119,7 +119,7 @@ export function MessageList({
         className="h-full overflow-y-auto px-4 md:px-6"
       >
         <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
-          {placeholder && messages.length === 0 && !pending && !submittedInput && !activity && (
+          {placeholder && (
             <Empty className="py-16">
               <EmptyHeader>
                 <EmptyDescription className="text-base">{placeholder}</EmptyDescription>

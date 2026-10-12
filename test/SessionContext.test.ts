@@ -9,6 +9,7 @@ import {
   sessionCheckoutMissing,
   sessionContext,
   sessionMutable,
+  sessionPane,
 } from "../web/src/lib/sessionContext.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
@@ -204,6 +205,107 @@ test("reply activity yields to visible pending text, except in Messages display"
     ).replyActivity,
     "starting",
   );
+});
+
+test("the session pane: a loading session shows the skeleton and nothing else", () => {
+  assert.deepEqual(sessionPane({ ...base, selecting: { cwd: "/repo", sessionId: "s1" } }), {
+    list: false,
+    skeleton: "shown",
+    placeholder: undefined,
+    composerDisabled: true,
+  });
+});
+
+test("the session pane: a first message shows at once, without skeleton, until Pi has the session", () => {
+  const input = { selectionId: "create", cwd: "/repo", text: "hi", outcome: "starting" as const };
+  assert.deepEqual(sessionPane({ ...base, pendingCreate: input }), {
+    list: true,
+    skeleton: "none",
+    placeholder: undefined,
+    composerDisabled: true,
+  });
+  // Pi's session is attached but still starting: the first message stays, the composer waits.
+  const attached = sessionPane({ ...base, pendingCreate: input, session: session("/repo") });
+  assert.equal(attached.skeleton, "none");
+  assert.equal(attached.placeholder, undefined, "the first message is not an empty transcript");
+  assert.equal(attached.composerDisabled, true);
+  const submitted = sessionPane({
+    ...base,
+    pendingCreate: { ...input, outcome: "submitted" },
+    session: session("/repo"),
+  });
+  assert.equal(submitted.composerDisabled, false);
+  // A failed first message keeps its text in view instead of a loading skeleton.
+  assert.equal(
+    sessionPane({ ...base, pendingCreate: { ...input, outcome: "rejected" } }).skeleton,
+    "none",
+  );
+});
+
+test("the session pane: a failed selection has no skeleton", () => {
+  const pane = sessionPane({
+    ...base,
+    selectionFailure: { cwd: "/repo", sessionId: "s1", message: "gone" },
+  });
+  assert.equal(pane.skeleton, "none");
+  assert.equal(pane.list, false);
+});
+
+test("the session pane: a settled empty session says so and lets the skeleton fade", () => {
+  for (const hosted of [true, false]) {
+    const pane = sessionPane({ ...base, session: session("/repo", {}, { hosted }) });
+    assert.deepEqual(pane, {
+      list: true,
+      skeleton: "hidden",
+      placeholder: "No messages yet.",
+      composerDisabled: false,
+    });
+  }
+  const withHistory = sessionPane({
+    ...base,
+    session: session("/repo", {}, { messages: [{ id: "m", role: "user", text: "hi" }] }),
+  });
+  assert.equal(withHistory.skeleton, "hidden");
+  assert.equal(withHistory.placeholder, undefined);
+});
+
+test("the session pane: input Pi has not answered keeps the skeleton and no placeholder", () => {
+  const submitting = sessionPane({
+    ...base,
+    session: session("/repo", { submission: { id: 1, outcome: "submitting" } }),
+  });
+  assert.equal(submitting.skeleton, "shown");
+  assert.equal(submitting.placeholder, undefined);
+  // Pi's reply has begun: the transcript replaces the skeleton.
+  const replying = sessionPane({
+    ...base,
+    session: session(
+      "/repo",
+      { isStreaming: true },
+      { pending: { id: "p", role: "assistant", text: "partial" } },
+    ),
+  });
+  assert.equal(replying.skeleton, "hidden");
+  assert.equal(replying.placeholder, undefined);
+});
+
+test("the session pane: work under way is never described as an empty session", () => {
+  for (const working of [{ isStreaming: true }, { isCompacting: true }, { isRetrying: true }]) {
+    const pane = sessionPane({ ...base, session: session("/repo", working) });
+    assert.equal(pane.placeholder, undefined, JSON.stringify(working));
+    assert.equal(pane.skeleton, "shown", JSON.stringify(working));
+  }
+});
+
+test("the session pane: the composer waits for a ready attachment", () => {
+  const current = { ...base, session: session("/repo") };
+  assert.equal(sessionPane(current).composerDisabled, false);
+  for (const state of [
+    { ...current, connected: false },
+    { ...current, resync: true },
+    { ...current, selectionId: null },
+  ])
+    assert.equal(sessionPane(state).composerDisabled, true);
 });
 
 test("directory trust prefers the latest probe over discovery", () => {
