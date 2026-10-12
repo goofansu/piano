@@ -41,8 +41,6 @@ jobs:
           "$RUNNER_TEMP/worktrunk/wt" --version
       - name: Clean install
         run: npm ci
-      - name: Dependency audit policy
-        run: npm run audit:check
       - name: Typecheck
         run: npm run typecheck
       # biome check also enforces the formatter; do not run auto-fixes in CI.

@@ -45,7 +45,30 @@ The current shadcn 4.21.4 metadata still depends on fast-glob ^3.3.3 and ts-morp
 an unrelated patch upgrade would not remove this chain. No dependency or Effect version changes
 are justified by this report; no force fix or lockfile rewrite was applied.
 
-## Enforcement and exception
+## Current policy — no custom audit gate
+
+The owner chose Dependabot alerts and security updates instead of a blocking audit gate.
+The follow-up to merged PR #88 removes the audit script, its gate-specific tests, npm command
+and CI step. The reports and exposure analysis above remain historical evidence, not a
+current audit result. The former November 12 exception/expiry below is superseded; it will
+not block CI. No dependency versions or application behavior change.
+
+Enablement is **unverified**: the exe.dev GitHub integration returned HTTP 403, “Resource not
+accessible by integration,” for both reading and enabling vulnerability alerts and automated
+security fixes. An owner should enable Dependabot alerts and Dependabot security updates in
+repository Settings → Security → Advanced Security. No scheduled version-update configuration
+is added: routine version bumps are separate from security alerts and security updates.
+Review alerts manually, apply compatible fixes when available, and record decisions for
+findings without a fix. CI continues to run clean install, typecheck, lint, tests and build;
+it does not enforce vulnerability severity or exception expiry.
+
+Removal verification: base `e083eda` plus this policy diff, Node 24.21.0/npm 11.19.0.
+`npm test` passed 388/388 with no skips (three obsolete audit-policy tests removed);
+`npm run typecheck`, `npm run lint` and `git diff --check` passed. Logs are retained locally
+at `/tmp/piano-remove-audit/`. Inspection confirms PR/main/merge-group coverage and workflow
+security controls are unchanged. No browser check is needed for this CI-only policy removal.
+
+## Historical enforcement and exception (superseded)
 
 `npm run audit:check` runs both audits and retains raw reports under ignored `audit-reports/`.
 The existing **Quality gates** CI job runs it after clean installation, preserving PR, main-push,
@@ -74,4 +97,5 @@ scopes under the policy; `npm test` passed 385/385 with no skips; `npm run typec
 `/tmp/piano-issue-audit/{tests,typecheck,lint}.log` (ephemeral).
 Relevant contracts: INV-09 (bounded verification claim), INV-11 (trust boundary).
 
-YEJ-17 remains a separate owner blocker: passing this CI job does not establish merge enforcement.
+YEJ-17 was canceled by the owner (will not implement). Passing this CI job does not establish
+merge enforcement; check Quality gates manually before merging.
