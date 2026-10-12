@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
 import { SessionHosts } from "../server/SessionHosts.ts";
@@ -46,6 +48,23 @@ test("a body outside the endpoint's Schema is answered 400 with the endpoint's m
   assert.deepEqual(await reply(await server.handle("/api/provider-login", { method: "PUT", body: JSON.stringify({ id: "a", promptId: "b", value: "x".repeat(16_385) }) })),
     { status: 400, body: { error: "Invalid sign-in request." } });
   assert.deepEqual(await reply(await post("/api/ls", "[1, 2")), { status: 400, body: { error: "Invalid request." } });
+});
+
+test("folder listing follows directory links, skips hidden/files/broken links, sorts names and preserves errors", async () => {
+  const path = join(server.root, "listing");
+  mkdirSync(path);
+  for (const name of ["zebra", "Alpha", ".hidden"]) mkdirSync(join(path, name));
+  writeFileSync(join(path, "file"), "text");
+  symlinkSync(join(path, "Alpha"), join(path, "link"));
+  symlinkSync(join(path, "missing"), join(path, "broken"));
+  const list = (path: string) => post("/api/ls", JSON.stringify({ path })).then(reply);
+  const result = await list(path);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.path, path);
+  assert.equal(result.body.parent, server.root);
+  assert.deepEqual(result.body.entries.map((entry: { name: string }) => entry.name), ["Alpha", "link", "zebra"]);
+  assert.deepEqual(await list(join(path, "missing")), { status: 400, body: { error: `No such directory: ${path}/missing` } });
+  assert.deepEqual(await list(join(path, "file")), { status: 400, body: { error: `${path}/file is a file, not a directory` } });
 });
 
 test("a result outside the response Schema is never sent", async () => {
