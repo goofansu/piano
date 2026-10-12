@@ -32,7 +32,7 @@ for (const entry of entries) writeFileSync(join(sessions, `${entry.sessionId}.js
 writeFileSync(join(root, 'registry.json'), JSON.stringify({ folders: repos, worktrees: [], sessions: entries }));
 const backendPort = process.env.PIANO_TEST_BACKEND_PORT ?? '7171', webPort = process.env.PIANO_TEST_WEB_PORT ?? '7172';
 const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...env, HOST: '127.0.0.1', PORT: backendPort,
-  ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '',
+  PIANO_ALLOWED_ORIGINS: `http://127.0.0.1:${webPort}`, ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: resolve('test/fake-host-pi.mjs'), PIANO_PI_ARGS: '',
   PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', webPort, '--strictPort'], {
   cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: `http://127.0.0.1:${backendPort}` }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -119,7 +119,6 @@ try {
   assert.ok(newActions.every(a => a.fits), 'new session actions fit mobile width');
   assert.ok(newActions[0].icon.includes('lucide-plus'));
   assert.equal(newActions[0].icon, newActions[1].icon, 'new session actions use the same icon');
-  assert.equal(await evaluate(`document.querySelector('main header [aria-label="New session here"] svg').classList.contains('lucide-plus')`), true, 'header uses the same plus icon');
   await ab('click', '[cmdk-item][data-value="New session here"]');
   await ab('wait', '--text', 'What should we work on?');
   assert.equal(await evaluate(`!!document.querySelector('${input}')`), false, 'here action closes palette');

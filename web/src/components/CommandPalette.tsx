@@ -37,6 +37,7 @@ export function CommandPalette({ state }: Props) {
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (!open) setSearch(""); }, [open]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: search changes the rendered results; reset their DOM scroll even though the effect does not read the query.
   useEffect(() => {
     if (!open) return;
     // Wait for cmdk's selection and ranked group layout before resetting each search.
@@ -47,9 +48,7 @@ export function CommandPalette({ state }: Props) {
   // the host runs these and the global commands alike.
   const { commands: sessionCommandList, run: runCommand } = useSessionCommands();
   // Every session that is not archived, including those whose folder was closed: reachable here by name.
-  const sessions = useMemo(() => recentSessions(state),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, state.session?.cwd, state.session?.sessionId, state.selecting]);
+  const sessions = useMemo(() => recentSessions(state), [state]);
   // The sidebar's View menu choices by the same names; trust is for the directory the main pane is about.
   const globalCommandList = globalCommands(state, { settingsOpen: !!settings, view });
   const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);

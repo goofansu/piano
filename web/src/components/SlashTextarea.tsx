@@ -59,6 +59,7 @@ export function SlashTextarea({ value, ref, completion, onValueChange, onKeyDown
       return rank(a) - rank(b) || a.name.localeCompare(b.name);
     }).slice(0, 50);
   const active = Math.min(selected, Math.max(0, commands.length - 1));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changing the completion position/query resets selection; arrow-key selection alone must not reset it.
   useEffect(() => setSelected(0), [position]);
   useLayoutEffect(() => {
     if (open) list.current?.children[active]?.scrollIntoView({ block: "nearest" });

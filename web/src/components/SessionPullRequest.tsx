@@ -1,6 +1,6 @@
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
 import { ArrowRightIcon, BookMarkedIcon, CheckIcon, ClockIcon, FileDiffIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -114,16 +114,20 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
   const status = pullRequest ? states[pullRequest.state] : undefined;
   const repo = pullRequest?.repo ?? (link ? new URL(link.url).pathname.split("/").slice(1, 3).join("/") : "");
   const number = pullRequest?.number ?? link?.url.split("/").pop();
+  // Opening samples the latest link and refresh function. Background observations must not
+  // restart linking, reset an edit, or trigger a refresh -> observation -> refresh loop.
+  const opened = useEffectEvent(() => {
+    if (!link) setLinking(true);
+    else void pr.refresh();
+  });
   useEffect(() => {
     if (!open) { setEditing(false); setLinking(false); }
-    else if (!link) setLinking(true);
+    else opened();
   }, [open]);
   // A discovered or manually linked PR reveals the header, not a second overlay.
-  useEffect(() => { if (open && linking && link) onOpenChange(false); }, [open, linking, link]);
+  useEffect(() => { if (open && linking && link) onOpenChange(false); }, [open, linking, link, onOpenChange]);
   // Cancel and successful discovery replace the focused form controls.
   useEffect(() => { if (open && showingDetails) closeRef.current?.focus(); }, [open, showingDetails]);
-  // Opening may refresh an existing link, but must not discover or associate one.
-  useEffect(() => { if (open && link) void pr.refresh(); }, [open]);
   const close = () => onOpenChange(false);
   const restoreFocus = (event: Event) => {
     event.preventDefault();

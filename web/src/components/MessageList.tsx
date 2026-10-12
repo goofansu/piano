@@ -42,6 +42,7 @@ export function MessageList({ messages, pending, submittedInput, tools, activity
   const stick = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
   // Keep the view pinned to the bottom unless the reader scrolled up.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these inputs change rendered transcript height; reading the DOM after each change preserves scroll pinning.
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
@@ -233,6 +234,7 @@ function UserMessage({ id, text, skill, attachments }: { id?: string; text: stri
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
   // Measure against the cap while closed; re-measure when the column resizes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: text and expansion change the measured DOM; a capped element may gain overflow without resizing.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;

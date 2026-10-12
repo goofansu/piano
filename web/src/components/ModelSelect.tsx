@@ -1,7 +1,7 @@
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EffortSelect } from "@/components/EffortSelect";
 import { IconButton } from "@/components/IconButton";
@@ -40,7 +40,7 @@ interface Props {
 export function ModelSelect({ open: controlledOpen, onOpenChange, returnFocusRef, catalog, value, onChange, effort, onEffortChange, disabled, variant = "ghost", onRefresh, isRefreshing, noDirectory }: Props) {
   const [localOpen, setLocalOpen] = useState(false);
   const open = controlledOpen ?? localOpen;
-  const setOpen = (next: boolean) => { setLocalOpen(next); onOpenChange?.(next); };
+  const setOpen = useCallback((next: boolean) => { setLocalOpen(next); onOpenChange?.(next); }, [onOpenChange]);
   const [focusModel, setFocusModel] = useState<string | null>(null);
   const effortPanel = useRef<HTMLDivElement>(null);
   const done = useRef<HTMLButtonElement>(null);
@@ -56,7 +56,7 @@ export function ModelSelect({ open: controlledOpen, onOpenChange, returnFocusRef
     const dismiss = () => setOpen(false);
     window.addEventListener("blur", dismiss);
     return () => window.removeEventListener("blur", dismiss);
-  }, [open]);
+  }, [open, setOpen]);
   const search = useRef<HTMLInputElement>(null);
   const want = value || catalog?.defaultModel || "";
   const models = catalog?.models ?? [];
@@ -73,7 +73,7 @@ export function ModelSelect({ open: controlledOpen, onOpenChange, returnFocusRef
     const first = panel?.querySelector<HTMLButtonElement>('[role="radio"]:not(:disabled)');
     (current ?? first ?? done.current)?.focus({ preventScroll: true });
     setFocusModel(null);
-  }, [open, focusModel, want, effort]);
+  }, [open, focusModel, want]);
   const [saving, setSaving] = useState(false);
   const isDefault = !!want && want === catalog?.defaultModel && effort === catalog.defaultThinkingLevel;
   // Pi owns the saved defaults; its catalog invalidation updates every picker's default.
