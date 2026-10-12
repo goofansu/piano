@@ -18,7 +18,7 @@ import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { saveDefaults } from "@/lib/api";
-import { levelsFor } from "@/lib/modelChoice";
+import { modelPickerView } from "@/lib/modelPicker";
 import { picker } from "@/lib/styles";
 
 interface Props {
@@ -89,16 +89,19 @@ export function ModelSelect({
     return () => window.removeEventListener("blur", dismiss);
   }, [open, setOpen]);
   const search = useRef<HTMLInputElement>(null);
-  const want = value || catalog?.defaultModel || "";
-  const models = catalog?.models ?? [];
-  // Literal matching avoids unrelated fuzzy hits and preserves catalog order.
-  const needle = query.trim().toLowerCase();
-  const visibleModels = needle
-    ? models.filter((m) =>
-        [m.ref, m.id, m.provider, m.name ?? ""].some((text) => text.toLowerCase().includes(needle)),
-      )
-    : models;
-  const waitingForModel = focusModel !== null && focusModel !== want;
+  const [saving, setSaving] = useState(false);
+  const view = modelPickerView({
+    catalog,
+    value,
+    effort,
+    query,
+    disabled: !!disabled,
+    canRefresh: !!onRefresh,
+    noDirectory: !!noDirectory,
+    chosen: focusModel,
+    saving,
+  });
+  const want = view.shown;
   useEffect(() => {
     if (!open) {
       setFocusModel(null);
@@ -115,9 +118,6 @@ export function ModelSelect({
     (current ?? first ?? done.current)?.focus({ preventScroll: true });
     setFocusModel(null);
   }, [open, focusModel, want]);
-  const [saving, setSaving] = useState(false);
-  const isDefault =
-    !!want && want === catalog?.defaultModel && effort === catalog.defaultThinkingLevel;
   // Pi owns the saved defaults; its catalog invalidation updates every picker's default.
   const saveDefault = async () => {
     setSaving(true);
@@ -130,15 +130,6 @@ export function ModelSelect({
       setSaving(false);
     }
   };
-  const label = !catalog
-    ? noDirectory
-      ? "Model"
-      : "Loading models"
-    : catalog.error
-      ? "No models"
-      : want
-        ? want.split("/").pop()
-        : "Model";
 
   const item = (m: ModelChoice) => (
     <CommandItem
@@ -171,17 +162,15 @@ export function ModelSelect({
           size={variant === "outline" ? "default" : "sm"}
           aria-haspopup="dialog"
           aria-expanded={open}
-          aria-label={`Model: ${want || label}; effort: ${effort}`}
+          aria-label={`Model: ${want || view.label}; effort: ${effort}`}
           title={want}
-          disabled={disabled || (!models.length && !onRefresh) || !catalog}
+          disabled={!view.triggerEnabled}
           className={cn(
             "min-w-0 shrink font-mono",
             variant === "outline" ? "max-w-full justify-start" : [picker, "max-w-none justify-end"],
           )}
         >
-          <span className={cn("min-w-0 truncate", !catalog && !noDirectory && "shimmer")}>
-            {label}
-          </span>
+          <span className={cn("min-w-0 truncate", view.shimmer && "shimmer")}>{view.label}</span>
           <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>
             ·
           </span>
@@ -264,10 +253,8 @@ export function ModelSelect({
             )}
           </PickerSearch>
           <CommandList className="max-h-[min(16rem,40dvh)]">
-            <CommandEmpty>
-              {catalog?.error ? "No models available." : "No model matches."}
-            </CommandEmpty>
-            <CommandGroup>{visibleModels.map(item)}</CommandGroup>
+            <CommandEmpty>{view.emptyText}</CommandEmpty>
+            <CommandGroup>{view.visibleModels.map(item)}</CommandGroup>
           </CommandList>
         </Command>
         <Separator />
@@ -276,20 +263,18 @@ export function ModelSelect({
             value={effort}
             onChange={onEffortChange}
             onCommit={finish}
-            levels={levelsFor(catalog, want)}
+            levels={view.levels}
             defaultLevel={catalog?.defaultThinkingLevel}
-            disabled={disabled || waitingForModel}
+            disabled={!view.effortEnabled}
           />
           <Button
             variant="outline"
             size="sm"
-            disabled={
-              disabled || waitingForModel || saving || isDefault || !want || !!catalog?.error
-            }
+            disabled={!view.canSaveDefault}
             onClick={() => void saveDefault()}
           >
             {saving && <Spinner data-icon="inline-start" />}
-            {isDefault ? "Default for new sessions" : "Use for new sessions"}
+            {view.saveLabel}
           </Button>
           <Button ref={done} variant="ghost" size="sm" onClick={finish}>
             Done

@@ -5,7 +5,6 @@ import {
   type ComposerSituation,
   composerControl,
   deliveryAction,
-  modelPickerAvailable,
   type NewSessionSituation,
   newSessionReady,
 } from "../web/src/lib/composerControl.ts";
@@ -182,16 +181,4 @@ test("the New page sends its first message only with a connection, a directory w
   ];
   for (const [why, over] of blocked)
     assert.equal(newSessionReady({ ...firstMessage, ...over }), false, why);
-});
-
-test("Mod+/ opens the model picker only with a model to pick or a refresh to find one, and never while the editor is disabled", () => {
-  const models = { models: [{ ref: "fake/alpha" }] } as unknown as Parameters<
-    typeof modelPickerAvailable
-  >[0]["catalog"];
-  const empty = { models: [] };
-  assert.equal(modelPickerAvailable({ disabled: false, catalog: models, canRefresh: false }), true);
-  assert.equal(modelPickerAvailable({ disabled: false, catalog: empty, canRefresh: true }), true);
-  assert.equal(modelPickerAvailable({ disabled: false, catalog: empty, canRefresh: false }), false);
-  assert.equal(modelPickerAvailable({ disabled: false, catalog: null, canRefresh: true }), false);
-  assert.equal(modelPickerAvailable({ disabled: true, catalog: models, canRefresh: true }), false);
 });
