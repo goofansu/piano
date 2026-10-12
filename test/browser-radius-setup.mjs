@@ -147,7 +147,11 @@ const palette = async (name) => {
 const scroller = `document.querySelector('#settings-providers').parentElement`;
 const openRadius = async () => {
   await button("Providers");
-  await ab("wait", "--text", "Radius account");
+  await ab(
+    "wait",
+    "--fn",
+    `!!document.querySelector('[aria-label="Sign in to Radius"], [aria-label="Sign out of Radius"]')`,
+  );
   if ((await evaluate(toolsState)) !== "open") await ab("click", tools);
   await ab("wait", "--text", "Radius MCP");
 };
@@ -550,6 +554,20 @@ try {
   );
   assert.equal(await evaluate(toolsState), "open");
   await capture("15-mobile-deep-link");
+  // Both groups have peer headings; Radius carries its brand once, on the heading.
+  assert.equal(
+    await evaluate(`document.querySelector('#settings-model-providers-title').textContent`),
+    "Model providers",
+  );
+  assert.equal(
+    await evaluate(`document.querySelector('#settings-radius-title use').getAttribute('href')`),
+    "/provider-logos/radius.svg#logo",
+  );
+  await ab("set", "viewport", "1280", "1100");
+  await ab("click", tools);
+  await ab("wait", "--fn", `${toolsState} === 'closed'`);
+  await ab("eval", `${scroller}.scrollTop = 0`);
+  await capture("16-provider-section-headings");
   assert.equal(await ab("errors"), "");
   writeFileSync(join(evidence, "observed-config.json"), JSON.stringify(config, null, 2));
   writeFileSync(join(evidence, "installer-argv.jsonl"), readFileSync(audit));

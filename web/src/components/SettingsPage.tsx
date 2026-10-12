@@ -216,80 +216,92 @@ function ProvidersSettings({
         </>
       }
     >
-      {error ? (
-        <SettingsAlert title="Could not load providers" icon={<AlertCircleIcon />}>
-          <p>Check your connection and try again.</p>
-          <Button variant="outline" size="sm" onClick={() => void observed.refresh()}>
-            Retry
-          </Button>
-        </SettingsAlert>
-      ) : !providers ? (
-        <SettingsSkeleton label="Loading providers…" className="flex flex-col gap-2">
-          {[0, 1, 2].map((row) => (
-            <Skeleton key={row} className="h-16 w-full" />
-          ))}
-        </SettingsSkeleton>
-      ) : providers.length === 0 ? (
-        // Radius alone is already covered by its own section below; only a catalog with nothing
-        // in it needs explaining.
-        catalogEmpty && (
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <PlugIcon />
-              </EmptyMedia>
-              <EmptyTitle>No OAuth providers available</EmptyTitle>
-              <EmptyDescription>Providers supported by Pi will appear here.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )
-      ) : (
-        <ItemGroup className="gap-2">
-          {providers.map((provider) => (
-            <Item key={provider.id} role="listitem" variant="outline" className="flex-nowrap">
-              {Object.hasOwn(PROVIDER_LOGOS, provider.id) && PROVIDER_LOGOS[provider.id] && (
-                <ItemMedia variant="icon">
-                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <use href={`/provider-logos/${PROVIDER_LOGOS[provider.id]}.svg#logo`} />
-                  </svg>
-                </ItemMedia>
-              )}
-              <ItemContent className="min-w-0">
-                <ItemTitle>
-                  {provider.name}
-                  {provider.signedIn && (
-                    <>
-                      <CheckCircle2Icon className="size-3.5 text-brand" aria-hidden />
-                      <span className="sr-only">(Signed in)</span>
-                    </>
-                  )}
-                </ItemTitle>
-              </ItemContent>
-              <ItemActions className="shrink-0">
-                <Button
-                  variant={provider.signedIn ? "ghost" : "default"}
-                  size="sm"
-                  className={provider.signedIn ? "text-muted-foreground" : undefined}
-                  disabled={!!signingOut}
-                  aria-label={`${provider.signedIn ? "Sign out of" : "Sign in to"} ${provider.name}`}
-                  onClick={() => {
-                    if (provider.signedIn) actions.confirm(provider);
-                    else actions.openSignIn(provider.id);
-                  }}
-                >
-                  {signingOut === provider.id
-                    ? "Signing out…"
-                    : provider.signedIn
-                      ? "Sign out"
-                      : "Sign in"}
+      <div className="flex flex-col gap-8">
+        {(!providers || providers.length > 0 || catalogEmpty || error) && (
+          <section aria-labelledby="settings-model-providers-title" className="flex flex-col gap-3">
+            <h2
+              id="settings-model-providers-title"
+              className="flex min-h-8 items-center text-lg font-semibold"
+            >
+              Model providers
+            </h2>
+            {error ? (
+              <SettingsAlert title="Could not load providers" icon={<AlertCircleIcon />}>
+                <p>Check your connection and try again.</p>
+                <Button variant="outline" size="sm" onClick={() => void observed.refresh()}>
+                  Retry
                 </Button>
-              </ItemActions>
-            </Item>
-          ))}
-        </ItemGroup>
-      )}
-      {/* Radius is reached last, so it waits for the list above to take its height before scrolling. */}
-      <RadiusSection reveal={revealRadius} listed={!!providers || !!error} />
+              </SettingsAlert>
+            ) : !providers ? (
+              <SettingsSkeleton label="Loading providers…" className="flex flex-col gap-2">
+                {[0, 1, 2].map((row) => (
+                  <Skeleton key={row} className="h-16 w-full" />
+                ))}
+              </SettingsSkeleton>
+            ) : providers.length === 0 ? (
+              // Radius alone is already covered by its own section below; only a catalog with nothing
+              // in it needs explaining.
+              catalogEmpty && (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <PlugIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>No OAuth providers available</EmptyTitle>
+                    <EmptyDescription>Providers supported by Pi will appear here.</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )
+            ) : (
+              <ItemGroup className="gap-2">
+                {providers.map((provider) => (
+                  <Item key={provider.id} role="listitem" variant="outline" className="flex-nowrap">
+                    {Object.hasOwn(PROVIDER_LOGOS, provider.id) && PROVIDER_LOGOS[provider.id] && (
+                      <ItemMedia variant="icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <use href={`/provider-logos/${PROVIDER_LOGOS[provider.id]}.svg#logo`} />
+                        </svg>
+                      </ItemMedia>
+                    )}
+                    <ItemContent className="min-w-0">
+                      <ItemTitle>
+                        {provider.name}
+                        {provider.signedIn && (
+                          <>
+                            <CheckCircle2Icon className="size-3.5 text-brand" aria-hidden />
+                            <span className="sr-only">(Signed in)</span>
+                          </>
+                        )}
+                      </ItemTitle>
+                    </ItemContent>
+                    <ItemActions className="shrink-0">
+                      <Button
+                        variant={provider.signedIn ? "ghost" : "default"}
+                        size="sm"
+                        className={provider.signedIn ? "text-muted-foreground" : undefined}
+                        disabled={!!signingOut}
+                        aria-label={`${provider.signedIn ? "Sign out of" : "Sign in to"} ${provider.name}`}
+                        onClick={() => {
+                          if (provider.signedIn) actions.confirm(provider);
+                          else actions.openSignIn(provider.id);
+                        }}
+                      >
+                        {signingOut === provider.id
+                          ? "Signing out…"
+                          : provider.signedIn
+                            ? "Sign out"
+                            : "Sign in"}
+                      </Button>
+                    </ItemActions>
+                  </Item>
+                ))}
+              </ItemGroup>
+            )}
+          </section>
+        )}
+        {/* Radius is reached last, so it waits for the list above to take its height before scrolling. */}
+        <RadiusSection reveal={revealRadius} listed={!!providers || !!error} />
+      </div>
     </SettingsSectionFrame>
   );
 }

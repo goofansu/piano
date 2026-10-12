@@ -6,7 +6,6 @@ import {
   ExternalLinkIcon,
   GlobeIcon,
   RefreshCwIcon,
-  UserRoundIcon,
   WrenchIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -191,7 +190,13 @@ export function RadiusSection({
       className="flex scroll-mt-4 flex-col gap-3"
     >
       <div className="flex min-h-8 items-center gap-2">
-        <h2 id="settings-radius-title" className="min-w-0 flex-1 text-sm font-medium">
+        <h2
+          id="settings-radius-title"
+          className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold"
+        >
+          <svg className="size-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <use href="/provider-logos/radius.svg#logo" />
+          </svg>
           Radius
         </h2>
         <IconButton
@@ -233,23 +238,20 @@ export function RadiusSection({
       ) : (
         <>
           <Item variant="outline" className="rounded-xl px-4 sm:px-5">
-            <ItemMedia variant="icon">
-              <UserRoundIcon />
-            </ItemMedia>
             <ItemContent className="min-w-0">
               <ItemTitle>
-                Radius account
+                Account
                 <ReadyMark ready={signedIn} label="Signed in" />
               </ItemTitle>
-              <ItemDescription className="line-clamp-none">
-                {!radius
-                  ? "Radius sign-in is unavailable in this Pi installation."
-                  : signedIn
-                    ? "Signed in. You stay signed in until you sign out."
+              {!signedIn && (
+                <ItemDescription className="line-clamp-none">
+                  {!radius
+                    ? "Radius sign-in is unavailable in this Pi installation."
                     : "Sign in to set up Radius tools and web search."}
-              </ItemDescription>
+                </ItemDescription>
+              )}
             </ItemContent>
-            <ItemActions className="max-sm:basis-full max-sm:pl-12">
+            <ItemActions className="max-sm:basis-full">
               {signedIn ? (
                 <Button
                   variant="ghost"
