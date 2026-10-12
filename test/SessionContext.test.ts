@@ -76,7 +76,8 @@ test("a worktree session reads its folder, worktree, branch, project and workspa
   assert.equal(ctx.title, "Registry title", "an unnamed Pi session shows its registry title");
   assert.equal(
     sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).worktreeName,
-    "main",
+    undefined,
+    "the root checkout must not display a synthetic main branch label",
   );
   assert.equal(
     sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).title,

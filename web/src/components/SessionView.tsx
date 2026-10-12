@@ -17,6 +17,7 @@ import { useDraftStore } from "@/lib/draftStore";
 import { sessionDraftKey } from "@/lib/messageDraft";
 import { completionTarget, sessionActivity, sessionContext } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
+import { useCheckoutRefresh } from "@/lib/useCheckoutRefresh";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
@@ -40,6 +41,7 @@ export function SessionView({ state, send, onMenu, pullRequest }: Props) {
   const onPullRequestOpenChange = (open: boolean) => (open ? openPanel("pr") : closePanel());
   const [display] = useSessionDisplay();
   const t = state.session;
+  useCheckoutRefresh(state, send);
   // The transcript looks executions up by tool call ID.
   const tools = useMemo(
     () => Object.fromEntries((t?.tools ?? []).map((tool) => [tool.id, tool])),

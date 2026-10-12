@@ -157,7 +157,7 @@ export interface SessionContext {
   checkout: WorktreeView | undefined;
   /** Folder name, else the directory's last segment; Zed's `folder ⇄ worktree / ⑂ branch`. */
   folderName: string;
-  /** `main` for the folder's own checkout, else the worktree's directory name; undefined when not a known checkout. */
+  /** Linked worktree's directory name; omitted for the folder's own checkout. */
   worktreeName: string | undefined;
   /** Git's branch for the selected session's checkout, while discovery is ready. */
   branch: string | undefined;
@@ -191,7 +191,7 @@ export function sessionContext(state: AppState): SessionContext {
     folder,
     checkout,
     folderName,
-    worktreeName: checkout && (checkout.root ? "main" : worktreeName(folderName, checkout.path)),
+    worktreeName: checkout && !checkout.root ? worktreeName(folderName, checkout.path) : undefined,
     branch:
       session && folder?.discovery.status === "ready" ? (checkout?.branch ?? undefined) : undefined,
     title: session?.state.sessionName || info?.title || "Untitled",
