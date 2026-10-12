@@ -14,6 +14,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { TooltipProvider } from "@/components/PianoTooltip";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { readStorage, writeStorage } from "@/lib/storage";
+import { useSidebarSwipe } from "@/lib/useSidebarSwipe";
 
 const WIDTH = { min: 208, max: 480, default: 288, rail: 48, collapseBelow: 160 };
 const desktop = () => matchMedia("(min-width: 768px)").matches;
@@ -149,6 +150,8 @@ export function AppLayout({
   content: ReactNode;
   children?: ReactNode;
 }) {
+  const openSwipe = useSidebarSwipe("open", layout.show);
+  const closeSwipe = useSidebarSwipe("close", layout.closeMobile);
   return (
     <SidebarProvider
       open={!layout.collapsed}
@@ -214,6 +217,7 @@ export function AppLayout({
           }}
         >
           <SheetContent
+            {...closeSwipe}
             side="left"
             className="h-dvh w-full border-0 bg-surface-0 p-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:max-w-none"
             showCloseButton={false}
@@ -241,6 +245,7 @@ export function AppLayout({
         </Sheet>
         {/* A viewport landmark, not a shadcn content Card with header/footer padding. */}
         <main
+          {...openSwipe}
           data-slot="layout-main"
           className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
         >

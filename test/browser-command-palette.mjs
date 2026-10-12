@@ -429,6 +429,59 @@ try {
   await capture("touch-sidebar");
   await ab("press", "Escape");
   await ab("wait", "--fn", `document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
+  // Synthetic touch sequences exercise the app contract, not Safari's OS-owned Back gesture.
+  const swipe = (selector, x, dx, dy = 0, fixture = "") =>
+    evaluate(`(() => {
+      const surface = document.querySelector(${JSON.stringify(selector)});
+      let target = surface;
+      const fixture = ${JSON.stringify(fixture)};
+      if (fixture) {
+        target = document.createElement(fixture === 'input' ? 'input' : 'div');
+        if (fixture === 'scroll') {
+          target.style.cssText = 'width:100px;overflow-x:auto';
+          target.innerHTML = '<div style="width:500px;height:20px"></div>';
+        }
+        surface.append(target);
+      }
+      const send = (type, px, py) => {
+        const touch = new Touch({ identifier: 1, target, clientX: px, clientY: py });
+        target.dispatchEvent(new TouchEvent(type, { bubbles: true,
+          touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] }));
+      };
+      send('touchstart', ${x}, 300);
+      send('touchmove', ${x + dx}, ${300 + dy});
+      send('touchend', ${x + dx}, ${300 + dy});
+      if (fixture) target.remove();
+      return true;
+    })()`);
+  const main = '[data-slot="layout-main"]';
+  for (const [x, dx, dy, fixture] of [
+    [5, 100, 0, ""],
+    [150, 100, 0, ""],
+    [40, 20, 0, ""],
+    [40, 100, 120, ""],
+    [40, 100, 0, "scroll"],
+    [40, 100, 0, "input"],
+  ]) {
+    await swipe(main, x, dx, dy, fixture);
+    assert.equal(
+      await evaluate(`!!document.querySelector('[data-slot="sheet-content"][data-state="open"]')`),
+      false,
+    );
+  }
+  await swipe(main, 40, 100);
+  await ab("wait", '[data-slot="sheet-content"][data-state="open"]');
+  await capture("swipe-open");
+  await swipe('[data-slot="sheet-content"]', 250, -100);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="sheet-content"]')`);
+  await capture("swipe-closed");
+  await ab("set", "viewport", "1200", "844");
+  await swipe(main, 40, 100);
+  assert.equal(await evaluate(`!!document.querySelector('[data-slot="sheet-content"]')`), false);
+  await ab("set", "viewport", "390", "844");
+  console.log(
+    "PASS: sidebar swipes open/close; edge, middle, short, vertical, horizontal scroller, input and desktop gestures ignored",
+  );
   await ab("set", "media", "light", "reduced-motion");
   await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
   await ab("wait", '[data-slot="sheet-content"]');
