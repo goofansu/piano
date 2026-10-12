@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { projectSessionEvent } from "../server/DisplayProjection.ts";
 import { modelChoicesOf, piCommandFor } from "../server/PiRecords.ts";
+import type { Dialog } from "../shared/wire.ts";
 
 // Expected efforts follow pi-ai getSupportedThinkingLevels: off..high unless mapped to null,
 // xhigh and max only when mapped, and off alone for a model that cannot reason.
@@ -165,4 +167,42 @@ test("INV-04: a dialog answer reaches Pi as its original value, and cancel as a 
     ),
     { command: { type: "extension_ui_response", id: "d1", confirmed: false } },
   );
+});
+
+test("INV-11: a select option shown through the published dialog answers with its original value", () => {
+  // A known secret is compiled once for the whole published dialog and again for each option
+  // when the answer is matched: both passes must apply the same rule.
+  process.env.PIANO_ROUNDTRIP_TOKEN = "roundtrip-secret-0123";
+  try {
+    const dialog: Dialog = {
+      id: "d2",
+      generation: "g",
+      receivedAt: 0,
+      deadlineAt: 1,
+      deadlineKind: "host-recovery",
+      method: "select",
+      options: [
+        "Deploy with roundtrip-secret-0123",
+        "Use Bearer abc.def",
+        "Read password: hunter2xyz",
+        "\u001b[1mBold\u001b[0m plain",
+      ],
+    };
+    const published = projectSessionEvent({ _tag: "dialog", dialog });
+    assert.ok(published._tag === "dialog");
+    const labels = published.dialog.options ?? [];
+    assert.deepEqual(labels, [
+      "Deploy with [REDACTED]",
+      "Use Bearer [REDACTED]",
+      "Read password: [REDACTED]",
+      "Bold plain",
+    ]);
+    labels.forEach((value, i) => {
+      assert.deepEqual(piCommandFor({ _tag: "answer", id: "d2", generation: "g", value }, dialog), {
+        command: { type: "extension_ui_response", id: "d2", value: dialog.options![i] },
+      });
+    });
+  } finally {
+    delete process.env.PIANO_ROUNDTRIP_TOKEN;
+  }
 });

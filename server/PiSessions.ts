@@ -45,7 +45,7 @@ import type {
   Snapshot,
 } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
+import { projectDisplay, projectSessionEvent, projectSnapshot } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import {
@@ -292,7 +292,7 @@ const openSession = (spec: PiSessionSpec) =>
     const publish = Effect.fnUntraced(function* (event: SessionEvent) {
       yield* Ref.update(snapshotRef, (snapshot) => applySessionEvent(snapshot, event));
       sequence++;
-      const frame: SessionFrame = { ...projectDisplay(event), cursor: cursor() };
+      const frame: SessionFrame = { ...projectSessionEvent(event), cursor: cursor() };
       for (const subscriber of subscribers) yield* subscriber.offer(frame);
     });
     const lock = yield* Semaphore.make(1);
@@ -722,7 +722,7 @@ const openSession = (spec: PiSessionSpec) =>
           };
           return Stream.make<[SessionFrame]>({
             _tag: "snapshot",
-            snapshot: projectDisplay(snapshot),
+            snapshot: projectSnapshot(snapshot),
             cursor: cursor(),
           }).pipe(
             Stream.concat(snapshot.state.closure ? Stream.empty : sub.stream),

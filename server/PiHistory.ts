@@ -101,8 +101,9 @@ const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
         : context.model
           ? { provider: context.model.provider, id: context.model.modelId }
           : undefined;
-    return projectDisplay({
-      state: {
+    // serializeMessages projects the transcript where Pi content enters; the state is read here.
+    return {
+      state: projectDisplay({
         ...stateFactsOf({
           sessionId,
           sessionFile: path,
@@ -112,10 +113,10 @@ const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
           isStreaming: false,
         }),
         subagents: new RunLedger().add(sm.getEntries()).usage,
-      },
+      }),
       messages: serializeMessages(context.messages as RawMessage[]),
       dialogs: [],
-    });
+    };
   }).pipe(
     Effect.orElseSucceed(() => ({
       state: {
