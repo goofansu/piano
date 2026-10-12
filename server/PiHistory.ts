@@ -15,7 +15,7 @@ import type { Snapshot } from "../shared/wire.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { directoryPath, sessionDirFor } from "./PiEnv.ts";
 import { type RawMessage, serializeMessages, stateFactsOf } from "./PiRecords.ts";
-import { RunLedger } from "./RunLedger.ts";
+import { RunLedger } from "./Subagents.ts";
 
 /** Where a session's Pi history is, across the spellings of its checkout. */
 export type HistoryLocation =
