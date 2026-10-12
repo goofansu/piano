@@ -87,6 +87,37 @@ sudo systemctl restart piano.service      # explicit deploy: cuts off active Pi 
 
 ## Private access
 
+### Supported use case and review baseline
+
+Piano is a trusted single-user developer tool, used either locally on loopback or behind
+exe.dev private authenticated access. The owner confirmed this intended use on 2026-10-11.
+Public unauthenticated hosting, untrusted users and multi-user authorization are out of scope.
+This is the existing ADR 0001 decision 8 / INV-11 model, not a new authentication design.
+
+For future agent reviews:
+
+- Missing built-in application authentication is an accepted property of this deployment model,
+  not by itself a new vulnerability or a reason to propose a multi-user authentication system.
+- Keep the backend and TCP forwarder on loopback. Private proxy access must cover HTTP and
+  WebSockets, with no unauthenticated alternate route to the backend.
+- Distinguish the owner's stated use case from independently observed deployment configuration.
+  An inability to inspect exe.dev sharing settings is a verification limitation, not evidence of
+  exposure. Reuse YEJ-5 for that outstanding verification rather than opening duplicate findings.
+- Browser-origin protection is a separate defense: private authentication does not establish
+  that a request originated from Piano. YEJ-12 tracks that work; this accepted use case does not
+  waive origin validation or establish that it is already implemented.
+- Reopen the access-boundary question when there is concrete evidence of public access, changed
+  sharing/listener configuration, or a requirement to support untrusted users—not merely because
+  the application has no login screen. Do not suppress genuinely new exposure evidence.
+
+The source and listener inspection for YEJ-5 at `4ceeee79727768a2b511ff778aaed5168dd8b04c`
+on 2026-10-11 found loopback listeners on ports 8000/8001 and a TCP forwarder to 8001.
+Authoritative sharing inspection failed SSH authentication; a cookie-free HTTPS probe could not
+connect. Neither result proves external access is denied. The actual external HTTP/WebSocket
+access boundary remains unverified by that inspection; no exploit or exposure was demonstrated.
+
+### Access requirements
+
 Piano has no application authentication and can execute commands as the owner. The
 TCP proxy adds no authentication or Host/origin allowlist; private authenticated
 exe.dev access must protect both HTTP and WebSocket routes. Unlike the old Vite
