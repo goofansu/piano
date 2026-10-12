@@ -39,9 +39,13 @@ export interface ClientOptions {
   lastDirectory?: LastDirectory;
 }
 
+/** Live projections may share a paint; input and connection changes must render immediately. */
+export type ClientUpdate = "live" | "immediate";
+
 export interface Client {
   getState: () => AppState;
-  subscribe: (listener: () => void) => () => void;
+  /** Called synchronously after projection; render subscribers may defer only live updates. */
+  subscribe: (listener: (update: ClientUpdate) => void) => () => void;
   /** Opens the connection; the returned function closes it. */
   start: () => () => void;
   /** Sends a command, correlating `select`, `create_session` and `act` with the current attachment. */
@@ -69,7 +73,7 @@ export function createClient({
   let connection: Connection | null = null;
   /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
-  const listeners = new Set<() => void>();
+  const listeners = new Set<(update: ClientUpdate) => void>();
 
   /**
    * One models and trust request per focused directory, catalog revision and connection: a
@@ -95,7 +99,7 @@ export function createClient({
     if (next === state) return;
     state = next;
     askAboutFocus();
-    for (const listener of listeners) listener();
+    for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
   };
 
   const send = (m: ClientCommand) => {

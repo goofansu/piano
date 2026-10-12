@@ -56,6 +56,7 @@ const backend = spawn(process.execPath, ["server/main.ts"], {
     HOME: root,
     HOST: "127.0.0.1",
     PORT: String(port),
+    PIANO_ALLOWED_ORIGINS: appUrl,
     ...registryEnv(join(root, "registry.json")),
     PIANO_PI_CLI: resolve("test/fake-host-pi.mjs"),
     PIANO_PI_ARGS: "",
@@ -90,10 +91,10 @@ const init = join(root, "observe.js");
 // makes the snapshot wait observable without changing the real reconnect path.
 writeFileSync(
   init,
-  `window.pageToken=crypto.randomUUID();window.controlConnections=0;window.held=[];window.sent=[];
+  `window.pageToken=crypto.randomUUID();window.controlConnections=0;window.held=[];window.sent=[];window.controlCloses=[];
 const Native=WebSocket;
 window.WebSocket=class extends Native {
- constructor(...args){super(...args);if(this.url.endsWith('/ws')){window.control=this;window.controlConnections++;}}
+ constructor(...args){super(...args);if(this.url.endsWith('/ws')){window.control=this;window.controlConnections++;this.addEventListener('close',e=>controlCloses.push({code:e.code,reason:e.reason}));}}
  set onmessage(handler){super.onmessage=e=>{if(this.url.endsWith('/ws')&&window.holdFrames){held.push(()=>handler(e));return;}handler(e);};}
  send(data){if(this.url.endsWith('/ws')){window.sent.push(JSON.parse(data));if(window.dropOutbound)return;}return super.send(data);}
 };`,
@@ -152,6 +153,31 @@ try {
   await ab("--init-script", init, "open", `${appUrl}/s/${id}`);
   await ab("wait", "--text", "Saved message 59");
   await ab("set", "viewport", "390", "844");
+  // A responsive browser must consume a live burst without rendering the whole
+  // application synchronously for every frame and overflowing server delivery.
+  const burstConnections = await evaluate("controlConnections");
+  await ab("fill", 'textarea[aria-label="Message"]', "/burst");
+  await ab("click", 'button[aria-label="Send"]');
+  await ab(
+    "wait",
+    "--fn",
+    "controlCloses.some(c=>c.code===1013)||document.body.innerText.includes('burst complete')",
+  );
+  await capture("live-burst");
+  const burst = await evaluate(`({connections:controlConnections,closes:controlCloses,
+    warning:document.body.innerText.includes('Connection fell behind'),
+    complete:document.body.innerText.includes('burst complete'),
+    finalStatus:document.body.innerText.includes('burst 600')})`);
+  writeFileSync(join(evidence, "burst.json"), JSON.stringify(burst, null, 2));
+  assert.equal(burst.warning, false, "a responsive browser must not warn that it fell behind");
+  assert.equal(
+    burst.closes.some((c) => c.code === 1013),
+    false,
+    "live delivery must not overflow",
+  );
+  assert.equal(burst.connections, burstConnections, "the burst needs no reconnect");
+  assert.equal(burst.complete, true, "the final live notice is delivered");
+  assert.equal(burst.finalStatus, true, "the latest streamed state is rendered");
   await ab("fill", 'textarea[aria-label="Message"]', "/partial");
   await ab("click", 'button[aria-label="Send"]');
   await ab("wait", "--text", "Partial reconnect-example");
@@ -161,7 +187,7 @@ try {
   );
   const before = await evaluate(observe);
   assert.equal(before.scrollTop, 150);
-  assert.equal(before.prompts, 1);
+  assert.equal(before.prompts, 2);
   // Keep incoming frames working while the outgoing path silently fails.
   await evaluate("window.dropOutbound=true;true");
   await ab(
@@ -214,7 +240,7 @@ try {
   assert.equal(during.disabled, true, "wait for attachment before enabling actions");
   assert.equal(after.disabled, false);
   console.log(
-    "PASS: half-open outgoing connections show Reconnecting and disable actions; recovery keeps the conversation, partial reply, draft and scroll position; actions wait for the snapshot; no prompt replay",
+    "PASS: a live burst reaches its final state and notice without overflow or reconnect; half-open outgoing connections show Reconnecting and disable actions; recovery keeps the conversation, partial reply, draft and scroll position; actions wait for the snapshot; no prompt replay",
   );
 } finally {
   try {

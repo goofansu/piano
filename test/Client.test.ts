@@ -54,6 +54,35 @@ function harness() {
 
 const act = { _tag: "act", action: { _tag: "abort" } } as const;
 
+test("live state is current before paint, while typing and disconnect notify renderers immediately", () => {
+  const h = harness();
+  h.status(true);
+  let rendered = h.client.getState();
+  let paint: (() => void) | undefined;
+  const unsubscribe = h.client.subscribe((update) => {
+    const render = () => {
+      rendered = h.client.getState();
+    };
+    if (update === "live") paint = render;
+    else render();
+  });
+  h.server({ _tag: "hosts", hosts: [{ cwd: "/scratch", sessionId: "a", streaming: true }] });
+  assert.equal(rendered.hosts.length, 0, "rendering a live update may wait for a paint");
+  assert.equal(h.client.getState().hosts.length, 1, "projection never waits for a paint");
+  h.client.dispatch({ type: "draft_changed", key: NEW_SESSION_DRAFT, text: "typing" });
+  assert.equal(rendered, h.client.getState(), "controlled input must not wait for a paint");
+  h.server({ _tag: "hosts", hosts: [] });
+  h.status(false);
+  assert.equal(
+    rendered.connected,
+    false,
+    "disconnect disables controls without waiting for a paint",
+  );
+  paint?.();
+  assert.equal(rendered, h.client.getState(), "a later paint cannot restore stale state");
+  unsubscribe();
+});
+
 test("INV-02/05: a dropped connection re-selects the session exactly once and keeps its transcript", () => {
   const h = harness();
   h.status(true);
