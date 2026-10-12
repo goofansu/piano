@@ -1,4 +1,3 @@
-import type { ClientCommand as ClientMessage } from "@shared/wire";
 import { cn } from "cn";
 import {
   ArrowUpIcon,
@@ -46,11 +45,16 @@ import {
 import { completionTarget, folderFor } from "@/lib/sessionContext";
 import { composerAction, composerInput, picker } from "@/lib/styles";
 import { useModelChoice } from "@/lib/useModelChoice";
+import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
+import type { WorktreeOperationOptions } from "@/lib/worktreeOperation";
 import type { AppState } from "@/store";
+
+type WorktreeClient = WorktreeOperationOptions["client"];
 
 interface Props {
   state: AppState;
-  send: (m: ClientMessage) => void;
+  /** Sends commands; the worktree picker also hears its own receipts through it. */
+  client: WorktreeClient;
   /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
   chooseDirectory: (cwd: string) => void;
   /** The project a session started here joins; the page is that project's home. */
@@ -64,12 +68,13 @@ const NEW = { kind: "new" } as const;
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
 export function NewSession({
   state,
-  send,
+  client,
   chooseDirectory,
   projectId,
   onProjectChange,
   onMenu,
 }: Props) {
+  const { send } = client;
   const { run } = useCommands();
   // The client starts a fresh page in the last directory used, else the first folder; opened for a project, it starts without one.
   const cwd = state.view.kind === "new" ? (state.view.cwd ?? "") : "";
@@ -142,7 +147,7 @@ export function NewSession({
                   value={cwd}
                   onChange={chooseDirectory}
                   onBrowse={() => setPickerOpen(true)}
-                  send={send}
+                  client={client}
                 />
               </div>
               {trust && <TrustToggle command={trust} run={run} />}
@@ -365,17 +370,23 @@ function DirectorySelect({
   value,
   onChange,
   onBrowse,
-  send,
+  client,
 }: {
   state: AppState;
   value: string;
   onChange: (cwd: string) => void;
   onBrowse: () => void;
-  send: (m: ClientMessage) => void;
+  client: WorktreeClient;
 }) {
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
-  const [wtPending, setWtPending] = useState(false);
+  const worktrees = useWorktreeOperation(client, (cwd) => {
+    onChange(cwd);
+    setOpen(false);
+    setWtOpen(false);
+  });
+  // A pending worktree operation keeps the picker open until its receipt, timeout or disconnect.
+  const wtPending = worktrees.request.status === "pending";
   const search = useRef<HTMLInputElement>(null);
   const known = state.folders.flatMap((p) => p.worktrees.map((w) => ({ folder: p.name, ...w })));
   const current = known.find((k) => k.path === value);
@@ -420,20 +431,7 @@ function DirectorySelect({
         </Button>
       </PopoverTrigger>
       {wtOpen ? (
-        <WorktreesPopover
-          onOpenChange={(next) => {
-            setOpen(next);
-            if (!next) {
-              setWtOpen(false);
-              setWtPending(false);
-            }
-          }}
-          onPendingChange={setWtPending}
-          state={state}
-          currentCwd={value}
-          send={send}
-          onSelect={onChange}
-        />
+        <WorktreesPopover operation={worktrees} state={state} currentCwd={value} />
       ) : (
         <PickerContent aria-label="Choose a folder" searchRef={search}>
           <Command>
@@ -476,6 +474,7 @@ function DirectorySelect({
                     value="__worktree"
                     onSelect={() => {
                       setWtOpen(true);
+                      worktrees.open(folderFor(state, value)?.path);
                     }}
                   >
                     <GitBranchPlusIcon /> Worktrees
