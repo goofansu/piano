@@ -29,6 +29,11 @@ let delayedPrompt;
 let heldState;
 let heldClear;
 let holdNextState = false;
+const capacityHeld = [];
+let capacityRound = 0;
+function releaseCapacity() {
+  for (const cmd of capacityHeld.splice(0)) respond(cmd, { disposition: "handled" });
+}
 let liveContext;
 let liveStage = 0;
 const steering = [];
@@ -77,6 +82,14 @@ const respond = (cmd, data, error) => out({ id: cmd.id, type: "response", comman
 function handle(cmd) {
   switch (cmd.type) {
     case "get_state":
+      if (sessionId === "capacity-records") {
+        for (let n = 0; n < 257; n++) out({ type: "future_event", n });
+        return; // No readiness response: nothing consumes records until open completes.
+      }
+      if (sessionId === "capacity-record-bytes") {
+        for (let n = 0; n < 3; n++) out({ type: "future_event", text: "x".repeat(12 * 1024 * 1024) });
+        return;
+      }
       if (args.includes("--silence-readiness")) return; // alive, but never ready
       if (holdNextState) {
         holdNextState = false; heldState = { cmd, data: state() };
@@ -113,6 +126,7 @@ function handle(cmd) {
     case "set_model": model = { provider: cmd.provider, id: cmd.modelId }; return respond(cmd, model);
     case "set_thinking_level": thinkingLevel = cmd.level; out({ type: "thinking_level_changed", level: cmd.level }); return respond(cmd, undefined);
     case "abort":
+      releaseCapacity();
       if (sessionId === "stop-abort-exit") return process.exit(3);
       if (sessionId === "stop-abort-failure") return respond(cmd, undefined, "fixture abort failed");
       if (sessionId.startsWith("stop-") && (steering.length || followUp.length)) return respond(cmd, undefined, "abort before clear");
@@ -138,6 +152,11 @@ function handle(cmd) {
       return respond(cmd, { disposition: "queued" });
     }
     case "extension_ui_response": {
+      if (cmd.id.startsWith("capacity-")) {
+        releaseCapacity(); streaming = false;
+        out({ type: "extension_ui_request", id: "capacity-answered", method: "notify", message: "Capacity dialog answered" });
+        settle(); return;
+      }
       if (liveStage === 1) {
         liveStage = 2;
         liveContext = { tokens: null, contextWindow: 200000, percent: null };
@@ -156,6 +175,23 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
+      if (cmd.message === "capacity hold") {
+        if (capacityHeld.length === 0) out({ type: "extension_ui_request", id: `capacity-${++capacityRound}`, method: "input", title: "Release capacity" });
+        capacityHeld.push(cmd); streaming = true;
+        out({ type: "extension_ui_request", id: "capacity-count", method: "notify", message: `Capacity held: ${capacityHeld.length}` });
+        return;
+      }
+      if (cmd.message === "capacity oversized-line") {
+        process.stdout.write("x".repeat(32 * 1024 * 1024 + 1));
+        return; // Intentionally no newline and no response.
+      }
+      if (cmd.message === "capacity fragmented") {
+        const bytes = Buffer.from(JSON.stringify({ type: "extension_ui_request", id: "unicode", method: "notify", message: "Fragmented € record" }) + "\n");
+        const split = bytes.indexOf(Buffer.from("€")) + 1;
+        process.stdout.write(bytes.subarray(0, split));
+        setImmediate(() => { process.stdout.write(bytes.subarray(split)); respond(cmd, { disposition: "handled" }); });
+        return;
+      }
       if (cmd.message.startsWith("protocol raw:")) {
         process.stdout.write(`${cmd.message.slice("protocol raw:".length)}\n`);
         return;

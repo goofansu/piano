@@ -81,6 +81,7 @@ logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credent
 - `PIANO_DEV_BACKEND`: Vite proxy target; defaults to `http://127.0.0.1:7070`.
 - `PIANO_PI_CLI`: override the bundled Pi CLI entry path.
 - `PIANO_PI_ARGS`: extra Pi arguments, such as `-e ./ext.ts`.
+- Incoming WebSocket messages/RPC lines and pending work have [bounded input limits](docs/runtime-input-limits.md), with reserved capacity for answers and cancellation. Overload is rejected, never queued for automatic retry.
 - `PIANO_IDLE_MINUTES`: idle time before retiring a session's Pi process; defaults to `30`, or `0` to disable.
 
 ### Browser-origin boundary

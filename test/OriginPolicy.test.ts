@@ -6,6 +6,8 @@ import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { NodeWS } from "@effect/platform-node/NodeSocket";
+import { inboundLimits } from "../server/InboundCapacity.ts";
 import { configuredOrigins } from "../server/OriginPolicy.ts";
 
 test("origin configuration fails closed and does not implicitly extend explicit origins", () => {
@@ -74,6 +76,19 @@ test("INV-11: real HTTP and WebSocket boundaries reject untrusted origins before
       assert.equal(await handshake(origin), 101);
     }
     assert.equal((await fetch(`${base}/api/folders`)).status, 200, "safe reads need no Origin");
+    // The actual ws parser must reject fragmented messages before JSON/schema
+    // decoding, not just check individual fragments after they have accumulated.
+    for (const fragmented of [false, true]) {
+      const ws = new NodeWS.WebSocket(`${base.replace('http', 'ws')}/ws`, { origin: base });
+      await once(ws, "open");
+      const closed = once(ws, "close");
+      if (fragmented) {
+        const half = Buffer.alloc(inboundLimits.frameBytes / 2, 120);
+        ws.send(half, { fin: false }); ws.send(half, { fin: false }); ws.send("x", { fin: true });
+      } else ws.send(Buffer.alloc(inboundLimits.frameBytes + 1, 120));
+      const [code] = await closed;
+      assert.equal(code, 1009, `oversized ${fragmented ? 'fragmented' : 'single'} input closes with 1009`);
+    }
   } finally {
     const exited = once(child, "exit");
     child.kill("SIGTERM");

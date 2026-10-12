@@ -9,6 +9,7 @@ import { type ClientMessage, decodeClientMessage, encodeServerMessage, type Serv
 import { makeSocketDelivery } from "./BoundedDelivery.ts";
 import { makeClientDispatch } from "./ClientDispatch.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
+import { inboundLimits } from "./InboundCapacity.ts";
 
 export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket: Socket.Socket) {
   // The reader performs the upgrade handshake; the writer waits on it.
@@ -26,6 +27,11 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket
   yield* Effect.gen(function* () {
     const chunks = yield* reader.pull;
     for (const chunk of chunks) {
+      const size = typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.byteLength;
+      if (size > inboundLimits.frameBytes) {
+        yield* delivery.close("Input exceeds the WebSocket message byte limit. Reduce it before reconnecting.", 1009);
+        return yield* Effect.never;
+      }
       const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
       let msg: ClientMessage;
       try {
