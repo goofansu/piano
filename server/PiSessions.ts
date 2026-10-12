@@ -2,16 +2,16 @@
  * PiSessions: one running `pi --mode rpc` child per session, behind a small
  * interface in the browser's own vocabulary (SessionEvent / SessionAction).
  *
- * Behind the seam: strict JSONL framing, request correlation, locking and
- * publication, readback scheduling, dialog deadlines and claims, abort/stop
- * orchestration, fan-out to any number of subscribers, stderr capture, exit
- * handling and orderly shutdown. PiRecords translates both ways: what each Pi
- * record and readback means, and which Pi command each action sends. The only
- * external seam is ChildProcessSpawner.
+ * Ownership behind this public seam:
+ * - PiTransport: scoped process, framing/capacity, correlation, terminal failure.
+ * - This module: generation, atomic snapshot/live publication, dialog claims,
+ *   readback freshness, session-owned actions and shutdown announcement.
+ * - PiRecords: protocol translation, not process or publication lifecycle.
+ * The external dependency seam remains ChildProcessSpawner; tests use PiSessions.
  */
 import { randomUUID } from "node:crypto";
-import { Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Schema, type Scope, Semaphore, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
+import { Cause, Clock, Context, Deferred, Effect, Fiber, Layer, Ref, type Scope, Semaphore, Stream } from "effect";
+import { ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
@@ -21,9 +21,9 @@ import type { Dialog, DialogResolution, ModelChoice, PromptSubmission, SessionAc
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
-import { PiCli } from "./PiCli.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
-import { dialogCancellation, dispositionOf, type PiCommand, PiProjector, type PiReadback, type PiRecord, type PiTranslation, piCommandFor, piReadbacks, queuedMessagesOf, type RefreshKind, sessionArgs, stateFactsOf } from "./PiRecords.ts";
+import { dialogCancellation, dispositionOf, type PiCommand, PiProjector, type PiRecord, type PiTranslation, piCommandFor, piReadbacks, queuedMessagesOf, type RefreshKind, sessionArgs, stateFactsOf } from "./PiRecords.ts";
+import { PiSessionError, PiTransport } from "./PiTransport.ts";
 import { RunLedger } from "./RunLedger.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
@@ -42,11 +42,6 @@ export interface PiSessionSpec {
   /** Seed only display statistics while Pi's authoritative readback is pending. */
   readonly lastKnownStats?: SessionStats;
 }
-
-export class PiSessionError extends Data.TaggedError("PiSessionError")<{
-  readonly reason: "spawn" | "exited" | "protocol" | "rejected" | "timeout" | "transport";
-  readonly detail: string;
-}> {}
 
 export interface PiSession {
   readonly spec: PiSessionSpec;
@@ -86,285 +81,22 @@ export class PiSessions extends Context.Service<
 const commandOf = (translation: PiTranslation): Effect.Effect<PiCommand, PiSessionError> =>
   "rejected" in translation ? Effect.fail(new PiSessionError({ reason: "rejected", detail: translation.rejected })) : Effect.succeed(translation.command);
 
-/** Host acknowledgement deadline, not a deadline for model work or extension execution. */
-export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTimeoutMs", { defaultValue: () => 30_000 });
+// Preserve the public configuration/error imports; transport details stay internal.
+export { PiRequestTimeoutMs, PiSessionError } from "./PiTransport.ts";
 
 /** Bounded recovery for dialogs whose extension-owned cancellation is invisible over RPC. */
 export const PiDialogRecoveryMs = Context.Reference<number>("piano/PiDialogRecoveryMs", { defaultValue: () => 10 * 60_000 });
-
-const encoder = new TextEncoder();
-
-// Validate only the envelope; PiRecords owns payload interpretation. Unknown
-// event types and extra fields remain forward compatible, not malformed input.
-const validEnvelope = Schema.is(Schema.Struct({ type: Schema.NonEmptyString, id: Schema.optional(Schema.String) }));
-const validResponse = Schema.is(Schema.Struct({
-  type: Schema.Literal("response"),
-  id: Schema.optional(Schema.String),
-  command: Schema.String,
-  success: Schema.Boolean,
-  data: Schema.optional(Schema.Unknown),
-  error: Schema.optional(Schema.String),
-}));
 
 /** Retained state shows nothing Pi could still continue on its own or that awaits an answer. */
 const settled = ({ state, dialogs }: Snapshot) => dialogs.length === 0 && !isWorking(state) && !state.isStopping &&
   !state.queuedMessages?.length && state.dialogResolution?.delivery !== "pending" && state.dialogResolution?.delivery !== "uncertain" &&
   state.submission?.outcome !== "submitting" && state.submission?.outcome !== "uncertain";
 
-/** A spawned Pi child with request correlation. Everything above builds on `request` and `records`. */
-interface Child {
-  readonly request: (command: Record<string, unknown>, dispatched?: Deferred.Deferred<void>) => Effect.Effect<unknown, PiSessionError>;
-  /** A readback's query, its reply decoded; a reply of the wrong shape fails as "protocol". */
-  readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
-  readonly write: (record: Record<string, unknown>) => Effect.Effect<void, PiSessionError>;
-  /** Every non-response record, in stdout order. Ends when the child exits. */
-  readonly records: Stream.Stream<{ record: PiRecord; receivedAt: number }>;
-  readonly exited: Deferred.Deferred<SessionClosure>;
-  /** Stop an unusable session and settle all transport work before killing Pi. */
-  readonly fail: (detail: string) => Effect.Effect<void>;
-  /** Includes queued records, so readbacks cannot race output not yet projected. */
-  readonly observationVersion: () => number;
-  readonly hasPendingWork: () => boolean;
-}
-
-const debug = (...a: unknown[]) => { if (process.env.PIANO_DEBUG) console.error("[PiSessions]", ...projectDisplay(a)); };
-
-const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
-  Effect.gen(function* () {
-    const cli = yield* PiCli;
-    const timeoutMs = yield* PiRequestTimeoutMs;
-    debug("spawning", cli.node, cli.cli, args);
-    const stdin = yield* Queue.dropping<{ bytes: Uint8Array; done: Deferred.Deferred<void, PiSessionError> }, Cause.Done>(inboundLimits.writes.messages + inboundLimits.control.messages);
-    const records = yield* Queue.dropping<{ record: PiRecord; receivedAt: number; bytes: number }, Cause.Done>(inboundLimits.records.messages);
-    let recordBytes = 0;
-    const requestCapacity = makeInboundCapacity(inboundLimits.requests);
-    const writeCapacity = makeInboundCapacity(inboundLimits.writes);
-    const writes = new Map<Deferred.Deferred<void, PiSessionError>, () => void>();
-    let transportError: PiSessionError | undefined;
-    const pending = new Map<string, Deferred.Deferred<unknown, PiSessionError>>();
-    const exited = yield* Deferred.make<SessionClosure>();
-    let stderr = "";
-    let closed = false;
-    let seq = 0;
-    let observationVersion = 0;
-    let uncertainMutation = false;
-    let uncertainWrite = false;
-
-    const handle = yield* ChildProcess.make(cli.node, [cli.cli, "--mode", "rpc", ...args, ...cli.extraArgs], {
-      cwd,
-      extendEnv: true,
-      // Development only: `npm run dev` (node --watch) sets WATCH_REPORT_DEPENDENCIES=1, and Pi's
-      // image-resize worker then mistakes Node's dependency-watch message for its result and
-      // reports a bogus size-limit omission. `npm start` and the hosted service never set it (INV-12).
-      env: { WATCH_REPORT_DEPENDENCIES: undefined },
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-      forceKillAfter: "1 second",
-    }).pipe(Effect.mapError((e) => new PiSessionError({ reason: "spawn", detail: String(e) })));
-    debug("spawned pid", handle.pid);
-
-    const onLine = Effect.fnUntraced(function* (line: string) {
-      const record: unknown = yield* Effect.try({
-        try: () => JSON.parse(line),
-        catch: () => new PiSessionError({ reason: "protocol", detail: "Pi protocol failure: malformed JSON on stdout." }),
-      });
-      if (!validEnvelope(record) || (record.type === "response" && !validResponse(record))) {
-        return yield* new PiSessionError({ reason: "protocol", detail: "Pi protocol failure: invalid RPC envelope on stdout." });
-      }
-      debug("record", record.type); // Never log unprojected protocol content.
-      if (record.type === "response") {
-        // Late/unmatched acknowledgements must not become session activity.
-        if (typeof record.id !== "string" || !pending.has(record.id)) return;
-        const d = pending.get(record.id) as Deferred.Deferred<unknown, PiSessionError>;
-        pending.delete(record.id);
-        if (validResponse(record)) {
-          if (record.success) yield* Deferred.succeed(d, record.data);
-          else yield* Deferred.fail(d, new PiSessionError({ reason: "rejected", detail: record.error ?? record.command }));
-        }
-        return;
-      }
-      const bytes = Buffer.byteLength(line);
-      if (recordBytes + bytes > inboundLimits.records.bytes || !Queue.offerUnsafe(records, { record, receivedAt: yield* Clock.currentTimeMillis, bytes })) {
-        return yield* new PiSessionError({ reason: "protocol", detail: "Pi output exceeded the pending record limit. Reopen history before continuing; do not automatically resend input." });
-      }
-      recordBytes += bytes;
-      observationVersion += 1;
-    });
-
-    yield* handle.stderr.pipe(
-      Stream.decodeText(),
-      Stream.runForEach((chunk) => Effect.sync(() => {
-        stderr = (stderr + chunk).slice(-8192);
-      })),
-      // Diagnostic-only stream: losing stderr does not invalidate RPC stdout.
-      Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("Pi stderr reader failed; exit diagnostics may be incomplete.")),
-      Effect.forkScoped,
-    );
-
-    const finish = (closure: SessionClosure) =>
-      Effect.gen(function* () {
-        if (closed) return;
-        closed = true;
-        const reason = closure.detail;
-        yield* Deferred.succeed(exited, closure);
-        for (const d of pending.values()) {
-          yield* Deferred.fail(d, new PiSessionError({ reason: "exited", detail: reason }));
-        }
-        pending.clear();
-        for (const [done, release] of writes) { release(); yield* Deferred.fail(done, new PiSessionError({ reason: "exited", detail: reason })); }
-        writes.clear();
-        yield* Queue.end(records);
-      });
-
-    const failOutput = Effect.fn("PiSessions.failOutput")(function* (detail: string) {
-      if (closed) return;
-      // Settle callers and publish failure before waiting for process termination.
-      // Never include raw protocol content (which may contain secrets) in diagnostics.
-      yield* finish({ _tag: "failed", detail });
-      yield* Queue.end(stdin);
-      yield* handle.kill({ forceKillAfter: "1 second" }).pipe(Effect.ignore);
-    });
-
-    // Frame bytes before decoding or parsing. A newline-free producer cannot grow
-    // splitLines' internal string without bound; multibyte UTF-8 may span chunks.
-    let partial = Buffer.alloc(0), partialLength = 0;
-    const onChunk = Effect.fnUntraced(function* (chunk: Uint8Array) {
-      let start = 0;
-      for (let end = 0; end <= chunk.length; end++) {
-        if (end < chunk.length && chunk[end] !== 10) continue;
-        const length = partialLength + end - start;
-        if (length > inboundLimits.rpcLineBytes) return yield* new PiSessionError({ reason: "protocol", detail: "Pi stdout exceeded the RPC line byte limit. Reopen history before continuing; do not automatically resend input." });
-        if (partial.length < length) {
-          const next = Buffer.allocUnsafe(Math.min(inboundLimits.rpcLineBytes, Math.max(length, partial.length * 2, 65536)));
-          partial.copy(next, 0, 0, partialLength); partial = next;
-        }
-        partial.set(chunk.subarray(start, end), partialLength);
-        partialLength = length;
-        if (end < chunk.length) {
-          yield* onLine(partial.toString("utf8", 0, partialLength));
-          partialLength = 0;
-        }
-        start = end + 1;
-      }
-    });
-    yield* handle.stdout.pipe(Stream.runForEach(onChunk),
-      Effect.andThen(Effect.suspend(() => partialLength ? onLine(partial.toString("utf8", 0, partialLength)) : Effect.void)),
-    ).pipe(
-      // Normal EOF usually precedes exitCode notification. A child that closes
-      // stdout but stays alive cannot acknowledge further commands.
-      Effect.andThen(Deferred.await(exited).pipe(
-        Effect.timeoutOption("1 second"),
-        Effect.flatMap(result => result._tag === "None" ? failOutput("Pi stdout closed while the process was still running.") : Effect.void),
-      )),
-      Effect.catchTag("PiSessionError", error => failOutput(error.detail)),
-      Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : failOutput("Pi stdout reader failed: malformed RPC output or unreadable transport. Reopen history before continuing; do not automatically resend input.")),
-      Effect.forkScoped,
-    );
-
-    yield* handle.exitCode.pipe(
-      Effect.flatMap((code) => finish({ _tag: "exited", code, detail: `Pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}` })),
-      Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : failOutput("Pi exit could not be observed. Reopen history before continuing; do not automatically resend input.")),
-      Effect.forkScoped,
-    );
-
-    // Acknowledge a write only after the sink has pulled its bytes and accepted
-    // them with backpressure. This still cannot prove Pi consumed a UI response.
-    yield* Stream.fromQueue(stdin).pipe(
-      Stream.flatMap(({ bytes, done }) => Stream.make(bytes).pipe(
-        Stream.concat(Stream.fromEffect(Effect.sync(() => { writes.get(done)?.(); writes.delete(done); }).pipe(Effect.andThen(Deferred.succeed(done, undefined)))).pipe(Stream.drain)),
-      )),
-      Stream.run(handle.stdin),
-      Effect.catchCause((cause) => Effect.gen(function* () {
-        if (Cause.hasInterruptsOnly(cause) || closed) return;
-        transportError = new PiSessionError({ reason: "transport", detail: "Pi stdin failed; delivery is uncertain. Reopen history before continuing; do not automatically resend input." });
-        for (const [done, release] of writes) { release(); yield* Deferred.fail(done, transportError); }
-        writes.clear();
-        for (const d of pending.values()) yield* Deferred.fail(d, transportError);
-        yield* failOutput(transportError.detail);
-      })),
-      Effect.forkScoped,
-    );
-
-    // Orderly shutdown: close stdin, give Pi a moment, then kill.
-    yield* Effect.addFinalizer(() =>
-      Effect.gen(function* () {
-        if (closed) return;
-        yield* Queue.end(stdin);
-        const done = yield* Deferred.await(exited).pipe(Effect.timeoutOption("3 seconds"));
-        if (done._tag === "None") yield* handle.kill({ forceKillAfter: "1 second" }).pipe(Effect.ignore);
-      }),
-    );
-
-    const write = Effect.fn("PiSessions.write")(function* (record: Record<string, unknown>) {
-        if (closed) return yield* new PiSessionError({ reason: "exited", detail: (yield* Deferred.await(exited)).detail });
-        if (transportError) return yield* transportError;
-        const text = `${JSON.stringify(record)}\n`;
-        const size = Buffer.byteLength(text);
-        if (size > inboundLimits.rpcLineBytes) return yield* new PiSessionError({ reason: "rejected", detail: "Input exceeds the Pi RPC byte limit. Nothing was sent." });
-        const done = yield* Deferred.make<void, PiSessionError>();
-        const release = writeCapacity.acquire(size, record.type === "abort" || record.type === "clear_queue" || record.type === "extension_ui_response");
-        if (!release) return yield* new PiSessionError({ reason: "rejected", detail: "Pi input capacity is full. Nothing was sent; wait for pending work before trying again." });
-        writes.set(done, release);
-        if (!Queue.offerUnsafe(stdin, { bytes: encoder.encode(text), done })) {
-          release(); writes.delete(done);
-          return yield* new PiSessionError({ reason: "rejected", detail: "Pi input queue is closed or full. Nothing was sent." });
-        }
-        yield* Deferred.await(done).pipe(
-          Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => Effect.fail(new PiSessionError({ reason: "transport", detail: "Pi stdin write timed out; delivery is uncertain. Do not resend this response." })) }),
-          Effect.tapError(() => Effect.sync(() => { uncertainWrite = true; })),
-          // Queued bytes keep their capacity lease after caller timeout/interruption
-          // until the sink accepts them or the transport closes (delivery is uncertain).
-        );
-      });
-
-    const request = Effect.fn("PiSessions.request")(function* (command: Record<string, unknown>, dispatched?: Deferred.Deferred<void>) {
-        const size = Buffer.byteLength(JSON.stringify(command));
-        const d = yield* Deferred.make<unknown, PiSessionError>();
-        const release = requestCapacity.acquire(size, command.type === "abort" || command.type === "clear_queue");
-        if (!release) {
-          if (dispatched) yield* Deferred.succeed(dispatched, undefined);
-          return yield* new PiSessionError({ reason: "rejected", detail: "Pi command capacity is full. Nothing was sent; wait for pending work before trying again." });
-        }
-        seq += 1;
-        const id = `q${seq}`;
-        pending.set(id, d);
-        debug("request", id, command.type);
-        return yield* write({ id, ...command }).pipe(
-          Effect.ensuring(dispatched ? Deferred.succeed(dispatched, undefined) : Effect.void),
-          Effect.andThen(Deferred.await(d)),
-          Effect.timeoutOrElse({
-            duration: timeoutMs,
-            orElse: () => Effect.fail(new PiSessionError({ reason: "timeout", detail: `Pi did not acknowledge ${command.type} within ${timeoutMs}ms. Delivery may have occurred; inspect the session before sending again.` })),
-          }),
-          Effect.tapError(error => Effect.sync(() => {
-            // Timeout is not cancellation. A newer successful command cannot
-            // establish that an older, unacknowledged mutation stopped running.
-            if (!String(command.type).startsWith("get_") && error.reason !== "rejected") uncertainMutation = true;
-          })),
-          Effect.ensuring(Effect.sync(() => { pending.delete(id); release(); })),
-        );
-      });
-
-    const read = <A>(readback: PiReadback<A>) => request(readback.command).pipe(Effect.flatMap((data) => {
-      const value = readback.decode(data);
-      return value === undefined ? Effect.fail(new PiSessionError({ reason: "protocol", detail: readback.invalid })) : Effect.succeed(value);
-    }));
-
-    const recordStream = Stream.fromEffectRepeat(Queue.take(records)).pipe(Stream.map(item => {
-      recordBytes -= item.bytes;
-      return item;
-    }));
-    const child: Child = { request, read, write, records: recordStream, exited, fail: failOutput, observationVersion: () => observationVersion,
-      hasPendingWork: () => pending.size > 0 || writes.size > 0 || uncertainMutation || uncertainWrite,
-    };
-    return child;
-  });
-
 const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
-    const child = yield* spawnChild(sessionArgs(spec), spec.cwd);
+    const child = yield* PiTransport.spawn(sessionArgs(spec), spec.cwd);
     const sessionScope = yield* Effect.scope;
+    // A generation belongs to this open, never to a browser or subscription.
     const generation = randomUUID();
     const recoveryMs = yield* PiDialogRecoveryMs;
 
@@ -396,7 +128,9 @@ const openSession = (spec: PiSessionSpec) =>
     const subscribers = new Set<Effect.Success<ReturnType<typeof makeDelivery<SessionFrame>>>>();
     let sequence = 0;
     const cursor = () => ({ cwd: spec.cwd, sessionId: spec.sessionId, generation, sequence });
-    // All callers hold the snapshot lock. Never await a consumer here.
+    // Publication owner: this lock covers projector correlation, snapshot fold,
+    // sequence assignment and subscriber attachment. Never await a consumer here.
+    // All publish callers hold the lock; transport/readbacks wait outside it.
     const publish = Effect.fnUntraced(function* (event: SessionEvent) {
       yield* Ref.update(snapshotRef, snapshot => applySessionEvent(snapshot, event));
       sequence++;
@@ -412,7 +146,12 @@ const openSession = (spec: PiSessionSpec) =>
     let submissionId = 0;
     let announced = false;
     let processedVersion = 0;
+    // Dialog lifecycle stays with publication: claim/removal, deadline wakeup and
+    // resolution frames must share one atomic snapshot boundary. Transport is
+    // attempted only after the claim; no transport acknowledgement reopens it.
     const dialogClosed = new Map<string, Deferred.Deferred<void>>();
+    // Cancellation owner: operation tokens fence late abort/readback results.
+    // Work belongs to sessionScope, not the lifetime of the requesting browser.
     const promptOperations = new Set<number>();
     let aborting: { dispatched: Deferred.Deferred<void>; pendingPrompts: Set<number>; acknowledged: boolean } | undefined;
 
@@ -600,6 +339,8 @@ const openSession = (spec: PiSessionSpec) =>
       Effect.ensuring(Deferred.succeed(recordsDrained, undefined)), Effect.forkScoped,
     );
 
+    // Shutdown owner: transport settles callers and ends records; this module
+    // drains projected records before publishing exactly one terminal snapshot.
     // Subscribers learn exactly once that Pi is gone: from the child's own exit (a crash),
     // or from this scope closing (a deliberate release), whichever comes first. The
     // finalizer is registered after the child's, so it runs before Pi is shut down.
@@ -800,7 +541,7 @@ const openSession = (spec: PiSessionSpec) =>
 
 const probe = (cwd: string, options?: { globalSettingsOnly?: boolean }): Effect.Effect<ProbeResult, PiSessionError, ChildProcessSpawner> =>
   Effect.gen(function* () {
-    const child = yield* spawnChild(["--no-session", ...(options?.globalSettingsOnly ? ["--no-approve"] : [])], cwd);
+    const child = yield* PiTransport.spawn(["--no-session", ...(options?.globalSettingsOnly ? ["--no-approve"] : [])], cwd);
     const [models, state, commands] = yield* Effect.all([
       child.read(piReadbacks.models(options?.globalSettingsOnly ? [] : enabledModelPatterns(cwd))),
       child.read(piReadbacks.state),
