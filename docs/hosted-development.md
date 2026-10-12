@@ -106,13 +106,18 @@ The proxy port remains 8000; the public URL does not change.
 
 ## Origin configuration
 
-`PIANO_ALLOWED_ORIGINS` names the browser-facing origins explicitly. The checked-in backend unit
-allows `https://yejun-dev.exe.xyz` and local HTTP access on ports 8000/8001. This is not inferred
-from Host or forwarded headers: neither Piano nor the TCP forwarder uses proxy identity headers
+`PIANO_ALLOWED_ORIGINS` names the browser-facing origins explicitly. The production unit contains
+`https://<your-piano-domain>`: replace this placeholder with your actual HTTPS origin before
+installing it, without a trailing slash. The placeholder intentionally fails application startup
+validation until replaced. The production allowlist includes no local origins; the backend still
+binds to loopback for the private proxy connection. Local development defaults and scratch origin
+configuration are separate from this unit.
+
+Origins are not inferred from Host or forwarded headers: neither Piano nor the TCP forwarder uses proxy identity headers
 as authorization. exe.dev remains responsible for private HTTP/WebSocket access (YEJ-5); browser
 origin checks are a separate control (YEJ-12, INV-11).
 
-When deliberately deploying this change, install the updated `piano.service` unit (or configure
+When deliberately deploying this change, install the configured `piano.service` unit (or configure
 the equivalent environment in a drop-in), daemon-reload, and restart under the authorized deployment
 workflow. Merely updating the code without the origin setting will reject the hosted browser's
 mutations and WebSocket connection. Installing a unit is a deployment step, not part of development
