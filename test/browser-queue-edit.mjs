@@ -100,7 +100,7 @@ try {
   ab('wait', '[aria-label="Edit queued message"]');
   ab('click', '[aria-label="Delivery: steer"]');
   capture('delivery-menu');
-  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter Add work after the current task.');
+  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter');
   ab('fill', input, 'Second message'); ab('click', '[aria-label="follow-up"]');
   ab('wait', '[aria-label="Edit all queued messages"]');
   ab('fill', input, 'Keep my draft');

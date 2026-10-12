@@ -132,17 +132,13 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
                   <ChevronDownIcon className="text-ink-3" aria-hidden />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuRadioGroup value={queueMode} onValueChange={(mode) => setQueueMode(mode as DeliveryMode)}>
                   {DELIVERY_MODES.map((mode) => (
                     <DropdownMenuRadioItem key={mode} value={mode}>
-                      {/* Two lines in one column, so the item's trailing check centers on both. */}
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="flex items-center gap-2">
-                          {DELIVERY[mode].label}
-                          <KbdGroup className="ml-auto">{mode !== queueMode && <Kbd>Alt</Kbd>}<Kbd>Enter</Kbd></KbdGroup>
-                        </span>
-                        <span className="text-xs text-muted-foreground">{DELIVERY[mode].detail}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                        {DELIVERY[mode].label}
+                        <KbdGroup className="ml-auto">{mode !== queueMode && <Kbd>Alt</Kbd>}<Kbd>Enter</Kbd></KbdGroup>
                       </span>
                     </DropdownMenuRadioItem>
                   ))}

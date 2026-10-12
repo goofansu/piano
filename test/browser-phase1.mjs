@@ -98,7 +98,7 @@ try {
   send('live context');
   ab('wait', '[aria-label="Stop"]');
   ab('click', '[aria-label="Delivery: steer"]');
-  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter Add work after the current task.');
+  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter');
   send('expand queue');
   ab('wait', '--text', 'Queued messages (1)');
   assert.equal(lastInput(), null, 'the queue itself shows pending input');

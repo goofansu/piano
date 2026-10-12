@@ -296,7 +296,7 @@ async function run() {
   if (evaluate(`[...document.querySelectorAll('[aria-label="Queued messages"] li')].map(li=>li.firstElementChild.textContent).join(',')`) !== 'Steering,Steering') throw new Error('Steering messages are not labelled');
   // The delivery menu switches the sticky mode; a follow-up then joins the queue after the steering messages.
   ab('click', '[aria-label="Delivery: steer"]');
-  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter Add work after the current task.');
+  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter');
   await until(`!document.querySelector('[role="menu"]')`); // the menu must close before the draft can take focus
   ab('fill', '[aria-label="Message"]', 'mobile follow-up');
   ab('press', 'Enter');
@@ -413,7 +413,7 @@ async function run() {
   await until(`!!document.querySelector('[aria-label="Stop"]')`);
   // Choose follow-up delivery explicitly, so Enter queues a follow-up and Alt+Enter steers whatever the sticky preference was.
   ab('click', '[aria-label^="Delivery:"]');
-  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter Add work after the current task.');
+  ab('find', 'role', 'menuitemradio', 'click', '--name', 'follow-up Alt Enter');
   await until(`!document.querySelector('[role="menu"]')`); // the menu must close before the draft can take focus
   ab('fill', '[aria-label="Message"]', 'desktop follow-up');
   ab('press', 'Enter');
