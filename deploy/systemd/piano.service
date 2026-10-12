@@ -11,6 +11,7 @@ Environment=HOME=/home/exedev
 Environment=PATH=/home/exedev/.local/bin:/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOST=127.0.0.1
 Environment=PORT=8001
+Environment=PIANO_ALLOWED_ORIGINS=https://yejun-dev.exe.xyz,http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:8001,http://localhost:8001
 ExecStart=/home/exedev/.local/bin/node server/main.ts
 Restart=on-failure
 RestartSec=2

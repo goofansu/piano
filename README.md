@@ -74,11 +74,30 @@ logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credent
 
 - `HOST`: bind address; defaults to `127.0.0.1`.
 - `PORT`: backend port; defaults to `7070`.
+- `PIANO_ALLOWED_ORIGINS`: comma-separated exact browser origins (scheme, host, port), replacing the default `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>`, and `http://[::1]:<PORT>`. No paths, trailing slashes, credentials, wildcards, or `null`; invalid configuration fails startup. `npm run dev:server` defaults to the three loopback origins on Vite port 5173 instead. For custom Vite ports or private proxies, explicitly configure the browser-facing origin, not the backend address.
 - `PIANO_DB_PATH`: SQLite registry path; defaults to `$XDG_DATA_HOME/piano/piano.db` or `~/.local/share/piano/piano.db` when `XDG_DATA_HOME` is unset.
 - `PIANO_DEV_BACKEND`: Vite proxy target; defaults to `http://127.0.0.1:7070`.
 - `PIANO_PI_CLI`: override the bundled Pi CLI entry path.
 - `PIANO_PI_ARGS`: extra Pi arguments, such as `-e ./ext.ts`.
 - `PIANO_IDLE_MINUTES`: idle time before retiring a session's Pi process; defaults to `30`, or `0` to disable.
+
+### Browser-origin boundary
+
+Piano supports trusted single-user local use or private authenticated proxy access, not public
+unauthenticated or multi-user hosting. Missing built-in authentication alone is an accepted part of
+that model, not a new exposure finding. Keep listeners on loopback and proxy access private.
+
+All non-GET/HEAD/OPTIONS requests and `/ws` require an exact allowed `Origin` before routing,
+body decoding or upgrade. Foreign, missing, empty and literal `null` origins receive HTTP 403.
+There is no non-browser bypass: scripts must send an allowed `Origin` too. Read-only HTTP requests
+remain usable without it. Host, Forwarded, X-Forwarded-* and identity headers never grant trust.
+Origin validation is browser cross-site defense, **not authentication**: non-browser clients can
+forge the header. It neither replaces private access nor proves the proxy is configured privately.
+Do not allow origins serving untrusted generated previews.
+
+For scratch development on port 7172, start the backend with
+`PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172` alongside its scratch database
+and port settings. See [hosted origin configuration](docs/hosted-development.md#origin-configuration).
 
 ## Registry storage
 

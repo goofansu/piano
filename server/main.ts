@@ -10,6 +10,7 @@ import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
 import { DirectoryFactsLive } from "./DirectoryFacts.ts";
 import { McpSetupLive } from "./McpSetup.ts";
+import { AllowedOrigins, configuredOrigins } from "./OriginPolicy.ts";
 import { agentDir } from "./PiEnv.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
 import { PiSettingsLive } from "./PiSettings.ts";
@@ -26,6 +27,7 @@ import { WorkspaceRevisionsLive } from "./WorkspaceRevisions.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
+const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
 
@@ -61,6 +63,7 @@ const Routes = Layer.mergeAll(AppRouter, HttpStaticServer.layer({ root: WEB_DIST
 
 const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog: true }).pipe(
   Layer.provide(Core),
+  Layer.provide(Layer.succeed(AllowedOrigins, origins)),
   Layer.provide(Infra),
 );
 

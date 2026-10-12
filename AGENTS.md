@@ -31,7 +31,7 @@ The user's systemd instance serves the built UI on port 8000 through the backend
 with the real registry (local instances may use 7070). Verify in separate scratch processes:
 
 ```bash
-HOST=127.0.0.1 PIANO_DB_PATH=<scratchpad>/piano.db PORT=7171 node server/main.ts &
+HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 PIANO_DB_PATH=<scratchpad>/piano.db PORT=7171 node server/main.ts &
 PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort &
 ```
 

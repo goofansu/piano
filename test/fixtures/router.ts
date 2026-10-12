@@ -8,6 +8,7 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
 import { DirectoryFactsLive } from "../../server/DirectoryFacts.ts";
 import { McpSetupLive } from "../../server/McpSetup.ts";
+import { AllowedOrigins } from "../../server/OriginPolicy.ts";
 import { PiCli } from "../../server/PiCli.ts";
 import { PiSessionsLive } from "../../server/PiSessions.ts";
 import { PiSettingsLive } from "../../server/PiSettings.ts";
@@ -49,6 +50,7 @@ export async function startRouter<Fakes = never>(prefix: string, services?: Laye
   writeFileSync(join(repo, "README.md"), "one\ntwo\n");
 
   const Config = Layer.mergeAll(
+    Layer.succeed(AllowedOrigins, new Set(["http://piano.test"])),
     Layer.succeed(PiCli, { node: process.execPath, cli: new URL("../fake-pi.mjs", import.meta.url).pathname, extraArgs: [] }),
     Layer.succeed(RegistryDatabasePath, join(root, "registry.db")),
     NodeServices.layer,
@@ -66,7 +68,11 @@ export async function startRouter<Fakes = never>(prefix: string, services?: Laye
   const web = HttpRouter.toWebHandler(AppRouter.pipe(Layer.provideMerge(Layer.succeedContext(await runtime.context()))), { disableLogger: true });
   return {
     root, repo, workspaceId,
-    handle: (input, init) => web.handler(new Request(new URL(input, "http://piano.test"), init)),
+    handle: (input, init) => {
+      const headers = new Headers(init?.headers);
+      if (!headers.has("origin")) headers.set("origin", "http://piano.test");
+      return web.handler(new Request(new URL(input, "http://piano.test"), { ...init, headers }));
+    },
     run: effect => runtime.runPromise(effect),
     dispose: async () => {
       await web.dispose();
