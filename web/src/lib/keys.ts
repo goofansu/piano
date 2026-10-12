@@ -11,6 +11,10 @@ export const hasMod = (e: KeyboardEvent | React.KeyboardEvent) => (isMac ? e.met
 /** A shortcut as a list of key labels, for a `KbdGroup`. */
 export const keys = (...parts: string[]) => parts.map((p) => (p === "mod" ? mod : p));
 
+/** Composer-local model picker shortcut; never consume IME input. */
+export const isModelPickerKey = (e: React.KeyboardEvent) =>
+  e.key === "/" && hasMod(e) && !e.altKey && !e.shiftKey && !e.repeat && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229;
+
 /** Enter sends from a keyboard. Shift+Enter, IME composition, key repeat and touch screens (where Enter is a newline) do not. */
 export const isSendKey = (e: React.KeyboardEvent) =>
   e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229 && !e.repeat && !window.matchMedia("(pointer: coarse)").matches;

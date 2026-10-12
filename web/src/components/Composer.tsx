@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { composerControl, DELIVERY, DELIVERY_MODES, type DeliveryMode } from "@/lib/composerControl";
 import { contextFigures, type SessionUsage } from "@/lib/contextUsage";
-import { isSendKey } from "@/lib/keys";
+import { isModelPickerKey, isSendKey } from "@/lib/keys";
 import type { DraftKey } from "@/lib/messageDraft";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
@@ -52,6 +52,7 @@ const loadQueueMode = (): DeliveryMode => (readStorage(QUEUE_MODE_KEY) === "foll
 /** The composer: a layer-1 card that lines up with the transcript column. */
 export function Composer({ draftKey, completion, text, onTextChange, onTextAppend, onRestoreQueue, disabled, streaming, compacting, onSend, onStop, stopping, catalog, onRefreshModels, model, onModelChange, effort, onEffortChange, usage, messages = [], queuedMessages = [] }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const [modelOpen, setModelOpen] = useState(false);
   const attachments = useAttachments(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
   const [queueMode, setQueueModeState] = useState<DeliveryMode>(loadQueueMode);
@@ -110,7 +111,10 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
             className={cn(composerInput, "min-w-0 flex-1")}
             onValueChange={onTextChange}
             onKeyDown={(e) => {
-              if (isSendKey(e)) {
+              if (isModelPickerKey(e) && !disabled && catalog && (catalog.models.length > 0 || onRefreshModels)) {
+                e.preventDefault();
+                setModelOpen(true);
+              } else if (isSendKey(e)) {
                 e.preventDefault();
                 send(e.altKey);
               } else if (e.key === "Escape" && control.escape !== "none") {
@@ -123,7 +127,7 @@ export function Composer({ draftKey, completion, text, onTextChange, onTextAppen
         </div>
         <div className={composerToolbar}>
           <AttachButton draft={attachments} disabled={disabled} />
-          <ModelSelect catalog={catalog} onRefresh={onRefreshModels} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
+          <ModelSelect open={modelOpen} onOpenChange={setModelOpen} returnFocusRef={ref} catalog={catalog} onRefresh={onRefreshModels} value={model} onChange={onModelChange} effort={effort} onEffortChange={onEffortChange} disabled={disabled} />
           {showDelivery && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

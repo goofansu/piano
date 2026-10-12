@@ -19,7 +19,7 @@ import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
-import { isSendKey } from "@/lib/keys";
+import { isModelPickerKey, isSendKey } from "@/lib/keys";
 import { type DraftKey, NEW_SESSION_DRAFT, sendable } from "@/lib/messageDraft";
 import { canStartSessionIn, findProject, newProjectCommand, projectChoices, projectCommand } from "@/lib/projectCommands";
 import { completionTarget, folderFor } from "@/lib/sessionContext";
@@ -53,6 +53,7 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
   const attachments = useAttachments(NEW_SESSION_DRAFT);
   const [pickerOpen, setPickerOpen] = useState(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const [modelOpen, setModelOpen] = useState(false);
 
   useAutoGrow(textarea, text, 288);
   useTypeToFocus(textarea, useCallback((s: string) => onDraftChange(NEW_SESSION_DRAFT, text + s), [onDraftChange, text]));
@@ -107,7 +108,10 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
                 className={cn(composerInput, "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5")}
                 onValueChange={setText}
                 onKeyDown={(e) => {
-                  if (isSendKey(e)) {
+                  if (isModelPickerKey(e) && catalog && (catalog.models.length > 0 || cwd)) {
+                    e.preventDefault();
+                    setModelOpen(true);
+                  } else if (isSendKey(e)) {
                     e.preventDefault();
                     submit();
                   }
@@ -115,7 +119,7 @@ export function NewSession({ state, send, onDraftChange, chooseDirectory, projec
               />
               <div className={composerToolbar}>
                 <AttachButton draft={attachments} disabled={!state.connected} />
-                <ModelSelect catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={choice.model} onChange={choice.onModelChange} effort={choice.effort} onEffortChange={choice.onEffortChange} noDirectory={!cwd} />
+                <ModelSelect open={modelOpen} onOpenChange={setModelOpen} returnFocusRef={textarea} catalog={catalog} onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined} value={choice.model} onChange={choice.onModelChange} effort={choice.effort} onEffortChange={choice.onEffortChange} noDirectory={!cwd} />
                 <Button size="icon" className={composerAction} aria-label="Send" disabled={!ready} onClick={submit}>
                   <span className="control-enter inline-flex"><ArrowUpIcon /></span>
                 </Button>
