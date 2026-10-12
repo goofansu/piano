@@ -11,18 +11,12 @@ import {
   ShieldOffIcon,
   TargetIcon,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
-import {
-  AttachButton,
-  AttachmentDraftView,
-  attachmentEvents,
-  useAttachments,
-} from "@/components/Attachments";
+import { useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
+import { DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { FolderPicker } from "@/components/FolderPicker";
 import { IconButton } from "@/components/IconButton";
-import { ModelSelect } from "@/components/ModelSelect";
 import {
   Command,
   CommandEmpty,
@@ -34,15 +28,14 @@ import {
 import { PianoMark } from "@/components/PianoMark";
 import { Popover, PopoverTrigger } from "@/components/PianoPopover";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
-import { SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { WorktreesPopover } from "@/components/Worktrees";
+import { newSessionReady } from "@/lib/composerControl";
 import { abbrevHome } from "@/lib/format";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
-import { isModelPickerKey, isSendKey } from "@/lib/keys";
-import { type DraftKey, NEW_SESSION_DRAFT, sendable } from "@/lib/messageDraft";
+import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
 import {
   canStartSessionIn,
   findProject,
@@ -51,16 +44,13 @@ import {
   projectCommand,
 } from "@/lib/projectCommands";
 import { completionTarget, folderFor } from "@/lib/sessionContext";
-import { composerAction, composerCard, composerInput, composerToolbar, picker } from "@/lib/styles";
-import { useTypeToFocus } from "@/lib/typeToFocus";
-import { useAutoGrow } from "@/lib/useAutoGrow";
+import { composerAction, composerInput, picker } from "@/lib/styles";
 import { useModelChoice } from "@/lib/useModelChoice";
 import type { AppState } from "@/store";
 
 interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
-  onDraftChange: (key: DraftKey, text: string) => void;
   /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
   chooseDirectory: (cwd: string) => void;
   /** The project a session started here joins; the page is that project's home. */
@@ -75,7 +65,6 @@ const NEW = { kind: "new" } as const;
 export function NewSession({
   state,
   send,
-  onDraftChange,
   chooseDirectory,
   projectId,
   onProjectChange,
@@ -84,18 +73,8 @@ export function NewSession({
   const { run } = useCommands();
   // The client starts a fresh page in the last directory used, else the first folder; opened for a project, it starts without one.
   const cwd = state.view.kind === "new" ? (state.view.cwd ?? "") : "";
-  const text = state.drafts[NEW_SESSION_DRAFT] ?? "";
-  const setText = (value: string) => onDraftChange(NEW_SESSION_DRAFT, value);
-  const attachments = useAttachments(NEW_SESSION_DRAFT);
+  const editor = useDraftEditor(NEW_SESSION_DRAFT);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const textarea = useRef<HTMLTextAreaElement>(null);
-  const [modelOpen, setModelOpen] = useState(false);
-
-  useAutoGrow(textarea, text, 288);
-  useTypeToFocus(
-    textarea,
-    useCallback((s: string) => onDraftChange(NEW_SESSION_DRAFT, text + s), [onDraftChange, text]),
-  );
 
   const folder = folderFor(state, cwd);
   const project = findProject(state, projectId);
@@ -105,29 +84,31 @@ export function NewSession({
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
   const choice = useModelChoice(catalog, NEW, cwd);
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
-  const ready =
-    state.connected &&
-    !!catalog &&
-    !catalog.error &&
-    cwd.trim().length > 0 &&
-    !!choice.model &&
-    sendable({ text, images: attachments }) &&
-    canStartSessionIn(state, projectId);
+  const ready = newSessionReady({
+    text: editor.text,
+    images: editor.attachments,
+    connected: state.connected,
+    catalog,
+    cwd,
+    model: choice.model,
+    projectOpen: canStartSessionIn(state, projectId),
+  });
 
   const submit = () => {
     // Creating switches the main pane to the new session at once, so this page never shows a pending state.
     if (!ready) return;
-    send({
-      _tag: "create_session",
-      cwd: cwd.trim(),
-      projectId,
-      options: choice.start(),
-      text: text.trim(),
-      attachments: attachments.items,
-    });
-    setText("");
-    attachments.clear();
+    editor.submit(({ text, attachments }) =>
+      send({
+        _tag: "create_session",
+        cwd: cwd.trim(),
+        projectId,
+        options: choice.start(),
+        text,
+        attachments,
+      }),
+    );
   };
+  const refreshModels = cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined;
 
   return (
     <>
@@ -167,47 +148,29 @@ export function NewSession({
               {trust && <TrustToggle command={trust} run={run} />}
               <ProjectSelect state={state} value={projectId} onChange={onProjectChange} />
             </div>
-            <div
-              className={cn(composerCard, "welcome-enter welcome-composer")}
-              {...attachmentEvents(attachments, !state.connected)}
-            >
-              <AttachmentDraftView draft={attachments} disabled={!state.connected} />
-              <SlashTextarea
-                ref={textarea}
-                completion={completionTarget(state)}
-                autoFocus={!window.matchMedia("(pointer: coarse)").matches}
-                value={text}
-                rows={1}
-                aria-label="First message"
-                className={cn(
-                  composerInput,
-                  "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5",
-                )}
-                onValueChange={setText}
-                onKeyDown={(e) => {
-                  if (isModelPickerKey(e) && catalog && (catalog.models.length > 0 || cwd)) {
-                    e.preventDefault();
-                    setModelOpen(true);
-                  } else if (isSendKey(e)) {
-                    e.preventDefault();
-                    submit();
-                  }
-                }}
-              />
-              <div className={composerToolbar}>
-                <AttachButton draft={attachments} disabled={!state.connected} />
-                <ModelSelect
-                  open={modelOpen}
-                  onOpenChange={setModelOpen}
-                  returnFocusRef={textarea}
-                  catalog={catalog}
-                  onRefresh={cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined}
-                  value={choice.model}
-                  onChange={choice.onModelChange}
-                  effort={choice.effort}
-                  onEffortChange={choice.onEffortChange}
-                  noDirectory={!cwd}
-                />
+            <DraftEditor
+              editor={editor}
+              completion={completionTarget(state)}
+              attachmentsDisabled={!state.connected}
+              autoFocus={!window.matchMedia("(pointer: coarse)").matches}
+              label="First message"
+              className="welcome-enter welcome-composer"
+              inputClassName={cn(
+                composerInput,
+                "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5",
+              )}
+              maxHeight={288}
+              model={{
+                catalog,
+                onRefresh: refreshModels,
+                value: choice.model,
+                onChange: choice.onModelChange,
+                effort: choice.effort,
+                onEffortChange: choice.onEffortChange,
+                noDirectory: !cwd,
+              }}
+              onSend={submit}
+              actions={
                 <Button
                   size="icon"
                   className={composerAction}
@@ -219,8 +182,8 @@ export function NewSession({
                     <ArrowUpIcon />
                   </span>
                 </Button>
-              </div>
-            </div>
+              }
+            />
             {folder?.discovery.status === "error" && (
               <Alert
                 variant="destructive"
