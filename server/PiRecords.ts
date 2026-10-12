@@ -22,7 +22,7 @@ import type {
   Usage,
 } from "../shared/wire.ts";
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
-import { projectDisplay, redactDisplay } from "./DisplayProjection.ts";
+import { compileRedaction, type DisplayRedaction } from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
 import { SubagentProjection, titleStatus } from "./Subagents.ts";
 
@@ -107,6 +107,7 @@ export function serializeMessage(
   id: string,
   msg: RawMessage,
   projection = new SubagentProjection(),
+  redaction: DisplayRedaction = compileRedaction(),
 ): RenderMsg | null {
   let result: RenderMsg;
   if (msg.role === "user")
@@ -182,7 +183,7 @@ export function serializeMessage(
   else if (msg.role === "bashExecution")
     result = { id, role: "context", label: `Shell: ${msg.command ?? ""}`, text: msg.output ?? "" };
   else return null; // System declarations and thinking are outside this display scope.
-  const projected = projectDisplay(result);
+  const projected = redaction.value(result);
   if (projected.role === "assistant") projection.assistant(projected);
   return projected;
 }
@@ -192,8 +193,9 @@ function serializeWithProjection(
   projection: SubagentProjection,
 ): RenderMsg[] {
   projection.reset();
+  const redaction = compileRedaction();
   const rendered = msgs.flatMap((m, i) => {
-    const result = serializeMessage(`${prefix}${i}`, m, projection);
+    const result = serializeMessage(`${prefix}${i}`, m, projection, redaction);
     return result ? [result] : [];
   });
   const reportedStatus = reportedSubagentStatus(rendered);
@@ -570,7 +572,8 @@ export function piCommandFor(
       if (dialog.method === "select") {
         // Keep protocol values private. Redacted labels must not change
         // what Pi receives, nor silently choose between colliding labels.
-        const options = dialog.options?.filter((option) => projectDisplay(option) === value) ?? [];
+        const redaction = compileRedaction();
+        const options = dialog.options?.filter((option) => redaction.text(option) === value) ?? [];
         if (options.length !== 1)
           return {
             rejected:
@@ -890,17 +893,18 @@ export class PiProjector {
         const old = this.tools.get(id);
         const ended = event.type === "tool_execution_end";
         const result = ended ? event.result : event.partialResult;
-        const tool: ToolExecution = projectDisplay({
+        const redaction = compileRedaction();
+        const tool: ToolExecution = redaction.value({
           id,
           parentId: event.parentToolCallId ?? old?.parentId,
           name: event.toolName ?? old?.name ?? "",
           args:
             event.args === undefined
               ? (old?.args ?? "")
-              : redactDisplay(argsOf(event.args), !ended),
+              : redaction.text(argsOf(event.args), !ended),
           // RPC does not define arbitrary tool updates as append-only. Show the
           // latest update explicitly; only execution_end claims complete output.
-          text: result ? redactDisplay(textOf(result.content), !ended) : (old?.text ?? ""),
+          text: result ? redaction.text(textOf(result.content), !ended) : (old?.text ?? ""),
           status: ended ? (event.isError ? "error" : "success") : "running",
           outputKind: ended ? "final" : "latest-update",
           subagent: ended
@@ -935,9 +939,10 @@ export class PiProjector {
   private update(): SessionEvent[] {
     if (!this.partial) return [];
     const blocks = [...this.blocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b);
-    this.partial = projectDisplay({
+    const redaction = compileRedaction();
+    this.partial = redaction.value({
       ...this.partial,
-      text: redactDisplay(
+      text: redaction.text(
         blocks
           .filter((b) => b.type === "text")
           .map((b) => b.text)
@@ -945,7 +950,7 @@ export class PiProjector {
         true,
       ),
       toolCalls: blocks.flatMap((b) =>
-        b.type === "tool" ? [{ id: b.id, name: b.name, args: redactDisplay(b.args, true) }] : [],
+        b.type === "tool" ? [{ id: b.id, name: b.name, args: redaction.text(b.args, true) }] : [],
       ),
     });
     return [{ _tag: "message_update", message: this.partial }];

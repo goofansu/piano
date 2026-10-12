@@ -13,7 +13,7 @@ import {
 } from "../shared/wire.ts";
 import { makeSocketDelivery } from "./BoundedDelivery.ts";
 import { makeClientDispatch } from "./ClientDispatch.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
+import { projectServerMessage } from "./DisplayProjection.ts";
 import { inboundLimits } from "./InboundCapacity.ts";
 
 export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket: Socket.Socket) {
@@ -24,7 +24,7 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket
   // Bound both host queues and the transport; the window and close codes live in BoundedDelivery.
   const delivery = yield* makeSocketDelivery(
     (text: string) => writer.write(text),
-    (m: ServerMessage, id) => encodeServerMessage(projectDisplay(m), id),
+    (m: ServerMessage, id) => encodeServerMessage(projectServerMessage(m), id),
   );
   const client = yield* makeClientDispatch({
     send: delivery.offer,
