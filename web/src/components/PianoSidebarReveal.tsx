@@ -2,10 +2,15 @@ import { Dialog } from "radix-ui";
 import { type CSSProperties, type ReactNode, type RefObject, useEffect } from "react";
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 
-export function sidebarRevealStyle(progress: number, duration: number): CSSProperties {
+export function sidebarRevealStyle(
+  progress: number,
+  duration: number,
+  easing: string,
+): CSSProperties {
   return {
     "--sidebar-progress": progress,
     "--sidebar-duration": `${duration}ms`,
+    "--sidebar-easing": easing,
   } as CSSProperties;
 }
 
@@ -17,6 +22,7 @@ export function PianoSidebarReveal({
   dragging,
   progress,
   settleDuration,
+  settleEasing,
   onOpenChange,
   returnFocus,
   contentRef: content,
@@ -27,6 +33,7 @@ export function PianoSidebarReveal({
   dragging: boolean;
   progress: number;
   settleDuration: number;
+  settleEasing: string;
   onOpenChange: (open: boolean) => void;
   returnFocus: RefObject<HTMLElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
@@ -45,7 +52,7 @@ export function PianoSidebarReveal({
           ref={content}
           data-slot="mobile-sidebar"
           data-dragging={dragging}
-          style={sidebarRevealStyle(progress, settleDuration)}
+          style={sidebarRevealStyle(progress, settleDuration, settleEasing)}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
             event.preventDefault();

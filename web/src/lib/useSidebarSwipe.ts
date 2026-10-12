@@ -41,7 +41,11 @@ export function useSidebarSwipe({
   const [progress, setProgress] = useState<number | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
   const revealRef = useRef<HTMLDivElement | null>(null);
-  const [settle, setSettle] = useState<{ target: boolean; duration: number } | null>(null);
+  const [settle, setSettle] = useState<{
+    target: boolean;
+    duration: number;
+    easing: string;
+  } | null>(null);
   const current = useEffectEvent(() => ({ open, onOpenChange, onPreview }));
   const cancelGesture = useRef<() => void>(() => {});
   const cancelDrag = useCallback(() => cancelGesture.current(), []);
@@ -166,11 +170,16 @@ export function useSidebarSwipe({
       suppressClickUntil = performance.now() + 500;
       cancel();
       const remaining = Math.abs(Number(next) - g.position) * g.width;
-      // Tracking is always 1:1 with no easing. Only the release is animated: preserve the
-      // flick's pace, then decelerate, instead of imposing a fixed 300ms on every gesture.
+      // Keep finger tracking 1:1, then carry its velocity into a gentle stop. Duration alone
+      // cannot do that: a fixed ease-out curve accelerates slow releases into a visible lurch.
       const speed = velocity * (Number(next) - g.position) > 0 ? Math.abs(velocity) : 0;
-      const duration = Math.round(Math.min(300, Math.max(120, remaining / Math.max(0.5, speed))));
-      setSettle({ target: next, duration });
+      const duration = Math.round(
+        Math.min(420, Math.max(120, (remaining * 2) / Math.max(0.5, speed))),
+      );
+      // A cubic's initial slope is y1/x1. Match px/ms at the handoff; clamp extreme flicks
+      // to keep the curve monotonic, and finish with a horizontal tangent (zero velocity).
+      const y1 = remaining > 0 ? Math.min(1, (speed * duration) / (remaining * 3)) : 0;
+      setSettle({ target: next, duration, easing: `cubic-bezier(${1 / 3}, ${y1}, 0.5, 1)` });
       const state = current();
       if (next !== state.open) state.onOpenChange(next);
     };
@@ -206,6 +215,7 @@ export function useSidebarSwipe({
     mainRef,
     revealRef,
     settleDuration: settle?.target === open ? settle.duration : 300,
+    settleEasing: settle?.target === open ? settle.easing : "cubic-bezier(0.22, 1, 0.36, 1)",
     cancelDrag,
   };
 }

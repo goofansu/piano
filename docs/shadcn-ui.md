@@ -46,8 +46,10 @@ modal primitive as Sheet, but exposes stationary navigation under a translated l
 than moving a sheet over it. The sidebar occupies 75% of the mobile viewport; only a claimed
 horizontal drag anywhere on the main content overrides touch scrolling, with browser edges,
 editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; settling
-duration adapts to release speed and remaining distance. During a drag, `useSidebarSwipe` batches
-surface-only style writes into animation frames; React owns mounting and the settled endpoint.
+duration adapts to release speed and remaining distance, with a velocity-matched easing curve to
+avoid a speed jump on release and stop gently at the endpoint. The moving surfaces have compositor
+hints (the live page only on mobile). During a drag, `useSidebarSwipe` batches surface-only style
+writes into animation frames; React owns mounting and the settled endpoint.
 Do not update inherited motion variables per frame: that invalidates styles across the transcript
 and navigation. Cancellation discards pending frames and returns the surfaces to CSS settling.
 

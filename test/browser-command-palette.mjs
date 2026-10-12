@@ -726,6 +726,41 @@ try {
   } finally {
     cdp.close();
   }
+  // Releasing a slow drag must not suddenly accelerate the page. Sample the real CSS
+  // transition at fixed times so this checks visible motion, not wall-clock/CDP timing.
+  const release = await evaluate(`(async () => {
+    const main = document.querySelector('[data-slot="layout-main"]');
+    const dispatch = (type, x, time) => {
+      const touch = new Touch({ identifier: 3, target: main, clientX: x, clientY: 300 });
+      const event = new TouchEvent(type, { bubbles: true, cancelable: true,
+        touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] });
+      Object.defineProperty(event, 'timeStamp', { value: time });
+      main.dispatchEvent(event);
+    };
+    const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    dispatch('touchstart', 150, 0);
+    dispatch('touchmove', 350, 500);
+    await frame(); await frame();
+    dispatch('touchend', 350, 510);
+    await frame();
+    const animation = main.getAnimations().find(a => a.transitionProperty === 'transform');
+    if (!animation) throw new Error('Missing sidebar settling transition');
+    animation.pause();
+    animation.currentTime = 0;
+    const start = main.getBoundingClientRect().left;
+    animation.currentTime = 10;
+    const after = main.getBoundingClientRect().left;
+    animation.finish();
+    return { start, after };
+  })()`);
+  assert.ok(Math.abs(release.start - 200) < 1, "release starts at the last dragged position");
+  assert.ok(
+    release.after - release.start > 2 && release.after - release.start < 7,
+    `slow release keeps its 0.4px/ms pace rather than lurching: ${JSON.stringify(release)}`,
+  );
+  await ab("press", "Escape");
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  ui.push({ swipeRelease: release });
   // Same travel, different release speed: a fast flick must settle sooner than a slow drag.
   const durations = [];
   for (const elapsed of [500, 40]) {
