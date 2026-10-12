@@ -26,7 +26,7 @@ import type {
 } from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiHistory } from "./PiHistory.ts";
-import { type PiSession, PiSessionError, PiSessions } from "./PiSessions.ts";
+import { type PiSession, PiSessionError, PiSessions, sessionActionPolicy } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 
 export interface OpenSpec {
@@ -395,7 +395,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                         return yield* rejected(
                           "Pi is closing or has stopped. Refresh before sending new input.",
                         );
-                      if (action._tag !== "abort" && action._tag !== "stop")
+                      if (sessionActionPolicy[action._tag].needsCheckout)
                         yield* requireCheckout(raw.spec.cwd);
                       host.actions++;
                       host.lastActivity = yield* Clock.currentTimeMillis;
