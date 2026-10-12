@@ -213,8 +213,6 @@ export interface SessionActivity {
   streaming: boolean;
   /** What the reply area's Piano keys show, if anything. */
   replyActivity: ReplyActivity | undefined;
-  /** Sent but not yet in the transcript: created with a first message, submitting, or running. */
-  firstMessageOnItsWay: boolean;
 }
 
 /** The selected session's activity. `display` is the transcript display: Messages hides pending text. */
@@ -256,12 +254,50 @@ export function sessionActivity(
               : t.state.closure
                 ? "Exited"
                 : activity || (streaming ? "Working" : t.hosted ? "Ready" : "Not running");
+  return { status, streaming, replyActivity };
+}
+
+export interface SessionPane {
+  /** The transcript is mounted: the selected session's, or a first message shown before it. */
+  list: boolean;
+  /**
+   * The loading skeleton: `none` is not mounted (a first message or a failed selection shows
+   * instead), `shown` while the session is fetched or its first input is on its way, `hidden`
+   * once its transcript or its empty state can show, so the skeleton fades out.
+   */
+  skeleton: "none" | "shown" | "hidden";
+  /** The empty transcript's text; omitted while anything is shown or on its way. */
+  placeholder: string | undefined;
+  composerDisabled: boolean;
+}
+
+/**
+ * Pi has the session's input but it is not in the transcript yet: submitting or running. Pi's own
+ * submission, not the browser's receipt: only Pi's input reaches the transcript.
+ */
+const inputOnItsWay = (t: NonNullable<AppState["session"]>): boolean =>
+  t.state.submission?.outcome === "submitting" || isWorking(t.state);
+
+/**
+ * What the main session pane shows while the session loads or a first message is on its way
+ * (INV-03): the browser's submitted input renders at once outside Pi's history, an ordinary
+ * history load uses the skeleton, and "No messages yet." only describes a settled empty session.
+ */
+export function sessionPane(state: AppState): SessionPane {
+  const t = state.session;
+  const input = state.pendingCreate;
+  const onItsWay = !!t && inputOnItsWay(t);
+  const hasContent = !!t && (t.messages.length > 0 || !!t.pending);
   return {
-    status,
-    streaming,
-    replyActivity,
-    // Pi's own submission, not the browser's receipt: only Pi's input reaches the transcript.
-    firstMessageOnItsWay: !!t && (t.state.submission?.outcome === "submitting" || streaming),
+    list: !!t || !!input,
+    skeleton:
+      input || state.selectionFailure
+        ? "none"
+        : t && (hasContent || !onItsWay)
+          ? "hidden"
+          : "shown",
+    placeholder: t && !input && !hasContent && !onItsWay ? "No messages yet." : undefined,
+    composerDisabled: !sessionReady(state) || !t || input?.outcome === "starting",
   };
 }
 

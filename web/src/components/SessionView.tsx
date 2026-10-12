@@ -16,7 +16,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { deliveryAction } from "@/lib/composerControl";
 import { useDraftStore } from "@/lib/draftStore";
 import { sessionDraftKey } from "@/lib/messageDraft";
-import { completionTarget, sessionActivity, sessionContext } from "@/lib/sessionContext";
+import {
+  completionTarget,
+  sessionActivity,
+  sessionContext,
+  sessionPane,
+} from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useCheckoutRefresh } from "@/lib/useCheckoutRefresh";
 import { useModelChoice } from "@/lib/useModelChoice";
@@ -48,13 +53,11 @@ export function SessionView({ state, send, onMenu }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { ready, workspace, changesWorkspace } = sessionContext(state);
+  const { workspace, changesWorkspace } = sessionContext(state);
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
   const pullRequest = useSessionPullRequest(workspace?.id, t?.sessionId, !!t && isWorking(t.state));
-  const { status, streaming, replyActivity, firstMessageOnItsWay } = sessionActivity(
-    state,
-    display,
-  );
+  const { status, streaming, replyActivity } = sessionActivity(state, display);
+  const pane = sessionPane(state);
   const notices = sessionNotices(state, display);
   const readOnly = notices.find((n) => n.placement === "composer");
   const draftKey = t ? sessionDraftKey(t) : null;
@@ -135,10 +138,8 @@ export function SessionView({ state, send, onMenu }: Props) {
               : undefined}
           </Banner>
         ))}
-      {/* Submitted input renders immediately outside Pi's history. Only an ordinary
-          history load uses the skeleton; terminal input outcomes retain the original. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {(t || input) && (
+        {pane.list && (
           <MessageList
             className="transcript-enter"
             showTools={display === "everything"}
@@ -147,14 +148,10 @@ export function SessionView({ state, send, onMenu }: Props) {
             submittedInput={input}
             tools={tools}
             activity={replyActivity}
-            placeholder={firstMessageOnItsWay ? undefined : "No messages yet."}
+            placeholder={pane.placeholder}
           />
         )}
-        {!input && !state.selectionFailure && (
-          <TranscriptSkeleton
-            hidden={!!t && (t.messages.length > 0 || !!t.pending || !firstMessageOnItsWay)}
-          />
-        )}
+        {pane.skeleton !== "none" && <TranscriptSkeleton hidden={pane.skeleton === "hidden"} />}
         {!state.connected && (
           <div
             role="status"
@@ -195,7 +192,7 @@ export function SessionView({ state, send, onMenu }: Props) {
           draftKey={draftKey}
           completion={completionTarget(state)}
           onRestoreQueue={() => send({ _tag: "act", action: { _tag: "restore_queue" } })}
-          disabled={!ready || !t || input?.outcome === "starting"}
+          disabled={pane.composerDisabled}
           streaming={streaming}
           compacting={t?.state.isCompacting}
           onSend={(text, kind, attachments) =>
@@ -298,8 +295,8 @@ function ExtensionBlock({
 
 /**
  * A skeleton in the transcript's own geometry: a prompt card, a reply with three lines and a
- * tool row. It is visible while a session is being fetched or its first message is on its way, and
- * fades out as the real transcript fades in; it stays mounted just long enough to finish leaving.
+ * tool row. `sessionPane` decides when it shows; once hidden it fades out as the real transcript
+ * fades in, staying mounted just long enough to finish leaving.
  */
 function TranscriptSkeleton({ hidden }: { hidden: boolean }) {
   const [lingering, setLingering] = useState(false);
