@@ -32,6 +32,23 @@ test("sidebar groups: a session's owner is its folder (from any worktree) or its
   assert.equal(ownerGroupKey(registry, { cwd: "/repo", sessionId: "s1" }, "none"), undefined);
 });
 
+test("sidebar groups: pinned selections never reveal related groups across selections and groupings", () => {
+  const pinned: AppState = { ...registry, sessionReferences: [
+    sessionReference("/work/repo.feature", "s1", { projectId: "p1", pinned: true }),
+    sessionReference("/other", "s2", { pinned: true }),
+  ] };
+  let groups = initialOpenGroups(["/keep-open"]);
+  for (const groupBy of ["folder", "project", "date", "none", "folder", "project"] as const) {
+    for (const [cwd, sessionId] of [["/work/repo.feature", "s1"], ["/other", "s2"]]) {
+      groups = run(groups, owner(pinned, cwd, sessionId, groupBy));
+      assert.deepEqual(open(groups), ["/keep-open"], `${groupBy}: ${sessionId} stays in Pinned, not its related group`);
+    }
+  }
+  assert.deepEqual(open(run(groups, owner(registry, "/work/repo.feature", "s1", "folder"))), ["/keep-open", "/repo"], "an unpinned selection still reveals its folder");
+  assert.deepEqual(open(run(groups, owner(registry, "/work/repo.feature", "s1", "project"))), ["/keep-open", "project:p1"], "an unpinned selection still reveals its project");
+  assert.equal(ownerGroupKey(pinned, { cwd: "/work/repo.feature", sessionId: null }, "folder"), "/repo", "a new session is not the pinned reference");
+});
+
 test("sidebar groups: selecting a session opens its group; a registry refresh never reopens a group the user collapsed", () => {
   const selected = run(initialOpenGroups([]), owner(registry, "/work/repo.feature", "s1", "folder"));
   assert.deepEqual(open(selected), ["/repo"]);

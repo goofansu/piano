@@ -29,11 +29,12 @@ export const projectKey = (id: string) => `project:${id}`;
 
 export const initialOpenGroups = (open: Iterable<string>): OpenGroups => ({ open: new Set(open), revealed: null, projects: null });
 
-/** The group holding a session under a grouping: its folder, or its project. Other groupings have none. */
+/** The group holding a session: pinned sessions live only in Pinned, never in their folder/project group. */
 export function ownerGroupKey(state: AppState, session: { cwd: string; sessionId: string | null }, groupBy: GroupBy): string | undefined {
+  const member = session.sessionId ? sessionReference(state, { cwd: session.cwd, sessionId: session.sessionId }) : undefined;
+  if (member?.pinned) return undefined;
   if (groupBy === "folder") return folderFor(state, session.cwd)?.path;
   if (groupBy !== "project") return undefined;
-  const member = session.sessionId ? sessionReference(state, { cwd: session.cwd, sessionId: session.sessionId }) : undefined;
   return projectKey(member?.projectId ?? "");
 }
 
