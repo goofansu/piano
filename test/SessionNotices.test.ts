@@ -131,6 +131,7 @@ test("banners come before status lines, in a fixed order", () => {
 
 test("an uncertain first message explains with the browser's own detail before Pi's", () => {
   const input: PendingCreate = {
+    selectionId: "create",
     cwd: "/repo",
     text: "hi",
     outcome: "uncertain",

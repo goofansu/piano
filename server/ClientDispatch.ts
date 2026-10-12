@@ -138,10 +138,23 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     if (!release) {
       // Reject before claiming a selection or mutating anything. The receive loop
       // remains available for acknowledgements, dialog answers and cancellation.
-      yield* report(
-        "Client input capacity is full. Request was not started; wait for pending work before trying again.",
-        "selectionId" in request ? request.selectionId : undefined,
-      );
+      const message =
+        "Client input capacity is full. Request was not started; wait for pending work before trying again.";
+      if (request._tag === "select" || request._tag === "create_session")
+        yield* send({ _tag: "selection_rejected", selectionId: request.selectionId, message });
+      else if (request._tag === "create_worktree" || request._tag === "add_worktree")
+        yield* send({
+          _tag: "worktree_result",
+          requestId: request.requestId,
+          result: { status: "error", detail: message },
+        });
+      else if (request._tag === "worktrees")
+        yield* send({
+          _tag: "worktrees",
+          folder: request.folder,
+          discovery: { status: "error", observedAt: new Date().toISOString(), detail: message },
+        });
+      else yield* report(message, "selectionId" in request ? request.selectionId : undefined);
       return Effect.void;
     }
     const work = yield* Effect.gen(function* () {

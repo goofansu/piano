@@ -27,6 +27,8 @@ export interface SessionView extends Snapshot {
 
 /** Browser-only submitted input, never part of Pi's transcript or registry. */
 export interface PendingCreate {
+  /** The creation request, not a later attachment to the same session. */
+  selectionId: string;
   cwd: string;
   text: string;
   attachments?: RenderMsg["attachments"];
@@ -63,6 +65,7 @@ export interface AppState {
   worktrees: Record<string, WorktreeDiscovery>;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
+  selectionFailure: { cwd: string; sessionId: string | null; message: string } | null;
   pendingCreate: PendingCreate | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
@@ -91,6 +94,7 @@ export const initialState: AppState = {
   worktreeResult: null,
   worktrees: {},
   selecting: null,
+  selectionFailure: null,
   pendingCreate: null,
   done: [],
   drafts: {},
@@ -182,8 +186,9 @@ function reduceAction(s: AppState, a: Action): AppState {
         resync: false,
         view: { kind: "session" },
         selecting: { cwd: a.cwd, sessionId: a.sessionId },
+        selectionFailure: null,
         pendingCreate: a.firstMessage
-          ? { cwd: a.cwd, ...a.firstMessage, outcome: "starting" }
+          ? { selectionId: a.selectionId, cwd: a.cwd, ...a.firstMessage, outcome: "starting" }
           : s.session && sessionKey(s.session) === sessionKey(a)
             ? s.pendingCreate
             : null,
@@ -196,6 +201,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         ...s,
         selectionId: null,
         resync: false,
+        selectionFailure: null,
         view: {
           kind: "new",
           cwd: a.cwd ?? (s.view.kind === "new" ? s.view.cwd : undefined),
@@ -215,6 +221,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         selectionId: null,
         resync: false,
         view: { kind: "missing-session", sessionId: a.sessionId },
+        selectionFailure: null,
         selecting: null,
         session: null,
         pendingCreate: null,
@@ -329,6 +336,18 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           hosted: m.hosted,
           cursor: m.cursor,
         },
+      };
+    case "selection_rejected":
+      if (m.selectionId !== s.selectionId || !s.selecting) return s;
+      return {
+        ...s,
+        selectionId: null,
+        selectionFailure: { ...s.selecting, message: m.message },
+        selecting: null,
+        pendingCreate:
+          s.pendingCreate?.selectionId === m.selectionId
+            ? { ...s.pendingCreate, outcome: "rejected", detail: m.message }
+            : s.pendingCreate,
       };
     case "error":
       if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;

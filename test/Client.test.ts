@@ -54,6 +54,47 @@ function harness() {
 
 const act = { _tag: "act", action: { _tag: "abort" } } as const;
 
+for (const retained of [false, true]) {
+  test(`selection rejection ends attachment and permits explicit retry (retained=${retained})`, () => {
+    const h = harness();
+    h.status(true);
+    h.client.select("/scratch", "a");
+    if (retained) {
+      h.server(h.selected("a"));
+      h.status(false);
+      h.status(true);
+    }
+    const before = h.selects().length;
+    const selectionId = h.client.getState().selectionId!;
+    h.client.select("/scratch", "a");
+    assert.equal(h.selects().length, before, "pending selections are deduplicated");
+    h.server({ _tag: "selection_rejected", selectionId, message: "Not started" });
+    assert.equal(h.client.getState().selecting, null);
+    assert.equal(h.client.getState().selectionId, null);
+    assert.equal(h.client.getState().selectionFailure?.message, "Not started");
+    assert.equal(!!h.client.getState().session, retained);
+    h.client.send(act);
+    assert.equal(h.sent.filter((m) => m._tag === "act").length, 0);
+    h.client.select("/scratch", "a");
+    assert.equal(h.selects().length, before + 1);
+    assert.notEqual(h.client.getState().selectionId, selectionId);
+    h.server({ _tag: "selection_rejected", selectionId, message: "Stale" });
+    h.server({
+      _tag: "error",
+      selectionId: h.client.getState().selectionId!,
+      message: "Action failure",
+    });
+    assert.ok(
+      h.client.getState().selecting,
+      "stale rejection and action error cannot settle attachment",
+    );
+    assert.equal(h.client.getState().selectionFailure, null);
+    h.server(h.selected("a"));
+    h.client.select("/scratch", "a");
+    assert.equal(h.selects().length, before + 1, "ready selection is deduplicated");
+  });
+}
+
 test("live state is current before paint, while typing and disconnect notify renderers immediately", () => {
   const h = harness();
   h.status(true);
@@ -207,6 +248,43 @@ test("create_session mints a selection and shows the first message until Pi reco
   assert.equal(created?.selectionId, "sel1");
   assert.equal(h.client.getState().pendingCreate?.text, "hello");
   assert.equal(h.client.getState().view.kind, "session");
+});
+
+test("rejected reattachment preserves uncertain first-message delivery and never resends creation", () => {
+  const h = harness();
+  h.status(true);
+  h.client.send({ _tag: "create_session", cwd: "/scratch", options: {}, text: "might execute" });
+  const selected = h.selected("a");
+  assert.ok(selected._tag === "selected");
+  h.server({ ...selected, snapshot: { ...selected.snapshot, messages: [] } });
+  h.status(false);
+  const uncertain = h.client.getState().pendingCreate;
+  assert.equal(uncertain?.outcome, "uncertain");
+  h.status(true);
+  h.server({
+    _tag: "selection_rejected",
+    selectionId: h.client.getState().selectionId!,
+    message: "Attachment was not started",
+  });
+  assert.deepEqual(h.client.getState().pendingCreate, uncertain);
+  assert.equal(h.client.getState().selecting, null);
+  assert.equal(h.client.getState().selectionFailure?.message, "Attachment was not started");
+  h.client.select("/scratch", "a");
+  assert.deepEqual(h.client.getState().pendingCreate, uncertain);
+  assert.equal(h.sent.filter((m) => m._tag === "create_session").length, 1);
+});
+
+test("rejected creation marks only its own first message as not started", () => {
+  const h = harness();
+  h.status(true);
+  h.client.send({ _tag: "create_session", cwd: "/scratch", options: {}, text: "not sent" });
+  h.server({
+    _tag: "selection_rejected",
+    selectionId: h.client.getState().selectionId!,
+    message: "Creation was not started",
+  });
+  assert.equal(h.client.getState().pendingCreate?.outcome, "rejected");
+  assert.equal(h.client.getState().pendingCreate?.detail, "Creation was not started");
 });
 
 /** What the client asked Pi about, as `tag cwd` pairs, since the last call. */

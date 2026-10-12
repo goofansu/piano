@@ -186,6 +186,7 @@ export function createClient({
     select: (cwd, sessionId) => {
       const current = state.session ?? state.selecting;
       if (
+        (state.selecting || sessionReady(state)) &&
         current &&
         current.cwd === cwd &&
         current.sessionId === sessionId &&
