@@ -159,6 +159,86 @@ test("an uncertain first message explains with the browser's own detail before P
   );
 });
 
+test("a first message that never reached Pi warns, whatever stopped it", () => {
+  const input: PendingCreate = {
+    selectionId: "create",
+    cwd: "/repo",
+    text: "hi",
+    outcome: "starting",
+  };
+  // The selection was rejected before Pi reported any submission.
+  const rejected = find(
+    at(
+      {},
+      {
+        session: null,
+        selectionId: null,
+        selectionFailure: { cwd: "/repo", sessionId: null, message: "Directory not trusted" },
+        pendingCreate: { ...input, outcome: "rejected", detail: "Directory not trusted" },
+      },
+    ),
+    "submission",
+  );
+  assert.equal(rejected?.tone, "warning");
+  assert.equal(rejected?.title, "Message rejected.");
+  assert.deepEqual(rejected?.details, ["Directory not trusted"]);
+
+  // The connection dropped while the first message was starting.
+  const lost = find(
+    at(
+      {},
+      {
+        connected: false,
+        session: null,
+        selectionId: null,
+        pendingCreate: {
+          ...input,
+          outcome: "uncertain",
+          detail: "Connection lost before delivery was confirmed.",
+        },
+      },
+    ),
+    "submission",
+  );
+  assert.equal(lost?.tone, "warning");
+  assert.match(lost?.title ?? "", /^Delivery uncertain — inspect the session list/);
+  assert.deepEqual(lost?.details, ["Connection lost before delivery was confirmed."]);
+});
+
+test("a handled command is a quiet line whether the browser or Pi reports it", () => {
+  const input: PendingCreate = {
+    selectionId: "create",
+    cwd: "/repo",
+    text: "/x",
+    outcome: "handled",
+  };
+  for (const s of [
+    at({}, { pendingCreate: input }),
+    at({ submission: { id: 1, outcome: "handled" } }),
+  ]) {
+    const line = find(s, "submission");
+    assert.equal(line?.tone, "quiet");
+    assert.equal(line?.title, "Command handled.");
+  }
+});
+
+test("Pi's submission speaks once the browser's record is gone", () => {
+  const submitting = find(at({ submission: { id: 2, outcome: "submitting" } }), "submission");
+  assert.equal(submitting?.tone, "quiet");
+  assert.equal(submitting?.title, "Submitting — waiting for Pi.");
+  const rejected = find(
+    at({ submission: { id: 2, outcome: "rejected", detail: "busy" } }),
+    "submission",
+  );
+  assert.equal(rejected?.tone, "warning");
+  assert.equal(rejected?.title, "Message rejected.");
+  assert.deepEqual(rejected?.details, ["busy"]);
+  assert.match(
+    find(at({ submission: { id: 2, outcome: "uncertain" } }), "submission")?.title ?? "",
+    /^Delivery uncertain — inspect the session and queue/,
+  );
+});
+
 test("an extension block appears only when it says something", () => {
   assert.equal(find(at({ extension: { statuses: [], widgets: [] } }), "extension"), undefined);
   const said = find(

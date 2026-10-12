@@ -8,7 +8,8 @@
 import type { ClientCommand, ExtensionState } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { SessionDisplay } from "./sessionCommands.ts";
-import { closureNeedsAttention, sessionActivity, sessionContext } from "./sessionContext.ts";
+import { closureNeedsAttention, sessionContext } from "./sessionContext.ts";
+import { submissionReceipt } from "./submissionReceipt.ts";
 
 /** Where a notice sits: above the transcript, below it, or in place of the composer. */
 export type SessionNoticePlacement = "banner" | "status" | "composer";
@@ -56,12 +57,12 @@ const notice = (
   ...rest,
 });
 
-/** The selected session's notices, in display order. `display` is the transcript display. */
-export function sessionNotices(state: AppState, display: SessionDisplay): SessionNotice[] {
+/** The selected session's notices, in display order. No notice depends on the transcript
+ * display today; callers pass it so one that does need not change them. */
+export function sessionNotices(state: AppState, _display: SessionDisplay): SessionNotice[] {
   const t = state.session;
-  const input = state.pendingCreate;
   const { folder, checkoutMissing } = sessionContext(state);
-  const { submissionText } = sessionActivity(state, display);
+  const receipt = submissionReceipt(state);
   const notices: SessionNotice[] = [];
 
   const failure = state.selectionFailure;
@@ -136,21 +137,8 @@ export function sessionNotices(state: AppState, display: SessionDisplay): Sessio
         `Dialog ${resolution.reason}: ${resolution.detail}`,
       ),
     );
-  if (submissionText) {
-    const submission = t?.state.submission;
-    // Browser-held input describes the first message until Pi's own submission supersedes it.
-    notices.push(
-      notice(
-        "submission",
-        "status",
-        submission?.outcome === "uncertain" || submission?.outcome === "rejected"
-          ? "warning"
-          : "quiet",
-        submissionText,
-        [input?.detail ?? submission?.detail],
-      ),
-    );
-  }
+  if (receipt?.text)
+    notices.push(notice("submission", "status", receipt.tone, receipt.text, [receipt.detail]));
   const extension = t?.state.extension;
   // Pi reports an extension block for every session; only one that says something is shown.
   if (

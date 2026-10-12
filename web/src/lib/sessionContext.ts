@@ -16,6 +16,7 @@ import type {
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
 import { findProject } from "./projectCommands.ts";
+import { submissionReceipt } from "./submissionReceipt.ts";
 
 type SessionRef = { cwd: string; sessionId: string };
 
@@ -214,8 +215,6 @@ export interface SessionActivity {
   replyActivity: ReplyActivity | undefined;
   /** Sent but not yet in the transcript: created with a first message, submitting, or running. */
   firstMessageOnItsWay: boolean;
-  /** The last input's outcome when it needs words; the running state already says the rest. */
-  submissionText: string | undefined;
 }
 
 /** The selected session's activity. `display` is the transcript display: Messages hides pending text. */
@@ -224,7 +223,7 @@ export function sessionActivity(
   display: "everything" | "messages",
 ): SessionActivity {
   const t = state.session;
-  const input = state.pendingCreate;
+  const receipt = submissionReceipt(state);
   const streaming = !!t && isWorking(t.state);
   const activity = [
     t?.dialogs.length ? "Waiting for input" : null,
@@ -233,43 +232,21 @@ export function sessionActivity(
   ]
     .filter(Boolean)
     .join(" · ");
-  const submission = t?.state.submission;
-  const starting = input?.outcome === "starting";
+  const starting = receipt?.phase === "starting";
   let replyActivity: ReplyActivity | undefined;
   // Messages only hides pending text, so it cannot replace the working indicator.
   if (display === "messages" || !t?.pending?.text) {
     if (starting) replyActivity = "starting";
     else if (streaming) replyActivity = "working";
   }
-  const inputText = input
-    ? {
-        starting: undefined, // The reply area's Piano keys provide startup feedback.
-        submitted: undefined,
-        handled: "Command handled.",
-        rejected: "Message rejected.",
-        uncertain:
-          "Delivery uncertain — inspect the session list before deciding whether to send again. Piano will not resend automatically.",
-      }[input.outcome]
-    : undefined;
-  const submissionText = input
-    ? inputText
-    : submission
-      ? {
-          submitting: "Submitting — waiting for Pi.",
-          started: undefined, // Running/ready state already describes the work.
-          queued: undefined, // The queue itself shows pending input.
-          handled: "Command handled.",
-          rejected: "Message rejected.",
-          uncertain:
-            "Delivery uncertain — inspect the session and queue before deciding whether to send again. Piano will not resend automatically.",
-        }[submission.outcome]
-      : undefined;
   // A dialog the first input opened needs the user, so it outranks startup.
   const status =
     starting && !t?.dialogs.length
       ? "Starting"
-      : !t && input
-        ? "Delivery uncertain"
+      : !t && receipt
+        ? receipt.phase === "rejected"
+          ? "Message rejected"
+          : "Delivery uncertain"
         : !state.connected || (t !== null && !sessionReady(state))
           ? "Reconnecting"
           : !t
@@ -283,8 +260,8 @@ export function sessionActivity(
     status,
     streaming,
     replyActivity,
-    firstMessageOnItsWay: !!t && (submission?.outcome === "submitting" || streaming),
-    submissionText,
+    // Pi's own submission, not the browser's receipt: only Pi's input reaches the transcript.
+    firstMessageOnItsWay: !!t && (t.state.submission?.outcome === "submitting" || streaming),
   };
 }
 
