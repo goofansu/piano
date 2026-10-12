@@ -73,6 +73,7 @@ const env = {
   PIANO_DB_PATH: undefined,
   HOST: "127.0.0.1",
   PORT: "7171",
+  PIANO_ALLOWED_ORIGINS: "http://127.0.0.1:7172,http://localhost:7172",
   PIANO_PI_CLI: resolve("test/fake-host-pi.mjs"),
   PIANO_PI_ARGS: `--audit ${audit}`,
   PI_CODING_AGENT_DIR: join(root, "agent"),

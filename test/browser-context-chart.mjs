@@ -54,6 +54,7 @@ const server = spawn(process.execPath, ["server/main.ts"], {
     HOME: root,
     HOST: "127.0.0.1",
     PORT: "7171",
+    PIANO_ALLOWED_ORIGINS: "http://127.0.0.1:7172,http://localhost:7172",
     ...registryEnv(registry),
     PI_CODING_AGENT_SESSION_DIR: sessionDir,
   },

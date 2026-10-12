@@ -99,6 +99,7 @@ const backend = spawn(process.execPath, ["server/main.ts"], {
     ...process.env,
     HOST: "127.0.0.1",
     PORT: String(backendPort),
+    PIANO_ALLOWED_ORIGINS: `http://127.0.0.1:${frontendPort},http://localhost:${frontendPort}`,
     ...registryEnv(join(root, "registry.json")),
     PIANO_REVISION_STORE: store,
     PIANO_PI_CLI: fake,

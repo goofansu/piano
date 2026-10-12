@@ -26,6 +26,7 @@ const backend = spawn(process.execPath, ["server/main.ts"], {
     HOME: fixture.root,
     HOST: "127.0.0.1",
     PORT: backendPort,
+    PIANO_ALLOWED_ORIGINS: `http://127.0.0.1:${frontendPort},http://localhost:${frontendPort}`,
     PIANO_DB_PATH: join(fixture.root, "piano.db"),
     PI_CODING_AGENT_DIR: fixture.agentDir,
     PI_CODING_AGENT_SESSION_DIR: fixture.sessionDir,

@@ -21,6 +21,7 @@ const env = {
   HOME: join(root, "home"),
   HOST: "127.0.0.1",
   PORT: "7171",
+  PIANO_ALLOWED_ORIGINS: "http://127.0.0.1:7172,http://localhost:7172",
   PIANO_PI_CLI: resolve("test/fake-host-pi.mjs"),
   PI_CODING_AGENT_DIR: join(root, "agent"),
   PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),

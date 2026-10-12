@@ -70,6 +70,7 @@ const backend = spawn(process.execPath, ["server/main.ts"], {
     ...process.env,
     HOST: "127.0.0.1",
     PORT: "7171",
+    PIANO_ALLOWED_ORIGINS: "http://127.0.0.1:7172,http://localhost:7172",
     ...registryEnv(registry),
     PIANO_PI_CLI: resolve("test/fake-pi.mjs"),
     PIANO_PI_ARGS: "",
