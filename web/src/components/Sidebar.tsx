@@ -28,6 +28,7 @@ import { pickCommands, SESSION_ROW_COMMANDS, type SessionTarget } from "@/lib/se
 import { sessionProject } from "@/lib/sessionContext";
 import { projectKey } from "@/lib/sidebarGroups";
 import { dateGroups, folderGroups, projectGroups, type SidebarView, sortSessions } from "@/lib/sidebarView";
+import { readJson, writeJson } from "@/lib/storage";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarGroups } from "@/lib/useSidebarGroups";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -50,6 +51,11 @@ export function Sidebar({ state, onHide }: Props) {
   const { select, openNew, openSettings, setPalette } = useNavigation();
   const { view } = useSidebarView();
   const { openGroups, setOpen } = useSidebarGroups(state, view.groupBy);
+  const [pinnedOpen, setPinnedOpen] = useState(() => readJson("piano.pinnedOpen", true));
+  const togglePinned = (open: boolean) => {
+    setPinnedOpen(open);
+    writeJson("piano.pinnedOpen", open);
+  };
   const [dateNow, setDateNow] = useState(() => new Date());
 
   // Refresh an idle date view at local midnight; focus also catches sleep and clock changes.
@@ -141,11 +147,19 @@ export function Sidebar({ state, onHide }: Props) {
       <ScrollArea className="min-h-0 flex-1">
       <nav className="relative px-3 pb-4" aria-label="Sessions">
         {state.registryLoaded && pinned.length > 0 && (
-          <section aria-label="Pinned">
-            {/* No standalone shadcn heading fits this noninteractive list section. */}
-            <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">Pinned</h2>
-            <SessionList sessions={pinned} {...groupProps} />
-          </section>
+          <Collapsible open={pinnedOpen} onOpenChange={togglePinned} aria-label="Pinned" className="mb-1">
+            <div className={groupRow}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className={groupTrigger}>
+                  <Chevron open={pinnedOpen} />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">Pinned</span>
+                </button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent className="disclosure-content">
+              <SessionRows className="flex flex-col gap-1 py-1" sessions={pinned} {...groupProps} />
+            </CollapsibleContent>
+          </Collapsible>
         )}
         {list()}
       </nav>
