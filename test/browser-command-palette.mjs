@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { registryEnv } from "./fixtures/registry.ts";
+import { sidebarDragPerformance } from "./fixtures/sidebar-drag-performance.mjs";
 
 const evidence = resolve(process.argv[2] ?? "/tmp/piano-palette-evidence");
 mkdirSync(evidence, { recursive: true });
@@ -70,6 +71,45 @@ for (const entry of entries)
         timestamp: entry.createdAt,
         message: { role: "user", content: `History for ${entry.title}`, timestamp: 0 },
       },
+      ...(entry.sessionId === "palette-0"
+        ? [
+            {
+              type: "message",
+              id: "m2",
+              parentId: "m1",
+              timestamp: entry.createdAt,
+              message: {
+                role: "assistant",
+                api: "openai-completions",
+                provider: "fake",
+                model: "alpha",
+                stopReason: "toolUse",
+                timestamp: 1,
+                content: [
+                  {
+                    type: "toolCall",
+                    id: "swipe-tool",
+                    name: "bash",
+                    arguments: { command: "echo swipe-header" },
+                  },
+                ],
+              },
+            },
+            {
+              type: "message",
+              id: "m3",
+              parentId: "m2",
+              timestamp: entry.createdAt,
+              message: {
+                role: "toolResult",
+                toolCallId: "swipe-tool",
+                toolName: "bash",
+                timestamp: 2,
+                content: [{ type: "text", text: "swipe-header output" }],
+              },
+            },
+          ]
+        : []),
     ]
       .map(JSON.stringify)
       .join("\n") + "\n",
@@ -417,27 +457,346 @@ try {
   await capture("touch-picker");
   await ab("press", "Escape");
   await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
-  await ab("wait", '[data-slot="sheet-content"]');
+  await ab("wait", '[data-slot="mobile-sidebar"]');
   const sheet = await evaluate(`(() => {
-    const content = getComputedStyle(document.querySelector('[data-slot="sheet-content"]'));
-    const overlay = getComputedStyle(document.querySelector('[data-slot="sheet-overlay"]'));
-    return { duration: content.animationDuration, overlayDuration: overlay.animationDuration, scrim: overlay.backgroundColor };
+    const content = document.querySelector('[data-slot="sidebar-reveal-navigation"]');
+    const overlay = getComputedStyle(document.querySelector('[data-slot="sidebar-scrim"]'));
+    return { ratio: content.getBoundingClientRect().width / innerWidth, duration: overlay.transitionDuration, scrim: overlay.backgroundColor };
   })()`);
   ui.push({ sheet });
-  assert.equal(sheet.duration, "0.3s");
-  assert.equal(sheet.overlayDuration, "0.3s");
+  assert.equal(sheet.ratio, 0.75);
+  assert.equal(sheet.duration, "0.3s, 0.3s, 0.3s");
   await capture("touch-sidebar");
   await ab("press", "Escape");
   await ab("wait", "--fn", `document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
-  await ab("set", "media", "light", "reduced-motion");
-  await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
-  await ab("wait", '[data-slot="sheet-content"]');
+  // Synthetic touch sequences exercise the app contract, not Safari's OS-owned Back gesture.
+  const swipe = (selector, x, dx, dy = 0, fixture = "") =>
+    evaluate(`(() => {
+      const surface = document.querySelector(${JSON.stringify(selector)});
+      let target = surface;
+      const fixture = ${JSON.stringify(fixture)};
+      if (fixture) {
+        target = document.createElement(fixture === 'input' ? 'input' : 'div');
+        if (fixture === 'scroll') {
+          target.style.cssText = 'width:100px;overflow-x:auto';
+          target.innerHTML = '<div style="width:500px;height:20px"></div>';
+        }
+        surface.append(target);
+      }
+      const send = (type, px, py) => {
+        const touch = new Touch({ identifier: 1, target, clientX: px, clientY: py });
+        target.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true,
+          touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] }));
+      };
+      send('touchstart', ${x}, 300);
+      send('touchmove', ${x + dx}, ${300 + dy});
+      send('touchend', ${x + dx}, ${300 + dy});
+      if (fixture) target.remove();
+      return true;
+    })()`);
+  const main = '[data-slot="layout-main"]';
+  for (const [x, dx, dy, fixture] of [
+    [5, 100, 0, ""],
+    [40, 20, 0, ""],
+    [40, 100, 120, ""],
+    [40, 100, 0, "scroll"],
+    [40, 100, 0, "input"],
+  ]) {
+    await swipe(main, x, dx, dy, fixture);
+    assert.equal(
+      await evaluate(`!!document.querySelector('[data-slot="mobile-sidebar"][data-state="open"]')`),
+      false,
+    );
+  }
+  // Separate events let React paint before release: this is the regression the old shortcut missed.
+  await evaluate(`(() => {
+    window.sidebarTouch = (type, x, y = 300) => {
+      if (type === 'touchstart') window.sidebarTarget = document.querySelector('[data-slot="mobile-sidebar"]') ?? document.querySelector('[data-slot="layout-main"]');
+      const target = window.sidebarTarget;
+      const touch = new Touch({ identifier: 9, target, clientX: x, clientY: y });
+      target.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true,
+        touches: ['touchend', 'touchcancel'].includes(type) ? [] : [touch], changedTouches: [touch] }));
+    };
+    return true;
+  })()`);
+  const touch = (type, x, y = 300) =>
+    evaluate(`(window.sidebarTouch('${type}', ${x}, ${y}), true)`);
+  const position = () =>
+    evaluate(`document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left`);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  await touch("touchstart", 180);
+  await touch("touchmove", 280);
+  assert.ok(
+    Math.abs((await position()) - 100) < 1,
+    "swipe from the middle follows finger before touchend",
+  );
+  await capture("swipe-preview");
+  await evaluate(`(() => {
+    window.sidebarTouch('touchmove', 250);
+    window.sidebarTouch('touchmove', 240);
+    window.sidebarTouch('touchmove', 220);
+    return true;
+  })()`);
+  assert.ok(
+    Math.abs((await position()) - 40) < 1,
+    "a burst of moves paints the latest finger position",
+  );
+  await evaluate(`(() => {
+    window.sidebarTouch('touchmove', 250);
+    window.sidebarTouch('touchcancel', 250);
+    return true;
+  })()`);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  assert.ok(
+    Math.abs(await position()) < 1,
+    "cancellation discards the pending frame and settles closed",
+  );
+  await touch("touchstart", 40);
+  await touch("touchmove", 140);
+  await ab("press", "Escape");
+  await touch("touchend", 140);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  assert.ok(Math.abs(await position()) < 1, "Escape cancels an unfinished preview");
+  // Fast, short flick commits even before the halfway point (deterministic event timestamps).
+  await evaluate(`(() => {
+    const target = document.querySelector('[data-slot="layout-main"]');
+    for (const [type, x, time] of [['touchstart', 40, 0], ['touchmove', 90, 40], ['touchend', 90, 50]]) {
+      const touch = new Touch({ identifier: 3, target, clientX: x, clientY: 300 });
+      const event = new TouchEvent(type, { bubbles: true, cancelable: true,
+        touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] });
+      Object.defineProperty(event, 'timeStamp', { value: time });
+      target.dispatchEvent(event);
+    }
+    return true;
+  })()`);
+  await ab(
+    "wait",
+    "--fn",
+    `Math.abs(document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left - innerWidth * .75) < 1`,
+  );
+  await capture("swipe-open");
+  await ab("press", "Tab");
   assert.equal(
     await evaluate(
-      `getComputedStyle(document.querySelector('[data-slot="sheet-content"]')).animationName`,
+      `document.querySelector('[data-slot="mobile-sidebar"]').contains(document.activeElement)`,
     ),
-    "none",
-    "reduced-motion beats app overlay styling",
+    true,
+    "focus stays within the open navigation",
+  );
+  await touch("touchstart", 250);
+  await touch("touchmove", 170);
+  assert.ok(Math.abs((await position()) - 212.5) < 1, "closing also tracks finger");
+  await touch("touchcancel", 170);
+  await ab(
+    "wait",
+    "--fn",
+    `Math.abs(document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left - innerWidth * .75) < 1`,
+  );
+  await touch("touchstart", 250);
+  await touch("touchmove", 50);
+  await touch("touchend", 50);
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  await capture("swipe-closed");
+  await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
+  await ab("wait", '[data-slot="mobile-sidebar"]');
+  await ab("click", '[data-slot="sidebar-scrim"]');
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  await ab("set", "viewport", "1200", "844");
+  await swipe(main, 40, 100);
+  assert.equal(await evaluate(`!!document.querySelector('[data-slot="mobile-sidebar"]')`), false);
+  await ab("set", "viewport", "390", "844");
+  // Trusted Chromium touch input verifies that modal mounting doesn't interrupt the gesture,
+  // and that the non-passive listener actually prevents native horizontal panning.
+  const cdp = new WebSocket(await ab("get", "cdp-url"));
+  await new Promise((resolve, reject) => {
+    cdp.addEventListener("open", resolve, { once: true });
+    cdp.addEventListener("error", reject, { once: true });
+  });
+  let messageId = 0;
+  const send = (method, params = {}, sessionId) =>
+    new Promise((resolve, reject) => {
+      const id = ++messageId;
+      const timer = setTimeout(() => {
+        cdp.removeEventListener("message", listener);
+        reject(new Error(`CDP timeout: ${method}`));
+      }, 10000);
+      const listener = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.id !== id) return;
+        clearTimeout(timer);
+        cdp.removeEventListener("message", listener);
+        if (message.error) reject(new Error(JSON.stringify(message.error)));
+        else resolve(message.result);
+      };
+      cdp.addEventListener("message", listener);
+      cdp.send(JSON.stringify({ id, method, params, sessionId }));
+    });
+  try {
+    const { targetInfos } = await send("Target.getTargets");
+    const target = targetInfos.find(
+      (target) => target.type === "page" && target.url.startsWith(`http://127.0.0.1:${webPort}`),
+    );
+    assert.ok(target);
+    const { sessionId } = await send("Target.attachToTarget", {
+      targetId: target.targetId,
+      flatten: true,
+    });
+    await send("Emulation.setTouchEmulationEnabled", { enabled: true }, sessionId);
+    const nativeTouch = (type, x) =>
+      send(
+        "Input.dispatchTouchEvent",
+        {
+          type,
+          touchPoints: type === "touchEnd" ? [] : [{ x, y: 300, id: 1 }],
+        },
+        sessionId,
+      );
+    await nativeTouch("touchStart", 150);
+    await nativeTouch("touchMove", 250);
+    assert.ok(Math.abs((await position()) - 100) < 2, "trusted touch previews before release");
+    await capture("native-touch-preview");
+    await nativeTouch("touchMove", 350);
+    await nativeTouch("touchEnd", 350);
+    await ab(
+      "wait",
+      "--fn",
+      `Math.abs(document.querySelector('[data-slot="layout-main"]').getBoundingClientRect().left - innerWidth * .75) < 1`,
+    );
+    // Start on the dimmed content, not the navigation, to cover both dismiss surfaces.
+    await nativeTouch("touchStart", 340);
+    await nativeTouch("touchMove", 240);
+    assert.ok(Math.abs((await position()) - 192.5) < 2, "scrim drag follows finger");
+    await nativeTouch("touchMove", 100);
+    await nativeTouch("touchEnd", 100);
+    await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+    if (process.env.PIANO_SWIPE_PROFILE === "1") {
+      const profile = await sidebarDragPerformance((method, params) =>
+        send(method, params, sessionId),
+      );
+      writeFileSync(join(evidence, "drag-performance.json"), JSON.stringify(profile, null, 2));
+      console.log(
+        `Drag timing: median ${profile.median.toFixed(1)}ms, p95 ${profile.p95.toFixed(1)}ms`,
+      );
+      assert.ok(
+        profile.median < 50,
+        "sustained drag avoids long visible stalls on the reference host",
+      );
+    }
+    // Real tool-call disclosure buttons must support both tap and drag, without changing
+    // disclosure state when the swipe is released (including a cancelled short swipe).
+    await ab("open", `http://127.0.0.1:${webPort}/s/palette-0`);
+    const header = '[role="group"][aria-label="bash tool call"] button[aria-expanded]';
+    await ab("wait", header);
+    const expanded = () =>
+      evaluate(`document.querySelector('${header}').getAttribute('aria-expanded')`);
+    const toolTouch = (type, x, y) =>
+      send(
+        "Input.dispatchTouchEvent",
+        {
+          type,
+          touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
+        },
+        sessionId,
+      );
+    for (const state of ["false", "true"]) {
+      await ab("scrollintoview", header);
+      const { x, y } = await evaluate(
+        `(() => { const r = document.querySelector('${header}').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; })()`,
+      );
+      assert.equal(await expanded(), state);
+      await toolTouch("touchStart", x, y);
+      await toolTouch("touchMove", x + 40, y);
+      assert.ok(Math.abs((await position()) - 40) < 2, "tool-call header starts a sidebar drag");
+      await toolTouch("touchEnd", x + 40, y);
+      await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+      assert.equal(await expanded(), state, "short swipe does not toggle disclosure");
+      await toolTouch("touchStart", x, y);
+      await toolTouch("touchMove", x + 100, y);
+      await toolTouch("touchMove", x + 200, y);
+      await toolTouch("touchEnd", x + 200, y);
+      await ab("wait", '[data-slot="mobile-sidebar"][data-state="open"]');
+      await ab("press", "Escape");
+      await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+      assert.equal(await expanded(), state, "opening sidebar does not toggle disclosure");
+      await toolTouch("touchStart", x, y);
+      await toolTouch("touchEnd", x, y);
+      assert.notEqual(await expanded(), state, "a fresh tap still toggles disclosure");
+    }
+    await capture("tool-header-swipes");
+  } finally {
+    cdp.close();
+  }
+  // Releasing a slow drag must not suddenly accelerate the page. Sample the real CSS
+  // transition at fixed times so this checks visible motion, not wall-clock/CDP timing.
+  const release = await evaluate(`(async () => {
+    const main = document.querySelector('[data-slot="layout-main"]');
+    const dispatch = (type, x, time) => {
+      const touch = new Touch({ identifier: 3, target: main, clientX: x, clientY: 300 });
+      const event = new TouchEvent(type, { bubbles: true, cancelable: true,
+        touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] });
+      Object.defineProperty(event, 'timeStamp', { value: time });
+      main.dispatchEvent(event);
+    };
+    const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    dispatch('touchstart', 150, 0);
+    dispatch('touchmove', 350, 500);
+    await frame(); await frame();
+    dispatch('touchend', 350, 510);
+    await frame();
+    const animation = main.getAnimations().find(a => a.transitionProperty === 'transform');
+    if (!animation) throw new Error('Missing sidebar settling transition');
+    animation.pause();
+    animation.currentTime = 0;
+    const start = main.getBoundingClientRect().left;
+    animation.currentTime = 10;
+    const after = main.getBoundingClientRect().left;
+    animation.finish();
+    return { start, after };
+  })()`);
+  assert.ok(Math.abs(release.start - 200) < 1, "release starts at the last dragged position");
+  assert.ok(
+    release.after - release.start > 2 && release.after - release.start < 7,
+    `slow release keeps its 0.4px/ms pace rather than lurching: ${JSON.stringify(release)}`,
+  );
+  await ab("press", "Escape");
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  ui.push({ swipeRelease: release });
+  // Same travel, different release speed: a fast flick must settle sooner than a slow drag.
+  const durations = [];
+  for (const elapsed of [500, 40]) {
+    await evaluate(`(() => {
+      const target = document.querySelector('[data-slot="layout-main"]');
+      for (const [type, x, time] of [['touchstart', 150, 0], ['touchmove', 350, ${elapsed}], ['touchend', 350, ${elapsed + 10}]]) {
+        const touch = new Touch({ identifier: 3, target, clientX: x, clientY: 300 });
+        const event = new TouchEvent(type, { bubbles: true, cancelable: true,
+          touches: type === 'touchend' ? [] : [touch], changedTouches: [touch] });
+        Object.defineProperty(event, 'timeStamp', { value: time });
+        target.dispatchEvent(event);
+      }
+      return true;
+    })()`);
+    durations.push(
+      await evaluate(
+        `parseFloat(getComputedStyle(document.querySelector('[data-slot="layout-main"]')).transitionDuration)`,
+      ),
+    );
+    await ab("press", "Escape");
+    await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+  }
+  assert.ok(durations[1] < durations[0], "faster flick has a shorter settling animation");
+  ui.push({ swipeSettleSeconds: durations });
+  console.log(
+    "PASS: 75% reveal, swipe anywhere with trusted touch, finger tracking, speed-aware settling, reversal, cancellation, scrim/tap dismissal; edge, vertical, horizontal scroller, input and desktop exclusions",
+  );
+  await ab("set", "media", "light", "reduced-motion");
+  await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
+  await ab("wait", '[data-slot="mobile-sidebar"]');
+  assert.equal(
+    await evaluate(
+      `getComputedStyle(document.querySelector('[data-slot="layout-main"]')).transitionDuration`,
+    ),
+    "0s",
+    "reduced-motion skips settling animations",
   );
   assert.equal(await ab("errors"), "");
   console.log(

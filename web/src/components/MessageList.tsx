@@ -639,7 +639,7 @@ function Tool({
         }
       >
         <CollapsibleTrigger asChild>
-          <button type="button" className={disclosureRow}>
+          <button type="button" data-sidebar-swipe="true" className={disclosureRow}>
             <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
               {verb}
               {!knownTool && (

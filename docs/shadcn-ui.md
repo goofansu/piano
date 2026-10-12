@@ -22,6 +22,7 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 | Search/option row heights, including touch and the palette dialog | `PianoCommand` |
 | Skeleton fill | `PianoSkeleton` |
 | Settings sidebar tooltip policy | `PianoSidebarMenuButton` |
+| Mobile sidebar reveal and partial scrim | `PianoSidebarReveal`; transient finger tracking in `useSidebarSwipe`, motion in `index.css` |
 | Theme tokens and existing selected-sidebar styling | `index.css` |
 
 Wrappers merge only Piano's changes, not copies of upstream class lists. Custom button/badge/alert
@@ -39,8 +40,18 @@ no duplicate class patch is needed.
 
 There are no intentional patches left in `ui/`. Keep Sidebar's built-in Mod+B listener alongside
 Piano's Mod+K command palette. Its controlled `open` prop connects the shortcut to Piano's desktop
-sidebar, including the saved collapsed preference. Piano's separate mobile sheet still uses its
-layout controls; stock `openMobile` is not connected to that sheet.
+sidebar, including the saved collapsed preference. Piano's separate mobile reveal still uses its
+layout controls; stock `openMobile` is not connected to that reveal. It composes the same Radix
+modal primitive as Sheet, but exposes stationary navigation under a translated live page rather
+than moving a sheet over it. The sidebar occupies 75% of the mobile viewport; only a claimed
+horizontal drag anywhere on the main content overrides touch scrolling, with browser edges,
+editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; settling
+duration adapts to release speed and remaining distance, with a velocity-matched easing curve to
+avoid a speed jump on release and stop gently at the endpoint. The moving surfaces have compositor
+hints (the live page only on mobile). During a drag, `useSidebarSwipe` batches surface-only style
+writes into animation frames; React owns mounting and the settled endpoint.
+Do not update inherited motion variables per frame: that invalidates styles across the transcript
+and navigation. Cancellation discards pending frames and returns the surfaces to CSS settling.
 
 ## Upgrade procedure
 
@@ -55,7 +66,11 @@ layout controls; stock `openMobile` is not connected to that sheet.
 4. Run the repository gates and the affected scratch-browser journey. For picker/overlay changes,
    `node test/browser-command-palette.mjs <evidence-directory>` checks desktop/mobile palette
    navigation, row sizing, light/dark pickers, trailing checks, pointer/keyboard focus, Mod+B,
-   touch focus, sheet timing and reduced motion. It uses fake Pi and no paid model calls.
+   touch focus, mobile reveal proportions, finger tracking (including trusted Chromium touch),
+   cancellation, dismissal and reduced motion. It uses fake Pi and no paid model calls. Physical
+   Safari browser-edge navigation still requires a device check. For comparative drag timing,
+   run with `PIANO_SWIPE_PROFILE=1`; it retains visible-position update gaps under 4x Chromium
+   CPU throttling. Its reference-host median budget is not an iPhone/Safari FPS guarantee.
 
 Upgrades still need review: clean upstream files eliminate customization merges, not API or
 visual regressions. Compare against CLI-generated source for this project's registry and aliases,
