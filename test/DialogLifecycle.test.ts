@@ -157,8 +157,11 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
     const closedInput = yield* watch(session, e => e._tag === "notice" && e.message === "input closed");
     yield* session.act({ _tag: "prompt", text: "/close-input" }).pipe(Effect.ignore, Effect.forkChild);
     yield* Fiber.join(closedInput);
+    const stopped = yield* watch(session, e => e._tag === "closed");
     const failed = yield* session.act(answer(dialog)).pipe(Effect.result);
     assert.equal(failed._tag, "Failure");
+    yield* Fiber.join(stopped);
+    assert.equal((yield* session.state).closure?._tag, "failed", "a broken input pipe cannot leave an uncontrollable live session");
     assert.equal((yield* session.state).dialogResolution?.delivery, "uncertain");
     assert.deepEqual((yield* snapshot(session)).dialogs, []);
     assert.equal((yield* session.act(answer(dialog)).pipe(Effect.result))._tag, "Failure");

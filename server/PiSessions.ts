@@ -120,6 +120,8 @@ interface Child {
   /** Every non-response record, in stdout order. Ends when the child exits. */
   readonly records: Stream.Stream<{ record: PiRecord; receivedAt: number }>;
   readonly exited: Deferred.Deferred<SessionClosure>;
+  /** Stop an unusable session and settle all transport work before killing Pi. */
+  readonly fail: (detail: string) => Effect.Effect<void>;
   /** Includes queued records, so readbacks cannot race output not yet projected. */
   readonly observationVersion: () => number;
   readonly hasPendingWork: () => boolean;
@@ -195,7 +197,8 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       Stream.runForEach((chunk) => Effect.sync(() => {
         stderr = (stderr + chunk).slice(-8192);
       })),
-      Effect.ignore,
+      // Diagnostic-only stream: losing stderr does not invalidate RPC stdout.
+      Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("Pi stderr reader failed; exit diagnostics may be incomplete.")),
       Effect.forkScoped,
     );
 
@@ -261,7 +264,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
 
     yield* handle.exitCode.pipe(
       Effect.flatMap((code) => finish({ _tag: "exited", code, detail: `Pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}` })),
-      Effect.catchCause((cause) => finish({ _tag: "failed", detail: `Pi exit could not be observed: ${String(cause)}` })),
+      Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : failOutput("Pi exit could not be observed. Reopen history before continuing; do not automatically resend input.")),
       Effect.forkScoped,
     );
 
@@ -273,10 +276,12 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       )),
       Stream.run(handle.stdin),
       Effect.catchCause((cause) => Effect.gen(function* () {
-        transportError = new PiSessionError({ reason: "transport", detail: `Pi stdin failed; delivery is uncertain: ${String(cause)}` });
+        if (Cause.hasInterruptsOnly(cause) || closed) return;
+        transportError = new PiSessionError({ reason: "transport", detail: "Pi stdin failed; delivery is uncertain. Reopen history before continuing; do not automatically resend input." });
         for (const [done, release] of writes) { release(); yield* Deferred.fail(done, transportError); }
         writes.clear();
         for (const d of pending.values()) yield* Deferred.fail(d, transportError);
+        yield* failOutput(transportError.detail);
       })),
       Effect.forkScoped,
     );
@@ -350,7 +355,7 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
       recordBytes -= item.bytes;
       return item;
     }));
-    const child: Child = { request, read, write, records: recordStream, exited, observationVersion: () => observationVersion,
+    const child: Child = { request, read, write, records: recordStream, exited, fail: failOutput, observationVersion: () => observationVersion,
       hasPendingWork: () => pending.size > 0 || writes.size > 0 || uncertainMutation || uncertainWrite,
     };
     return child;
@@ -590,7 +595,8 @@ const openSession = (spec: PiSessionSpec) =>
 
     const recordsDrained = yield* Deferred.make<void>();
     yield* child.records.pipe(
-      Stream.runForEach(item => onRecord(item).pipe(Effect.ensuring(Effect.sync(() => { processedVersion++; })))), Effect.ignore,
+      Stream.runForEach(item => onRecord(item).pipe(Effect.ensuring(Effect.sync(() => { processedVersion++; })))),
+      Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : child.fail("Pi record processing failed. Reopen history before continuing; do not automatically resend input.")),
       Effect.ensuring(Deferred.succeed(recordsDrained, undefined)), Effect.forkScoped,
     );
 

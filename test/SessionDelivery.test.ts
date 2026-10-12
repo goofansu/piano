@@ -80,6 +80,18 @@ test('INV-05: an oversized frame closes as too large and a lagging consumer clos
   assert.equal((yield* lagging.delivery.closed).code, 1013);
 })));
 
+test('INV-05: writer failure closes delivery without exposing transport contents or retrying', () => scoped(Effect.gen(function* () {
+  let attempts = 0;
+  const delivery = yield* makeSocketDelivery(() => Effect.sync(() => { attempts++; }).pipe(Effect.andThen(Effect.die('private transport content'))), (value: string) => value);
+  yield* delivery.offer('first');
+  yield* delivery.offer('second');
+  const closed = yield* delivery.closed;
+  assert.equal(closed.code, 1013);
+  assert.match(closed.reason, /reconnect/);
+  assert.equal(closed.reason.includes('private transport content'), false);
+  assert.equal(attempts, 1);
+})));
+
 const run = <A, E>(work: Effect.Effect<A, E, PiSessions | Scope.Scope>) => Effect.runPromise(work.pipe(
   Effect.scoped, Effect.timeout('10 seconds'),
   Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer))),

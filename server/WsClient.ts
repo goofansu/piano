@@ -3,7 +3,7 @@
  * ClientMessages. Acknowledgements go to delivery; every other message goes to the client's
  * ClientDispatch, which owns what the message means.
  */
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { Socket } from "effect/socket";
 import { type ClientMessage, decodeClientMessage, encodeServerMessage, type ServerMessage } from "../shared/wire.ts";
 import { makeSocketDelivery } from "./BoundedDelivery.ts";
@@ -48,7 +48,13 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket
       // that opens an extension dialog only gets its response after the dialog is answered.
       yield* Effect.forkScoped(yield* client.receive(msg));
     }
-  }).pipe(Effect.forever, Effect.catchCause(() => Effect.void), Effect.raceFirst(
+  }).pipe(Effect.forever,
+    // Peer close already ends this client scope; a failed reader must explicitly
+    // close an otherwise live socket. Never replay work or stop its Pi session.
+    Effect.catchTag("SocketError", error => error.reason._tag === "SocketCloseError" ? Effect.void : Effect.fail(error)),
+    Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void :
+      writer.write(new Socket.CloseEvent(1011, "Socket reader failed; reconnect for a current snapshot.")).pipe(Effect.ignore)),
+    Effect.raceFirst(
     delivery.closed.pipe(Effect.flatMap(({ reason, code }) => writer.write(new Socket.CloseEvent(code, reason)).pipe(Effect.ignore))),
   ));
 }, Effect.scoped);

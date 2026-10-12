@@ -68,7 +68,12 @@ try {
   assert.ok(await evaluate(`sent.filter(m=>m._tag==='ack').length > 8`), 'delivery acknowledgements continue while ordinary work is full');
   assert.equal(await ab('errors'), '');
   await ab('screenshot', join(evidence, 'recovered.png'));
-  console.log('PASS: overload is visible; dialog answer and acks remain live; rejected input is never replayed; a subsequent prompt succeeds.');
+  await ab('fill', 'textarea[aria-label="Message"]', 'protocol raw:not-json'); await ab('press', 'Enter');
+  await ab('wait', '--fn', `received.some(m=>m._tag==='session' && m.event._tag==='closed' && m.event.closure._tag==='failed')`);
+  await ab('wait', '--text', 'Pi protocol failure');
+  await ab('screenshot', join(evidence, 'transport-failure.png'));
+  assert.equal(await evaluate(`sent.filter(m=>m._tag==='act' && m.action?.text==='protocol raw:not-json').length`), 1, 'uncertain input is never automatically resent');
+  console.log('PASS: overload is visible; dialog answer and acks remain live; rejected input is never replayed; subsequent input succeeds; transport failure closes visibly without resending.');
 } finally {
   await ab('snapshot').then(value => writeFileSync(join(evidence, 'final.txt'), value)).catch(() => {});
   await evaluate('({sent, received})').then(value => writeFileSync(join(evidence, 'wire.json'), JSON.stringify(value, null, 2))).catch(() => {});
