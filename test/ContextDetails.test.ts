@@ -4,7 +4,7 @@ import { after, test } from "node:test";
 import { type ComponentType, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
-import { subagentUsage } from "../server/RunLedger.ts";
+import { RunLedger } from "../server/Subagents.ts";
 import type { RenderMsg } from "../shared/wire.ts";
 import {
   type ContextFigures,
@@ -28,11 +28,11 @@ const { ContextDetails } = (await vite.ssrLoadModule("/src/components/ContextDet
 };
 const totals = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, total: 120 };
 // The server folds deliveries into `subagents`; the popover renders what it is given.
-const render = (deliveries: RenderMsg[]) =>
+const render = (deliveries: unknown[]) =>
   renderToStaticMarkup(
     createElement(ContextDetails, {
       figures: contextFigures(undefined, null, undefined),
-      usage: { cost: 0.5, tokens: totals, subagents: subagentUsage(deliveries) },
+      usage: { cost: 0.5, tokens: totals, subagents: new RunLedger().add(deliveries).usage },
       messages: [],
     }),
   );
@@ -41,18 +41,19 @@ const result = (
   profile: string,
   usage: Record<string, number> | undefined,
   model?: string,
-): RenderMsg => ({
+) => ({
+  type: "custom_message",
   id: runId + profile,
-  role: "context",
-  label: "subagent-notification",
-  text: "",
-  subagent: {
-    kind: "result",
-    source: "notification",
+  customType: "subagent-notification",
+  content: "",
+  details: {
     runId,
-    profile,
-    status: "Completed",
-    ...(usage ? { usage: usage as never } : {}),
+    subagentId: `subagent-${runId}`,
+    agent: profile,
+    label: profile,
+    status: "completed",
+    durationMillis: 1,
+    ...(usage ? { usage } : {}),
     ...(model ? { model } : {}),
   },
 });

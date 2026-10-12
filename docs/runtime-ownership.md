@@ -16,6 +16,7 @@ second session implementation or a new registry store.
 | `PiSessions` actions/readbacks | Session scope owns admitted work, independent of the browser join. Operation/fact/output versions prevent old readbacks and abort acknowledgements from overwriting newer work. Abort does not clear queue; Stop restores queue first (INV-02/03). |
 | `PiSessions` shutdown | Transport termination settles callers; record consumer completion signals `recordsDrained`. Only then announce closure once, resolving remaining dialog/submission uncertainty. The consumer finalizer signals completion but never waits on a later child finalizer. Scope release judges retained state and transport uncertainty, not already-interrupted action fibers. |
 | `PiRecords` | Translates Pi payloads, readbacks and commands. Projector correlation is accessed under the publication lock; it does not own a process, deadline fiber or subscriber. |
+| `Subagents` | The pi-subagent extension contract: subagent cards from tool and notification `details`, and the `RunLedger` that folds raw session entries into a compact per-Run spend record. PiRecords asks it about subagent payloads. |
 | `SessionHosts` | Canonical checkout/session identity and replacement/retirement. Browser disconnect only releases its attachment, not this host's child. |
 
 The transport seam hides OS and RPC correlation details from session orchestration.
@@ -26,7 +27,8 @@ left after caller timeout so retirement cannot infer false quiescence.
 Dialog and publication code deliberately remain together. Extracting them now would
 require passing the snapshot lock, publish functions, generation and shutdown gates
 back and forth, making their shared atomicity harder to see. PiRecords likewise is
-not split by size. These are explicit ownership choices, not deferred mechanical
+not split by size; `Subagents` is a split by concept (the pi-subagent extension contract versus
+the Pi RPC protocol), so the run ledger reads Pi entries without serializing a transcript. These are explicit ownership choices, not deferred mechanical
 file splitting.
 
 ## Verification
