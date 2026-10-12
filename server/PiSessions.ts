@@ -10,7 +10,7 @@
  * external seam is ChildProcessSpawner.
  */
 import { randomUUID } from "node:crypto";
-import { type Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, type Scope, Semaphore, Stream } from "effect";
+import { Cause, Clock, Context, Data, Deferred, Effect, Fiber, Layer, Queue, Ref, Schema, type Scope, Semaphore, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
@@ -93,13 +93,17 @@ export const PiDialogRecoveryMs = Context.Reference<number>("piano/PiDialogRecov
 
 const encoder = new TextEncoder();
 
-interface Response extends PiRecord {
-  type: "response";
-  command: string;
-  success: boolean;
-  data?: unknown;
-  error?: string;
-}
+// Validate only the envelope; PiRecords owns payload interpretation. Unknown
+// event types and extra fields remain forward compatible, not malformed input.
+const validEnvelope = Schema.is(Schema.Struct({ type: Schema.NonEmptyString, id: Schema.optional(Schema.String) }));
+const validResponse = Schema.is(Schema.Struct({
+  type: Schema.Literal("response"),
+  id: Schema.optional(Schema.String),
+  command: Schema.String,
+  success: Schema.Boolean,
+  data: Schema.optional(Schema.Unknown),
+  error: Schema.optional(Schema.String),
+}));
 
 /** Retained state shows nothing Pi could still continue on its own or that awaits an answer. */
 const settled = ({ state, dialogs }: Snapshot) => dialogs.length === 0 && !isWorking(state) && !state.isStopping &&
@@ -154,33 +158,30 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
     }).pipe(Effect.mapError((e) => new PiSessionError({ reason: "spawn", detail: String(e) })));
     debug("spawned pid", handle.pid);
 
-    const onLine = (line: string) =>
-      Effect.gen(function* () {
-        let record: PiRecord;
-        try {
-          record = JSON.parse(line.endsWith("\r") ? line.slice(0, -1) : line) as PiRecord;
-        } catch {
-          return;
-        }
-        debug("record", record.type); // Never log unprojected protocol content.
-        if (record.type === "response") {
-          // Late/unmatched acknowledgements must not become session activity.
-          if (typeof record.id !== "string" || !pending.has(record.id)) return;
-          const d = pending.get(record.id) as Deferred.Deferred<unknown, PiSessionError>;
-          pending.delete(record.id);
-          const r = record as Response;
-          if (r.success) yield* Deferred.succeed(d, r.data);
-          else yield* Deferred.fail(d, new PiSessionError({ reason: "rejected", detail: r.error ?? r.command }));
-          return;
-        }
-        observationVersion += 1;
-        yield* Queue.offer(records, { record, receivedAt: yield* Clock.currentTimeMillis });
+    const onLine = Effect.fnUntraced(function* (line: string) {
+      const record: unknown = yield* Effect.try({
+        try: () => JSON.parse(line),
+        catch: () => new PiSessionError({ reason: "protocol", detail: "Pi protocol failure: malformed JSON on stdout." }),
       });
+      if (!validEnvelope(record) || (record.type === "response" && !validResponse(record))) {
+        return yield* new PiSessionError({ reason: "protocol", detail: "Pi protocol failure: invalid RPC envelope on stdout." });
+      }
+      debug("record", record.type); // Never log unprojected protocol content.
+      if (record.type === "response") {
+        // Late/unmatched acknowledgements must not become session activity.
+        if (typeof record.id !== "string" || !pending.has(record.id)) return;
+        const d = pending.get(record.id) as Deferred.Deferred<unknown, PiSessionError>;
+        pending.delete(record.id);
+        if (validResponse(record)) {
+          if (record.success) yield* Deferred.succeed(d, record.data);
+          else yield* Deferred.fail(d, new PiSessionError({ reason: "rejected", detail: record.error ?? record.command }));
+        }
+        return;
+      }
+      observationVersion += 1;
+      yield* Queue.offer(records, { record, receivedAt: yield* Clock.currentTimeMillis });
+    });
 
-    yield* handle.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.runForEach(onLine)).pipe(
-      Effect.ignore,
-      Effect.forkScoped,
-    );
     yield* handle.stderr.pipe(
       Stream.decodeText(),
       Stream.runForEach((chunk) => Effect.sync(() => {
@@ -203,6 +204,26 @@ const spawnChild = (args: ReadonlyArray<string>, cwd: string) =>
         for (const done of writes) yield* Deferred.fail(done, new PiSessionError({ reason: "exited", detail: reason }));
         yield* Queue.end(records);
       });
+
+    const failOutput = Effect.fn("PiSessions.failOutput")(function* (detail: string) {
+      if (closed) return;
+      // Settle callers and publish failure before waiting for process termination.
+      // Never include raw protocol content (which may contain secrets) in diagnostics.
+      yield* finish({ _tag: "failed", detail });
+      yield* Queue.end(stdin);
+      yield* handle.kill({ forceKillAfter: "1 second" }).pipe(Effect.ignore);
+    });
+
+    yield* handle.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.runForEach(onLine)).pipe(
+      // Normal EOF usually precedes exitCode notification. A child that closes
+      // stdout but stays alive cannot acknowledge further commands.
+      Effect.andThen(Deferred.await(exited).pipe(
+        Effect.timeoutOption("1 second"),
+        Effect.flatMap(result => result._tag === "None" ? failOutput("Pi stdout closed while the process was still running.") : Effect.void),
+      )),
+      Effect.catchCause(cause => Cause.hasInterruptsOnly(cause) ? Effect.void : failOutput("Pi stdout reader failed: malformed RPC output or unreadable transport. Reopen history before continuing; do not automatically resend input.")),
+      Effect.forkScoped,
+    );
 
     yield* handle.exitCode.pipe(
       Effect.flatMap((code) => finish({ _tag: "exited", code, detail: `Pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}` })),

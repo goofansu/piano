@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect";
+import { ChildProcessSpawner } from "effect/process";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { type Attachment, Attachments, decodeClientMessage, type SessionEvent } from "../shared/wire.ts";
@@ -58,6 +59,48 @@ test("Pi children omit Node watch reporting while preserving the rest of the env
     if (previousPreserved === undefined) delete process.env.PIANO_TEST_PRESERVED_ENV;
     else process.env.PIANO_TEST_PRESERVED_ENV = previousPreserved;
   }
+});
+
+for (const input of ["null", "17", "true", "[]", "{}", '{"type":7}', "not-json", '{"type":"response","id":"q3","command":"prompt","success":"yes"}', '{"type":"response","success":true}', "eof"]) {
+  test(`INV-03: invalid Pi output closes the session and settles pending input: ${input}`, async () => {
+    await run(Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "protocol-failure" });
+      const collector = yield* collectUntil(session.events, e => e._tag === "closed").pipe(Effect.forkChild);
+      const error = yield* session.act({ _tag: "prompt", text: input === "eof" ? "protocol eof" : `protocol raw:${input}` }).pipe(Effect.flip);
+      assert.notEqual(error.reason, "timeout", "pending input must fail without waiting for its acknowledgement deadline");
+      const events = yield* Fiber.join(collector);
+      const last = events.at(-1);
+      assert.ok(last?._tag === "closed");
+      assert.equal(last.closure._tag, "failed");
+      assert.match(last.closure.detail, /Pi stdout|Pi protocol/);
+      assert.equal((yield* session.state).closure?._tag, "failed");
+      assert.equal((yield* session.act({ _tag: "prompt", text: "later" }).pipe(Effect.flip)).reason, "exited");
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
+  });
+}
+
+test("INV-03: a stdout reader defect fails readiness instead of stranding open", async () => {
+  const brokenReader = Layer.effect(ChildProcessSpawner.ChildProcessSpawner, Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    return { ...spawner, spawn: Effect.fn("Test.spawn")(function* (...args: Parameters<typeof spawner.spawn>) {
+      const handle = yield* spawner.spawn(...args);
+      return { ...handle, stdout: Stream.die(new Error("reader defect sentinel")) };
+    }) };
+  })).pipe(Layer.provide(NodeServices.layer));
+  await Effect.runPromise(Effect.gen(function* () {
+    const error = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "reader-failure" }).pipe(Effect.flip);
+    assert.notEqual(error.reason, "timeout");
+    assert.match(error.detail, /Pi stdout reader failed/);
+    assert.equal(error.detail.includes("reader defect sentinel"), false, "raw failure content is not exposed");
+  }).pipe(Effect.provide(PiSessionsLive.pipe(Layer.provide(brokenReader))), Effect.provideService(PiCli, fakeCli), Effect.timeout("5 seconds"), Effect.scoped));
+});
+
+test("unknown Pi event types remain forward compatible", async () => {
+  await run(Effect.gen(function* () {
+    const session = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "future" });
+    yield* session.act({ _tag: "prompt", text: "protocol future" });
+    assert.equal((yield* session.state).closure, undefined);
+  }).pipe(Effect.timeout("5 seconds"), Effect.scoped));
 });
 
 test("snapshot first, then a streamed turn", async () => {
