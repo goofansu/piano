@@ -23,7 +23,14 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import {
   SidebarContent,
   SidebarGroup,
@@ -38,6 +45,18 @@ import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 export type { SettingsSection } from "@/lib/routes";
+
+// Pi owns the provider catalog; unknown/custom providers intentionally have no logo.
+const PROVIDER_LOGOS: Readonly<Record<string, string | undefined>> = {
+  anthropic: "anthropic",
+  openai: "openai",
+  "openai-codex": "openai",
+  "openai-chatgpt": "openai",
+  "github-copilot": "githubcopilot",
+  "google-gemini-cli": "googlegemini",
+  "google-antigravity": "googlegemini",
+  meta: "meta",
+};
 
 export function SettingsNavigation({
   compact,
@@ -203,6 +222,13 @@ function ProvidersSettings({
         <ItemGroup className="gap-2">
           {providers.map((provider) => (
             <Item key={provider.id} role="listitem" variant="outline" className="flex-nowrap">
+              {Object.hasOwn(PROVIDER_LOGOS, provider.id) && PROVIDER_LOGOS[provider.id] && (
+                <ItemMedia variant="icon">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <use href={`/provider-logos.svg#${PROVIDER_LOGOS[provider.id]}`} />
+                  </svg>
+                </ItemMedia>
+              )}
               <ItemContent className="min-w-0">
                 <ItemTitle>
                   {provider.name}
