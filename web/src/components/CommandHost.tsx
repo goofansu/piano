@@ -1,5 +1,5 @@
 import type { ClientCommand } from "@shared/wire";
-import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, ListIcon, type LucideIcon, MessageSquareIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, FileDiffIcon, GitPullRequestIcon, ListIcon, type LucideIcon, MessageSquareIcon, PinIcon, PinOffIcon, PlusIcon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { createContext, useContext, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -28,7 +28,7 @@ async function copySessionValue(value: string, label: string) {
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon, changes: FileDiffIcon, "pull-request": GitPullRequestIcon, everything: ListIcon, messages: MessageSquareIcon,
-  rename: TextCursorInputIcon, archive: ArchiveIcon, delete: Trash2Icon, new: PlusIcon,
+  rename: TextCursorInputIcon, pin: PinIcon, unpin: PinOffIcon, archive: ArchiveIcon, delete: Trash2Icon, new: PlusIcon,
 };
 
 export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {

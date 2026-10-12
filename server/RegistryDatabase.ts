@@ -26,6 +26,7 @@ const schema = `
     cwd TEXT NOT NULL REFERENCES workspaces(path), session_id TEXT NOT NULL,
     project_id TEXT REFERENCES projects(id), title TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     archived INTEGER NOT NULL CHECK (archived IN (0, 1)),
+    pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
     stats TEXT CHECK (stats IS NULL OR json_valid(stats)),
     pull_request_state TEXT NOT NULL CHECK (pull_request_state IN ('discover', 'removed', 'linked')),
     pull_request_url TEXT, pull_request_source TEXT, pull_request_api_host TEXT CHECK (pull_request_api_host IS NULL OR pull_request_api_host = 'github.int.exe.xyz'), position INTEGER NOT NULL,
@@ -35,7 +36,7 @@ const schema = `
   ) STRICT;
   CREATE INDEX sessions_activity ON sessions(archived, updated_at DESC);
   CREATE INDEX sessions_project ON sessions(project_id, updated_at DESC);
-  PRAGMA user_version = 2;
+  PRAGMA user_version = 3;
 `;
 
 type Row = SQLInputValue[];
@@ -49,8 +50,8 @@ const tables = [
     rows: (d: RegistryData): Row[] => d.folders.map((path, i) => [path, i]) },
   { name: "worktrees", columns: ["path", "folder_path", "branch", "position"], keys: 1,
     rows: (d: RegistryData): Row[] => d.worktrees.map((w, i) => [w.path, w.folder, w.branch, i]) },
-  { name: "sessions", columns: ["cwd", "session_id", "project_id", "title", "created_at", "updated_at", "archived", "stats", "pull_request_state", "pull_request_url", "pull_request_source", "pull_request_api_host", "position"], keys: 2,
-    rows: (d: RegistryData): Row[] => d.sessions.map((s, i) => [s.cwd, s.sessionId, s.projectId ?? null, s.title ?? null, s.createdAt, s.updatedAt, Number(s.archived),
+  { name: "sessions", columns: ["cwd", "session_id", "project_id", "title", "created_at", "updated_at", "archived", "pinned", "stats", "pull_request_state", "pull_request_url", "pull_request_source", "pull_request_api_host", "position"], keys: 2,
+    rows: (d: RegistryData): Row[] => d.sessions.map((s, i) => [s.cwd, s.sessionId, s.projectId ?? null, s.title ?? null, s.createdAt, s.updatedAt, Number(s.archived), Number(!!s.pinned),
       s.stats === undefined ? null : JSON.stringify(s.stats), s.pullRequest === undefined ? "discover" : s.pullRequest === null ? "removed" : "linked", s.pullRequest?.url ?? null, s.pullRequest?.source ?? null, s.pullRequest?.apiHost ?? null, i]) },
 ];
 
@@ -79,7 +80,7 @@ function snapshot(db: DatabaseSync): RegistryData {
     projects: rows("projects").map(r => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived) })),
     workspaces: rows("workspaces").map(r => ({ id: r.id as string, path: r.path as string, folder: r.folder_path as string })),
     worktrees: rows("worktrees").map(r => ({ path: r.path as string, folder: r.folder_path as string, branch: r.branch as string })),
-    sessions: rows("sessions").map(r => ({ cwd: r.cwd as string, sessionId: r.session_id as string, createdAt: r.created_at as string, updatedAt: r.updated_at as string, archived: Boolean(r.archived),
+    sessions: rows("sessions").map(r => ({ cwd: r.cwd as string, sessionId: r.session_id as string, createdAt: r.created_at as string, updatedAt: r.updated_at as string, archived: Boolean(r.archived), ...(r.pinned ? { pinned: true } : {}),
       ...(r.project_id === null ? {} : { projectId: r.project_id as string }), ...(r.title === null ? {} : { title: r.title as string }),
       ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
       ...(r.pull_request_state === "discover" ? {} : { pullRequest: r.pull_request_state === "removed" ? null : { url: r.pull_request_url as string, source: r.pull_request_source as "branch" | "manual", ...(r.pull_request_api_host === null ? {} : { apiHost: r.pull_request_api_host as "github.int.exe.xyz" }) } }),
@@ -117,9 +118,10 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         if (db.prepare("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").all().length) throw new Error("Unrecognized registry database; refusing to initialize it.");
         db.exec(schema);
         persist(db, empty, initial);
-      } else if (version === 1) {
-        db.exec("ALTER TABLE projects DROP COLUMN goal; PRAGMA user_version = 2;");
-      } else if (version !== 2) throw new Error(`Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`);
+      } else if (version === 1 || version === 2) {
+        if (version === 1) db.exec("ALTER TABLE projects DROP COLUMN goal;");
+        db.exec("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)); PRAGMA user_version = 3;");
+      } else if (version !== 3) throw new Error(`Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`);
       db.exec("COMMIT");
     } catch (error) { db.exec("ROLLBACK"); throw error; }
     db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");

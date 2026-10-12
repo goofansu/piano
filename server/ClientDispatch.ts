@@ -86,6 +86,8 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (ou
           return yield* send({ _tag: "pong", nonce: request.nonce });
         case "rename_session":
           return yield* commands.renameSession(request.cwd, request.sessionId, request.title);
+        case "pin_session":
+          return yield* registry.pinSession(request.cwd, request.sessionId, request.pinned);
         case "archive_session":
           return yield* sessions.retire(request.cwd, request.sessionId, "archive");
         case "delete_session":

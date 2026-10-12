@@ -33,25 +33,26 @@ test("session command availability: settled, disconnected, resyncing, missing ch
   assert.deepEqual(settled, {
     "copy-working-directory": true, "copy-branch": true, "copy-session-id": true, "copy-all": true,
     changes: true, "pull-request": true, "display-everything": true, "display-messages": true,
-    rename: true, archive: true, delete: true, "new-session-here": true,
+    rename: true, pin: true, archive: true, delete: true, "new-session-here": true,
   });
 
   const disconnected = enabled({ ...base, connected: false });
-  for (const id of ["rename", "archive", "delete"] as const) assert.equal(disconnected[id], false, id);
+  for (const id of ["rename", "pin", "archive", "delete"] as const) assert.equal(disconnected[id], false, id);
   assert.equal(disconnected.changes, true, "Changes reads the registry workspace, not the socket");
   assert.equal(enabled({ ...base, connected: false }, other).archive, false);
 
   // A resync holds the selected session's registry changes but not another row's.
   const resync = { ...base, resync: true };
   for (const id of ["rename", "archive", "delete"] as const) assert.equal(enabled(resync)[id], false, id);
-  assert.deepEqual(enabled(resync, other), { rename: true, archive: true, delete: true });
+  assert.deepEqual(enabled(resync, other), { rename: true, pin: true, archive: true, delete: true });
+  assert.equal(enabled(resync).pin, true, "pinning only changes registry preferences");
   // The same holds while a selection is in flight.
   assert.equal(enabled({ ...base, selecting: { cwd: "/work/repo.feature", sessionId: "s1" } }).delete, false);
 
   const missing = enabled({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) });
   assert.deepEqual([missing.rename, missing.changes, missing["new-session-here"], missing.archive, missing.delete], [false, false, false, true, true]);
   const missingRow = enabled({ ...base, sessionReferences: [sessionReference(other.cwd, other.sessionId, { title: other.title, unavailable: "checkout" })] }, other);
-  assert.deepEqual(missingRow, { rename: false, archive: true, delete: true });
+  assert.deepEqual(missingRow, { rename: false, pin: true, archive: true, delete: true });
 
   const noWorkspace = enabled({ ...base, workspaces: [] });
   assert.equal(noWorkspace.changes, false);
@@ -62,8 +63,21 @@ test("session command availability: settled, disconnected, resyncing, missing ch
   assert.deepEqual([unnamed["copy-session-id"], unnamed["pull-request"], unnamed.rename, unnamed.archive, unnamed.delete], [false, false, false, false, false]);
 
   // The New page: no selection, and sidebar rows stay actionable.
-  assert.deepEqual(enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }, other), { rename: true, archive: true, delete: true });
+  assert.deepEqual(enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }, other), { rename: true, pin: true, archive: true, delete: true });
   assert.deepEqual(enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }), {});
+});
+
+test("pin commands reflect registry state and stay available independently of Pi activity", () => {
+  const pin = sessionCommands(base, other).find(c => c.id === "pin")!;
+  assert.equal(pin.label, "Pin");
+  assert.deepEqual(pin.intent, { kind: "send", command: { _tag: "pin_session", cwd: other.cwd, sessionId: other.sessionId, pinned: true } });
+  const pinned = { ...base, sessionReferences: base.sessionReferences.map(s => ({ ...s, pinned: true })) };
+  const unpin = sessionCommands(pinned, other).find(c => c.id === "pin")!;
+  assert.equal(unpin.label, "Unpin");
+  assert.deepEqual(unpin.intent, { kind: "send", command: { _tag: "pin_session", cwd: other.cwd, sessionId: other.sessionId, pinned: false } });
+  assert.equal(enabled({ ...base, sessionReferences: [] }, other).pin, false);
+  assert.equal(enabled({ ...base, sessionReferences: base.sessionReferences.map(s => ({ ...s, archived: true })) }, other).pin, false);
+  assert.equal(enabled({ ...base, session: session("/work/repo.feature", { isStreaming: true }) }).pin, true);
 });
 
 test("display choices mark the current one", () => {
@@ -79,5 +93,5 @@ test("the palette offers every command the session header and the sidebar row me
   const row = pickCommands(sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }), SESSION_ROW_COMMANDS);
   const fromPalette = pickCommands(sessionCommands(base), SESSION_ROW_COMMANDS);
   assert.deepEqual(row.map(c => [c.id, c.label, c.enabled]), fromPalette.map(c => [c.id, c.label, c.enabled]));
-  assert.deepEqual(row.map(c => c.id), ["rename", "archive", "delete"]);
+  assert.deepEqual(row.map(c => c.id), ["rename", "pin", "archive", "delete"]);
 });

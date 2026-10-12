@@ -39,6 +39,8 @@ export interface SessionEntry {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archived: boolean;
+  /** Sidebar preference; absent means unpinned. */
+  readonly pinned?: boolean;
   /** Replaceable last-known Pi accounting, not session history. */
   readonly stats?: SessionStats;
   /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
@@ -65,7 +67,7 @@ const currentSchema = Schema.Struct({
   workspaces: Schema.Array(Workspace),
   projects: Schema.Array(Project),
   sessions: Schema.Array(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String, title: Schema.optional(Schema.String),
-    createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.Boolean, stats: Schema.optional(SessionStats),
+    createdAt: Schema.String, updatedAt: Schema.String, archived: Schema.Boolean, pinned: Schema.optional(Schema.Boolean), stats: Schema.optional(SessionStats),
     pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)), projectId: Schema.optional(Schema.String) })),
 });
 
@@ -139,6 +141,7 @@ export class Registry extends Context.Service<
     readonly mirrorSession: (cwd: string, sessionId: string, facts: { readonly sessionName?: string; readonly stats?: SessionStats }) => Effect.Effect<void, RegistryError>;
     /** Compare-and-set the association: delayed forge reads cannot undo removal or overwrite a newer choice. */
     readonly setSessionPullRequest: (expected: SessionEntry, link: SessionPullRequestLink | null | undefined) => Effect.Effect<boolean, RegistryError>;
+    readonly pinSession: (cwd: string, sessionId: string, pinned: boolean) => Effect.Effect<void, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
     readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
   }
@@ -269,6 +272,14 @@ export const RegistryLive = Layer.effect(
           return { ...d, sessions: d.sessions.map(t => t === entry ? { ...t, pullRequest: link } : t) };
         });
         return saved;
+      }),
+      pinSession: Effect.fn("Registry.pinSession")(function* (cwd, sessionId, pinned) {
+        yield* update(d => {
+          const entry = d.sessions.find(isSession(cwd, sessionId));
+          if (!entry || entry.archived) throw new RegistryError({ detail: "Session reference is unavailable. Refresh and try again." });
+          if (!!entry.pinned === pinned) return d;
+          return { ...d, sessions: d.sessions.map(s => s === entry ? { ...s, pinned: pinned || undefined } : s) };
+        });
       }),
       archiveSession: (cwd, sessionId) =>
         update((d) => ({ ...d, sessions: d.sessions.map((t) => (isSession(cwd, sessionId)(t) ? { ...t, archived: true } : t)) })),

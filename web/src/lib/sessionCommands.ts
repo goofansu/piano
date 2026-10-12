@@ -3,6 +3,7 @@
  * described once: label, icon, group, whether it is available now, and what running it means.
  * Surfaces render these descriptors and hand them to the one `CommandHost` (see `commands.ts`).
  */
+import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { isSelectedSession, sessionCheckoutMissing, sessionContext, sessionMutable } from "./sessionContext.ts";
 
@@ -18,15 +19,16 @@ export type SessionCommandId =
   | "copy-working-directory" | "copy-branch" | "copy-session-id" | "copy-all"
   | "changes" | "pull-request"
   | "display-everything" | "display-messages"
-  | "rename" | "archive" | "delete"
+  | "rename" | "pin" | "archive" | "delete"
   | "new-session-here";
 
 /** Sections a menu separates; the palette lists them in this order under Session commands. */
 export type SessionCommandGroup = "copy" | "open" | "display" | "manage" | "destructive" | "create";
 
-export type SessionCommandIcon = "copy" | "changes" | "pull-request" | "everything" | "messages" | "rename" | "archive" | "delete" | "new";
+export type SessionCommandIcon = "copy" | "changes" | "pull-request" | "everything" | "messages" | "rename" | "pin" | "unpin" | "archive" | "delete" | "new";
 
 export type SessionCommandIntent =
+  | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
   | { kind: "pull-request" }
@@ -51,7 +53,7 @@ export interface SessionCommand {
 }
 
 /** What the sidebar's session row menu offers, in its order. */
-export const SESSION_ROW_COMMANDS = ["rename", "archive", "delete"] as const satisfies readonly SessionCommandId[];
+export const SESSION_ROW_COMMANDS = ["rename", "pin", "archive", "delete"] as const satisfies readonly SessionCommandId[];
 /** What the session header offers: its New session here button, then its menu, in order. */
 export const SESSION_HEADER_COMMANDS = ["new-session-here", "copy-all", "changes", "pull-request", "display-everything", "display-messages"] as const satisfies readonly SessionCommandId[];
 
@@ -61,11 +63,12 @@ export function pickCommands<Id extends SessionCommandId>(commands: readonly Ses
 
 /**
  * Commands for `target`, or for the selected session when it is omitted. The selected session gets
- * every command; any other session only the registry changes (rename, archive, delete).
+ * every command; any other session only the management actions (rename, pin, archive, delete).
  *
  * Enablement, one rule per command:
  * - rename, archive, delete: `sessionMutable` (connected, and a settled attachment for the selected
  *   session); rename also needs the checkout, since renaming starts Pi there.
+ * - pin: connected with an active registry reference; independent of Pi attachment or activity.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`).
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - new session here: the checkout is present.
@@ -95,8 +98,14 @@ export function sessionCommands(state: AppState, target?: SessionTarget, options
   }
   if (selected || subject) {
     const mutable = !!subject && sessionMutable(state, subject);
+    const reference = subject && state.sessionReferences.find(s => s.cwd === subject.cwd && s.sessionId === subject.sessionId);
     commands.push(
       { id: "rename", label: "Rename", icon: "rename", group: "manage", enabled: mutable && !!subject && !sessionCheckoutMissing(state, subject), intent: { kind: "rename", target: subject } },
+      ...(subject ? [{
+        id: "pin" as const, label: reference?.pinned ? "Unpin" : "Pin", icon: reference?.pinned ? "unpin" as const : "pin" as const,
+        group: "manage" as const, enabled: state.connected && !!reference && !reference.archived,
+        intent: { kind: "send" as const, command: { _tag: "pin_session" as const, cwd: subject.cwd, sessionId: subject.sessionId, pinned: !reference?.pinned } },
+      }] : []),
       { id: "archive", label: "Archive", icon: "archive", group: "manage", enabled: mutable, intent: { kind: "archive", target: subject } },
       { id: "delete", label: "Delete", icon: "delete", group: "destructive", enabled: mutable, intent: { kind: "delete", target: subject } },
     );

@@ -444,6 +444,7 @@ export const SessionReference = Schema.Struct({
   /** Git's branch for that directory from the last discovery; null when unknown, detached, non-Git or its folder is closed. */
   branch: Schema.NullOr(Schema.String),
   projectId: Schema.optional(Schema.String), archived: Schema.Boolean,
+  pinned: Schema.optional(Schema.Boolean),
   createdAt: Schema.String,
   /** Registry's last-update time, so a project's recency follows its members. */
   updatedAt: Schema.String,
@@ -626,6 +627,8 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),
   /** Name a session through Pi (starting it when not running); the registry title follows Pi's name. */
   Schema.TaggedStruct("rename_session", { cwd: Schema.String, sessionId: Schema.String, title: Schema.String }),
+  /** Set a sidebar preference without starting or stopping Pi. */
+  Schema.TaggedStruct("pin_session", { cwd: Schema.String, sessionId: Schema.String, pinned: Schema.Boolean }),
   /** Hide a session from the sidebar (and stop Pi for it if running). */
   Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),
   /** Stop Pi for a session, delete its file from Pi's session store, and forget it. */

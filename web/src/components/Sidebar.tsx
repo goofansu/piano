@@ -76,11 +76,13 @@ export function Sidebar({ state, onHide }: Props) {
   const reveal = () => (settled ? "reveal-row" : undefined);
 
   // One catalog for every grouping, so switching the grouping never changes which sessions are listed.
-  const listed = useMemo(() => sessionCatalog(state).filter(s => s.listed),
+  const catalog = useMemo(() => sessionCatalog(state),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state.folders, state.sessionReferences, state.projects, state.hosts, state.done, current?.cwd, current?.sessionId]);
+  const pinned = sortSessions(catalog.filter(s => s.pinned), view.sortBy);
+  const listed = catalog.filter(s => s.listed && !s.pinned);
   const groupProps = { state, select, reveal };
-  const empty = (text: string) => (
+  const empty = (text: string) => pinned.length > 0 ? null : (
     <Empty className="view-enter py-8">
       <EmptyHeader>
         <EmptyDescription>{text}</EmptyDescription>
@@ -141,6 +143,13 @@ export function Sidebar({ state, onHide }: Props) {
       </div>
       <ScrollArea className="min-h-0 flex-1">
       <nav className="relative px-3 pb-4" aria-label="Sessions">
+        {state.registryLoaded && pinned.length > 0 && (
+          <section aria-label="Pinned">
+            {/* No standalone shadcn heading fits this noninteractive list section. */}
+            <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">Pinned</h2>
+            <SessionList sessions={pinned} {...groupProps} />
+          </section>
+        )}
         {list()}
       </nav>
       </ScrollArea>
@@ -294,12 +303,15 @@ function SessionRow({ t, state, select, reveal }: {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
-            <ProjectMenu state={state} session={target} />
-            {menu.filter(c => c.group !== "destructive").map(item)}
+            {menu.filter(c => c.id === "rename" || c.id === "pin").map(item)}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            {menu.filter(c => c.group === "destructive").map(item)}
+            {menu.filter(c => c.id === "archive" || c.id === "delete").map(item)}
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <ProjectMenu state={state} session={target} />
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>

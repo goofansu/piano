@@ -35,18 +35,18 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   seedRegistry(f.dbPath, original);
   // Reshape it as an older Piano left it: version 1, with a project goal. Opening upgrades it in place.
   const legacy = new DatabaseSync(f.dbPath);
-  try { legacy.exec("ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;"); }
+  try { legacy.exec("ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;"); }
   finally { legacy.close(); }
   assert.deepEqual(await f.get(), original);
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }), backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 2);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 3);
     assert.deepEqual(upgraded.prepare("SELECT name FROM pragma_table_info('projects')").all().map(c => c.name), ["id", "name", "archived", "position"]);
     assert.equal(backup.prepare("PRAGMA user_version").get()!.user_version, 1);
     assert.equal(backup.prepare("SELECT goal FROM projects WHERE id = 'project-1'").get()!.goal, "An older goal");
     assert.equal(statSync(`${f.dbPath}.v1-backup`).mode & 0o777, 0o600);
   } finally { upgraded.close(); backup.close(); }
-  assert.deepEqual(await f.get(), original, "a second open leaves version 2 alone");
+  assert.deepEqual(await f.get(), original, "a second open leaves the upgraded database alone");
   assert.equal(statSync(f.dbPath).mode & 0o777, 0o600);
   const db = new DatabaseSync(f.dbPath, { readOnly: true });
   try {
@@ -67,6 +67,27 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   assert.deepEqual(reopened.workspaces, original.workspaces);
   assert.deepEqual(reopened.sessions[0], { ...original.sessions[0], title: "Renamed", projectId: "project-2" });
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
+});
+
+test("INV-01: version-2 sessions start unpinned; pins persist without changing history metadata or activity", async t => {
+  const f = fixture(t), cwd = join(f.root, "folder");
+  await f.run(Effect.gen(function* () { yield* (yield* Registry).addSession(cwd, "one", "Original"); }));
+  const legacy = new DatabaseSync(f.dbPath);
+  try { legacy.exec("ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;"); }
+  finally { legacy.close(); }
+  const before = (await f.get()).sessions[0]!;
+  assert.equal(before.pinned, undefined);
+  await f.run(Effect.gen(function* () {
+    const r = yield* Registry;
+    yield* r.pinSession(cwd, "one", true);
+    yield* r.pinSession(cwd, "one", true);
+  }));
+  assert.deepEqual((await f.get()).sessions, [{ ...before, pinned: true }], "reopening preserves only the new preference");
+  await f.run(Effect.gen(function* () { yield* (yield* Registry).pinSession(cwd, "one", false); }));
+  assert.deepEqual((await f.get()).sessions, [before], "unpin persists across another restart");
+  await assert.rejects(f.run(Effect.gen(function* () { yield* (yield* Registry).pinSession(cwd, "missing", true); })), /unavailable/);
+  await f.run(Effect.gen(function* () { yield* (yield* Registry).archiveSession(cwd, "one"); }));
+  await assert.rejects(f.run(Effect.gen(function* () { yield* (yield* Registry).pinSession(cwd, "one", true); })), /unavailable/);
 });
 
 test("INV-01: the title mirrors Pi's name, else the start name or first prompt; mirroring never moves activity", async t => {

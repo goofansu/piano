@@ -29,8 +29,10 @@ export interface SessionEntry {
   /** The project the session belongs to, when that project exists. */
   project: Project | undefined;
   archived: boolean;
+  pinned: boolean;
   /**
-   * Shown in the sidebar: its folder is open, or it belongs to a project that is not archived.
+   * Eligible for regular sidebar groups: its folder is open, or it belongs to an active project.
+   * Pinned sessions appear separately above these groups even when their folder is closed.
    * A closed folder takes its unfiled sessions out of the sidebar; project members stay, under
    * every grouping, since membership does not depend on where a session runs.
    */
@@ -75,6 +77,7 @@ function entries(state: AppState): SessionEntry[] {
       projectId: ref.projectId,
       project,
       archived: ref.archived,
+      pinned: !!ref.pinned,
       listed: !ref.archived && (!!folder || (!!project && !project.archived)),
       activity: host?.streaming ? "working" : done.has(key) ? "done" : host ? "idle" : "off",
       selected: !!current && current.cwd === ref.cwd && current.sessionId === ref.sessionId,
