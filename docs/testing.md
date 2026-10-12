@@ -83,6 +83,23 @@ where boundaries matter, backed by focused lower-level tests for distinct logic.
 test validates Piano's contract handling, not the real Pi release; a real-runtime smoke check serves
 a different purpose.
 
+## Browser tests
+
+Browser evidence for a change is an observation through `agent-browser` on a scratch instance,
+kept in the PR; it does not become a committed script. The committed browser tests are only the
+critical paths, which must keep working on every change and run in CI:
+
+- `test/browser/start-session.mjs`: choose a folder, model, effort and project; send the first
+  message; see the reply; reload without resending.
+- `test/browser/open-session.mjs`: open a session from the sidebar; read its transcript; jump to an
+  earlier message; send a follow-up; read the session cost; stop a running reply.
+
+`npm run test:browser` runs both (about 6 seconds each) against a scratch registry, Pi history and
+`test/browser/fake-pi.mjs`, with no model calls. They drive the UI by role and accessible name and
+assert what a user sees and what Pi receives, not markup. Add a journey only for a new critical
+path; cover rules and edge cases with module tests. Earlier documents cite `test/browser-*.mjs`
+scripts as the evidence of their time; those scripts were removed for these two journeys.
+
 ## Completion evidence
 
 For code or dependency changes, run `npm test`, `npm run typecheck` and `npm run lint` as the repository baseline.
