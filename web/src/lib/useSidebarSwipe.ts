@@ -96,12 +96,12 @@ export function useSidebarSwipe({
       const { open } = current();
       if (open !== surface.matches('[data-slot="mobile-sidebar"]')) return;
       if (touch.clientX < 24 || touch.clientX > innerWidth - 24) return;
-      if (
-        !target.closest('[data-slot="sidebar-scrim"]') &&
-        target.closest(
-          'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
-        )
-      )
+      const control = target.closest(
+        'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
+      );
+      // Transcript disclosures act on click, so a claimed swipe can safely suppress the tap.
+      // Other controls (especially editors and pointer-down menus) retain their own gestures.
+      if (control && !control.matches('[data-slot="sidebar-scrim"], button[data-sidebar-swipe]'))
         return;
       for (let element: Element | null = target; element; element = element.parentElement) {
         if (

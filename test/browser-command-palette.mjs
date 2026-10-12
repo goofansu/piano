@@ -71,6 +71,45 @@ for (const entry of entries)
         timestamp: entry.createdAt,
         message: { role: "user", content: `History for ${entry.title}`, timestamp: 0 },
       },
+      ...(entry.sessionId === "palette-0"
+        ? [
+            {
+              type: "message",
+              id: "m2",
+              parentId: "m1",
+              timestamp: entry.createdAt,
+              message: {
+                role: "assistant",
+                api: "openai-completions",
+                provider: "fake",
+                model: "alpha",
+                stopReason: "toolUse",
+                timestamp: 1,
+                content: [
+                  {
+                    type: "toolCall",
+                    id: "swipe-tool",
+                    name: "bash",
+                    arguments: { command: "echo swipe-header" },
+                  },
+                ],
+              },
+            },
+            {
+              type: "message",
+              id: "m3",
+              parentId: "m2",
+              timestamp: entry.createdAt,
+              message: {
+                role: "toolResult",
+                toolCallId: "swipe-tool",
+                toolName: "bash",
+                timestamp: 2,
+                content: [{ type: "text", text: "swipe-header output" }],
+              },
+            },
+          ]
+        : []),
     ]
       .map(JSON.stringify)
       .join("\n") + "\n",
@@ -643,6 +682,47 @@ try {
         "sustained drag avoids long visible stalls on the reference host",
       );
     }
+    // Real tool-call disclosure buttons must support both tap and drag, without changing
+    // disclosure state when the swipe is released (including a cancelled short swipe).
+    await ab("open", `http://127.0.0.1:${webPort}/s/palette-0`);
+    const header = '[role="group"][aria-label="bash tool call"] button[aria-expanded]';
+    await ab("wait", header);
+    const expanded = () =>
+      evaluate(`document.querySelector('${header}').getAttribute('aria-expanded')`);
+    const toolTouch = (type, x, y) =>
+      send(
+        "Input.dispatchTouchEvent",
+        {
+          type,
+          touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
+        },
+        sessionId,
+      );
+    for (const state of ["false", "true"]) {
+      await ab("scrollintoview", header);
+      const { x, y } = await evaluate(
+        `(() => { const r = document.querySelector('${header}').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; })()`,
+      );
+      assert.equal(await expanded(), state);
+      await toolTouch("touchStart", x, y);
+      await toolTouch("touchMove", x + 40, y);
+      assert.ok(Math.abs((await position()) - 40) < 2, "tool-call header starts a sidebar drag");
+      await toolTouch("touchEnd", x + 40, y);
+      await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+      assert.equal(await expanded(), state, "short swipe does not toggle disclosure");
+      await toolTouch("touchStart", x, y);
+      await toolTouch("touchMove", x + 100, y);
+      await toolTouch("touchMove", x + 200, y);
+      await toolTouch("touchEnd", x + 200, y);
+      await ab("wait", '[data-slot="mobile-sidebar"][data-state="open"]');
+      await ab("press", "Escape");
+      await ab("wait", "--fn", `!document.querySelector('[data-slot="mobile-sidebar"]')`);
+      assert.equal(await expanded(), state, "opening sidebar does not toggle disclosure");
+      await toolTouch("touchStart", x, y);
+      await toolTouch("touchEnd", x, y);
+      assert.notEqual(await expanded(), state, "a fresh tap still toggles disclosure");
+    }
+    await capture("tool-header-swipes");
   } finally {
     cdp.close();
   }
