@@ -2,6 +2,7 @@ import type { PullRequest, SessionPullRequest } from "@shared/wire";
 import { ArrowRightIcon, BookMarkedIcon, CheckIcon, ClockIcon, FileDiffIcon, GitBranchIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, MessageSquareIcon, XCircleIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -157,7 +158,10 @@ export function SessionPullRequestControl({ open, onOpenChange, pr }: {
                 : <Badge variant="secondary">Status unavailable</Badge>}
               {pullRequest && (pullRequest.author || pullRequest.at) && <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                 {pullRequest.author && <>
-                  <img src={`https://github.com/${pullRequest.author}.png?size=40`} alt="" className="size-4 shrink-0 rounded-full bg-muted" />
+                  <Avatar size="sm" className="size-4" aria-hidden>
+                    <AvatarImage src={`https://github.com/${pullRequest.author}.png?size=40`} alt="" />
+                    <AvatarFallback>{pullRequest.author.charAt(0).toUpperCase()}</AvatarFallback>
+                  </Avatar>
                   <span className="truncate text-foreground">{pullRequest.author}</span>
                 </>}
                 {pullRequest.at && <span className="shrink-0">
