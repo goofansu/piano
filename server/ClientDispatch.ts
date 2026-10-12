@@ -2,7 +2,8 @@
  * One browser client's requests and the server-wide updates it hears, without the socket.
  * Session requests go to the client's ClientSessions; the rest run their WorkspaceCommands,
  * Registry or DirectoryFacts step here and answer through the client's output. A request's
- * failure reaches that client as an `error` message; it never ends the connection.
+ * failure reaches that client as a correlated selection failure or ordinary error; it never
+ * ends the connection.
  */
 import { Cause, Effect, Stream } from "effect";
 import type { ClientMessage } from "../shared/wire.ts";
@@ -115,11 +116,14 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       }
     });
 
-  const answered = <A, E>(work: Effect.Effect<A, E>, selectionId?: string): Effect.Effect<void> =>
+  const answered = <A, E>(
+    work: Effect.Effect<A, E>,
+    onFailure: (error: unknown) => Effect.Effect<void> = report,
+  ): Effect.Effect<void> =>
     work.pipe(
       Effect.asVoid,
       Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause) ? Effect.void : report(Cause.squash(cause), selectionId),
+        Cause.hasInterruptsOnly(cause) ? Effect.void : onFailure(Cause.squash(cause)),
       ),
     );
 
@@ -160,13 +164,23 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     const work = yield* Effect.gen(function* () {
       switch (request._tag) {
         case "select":
-          return answered(yield* sessions.select(request), request.selectionId);
+          return answered(yield* sessions.select(request), (error) => {
+            const message = errorText(error);
+            return Effect.logWarning(`selection failed: ${message}`).pipe(
+              Effect.andThen(
+                send({ _tag: "selection_failed", selectionId: request.selectionId, message }),
+              ),
+            );
+          });
         case "create_session":
-          return answered(yield* sessions.create(request), request.selectionId);
+          // Creation may already have submitted its first message; keep its uncertain outcome.
+          return answered(yield* sessions.create(request), (error) =>
+            report(error, request.selectionId),
+          );
         case "act":
           return answered(
             sessions.act(request.selectionId, request.action, request.start),
-            request.selectionId,
+            (error) => report(error, request.selectionId),
           );
         default:
           return answered(handle(request));
