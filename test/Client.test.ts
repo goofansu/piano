@@ -54,6 +54,47 @@ function harness() {
 
 const act = { _tag: "act", action: { _tag: "abort" } } as const;
 
+for (const retained of [false, true]) {
+  test(`selection rejection ends attachment and permits explicit retry (retained=${retained})`, () => {
+    const h = harness();
+    h.status(true);
+    h.client.select("/scratch", "a");
+    if (retained) {
+      h.server(h.selected("a"));
+      h.status(false);
+      h.status(true);
+    }
+    const before = h.selects().length;
+    const selectionId = h.client.getState().selectionId!;
+    h.client.select("/scratch", "a");
+    assert.equal(h.selects().length, before, "pending selections are deduplicated");
+    h.server({ _tag: "selection_rejected", selectionId, message: "Not started" });
+    assert.equal(h.client.getState().selecting, null);
+    assert.equal(h.client.getState().selectionId, null);
+    assert.equal(h.client.getState().selectionFailure?.message, "Not started");
+    assert.equal(!!h.client.getState().session, retained);
+    h.client.send(act);
+    assert.equal(h.sent.filter((m) => m._tag === "act").length, 0);
+    h.client.select("/scratch", "a");
+    assert.equal(h.selects().length, before + 1);
+    assert.notEqual(h.client.getState().selectionId, selectionId);
+    h.server({ _tag: "selection_rejected", selectionId, message: "Stale" });
+    h.server({
+      _tag: "error",
+      selectionId: h.client.getState().selectionId!,
+      message: "Action failure",
+    });
+    assert.ok(
+      h.client.getState().selecting,
+      "stale rejection and action error cannot settle attachment",
+    );
+    assert.equal(h.client.getState().selectionFailure, null);
+    h.server(h.selected("a"));
+    h.client.select("/scratch", "a");
+    assert.equal(h.selects().length, before + 1, "ready selection is deduplicated");
+  });
+}
+
 test("live state is current before paint, while typing and disconnect notify renderers immediately", () => {
   const h = harness();
   h.status(true);

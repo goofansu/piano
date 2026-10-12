@@ -14,7 +14,10 @@ import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
 import { type WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
-import type { Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
+import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
+import { createClient } from "../web/src/lib/client.ts";
+import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
+import { initialState } from "../web/src/store.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-dispatch-")));
 const cwd = join(root, "checkout");
@@ -132,7 +135,7 @@ for (const control of ["answer", "abort"] as const) {
         yield* yield* receive({ _tag: "select", selectionId: "excess", cwd, sessionId: null });
         for (;;) {
           const m = yield* Queue.take(queue);
-          if (m._tag !== "error") continue;
+          if (m._tag !== "selection_rejected") continue;
           assert.equal(m.selectionId, "excess");
           assert.match(m.message, /capacity.*not started/);
           break;
@@ -164,6 +167,52 @@ for (const control of ["answer", "abort"] as const) {
     );
   });
 }
+
+test("INV-05: browser client recovers from dispatch saturation with a fresh explicit selection", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* SessionHosts).open({
+        cwd,
+        sessionId: "browser-retry",
+        create: true,
+      });
+      const requests: ClientMessage[] = [];
+      let handlers: ConnectionHandlers | undefined;
+      const browser = createClient({
+        initial: initialState,
+        connect: (h) => {
+          handlers = h;
+          return { send: (m) => requests.push(m), close: () => {} };
+        },
+        notify: () => {},
+      });
+      browser.start();
+      handlers!.onStatus(true);
+      const dispatch = yield* makeClientDispatch({
+        send: (m) => Effect.sync(() => handlers!.onMessage(m)),
+        overflow: (e) => Effect.die(e),
+      });
+      // Admission owns capacity before returned work runs, so this saturates deterministically.
+      const held = [];
+      for (let n = 0; n < inboundLimits.client.messages; n++)
+        held.push(yield* dispatch.receive({ _tag: "registry" }));
+      browser.select(cwd, session.spec.sessionId);
+      const first = requests.find((m) => m._tag === "select")!;
+      yield* yield* dispatch.receive(first);
+      assert.equal(browser.getState().selecting, null);
+      assert.match(browser.getState().selectionFailure!.message, /not started/);
+      for (const work of held) yield* work;
+      browser.select(cwd, session.spec.sessionId);
+      const selections = requests.filter((m) => m._tag === "select");
+      assert.equal(selections.length, 2);
+      assert.notEqual(selections[0].selectionId, selections[1].selectionId);
+      yield* yield* dispatch.receive(selections[1]);
+      assert.equal(browser.getState().session?.sessionId, session.spec.sessionId);
+      assert.equal(browser.getState().selecting, null);
+      assert.equal(browser.getState().selectionFailure, null);
+    }),
+  );
+});
 
 test("a trust decision answers the requester with a notice, the new trust and the new models, in that order", async () => {
   // A project skill makes the directory's trust matter to Pi.

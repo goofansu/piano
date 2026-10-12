@@ -155,7 +155,7 @@ export function SessionView({
             placeholder={firstMessageOnItsWay ? undefined : "No messages yet."}
           />
         )}
-        {!input && (
+        {!input && !state.selectionFailure && (
           <TranscriptSkeleton
             hidden={!!t && (t.messages.length > 0 || !!t.pending || !firstMessageOnItsWay)}
           />

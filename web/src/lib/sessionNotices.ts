@@ -17,6 +17,7 @@ export type SessionNoticePlacement = "banner" | "status" | "composer";
 export type SessionNoticeTone = "destructive" | "warning" | "quiet" | "neutral";
 
 export type SessionNoticeId =
+  | "selection-rejected"
   | "git-unavailable"
   | "closure"
   | "projection-error"
@@ -62,6 +63,26 @@ export function sessionNotices(state: AppState, display: SessionDisplay): Sessio
   const { folder, checkoutMissing } = sessionContext(state);
   const { submissionText } = sessionActivity(state, display);
   const notices: SessionNotice[] = [];
+
+  const failure = state.selectionFailure;
+  if (failure)
+    notices.push(
+      notice(
+        "selection-rejected",
+        "banner",
+        "destructive",
+        "Unable to open session.",
+        [failure.message],
+        failure.sessionId
+          ? {
+              action: {
+                label: "Retry",
+                command: { _tag: "select", cwd: failure.cwd, sessionId: failure.sessionId },
+              },
+            }
+          : {},
+      ),
+    );
 
   if (t && folder?.discovery.status === "error") {
     notices.push(

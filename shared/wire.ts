@@ -871,6 +871,11 @@ export const ServerMessage = Schema.Union([
     result: SessionActionResult,
   }),
   Schema.TaggedStruct("worktree_result", { requestId: Schema.String, result: WorktreeResult }),
+  /** Admission refused before selection or session creation started. */
+  Schema.TaggedStruct("selection_rejected", {
+    selectionId: Schema.String,
+    message: Schema.String,
+  }),
   Schema.TaggedStruct("error", {
     message: Schema.String,
     selectionId: Schema.optional(Schema.String),
