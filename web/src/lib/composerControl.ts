@@ -2,9 +2,10 @@
  * What the composer's controls do for one moment of a session: whether the primary button sends,
  * queues or stops, whether it is enabled, what it says, what Esc does and how a send-key press is
  * delivered. The Enter guard and the button read the same `enabled`, so they cannot disagree.
- * Pure and React-free; the composer renders from it.
+ * The New page's first message and the model picker shortcut have their situations here too.
+ * Pure and React-free; the composers render from it.
  */
-import type { QueuedMessage } from "@shared/wire";
+import type { ModelCatalog, QueuedMessage } from "@shared/wire";
 import { hasContent, type ImageDraft, sendable } from "./messageDraft.ts";
 
 /** How a message sent while Pi works is delivered. */
@@ -113,3 +114,36 @@ export function composerControl(s: ComposerSituation): ComposerControl {
 
 const escapeAction = (s: ComposerSituation, idle: boolean): ComposerControl["escape"] =>
   !idle ? "none" : s.queued > 0 ? "restore-queue" : s.streaming ? "stop" : "none";
+
+/** What the New page knows when its first message would create a session. */
+export interface NewSessionSituation {
+  text: string;
+  images: Pick<ImageDraft, "items" | "busy">;
+  connected: boolean;
+  /** The directory's catalog: `null` until Pi answers, with `error` when it could not. */
+  catalog: Pick<ModelCatalog, "error"> | null;
+  cwd: string;
+  model: string | undefined;
+  /** The chosen project, if any, takes new sessions. */
+  projectOpen: boolean;
+}
+
+/** The first message can create a session; the button and the send key both obey it. */
+export const newSessionReady = (s: NewSessionSituation): boolean =>
+  s.connected &&
+  !!s.catalog &&
+  !s.catalog.error &&
+  s.cwd.trim().length > 0 &&
+  !!s.model &&
+  s.projectOpen &&
+  sendable({ text: s.text, images: s.images });
+
+/**
+ * Mod+/ opens the model picker exactly when its trigger could: the editor takes input and the
+ * catalog has a model to pick or can be refreshed to find one (ModelSelect's trigger rule).
+ */
+export const modelPickerAvailable = (s: {
+  disabled: boolean;
+  catalog: Pick<ModelCatalog, "models"> | null;
+  canRefresh: boolean;
+}): boolean => !s.disabled && !!s.catalog && (s.catalog.models.length > 0 || s.canRefresh);

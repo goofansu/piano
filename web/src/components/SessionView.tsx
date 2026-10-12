@@ -13,9 +13,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { deliveryAction } from "@/lib/composerControl";
-import { type DraftKey, sessionDraftKey } from "@/lib/messageDraft";
+import { useDraftStore } from "@/lib/draftStore";
+import { sessionDraftKey } from "@/lib/messageDraft";
 import { completionTarget, sessionActivity, sessionContext } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
+import { useCheckoutRefresh } from "@/lib/useCheckoutRefresh";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
@@ -26,22 +28,11 @@ interface Props {
   state: AppState;
   send: (m: ClientMessage) => void;
   onMenu: () => void;
-  onDraftChange: (key: DraftKey, text: string) => void;
-  onDraftAppend: (key: DraftKey, text: string) => void;
-  /** Adds text to a draft as a new paragraph. */
-  onDraftParagraph: (key: DraftKey, text: string) => void;
   pullRequest: ReturnType<typeof useSessionPullRequest>;
 }
 
-export function SessionView({
-  state,
-  send,
-  onMenu,
-  onDraftChange,
-  onDraftAppend,
-  onDraftParagraph,
-  pullRequest,
-}: Props) {
+export function SessionView({ state, send, onMenu, pullRequest }: Props) {
+  const { paragraph } = useDraftStore();
   // The selected session's Changes sheet and PR popover; hidden while Settings covers the view.
   const { settings, panel, openPanel, closePanel } = useNavigation();
   const changesOpen = !settings && panel === "changes";
@@ -50,6 +41,7 @@ export function SessionView({
   const onPullRequestOpenChange = (open: boolean) => (open ? openPanel("pr") : closePanel());
   const [display] = useSessionDisplay();
   const t = state.session;
+  useCheckoutRefresh(state, send);
   // The transcript looks executions up by tool call ID.
   const tools = useMemo(
     () => Object.fromEntries((t?.tools ?? []).map((tool) => [tool.id, tool])),
@@ -105,7 +97,7 @@ export function SessionView({
           session={t}
           onAsk={(text) => {
             if (!draftKey) return;
-            onDraftParagraph(draftKey, text);
+            paragraph(draftKey, text);
             onChangesOpenChange(false);
             toast.success("Added to your message");
           }}
@@ -181,7 +173,7 @@ export function SessionView({
               used={usedEditorRequest}
               onAppend={(request) => {
                 if (draftKey) {
-                  onDraftParagraph(draftKey, request.text);
+                  paragraph(draftKey, request.text);
                   setUsedEditorRequest(request.id);
                 }
               }}
@@ -199,13 +191,6 @@ export function SessionView({
         <Composer
           draftKey={draftKey}
           completion={completionTarget(state)}
-          text={draftKey ? (state.drafts[draftKey] ?? "") : ""}
-          onTextChange={(text) => {
-            if (draftKey) onDraftChange(draftKey, text);
-          }}
-          onTextAppend={(text) => {
-            if (draftKey) onDraftAppend(draftKey, text);
-          }}
           onRestoreQueue={() => send({ _tag: "act", action: { _tag: "restore_queue" } })}
           disabled={!ready || !t || input?.outcome === "starting"}
           streaming={streaming}

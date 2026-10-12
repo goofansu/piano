@@ -1,12 +1,12 @@
 /**
  * One browser client's requests and the server-wide updates it hears, without the socket.
  * Session requests go to the client's ClientSessions; the rest run their WorkspaceCommands,
- * Registry or DirectoryFacts step here and answer through the client's output. A request's
- * failure reaches that client as a correlated selection failure or ordinary error; it never
- * ends the connection.
+ * Registry or DirectoryFacts step here and answer through the client's output. A request that
+ * capacity refuses or that fails gets the one reply its sender awaits (`unansweredReply`); it
+ * never ends the connection.
  */
 import { Cause, Effect, Stream } from "effect";
-import type { ClientMessage } from "../shared/wire.ts";
+import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import { type ClientOutput, makeClientSessions } from "./ClientSessions.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
@@ -30,6 +30,55 @@ export interface ClientDispatch {
   readonly report: (error: unknown, selectionId?: string) => Effect.Effect<void>;
 }
 
+/** Why a request ends without its ordinary answer: refused unstarted at admission, or failed. */
+type Unanswered =
+  | { readonly _tag: "refused" }
+  | { readonly _tag: "failed"; readonly error: unknown };
+
+const unansweredText = (reason: Unanswered) =>
+  reason._tag === "refused"
+    ? "Client input capacity is full. Request was not started; wait for pending work before trying again."
+    : errorText(reason.error);
+
+/**
+ * The reply the sender of `request` awaits when it ends without its ordinary answer, correlated
+ * the way the browser settles that request: by selection, worktree request ID or folder. Requests
+ * nothing waits on get the ordinary error, with their selection when they have one.
+ */
+const unansweredReply = (request: ClientRequest, reason: Unanswered): ServerMessage => {
+  const message = unansweredText(reason);
+  switch (request._tag) {
+    case "select":
+      return reason._tag === "refused"
+        ? { _tag: "selection_rejected", selectionId: request.selectionId, message }
+        : { _tag: "selection_failed", selectionId: request.selectionId, message };
+    case "create_session":
+      // Creation may already have submitted its first message; a failure keeps that uncertain.
+      return reason._tag === "refused"
+        ? { _tag: "selection_rejected", selectionId: request.selectionId, message }
+        : { _tag: "error", message, selectionId: request.selectionId };
+    case "create_worktree":
+    case "add_worktree":
+      return {
+        _tag: "worktree_result",
+        requestId: request.requestId,
+        result: { status: "error", detail: message },
+      };
+    case "worktrees":
+      return {
+        _tag: "worktrees",
+        folder: request.folder,
+        discovery: { status: "error", observedAt: new Date().toISOString(), detail: message },
+      };
+    default:
+      return {
+        _tag: "error",
+        message,
+        selectionId: "selectionId" in request ? request.selectionId : undefined,
+      };
+  }
+};
+
 /** Sends the current hosts and sidebar, then forwards updates until the surrounding scope closes. */
 export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   output: ClientOutput,
@@ -48,6 +97,27 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       Effect.andThen(send({ _tag: "error", message, selectionId })),
     );
   };
+
+  const settle = Effect.fn("ClientDispatch.settle")(function* (
+    request: ClientRequest,
+    reason: Unanswered,
+  ) {
+    yield* Effect.logWarning(`${request._tag} ${reason._tag}: ${unansweredText(reason)}`);
+    yield* send(unansweredReply(request, reason));
+  });
+
+  /** Runs a request's work; any failure but interruption settles the request instead. */
+  const answered =
+    (request: ClientRequest) =>
+    <A, E>(work: Effect.Effect<A, E>): Effect.Effect<void> =>
+      work.pipe(
+        Effect.asVoid,
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : settle(request, { _tag: "failed", error: Cause.squash(cause) }),
+        ),
+      );
 
   const handle = (request: Exclude<ClientRequest, { _tag: "select" | "create_session" | "act" }>) =>
     Effect.gen(function* () {
@@ -90,16 +160,17 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         }
         case "create_worktree":
         case "add_worktree": {
-          const result = yield* (
+          // Settle the request first, whatever the outcome, so the rediscovery below follows it.
+          yield* (
             request._tag === "create_worktree"
               ? commands.createWorktree(request.folder, request.branch, { hooks: request.hooks })
               : commands.addWorktree(request.folder, request.path)
           ).pipe(
-            Effect.catchTag("WorktreeError", (e) =>
-              Effect.succeed({ status: "error" as const, detail: e.detail }),
+            Effect.flatMap((result) =>
+              send({ _tag: "worktree_result", requestId: request.requestId, result }),
             ),
+            answered(request),
           );
-          yield* send({ _tag: "worktree_result", requestId: request.requestId, result });
           // Failure may have left a checkout behind. Rediscover rather than retrying a mutation.
           return yield* sidebar.refresh;
         }
@@ -116,23 +187,12 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       }
     });
 
-  const answered = <A, E>(
-    work: Effect.Effect<A, E>,
-    onFailure: (error: unknown) => Effect.Effect<void> = report,
-  ): Effect.Effect<void> =>
-    work.pipe(
-      Effect.asVoid,
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause) ? Effect.void : onFailure(Cause.squash(cause)),
-      ),
-    );
-
   const capacity = makeInboundCapacity(inboundLimits.client);
   const receive = Effect.fn("ClientDispatch.receive")(function* (request: ClientRequest) {
     // Heartbeats are immediate transport liveness, not Pi work. Rejecting one
     // during saturation makes a healthy browser reconnect and abandon controls.
     if (request._tag === "ping") {
-      yield* answered(handle(request));
+      yield* answered(request)(handle(request));
       return Effect.void;
     }
     const priority =
@@ -142,51 +202,19 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     if (!release) {
       // Reject before claiming a selection or mutating anything. The receive loop
       // remains available for acknowledgements, dialog answers and cancellation.
-      const message =
-        "Client input capacity is full. Request was not started; wait for pending work before trying again.";
-      if (request._tag === "select" || request._tag === "create_session")
-        yield* send({ _tag: "selection_rejected", selectionId: request.selectionId, message });
-      else if (request._tag === "create_worktree" || request._tag === "add_worktree")
-        yield* send({
-          _tag: "worktree_result",
-          requestId: request.requestId,
-          result: { status: "error", detail: message },
-        });
-      else if (request._tag === "worktrees")
-        yield* send({
-          _tag: "worktrees",
-          folder: request.folder,
-          discovery: { status: "error", observedAt: new Date().toISOString(), detail: message },
-        });
-      else yield* report(message, "selectionId" in request ? request.selectionId : undefined);
+      yield* settle(request, { _tag: "refused" });
       return Effect.void;
     }
-    const work = yield* Effect.gen(function* () {
-      switch (request._tag) {
-        case "select":
-          return answered(yield* sessions.select(request), (error) => {
-            const message = errorText(error);
-            return Effect.logWarning(`selection failed: ${message}`).pipe(
-              Effect.andThen(
-                send({ _tag: "selection_failed", selectionId: request.selectionId, message }),
-              ),
-            );
-          });
-        case "create_session":
-          // Creation may already have submitted its first message; keep its uncertain outcome.
-          return answered(yield* sessions.create(request), (error) =>
-            report(error, request.selectionId),
-          );
-        case "act":
-          return answered(
-            sessions.act(request.selectionId, request.action, request.start),
-            (error) => report(error, request.selectionId),
-          );
-        default:
-          return answered(handle(request));
-      }
-    });
-    return work.pipe(Effect.ensuring(Effect.sync(release)));
+    // Selection and creation claim their selection here, in receive order; the work runs later.
+    const work: Effect.Effect<unknown, unknown> =
+      request._tag === "select"
+        ? yield* sessions.select(request)
+        : request._tag === "create_session"
+          ? yield* sessions.create(request)
+          : request._tag === "act"
+            ? sessions.act(request.selectionId, request.action, request.start)
+            : handle(request);
+    return work.pipe(answered(request), Effect.ensuring(Effect.sync(release)));
   }, Effect.uninterruptible);
 
   // ── initial state and global updates ──

@@ -76,7 +76,8 @@ test("a worktree session reads its folder, worktree, branch, project and workspa
   assert.equal(ctx.title, "Registry title", "an unnamed Pi session shows its registry title");
   assert.equal(
     sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).worktreeName,
-    "main",
+    undefined,
+    "the root checkout must not display a synthetic main branch label",
   );
   assert.equal(
     sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).title,
@@ -150,6 +151,11 @@ test("status precedence: startup, delivery, reconnecting, read-only, exited, the
     status({ ...base, pendingCreate: { ...pending, outcome: "uncertain" } }),
     "Delivery uncertain",
   );
+  assert.equal(
+    status({ ...base, pendingCreate: { ...pending, outcome: "rejected" } }),
+    "Message rejected",
+    "a rejected selection is known not to have delivered",
+  );
   assert.equal(status({ ...base }), "Loading");
   assert.equal(
     status({
@@ -197,16 +203,6 @@ test("reply activity yields to visible pending text, except in Messages display"
       "everything",
     ).replyActivity,
     "starting",
-  );
-  assert.equal(
-    sessionActivity(
-      {
-        ...base,
-        session: session("/repo", { submission: { id: 1, outcome: "submitting" } as never }),
-      },
-      "everything",
-    ).submissionText,
-    "Submitting — waiting for Pi.",
   );
 });
 

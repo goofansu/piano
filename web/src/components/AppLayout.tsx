@@ -10,10 +10,11 @@ import {
 } from "react";
 import { IconButton } from "@/components/IconButton";
 import { PianoMark } from "@/components/PianoMark";
-import { Sheet, SheetContent, SheetTitle } from "@/components/PianoSheet";
+import { PianoSidebarReveal, sidebarRevealStyle } from "@/components/PianoSidebarReveal";
 import { TooltipProvider } from "@/components/PianoTooltip";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { readStorage, writeStorage } from "@/lib/storage";
+import { useSidebarSwipe } from "@/lib/useSidebarSwipe";
 
 const WIDTH = { min: 208, max: 480, default: 288, rail: 48, collapseBelow: 160 };
 const desktop = () => matchMedia("(min-width: 768px)").matches;
@@ -149,6 +150,18 @@ export function AppLayout({
   content: ReactNode;
   children?: ReactNode;
 }) {
+  const setMobileOpen = (open: boolean) => {
+    if (open) layout.show();
+    else layout.closeMobile();
+  };
+  const swipe = useSidebarSwipe({
+    open: layout.mobileOpen,
+    onOpenChange: setMobileOpen,
+    onPreview: () => {
+      layout.returnFocus.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    },
+  });
   return (
     <SidebarProvider
       open={!layout.collapsed}
@@ -206,42 +219,28 @@ export function AppLayout({
             />
           )}
         </aside>
-        <Sheet
+        <PianoSidebarReveal
           open={layout.mobileOpen}
+          dragging={swipe.dragging}
+          progress={swipe.progress}
+          settleDuration={swipe.settleDuration}
+          settleEasing={swipe.settleEasing}
           onOpenChange={(open) => {
-            if (open) layout.show();
-            else layout.closeMobile();
+            swipe.cancelDrag();
+            setMobileOpen(open);
           }}
+          returnFocus={layout.returnFocus}
+          contentRef={swipe.revealRef}
+          title={navigationTitle}
         >
-          <SheetContent
-            side="left"
-            className="h-dvh w-full border-0 bg-surface-0 p-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:max-w-none"
-            showCloseButton={false}
-            aria-describedby={undefined}
-            onOpenAutoFocus={(event) => {
-              event.preventDefault();
-              (event.currentTarget as HTMLElement | null)?.focus();
-            }}
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              const target = layout.returnFocus.current;
-              layout.returnFocus.current = null;
-              // Navigation may have replaced the opener (or the command palette). Never focus hidden content.
-              const fallback = [
-                ...document.querySelectorAll<HTMLElement>('button[aria-label="Show sidebar"]'),
-              ].find((element) => element.checkVisibility({ visibilityProperty: true }));
-              if (target?.isConnected && target.checkVisibility({ visibilityProperty: true }))
-                target.focus();
-              else fallback?.focus();
-            }}
-          >
-            <SheetTitle className="sr-only">{navigationTitle}</SheetTitle>
-            {navigation(false)}
-          </SheetContent>
-        </Sheet>
+          {navigation(false)}
+        </PianoSidebarReveal>
         {/* A viewport landmark, not a shadcn content Card with header/footer padding. */}
         <main
+          ref={swipe.mainRef}
           data-slot="layout-main"
+          data-sidebar-dragging={swipe.dragging}
+          style={sidebarRevealStyle(swipe.progress, swipe.settleDuration, swipe.settleEasing)}
           className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
         >
           {content}

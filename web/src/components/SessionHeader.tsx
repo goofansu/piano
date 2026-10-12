@@ -31,7 +31,7 @@ export function SessionHeader({
 }) {
   const { openNew } = useNavigation();
   const session = state.session;
-  // Zed's form: `folder ⇄ worktree / ⑂ branch`; the folder's own checkout is the `main` worktree.
+  // `folder ⇄ worktree / ⑂ branch`; omit the redundant worktree segment for the root checkout.
   const {
     title,
     branch,
