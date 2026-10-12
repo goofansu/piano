@@ -7,7 +7,7 @@ import { MessageAttachments } from "@/components/Attachments";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { Markdown } from "@/components/Markdown";
 import { Keys } from "@/components/PianoMark";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge as Badge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";

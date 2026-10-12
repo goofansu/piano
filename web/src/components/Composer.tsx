@@ -17,18 +17,18 @@ import {
 import { ContextDetails } from "@/components/ContextDetails";
 import { JumpTo } from "@/components/JumpTo";
 import { ModelSelect } from "@/components/ModelSelect";
-import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/PianoDropdownMenu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
+import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
+import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
+import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   composerControl,
   DELIVERY,

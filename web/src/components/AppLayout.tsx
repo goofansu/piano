@@ -10,9 +10,9 @@ import {
 } from "react";
 import { IconButton } from "@/components/IconButton";
 import { PianoMark } from "@/components/PianoMark";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/PianoSheet";
+import { TooltipProvider } from "@/components/PianoTooltip";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { readStorage, writeStorage } from "@/lib/storage";
 
 const WIDTH = { min: 208, max: 480, default: 288, rail: 48, collapseBelow: 160 };

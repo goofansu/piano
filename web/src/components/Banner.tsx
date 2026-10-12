@@ -1,4 +1,5 @@
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PianoAlert as Alert } from "@/components/PianoAlert";
+import { AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 

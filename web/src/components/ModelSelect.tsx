@@ -5,16 +5,16 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner";
 import { EffortSelect } from "@/components/EffortSelect";
 import { IconButton } from "@/components/IconButton";
-import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
-import { Button } from "@/components/ui/button";
+import { PianoButton as Button } from "@/components/PianoButton";
 import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Popover, PopoverTrigger } from "@/components/ui/popover";
+} from "@/components/PianoCommand";
+import { Popover, PopoverTrigger } from "@/components/PianoPopover";
+import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { saveDefaults } from "@/lib/api";

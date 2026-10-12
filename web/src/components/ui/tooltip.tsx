@@ -21,29 +21,10 @@ function Tooltip({
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-// piano: menus, popovers and dialogs return focus to their trigger when they close. After a pointer
-// interaction that restored focus should not open a tooltip; hover already serves pointer users.
-let pointerModality = false
-if (typeof document !== "undefined") {
-  document.addEventListener("pointerdown", () => { pointerModality = true }, true)
-  document.addEventListener("keydown", () => { pointerModality = false }, true)
-}
-
 function TooltipTrigger({
-  onFocus,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return (
-    <TooltipPrimitive.Trigger
-      data-slot="tooltip-trigger"
-      onFocus={event => {
-        onFocus?.(event)
-        // Radix skips its focus-open handler for a default-prevented event.
-        if (pointerModality) event.preventDefault()
-      }}
-      {...props}
-    />
-  )
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
 function TooltipContent({
@@ -58,15 +39,13 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          // piano: z-[60] keeps tooltips above toasts; Piano's hover timing
-          "z-[60] w-fit origin-(--radix-tooltip-content-transform-origin) animate-in rounded-md bg-foreground px-3 py-1.5 text-xs text-balance text-background duration-(--dur-hover) ease-(--ease-enter) fade-in-0 zoom-in-[0.96] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.96]",
+          "z-50 w-fit origin-(--radix-tooltip-content-transform-origin) animate-in rounded-md bg-foreground px-3 py-1.5 text-xs text-balance text-background fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           className
         )}
         {...props}
       >
         {children}
-        {/* piano: the arrow matches the content's z-[60] */}
-        <TooltipPrimitive.Arrow className="z-[60] size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground" />
+        <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground" />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   )

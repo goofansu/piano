@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
 import { McpSettings } from "@/components/McpSettings";
+import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
+import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RadiusSettings } from "@/components/RadiusSettings";
@@ -27,10 +29,8 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
 
 import { oauthProviders, providerLogout } from "@/lib/api";
 import { SETTINGS_SECTIONS, type SettingsSection } from "@/lib/routes";

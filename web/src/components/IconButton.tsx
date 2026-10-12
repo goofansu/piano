@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
  * An icon-only button with its tooltip. The accessible name is the tooltip's words unless the

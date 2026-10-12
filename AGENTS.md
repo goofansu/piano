@@ -117,11 +117,13 @@ Build UI from shadcn/ui components: search the registry first, add with `npx sha
 and compose as the `shadcn` skill describes. Hand-written markup is for the case where no
 standard component exists, and says so in a comment.
 
-`npx shadcn@latest add` rewrites `web/src/components/ui/`, so keep Piano's decisions outside it
-where possible: tokens in `web/src/index.css`, rules keyed to `[data-slot=…]` for properties a
-component does not set itself, and wrappers in `web/src/components/`. Tag each edit that must stay
-in `ui/` with a `piano:` comment. Update a component with `add <name> --dry-run --diff <file>`,
-keep the tagged hunks and take the rest from upstream; never `--overwrite` unreviewed.
+Keep `web/src/components/ui/` upstream-owned. Piano's variants, overlay styling and focus policy
+live in the `Piano*` wrappers, `StatusBadge` and `PickerRadioItem` in `web/src/components/`; use
+those for customized controls, and raw `ui/` imports for standard controls. Tokens and the few
+internal-slot CSS exceptions live in `web/src/index.css`. The only retained `piano:` patch in
+`ui/` disables Sidebar's Mod+B shortcut. When adding a customization or upgrading shadcn, read
+[the ownership and upgrade guide](docs/shadcn-ui.md). Preview with
+`add <name> --dry-run --diff <file>`; never `--overwrite` unreviewed.
 
 The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands,

@@ -301,6 +301,42 @@
   }
 }
 
+/* shadcn owns the internal backdrops (no overlay props on Content). Keep these narrow slot
+ * exceptions here rather than copying Dialog/Sheet internals into app wrappers. */
+[data-slot="dialog-overlay"],
+[data-slot="sheet-overlay"] {
+  background-color: var(--scrim);
+}
+[data-slot="dialog-overlay"] {
+  animation-duration: var(--dur-enter);
+  transition-duration: var(--dur-enter);
+}
+[data-slot="dialog-overlay"][data-state="closed"] {
+  animation-duration: var(--dur-exit);
+  transition-duration: var(--dur-exit);
+}
+[data-slot="sheet-overlay"] {
+  animation-timing-function: var(--ease-enter);
+  transition-timing-function: var(--ease-enter);
+}
+[data-slot="sheet-overlay"][data-state="open"] {
+  animation-duration: 300ms;
+  transition-duration: 300ms;
+}
+[data-slot="sheet-overlay"][data-state="closed"] {
+  animation-duration: 200ms;
+  transition-duration: 200ms;
+  animation-timing-function: var(--ease-exit);
+  transition-timing-function: var(--ease-exit);
+}
+
+/* Radix's inline display: table widens this internal wrapper to the longest line, defeating
+ * truncation. There is no shadcn prop for it; preserve the existing block-layout fix. */
+[data-slot="scroll-area-viewport"] > div {
+  /* biome-ignore lint/complexity/noImportantStyles: override Radix's inline display, not utility classes. */
+  display: block !important;
+}
+
 /* A selected row: parchment in light mode, so it reads warm and distinct from the driftwood hover. */
 :root {
   --selected: oklch(0.88 0.021 53);

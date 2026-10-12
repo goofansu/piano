@@ -1,6 +1,7 @@
 import { MCP_CATALOG, type McpServerSetup, type McpSetupRequest } from "@shared/mcp";
 import { CheckCircle2Icon, ServerIcon } from "lucide-react";
 import { toast } from "sonner";
+import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RemovalDialog } from "@/components/RemovalDialog";
@@ -19,7 +20,6 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
-import { Skeleton } from "@/components/ui/skeleton";
 import { mcpLogin, mcpSetup } from "@/lib/api";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";

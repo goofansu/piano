@@ -1,7 +1,5 @@
 import * as React from "react"
 import { cn } from "cn"
-// piano: see returnFocusForKeyboard
-import { returnFocusForKeyboard } from "@/lib/pointerClose"
 import { Popover as PopoverPrimitive } from "radix-ui"
 
 function Popover({
@@ -20,7 +18,6 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
-  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
@@ -30,16 +27,10 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          // piano: z-[60] keeps popovers above toasts; rounded-lg and Piano's motion tokens
-          "z-[60] w-72 origin-(--radix-popover-content-transform-origin) rounded-lg border bg-popover p-4 text-popover-foreground shadow-md outline-hidden duration-[160ms] ease-(--ease-enter) data-[state=closed]:animate-out data-[state=closed]:duration-(--dur-exit) data-[state=closed]:ease-(--ease-exit) data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.96] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.96]",
+          "z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-hidden data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           className
         )}
         {...props}
-        // piano: a click that closes the overlay leaves focus alone instead of ringing the trigger
-        onCloseAutoFocus={(event) => {
-          onCloseAutoFocus?.(event)
-          if (!event.defaultPrevented) returnFocusForKeyboard(event)
-        }}
       />
     </PopoverPrimitive.Portal>
   )

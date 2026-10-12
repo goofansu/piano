@@ -1,4 +1,4 @@
-// Scratch-only command palette regression (INV-01: registry projection, no history changes).
+// Scratch-only palette and shared UI regressions (INV-01: projection only; INV-11: loopback).
 // node test/browser-command-palette.mjs <evidence-directory>
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -167,6 +167,100 @@ async function capture(name) {
   await ab("screenshot", join(evidence, `${name}.png`));
   writeFileSync(join(evidence, `${name}.txt`), await ab("snapshot"));
 }
+const ui = [];
+async function checkRowHeights(expected) {
+  const heights = await evaluate(`(() => {
+    const input = document.querySelector('[data-slot="command-input-wrapper"]');
+    const rows = [...document.querySelectorAll('[cmdk-item]')].filter(el => el.checkVisibility());
+    return [input.getBoundingClientRect().height, ...rows.map(el => el.getBoundingClientRect().height)];
+  })()`);
+  ui.push({ expected, heights });
+  assert.ok(
+    heights.length > 1 && heights.every((h) => Math.abs(h - expected) < 1),
+    "search and option rows share a height",
+  );
+}
+// These are app interactions, not assertions about where wrappers/classes happen to live.
+async function checkPianoControls() {
+  await ab("set", "viewport", "1440", "1000");
+  const view = '[aria-label="View options"]';
+  const directory = '[role="combobox"][aria-label="Directory"]';
+  await ab("press", process.platform === "darwin" ? "Meta+b" : "Control+b");
+  assert.equal(
+    await evaluate(`document.querySelector('[data-slot="layout-sidebar"]').dataset.state`),
+    "expanded",
+    "Mod+B remains unassigned",
+  );
+  for (const theme of ["Dark", "Light"]) {
+    await ab("click", view);
+    await ab("find", "role", "menuitem", "hover", "--name", "Appearance");
+    await ab(
+      "wait",
+      "--fn",
+      `!!document.querySelector('[role="menuitemradio"][data-state="checked"]')`,
+    );
+    const choice = await evaluate(`(() => {
+      const row = document.querySelector('[role="menuitemradio"][data-state="checked"]');
+      const check = row.querySelector('svg.lucide-check');
+      const label = row.getBoundingClientRect(), mark = check?.getBoundingClientRect();
+      return { trailingCheck: !!mark && mark.left > label.left + label.width / 2,
+        z: getComputedStyle(row.closest('[role="menu"]')).zIndex };
+    })()`);
+    ui.push({ theme, ...choice });
+    assert.equal(
+      choice.trailingCheck,
+      true,
+      "selected radio item has a trailing check, not a leading dot",
+    );
+    assert.equal(choice.z, "60", "submenu stays above toasts");
+    await ab("find", "role", "menuitemradio", "click", "--name", theme, "--exact");
+    await ab("mouse", "move", "0", "0");
+    await ab("wait", "--fn", `!document.querySelector('[role="menu"]')`);
+    assert.notEqual(
+      await evaluate(`document.activeElement.getAttribute('aria-label')`),
+      "View options",
+      "pointer close does not restore trigger focus",
+    );
+    assert.equal(
+      await evaluate(`!!document.querySelector('[role="tooltip"]')`),
+      false,
+      "pointer close does not reopen tooltip",
+    );
+
+    await ab("click", directory);
+    await ab("wait", '[aria-label="Search folders"]');
+    await checkRowHeights(36);
+    const overlay = await evaluate(`(() => {
+      const el = document.querySelector('[data-slot="popover-content"]'), style = getComputedStyle(el);
+      return { z: style.zIndex, duration: style.animationDuration, radius: style.borderRadius };
+    })()`);
+    ui.push({ theme, overlay });
+    assert.deepEqual(overlay, { z: "60", duration: "0.16s", radius: "10px" });
+    await capture(`picker-${theme.toLowerCase()}`);
+    await ab("click", `[cmdk-item][data-value="${repos[0]}"]`);
+    await ab("wait", "--fn", `!document.querySelector('[data-slot="popover-content"]')`);
+    assert.notEqual(
+      await evaluate(`document.activeElement.getAttribute('aria-label')`),
+      "Directory",
+      "pointer picker selection leaves focus alone",
+    );
+  }
+  // Keyboard users still get a tooltip and focus returned to the trigger on Escape.
+  await ab("press", "Tab");
+  await ab("focus", view);
+  await ab("wait", "--fn", `!!document.querySelector('[role="tooltip"]')`);
+  await ab("press", "Enter");
+  await ab("wait", "--fn", `!!document.querySelector('[role="menu"]')`);
+  await ab("press", "Escape");
+  await ab("wait", "--fn", `!document.querySelector('[role="menu"]')`);
+  assert.equal(await evaluate(`document.activeElement.getAttribute('aria-label')`), "View options");
+  await ab("focus", directory);
+  await ab("press", "Enter");
+  await ab("wait", '[aria-label="Search folders"]');
+  await ab("press", "Escape");
+  await ab("wait", "--fn", `!document.querySelector('[data-slot="popover-content"]')`);
+  assert.equal(await evaluate(`document.activeElement.getAttribute('aria-label')`), "Directory");
+}
 try {
   for (let n = 0; n < 100; n++) {
     assert.equal(backend.exitCode, null);
@@ -187,6 +281,7 @@ try {
   await ab("press", process.platform === "darwin" ? "Meta+k" : "Control+k");
   await ab("wait", input);
   assert.deepEqual(await titles(), recent, "eight newest by creation across both projects");
+  await checkRowHeights(48);
   await capture("desktop-recent");
   await ab("fill", input, "Session");
   await capture("desktop-search-top");
@@ -251,6 +346,7 @@ try {
   await ab("find", "role", "button", "click", "--name", "Search sessions", "--exact");
   await ab("wait", input);
   assert.deepEqual(await titles(), recent, "mobile opens the same recent list");
+  await checkRowHeights(48);
   await ab("fill", input, "new session");
   await capture("mobile-new-session-actions");
   const newActions = await evaluate(`(() => {
@@ -290,9 +386,55 @@ try {
     false,
     "generic action closes palette",
   );
+  await checkPianoControls();
+  assert.equal(await ab("errors"), "");
+  // A narrow desktop viewport is not a touch device: relaunch with a real coarse pointer.
+  await ab("close");
+  await ab(
+    "--args",
+    "--blink-settings=primaryPointerType=2",
+    "open",
+    `http://127.0.0.1:${webPort}/new`,
+  );
+  await ab("wait", "--text", "What should we work on?");
+  await ab("set", "viewport", "390", "844");
+  assert.equal(await evaluate(`matchMedia('(pointer: coarse)').matches`), true);
+  await ab("click", '[role="combobox"][aria-label="Directory"]');
+  await ab("wait", '[aria-label="Search folders"]');
+  await checkRowHeights(44);
+  assert.notEqual(
+    await evaluate(`document.activeElement.getAttribute('aria-label')`),
+    "Search folders",
+    "touch opening does not summon the software keyboard",
+  );
+  await capture("touch-picker");
+  await ab("press", "Escape");
+  await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
+  await ab("wait", '[data-slot="sheet-content"]');
+  const sheet = await evaluate(`(() => {
+    const content = getComputedStyle(document.querySelector('[data-slot="sheet-content"]'));
+    const overlay = getComputedStyle(document.querySelector('[data-slot="sheet-overlay"]'));
+    return { duration: content.animationDuration, overlayDuration: overlay.animationDuration, scrim: overlay.backgroundColor };
+  })()`);
+  ui.push({ sheet });
+  assert.equal(sheet.duration, "0.3s");
+  assert.equal(sheet.overlayDuration, "0.3s");
+  await capture("touch-sidebar");
+  await ab("press", "Escape");
+  await ab("wait", "--fn", `document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
+  await ab("set", "media", "light", "reduced-motion");
+  await ab("find", "role", "button", "click", "--name", "Show sidebar", "--exact");
+  await ab("wait", '[data-slot="sheet-content"]');
+  assert.equal(
+    await evaluate(
+      `getComputedStyle(document.querySelector('[data-slot="sheet-content"]')).animationName`,
+    ),
+    "none",
+    "reduced-motion beats app overlay styling",
+  );
   assert.equal(await ab("errors"), "");
   console.log(
-    "PASS: search viewport resets; keyboard scrolling; eight newest across projects; full active-session search; archive exclusion; clear/reopen reset; keyboard selection; mobile new session actions and consistent icons",
+    "PASS: search viewport resets; keyboard scrolling; eight newest across projects; full active-session search; archive exclusion; clear/reopen reset; keyboard selection; mobile new session actions; equal row heights; light/dark pickers; trailing checks; pointer and keyboard focus; no Mod+B; touch sizing/focus; sheet timing and reduced motion",
   );
   writeFileSync(
     join(evidence, "result.json"),
@@ -304,6 +446,7 @@ try {
         cli: "test/fake-host-pi.mjs",
         modelCalls: 0,
         newActions,
+        ui,
       },
       null,
       2,

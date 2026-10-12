@@ -2,8 +2,8 @@ import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { listRow } from "@/lib/styles";
 import {

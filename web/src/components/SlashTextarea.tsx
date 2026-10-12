@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopover";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionCommands, slashCommands } from "@/lib/api";
 import { useObservation } from "@/lib/useObservation";

@@ -16,8 +16,6 @@ import {
 import { useTheme } from "next-themes";
 import { createContext, useContext, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ProjectDialogView } from "@/components/Projects";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -25,8 +23,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+} from "@/components/PianoDialog";
+import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
+import { ProjectDialogView } from "@/components/Projects";
+import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { type Command, type CommandEffects, type CommandForm, runCommand } from "@/lib/commands";

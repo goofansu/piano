@@ -16,29 +16,29 @@ import { SessionCommandMenuItem, useCommands, useSessionCommands } from "@/compo
 import { DisclosureChevron } from "@/components/Disclosure";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { IconButton } from "@/components/IconButton";
-import { Keys } from "@/components/PianoMark";
-import { ProjectCommandIconView } from "@/components/Projects";
-import { Hint } from "@/components/Shortcut";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { PianoButton as Button } from "@/components/PianoButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/PianoDropdownMenu";
+import { Keys } from "@/components/PianoMark";
+import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
+import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
+import { ProjectCommandIconView } from "@/components/Projects";
+import { Hint } from "@/components/Shortcut";
+import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, type GlobalCommandGroup, globalCommands } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";

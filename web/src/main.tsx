@@ -1,7 +1,7 @@
 import { ThemeProvider } from "next-themes";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/PianoTooltip";
 import App from "./App";
 import "./index.css";
 

@@ -1,8 +1,8 @@
 import { cn } from "cn";
 import { CheckIcon } from "lucide-react";
 import { type ComponentProps, type RefObject, useRef } from "react";
-import { CommandInput } from "@/components/ui/command";
-import { PopoverContent } from "@/components/ui/popover";
+import { CommandInput } from "@/components/PianoCommand";
+import { PopoverContent } from "@/components/PianoPopover";
 
 /**
  * The searchable pickers (folder, project, worktree, model) share one popover: one width, scrolling

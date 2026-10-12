@@ -1,6 +1,5 @@
 import { GitBranchIcon, MoreHorizontalIcon, PanelLeftOpenIcon, SplitIcon } from "lucide-react";
 import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,11 +7,12 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/PianoDropdownMenu";
+import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
+import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
+import { Button } from "@/components/ui/button";
 import { pickCommands, SESSION_HEADER_COMMANDS } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";

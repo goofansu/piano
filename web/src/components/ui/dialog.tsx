@@ -37,8 +37,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        // piano: the warm --scrim token (umber by day, midnight by night); Piano's motion tokens
-        "fixed inset-0 z-50 bg-scrim duration-(--dur-enter) data-[state=closed]:animate-out data-[state=closed]:duration-(--dur-exit) data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -60,8 +59,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          // piano: overlay layer surface (bg-surface-3, rounded-2xl) and Piano's motion tokens
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border bg-surface-3 p-6 shadow-lg duration-(--dur-enter) ease-(--ease-enter) outline-none data-[state=closed]:animate-out data-[state=closed]:duration-(--dur-exit) data-[state=closed]:ease-(--ease-exit) data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.96] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.96] sm:max-w-lg",
+          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
           className
         )}
         {...props}

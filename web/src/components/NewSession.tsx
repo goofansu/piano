@@ -23,11 +23,6 @@ import { useCommands } from "@/components/CommandHost";
 import { FolderPicker } from "@/components/FolderPicker";
 import { IconButton } from "@/components/IconButton";
 import { ModelSelect } from "@/components/ModelSelect";
-import { PianoMark } from "@/components/PianoMark";
-import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
-import { SlashTextarea } from "@/components/SlashTextarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -35,9 +30,14 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command";
+} from "@/components/PianoCommand";
+import { PianoMark } from "@/components/PianoMark";
+import { Popover, PopoverTrigger } from "@/components/PianoPopover";
+import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
+import { SlashTextarea } from "@/components/SlashTextarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { abbrevHome } from "@/lib/format";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";

@@ -12,6 +12,7 @@ import {
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
+import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RemovalDialog } from "@/components/RemovalDialog";
@@ -31,7 +32,6 @@ import {
   ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { oauthProviders, providerLogout, type RadiusSetupAction, radiusSetup } from "@/lib/api";
 import {

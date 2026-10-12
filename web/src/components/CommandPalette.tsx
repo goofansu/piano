@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { CommandIcon, useSessionCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
-import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import {
   CommandDialog,
   CommandEmpty,
@@ -12,7 +11,8 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@/components/PianoCommand";
+import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { abbrevPath } from "@/lib/format";
 import { globalCommands } from "@/lib/globalCommands";
 import { hasMod } from "@/lib/keys";
