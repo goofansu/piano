@@ -1,47 +1,22 @@
 /**
- * Workspace and session commands: the domain steps behind the browser's requests to discover
- * and add worktrees, trust a folder, and create, prompt, rename, archive and delete sessions.
- * Registry holds references only (INV-01); SessionHosts owns the single child per session
- * (INV-02); Worktrees owns Git and Worktrunk; Pi's trust store owns trust. The requesting
- * client's ClientSessions attaches what it opens, through `SessionClient`.
+ * Workspace commands: the domain steps behind the browser's requests to discover and add
+ * worktrees and to trust a folder. Registry holds references only (INV-01); Worktrees owns Git
+ * and Worktrunk; Pi's trust store owns trust. Sessions belong to SessionHosts.
  */
-import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer } from "effect";
 import type {
-  Attachment,
   ModelCatalog,
   ProjectTrust,
-  SessionAction,
-  SessionActionResult,
-  StartOptions,
   WorktreeDiscovery,
   WorktreeResult,
 } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
-import type { PiSession, PiSessionError } from "./PiSessions.ts";
 import type { ProjectTrustError } from "./ProjectTrust.ts";
-import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
-import { SessionHosts } from "./SessionHosts.ts";
+import { Registry, type RegistryError } from "./Registry.ts";
 import { SidebarView } from "./SidebarView.ts";
 import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
 
 export type ReadyWorktree = Extract<WorktreeResult, { status: "ready" }>;
-
-export interface CreateSessionRequest {
-  readonly cwd: string;
-  readonly projectId?: string;
-  readonly options: StartOptions;
-  readonly text?: string;
-  readonly attachments?: ReadonlyArray<Attachment>;
-}
-
-/** How the requesting connection takes part: it attaches the opened session. Registry writes reach the sidebar on their own. */
-export interface SessionClient<E, R> {
-  /** Opens the session and shows it if the client still has this new session selected. */
-  readonly attach: (
-    open: Effect.Effect<PiSession, PiSessionError>,
-  ) => Effect.Effect<PiSession, E | PiSessionError, R>;
-}
 
 export interface TrustDecision {
   readonly cwd: string;
@@ -49,8 +24,6 @@ export interface TrustDecision {
   readonly catalog: ModelCatalog;
   readonly notice: string;
 }
-
-export type RetireMode = "archive" | "delete";
 
 export class WorkspaceCommands extends Context.Service<
   WorkspaceCommands,
@@ -76,28 +49,6 @@ export class WorkspaceCommands extends Context.Service<
       path: string,
       trusted: boolean,
     ) => Effect.Effect<TrustDecision, ProjectTrustError>;
-    /** Start a new session; the registry reference and project are written before any prompt reaches Pi. */
-    readonly createSession: <E, R>(
-      request: CreateSessionRequest,
-      client: SessionClient<E, R>,
-    ) => Effect.Effect<PiSession, E | PiSessionError | RegistryError | RegistryLookupError, R>;
-    /** Send input to a session. A prompt or steer is activity, recorded (with a first title) before Pi sees it. */
-    readonly act: (
-      session: PiSession,
-      action: SessionAction,
-    ) => Effect.Effect<SessionActionResult | undefined, PiSessionError | RegistryError>;
-    /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
-    readonly renameSession: (
-      cwd: string,
-      sessionId: string,
-      title: string,
-    ) => Effect.Effect<string, PiSessionError | RegistryError>;
-    /** Stop Pi, then archive the reference or delete Pi's history and the reference. */
-    readonly retireSession: (
-      cwd: string,
-      sessionId: string,
-      mode: RetireMode,
-    ) => Effect.Effect<void, PiSessionError>;
   }
 >()("piano/WorkspaceCommands") {}
 
@@ -105,7 +56,6 @@ export const WorkspaceCommandsLive = Layer.effect(
   WorkspaceCommands,
   Effect.gen(function* () {
     const registry = yield* Registry;
-    const hosts = yield* SessionHosts;
     const facts = yield* DirectoryFacts;
     const sidebar = yield* SidebarView;
 
@@ -126,15 +76,6 @@ export const WorkspaceCommandsLive = Layer.effect(
         });
       return result;
     });
-    const act = Effect.fn("WorkspaceCommands.act")(function* (
-      session: PiSession,
-      action: SessionAction,
-    ) {
-      if (action._tag === "prompt" || action._tag === "steer")
-        yield* registry.touchSession(session.spec.cwd, session.spec.sessionId, action.text);
-      return yield* session.act(action);
-    });
-
     return WorkspaceCommands.of({
       discoverWorktrees: (folder) =>
         registry.requireFolder(folder).pipe(
@@ -158,8 +99,6 @@ export const WorkspaceCommandsLive = Layer.effect(
           : "Untrusted. Sessions started from now skip this folder's Pi settings and skills.";
         return { ...decision, notice };
       }),
-
-      act,
 
       addWorktree: Effect.fn("WorkspaceCommands.addWorktree")(function* (folder, path) {
         yield* registered(folder);
@@ -190,47 +129,6 @@ export const WorkspaceCommandsLive = Layer.effect(
           });
         },
       ),
-
-      createSession: Effect.fn("WorkspaceCommands.createSession")(function* (request, client) {
-        if (request.projectId !== undefined)
-          yield* registry.requireActiveProject(request.projectId);
-        const cwd = yield* registry.ensureFolder(request.cwd);
-        const { model, thinkingLevel, name } = request.options;
-        // Registration and initial membership survive a disconnect with server-owned acquisition.
-        // Only a fresh server-generated ID may create a reference; SessionHosts keeps one child per ID.
-        const session = yield* client.attach(
-          hosts.open({
-            cwd,
-            sessionId: randomUUID(),
-            create: true,
-            projectId: request.projectId,
-            model,
-            thinkingLevel,
-            name,
-          }),
-        );
-        const text = request.text?.trim() ?? "";
-        if (!text && !request.attachments?.length) return session;
-        yield* act(session, { _tag: "prompt", text, attachments: request.attachments });
-        return session;
-      }),
-
-      renameSession: Effect.fn("WorkspaceCommands.renameSession")(
-        function* (cwd, sessionId, title) {
-          // The host releases a session started only for this once it is idle.
-          const session =
-            (yield* hosts.get(cwd, sessionId)) ?? (yield* hosts.open({ cwd, sessionId }));
-          yield* session.act({ _tag: "set_name", name: title });
-          const mirrored = (yield* session.state).sessionName ?? title;
-          yield* registry.mirrorSession(session.spec.cwd, session.spec.sessionId, {
-            sessionName: mirrored,
-          });
-          return mirrored;
-        },
-      ),
-
-      retireSession: (cwd, sessionId, mode) =>
-        mode === "delete" ? hosts.delete(cwd, sessionId) : hosts.archive(cwd, sessionId),
     });
   }),
 );

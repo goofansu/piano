@@ -14,11 +14,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
+import {
+  Registry,
+  RegistryDatabasePath,
+  RegistryLive,
+  RegistryLookupError,
+} from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import type { SessionEvent } from "../shared/wire.ts";
 
@@ -72,7 +77,7 @@ const waitAudit = (id: string, pred: (records: Record[]) => boolean) =>
       }),
   );
 const run = <A, E>(
-  effect: Effect.Effect<A, E, SessionHosts | Registry>,
+  effect: Effect.Effect<A, E, SessionHosts | Registry | Scope.Scope>,
   options: {
     idleMs?: number;
     holdShutdown?: boolean;
@@ -81,6 +86,8 @@ const run = <A, E>(
     statsFile?: string;
     clock?: boolean;
     timeoutMs?: number;
+    /** The general fake Pi, which keeps names and messages, with a fresh registry of this name. */
+    fakePi?: string;
   } = {},
 ) => {
   const layer = SessionHostsLive({ idleMs: options.idleMs ?? 0 }).pipe(
@@ -91,18 +98,27 @@ const run = <A, E>(
   const work = effect.pipe(
     Effect.scoped,
     Effect.provide(layer),
-    Effect.provideService(PiCli, {
-      ...cli,
-      extraArgs: [
-        ...cli.extraArgs,
-        ...(options.holdShutdown ? ["--hold-shutdown"] : []),
-        ...(options.holdReadiness ? ["--hold-readiness"] : []),
-        ...(options.holdStats ? ["--hold-stats"] : []),
-        ...(options.statsFile ? ["--stats-file", options.statsFile] : []),
-      ],
-    }),
+    Effect.provideService(
+      PiCli,
+      options.fakePi
+        ? {
+            node: process.execPath,
+            cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
+            extraArgs: [],
+          }
+        : {
+            ...cli,
+            extraArgs: [
+              ...cli.extraArgs,
+              ...(options.holdShutdown ? ["--hold-shutdown"] : []),
+              ...(options.holdReadiness ? ["--hold-readiness"] : []),
+              ...(options.holdStats ? ["--hold-stats"] : []),
+              ...(options.statsFile ? ["--stats-file", options.statsFile] : []),
+            ],
+          },
+    ),
     Effect.provideService(PiRequestTimeoutMs, options.timeoutMs ?? 30000),
-    Effect.provideService(RegistryDatabasePath, join(root, "registry.db")),
+    Effect.provideService(RegistryDatabasePath, join(root, `${options.fakePi ?? "registry"}.db`)),
   );
   return Effect.runPromise(options.clock ? work.pipe(Effect.provide(TestClock.layer())) : work);
 };
@@ -644,5 +660,112 @@ test("INV-02/03: hung readbacks time out visibly without blocking a later dialog
       );
     }),
     { clock: true, timeoutMs: 1000 },
+  );
+});
+
+const unavailableProject =
+  "Project is unavailable or archived. Choose a current project before starting.";
+
+test("INV-01: creating with an archived or unknown project registers no folder, reference or child", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* registry.saveProject({ id: "old", name: "Old" });
+      yield* registry.archiveProject("old", true);
+      for (const projectId of ["old", "missing", ""]) {
+        const error = yield* hosts.create({ cwd, projectId, options: {} }).pipe(Effect.flip);
+        assert.ok(error instanceof RegistryLookupError);
+        assert.equal(error.message, unavailableProject);
+      }
+      const data = yield* registry.get;
+      assert.deepEqual([data.sessions.length, data.folders.length], [0, 0]);
+      assert.deepEqual(yield* hosts.list, []);
+    }),
+    { fakePi: "create-refused" },
+  );
+});
+
+test("INV-01/02: a project archived after preflight refuses registration before Pi starts", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      // Another tab archives the project once creation has passed its check and registered the folder.
+      yield* registry.onChange((before, after) =>
+        after.folders.length > before.folders.length
+          ? registry.archiveProject("launch", true).pipe(Effect.orDie)
+          : Effect.void,
+      );
+      const error = yield* hosts
+        .create({ cwd, projectId: "launch", options: {} })
+        .pipe(Effect.flip);
+      assert.equal(error.detail, unavailableProject);
+      const data = yield* registry.get;
+      assert.deepEqual(data.folders, [cwd], "the race happened after the folder was registered");
+      assert.deepEqual(data.sessions, [], "no rejected reference is inserted");
+      assert.deepEqual(yield* hosts.list, [], "no rejected child is started");
+    }),
+    { fakePi: "create-raced" },
+  );
+});
+
+test("INV-01: a prompt or steer records activity on every path to a running session; other input does not", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      const session = yield* hosts.create({ cwd, projectId: "launch", options: {} });
+      const id = session.spec.sessionId;
+      const entry = (yield* registry.get).sessions.find((s) => s.sessionId === id)!;
+      assert.deepEqual([entry.cwd, entry.projectId], [cwd, "launch"]);
+      assert.equal("projectId" in session.spec, false, "membership is not part of Pi's spec");
+      const bumps: string[] = [];
+      yield* registry.onChange((before, after) =>
+        Effect.sync(() => {
+          for (const s of after.sessions)
+            if (
+              before.sessions.some(
+                (b) => b.sessionId === s.sessionId && b.updatedAt !== s.updatedAt,
+              )
+            )
+              bumps.push(s.sessionId);
+        }),
+      );
+      // Activity times have millisecond resolution; keep each step on its own tick so every bump is a change.
+      const tick = Effect.sleep("2 millis");
+      yield* tick;
+      yield* session.act({ _tag: "prompt", text: "  First prompt  " });
+      yield* tick;
+      // Another caller, such as the HTTP router, reaches the same running session through `get`.
+      yield* (yield* hosts.get(cwd, id))!.act({ _tag: "steer", text: "Steer" });
+      assert.deepEqual(bumps, [id, id], "each records activity");
+      yield* tick;
+      yield* session.act({ _tag: "set_thinking_level", level: "low" });
+      yield* session.act({ _tag: "commands" });
+      assert.equal(bumps.length, 2, "other input is not activity");
+    }),
+    { fakePi: "activity" },
+  );
+});
+
+test("INV-01: renaming goes through Pi, even for a stopped session, and the registry mirrors Pi's name", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      const id = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
+      yield* hosts.release(cwd, id);
+      assert.equal(yield* hosts.rename(cwd, id, "Release notes"), "Release notes");
+      const running = (yield* hosts.get(cwd, id))!;
+      assert.equal((yield* running.state).sessionName, "Release notes", "Pi recorded the name");
+      assert.equal(
+        (yield* registry.get).sessions.find((s) => s.sessionId === id)?.title,
+        "Release notes",
+      );
+    }),
+    { fakePi: "rename" },
   );
 });
