@@ -12,6 +12,7 @@ import {
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopover";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionCommands, slashCommands } from "@/lib/api";
+import { acceptCompletion, commandToken, completionRange, rankSkills } from "@/lib/slashCompletion";
 import { useObservation } from "@/lib/useObservation";
 
 export interface CompletionContext {
@@ -28,17 +29,6 @@ type Props = Omit<ComponentProps<typeof Textarea>, "value" | "ref" | "onChange">
   ref: RefObject<HTMLTextAreaElement | null>;
   completion?: CompletionContext;
 };
-
-/** Leading command token only. Sending trims the prompt, so whitespace before it is harmless. */
-function tokenAt(text: string, start: number, end: number) {
-  if (start !== end) return null;
-  const match = /^\s*\/([^\s/]*)/.exec(text);
-  if (!match) return null;
-  const from = match[0].indexOf("/");
-  const to = match[0].length;
-  if (start <= from || start > to || text[to] === "/") return null;
-  return { from, to, query: text.slice(from + 1, start).toLowerCase() };
-}
 
 /** One textarea/listbox interaction for both composers. No prompt transformation or execution. */
 export function SlashTextarea({
@@ -66,12 +56,8 @@ export function SlashTextarea({
   const [accepted, setAccepted] = useState<string>();
   const [hovered, setHovered] = useState(false);
   const key = JSON.stringify(completion);
-  const range = tokenAt(value, selection.start, selection.end);
-  const leading = /^\s*\/([^\s/]+)(?=\s|$)/.exec(value);
-  const token =
-    accepted && leading?.[1] === accepted
-      ? { from: leading[0].indexOf("/"), to: leading[0].length }
-      : null;
+  const range = completionRange(value, selection);
+  const token = commandToken(value, accepted);
   // The native textarea remains the editor (selection, undo, IME and accessibility).
   // A non-interactive mirror paints command color and hover without replacing native editing.
   // biome-ignore lint/correctness/useExhaustiveDependencies: resync DOM metrics when draft text or input styling changes, not on streaming renders.
@@ -141,20 +127,7 @@ export function SlashTextarea({
     : catalog.error
       ? { commands: [], error: catalog.error }
       : undefined;
-  const query = range?.query ?? "";
-  const commands = (current?.commands ?? [])
-    .filter((command) => command.source === "skill" && command.name.toLowerCase().includes(query))
-    .sort((a, b) => {
-      const rank = (command: SlashCommand) =>
-        command.name
-          .replace(/^skill:/, "")
-          .toLowerCase()
-          .startsWith(query)
-          ? 0
-          : 1;
-      return rank(a) - rank(b) || a.name.localeCompare(b.name);
-    })
-    .slice(0, 50);
+  const commands = rankSkills(current?.commands ?? [], range?.query ?? "");
   const active = Math.min(selected, Math.max(0, commands.length - 1));
   // biome-ignore lint/correctness/useExhaustiveDependencies: changing the completion position/query resets selection; arrow-key selection alone must not reset it.
   useEffect(() => setSelected(0), [position]);
@@ -174,13 +147,7 @@ export function SlashTextarea({
       element.selectionEnd !== selection.end
     )
       return;
-    const suffix = value.slice(range.to);
-    const hasSeparator = /^\s/.test(suffix);
-    const inserted = `/${command.name}${hasSeparator ? "" : " "}`;
-    const next = value.slice(0, range.from) + inserted + suffix;
-    // Reuse an existing separator, but leave the caret after it so the next
-    // character becomes an argument rather than extending the command name.
-    const caret = range.from + inserted.length + (hasSeparator ? 1 : 0);
+    const { text: next, caret } = acceptCompletion(value, range, command.name);
     setAccepted(command.name);
     onValueChange(next);
     setDismissed(JSON.stringify([key, next, { start: caret, end: caret }]));
