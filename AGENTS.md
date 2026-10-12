@@ -75,7 +75,10 @@ mock choreography or implementation shape. No coverage quota or one-test-per-fun
 Documentation-only changes need document/link review, not new unit tests or an application run.
 
 For application behavior changes, observe the affected journey through `npx agent-browser`, with output
-kept. Model calls cost real credits; use short prompts such as "Reply with exactly: X" and read the
+kept as PR evidence; do not commit a script for it. The only committed browser tests are the critical
+paths in `test/browser/` (start a session; open and continue one), run by `npm run test:browser` and
+CI against a scratch Piano and fake Pi. Run them for changes on those paths, and add a journey only
+for a new critical path. Model calls cost real credits; use short prompts such as "Reply with exactly: X" and read the
 reply back. Radix
 menus and popovers open on pointer events, so open them with `agent-browser click`, not a DOM
 `.click()` from `eval`. `npm test` runs the module tests against `test/fake-pi.mjs` and needs no

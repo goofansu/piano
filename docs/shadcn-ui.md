@@ -63,14 +63,11 @@ and navigation. Cancellation discards pending frames and returns the surfaces to
 3. Check changed props, slots and internal composition against app wrappers. In particular,
    upstream composites import their own `ui/` children: they do not automatically use Piano
    wrappers. `PianoCommand` composes its own dialog, and `PianoSidebarMenuButton` its own tooltip.
-4. Run the repository gates and the affected scratch-browser journey. For picker/overlay changes,
-   `node test/browser-command-palette.mjs <evidence-directory>` checks desktop/mobile palette
-   navigation, row sizing, light/dark pickers, trailing checks, pointer/keyboard focus, Mod+B,
-   touch focus, mobile reveal proportions, finger tracking (including trusted Chromium touch),
-   cancellation, dismissal and reduced motion. It uses fake Pi and no paid model calls. Physical
-   Safari browser-edge navigation still requires a device check. For comparative drag timing,
-   run with `PIANO_SWIPE_PROFILE=1`; it retains visible-position update gaps under 4x Chromium
-   CPU throttling. Its reference-host median budget is not an iPhone/Safari FPS guarantee.
+4. Run the repository gates and `npm run test:browser`, then observe the affected controls through
+   `agent-browser` on a scratch instance. For picker/overlay changes, check desktop and mobile,
+   light and dark, row sizing, trailing checks, pointer and keyboard focus, Mod+K and Mod+B,
+   touch focus, the mobile sidebar reveal and finger tracking, cancellation, dismissal and
+   reduced motion. Physical Safari browser-edge navigation still requires a device check.
 
 Upgrades still need review: clean upstream files eliminate customization merges, not API or
 visual regressions. Compare against CLI-generated source for this project's registry and aliases,
