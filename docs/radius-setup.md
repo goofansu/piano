@@ -2,9 +2,9 @@
 
 Open **Settings → Providers** and use the **Radius** section, or choose **Radius** from
 Mod+K. `/settings/radius` stays a working address: it opens Providers with the Radius
-section revealed, as the palette row does. Radius appears there once, with no separate
-provider row, because signing in is only the first of its steps. **Tools and web search** folds the
-MCP and web-search steps away and reports where they stand while folded. Setup is
+section revealed, as the palette row does. Radius appears first, followed by **Other providers**,
+with no duplicate Radius provider row. **Tools and web search** folds the MCP and web-search
+steps away and reports where they stand while folded; its expanded content includes the setup guide. Setup is
 machine-wide for the OS account running Piano, not a browser account or a Project.
 
 1. **Sign in to Radius.** Uses the existing Pi-backed provider OAuth dialog. Pi owns

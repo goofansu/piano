@@ -54,18 +54,10 @@ const INSTALL_POLL_MS = 1500;
  * than in the provider list because signing in is only the first of its steps.
  *
  * `reveal` is navigation's request count for the address and palette row that name Radius
- * directly: each new request opens the tools at once and, once `listed` and this section's own
- * facts have taken their height, scrolls here once. Counting requests rather than reading a flag
- * is what lets the same row asked for twice reveal Radius twice.
+ * directly: each new request opens the tools and scrolls to this first section. Counting requests
+ * rather than reading a flag lets the same row asked for twice reveal Radius twice.
  */
-export function RadiusSection({
-  reveal,
-  listed,
-}: {
-  reveal?: number;
-  /** Whether the page above has settled, so scrolling here lands where Radius finally sits. */
-  listed: boolean;
-}) {
+export function RadiusSection({ reveal }: { reveal?: number }) {
   const manualRefresh = useRef(false);
   const progress = useRef(RADIUS_PROGRESS);
   const announce = useCallback((observation: RadiusObservation) => {
@@ -165,23 +157,12 @@ export function RadiusSection({
   const removal = confirmation && confirmation.kind !== "sign-out" ? confirmation : undefined;
   const anchor = useRef<HTMLElement>(null);
   const [toolsOpen, setToolsOpen] = useState(reveal !== undefined);
-  // A request opens the tools at once; where to scroll is only known once the page has its height.
-  const [scrollWanted, setScrollWanted] = useState(false);
-  const served = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (reveal === undefined || reveal === served.current) return;
-    served.current = reveal;
+    if (reveal === undefined) return;
     setToolsOpen(true);
-    setScrollWanted(true);
-  }, [reveal]);
-  // A section that cannot load its facts still has a place to scroll to.
-  const placed = listed && (!!state || !!error);
-  useEffect(() => {
-    if (!scrollWanted || !placed) return;
-    setScrollWanted(false);
-    // Jumping, not gliding: the section is already open, and no motion is anything to reduce.
+    // Radius is first, so its position no longer depends on the provider catalog loading.
     anchor.current?.scrollIntoView({ block: "start", behavior: "auto" });
-  }, [scrollWanted, placed]);
+  }, [reveal]);
   return (
     <section
       id="settings-radius"
@@ -215,18 +196,6 @@ export function RadiusSection({
           />
         </IconButton>
       </div>
-      <p className="max-w-prose text-sm text-muted-foreground">
-        Sign in once, then choose what Pi can use from Radius.{" "}
-        <a
-          className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline"
-          href="https://radius.earendil.com/docs/extensions"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Setup guide
-          <ExternalLinkIcon className="size-3.5" aria-hidden />
-        </a>
-      </p>
       {(error || actions.error) && (
         <SettingsAlert title="Radius setup needs attention">{error || actions.error}</SettingsAlert>
       )}
@@ -302,6 +271,17 @@ export function RadiusSection({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="disclosure-content">
+              <div className="border-t px-4 py-3 sm:px-5">
+                <a
+                  className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline"
+                  href="https://radius.earendil.com/docs/extensions"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Setup guide
+                  <ExternalLinkIcon className="size-3.5" aria-hidden />
+                </a>
+              </div>
               <ItemGroup className="border-t">
                 <Item className="rounded-none px-4 sm:px-5">
                   <ItemMedia variant="icon">

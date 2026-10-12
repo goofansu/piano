@@ -538,35 +538,53 @@ try {
   assert(!existsSync(join(agent, "npm/node_modules", packageName)));
   assert.equal(readFileSync(audit, "utf8").trim().split("\n").length, 4);
   await capture("14-removed");
-  // A cold deep link with Pi's own provider catalog: the list above Radius loads after the first
-  // paint and pushes the page past one screen, so the scroll has to wait for it.
+  // A cold deep link keeps Radius visible while the other providers load beneath it.
   await ab("open", `${frontendUrl}/settings/radius`);
   await ab("wait", "--text", "Radius MCP");
   assert.equal(
     await evaluate(`(() => { const s = ${scroller}; return s.scrollHeight > s.clientHeight; })()`),
     true,
-    "the provider list must push Radius past one screen for this check to mean anything",
+    "the full provider catalog makes this a scrollable mobile page",
   );
   await ab(
     "wait",
     "--fn",
-    `(() => { const s = ${scroller}; const box = s.getBoundingClientRect(); const heading = document.querySelector('#settings-radius-title').getBoundingClientRect(); return s.scrollTop > 0 && heading.top >= box.top - 1 && heading.bottom <= box.bottom; })()`,
+    `(() => { const s = ${scroller}; const box = s.getBoundingClientRect(); const heading = document.querySelector('#settings-radius-title').getBoundingClientRect(); return heading.top >= box.top - 1 && heading.bottom <= box.bottom; })()`,
   );
   assert.equal(await evaluate(toolsState), "open");
   await capture("15-mobile-deep-link");
   // Both groups have peer headings; Radius carries its brand once, on the heading.
   assert.equal(
-    await evaluate(`document.querySelector('#settings-model-providers-title').textContent`),
-    "Model providers",
+    await evaluate(`document.querySelector('#settings-other-providers-title').textContent`),
+    "Other providers",
   );
   assert.equal(
     await evaluate(`document.querySelector('#settings-radius-title use').getAttribute('href')`),
     "/provider-logos/radius.svg#logo",
   );
+  assert.equal(
+    await evaluate(
+      `[...document.querySelectorAll('#settings-providers h2')].map(heading => heading.textContent).join('|')`,
+    ),
+    "Radius|Other providers",
+  );
+  assert.equal(
+    await evaluate(
+      `document.body.textContent.includes('Sign in once, then choose what Pi can use from Radius.')`,
+    ),
+    false,
+  );
+  assert.equal(
+    await evaluate(
+      `!!document.querySelector('[data-slot="collapsible-content"] a[href="https://radius.earendil.com/docs/extensions"]')`,
+    ),
+    true,
+  );
   await ab("set", "viewport", "1280", "1100");
   await ab("click", tools);
   await ab("wait", "--fn", `${toolsState} === 'closed'`);
   await ab("eval", `${scroller}.scrollTop = 0`);
+  assert.equal(await evaluate(`document.body.textContent.includes('Setup guide')`), false);
   await capture("16-provider-section-headings");
   assert.equal(await ab("errors"), "");
   writeFileSync(join(evidence, "observed-config.json"), JSON.stringify(config, null, 2));

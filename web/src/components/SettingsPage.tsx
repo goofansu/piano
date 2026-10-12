@@ -217,13 +217,14 @@ function ProvidersSettings({
       }
     >
       <div className="flex flex-col gap-8">
+        <RadiusSection reveal={revealRadius} />
         {(!providers || providers.length > 0 || catalogEmpty || error) && (
-          <section aria-labelledby="settings-model-providers-title" className="flex flex-col gap-3">
+          <section aria-labelledby="settings-other-providers-title" className="flex flex-col gap-3">
             <h2
-              id="settings-model-providers-title"
+              id="settings-other-providers-title"
               className="flex min-h-8 items-center text-lg font-semibold"
             >
-              Model providers
+              Other providers
             </h2>
             {error ? (
               <SettingsAlert title="Could not load providers" icon={<AlertCircleIcon />}>
@@ -299,8 +300,6 @@ function ProvidersSettings({
             )}
           </section>
         )}
-        {/* Radius is reached last, so it waits for the list above to take its height before scrolling. */}
-        <RadiusSection reveal={revealRadius} listed={!!providers || !!error} />
       </div>
     </SettingsSectionFrame>
   );
