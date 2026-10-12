@@ -73,6 +73,7 @@ export function SessionView({ state, send }: Props) {
     },
     `${t?.cwd}\0${t?.sessionId}\0${t?.hosted}`,
     (action) => send({ _tag: "act", action }),
+    !pane.composerDisabled,
   );
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
 
@@ -190,21 +191,25 @@ export function SessionView({ state, send }: Props) {
           draftKey={draftKey}
           completion={completionTarget(state)}
           onRestoreQueue={() => send({ _tag: "act", action: { _tag: "restore_queue" } })}
-          disabled={pane.composerDisabled}
+          disabled={!draftKey || input?.outcome === "starting"}
+          actionsDisabled={pane.composerDisabled}
           streaming={streaming}
           compacting={t?.state.isCompacting}
-          onSend={(text, kind, attachments) =>
+          onSend={(text, kind, attachments) => {
             send({
               _tag: "act",
               action: { _tag: deliveryAction(kind), text, attachments },
               start: choice.start(),
-            })
-          }
+            });
+            choice.submitted();
+          }}
           onStop={() => send({ _tag: "act", action: { _tag: "stop" } })}
           stopping={t?.state.isStopping}
           catalog={catalog}
           onRefreshModels={
-            t ? () => send({ _tag: "models", cwd: t.cwd, refresh: true }) : undefined
+            t && !pane.composerDisabled
+              ? () => send({ _tag: "models", cwd: t.cwd, refresh: true })
+              : undefined
           }
           model={choice.model}
           onModelChange={choice.onModelChange}

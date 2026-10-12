@@ -39,7 +39,9 @@ interface Props {
   draftKey: DraftKey | null;
   completion?: CompletionContext;
   onRestoreQueue: () => void;
+  /** Local drafting is unavailable (for example, before a session has loaded). */
   disabled: boolean;
+  actionsDisabled: boolean;
   streaming: boolean;
   compacting?: boolean;
   onSend: (text: string, kind: QueuedMessage["kind"], attachments: readonly Attachment[]) => void;
@@ -66,6 +68,7 @@ export function Composer({
   completion,
   onRestoreQueue,
   disabled,
+  actionsDisabled,
   streaming,
   compacting,
   onSend,
@@ -91,7 +94,7 @@ export function Composer({
   const control = composerControl({
     text: editor.text,
     images: editor.attachments,
-    disabled,
+    disabled: disabled || actionsDisabled,
     streaming,
     compacting: !!compacting,
     stopping: !!stopping,

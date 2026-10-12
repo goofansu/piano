@@ -790,7 +790,7 @@ export const ClientMessage = Schema.Union([
     text: Schema.optional(Schema.String),
     attachments: attachmentInput,
   }),
-  /** Act on the selected session. `start` carries the options used to start Pi when it is not running. */
+  /** Act on the selected session. `start` starts a stopped Pi, or applies draft model/effort choices before acting on a running Pi. */
   Schema.TaggedStruct("act", {
     selectionId: Schema.String,
     action: SessionAction,

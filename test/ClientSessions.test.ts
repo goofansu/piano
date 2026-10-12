@@ -194,6 +194,37 @@ test("INV-02/05: starting from a stopped selection attaches before the first pro
   );
 });
 
+test("INV-02/05: a reattached session applies offline draft choices before its next input", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* started();
+      const { sessions, next } = yield* client;
+      yield* yield* sessions.select({
+        cwd,
+        sessionId: session.spec.sessionId,
+        selectionId: "back",
+      });
+      yield* sessions.act(
+        "back",
+        { _tag: "prompt", text: "offline draft" },
+        {
+          model: "fake/beta",
+          thinkingLevel: "high",
+        },
+      );
+      const reply = yield* next(
+        (m) =>
+          m._tag === "session" &&
+          m.event._tag === "message_end" &&
+          m.event.message.role === "assistant",
+      );
+      assert.ok(reply._tag === "session" && reply.event._tag === "message_end");
+      assert.equal(reply.event.message.model, "fake/beta");
+      assert.equal((yield* session.state).thinkingLevel, "high");
+    }),
+  );
+});
+
 test("a new-session selection shows what it creates only while it is still selected", async () => {
   await run(
     Effect.gen(function* () {
