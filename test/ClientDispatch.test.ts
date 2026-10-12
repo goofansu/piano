@@ -16,8 +16,9 @@ import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
 import { type WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
 import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
+import { initialWorktreeRequest, transition } from "../web/src/lib/worktreeRequest.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
-import { initialState } from "../web/src/store.ts";
+import { initialState, reduce } from "../web/src/store.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-dispatch-")));
 const cwd = join(root, "checkout");
@@ -238,6 +239,74 @@ test("a trust decision answers the requester with a notice, the new trust and th
   } finally {
     rmSync(join(cwd, ".agents"), { recursive: true, force: true });
   }
+});
+
+test("INV-06: rejected worktree operations settle browser state immediately without replay", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { receive } = yield* client;
+      yield* (yield* SidebarView).fresh;
+      const held = [];
+      for (let n = 0; n < inboundLimits.client.messages; n++)
+        held.push(yield* receive({ _tag: "registry" }));
+      const before = yield* (yield* Registry).get;
+      for (const kind of ["create", "select"] as const) {
+        const started = transition(initialWorktreeRequest, {
+          type: "start",
+          requestId: kind,
+          intent:
+            kind === "create"
+              ? { kind, folder: cwd, branch: "must-not-exist", hooks: false }
+              : { kind, folder: cwd, path: cwd },
+        });
+        assert.ok(
+          started.command?._tag === "create_worktree" || started.command?._tag === "add_worktree",
+        );
+        const from = sent.length;
+        yield* yield* receive(started.command);
+        let browser = initialState;
+        for (const message of answers(from)) browser = reduce(browser, { type: "server", message });
+        assert.equal(browser.worktreeResult?.requestId, kind);
+        const unrelated = transition(started.state, {
+          type: "receipt",
+          receipt: {
+            _tag: "worktree_result",
+            requestId: "other",
+            result: { status: "error", detail: "stale" },
+          },
+        });
+        assert.equal(unrelated.state, started.state);
+        const settled = transition(started.state, {
+          type: "receipt",
+          receipt: browser.worktreeResult,
+        });
+        assert.equal(settled.state.request.status, "failed");
+        if (settled.state.request.status === "failed")
+          assert.match(settled.state.request.detail, /not started/);
+        assert.equal(settled.command, undefined, "mutations are never replayed");
+      }
+      const refresh = transition(initialWorktreeRequest, { type: "refresh", folder: cwd });
+      assert.ok(refresh.command?._tag === "worktrees");
+      const from = sent.length;
+      yield* yield* receive(refresh.command);
+      let browser = initialState;
+      for (const message of answers(from)) browser = reduce(browser, { type: "server", message });
+      assert.equal(browser.worktrees["unrelated"], undefined);
+      const discovery = browser.worktrees[cwd];
+      assert.equal(discovery?.status, "error");
+      if (discovery?.status === "error") assert.match(discovery.detail, /not started/);
+      const completed = discovery
+        ? transition(refresh.state, { type: "answered" })
+        : { state: refresh.state };
+      assert.equal(completed.state.refreshing, false);
+      assert.deepEqual(
+        yield* (yield* Registry).get,
+        before,
+        "admission did not invoke lifecycle registration",
+      );
+      for (const work of held) yield* work;
+    }),
+  );
 });
 
 test("INV-06: a failed worktree request is answered, then the sidebar is rediscovered", async () => {
