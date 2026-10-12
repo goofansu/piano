@@ -9,10 +9,10 @@ import {
 } from "@/components/Attachments";
 import { ModelSelect } from "@/components/ModelSelect";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
-import { modelPickerAvailable } from "@/lib/composerControl";
 import { useDraftStore } from "@/lib/draftStore";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
 import type { DraftKey } from "@/lib/messageDraft";
+import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
@@ -108,7 +108,8 @@ export function DraftEditor({
   const [modelOpen, setModelOpen] = useState(false);
   useAutoGrow(ref, text, maxHeight);
   useTypeToFocus(ref, editor.append, !disabled);
-  const pickerAvailable = modelPickerAvailable({
+  // Mod+/ opens the picker exactly when its trigger could.
+  const pickerAvailable = modelPickerEnabled({
     disabled,
     catalog: model.catalog,
     canRefresh: !!model.onRefresh,

@@ -2,7 +2,7 @@
  * What the composer's controls do for one moment of a session: whether the primary button sends,
  * queues or stops, whether it is enabled, what it says, what Esc does and how a send-key press is
  * delivered. The Enter guard and the button read the same `enabled`, so they cannot disagree.
- * The New page's first message and the model picker shortcut have their situations here too.
+ * The New page's first message has its situation here too.
  * Pure and React-free; the composers render from it.
  */
 import type { ModelCatalog, QueuedMessage } from "@shared/wire";
@@ -137,13 +137,3 @@ export const newSessionReady = (s: NewSessionSituation): boolean =>
   !!s.model &&
   s.projectOpen &&
   sendable({ text: s.text, images: s.images });
-
-/**
- * Mod+/ opens the model picker exactly when its trigger could: the editor takes input and the
- * catalog has a model to pick or can be refreshed to find one (ModelSelect's trigger rule).
- */
-export const modelPickerAvailable = (s: {
-  disabled: boolean;
-  catalog: Pick<ModelCatalog, "models"> | null;
-  canRefresh: boolean;
-}): boolean => !s.disabled && !!s.catalog && (s.catalog.models.length > 0 || s.canRefresh);
