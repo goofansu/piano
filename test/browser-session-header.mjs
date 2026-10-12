@@ -40,7 +40,7 @@ const fake = join(root, 'fake.mjs');
 writeFileSync(fake, readFileSync('test/fake-pi.mjs', 'utf8').replace('const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";', `const sessionId = args.includes("--session") ? ${JSON.stringify(sessionId)} : args[args.indexOf("--session-id") + 1] || "nosession";`));
 const backendPort = await freePort();
 const frontendPort = await freePort();
-const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: String(backendPort), ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: fake, PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
+const backend = spawn(process.execPath, ['server/main.ts'], { env: { ...process.env, HOST: '127.0.0.1', PORT: String(backendPort), PIANO_ALLOWED_ORIGINS: `http://127.0.0.1:${frontendPort}`, ...registryEnv(join(root, 'registry.json')), PIANO_PI_CLI: fake, PIANO_PI_ARGS: '', PI_CODING_AGENT_DIR: join(root, 'agent'), PI_CODING_AGENT_SESSION_DIR: sessions }, stdio: ['ignore', 'pipe', 'pipe'] });
 const frontend = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], { cwd: resolve('web'), env: { ...process.env, PIANO_DEV_BACKEND: `http://127.0.0.1:${backendPort}` }, stdio: ['ignore', 'pipe', 'pipe'] });
 let processLog = '';
 for (const p of [backend, frontend]) { p.stdout.on('data', d => processLog += d); p.stderr.on('data', d => processLog += d); }
@@ -115,13 +115,10 @@ try {
   for (const [width, height] of [[1280, 900], [390, 844], [320, 700]]) {
     await ab('set', 'viewport', String(width), String(height));
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('main header p')].slice(0, 2).map(p => p.textContent)`), [`Folder: ${repo.split('/').pop()}`, 'Worktree: main']);
-    assert.ok(await evaluate(`(() => {
-      const create = document.querySelector('main header [aria-label="New session here"]').getBoundingClientRect();
-      const menu = document.querySelector('[aria-label="Session information and actions"]').getBoundingClientRect();
-      return create.width > 0 && create.right <= menu.left && menu.right <= innerWidth;
-    })()`), 'Quick action remains visible');
-    await uncovered('main header [aria-label="New session here"]');
-    await ab('click', 'main header [aria-label="New session here"]');
+    assert.equal(await evaluate(`document.querySelector('main header [aria-label="New session here"]') === null`), true, 'New session here is absent from the header');
+    await ab('press', process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
+    await ab('fill', '[aria-label="Search sessions and commands"]', 'New session here');
+    await ab('click', '[cmdk-item][data-value="New session here"]');
     await ab('wait', '--fn', `location.pathname === '/new' && !!document.querySelector('[aria-label="First message"]')`);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Directory"]').title`), repo);
     await ab('back');
@@ -184,7 +181,7 @@ try {
   await assertToastPlaced('Session details copied', 'desktop-resized');
   // Moving focus and clicking outside dismiss the non-modal menu; the trigger reopens it.
   await menu();
-  await ab('focus', 'main header [aria-label="New session here"]'); await closed();
+  await ab('focus', '[aria-label="Search sessions"]'); await closed();
   await menu(); await ab('click', '[data-slot="transcript"]'); await closed();
   await menu(); await ab('press', 'Escape'); await closed();
   await ab('wait', '--fn', `document.activeElement?.getAttribute('aria-label') === 'Session information and actions'`);

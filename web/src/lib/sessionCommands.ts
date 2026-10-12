@@ -54,8 +54,8 @@ export interface SessionCommand {
 
 /** What the sidebar's session row menu offers, in its order. */
 export const SESSION_ROW_COMMANDS = ["rename", "pin", "archive", "delete"] as const satisfies readonly SessionCommandId[];
-/** What the session header offers: its New session here button, then its menu, in order. */
-export const SESSION_HEADER_COMMANDS = ["new-session-here", "copy-all", "changes", "pull-request", "display-everything", "display-messages"] as const satisfies readonly SessionCommandId[];
+/** What the session header menu offers, in order. */
+export const SESSION_HEADER_COMMANDS = ["copy-all", "changes", "pull-request", "display-everything", "display-messages"] as const satisfies readonly SessionCommandId[];
 
 export function pickCommands<Id extends SessionCommandId>(commands: readonly SessionCommand[], ids: readonly Id[]): (SessionCommand & { id: Id })[] {
   return ids.flatMap(id => commands.filter((c): c is SessionCommand & { id: Id } => c.id === id));

@@ -1,6 +1,5 @@
 import { GitBranchIcon, MoreHorizontalIcon, PanelLeftOpenIcon, SplitIcon } from "lucide-react";
 import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
-import { IconButton } from "@/components/IconButton";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +17,6 @@ export function SessionHeader({ state, onMenu, status, pullRequest }: {
   const { title, branch, sessionId, project, cwd, folderName: folder, worktreeName: worktree } = sessionContext(state);
   const { commands, run, display } = useSessionCommands();
   const header = pickCommands(commands, SESSION_HEADER_COMMANDS);
-  const newHere = header.find(c => c.id === "new-session-here");
   const copyAll = header.find(c => c.id === "copy-all");
   const displays = header.filter(c => c.group === "display");
   return <>
@@ -59,7 +57,6 @@ export function SessionHeader({ state, onMenu, status, pullRequest }: {
         </> : <><Skeleton className="col-span-2 h-4 w-40" /><Skeleton className="col-span-2 h-3 w-28" /></>}
       </div>
       <span role="status" className="sr-only">{status}</span>
-      <IconButton label={newHere?.label ?? "New session here"} disabled={!newHere?.enabled} onClick={() => { if (newHere) run(newHere); }}><CommandIcon icon="new" /></IconButton>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Session information and actions" disabled={!session}><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" collisionPadding={16} className="w-96 max-w-[calc(100vw-2rem)]">
