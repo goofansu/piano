@@ -100,3 +100,13 @@ lint passed; `/tmp/piano-share-titles-{tests,types,lint}.log`. A scratch-browser
 new title, then updated a simulated old “Pi session” title at the same URL on re-share:
 `/tmp/piano-share-titles-browser/run.log` and `evidence/`. Same Linux/Node/Pi environment and
 synthetic Radius boundary as above; no real artifact was published or renamed, and no deploy.
+
+## Remove the repeated success description
+
+On `7392635` plus the UI-only patch, success omits the audience/version description and its ARIA
+reference; confirmation keeps its description. All 480 tests, typecheck and lint passed
+(`/tmp/piano-share-no-description-{tests,types,lint}.log`). The desktop/mobile scratch journey
+confirmed description presence before sharing, absence after success, no dangling `aria-describedby`,
+and unchanged copy/open/close/keyboard behavior. Evidence:
+`/tmp/piano-share-icons-browser/no-description-run.log` and `no-description-evidence/`.
+Same isolated environment and synthetic upload boundary; no new deployment or live publication.

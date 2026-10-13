@@ -77,14 +77,18 @@ export function ShareSessionDialog({
   };
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && close()}>
-      <DialogContent className="sm:max-w-md" showCloseButton={!!result}>
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={!!result}
+        aria-describedby={result ? undefined : "share-session-description"}
+      >
         <DialogHeader>
           <DialogTitle>{result ? "Session shared" : "Share session"}</DialogTitle>
-          <DialogDescription>
-            {result
-              ? "Members of your Radius organization can view this link’s versions."
-              : "Share a snapshot with your Radius organization. Reuses the same link."}
-          </DialogDescription>
+          {!result && (
+            <DialogDescription id="share-session-description">
+              Share a snapshot with your Radius organization. Reuses the same link.
+            </DialogDescription>
+          )}
         </DialogHeader>
         {result ? (
           <FieldGroup>
