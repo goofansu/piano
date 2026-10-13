@@ -283,7 +283,20 @@ test("image-only prompts reach Pi and survive authoritative refresh and late sna
   await run(
     Effect.gen(function* () {
       const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "images" });
+      // Pi acknowledges a prompt before it sends the user message, so wait for the run to settle.
+      const ready = yield* Deferred.make<void>();
+      const settled = yield* collectUntil(
+        t.events.pipe(
+          Stream.tap((e) =>
+            e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+        ),
+        (e) => e._tag === "state" && !e.state.isStreaming,
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
       yield* t.act({ _tag: "prompt", text: "", attachments: [image] });
+      yield* Fiber.join(settled);
+      // A late subscriber reads the image-only prompt from Pi's retained history.
       const events = yield* collectUntil(t.events, (e) => e._tag === "snapshot");
       const event = events[0];
       assert.ok(event._tag === "snapshot");
