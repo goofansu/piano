@@ -28,7 +28,7 @@ import { ChildProcessSpawner as Spawner } from "effect/process";
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
-import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
+import { applySessionEvent, isWorking, withLastKnownStats } from "../shared/sessionProjection.ts";
 import type {
   Dialog,
   DialogResolution,
@@ -76,7 +76,7 @@ export interface PiSessionSpec {
   readonly model?: string;
   /** Passed as --thinking */
   readonly thinkingLevel?: string;
-  /** Passed as --name; callers pass it only for a brand-new session. */
+  /** Passed as --name for a session without history; Pi's saved name wins once `sessionFile` exists. */
   readonly name?: string;
   /** Seed only display statistics while Pi's authoritative readback is pending. */
   readonly lastKnownStats?: SessionStats;
@@ -276,7 +276,7 @@ const openSession = (spec: PiSessionSpec) =>
       });
     // Everything a subscriber's snapshot holds except host observations, kept by the shared fold.
     const snapshotRef = yield* Ref.make<Snapshot>({
-      state: { ...opened, ...spec.lastKnownStats, contextIsLastKnown: true },
+      state: withLastKnownStats(opened, spec.lastKnownStats),
       messages: projector.history(initial[1], "m"),
       dialogs: [],
       tools: [],

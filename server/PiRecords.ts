@@ -485,7 +485,8 @@ export const sessionArgs = (spec: {
   ...(spec.sessionFile ? ["--session", spec.sessionFile] : ["--session-id", spec.sessionId]),
   ...(spec.model ? ["--model", spec.model] : []),
   ...(spec.thinkingLevel ? ["--thinking", spec.thinkingLevel] : []),
-  ...(spec.name ? ["--name", spec.name] : []),
+  // --name names a new session; existing history keeps the name Pi saved in it.
+  ...(spec.name && !spec.sessionFile ? ["--name", spec.name] : []),
 ];
 
 /** One RPC record for Pi's stdin; the transport adds the request id. */

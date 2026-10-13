@@ -5,7 +5,7 @@
  * (a browser request, a Pi rename mirrored by SessionHosts) needs no publish step of its own.
  *
  * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06),
- * session availability (SessionHosts' judgement of Pi history and checkouts) and Pi project trust
+ * session availability (SessionReferences' judgement of Pi history and checkouts) and Pi project trust
  * (through DirectoryFacts) are the observations: discovery runs single-flight in the background,
  * and changes that arrive during a run cause at most one more. A change that keeps the set of
  * registered folders and worktrees publishes at once from the last observation, so a prompt or
@@ -26,6 +26,7 @@ import type {
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { Registry, type RegistryData, shownReference } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
+import { SessionReferences } from "./SessionReferences.ts";
 import { listWorktrees } from "./Worktrees.ts";
 
 export type SidebarMessage = Extract<ServerMessage, { _tag: "registry" }>;
@@ -48,7 +49,7 @@ interface Observation {
   readonly shape: string;
   readonly paths: ReadonlySet<string>;
   readonly discoveries: ReadonlyMap<string, WorktreeDiscovery>;
-  /** Why a project member cannot be opened, as SessionHosts judges it; a member not yet observed is available. */
+  /** Why a project member cannot be opened, as SessionReferences judges it; a member not yet observed is available. */
   readonly unavailable: (cwd: string, sessionId: string) => SessionReference["unavailable"];
   /** Pi's trust for each of `paths`, re-read whenever DirectoryFacts reports a change. */
   readonly trust: ReadonlyMap<string, ProjectTrust>;
@@ -74,6 +75,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
     Effect.gen(function* () {
       const registry = yield* Registry;
       const hosts = yield* SessionHosts;
+      const references = yield* SessionReferences;
       const facts = yield* DirectoryFacts;
       const discover = options.discover ?? listWorktrees;
       const layerScope = yield* Effect.scope;
@@ -98,7 +100,9 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             { concurrency: 4 },
           ),
         );
-        const unavailable = yield* hosts.availability(data.sessions.filter((s) => s.projectId));
+        const unavailable = yield* references.availability(
+          data.sessions.filter((s) => s.projectId),
+        );
         const paths = new Set([...data.folders, ...data.worktrees.map((w) => w.path)]);
         return { shape: shapeOf(data), paths, discoveries, unavailable };
       });

@@ -1,11 +1,10 @@
 /** Canonical execution ownership and the session lifecycle around it: create (folder, project
  * and reference before Pi starts), act (activity recorded before Pi sees it), rename, archive and
  * delete. Browser lifetimes never own acquisition or shutdown.
- * Registry references and Pi files keep their original identity; only the ownership
- * key uses realpath. Incompatible alias references fail explicitly, never merge.
+ * SessionReferences finds a session's history and judges whether it can be opened; this module
+ * keys ownership by the physical checkout it returns and calls it under that key's lock.
  */
 import { randomUUID } from "node:crypto";
-import { realpath, rm } from "node:fs/promises";
 import {
   Clock,
   Context,
@@ -20,18 +19,15 @@ import {
   Stream,
 } from "effect";
 import { isWorking } from "../shared/sessionProjection.ts";
-import type {
-  HostInfo,
-  SessionClosure,
-  SessionReference,
-  SessionStats,
-  Snapshot,
-  StartOptions,
-} from "../shared/wire.ts";
-import { directoryPath } from "./PiEnv.ts";
-import { PiHistory } from "./PiHistory.ts";
+import type { HostInfo, SessionClosure, Snapshot, StartOptions } from "../shared/wire.ts";
 import { type PiSession, PiSessionError, PiSessions, sessionActionPolicy } from "./PiSessions.ts";
 import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
+import {
+  checkoutMissing,
+  type SessionLocation,
+  SessionReferences,
+  SessionReferencesLive,
+} from "./SessionReferences.ts";
 
 export interface OpenSpec {
   readonly cwd: string;
@@ -58,18 +54,10 @@ interface Host {
   actions: number;
   closing: boolean;
 }
-/** The registry reference that owns a session's history, with Pi's file when one exists. */
-interface Reference {
-  readonly cwd: string;
-  readonly file: string | undefined;
-  readonly stats: SessionStats | undefined;
-}
 /** A session resolved under its ownership lock. `host` is live: a dead one has been stopped. */
 interface Resolved {
   readonly key: string;
-  readonly physical: string;
-  readonly ref: Reference;
-  readonly missing: boolean;
+  readonly ref: SessionLocation;
   readonly host: Host | undefined;
 }
 const hostKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
@@ -111,25 +99,18 @@ export class SessionHosts extends Context.Service<
     readonly archive: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly delete: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly list: Effect.Effect<ReadonlyArray<HostInfo>>;
-    /**
-     * Why each session could not be opened from its history, judged by the rules `open` uses: Pi's
-     * file under any spelling of its checkout, and a checkout that still resolves. Undefined when it
-     * can. Lists each spelling's history once, so a caller can ask about many sessions in the
-     * background; it is not a lock-held answer and an open may still refuse for other reasons.
-     */
-    readonly availability: (
-      sessions: ReadonlyArray<{ readonly cwd: string; readonly sessionId: string }>,
-    ) => Effect.Effect<(cwd: string, sessionId: string) => SessionReference["unavailable"]>;
     readonly changes: Stream.Stream<ReadonlyArray<HostInfo>>;
   }
 >()("piano/SessionHosts") {}
 
+/** Also provides the SessionReferences it keys ownership by, so every caller shares its alias memory. */
 export const SessionHostsLive = (options: { idleMs: number }) =>
   Layer.effect(
     SessionHosts,
     Effect.gen(function* () {
       const sessions = yield* PiSessions;
       const registry = yield* Registry;
+      const references = yield* SessionReferences;
       const layerScope = yield* Effect.scope;
       const hosts = new Map<string, Host>();
       const locks = new Map<string, Semaphore.Semaphore>();
@@ -147,125 +128,21 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           }
           return lock;
         });
-      // Remember observed aliases for this server lifetime so removing a checkout
-      // cannot give an existing child a second ownership key. After restart, missing
-      // paths use only their exact registry identity; never guess an alias relationship.
-      const identities = new Map<string, string>();
-      const checkout = (cwd: string) =>
-        Effect.tryPromise({
-          try: async () => {
-            const path = directoryPath(cwd);
-            try {
-              const physical = await realpath(path);
-              identities.set(path, physical);
-              return { physical, missing: false };
-            } catch (error) {
-              if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-              return { physical: identities.get(path) ?? path, missing: true };
-            }
-          },
-          catch: (error) => rejected(`Cannot resolve checkout ${cwd}: ${String(error)}`),
-        });
-      const checkoutMissing = rejected(
-        "This checkout no longer exists. You can read, archive or delete this session. Restore the checkout at its original path before continuing.",
-      );
-      const requireCheckout = (cwd: string) =>
-        checkout(cwd).pipe(
-          Effect.flatMap(({ missing }) => (missing ? Effect.fail(checkoutMissing) : Effect.void)),
-        );
       const owned = <A, E>(work: Effect.Effect<A, E>) =>
         work.pipe(Effect.forkIn(layerScope), Effect.flatMap(Fiber.join));
       const keyed = <A, E>(
         cwd: string,
         sessionId: string,
-        work: (key: string, physical: string) => Effect.Effect<A, E>,
+        work: (key: string) => Effect.Effect<A, E>,
       ) =>
         owned(
           Effect.gen(function* () {
-            const { physical } = yield* checkout(cwd);
+            const { physical } = yield* references.checkout(cwd);
             const key = hostKey(physical, sessionId);
             const lock = yield* lockFor(key);
-            return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() => work(key, physical)));
+            return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() => work(key)));
           }),
         );
-
-      /** The registry reference that owns a session, and its Pi file under the reference's, caller's or ownership key's spelling. */
-      const reference = Effect.fn("SessionHosts.reference")(function* (
-        cwd: string,
-        sessionId: string,
-        physical: string,
-        create = false,
-      ): Effect.fn.Return<Reference, PiSessionError> {
-        const candidates = (yield* registry.get).sessions.filter((s) => s.sessionId === sessionId);
-        const matching = [];
-        for (const entry of candidates) {
-          const path = yield* checkout(entry.cwd).pipe(
-            Effect.map((c) => c.physical),
-            Effect.orElseSucceed(() => undefined),
-          );
-          if (path === physical) matching.push(entry);
-        }
-        if (matching.length > 1)
-          return yield* rejected(
-            `Conflicting session references for ${sessionId}: ${matching.map((s) => s.cwd).join(", ")}. Keep the original references and resolve the duplicate explicitly; Piano has not merged or moved history.`,
-          );
-        const entry = matching[0];
-        if (entry?.archived)
-          return yield* rejected("This session is archived. Start a new session instead.");
-        if (!entry && !create)
-          return yield* rejected(
-            "This session is no longer registered. Refresh the folder list; deleted sessions cannot be restarted.",
-          );
-        if (entry && create) return yield* rejected("This session ID is already registered.");
-        const owner = entry?.cwd ?? directoryPath(cwd);
-        const history = yield* PiHistory.locate(sessionId, [owner, cwd, physical]).pipe(
-          Effect.mapError((e) => rejected(e.detail)),
-        );
-        if (history._tag === "conflict")
-          return yield* rejected(
-            `Conflicting Pi files for checkout aliases (${owner}, ${physical}). Piano has not merged or moved history. Resolve the conflicting session ID before starting it.`,
-          );
-        return {
-          cwd: owner,
-          file: history._tag === "file" ? history.path : undefined,
-          stats: entry?.stats,
-        };
-      });
-
-      const availability = Effect.fn("SessionHosts.availability")(function* (
-        refs: ReadonlyArray<{ readonly cwd: string; readonly sessionId: string }>,
-      ) {
-        // Per checkout, once: whether it resolves, and the IDs Pi has history for under its registry and physical spellings.
-        const checkouts = new Map(
-          yield* Effect.forEach(
-            new Set(refs.map((r) => r.cwd)),
-            (cwd) =>
-              Effect.gen(function* () {
-                // A checkout that cannot be resolved cannot be opened either; its history is still listed under the registry spelling.
-                const { physical, missing } = yield* checkout(cwd).pipe(
-                  Effect.orElseSucceed(() => ({ physical: directoryPath(cwd), missing: true })),
-                );
-                const ids = yield* Effect.forEach(
-                  new Set([directoryPath(cwd), physical]),
-                  PiHistory.sessionIds,
-                );
-                return [cwd, { missing, ids }] as const;
-              }),
-            { concurrency: 4 },
-          ),
-        );
-        // History is judged first: a session without it cannot be opened even once its checkout is restored.
-        return (cwd: string, sessionId: string): SessionReference["unavailable"] => {
-          const c = checkouts.get(cwd);
-          return !c
-            ? undefined
-            : !c.ids.some((ids) => ids.has(sessionId))
-              ? "history"
-              : c.missing
-                ? "checkout"
-                : undefined;
-        };
-      });
 
       const list = Effect.gen(function* () {
         const out: HostInfo[] = [];
@@ -337,10 +214,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       }, Effect.uninterruptible);
 
       /**
-       * Resolve a session under its ownership lock, once: its registry reference and Pi file,
-       * whether its checkout is missing, and its live host. A caller can beat the event watcher
-       * to this lock after Pi exits or the checkout disappears, so a dead host is stopped first
-       * and the reference re-read: stopping may persist the Pi file and final statistics.
+       * Resolve a session under its ownership lock, once: its reference and Pi file, whether its
+       * checkout is missing, and its live host. A caller can beat the event watcher to this lock
+       * after Pi exits or the checkout disappears, so a dead host is stopped first and the
+       * reference re-read: stopping may persist the Pi file and final statistics.
        */
       const resolved = <A, E>(
         cwd: string,
@@ -348,20 +225,19 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         work: (r: Resolved) => Effect.Effect<A, E>,
         create = false,
       ) =>
-        keyed(cwd, id, (key, physical) =>
+        keyed(cwd, id, (key) =>
           Effect.gen(function* () {
             // Coalesced create calls can share an existing host; registration checks still
             // run for ordinary reopen so archive/delete cannot be undone by a stale tab.
             const fresh = create && !hosts.has(key);
-            let ref = yield* reference(cwd, id, physical, fresh);
-            const { missing } = yield* checkout(ref.cwd);
+            let ref = yield* references.resolve(cwd, id, { create: fresh });
             let host = hosts.get(key);
-            if (host && (missing || (yield* host.session.state).closure)) {
+            if (host && (ref.checkoutMissing || (yield* host.session.state).closure)) {
               yield* close(key, host);
               host = undefined;
-              ref = yield* reference(cwd, id, physical);
+              ref = yield* references.resolve(cwd, id);
             }
-            return yield* work({ key, physical, ref, missing, host });
+            return yield* work({ key, ref, host });
           }),
         );
 
@@ -369,10 +245,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         resolved(
           spec.cwd,
           spec.sessionId,
-          ({ key, ref, missing, host: existing }) =>
+          ({ key, ref, host: existing }) =>
             Effect.gen(function* () {
               if (stopping) return yield* rejected("Piano is shutting down.");
-              if (missing) return yield* checkoutMissing;
+              if (ref.checkoutMissing) return yield* checkoutMissing;
               if (existing) return existing.session;
               const { create, projectId, ...piSpec } = spec;
               if (create)
@@ -386,7 +262,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                   cwd: ref.cwd,
                   sessionFile: ref.file,
                   lastKnownStats: ref.stats,
-                  name: ref.file ? undefined : spec.name,
                 })
                 .pipe(
                   Scope.provide(scope),
@@ -435,7 +310,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                           "Pi is closing or has stopped. Refresh before sending new input.",
                         );
                       if (sessionActionPolicy[action._tag].needsCheckout)
-                        yield* requireCheckout(raw.spec.cwd);
+                        yield* references.requireCheckout(raw.spec.cwd);
                       host.actions++;
                       host.lastActivity = yield* Clock.currentTimeMillis;
                       return yield* raw.act(action).pipe(
@@ -543,25 +418,13 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           return host ? close(key, host) : Effect.void;
         });
       const retire = (cwd: string, id: string, remove: boolean) =>
-        resolved(cwd, id, ({ key, physical, ref, host }) =>
+        resolved(cwd, id, ({ key, ref, host }) =>
           Effect.gen(function* () {
             // Discover the final file AFTER shutdown; a last response may have persisted it.
             const final = host
-              ? yield* close(key, host).pipe(Effect.andThen(reference(ref.cwd, id, physical)))
+              ? yield* close(key, host).pipe(Effect.andThen(references.resolve(ref.cwd, id)))
               : ref;
-            if (remove && final.file)
-              yield* Effect.tryPromise({
-                try: () => rm(final.file!, { force: true }),
-                catch: (error) => rejected(`Could not delete Pi history: ${String(error)}`),
-              });
-            if (remove)
-              yield* registry
-                .removeSession(ref.cwd, id)
-                .pipe(Effect.mapError((e) => rejected(e.detail)));
-            else
-              yield* registry
-                .archiveSession(ref.cwd, id)
-                .pipe(Effect.mapError((e) => rejected(e.detail)));
+            yield* remove ? references.remove(final) : references.archive(final);
           }),
         );
 
@@ -601,22 +464,13 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         release,
         get,
         peek: (cwd, id) =>
-          resolved(cwd, id, ({ key, ref, missing }) =>
+          resolved(cwd, id, ({ key, ref }) =>
             Effect.gen(function* () {
-              const snapshot = yield* PiHistory.peek(id, ref.file);
+              const snapshot = yield* references.peek(ref);
               yield* mirror(ref.cwd, id, { sessionName: snapshot.state.sessionName });
               return {
                 cwd: ref.cwd,
-                snapshot: {
-                  ...snapshot,
-                  state: {
-                    ...snapshot.state,
-                    ...ref.stats,
-                    contextIsLastKnown: true,
-                    checkoutMissing: missing,
-                    closure: exits.get(key),
-                  },
-                },
+                snapshot: { ...snapshot, state: { ...snapshot.state, closure: exits.get(key) } },
               };
             }),
           ),
@@ -625,16 +479,13 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             Effect.gen(function* () {
               if (host && (host.actions || !(yield* host.session.state).isQuiescent))
                 return yield* rejected("Wait for this session to finish before sharing.");
-              return yield* PiHistory.exportBranch(id, ref.file).pipe(
-                Effect.mapError((error) => rejected(error.detail)),
-              );
+              return yield* references.exportBranch(ref);
             }),
           ),
         archive: (cwd, id) => retire(cwd, id, false),
         delete: (cwd, id) => retire(cwd, id, true),
         list,
-        availability,
         changes: Stream.fromPubSub(changed),
       });
     }),
-  );
+  ).pipe(Layer.provideMerge(SessionReferencesLive));

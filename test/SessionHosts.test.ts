@@ -308,21 +308,16 @@ test("INV-01/02/06: deleted checkout history remains readable and can be archive
       yield* registry.addSession(path, "missing-archive");
       yield* registry.addSession(path, "missing-delete");
       rmSync(path, { recursive: true });
+      // SessionReferences' tests own how a removed checkout's history is found and read.
       assert.equal(yield* hosts.get(path, "missing-archive"), undefined);
-      const view = yield* hosts.peek(path, "missing-archive");
-      assert.equal(view.snapshot.messages[0].text, "preserved conversation");
-      assert.equal(view.cwd, path);
-      assert.equal(view.snapshot.state.checkoutMissing, true);
+      assert.equal(
+        (yield* hosts.peek(path, "missing-archive")).snapshot.state.checkoutMissing,
+        true,
+      );
       assert.match(
         (yield* hosts.open({ cwd: path, sessionId: "missing-archive" }).pipe(Effect.flip)).detail,
         /checkout no longer exists/,
       );
-      mkdirSync(path);
-      assert.equal(
-        (yield* hosts.peek(path, "missing-archive")).snapshot.state.checkoutMissing,
-        false,
-      );
-      rmSync(path, { recursive: true });
       yield* hosts.archive(path, "missing-archive");
       yield* hosts.delete(path, "missing-delete");
       assert.ok(existsSync(archived));
@@ -535,9 +530,9 @@ for (const operation of ["archive", "delete"] as const)
     );
   });
 
-// PiHistory's tests own where alias history is found and what a conflict is; this one owns
-// that the registry's reference keeps its spelling and that a conflict refuses before Pi starts.
-test("INV-01/02: alias history opens under its registry owner; conflicting references or files refuse to start", async () => {
+// SessionReferences' tests own which reference and file a session resolves to and what a
+// conflict is; this one owns that Pi starts under the owner's spelling and a refusal starts none.
+test("INV-01/02: alias history opens under its registry owner; a conflict refuses to start", async () => {
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
@@ -548,18 +543,6 @@ test("INV-01/02: alias history opens under its registry owner; conflicting refer
       assert.equal(s.spec.cwd, alias);
       assert.equal((yield* s.state).sessionFile, file);
       yield* hosts.release(cwd, "legacy");
-      const view = yield* hosts.peek(cwd, "legacy");
-      assert.equal(view.cwd, alias);
-      assert.equal(view.snapshot.messages[0].text, "alias history");
-      assert.equal(
-        (yield* registry.get).sessions.find((s) => s.sessionId === "legacy")?.cwd,
-        alias,
-      );
-      seed(cwd, "legacy", "different history");
-      assert.match(
-        (yield* hosts.open({ cwd, sessionId: "legacy" }).pipe(Effect.flip)).detail,
-        /Conflicting Pi files/,
-      );
       yield* registry.addSession(cwd, "legacy");
       assert.match(
         (yield* hosts.open({ cwd, sessionId: "legacy" }).pipe(Effect.flip)).detail,

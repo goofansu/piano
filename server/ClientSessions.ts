@@ -12,9 +12,9 @@
  * session; SessionHosts keeps one child per session (INV-02).
  */
 import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
+import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Attachment, ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
-import { emptySnapshot } from "./PiHistory.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
 import type { RegistryError, RegistryLookupError } from "./Registry.ts";
 import { type CreateSpec, SessionHosts } from "./SessionHosts.ts";
