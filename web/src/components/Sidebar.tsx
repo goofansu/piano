@@ -720,11 +720,6 @@ function FolderGroup({
           Git status unavailable
         </Badge>
       )}
-      {folder.discovery.status === "non-git" && (
-        <Badge variant="secondary" className="ml-7">
-          Non-Git
-        </Badge>
-      )}
       <CollapsibleContent className="disclosure-content">
         {sessions.length === 0 ? (
           <ListEmpty>No sessions yet</ListEmpty>
