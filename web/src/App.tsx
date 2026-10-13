@@ -23,15 +23,12 @@ import type { DraftKey } from "@/lib/messageDraft";
 import { initialView } from "@/lib/navigation";
 import { parseRoute } from "@/lib/routes";
 import { sessionReady } from "@/lib/sessionContext";
-import { readJson, writeJson } from "@/lib/storage";
 import { useClient } from "@/lib/useClient";
+import { modelCatalogs } from "@/lib/useModelCatalog";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
 import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SidebarLayoutContext, useSidebarLayoutController } from "@/lib/useSidebarLayout";
 import { type AppState, initialState } from "@/store";
-
-/** Model catalogs outlive reloads so the picker opens at once; its refresh button re-probes Pi. */
-const CATALOGS_KEY = "piano.catalogs";
 
 const notify = (message: string, level?: NotifyLevel) =>
   level === "success"
@@ -46,18 +43,13 @@ const notify = (message: string, level?: NotifyLevel) =>
 
 export default function App() {
   const { state, client } = useClient((): AppState => {
-    const seeded = { ...initialState, catalogs: readJson<AppState["catalogs"]>(CATALOGS_KEY, {}) };
-    return { ...seeded, view: initialView(parseRoute(location)) };
+    // Stored catalogs let the model picker open before Pi answers.
+    const catalogs = { ...modelCatalogs.seed() };
+    return { ...initialState, catalogs, view: initialView(parseRoute(location)) };
   }, notify);
   const { dispatch, send } = client;
   useEffect(() => providerAccounts.follow(client), [client]);
-  useEffect(() => {
-    // Without storage the server cache still answers.
-    writeJson(
-      CATALOGS_KEY,
-      Object.fromEntries(Object.entries(state.catalogs).filter(([, c]) => !c.error)),
-    );
-  }, [state.catalogs]);
+  useEffect(() => modelCatalogs.follow(client), [client]);
   const layout = useSidebarLayoutController();
 
   const navigation = useNavigationController(client, layout.closeMobile);

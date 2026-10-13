@@ -1,4 +1,4 @@
-import type { Attachment, ModelCatalog, ThinkingLevel } from "@shared/wire";
+import type { Attachment, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -13,6 +13,7 @@ import { type CompletionContext, SlashTextarea } from "@/components/SlashTextare
 import { useDraftStore } from "@/lib/draftStore";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
 import { type DraftKey, withQuotes } from "@/lib/messageDraft";
+import type { ModelCatalogView } from "@/lib/modelCatalogs";
 import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
@@ -59,12 +60,12 @@ export function useDraftEditor(key: DraftKey | null) {
 export type DraftEditorState = ReturnType<typeof useDraftEditor>;
 
 interface ModelProps {
-  catalog: ModelCatalog | null;
+  /** The directory's catalog with its refresh and saved defaults (`useModelCatalog`). */
+  models: ModelCatalogView;
   value: string | undefined;
   onChange: (ref: string) => void;
   effort: ThinkingLevel;
   onEffortChange: (level: ThinkingLevel) => void;
-  onRefresh?: () => void;
   noDirectory?: boolean;
 }
 
@@ -122,8 +123,8 @@ export function DraftEditor({
   // Mod+/ opens the picker exactly when its trigger could.
   const pickerAvailable = modelPickerEnabled({
     disabled,
-    catalog: model.catalog,
-    canRefresh: !!model.onRefresh,
+    catalog: model.models.catalog,
+    canRefresh: !!model.models.refresh,
   });
   return (
     <div
@@ -163,8 +164,7 @@ export function DraftEditor({
           open={modelOpen}
           onOpenChange={setModelOpen}
           returnFocusRef={ref}
-          catalog={model.catalog}
-          onRefresh={model.onRefresh}
+          models={model.models}
           value={model.value}
           onChange={model.onChange}
           effort={model.effort}

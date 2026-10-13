@@ -2,7 +2,7 @@
  * What the model picker shows for one moment: the model it displays, its trigger label, whether
  * the trigger (and so Mod+/) can open it, the models a search leaves, and whether the shown
  * selection is, or can be saved as, Pi's default for new sessions. Pure and React-free;
- * ModelSelect renders from it and keeps focus, keys, refresh tracking and the save request.
+ * ModelSelect renders from it and keeps focus and keys; refresh and saving live in modelCatalogs.
  */
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
 import { levelsFor } from "./modelChoice.ts";

@@ -172,7 +172,6 @@ export function SessionView({ state, send }: Props) {
         )}
       <Composer
         session={t}
-        catalog={t ? (state.catalogs[t.cwd] ?? null) : null}
         draftKey={draftKey}
         completion={completionTarget(state)}
         disabled={!draftKey || input?.outcome === "starting"}

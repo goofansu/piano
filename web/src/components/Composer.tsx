@@ -1,5 +1,5 @@
 import { isWorking } from "@shared/sessionProjection";
-import type { ClientCommand, ModelCatalog } from "@shared/wire";
+import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { ContextDetails } from "@/components/ContextDetails";
@@ -30,6 +30,7 @@ import type { DraftKey } from "@/lib/messageDraft";
 import { createPreference } from "@/lib/preference";
 import type { SessionNotice } from "@/lib/sessionNotices";
 import { composerAction, composerInput, picker } from "@/lib/styles";
+import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
 import type { SessionView } from "@/store";
@@ -37,8 +38,6 @@ import type { SessionView } from "@/store";
 interface Props {
   /** The selected session; `null` while it loads. */
   session: SessionView | null;
-  /** The session directory's model catalog; `null` until Pi answers. */
-  catalog: ModelCatalog | null;
   /** `null` while the session is loading; the composer is disabled then. */
   draftKey: DraftKey | null;
   completion?: CompletionContext;
@@ -64,7 +63,6 @@ const queueModePreference = createPreference<DeliveryMode>({
  */
 export function Composer({
   session: t,
-  catalog,
   draftKey,
   completion,
   disabled,
@@ -72,6 +70,10 @@ export function Composer({
   readOnly,
   send: sendCommand,
 }: Props) {
+  const directoryModels = useModelCatalog(t?.cwd);
+  // Refreshing waits for the session to take input again.
+  const models = actionsDisabled ? { ...directoryModels, refresh: undefined } : directoryModels;
+  const { catalog } = models;
   // A running Pi owns the selection; a saved session's picks wait for its first prompt and
   // override only what was picked, so Pi restores the rest of its recorded selection.
   const choice = useModelChoice(
@@ -93,10 +95,6 @@ export function Composer({
   const queuedMessages = t?.state.queuedMessages ?? [];
   const onStop = () => sendCommand({ _tag: "act", action: { _tag: "stop" } });
   const onRestoreQueue = () => sendCommand({ _tag: "act", action: { _tag: "restore_queue" } });
-  const onRefreshModels =
-    t && !actionsDisabled
-      ? () => sendCommand({ _tag: "models", cwd: t.cwd, refresh: true })
-      : undefined;
   const editor = useDraftEditor(draftKey);
   const [queueMode, setQueueMode] = usePreference(queueModePreference);
   const control = composerControl({
@@ -150,8 +148,7 @@ export function Composer({
         inputClassName={composerInput}
         maxHeight={192}
         model={{
-          catalog,
-          onRefresh: onRefreshModels,
+          models,
           value: model,
           onChange: onModelChange,
           effort,
