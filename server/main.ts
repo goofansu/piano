@@ -9,6 +9,7 @@ import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
 import { DirectoryFactsLive } from "./DirectoryFacts.ts";
+import { GitHubPullRequestsLive } from "./GitHubPullRequests.ts";
 import { inboundLimits } from "./InboundCapacity.ts";
 import { McpSetupLive } from "./McpSetup.ts";
 import { AllowedOrigins, configuredOrigins } from "./OriginPolicy.ts";
@@ -64,7 +65,7 @@ const Services = Layer.mergeAll(
   McpSetupLive,
   WorkspaceRevisionsLive,
   WorkspaceChangesLive,
-  SessionPullRequestsLive,
+  SessionPullRequestsLive.pipe(Layer.provide(GitHubPullRequestsLive)),
   // Sharing reads the Radius credential through the one ProviderLogin that the routes use.
   SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
 ).pipe(

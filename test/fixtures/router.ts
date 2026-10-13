@@ -7,6 +7,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
 import { DirectoryFactsLive } from "../../server/DirectoryFacts.ts";
+import { GitHubPullRequestsLive } from "../../server/GitHubPullRequests.ts";
 import { McpSetupLive } from "../../server/McpSetup.ts";
 import { AllowedOrigins } from "../../server/OriginPolicy.ts";
 import { PiCli } from "../../server/PiCli.ts";
@@ -77,7 +78,7 @@ export async function startRouter<Fakes = never>(
     McpSetupLive,
     WorkspaceRevisionsLive,
     WorkspaceChangesLive,
-    SessionPullRequestsLive,
+    SessionPullRequestsLive.pipe(Layer.provide(GitHubPullRequestsLive)),
     // Sharing reads the Radius credential through the one ProviderLogin that the routes use.
     SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
   ).pipe(
