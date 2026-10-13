@@ -19,6 +19,17 @@ import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
 
 type ReadyWorktree = Extract<WorktreeResult, { status: "ready" }>;
 
+/**
+ * The error result for a worktree mutation that failed with `error`. Only an expected
+ * WorktreeError can confirm that nothing ran; any other failure may have run Worktrunk and left a
+ * checkout behind, so the result is `unconfirmed`.
+ */
+export const worktreeFailure = (error: unknown): Extract<WorktreeResult, { status: "error" }> => ({
+  status: "error",
+  detail: errorText(error),
+  unconfirmed: !(error instanceof WorktreeError) || error.unconfirmed === true,
+});
+
 export interface TrustDecision {
   readonly cwd: string;
   readonly trust: ProjectTrust;
@@ -81,22 +92,16 @@ export const WorkspaceCommandsLive = Layer.effect(
       return result;
     });
     /**
-     * A worktree mutation's complete answer. Failures become error results; only an expected
-     * WorktreeError can confirm that nothing ran. Then rediscover rather than retry: a failure may
-     * have left a checkout behind.
+     * A worktree mutation's complete answer. Failures become error results (`worktreeFailure`).
+     * Then rediscover rather than retry: a failure may have left a checkout behind.
      */
     const settled = <E>(work: Effect.Effect<ReadyWorktree, E>): Effect.Effect<WorktreeResult> =>
       work.pipe(
         Effect.catchCause((cause) => {
           if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
-          const error = Cause.squash(cause);
-          const detail = errorText(error);
-          return Effect.logWarning(`worktree request failed: ${detail}`).pipe(
-            Effect.as<WorktreeResult>({
-              status: "error",
-              detail,
-              unconfirmed: !(error instanceof WorktreeError) || error.unconfirmed === true,
-            }),
+          const result = worktreeFailure(Cause.squash(cause));
+          return Effect.logWarning(`worktree request failed: ${result.detail}`).pipe(
+            Effect.as<WorktreeResult>(result),
           );
         }),
         Effect.ensuring(sidebar.refresh),

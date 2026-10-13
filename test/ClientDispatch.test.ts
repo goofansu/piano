@@ -325,7 +325,6 @@ test("INV-06: rejected worktree operations settle the picker immediately without
       const held = [];
       for (let n = 0; n < inboundLimits.client.messages; n++)
         held.push(yield* receive({ _tag: "registry" }));
-      const before = yield* (yield* Registry).get;
       const { operation, sentByPicker, exchange } = worktreePicker(receive);
 
       operation.open(cwd);
@@ -347,10 +346,140 @@ test("INV-06: rejected worktree operations settle the picker immediately without
         ["worktrees", "create_worktree", "add_worktree"],
         "mutations are never replayed",
       );
+      for (const work of held) yield* work;
+    }),
+  );
+});
+
+/**
+ * One request of every kind, with the reply its sender awaits when client capacity refuses it.
+ * Exhaustive by type, so a new request kind needs its refusal reply stated here. `REFUSED` stands
+ * for the capacity message.
+ */
+const refusals: {
+  readonly [K in ClientRequest["_tag"]]: readonly [Extract<ClientRequest, { _tag: K }>, unknown];
+} = {
+  // A heartbeat is never refused: it bypasses capacity and is answered.
+  ping: [
+    { _tag: "ping", nonce: "n" },
+    { _tag: "pong", nonce: "n" },
+  ],
+  select: [
+    { _tag: "select", selectionId: "s1", cwd, sessionId: null },
+    { _tag: "selection_rejected", selectionId: "s1", message: "REFUSED" },
+  ],
+  create_session: [
+    { _tag: "create_session", selectionId: "s2", cwd, options: {}, text: "hi" },
+    { _tag: "selection_rejected", selectionId: "s2", message: "REFUSED" },
+  ],
+  act: [
+    { _tag: "act", selectionId: "s3", action: { _tag: "prompt", text: "hi" } },
+    { _tag: "error", message: "REFUSED", selectionId: "s3" },
+  ],
+  worktrees: [
+    { _tag: "worktrees", folder: cwd },
+    {
+      _tag: "worktrees",
+      folder: cwd,
+      discovery: { status: "error", observedAt: "OBSERVED", detail: "REFUSED" },
+    },
+  ],
+  create_worktree: [
+    { _tag: "create_worktree", requestId: "w1", folder: cwd, branch: "b", hooks: false },
+    {
+      _tag: "worktree_result",
+      requestId: "w1",
+      result: { status: "error", detail: "REFUSED", unconfirmed: false },
+    },
+  ],
+  add_worktree: [
+    { _tag: "add_worktree", requestId: "w2", folder: cwd, path: join(root, "other") },
+    {
+      _tag: "worktree_result",
+      requestId: "w2",
+      result: { status: "error", detail: "REFUSED", unconfirmed: false },
+    },
+  ],
+  registry: [{ _tag: "registry" }, { _tag: "error", message: "REFUSED" }],
+  models: [
+    { _tag: "models", cwd },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  save_project: [
+    { _tag: "save_project", project: { id: "p", name: "P" } },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  archive_project: [
+    { _tag: "archive_project", id: "p", archived: true },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  assign_project: [
+    { _tag: "assign_project", cwd, sessionId: "x", projectId: null },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  add_folder: [
+    { _tag: "add_folder", path: cwd },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  remove_folder: [
+    { _tag: "remove_folder", path: cwd },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  trust: [
+    { _tag: "trust", cwd },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  set_trust: [
+    { _tag: "set_trust", path: cwd, trusted: true },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  rename_session: [
+    { _tag: "rename_session", cwd, sessionId: "x", title: "t" },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  pin_session: [
+    { _tag: "pin_session", cwd, sessionId: "x", pinned: true },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  archive_session: [
+    { _tag: "archive_session", cwd, sessionId: "x" },
+    { _tag: "error", message: "REFUSED" },
+  ],
+  delete_session: [
+    { _tag: "delete_session", cwd, sessionId: "x" },
+    { _tag: "error", message: "REFUSED" },
+  ],
+};
+
+test("INV-05/06: every request kind refused at capacity gets its own correlated reply and changes nothing", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { receive } = yield* client;
+      yield* (yield* SidebarView).fresh;
+      const held = [];
+      for (let n = 0; n < inboundLimits.client.messages; n++)
+        held.push(yield* receive({ _tag: "registry" }));
+      const before = yield* (yield* Registry).get;
+      for (const [request, reply] of Object.values(refusals)) {
+        const from = sent.length;
+        yield* yield* receive(request);
+        // Stand in for the capacity message and the observation time, and drop absent fields.
+        const [answer, ...rest] = JSON.parse(
+          JSON.stringify(answers(from), (key, value) =>
+            typeof value === "string" && /not started/.test(value)
+              ? "REFUSED"
+              : key === "observedAt"
+                ? "OBSERVED"
+                : value,
+          ),
+        );
+        assert.deepEqual(answer, reply, request._tag);
+        assert.deepEqual(rest, [], `${request._tag} gets one reply`);
+      }
       assert.deepEqual(
         yield* (yield* Registry).get,
         before,
-        "admission did not invoke lifecycle registration",
+        "refused requests did not reach the registry",
       );
       for (const work of held) yield* work;
     }),
