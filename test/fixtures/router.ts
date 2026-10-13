@@ -12,7 +12,7 @@ import { AllowedOrigins } from "../../server/OriginPolicy.ts";
 import { PiCli } from "../../server/PiCli.ts";
 import { PiSessionsLive } from "../../server/PiSessions.ts";
 import { PiSettingsLive } from "../../server/PiSettings.ts";
-import { ProviderLoginLive } from "../../server/ProviderLogin.ts";
+import { type ProviderLogin, ProviderLoginLive } from "../../server/ProviderLogin.ts";
 import { RadiusSetupLive } from "../../server/RadiusSetup.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../../server/Registry.ts";
 import { AppRouter } from "../../server/Router.ts";
@@ -32,7 +32,9 @@ export interface RouterFixture {
   /** Answer a request as the server would; a relative URL resolves against the server's origin. */
   readonly handle: (input: string, init?: RequestInit) => Promise<Response>;
   /** Run against the same services the router answers from, e.g. to start a session it can see. */
-  readonly run: <A, X>(effect: Effect.Effect<A, X, SessionHosts | Registry>) => Promise<A>;
+  readonly run: <A, X>(
+    effect: Effect.Effect<A, X, SessionHosts | Registry | ProviderLogin>,
+  ) => Promise<A>;
   readonly dispose: () => Promise<void>;
 }
 
@@ -71,13 +73,13 @@ export async function startRouter<Fakes = never>(
   );
   const Services = Layer.mergeAll(
     PiSettingsLive,
-    ProviderLoginLive,
     RadiusSetupLive,
     McpSetupLive,
     WorkspaceRevisionsLive,
     WorkspaceChangesLive,
     SessionPullRequestsLive,
-    SessionSharingLive,
+    // Sharing reads the Radius credential through the one ProviderLogin that the routes use.
+    SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
   ).pipe(
     Layer.provideMerge(DirectoryFactsLive),
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),

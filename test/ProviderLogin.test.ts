@@ -270,3 +270,24 @@ test("INV-01/02: completing sign-in or sign-out invalidates the model catalog in
       }),
   );
 });
+
+test("INV-01/11: a bearer token comes only from a signed-in OAuth credential, never an API key", async () => {
+  await fixture(
+    async () => ({
+      type: "oauth",
+      access: "private-access",
+      refresh: "private-refresh",
+      expires: Date.now() + 3600_000,
+    }),
+    (login) =>
+      Effect.gen(function* () {
+        assert.equal(yield* login.bearer("openai"), undefined, "an API key is not a sign-in");
+        assert.equal(yield* login.bearer("radius"), undefined);
+        yield* login.start("radius");
+        yield* until(login, (s) => s.status === "success");
+        assert.equal(yield* login.bearer("radius"), "private-access");
+        yield* login.signOut("radius");
+        assert.equal(yield* login.bearer("radius"), undefined);
+      }),
+  );
+});

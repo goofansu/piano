@@ -1,6 +1,8 @@
 /** Global OAuth orchestration only. Pi's SDK owns provider configuration, token
  * exchange and locked credential persistence; no agent/session is embedded here.
  * SignInAttempts owns the attempt itself; this module is its provider source.
+ * It is Piano's only reader of Pi credentials, so one signed-in rule serves the Providers UI,
+ * sign-out and features such as sharing that act on the user's behalf.
  * A completed sign-in or sign-out changes the usable models, so this service
  * invalidates the model catalogs itself rather than relying on a client to poll. */
 import {
@@ -15,13 +17,16 @@ import { agentDir } from "./PiEnv.ts";
 import { SignInAttempts, SignInError, type SignInSource } from "./SignInAttempts.ts";
 
 type Interaction = Parameters<ModelRuntime["login"]>[2];
-type Runtime = Pick<ModelRuntime, "getProviders" | "listCredentials" | "login" | "logout">;
+type Runtime = Pick<
+  ModelRuntime,
+  "getProviders" | "listCredentials" | "getAuth" | "login" | "logout"
+>;
 export const ProviderLoginRuntime = Context.Reference<{
-  create: () => Promise<Runtime>;
+  create: (signal?: AbortSignal) => Promise<Runtime>;
   deviceId: () => string;
 }>("piano/ProviderLoginRuntime", {
   defaultValue: () => ({
-    create: () => ModelRuntime.create({ refreshOnCreate: false }),
+    create: (signal) => ModelRuntime.create({ refreshOnCreate: false, signal }),
     deviceId: () => SettingsManager.create(process.cwd(), agentDir()).getOrCreateDeviceId(),
   }),
 });
@@ -39,8 +44,20 @@ export class ProviderLogin extends Context.Service<
     ) => Effect.Effect<ProviderLoginState, SignInError>;
     readonly cancel: (id: string) => Effect.Effect<ProviderLoginState, SignInError>;
     readonly signOut: (provider: string) => Effect.Effect<void, SignInError>;
+    /** A bearer token valid for at least five more minutes, only while the user is signed in to
+     * the provider; undefined otherwise. Ambient API keys never authorize a Piano feature. */
+    readonly bearer: (provider: string) => Effect.Effect<string | undefined, Error>;
   }
 >()("piano/ProviderLogin") {}
+
+/** Piano's one signed-in rule: Pi holds an OAuth credential for the provider. Reads Pi's
+ * credential metadata, not tokens or the availability cache. */
+const signedIn = async (runtime: Runtime, signal?: AbortSignal) =>
+  new Set(
+    (await runtime.listCredentials({ signal }))
+      .filter((c) => c.type === "oauth")
+      .map((c) => c.providerId),
+  );
 
 export const ProviderLoginLive = Layer.effect(
   ProviderLogin,
@@ -94,11 +111,7 @@ export const ProviderLoginLive = Layer.effect(
             message: "This provider does not support OAuth sign-in in Piano.",
           };
         }
-        if (
-          (await runtime.listCredentials()).some(
-            (c) => c.providerId === provider && c.type === "oauth",
-          )
-        ) {
+        if ((await signedIn(runtime)).has(provider)) {
           return { status: "error", message: "Sign out of this provider before signing in again." };
         }
         if (signal.aborted) throw new Error("Sign-in cancelled.");
@@ -122,16 +135,11 @@ export const ProviderLoginLive = Layer.effect(
     return ProviderLogin.of({
       providers: Effect.tryPromise(async () => {
         const runtime = await factory.create();
-        // Read Pi's credential metadata, not tokens or the availability cache.
-        const signedIn = new Set(
-          (await runtime.listCredentials())
-            .filter((c) => c.type === "oauth")
-            .map((c) => c.providerId),
-        );
+        const oauth = await signedIn(runtime);
         return runtime
           .getProviders()
           .filter((p) => p.auth.oauth && p.id !== "openai-codex")
-          .map((p) => ({ id: p.id, name: p.name, signedIn: signedIn.has(p.id) }))
+          .map((p) => ({ id: p.id, name: p.name, signedIn: oauth.has(p.id) }))
           .sort((a, b) => a.id.localeCompare(b.id));
       }),
       state: attempts.state,
@@ -145,9 +153,7 @@ export const ProviderLoginLive = Layer.effect(
               const runtime = await factory.create();
               if (
                 !runtime.getProviders().some((p) => p.id === provider && p.auth.oauth) ||
-                !(await runtime.listCredentials()).some(
-                  (c) => c.providerId === provider && c.type === "oauth",
-                )
+                !(await signedIn(runtime)).has(provider)
               ) {
                 throw new Error("No OAuth credential for this provider.");
               }
@@ -168,6 +174,20 @@ export const ProviderLoginLive = Layer.effect(
           }).pipe(Effect.andThen(facts.invalidate), Effect.andThen(attempts.forget(provider))),
           "Could not sign out. Finish any sign-in in progress and try again.",
         ),
+      bearer: Effect.fn("ProviderLogin.bearer")(function* (provider: string) {
+        return yield* Effect.tryPromise(async (signal) => {
+          const runtime = await factory.create(signal);
+          if (!(await signedIn(runtime, signal)).has(provider)) return undefined;
+          const auth = await runtime.getAuth(provider, { minOAuthValidityMs: 300_000, signal });
+          const authorization = Object.entries(auth?.auth.headers ?? {}).find(
+            ([name]) => name.toLowerCase() === "authorization",
+          )?.[1];
+          return (
+            auth?.auth.apiKey ??
+            (authorization ? /^Bearer\s+(.+)$/iu.exec(authorization)?.[1] : undefined)
+          );
+        });
+      }),
     });
   }),
 );

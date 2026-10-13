@@ -3,9 +3,9 @@
  * retained in Piano's database. Save it before uploading any transcript so retries/restarts
  * can add a version at the same URL, replacing it only after Radius reports it missing. */
 import { DEFAULT_RADIUS_GATEWAY } from "@earendil-works/pi-ai/providers/radius-config";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Deferred, Effect, Layer, Schema } from "effect";
 import type { RadiusShareLink, SessionShare } from "../shared/share.ts";
+import { ProviderLogin } from "./ProviderLogin.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 
@@ -20,14 +20,12 @@ const uncertain = "Sharing could not be confirmed. Check Radius artifacts before
 const unavailable =
   "The saved Radius share is unavailable. Check its access or expiration in Radius. Piano has not created a new link.";
 
-/** Only the external credential and HTTP boundaries are replaceable in tests. */
+/** Only the HTTP boundary is replaceable in tests; credentials come from ProviderLogin. */
 export const SharingEnvironment = Context.Reference<{
-  runtime: (signal: AbortSignal) => Promise<Pick<ModelRuntime, "listCredentials" | "getAuth">>;
   fetch: typeof fetch;
   timeoutMs: number;
 }>("piano/SharingEnvironment", {
   defaultValue: () => ({
-    runtime: (signal) => ModelRuntime.create({ refreshOnCreate: false, signal }),
     fetch: globalThis.fetch,
     timeoutMs: 60_000,
   }),
@@ -57,6 +55,7 @@ export const SessionSharingLive = Layer.effect(
     const hosts = yield* SessionHosts;
     const registry = yield* Registry;
     const environment = yield* SharingEnvironment;
+    const login = yield* ProviderLogin;
     const scope = yield* Effect.scope;
     const pending = new Map<string, Deferred.Deferred<SessionShare, ShareError>>();
     // All requests go to Pi's official Radius gateway, never a URL from a browser or stored link.
@@ -102,26 +101,14 @@ export const SessionSharingLive = Layer.effect(
       return { ...artifact, canonical_url: link.href };
     };
     const publish = Effect.fn("SessionSharing.publish")(function* (cwd: string, sessionId: string) {
-      const token = yield* Effect.tryPromise({
-        try: async (signal) => {
-          const runtime = await environment.runtime(signal);
-          // Match the UI's signed-in rule; ambient API keys alone do not authorize this feature.
-          if (
-            !(await runtime.listCredentials({ signal })).some(
-              (credential) => credential.providerId === "radius" && credential.type === "oauth",
-            )
-          )
-            return undefined;
-          const auth = await runtime.getAuth("radius", { minOAuthValidityMs: 300_000, signal });
-          const authorization = Object.entries(auth?.auth.headers ?? {}).find(
-            ([name]) => name.toLowerCase() === "authorization",
-          )?.[1];
-          return (
-            auth?.auth.apiKey ?? (authorization && /^Bearer\s+(.+)$/iu.exec(authorization)?.[1])
-          );
-        },
-        catch: () => failure("Could not authorize sharing. Sign in to Radius again in Providers."),
-      });
+      // The Providers UI's signed-in rule; ambient API keys alone do not authorize this feature.
+      const token = yield* login
+        .bearer("radius")
+        .pipe(
+          Effect.mapError(() =>
+            failure("Could not authorize sharing. Sign in to Radius again in Providers."),
+          ),
+        );
       if (!token) return yield* failure("Sign in to Radius in Providers before sharing.");
       const content = yield* hosts
         .exportBranch(cwd, sessionId)
