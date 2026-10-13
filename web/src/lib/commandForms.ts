@@ -1,34 +1,44 @@
 /**
- * The answers to the forms `runCommand` opens (see `CommandForm`): whether the answer is allowed now,
- * and the one registry change it sends. Forms re-check their rule when answered, since the
- * connection or the session's attachment may have changed while the form was open. `CommandHost`
- * and the project dialog render the inputs and act on the answer.
+ * The forms `runCommand` opens (see `CommandForm`) and their one lifecycle: `open` a form, `edit`
+ * its text, `submit` or `cancel` it. Submitting re-checks the form's rule, since the connection or
+ * the session's attachment may have changed while the form was open, and a form closes only after
+ * its answer was sent; a refused answer leaves it open having sent nothing. Sharing is a phase of
+ * its form (confirm, publishing, shared or failed) and publishes at most once per opening. A new
+ * project not created for a session opens once it is saved. `CommandHost` and the dialogs render
+ * this state and nothing else. Nothing here depends on React.
  */
 // Relative, not @shared: module tests load this file directly in Node.
+import type { SessionShare } from "../../../shared/share.ts";
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
-import { canRenameSession } from "./sessionCommands.ts";
-import { sessionMutable } from "./sessionContext.ts";
+import { canRenameSession, canShareSession } from "./sessionCommands.ts";
+import { sessionMutable, workspaceFor } from "./sessionContext.ts";
 
 export interface FormAnswer {
   /** The form may be submitted now; otherwise its submit control is disabled. */
   allowed: boolean;
-  /** What submitting sends; present exactly when allowed. */
+  /** What submitting sends; present exactly when an allowed registry form. */
   command?: ClientCommand;
   /** A new project, not created for a session, opens once it is saved. */
   openProject?: string;
+  /** What submitting a share form publishes; present exactly when an allowed share form. */
+  share?: { workspaceId: string; sessionId: string };
 }
 
-/**
- * Answer `form` with its text input (the session title or project name; unused by confirmations).
- * `newId` names a new project; it is called only for an allowed new-project answer.
- */
+export interface AnswerContext {
+  /** Share publishes only while signed in to Radius. */
+  radiusSignedIn?: boolean;
+  /** Names a new project; called only for an allowed new-project answer. */
+  newId?: () => string;
+}
+
+/** Answer `form` with its text input (the session title or project name; unused by confirmations). */
 export function answerForm(
   state: AppState,
   form: CommandForm,
   text = "",
-  newId: () => string = () => crypto.randomUUID(),
+  { radiusSignedIn = false, newId = () => crypto.randomUUID() }: AnswerContext = {},
 ): FormAnswer {
   switch (form.kind) {
     case "rename-session": {
@@ -52,9 +62,16 @@ export function answerForm(
         },
       };
     }
-    // Sharing has its own HTTP confirmation/result form, not a registry command.
-    case "share-session":
-      return { allowed: false };
+    // Sharing publishes over HTTP, not through a registry command.
+    case "share-session": {
+      const workspace = workspaceFor(state, form.target.cwd);
+      if (!radiusSignedIn || !workspace || !canShareSession(state, form.target))
+        return { allowed: false };
+      return {
+        allowed: true,
+        share: { workspaceId: workspace.id, sessionId: form.target.sessionId },
+      };
+    }
     case "close-folder":
       if (!state.connected) return { allowed: false };
       return { allowed: true, command: { _tag: "remove_folder", path: form.folder.path } };
@@ -75,4 +92,134 @@ export function answerForm(
       };
     }
   }
+}
+
+export type SharePhase =
+  | { phase: "confirm" }
+  | { phase: "publishing" }
+  | { phase: "shared"; share: SessionShare }
+  | { phase: "failed"; error: string };
+
+export interface CommandFormsState {
+  /** The open form; `null` when none is. */
+  form: CommandForm | null;
+  /** The form's text input: the session title or project name. */
+  text: string;
+  /** The share form's phase; `confirm` for every other form. */
+  share: SharePhase;
+}
+
+export interface CommandFormsOptions {
+  /** The page's state as of now; forms are answered against it when rendered and submitted. */
+  getState: () => AppState;
+  radiusSignedIn: () => boolean;
+  send: (command: ClientCommand) => void;
+  /** Publish a session to Radius; resolves once the publication is confirmed. */
+  share: (workspaceId: string, sessionId: string) => Promise<SessionShare>;
+  openProject: (id: string) => void;
+  newId?: () => string;
+}
+
+export interface CommandForms {
+  getState: () => CommandFormsState;
+  subscribe: (listener: () => void) => () => void;
+  /** The open form's answer as of now; `{ allowed: false }` when none is open. */
+  answer: () => FormAnswer;
+  /** Open `form`, replacing any open one. Rename starts from the title, a project edit from its name. */
+  open: (form: CommandForm) => void;
+  edit: (text: string) => void;
+  /**
+   * Send the open form's answer if it is allowed now, then close; a share form publishes instead and
+   * stays open on its result. Returns whether anything was sent or published.
+   */
+  submit: () => boolean;
+  /** Close the open form; ignored while a share is publishing. */
+  cancel: () => void;
+}
+
+export const SHARE_UNCONFIRMED =
+  "Sharing could not be confirmed. Check Radius artifacts before sharing again.";
+
+const CLOSED: CommandFormsState = { form: null, text: "", share: { phase: "confirm" } };
+
+export function createCommandForms({
+  getState,
+  radiusSignedIn,
+  send,
+  share,
+  openProject,
+  newId,
+}: CommandFormsOptions): CommandForms {
+  let state = CLOSED;
+  const listeners = new Set<() => void>();
+  const set = (next: CommandFormsState) => {
+    state = next;
+    for (const listener of listeners) listener();
+  };
+  const answer = (): FormAnswer =>
+    state.form
+      ? answerForm(getState(), state.form, state.text, {
+          radiusSignedIn: radiusSignedIn(),
+          newId,
+        })
+      : { allowed: false };
+
+  const publish = (form: CommandForm, workspaceId: string, sessionId: string) => {
+    // Only this opening of the form takes the result; a closed or replaced form ignores it.
+    const settle = (phase: SharePhase) => {
+      if (state.form === form) set({ ...state, share: phase });
+    };
+    set({ ...state, share: { phase: "publishing" } });
+    share(workspaceId, sessionId).then(
+      (result) => settle({ phase: "shared", share: result }),
+      (cause: unknown) =>
+        settle({
+          phase: "failed",
+          error: cause instanceof Error ? cause.message : SHARE_UNCONFIRMED,
+        }),
+    );
+  };
+
+  return {
+    getState: () => state,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    answer,
+    open: (form) =>
+      set({
+        form,
+        text:
+          form.kind === "rename-session"
+            ? (form.target.title ?? "")
+            : form.kind === "project"
+              ? (form.dialog.project?.name ?? "")
+              : "",
+        share: { phase: "confirm" },
+      }),
+    edit: (text) => {
+      if (state.form) set({ ...state, text });
+    },
+    submit: () => {
+      const { form } = state;
+      if (!form) return false;
+      // Publish at most once per opening: only from the confirmation phase.
+      if (form.kind === "share-session" && state.share.phase !== "confirm") return false;
+      const answered = answer();
+      if (!answered.allowed) return false;
+      if (answered.share) {
+        publish(form, answered.share.workspaceId, answered.share.sessionId);
+        return true;
+      }
+      if (!answered.command) return false;
+      send(answered.command);
+      set(CLOSED);
+      if (answered.openProject) openProject(answered.openProject);
+      return true;
+    },
+    cancel: () => {
+      if (state.form && state.share.phase !== "publishing") set(CLOSED);
+    },
+  };
 }
