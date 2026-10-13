@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   completionTarget,
+  directoryChoices,
   directoryTrust,
   focusedDirectory,
   sessionActivity,
@@ -409,4 +410,49 @@ test("slash completion uses one revision rule for the New page and a session", (
     undefined,
     "only on a ready attachment",
   );
+});
+
+test("the New session directory picker names a root by folder, a worktree by folder and branch, and anything else by path", () => {
+  const root = directoryChoices(base, "/repo");
+  assert.deepEqual(root.trigger, { kind: "checkout", folder: "repo" });
+  assert.equal(root.worktreesFolder?.path, "/repo");
+  assert.deepEqual(root.roots, [{ path: "/repo", label: "repo", disabled: false, selected: true }]);
+  const feature = directoryChoices(base, "/work/repo.feature");
+  assert.deepEqual(feature.trigger, { kind: "checkout", folder: "repo", branchLabel: "feature" });
+  assert.equal(
+    feature.worktreesFolder?.path,
+    "/repo",
+    "worktrees belong to the folder's repository",
+  );
+  assert.equal(feature.roots[0]?.selected, false);
+  const elsewhere = directoryChoices(base, "/Users/me/scratch");
+  assert.deepEqual(elsewhere.trigger, { kind: "path", label: "~/scratch" });
+  assert.equal(elsewhere.worktreesFolder, undefined, "an unregistered directory has no Worktrees");
+  assert.deepEqual(directoryChoices(base, "").trigger, { kind: "none" });
+});
+
+test("the New session directory picker disables a missing root and labels a branchless worktree", () => {
+  const facts = (detached: boolean) => ({
+    path: "/work/repo.x",
+    branch: null,
+    detached,
+    prunable: false,
+  });
+  const withWorktree = (w: WorktreeView): AppState => ({
+    ...base,
+    folders: [{ ...folder, worktrees: [worktree("/repo", "main", { status: "missing" }), w] }],
+  });
+  const detached = withWorktree(worktree("/work/repo.x", null, { facts: facts(true) }));
+  assert.equal(directoryChoices(detached, "/repo").roots[0]?.disabled, true);
+  assert.deepEqual(directoryChoices(detached, "/work/repo.x").trigger, {
+    kind: "checkout",
+    folder: "repo",
+    branchLabel: "Detached HEAD",
+  });
+  const unknown = withWorktree(worktree("/work/repo.x", null, { facts: facts(false) }));
+  assert.deepEqual(directoryChoices(unknown, "/work/repo.x").trigger, {
+    kind: "checkout",
+    folder: "repo",
+    branchLabel: "Unknown branch",
+  });
 });

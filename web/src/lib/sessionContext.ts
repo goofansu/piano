@@ -15,6 +15,7 @@ import type {
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
+import { abbrevHome } from "./format.ts";
 import { findProject } from "./projectCommands.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
@@ -30,6 +31,60 @@ export function folderFor(state: AppState, cwd: string | undefined): FolderView 
 /** The folder's checkout at `cwd`: its root (the `main` worktree) or one of its worktrees. */
 export function checkoutFor(state: AppState, cwd: string | undefined): WorktreeView | undefined {
   return folderFor(state, cwd)?.worktrees.find((w) => w.path === cwd);
+}
+
+/** What the New session directory picker's trigger names. */
+export type DirectoryTrigger =
+  | { kind: "none" }
+  /** A registered checkout: its folder, plus its branch unless it is the folder's root. */
+  | { kind: "checkout"; folder: string; branchLabel?: string }
+  /** A directory no registered folder contains, as a home-abbreviated path. */
+  | { kind: "path"; label: string };
+
+export interface DirectoryRoot {
+  path: string;
+  /** The folder's name. */
+  label: string;
+  /** The root checkout is gone, so no session can start there. */
+  disabled: boolean;
+  selected: boolean;
+}
+
+export interface DirectoryChoices {
+  trigger: DirectoryTrigger;
+  /** Every registered folder's root checkout. */
+  roots: DirectoryRoot[];
+  /** The folder whose worktrees the picker offers: only when `cwd` is one of its checkouts. */
+  worktreesFolder: FolderView | undefined;
+}
+
+/** The New session directory picker: its trigger, folder roots and the folder its Worktrees open. */
+export function directoryChoices(state: AppState, cwd: string): DirectoryChoices {
+  const folder = folderFor(state, cwd);
+  const checkout = folder?.worktrees.find((w) => w.path === cwd);
+  const trigger: DirectoryTrigger = !cwd
+    ? { kind: "none" }
+    : folder && checkout
+      ? {
+          kind: "checkout",
+          folder: folder.name,
+          ...(!checkout.root && {
+            branchLabel:
+              checkout.branch ?? (checkout.facts?.detached ? "Detached HEAD" : "Unknown branch"),
+          }),
+        }
+      : { kind: "path", label: abbrevHome(cwd) };
+  const roots = state.folders.flatMap((f) =>
+    f.worktrees
+      .filter((w) => w.root)
+      .map((w) => ({
+        path: w.path,
+        label: f.name,
+        disabled: w.status === "missing",
+        selected: w.path === cwd,
+      })),
+  );
+  return { trigger, roots, worktreesFolder: checkout ? folder : undefined };
 }
 
 /**
