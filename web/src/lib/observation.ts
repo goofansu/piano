@@ -4,7 +4,8 @@
  * starts from nothing, so an older workspace's or session's value is never shown as current.
  * Reads refresh on demand, on window focus, on an interval and on a debounced trigger. A mutation
  * supersedes in-flight reads and holds new ones off until it settles, so a read that started
- * before a change can never overwrite the change's result. Nothing here depends on React.
+ * before a change can never overwrite the change's result. A failure is shown only once settled:
+ * a re-read in flight hides the last one, as the first read does. Nothing here depends on React.
  */
 
 export interface ObservationState<T> {
@@ -13,6 +14,8 @@ export interface ObservationState<T> {
   value: T | undefined;
   /** The last read's failure for this key, kept until a read or mutation succeeds. */
   error: string | undefined;
+  /** The failure worth showing: `error` once settled, hidden while a re-read is in flight. */
+  failure: string | undefined;
   /** A read is in flight. */
   loading: boolean;
   /** A mutation is in flight; reads wait for it. */
@@ -80,6 +83,7 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
     key: null,
     value: undefined,
     error: undefined,
+    failure: undefined,
     loading: false,
     mutating: false,
   };
@@ -92,6 +96,7 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
 
   const set = (patch: Partial<ObservationState<T>>) => {
     state = { ...state, ...patch };
+    state.failure = state.loading ? undefined : state.error;
     for (const listener of listeners) listener();
   };
   const live = () => running && enabled && state.key !== null;

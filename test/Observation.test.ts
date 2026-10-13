@@ -116,6 +116,7 @@ test("a newer read supersedes an older one for the same key; a failure keeps the
     key: "k",
     value: "first",
     error: "offline",
+    failure: "offline",
     loading: false,
     mutating: false,
   });
@@ -124,6 +125,40 @@ test("a newer read supersedes an older one for the same key; a failure keeps the
   await settle();
   assert.equal(observation.getState().error, undefined);
   assert.equal(observation.getState().value, "second");
+});
+
+test("a failure is shown once settled: hidden while a re-read is in flight, never carried to another key", async () => {
+  const { env } = environment();
+  const pi = server();
+  const observation = createObservation({ load: pi.load, environment: env });
+  observation.start();
+  observation.observe("k");
+  pi.reads[0].reject(new Error("offline"));
+  await settle();
+  assert.equal(observation.getState().failure, "offline");
+
+  void observation.refresh();
+  assert.deepEqual(
+    { error: observation.getState().error, failure: observation.getState().failure },
+    { error: "offline", failure: undefined },
+    "the last error is kept, but not shown, while the re-read runs",
+  );
+  pi.reads[1].reject(new Error("still offline"));
+  await settle();
+  assert.equal(observation.getState().failure, "still offline");
+
+  // A failure belongs to its key: the next key starts without one, and the old key's late failure is dropped.
+  void observation.refresh();
+  observation.observe("other");
+  pi.reads[2].reject(new Error("stale"));
+  await settle();
+  assert.equal(observation.getState().failure, undefined);
+  pi.reads[3].resolve("other value");
+  await settle();
+  assert.deepEqual(
+    { value: observation.getState().value, failure: observation.getState().failure },
+    { value: "other value", failure: undefined },
+  );
 });
 
 test("a mutation supersedes an in-flight read, holds reads off, and its result is not overwritten by an older read", async () => {
@@ -156,6 +191,7 @@ test("a mutation supersedes an in-flight read, holds reads off, and its result i
     key: "session",
     value: "linked #42",
     error: undefined,
+    failure: undefined,
     loading: false,
     mutating: false,
   });
