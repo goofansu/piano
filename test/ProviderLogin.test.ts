@@ -19,7 +19,7 @@ const until = (
 ) =>
   Effect.gen(function* () {
     for (;;) {
-      const state = yield* login.state;
+      const state = yield* login.signIn.state;
       if (state && predicate(state)) return state;
       yield* Effect.sleep(1);
     }
@@ -126,17 +126,20 @@ test("INV-01/11/12: OAuth interactions relay through Pi, persist credentials thr
         );
         assert.equal(providers.find((p) => p.id === "radius")?.signedIn, false);
         assert(!providers.some((p) => p.id === "deepseek"));
-        const started = yield* login.start("radius");
+        const started = yield* login.signIn.start("radius");
         assert.equal(started.status, "running");
         // One lane for every provider: they share a loopback callback port.
-        assert.match((yield* Effect.flip(login.start("anthropic"))).detail, /already in progress/);
+        assert.match(
+          (yield* Effect.flip(login.signIn.start("anthropic"))).detail,
+          /already in progress/,
+        );
         const method = yield* until(login, (s) => !!s.prompt);
         assert.deepEqual(method.prompt?.options, [{ id: "device", label: "Device code" }]);
-        yield* login.answer(started.id, method.prompt!.id, "device");
+        yield* login.signIn.answer(started.id, method.prompt!.id, "device");
         const code = yield* until(login, (s) => s.prompt?.type === "manual_code");
         assert.equal(code.userCode, "ABCD");
         assert.equal(code.url, "https://example.invalid/login");
-        yield* login.answer(started.id, code.prompt!.id, "one-use-code");
+        yield* login.signIn.answer(started.id, code.prompt!.id, "one-use-code");
         const done = yield* until(login, (s) => s.status === "success");
         assert(!JSON.stringify(done).includes("private-"));
         assert(!done.prompt && !done.url && !done.userCode);
@@ -152,7 +155,7 @@ test("INV-01/11/12: OAuth interactions relay through Pi, persist credentials thr
         assert.deepEqual(JSON.parse(readFileSync(authPath, "utf8")), {
           openai: { type: "api_key", key: "existing-key" },
         });
-        assert.equal(yield* login.state, null);
+        assert.equal(yield* login.signIn.state, null);
       }),
   );
 });
@@ -170,14 +173,14 @@ test("INV-04: Pi's per-prompt signal closes that prompt; sign-out waits for sign
     },
     (login, authPath) =>
       Effect.gen(function* () {
-        const started = yield* login.start("radius");
+        const started = yield* login.signIn.start("radius");
         const first = yield* until(login, (s) => !!s.prompt);
         assert((yield* Effect.result(login.signOut("radius")))._tag === "Failure");
         callback.abort();
         const next = yield* until(login, (s) => s.prompt?.message === "Next step");
         assert.notEqual(next.prompt!.id, first.prompt!.id);
-        yield* login.cancel(started.id);
-        assert.equal((yield* login.state)?.status, "cancelled");
+        yield* login.signIn.cancel(started.id);
+        assert.equal((yield* login.signIn.state)?.status, "cancelled");
         assert.deepEqual(JSON.parse(readFileSync(authPath, "utf8")), {
           openai: { type: "api_key", key: "existing-key" },
         });
@@ -197,15 +200,15 @@ test("INV-01/11/12: sign-out requires an OAuth credential and sign-in requires s
       Effect.gen(function* () {
         assert((yield* Effect.result(login.signOut("not-a-provider")))._tag === "Failure");
         assert((yield* Effect.result(login.signOut("openai")))._tag === "Failure");
-        yield* login.start("radius");
+        yield* login.signIn.start("radius");
         yield* until(login, (s) => s.status === "success");
-        yield* login.start("radius");
+        yield* login.signIn.start("radius");
         const blocked = yield* until(login, (s) => s.status === "error");
         assert.match(blocked.message!, /Sign out/);
         const competing = yield* Effect.all(
           [
             Effect.result(login.signOut("radius")),
-            Effect.result(login.start("radius")),
+            Effect.result(login.signIn.start("radius")),
             Effect.result(login.signOut("radius")),
           ],
           { concurrency: "unbounded" },
@@ -214,7 +217,7 @@ test("INV-01/11/12: sign-out requires an OAuth credential and sign-in requires s
           competing.map((result) => result._tag),
           ["Success", "Failure", "Failure"],
         );
-        yield* login.start("radius");
+        yield* login.signIn.start("radius");
         yield* until(login, (s) => s.status === "success");
         assert.equal((yield* login.providers).find((p) => p.id === "radius")?.signedIn, true);
         assert.equal(JSON.parse(readFileSync(authPath, "utf8")).openai.key, "existing-key");
@@ -229,13 +232,13 @@ test("INV-11: unknown providers and provider failures cannot disclose token resp
     },
     (login) =>
       Effect.gen(function* () {
-        yield* login.start("openai-codex");
+        yield* login.signIn.start("openai-codex");
         const legacy = yield* until(login, (s) => s.status === "error");
         assert.match(legacy.message!, /does not support OAuth/);
-        yield* login.start("not-a-provider");
+        yield* login.signIn.start("not-a-provider");
         const unknown = yield* until(login, (s) => s.status === "error");
         assert.match(unknown.message!, /does not support OAuth/);
-        yield* login.start("radius");
+        yield* login.signIn.start("radius");
         const failed = yield* until(login, (s) => s.status === "error");
         assert(!JSON.stringify(failed).includes("secret-response-token"));
       }),
@@ -257,7 +260,7 @@ test("INV-01/02: completing sign-in or sign-out invalidates the model catalog in
         yield* catalog.catalog(cwd);
         assert.equal(count(), 1, "a cached catalog is not re-probed");
         // Watch only the service state, never the HTTP route that used to invalidate on GET.
-        yield* login.start("radius");
+        yield* login.signIn.start("radius");
         yield* until(login, (s) => s.status === "success");
         yield* catalog.catalog(cwd);
         assert.equal(count(), 2, "sign-in completion re-probes the catalog");
@@ -284,7 +287,7 @@ test("INV-01/11: a bearer token comes only from a signed-in OAuth credential, ne
       Effect.gen(function* () {
         assert.equal(yield* login.bearer("openai"), undefined, "an API key is not a sign-in");
         assert.equal(yield* login.bearer("radius"), undefined);
-        yield* login.start("radius");
+        yield* login.signIn.start("radius");
         yield* until(login, (s) => s.status === "success");
         assert.equal(yield* login.bearer("radius"), "private-access");
         yield* login.signOut("radius");

@@ -3,6 +3,7 @@ import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { WorkspaceRevisions } from "../server/WorkspaceRevisions.ts";
+import { type Endpoint, Endpoints } from "../shared/http.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
 // The router's half of shared/http.ts, observed over HTTP the way any client sees it.
@@ -102,25 +103,25 @@ test("a result outside the response Schema is never sent", async () => {
 });
 
 test("INV-04: a provider sign-in refusal reaches the browser with its own detail, as MCP sign-in's does", async () => {
-  const send = (path: string, method: string, body: unknown) =>
+  const send = ({ method, path }: Endpoint, body: unknown) =>
     server.handle(path, {
       method,
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-  for (const path of ["/api/provider-login", "/api/settings/mcp/login"]) {
+  for (const lane of [Endpoints.providerLogin, Endpoints.mcpLogin]) {
     assert.deepEqual(
-      await reply(await send(path, "PUT", { id: "gone", promptId: "gone", value: "x" })),
+      await reply(await send(lane.answer, { id: "gone", promptId: "gone", value: "x" })),
       {
         status: 409,
         body: { error: "This sign-in prompt has already closed. Refresh and try again." },
       },
-      path,
+      lane.answer.path,
     );
     assert.deepEqual(
-      await reply(await send(path, "DELETE", { id: "gone" })),
+      await reply(await send(lane.cancel, { id: "gone" })),
       { status: 409, body: { error: "This sign-in is no longer current." } },
-      path,
+      lane.cancel.path,
     );
   }
 });

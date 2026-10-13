@@ -14,6 +14,7 @@ import {
   type IdParam,
   type Json,
   type RadiusSetupAction,
+  type SignInEndpoints,
 } from "../../../shared/http.ts";
 import type { McpSetupRequest } from "../../../shared/mcp.ts";
 import type { SessionPullRequestAction, ThinkingLevel } from "../../../shared/wire.ts";
@@ -152,46 +153,31 @@ export const providerLogout = async (provider: string, options?: RequestOptions)
 };
 
 /** Each sign-in request answers with the current attempt, or null when none exists. */
-export type ProviderLoginRequest =
+export type SignInRequest =
   | { method: "GET" }
-  | { method: "POST"; body: typeof Endpoints.startProviderLogin.body.Type }
-  | { method: "PUT"; body: typeof Endpoints.answerProviderLogin.body.Type }
-  | { method: "DELETE"; body: typeof Endpoints.cancelProviderLogin.body.Type };
+  | { method: "POST"; body: SignInEndpoints["start"]["body"]["Type"] }
+  | { method: "PUT"; body: SignInEndpoints["answer"]["body"]["Type"] }
+  | { method: "DELETE"; body: SignInEndpoints["cancel"]["body"]["Type"] };
 
-export const providerLogin = async (
-  request: ProviderLoginRequest = { method: "GET" },
-  options?: RequestOptions,
-) => {
-  switch (request.method) {
-    case "GET":
-      return (await call(Endpoints.providerLoginState, {}, options)).state;
-    case "POST":
-      return (await call(Endpoints.startProviderLogin, request, options)).state;
-    case "PUT":
-      return (await call(Endpoints.answerProviderLogin, request, options)).state;
-    case "DELETE":
-      return (await call(Endpoints.cancelProviderLogin, request, options)).state;
-  }
-};
+/** One sign-in lane's requests, the shape both sign-in dialogs drive. */
+export const signInApi =
+  (endpoints: SignInEndpoints) =>
+  async (request: SignInRequest = { method: "GET" }, options?: RequestOptions) => {
+    switch (request.method) {
+      case "GET":
+        return (await call(endpoints.state, {}, options)).state;
+      case "POST":
+        return (await call(endpoints.start, request, options)).state;
+      case "PUT":
+        return (await call(endpoints.answer, request, options)).state;
+      case "DELETE":
+        return (await call(endpoints.cancel, request, options)).state;
+    }
+  };
 
+export const providerLogin = signInApi(Endpoints.providerLogin);
 /** The same sign-in attempt as providers', run by Pi's MCP OAuth for a catalog server. */
-export const mcpLogin = async (
-  request: ProviderLoginRequest = { method: "GET" },
-  options?: RequestOptions,
-) => {
-  switch (request.method) {
-    case "GET":
-      return (await call(Endpoints.mcpLoginState, {}, options)).state;
-    case "POST":
-      return (
-        await call(Endpoints.startMcpLogin, { body: { server: request.body.provider } }, options)
-      ).state;
-    case "PUT":
-      return (await call(Endpoints.answerMcpLogin, request, options)).state;
-    case "DELETE":
-      return (await call(Endpoints.cancelMcpLogin, request, options)).state;
-  }
-};
+export const mcpLogin = signInApi(Endpoints.mcpLogin);
 
 export const mcpSetup = async (request?: McpSetupRequest, options?: RequestOptions) =>
   (request

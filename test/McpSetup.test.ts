@@ -119,7 +119,7 @@ async function fixture(
 const until = (setup: McpSetup["Service"], done: (state: ProviderLoginState) => boolean) =>
   Effect.gen(function* () {
     for (;;) {
-      const state = yield* setup.login;
+      const state = yield* setup.signIn.state;
       if (state && done(state)) return state;
       yield* Effect.sleep(5);
     }
@@ -138,7 +138,7 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
         oauth: true,
         signedIn: false,
       });
-      const notInstalled = yield* Effect.flip(setup.startLogin("linear"));
+      const notInstalled = yield* Effect.flip(setup.signIn.start("linear"));
       assert.match(notInstalled.detail, /Install Linear MCP/);
 
       yield* setup.change({ action: "install", server: "linear" });
@@ -150,7 +150,7 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
       assert.equal(installed.status, "ready");
       assert.equal(installed.signedIn, false);
 
-      yield* setup.startLogin("linear");
+      yield* setup.signIn.start("linear");
       const waiting = yield* until(setup, (state) => !!state.prompt && !!state.url);
       const authorization = new URL(waiting.url!);
       assert.equal(authorization.origin, new URL(url).origin);
@@ -161,11 +161,11 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
       const wrongState = new URL(redirect);
       wrongState.searchParams.set("state", "other");
       const rejected = yield* Effect.flip(
-        setup.answerLogin(waiting.id, waiting.prompt!.id, wrongState.href),
+        setup.signIn.answer(waiting.id, waiting.prompt!.id, wrongState.href),
       );
       assert.match(rejected.detail, /Paste the full address/);
-      assert.equal((yield* setup.login)?.prompt?.id, waiting.prompt!.id);
-      yield* setup.answerLogin(waiting.id, waiting.prompt!.id, redirect.href);
+      assert.equal((yield* setup.signIn.state)?.prompt?.id, waiting.prompt!.id);
+      yield* setup.signIn.answer(waiting.id, waiting.prompt!.id, redirect.href);
       const finished = yield* until(setup, (state) => state.status !== "running");
       assert.equal(finished.status, "success", finished.message);
       assert.ok(
@@ -176,7 +176,7 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
       assert.match(readFileSync(join(directory, "mcp-auth.json"), "utf8"), /private-access-token/);
 
       // A second sign-in finds the stored token and asks nothing.
-      yield* setup.startLogin("linear");
+      yield* setup.signIn.start("linear");
       assert.equal(
         (yield* until(setup, (state) => state.status !== "running")).message,
         "Already signed in to Linear.",

@@ -100,9 +100,42 @@ const RadiusSetupRequest = Schema.Union([
 
 const RadiusReply = Schema.Struct({ state: RadiusSetupState });
 const McpReply = Schema.Struct({ state: McpSetupState });
-const LoginReply = Schema.Struct({ state: Schema.NullOr(ProviderLoginState) });
-const loginFallback = "Could not complete sign-in.";
-const loginInvalid = "Invalid sign-in request.";
+
+/**
+ * One sign-in lane's four requests on one path: read the current attempt, start one for a subject
+ * (a provider, or an MCP catalog server), answer its prompt, cancel it. Credential values and
+ * callback URLs travel only in bodies; each request answers with the current attempt, or null when
+ * none exists.
+ */
+const signInEndpoints = <const P extends `/api/${string}`>(path: NoPathParams<P>) => {
+  const shared = {
+    path,
+    invalid: "Invalid sign-in request.",
+    response: Schema.Struct({ state: Schema.NullOr(ProviderLoginState) }),
+    noStore: true,
+    fallback: "Could not complete sign-in.",
+  } as const;
+  return {
+    state: endpoint({ ...shared, method: "GET" }),
+    // `provider` names the subject, as the attempt's own `provider` field does for both lanes.
+    start: endpoint({
+      ...shared,
+      method: "POST",
+      body: Schema.Struct({ provider: Schema.String }),
+    }),
+    answer: endpoint({
+      ...shared,
+      method: "PUT",
+      body: Schema.Struct({
+        id: Schema.String,
+        promptId: Schema.String,
+        value: Schema.String.check(Schema.isMaxLength(16_384)),
+      }),
+    }),
+    cancel: endpoint({ ...shared, method: "DELETE", body: Schema.Struct({ id: Schema.String }) }),
+  };
+};
+export type SignInEndpoints = ReturnType<typeof signInEndpoints>;
 
 export const Endpoints = {
   // Folder picker
@@ -266,88 +299,10 @@ export const Endpoints = {
     fallback: "Could not sign out. Try again.",
   }),
 
-  // Provider sign-in. Credential values and callback URLs travel only in bodies; each request
-  // answers with the current attempt, or null when none exists.
+  // Sign-in: provider OAuth, and MCP server OAuth with the same attempt shape.
 
-  providerLoginState: endpoint({
-    method: "GET",
-    path: "/api/provider-login",
-    response: LoginReply,
-    noStore: true,
-    fallback: loginFallback,
-  }),
-  startProviderLogin: endpoint({
-    method: "POST",
-    path: "/api/provider-login",
-    body: Schema.Struct({ provider: Schema.String }),
-    invalid: loginInvalid,
-    response: LoginReply,
-    noStore: true,
-    fallback: loginFallback,
-  }),
-  answerProviderLogin: endpoint({
-    method: "PUT",
-    path: "/api/provider-login",
-    body: Schema.Struct({
-      id: Schema.String,
-      promptId: Schema.String,
-      value: Schema.String.check(Schema.isMaxLength(16_384)),
-    }),
-    invalid: loginInvalid,
-    response: LoginReply,
-    noStore: true,
-    fallback: loginFallback,
-  }),
-  cancelProviderLogin: endpoint({
-    method: "DELETE",
-    path: "/api/provider-login",
-    body: Schema.Struct({ id: Schema.String }),
-    invalid: loginInvalid,
-    response: LoginReply,
-    noStore: true,
-    fallback: loginFallback,
-  }),
-
-  // MCP server sign-in: the same attempt shape as provider sign-in, run by Pi's MCP OAuth.
-
-  mcpLoginState: endpoint({
-    method: "GET",
-    path: "/api/settings/mcp/login",
-    response: LoginReply,
-    noStore: true,
-    fallback: loginFallback,
-  }),
-  startMcpLogin: endpoint({
-    method: "POST",
-    path: "/api/settings/mcp/login",
-    body: Schema.Struct({ server: Schema.String }),
-    invalid: loginInvalid,
-    response: LoginReply,
-    noStore: true,
-    fallback: loginFallback,
-  }),
-  answerMcpLogin: endpoint({
-    method: "PUT",
-    path: "/api/settings/mcp/login",
-    body: Schema.Struct({
-      id: Schema.String,
-      promptId: Schema.String,
-      value: Schema.String.check(Schema.isMaxLength(16_384)),
-    }),
-    invalid: loginInvalid,
-    response: LoginReply,
-    noStore: true,
-    fallback: loginFallback,
-  }),
-  cancelMcpLogin: endpoint({
-    method: "DELETE",
-    path: "/api/settings/mcp/login",
-    body: Schema.Struct({ id: Schema.String }),
-    invalid: loginInvalid,
-    response: LoginReply,
-    noStore: true,
-    fallback: loginFallback,
-  }),
+  providerLogin: signInEndpoints("/api/provider-login"),
+  mcpLogin: signInEndpoints("/api/settings/mcp/login"),
 } as const;
 
 export type Endpoints = typeof Endpoints;

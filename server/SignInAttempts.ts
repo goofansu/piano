@@ -73,6 +73,20 @@ export interface SignInAttempts {
   ) => Effect.Effect<A, E | SignInError, R>;
   /** Drop a finished attempt for `subject`, for example after signing out of it. */
   readonly forget: (subject: string) => Effect.Effect<void>;
+  /** This lane as its owner exposes it: `start` takes only a subject, which `source` validates
+   * and turns into the flow that runs. */
+  readonly lane: (
+    source: (subject: string) => Effect.Effect<SignInSource, SignInError>,
+  ) => SignInLane;
+}
+
+/** A sign-in lane as the router serves it: the current attempt, and starting, answering and
+ * cancelling one. Every request answers with the attempt, or refuses with a SignInError. */
+export interface SignInLane {
+  readonly state: Effect.Effect<SignInState | null>;
+  readonly start: (subject: string) => Effect.Effect<SignInState, SignInError>;
+  readonly answer: SignInAttempts["answer"];
+  readonly cancel: SignInAttempts["cancel"];
 }
 
 const closed = "This sign-in prompt has already closed. Refresh and try again.";
@@ -208,18 +222,20 @@ export const SignInAttempts = {
       return snapshot()!;
     });
 
+    const state = Effect.sync(snapshot);
+    const cancelAttempt = Effect.fn("SignInAttempts.cancel")(function* (id: string) {
+      if (current?.state.id !== id)
+        return yield* new SignInError({ detail: "This sign-in is no longer current." });
+      cancel("Sign-in cancelled.");
+      return snapshot()!;
+    });
     const attempts: SignInAttempts = {
-      state: Effect.sync(snapshot),
+      state,
       busy: (subject) =>
         !!current?.active && (subject === undefined || current.state.provider === subject),
       start,
       answer,
-      cancel: Effect.fn("SignInAttempts.cancel")(function* (id: string) {
-        if (current?.state.id !== id)
-          return yield* new SignInError({ detail: "This sign-in is no longer current." });
-        cancel("Sign-in cancelled.");
-        return snapshot()!;
-      }),
+      cancel: cancelAttempt,
       // Claim before the operation awaits, so another tab cannot start a sign-in under it.
       exclusive: <A, E, R>(operation: Effect.Effect<A, E, R>, busy: string) =>
         Effect.suspend((): Effect.Effect<A, E | SignInError, R> => {
@@ -237,6 +253,12 @@ export const SignInAttempts = {
         Effect.sync(() => {
           if (current && !current.active && current.state.provider === subject) current = undefined;
         }),
+      lane: (source) => ({
+        state,
+        start: (subject) => Effect.flatMap(source(subject), (flow) => start(subject, flow)),
+        answer,
+        cancel: cancelAttempt,
+      }),
     };
     return attempts;
   }),
