@@ -18,18 +18,18 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { folderFor } from "@/lib/sessionContext";
 import {
-  filterWorktrees,
   type WorktreeOperation,
   type WorktreeOperationState,
   worktreeLabel,
+  worktreesView,
 } from "@/lib/worktreeOperation";
 import type { AppState } from "@/store";
 
 /**
  * The current folder's repository only: opening or refreshing rediscovers that one repository. One
  * deliberate selection or new-branch operation; never automatic retries. The operation
- * (lib/worktreeOperation) owns requests, receipts and discovery; this renders it and keeps the
- * form's own fields.
+ * (lib/worktreeOperation) owns requests, receipts and discovery, and `worktreesView` decides what
+ * the picker shows and allows; this renders it and keeps the form's own fields.
  */
 export function WorktreesPopover({
   operation,
@@ -40,9 +40,6 @@ export function WorktreesPopover({
   state: AppState;
   currentCwd: string;
 }) {
-  const folder = folderFor(state, currentCwd);
-  // The sidebar snapshot stands in only until this picker's own discovery answers.
-  const discovery = folder && (operation.discovery ?? folder.discovery);
   const [query, setQuery] = useState("");
   const [branch, setBranch] = useState("");
   const [hooks, setHooks] = useState(false);
@@ -50,17 +47,19 @@ export function WorktreesPopover({
   const [creating, setCreating] = useState(false);
   const errorRef = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
-  const failure = operation.request.status === "failed" ? operation.request : null;
-  const error = failure?.detail ?? null;
+  const view = worktreesView({
+    state: operation,
+    folder: folderFor(state, currentCwd),
+    connected: state.connected,
+    form: { creating, branch, hooks, query },
+  });
+  const { target, pending, failure } = view;
   useEffect(() => {
-    if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
-  }, [error]);
-  const { refreshing } = operation;
-  const target = discovery?.status === "ready" ? folder : undefined;
-  const pending = operation.request.status === "pending";
+    if (operation.request.status === "failed")
+      errorRef.current?.scrollIntoView({ block: "nearest" });
+  }, [operation.request]);
   const submit = () => {
-    if (!state.connected || !branch.trim() || !target) return;
-    operation.create(branch, hooks);
+    if (view.canSubmit) operation.create(branch, hooks);
   };
   const startCreating = (initialBranch = "") => {
     operation.dismiss();
@@ -71,44 +70,28 @@ export function WorktreesPopover({
     setCreating(false);
     operation.dismiss();
   };
-  const all = discovery?.status === "ready" ? discovery.worktrees : [];
-  const visible = filterWorktrees(all, query);
-  const needle = query.trim();
-  const busy = pending || !state.connected || refreshing;
-  const errorBox = error && (
+  const errorBox = failure && (
     <Alert
       ref={errorRef}
       variant="destructive"
       className="animate-in fade-in-0 slide-in-from-top-1"
     >
-      {failure?.unconfirmed ? (
-        <>
-          <AlertTitle>Worktree operation not confirmed</AlertTitle>
-          <AlertDescription>
-            <p>Refresh discovery before retrying.</p>
-            {creating && hooks && (
-              <p>
-                For unapproved hooks, review and approve them in a terminal, or leave hooks off.
-              </p>
-            )}
-            <AlertDetails label="Error details">
-              <p className="whitespace-pre-wrap break-words">{error}</p>
-            </AlertDetails>
-          </AlertDescription>
-        </>
-      ) : (
-        // Nothing changed on disk, so the error itself is the whole story.
-        <>
-          <AlertTitle>
-            {creating ? "Could not create the worktree" : "Could not open the worktree"}
-          </AlertTitle>
-          <AlertDescription>
-            <p className="whitespace-pre-wrap break-words">{error}</p>
-          </AlertDescription>
-        </>
-      )}
+      <AlertTitle>{failure.title}</AlertTitle>
+      <AlertDescription>
+        {failure.lines.map((line) => (
+          <p key={line} className="whitespace-pre-wrap break-words">
+            {line}
+          </p>
+        ))}
+        {failure.details && (
+          <AlertDetails label="Error details">
+            <p className="whitespace-pre-wrap break-words">{failure.details}</p>
+          </AlertDetails>
+        )}
+      </AlertDescription>
     </Alert>
   );
+  const { disconnected, discoveryError } = view.notices;
   return (
     <PickerContent
       aria-label={creating ? "New worktree" : "Worktrees"}
@@ -175,11 +158,7 @@ export function WorktreesPopover({
           </FieldGroup>
           {errorBox}
           <div className="flex justify-end">
-            <Button
-              type="submit"
-              size="sm"
-              disabled={!branch.trim() || pending || !state.connected}
-            >
+            <Button type="submit" size="sm" disabled={!view.canSubmit}>
               {pending && <Spinner />}
               {pending ? "Creating" : "Create"}
             </Button>
@@ -202,39 +181,41 @@ export function WorktreesPopover({
               {target && (
                 <IconButton
                   label="New worktree"
-                  disabled={pending || !state.connected}
+                  disabled={!view.canStart}
                   onClick={() => startCreating()}
                 >
                   <PlusIcon aria-hidden />
                 </IconButton>
               )}
-              <IconButton label="Refresh worktrees" disabled={busy} onClick={operation.refresh}>
-                {refreshing ? <Spinner /> : <RefreshCwIcon aria-hidden />}
+              <IconButton
+                label="Refresh worktrees"
+                disabled={view.busy}
+                onClick={operation.refresh}
+              >
+                {operation.refreshing ? <Spinner /> : <RefreshCwIcon aria-hidden />}
               </IconButton>
             </PickerSearch>
             <CommandList aria-label="Discovered worktrees" className="max-h-[min(18rem,50dvh)]">
               <CommandEmpty className="flex flex-col items-center gap-2 py-6 text-center text-sm">
-                <span>
-                  {discovery?.status === "non-git" ? "Non-Git directory" : "No worktree matches."}
-                </span>
-                {target && needle && (
+                <span>{view.emptyText}</span>
+                {view.createFromQuery && (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={pending || !state.connected}
-                    onClick={() => startCreating(query.trim())}
+                    disabled={!view.canStart}
+                    onClick={() => startCreating(view.createFromQuery)}
                   >
-                    <PlusIcon aria-hidden /> New worktree “{query.trim()}”
+                    <PlusIcon aria-hidden /> New worktree “{view.createFromQuery}”
                   </Button>
                 )}
               </CommandEmpty>
-              {target && visible.length > 0 && (
+              {view.visible.length > 0 && (
                 <CommandGroup>
-                  {visible.map((worktree) => (
+                  {view.visible.map((worktree) => (
                     <CommandItem
                       key={worktree.path}
                       value={worktree.path}
-                      disabled={busy || worktree.prunable}
+                      disabled={view.busy || worktree.prunable}
                       onSelect={() => operation.select(worktree.path)}
                     >
                       <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">
@@ -247,17 +228,13 @@ export function WorktreesPopover({
               )}
             </CommandList>
           </Command>
-          {(!state.connected || discovery?.status === "error" || error) && (
+          {(disconnected || discoveryError || failure) && (
             <div className="flex flex-col gap-2 border-t border-line p-2">
-              {!state.connected && (
-                <p className="px-2 text-sm text-muted-foreground">
-                  Disconnected — showing last observation.
-                </p>
-              )}
-              {discovery?.status === "error" && (
+              {disconnected && <p className="px-2 text-sm text-muted-foreground">{disconnected}</p>}
+              {discoveryError && (
                 <Alert variant="destructive">
                   <AlertDescription className="whitespace-pre-wrap break-words">
-                    {discovery.detail}
+                    {discoveryError}
                   </AlertDescription>
                 </Alert>
               )}

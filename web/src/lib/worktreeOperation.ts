@@ -229,3 +229,104 @@ export function filterWorktrees(
       )
     : all;
 }
+
+/** The picker's form fields, which the component keeps as local state. */
+export interface WorktreesForm {
+  /** The new-worktree form is open instead of the list. */
+  creating: boolean;
+  branch: string;
+  hooks: boolean;
+  /** The list's search text. */
+  query: string;
+}
+
+export interface WorktreesViewInput<Folder extends { discovery: WorktreeDiscovery }> {
+  state: WorktreeOperationState;
+  /** The registered folder the picker is on; its sidebar snapshot carries its last discovery. */
+  folder: Folder | undefined;
+  connected: boolean;
+  form: WorktreesForm;
+}
+
+export interface WorktreesFailure {
+  title: string;
+  /** Shown in order, preserving line breaks. */
+  lines: readonly string[];
+  /** The raw error behind a disclosure, when the outcome is unconfirmed. */
+  details?: string;
+}
+
+export interface WorktreesView<Folder> {
+  /** This picker's own discovery, or the sidebar snapshot until that answers. */
+  discovery: WorktreeDiscovery | undefined;
+  /** The folder a new worktree goes into: only once discovery found a Git repository. */
+  target: Folder | undefined;
+  /** Discovered worktrees matching the search, in discovery order. */
+  visible: readonly WorktreeFacts[];
+  pending: boolean;
+  /** Refresh and selection wait: an operation, a discovery or the connection is outstanding. */
+  busy: boolean;
+  /** A new operation may begin: the new-worktree buttons. */
+  canStart: boolean;
+  /** The form may be submitted; the Create button and the submit guard both read this. */
+  canSubmit: boolean;
+  /** The trimmed search text, offered as a new branch when nothing matches it. */
+  createFromQuery: string | undefined;
+  /** What the list says when it has no rows. */
+  emptyText: string;
+  failure: WorktreesFailure | undefined;
+  /** Notices under the list. */
+  notices: { disconnected: string | undefined; discoveryError: string | undefined };
+}
+
+const HOOKS_HINT =
+  "For unapproved hooks, review and approve them in a terminal, or leave hooks off.";
+
+/** What the Worktrees picker shows and allows. Pure; the component renders it and keeps the form. */
+export function worktreesView<Folder extends { discovery: WorktreeDiscovery }>({
+  state,
+  folder,
+  connected,
+  form,
+}: WorktreesViewInput<Folder>): WorktreesView<Folder> {
+  // The sidebar snapshot stands in only until this picker's own discovery answers.
+  const discovery = folder && (state.discovery ?? folder.discovery);
+  const ready = discovery?.status === "ready" ? discovery : undefined;
+  const target = ready ? folder : undefined;
+  const { request } = state;
+  const pending = request.status === "pending";
+  const canStart = connected && !pending;
+  const needle = form.query.trim();
+  let failure: WorktreesFailure | undefined;
+  if (request.status === "failed")
+    failure = request.unconfirmed
+      ? {
+          title: "Worktree operation not confirmed",
+          lines: [
+            "Refresh discovery before retrying.",
+            ...(form.creating && form.hooks ? [HOOKS_HINT] : []),
+          ],
+          details: request.detail,
+        }
+      : // Nothing changed on disk, so the error itself is the whole story.
+        {
+          title: form.creating ? "Could not create the worktree" : "Could not open the worktree",
+          lines: [request.detail],
+        };
+  return {
+    discovery,
+    target,
+    visible: filterWorktrees(ready?.worktrees ?? [], form.query),
+    pending,
+    busy: pending || !connected || state.refreshing,
+    canStart,
+    canSubmit: canStart && target !== undefined && form.branch.trim() !== "",
+    createFromQuery: target && needle ? needle : undefined,
+    emptyText: discovery?.status === "non-git" ? "Non-Git directory" : "No worktree matches.",
+    failure,
+    notices: {
+      disconnected: connected ? undefined : "Disconnected — showing last observation.",
+      discoveryError: discovery?.status === "error" ? discovery.detail : undefined,
+    },
+  };
+}
