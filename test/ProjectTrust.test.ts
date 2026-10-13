@@ -6,12 +6,10 @@ import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
-import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
-import { PiSessionsLive } from "../server/PiSessions.ts";
+import { PianoCoreLive } from "../server/PianoServices.ts";
 import { setProjectTrust } from "../server/ProjectTrust.ts";
-import { RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { SessionHostsLive } from "../server/SessionHosts.ts";
-import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
+import { RegistryDatabasePath } from "../server/Registry.ts";
+import { SidebarView } from "../server/SidebarView.ts";
 import { WorktrunkCommand } from "../server/Worktrees.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
@@ -62,13 +60,7 @@ function fixture(t: TestContext) {
 
 test("INV-01: project trust is read from and written to Pi's trust file, per directory", async (t) => {
   const { root, skilled, plain, agent } = fixture(t);
-  const layer = SidebarViewLive().pipe(
-    Layer.provide(DirectoryFactsLive),
-    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
-    Layer.provide(PiSessionsLive),
-    Layer.provideMerge(RegistryLive),
-    Layer.provide(NodeServices.layer),
-  );
+  const layer = PianoCoreLive({ idleMs: 0 }).pipe(Layer.provide(NodeServices.layer));
   await Effect.runPromise(
     Effect.gen(function* () {
       const buildFolders = Effect.map((yield* SidebarView).fresh, (view) => view.folders);

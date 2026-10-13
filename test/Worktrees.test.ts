@@ -15,11 +15,9 @@ import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
-import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
-import { PiSessionsLive } from "../server/PiSessions.ts";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { SessionHostsLive } from "../server/SessionHosts.ts";
-import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
+import { PianoCoreLive } from "../server/PianoServices.ts";
+import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
+import { SidebarView } from "../server/SidebarView.ts";
 import {
   checkoutHint,
   createWorktree,
@@ -321,13 +319,7 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
 
   // Through the actual view caller: registry names never become Git facts and
   // external deletion/failure must not hide registered session references.
-  const layer = SidebarViewLive().pipe(
-    Layer.provide(DirectoryFactsLive),
-    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
-    Layer.provide(PiSessionsLive),
-    Layer.provideMerge(RegistryLive),
-    Layer.provide(NodeServices.layer),
-  );
+  const layer = PianoCoreLive({ idleMs: 0 }).pipe(Layer.provide(NodeServices.layer));
   await Effect.runPromise(
     Effect.gen(function* () {
       const sidebar = yield* SidebarView;

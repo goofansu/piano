@@ -6,14 +6,14 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Queue, type Scope } from "effect";
 import { type ClientRequest, makeClientDispatch } from "../server/ClientDispatch.ts";
-import { type DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
+import type { DirectoryFacts } from "../server/DirectoryFacts.ts";
 import { inboundLimits } from "../server/InboundCapacity.ts";
+import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { PiSessionsLive } from "../server/PiSessions.ts";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
-import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
-import { type WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
+import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
+import { SessionHosts } from "../server/SessionHosts.ts";
+import { SidebarView } from "../server/SidebarView.ts";
+import type { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
 import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import {
@@ -56,14 +56,7 @@ const run = <A, E>(
 ) => {
   sent.length = 0;
   discovered = undefined;
-  const layer = WorkspaceCommandsLive.pipe(
-    Layer.provideMerge(SidebarViewLive({ discover })),
-    Layer.provideMerge(DirectoryFactsLive),
-    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
-    Layer.provide(PiSessionsLive),
-    Layer.provideMerge(RegistryLive),
-    Layer.provide(NodeServices.layer),
-  );
+  const layer = PianoCoreLive({ idleMs: 0, discover }).pipe(Layer.provide(NodeServices.layer));
   return Effect.runPromise(
     effect.pipe(
       Effect.scoped,

@@ -1,4 +1,4 @@
-/** The production router over the production services, in a scratch directory; only the Pi child is faked. */
+/** The production router over the production services (PianoServices), in a scratch directory; only the Pi child is faked. */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,25 +6,13 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
-import { DirectoryFactsLive } from "../../server/DirectoryFacts.ts";
-import { GitHubPullRequestsLive } from "../../server/GitHubPullRequests.ts";
-import { McpSetupLive } from "../../server/McpSetup.ts";
 import { AllowedOrigins } from "../../server/OriginPolicy.ts";
+import { PianoAdaptersLive, PianoServicesLive } from "../../server/PianoServices.ts";
 import { PiCli } from "../../server/PiCli.ts";
-import { PiSessionsLive } from "../../server/PiSessions.ts";
-import { PiSettingsLive } from "../../server/PiSettings.ts";
-import { type ProviderLogin, ProviderLoginLive } from "../../server/ProviderLogin.ts";
-import { RadiusArtifactsLive } from "../../server/RadiusArtifacts.ts";
-import { RadiusSetupLive } from "../../server/RadiusSetup.ts";
+import type { ProviderLogin } from "../../server/ProviderLogin.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../../server/Registry.ts";
 import { AppRouter } from "../../server/Router.ts";
-import { type SessionHosts, SessionHostsLive } from "../../server/SessionHosts.ts";
-import { SessionPullRequestsLive } from "../../server/SessionPullRequests.ts";
-import { SessionSharingLive } from "../../server/SessionSharing.ts";
-import { SidebarViewLive } from "../../server/SidebarView.ts";
-import { WorkspaceChangesLive } from "../../server/WorkspaceChanges.ts";
-import { WorkspaceCommandsLive } from "../../server/WorkspaceCommands.ts";
-import { WorkspaceRevisionsLive } from "../../server/WorkspaceRevisions.ts";
+import type { SessionHosts } from "../../server/SessionHosts.ts";
 
 export interface RouterFixture {
   readonly root: string;
@@ -74,26 +62,9 @@ export async function startRouter<Fakes = never>(
     NodeServices.layer,
   );
   // Production adapters a test may replace through `services`: a later layer wins a merge.
-  const Adapters = Layer.merge(Config, RadiusArtifactsLive);
-  const Services = Layer.mergeAll(
-    PiSettingsLive,
-    RadiusSetupLive,
-    McpSetupLive,
-    WorkspaceRevisionsLive,
-    WorkspaceChangesLive,
-    SessionPullRequestsLive.pipe(Layer.provide(GitHubPullRequestsLive)),
-    // Sharing reads the Radius credential through the one ProviderLogin that the routes use.
-    SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
-  ).pipe(
-    Layer.provideMerge(DirectoryFactsLive),
-    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
-    Layer.provideMerge(RegistryLive),
-    Layer.provideMerge(PiSessionsLive),
+  const Adapters = PianoAdaptersLive.pipe(Layer.provideMerge(Config));
+  const Services = PianoServicesLive({ idleMs: 0 }).pipe(
     Layer.provideMerge(services ? Layer.merge(Adapters, services) : Adapters),
-  );
-  const Core = WorkspaceCommandsLive.pipe(
-    Layer.provideMerge(SidebarViewLive()),
-    Layer.provideMerge(Services),
   );
 
   const workspaceId = await Effect.runPromise(
@@ -103,7 +74,7 @@ export async function startRouter<Fakes = never>(
       return (yield* registry.get).workspaces.find((w) => w.path === repo)!.id;
     }).pipe(Effect.provide(RegistryLive.pipe(Layer.provide(Config)))),
   );
-  const runtime = ManagedRuntime.make(services ? Layer.merge(Core, services) : Core);
+  const runtime = ManagedRuntime.make(services ? Layer.merge(Services, services) : Services);
   const web = HttpRouter.toWebHandler(
     AppRouter.pipe(Layer.provideMerge(Layer.succeedContext(await runtime.context()))),
     { disableLogger: true },
