@@ -14,18 +14,18 @@ Read the installed `herdr` skill in full and follow it for discovery, targeting,
 
 Resolve these inputs from the user's request, asking only for missing consequential choices:
 
-- **Target:** the specified Claude Code pane. If the user says “left pane,” resolve the actual left neighbor of the caller and confirm its agent kind and cwd. If no target is specified, show the matching Claude panes and ask. Create a new agent only when requested, using Herdr's normal topology rules and `--kind claude`.
+- **Target:** always create a dedicated Claude Code agent for this run. Follow the Herdr skill to split a sibling pane in the caller's current tab, preserve the current working directory, and use `--no-focus`. Start a uniquely named agent with `--kind claude` in the returned pane ID. Record its pane ID and session identity, and run every round there. Existing Claude panes are not targets, even if one is idle. Reuse this run's own agent across rounds; on an interrupted run, resume it only when its recorded identity still matches. If it is gone, reconcile unfinished work before creating a replacement.
 - **Budget:** default to one round; accept a finite user-specified round count. An unbounded request needs a finite budget before execution.
 - **Publishing:** this workflow creates worktrees, branches, and stacked PRs. State that scope before the first prompt; obey the repository's policies.
 - **Merging:** default to opening PRs only. Ask for explicit authorization before merging; record whether permission covers one stack or every stack in this run.
 
 Read the target repository's instructions. Record the target pane, Claude session identity, cwd, initial revision, round budget, and permissions in a small run ledger under a temporary directory. Keep secrets and full transcripts out of it. Record phase, delivered prompts, PRs, evidence paths, blockers, and completion per round so interrupted runs can reconcile instead of starting over.
 
-**Gate:** the target is unambiguous, the scope is stated, and the run has a finite budget.
+**Gate:** the dedicated Claude agent is ready in the intended repository, its identity is recorded, the scope is stated, and the run has a finite budget.
 
 ## 2. Reconcile before resetting
 
-Read Claude's current state and recent output. A settled Herdr state can occur while Claude's background agents still work: inspect the response for outstanding jobs, verification, or publishing. Resume unfinished authorized work before beginning a new round. Existing unrelated work belongs to the user; ask before interrupting or clearing it.
+Read the run's dedicated Claude agent's current state and recent output. A settled Herdr state can occur while Claude's background agents still work: inspect the response for outstanding jobs, verification, or publishing. On resume, finish this run's unfinished authorized work before beginning a new round. If the pane has been replaced or taken over for unrelated work, pause rather than interrupting or clearing it.
 
 Before every submission, confirm the pane still hosts the intended Claude session in the intended repository. If it is working, wait and then read. If blocked, inspect the question or approval and ask the user; permissions already enabled in Claude's UI are not authorization for the orchestrator. If unknown, inspect rather than treating it as done.
 
