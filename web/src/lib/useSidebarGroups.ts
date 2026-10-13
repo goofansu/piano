@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPreference, parseJson } from "@/lib/preference";
 import {
   initialOpenGroups,
   nextOpenGroups,
@@ -6,24 +7,25 @@ import {
   ownerGroupKey,
 } from "@/lib/sidebarGroups";
 import type { GroupBy } from "@/lib/sidebarView";
-import { readJson, writeJson } from "@/lib/storage";
 import type { AppState } from "@/store";
 
-/** Remembered per browser, like the sidebar's grouping. */
-const KEY = "piano.openProjects";
+/** Remembered per browser, like the sidebar's grouping; read when a sidebar mounts. */
+const openProjects = createPreference<readonly string[]>({
+  key: "piano.openProjects",
+  decode: (raw) => {
+    const stored = parseJson(raw);
+    return Array.isArray(stored) ? stored.filter((key) => typeof key === "string") : [];
+  },
+});
 
 /** The sidebar's open groups: `nextOpenGroups` fed by the selection, the registry and user toggles. */
 export function useSidebarGroups(state: AppState, groupBy: GroupBy) {
-  const [groups, setGroups] = useState(() => initialOpenGroups(readJson<string[]>(KEY, [])));
+  const [groups, setGroups] = useState(() => initialOpenGroups(openProjects.get()));
   const dispatch = useCallback(
-    (event: OpenGroupsEvent) =>
-      setGroups((prev) => {
-        const next = nextOpenGroups(prev, event);
-        if (next.open !== prev.open) writeJson(KEY, [...next.open]);
-        return next;
-      }),
+    (event: OpenGroupsEvent) => setGroups((prev) => nextOpenGroups(prev, event)),
     [],
   );
+  useEffect(() => openProjects.set([...groups.open]), [groups.open]);
 
   const current = state.session ?? state.selecting;
   const cwd = current?.cwd;

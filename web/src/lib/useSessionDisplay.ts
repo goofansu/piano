@@ -1,42 +1,14 @@
-import { useSyncExternalStore } from "react";
+import { createPreference } from "@/lib/preference";
 import type { SessionDisplay } from "@/lib/sessionCommands";
-import { readStorage, writeStorage } from "@/lib/storage";
+import { usePreference } from "@/lib/usePreference";
 
-const KEY = "piano:session-display";
-const normalize = (value: string | null): SessionDisplay =>
-  value === "messages" ? "messages" : "everything";
-let display = normalize(readStorage(KEY));
-const listeners = new Set<() => void>();
-const notify = () => {
-  for (const listener of listeners) listener();
-};
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  const onStorage = (event: StorageEvent) => {
-    if (event.key !== KEY && event.key !== null) return;
-    display = normalize(readStorage(KEY));
-    notify();
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
-  };
-}
-
-function setDisplay(value: SessionDisplay) {
-  display = value;
-  writeStorage(KEY, value);
-  notify();
-}
+const sessionDisplay = createPreference<SessionDisplay>({
+  key: "piano:session-display",
+  decode: (raw) => (raw === "messages" ? "messages" : "everything"),
+  encode: (value) => value,
+});
 
 /** A display preference only: the authoritative transcript stays intact. */
 export function useSessionDisplay() {
-  const value = useSyncExternalStore(
-    subscribe,
-    () => display,
-    () => "everything" as const,
-  );
-  return [value, setDisplay] as const;
+  return usePreference(sessionDisplay);
 }

@@ -42,6 +42,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, type GlobalCommandGroup, globalCommands } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
+import { createPreference, parseJson } from "@/lib/preference";
 import {
   assignProjectCommand,
   newProjectCommand,
@@ -54,8 +55,8 @@ import { sessionProject } from "@/lib/sessionContext";
 import { projectKey } from "@/lib/sidebarGroups";
 import { sidebarSections } from "@/lib/sidebarSections";
 import type { SidebarView } from "@/lib/sidebarView";
-import { readJson, writeJson } from "@/lib/storage";
 import { useNavigation } from "@/lib/useNavigation";
+import { usePreference } from "@/lib/usePreference";
 import { useSidebarGroups } from "@/lib/useSidebarGroups";
 import { useSidebarView } from "@/lib/useSidebarView";
 import { type AppState, sessionKey } from "@/store";
@@ -73,6 +74,11 @@ const groupRow = cn(
   row,
   "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover",
 );
+/** The Pinned group starts open and stays as the user leaves it, per browser. */
+const pinnedOpenPreference = createPreference<boolean>({
+  key: "piano.pinnedOpen",
+  decode: (raw) => parseJson(raw) !== false,
+});
 const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
@@ -80,11 +86,7 @@ export function Sidebar({ state }: Props) {
   const { select, openNew, openSettings, setPalette } = useNavigation();
   const { view } = useSidebarView();
   const { openGroups, setOpen } = useSidebarGroups(state, view.groupBy);
-  const [pinnedOpen, setPinnedOpen] = useState(() => readJson("piano.pinnedOpen", true));
-  const togglePinned = (open: boolean) => {
-    setPinnedOpen(open);
-    writeJson("piano.pinnedOpen", open);
-  };
+  const [pinnedOpen, togglePinned] = usePreference(pinnedOpenPreference);
   const [dateNow, setDateNow] = useState(() => new Date());
 
   // Refresh an idle date view at local midnight; focus also catches sleep and clock changes.
