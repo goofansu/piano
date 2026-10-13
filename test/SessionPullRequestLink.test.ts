@@ -130,3 +130,20 @@ test("background reads never reset an edit in progress", async () => {
   pr.cancel();
   assert.equal(pr.getState().surface, "details");
 });
+
+test("a blank URL, or one sent while another change is in flight, sends nothing", async () => {
+  const { pi, pr } = setup();
+  pi.last().resolve(unlinked);
+  await settle();
+  pr.open();
+  const sent = pi.requests.length;
+  assert.deepEqual(await pr.link(""), { _tag: "refused" });
+  assert.deepEqual(await pr.link("   "), { _tag: "refused" });
+  assert.equal(pi.requests.length, sent);
+
+  const finding = pr.discover();
+  assert.deepEqual(await pr.link(URL), { _tag: "refused" });
+  assert.equal(pi.requests.length, sent + 1, "only the discovery was sent");
+  pi.last().resolve(linked);
+  assert.equal((await finding)._tag, "saved", "the change in flight was not superseded");
+});

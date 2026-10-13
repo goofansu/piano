@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PullRequest, SessionPullRequest } from "../shared/wire.ts";
-import { pullRequestView } from "../web/src/lib/pullRequestView.ts";
+import {
+  pullRequestForm,
+  pullRequestTrigger,
+  pullRequestView,
+} from "../web/src/lib/pullRequestView.ts";
 
 const url = "https://github.com/example/repo/pull/42";
 const now = Date.parse("2026-10-12T12:00:00Z");
@@ -94,4 +98,55 @@ test("diff and branch facts appear only when GitHub reports them in full", () =>
 test("a just-updated PR reads as just now", () => {
   const view = pullRequestView(linked(pr({ at: new Date(now - 30_000).toISOString() })), now);
   assert.equal(view?.timeLabel, "updated just now");
+});
+
+test("the trigger names the PR by number with its status, else reads as PR", () => {
+  assert.deepEqual(pullRequestTrigger(pullRequestView(linked(pr({ state: "merged" })), now)!), {
+    label: "#42",
+    ariaLabel: "Pull request #42",
+    ariaDescription: "Merged",
+    tooltip: "The session deliverable",
+  });
+  assert.deepEqual(pullRequestTrigger(pullRequestView(linked(null), now)!), {
+    label: "#42",
+    ariaLabel: "Pull request #42",
+    ariaDescription: "Status unavailable",
+    tooltip: "Pull request",
+  });
+  const unnamed: SessionPullRequest = {
+    link: { url: "https://github.com/", source: "manual" },
+    pullRequest: null,
+    discovery: true,
+  };
+  assert.deepEqual(pullRequestTrigger(pullRequestView(unnamed, now)!), {
+    label: "PR",
+    ariaLabel: "PR",
+    ariaDescription: undefined,
+    tooltip: "Pull request",
+  });
+});
+
+test("the link form submits only a non-blank URL while idle", () => {
+  const canSubmit = (draft: string, busy = false) =>
+    pullRequestForm({ url: draft, busy, finding: false, editing: false }).canSubmit;
+  assert.equal(canSubmit(url), true);
+  assert.equal(canSubmit(""), false);
+  assert.equal(canSubmit("  "), false);
+  assert.equal(canSubmit(url, true), false);
+});
+
+test("the link form offers Find from branch when linking and Cancel when changing a link", () => {
+  assert.deepEqual(pullRequestForm({ url: "", busy: false, finding: false, editing: false }), {
+    canSubmit: false,
+    submitLabel: "Link",
+    secondary: { action: "find", label: "Find from branch", disabled: false },
+  });
+  assert.deepEqual(pullRequestForm({ url, busy: true, finding: true, editing: false }).secondary, {
+    action: "find",
+    label: "Finding…",
+    disabled: true,
+  });
+  const editing = pullRequestForm({ url, busy: false, finding: false, editing: true });
+  assert.equal(editing.submitLabel, "Save link");
+  assert.deepEqual(editing.secondary, { action: "cancel", label: "Cancel" });
 });
