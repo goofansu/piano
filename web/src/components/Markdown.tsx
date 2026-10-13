@@ -1,17 +1,58 @@
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
+import { IconButton } from "@/components/IconButton";
 import { renderMarkdown } from "@/lib/markdown";
+
+function CopyCode({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <IconButton
+      label={copied ? "Code copied" : "Copy code"}
+      size="icon-xs"
+      className="absolute top-2 right-2"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+        } catch {
+          toast.error("Couldn’t copy. Select the code text to copy it.");
+        }
+      }}
+    >
+      {copied ? <CheckIcon /> : <CopyIcon />}
+    </IconButton>
+  );
+}
 
 /** HTML-safe prose, enhanced with diagrams only after their closing fence arrives. */
 export function Markdown({ text, className }: { text: string; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const html = useMemo(() => renderMarkdown(text), [text]);
+  const [codeBlocks, setCodeBlocks] = useState<{ host: HTMLDivElement; text: string }[]>([]);
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
     // Restore source when switching themes, or after an earlier async render.
     root.innerHTML = html;
+    setCodeBlocks(
+      Array.from(root.querySelectorAll<HTMLPreElement>("pre")).map((block) => {
+        // Custom code host: shadcn has no HTML-string Markdown renderer. The control is a portal.
+        const host = document.createElement("div");
+        host.className = "markdown-code-block";
+        block.replaceWith(host);
+        host.append(block);
+        return { host, text: block.querySelector("code")?.textContent ?? "" };
+      }),
+    );
     const blocks = Array.from(root.querySelectorAll<HTMLPreElement>("pre[data-mermaid]"));
     if (!blocks.length) return;
     let cancelled = false;
@@ -57,6 +98,13 @@ export function Markdown({ text, className }: { text: string; className?: string
     };
   }, [html, resolvedTheme]);
   // Custom prose host: shadcn has no Markdown/Mermaid renderer. HTML is escaped by renderMarkdown.
-  // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes the source before adding markup.
-  return <div ref={ref} className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <>
+      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes the source before adding markup. */}
+      <div ref={ref} className={className} dangerouslySetInnerHTML={{ __html: html }} />
+      {codeBlocks.map(({ host, text }, index) =>
+        createPortal(<CopyCode text={text} />, host, String(index)),
+      )}
+    </>
+  );
 }

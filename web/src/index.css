@@ -569,6 +569,9 @@
   border-radius: 0.3rem;
   padding: 0.1em 0.35em;
 }
+.markdown-code-block {
+  position: relative;
+}
 .prose-chat pre {
   background: var(--fill);
   border: 1px solid var(--line);
@@ -579,6 +582,9 @@
 }
 .dark .prose-chat pre {
   background: var(--fill);
+}
+.prose-chat .markdown-code-block pre {
+  padding-top: 2.5rem;
 }
 .prose-chat pre code {
   background: none;
