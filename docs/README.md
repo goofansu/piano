@@ -22,6 +22,8 @@ Session grouping is implemented; shared context and instructions remain deferred
 Projects from Repositories while existing directory-based `project` fields retain their meaning.
 
 Use the [domain glossary](glossary.md) to distinguish sessions, tasks, evidence and verification.
+[Configuration and storage](configuration.md), [provider sign-in](provider-sign-in.md) and
+[development checks and policy](development.md) hold the detail the root README links to.
 Contributor skill preferences are optional; see the development handoff.
 When developing Piano, follow [evidence-based development and testing](testing.md): choose checks
 from the risk and acceptance claim, and add regression tests only where they provide durable value.

@@ -1,130 +1,77 @@
 # piano
 
-A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across projects and git worktrees.
+Piano is a browser UI for [Pi](https://github.com/earendil-works/pi) sessions. It starts and
+continues sessions across your folders and their Git worktrees.
 
-## Requirements
+## Use Piano
+
+### Requirements
 
 - Node.js 24 and npm.
 - Git.
-- Pi model credentials (sign in through Piano below, or configure Pi directly; default agent directory: `~/.pi/agent`). The Pi runtime is installed with Piano's dependencies.
-- [Worktrunk](https://worktrunk.dev) (`wt`) on `PATH` for worktree support.
+- [Worktrunk](https://worktrunk.dev) (`wt`) on `PATH`, to create worktrees.
+- Credentials for a model provider. Sign in through Piano, or reuse an existing Pi setup in
+  `~/.pi/agent`. Piano installs the Pi runtime with its own dependencies.
 
-## Install and run
+### Install and start
 
-- Clone this repository and enter its directory.
-- Install dependencies, build the UI, and start the server:
+1. Clone this repository and enter its directory.
+2. Install dependencies, build the UI, and start the server:
 
-  ```bash
-  npm install
-  npm run build
-  npm start
-  ```
+	```bash
+	npm install
+	npm run build
+	npm start
+	```
 
-- Open <http://127.0.0.1:7070>.
-- Piano is a trusted single-user tool for local use or private authenticated exe.dev access, not public or multi-user hosting. Keep its listener on loopback; it has no built-in access authentication and can execute commands as your user. See the [supported use case and security-review baseline](docs/hosted-development.md#supported-use-case-and-review-baseline) before raising access-boundary findings.
+3. Open <http://127.0.0.1:7070>.
 
-## Provider sign-in
+Piano has no login and runs commands as your user. Keep it on loopback, or reach it through a
+private authenticated proxy such as exe.dev's. Never expose it publicly. See
+[browser origins](docs/configuration.md#browser-origins) for the access model.
 
-Open **Settings** at the bottom of the sidebar, then choose **Sign in** next to a
-provider in **Providers**. Settings is also reachable through Mod+K and `/settings`.
-No folder or model selection is required. Provider sign-in is not a composer command.
+### Sign in to a model provider
 
-Pi handles authorization and saves credentials in its normal `auth.json`; Piano does
-not put tokens or pasted codes in session history, the registry or browser storage.
-Use device-code/copy-code methods when Piano runs on another machine. Radius's browser
-method requires a callback on the Piano server; its device-code method works remotely.
-Hiding or reloading the dialog preserves an active sign-in; return to **Settings → Providers** and click **Sign in** to resume
-it. **Cancel sign-in** stops it. Attempts expire after 15 minutes or when Piano stops.
+Open **Settings** at the bottom of the sidebar, then click **Sign in** next to a provider under
+**Providers**. Start a new session afterwards, because a running session keeps the models it started
+with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-in.md).
 
-Start a new session after signing in: already-running RPC children retain their model
-availability snapshot. This global flow uses the bundled Pi SDK's built-in providers
-and `models.json` configuration; extension-only OAuth providers, API-key setup and
-logout still require Pi TUI. A custom `PIANO_PI_CLI` must share the same credential format.
+### Configure Piano
 
-## Develop
+Piano reads environment variables such as `PORT`, `HOST`, `PIANO_DB_PATH` and
+`PIANO_ALLOWED_ORIGINS`. Its registry lives in `~/.local/share/piano/piano.db` by default. For every
+variable, the origin policy, and backup steps, see
+[configuration and storage](docs/configuration.md).
 
-- Start the backend and UI together:
+## Develop Piano
 
-  ```bash
-  npm run dev
-  ```
+1. Install dependencies. `npm install` also installs the pre-commit hook that runs lint.
+2. Start the backend and the UI together:
 
-- Both processes have labeled logs. Press Ctrl+C to stop both.
-- To run them separately, use `npm run dev:server` and `npm run dev:web`.
+	```bash
+	npm run dev
+	```
 
-- Open <http://localhost:5173>. Vite proxies API and WebSocket requests to the backend on port 7070.
-- `npm run dev` restarts the backend on changes, interrupting active sessions. Use `npm start` when you want manual restarts.
-- Run checks before committing:
+3. Open <http://localhost:5173>. Vite proxies API and WebSocket requests to the backend on 7070.
 
-  ```bash
-  npm test
-  npm run typecheck
-  npm run lint
-  ```
+`npm run dev` restarts the backend when server files change, which stops running sessions. To
+restart by hand instead, run `npm run build` and `npm start`. To run the two processes in separate
+terminals, use `npm run dev:server` and `npm run dev:web`.
 
-- `npm run format` applies the pinned Biome formatter; `npm run format:check` checks without writing. The convention is two spaces, LF, a 100-column target, double quotes (including JSX), semicolons and trailing commas. `biome.json` is authoritative.
-- Formatting covers application/test source and maintained JS/JSON configuration. Generated `web/src/components/ui` stays excluded from Biome to keep upstream updates reviewable and preserve `piano:` customizations; Tailwind checks still cover it. Lockfiles, captured evidence, vendored skills, Markdown and YAML are not reformatted. Keep mechanical formatting commits separate from behavior changes.
-- `npm run lint` checks formatting as well as Biome rules and `@shadcn/lint` via ESLint. Run `npm run lint:tailwind` for Tailwind checks alone. Configure rules in `eslint.config.mjs`; currently it rejects unknown classes using the UI's Tailwind theme, including inside `components/ui`. Inline ESLint directives are ignored for this dedicated check so legacy React Hooks directives do not interfere.
-- `npm install` sets up a Husky pre-commit hook that runs `npm run lint`; a lint error blocks the commit.
+Before you commit, run:
 
-- Tests use fake Pi and need no model credentials. The Worktrunk integration test requires `wt` **0.80.0** on `PATH`.
-- [Quality CI](.github/workflows/quality.yml) runs on every PR, pushes to `main`, and merge-queue candidates using Node 24: `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, then `npm run build`. It installs checksum-pinned Worktrunk 0.80.0; no model secrets are supplied.
-- Dependency security uses manual review of Dependabot alerts and security-update PRs, not a custom CI audit gate. An owner must enable **Dependabot alerts** and **Dependabot security updates** in repository Settings → Security → Advanced Security; the integration cannot read or change these settings (403), so enablement is unverified. See [retained audit findings and policy](docs/research/yej-16-audit.md).
-- Check **Quality gates** on the latest PR commit manually before merging. The owner canceled automatic branch-protection enforcement (YEJ-17); a workflow alone does not block merges. Keep the repository private.
-- Main directories: `server/` (backend), `web/` (React UI), `shared/` (wire schemas), `test/` (tests).
-- See [development docs](docs/README.md) for architecture, invariants, and verification guidance.
-- For the hosted exe.dev instance, use the [separate scratch development setup](docs/hosted-development.md#develop-and-verify-separately); do not develop against the running user instance.
+```bash
+npm run typecheck
+npm test
+```
 
-## Configuration
+Tests use a fake Pi and need no credentials. CI runs these checks, lint, the build and the browser
+journeys on every pull request and push to `main`.
 
-- `HOST`: bind address; defaults to `127.0.0.1`.
-- `PORT`: backend port; defaults to `7070`.
-- `PIANO_ALLOWED_ORIGINS`: comma-separated exact browser origins (scheme, host, port), replacing the default `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>`, and `http://[::1]:<PORT>`. No paths, trailing slashes, credentials, wildcards, or `null`; invalid configuration fails startup. `npm run dev:server` defaults to the three loopback origins on Vite port 5173 instead. For custom Vite ports or private proxies, explicitly configure the browser-facing origin, not the backend address.
-- `PIANO_DB_PATH`: SQLite registry path; defaults to `$XDG_DATA_HOME/piano/piano.db` or `~/.local/share/piano/piano.db` when `XDG_DATA_HOME` is unset.
-- `PIANO_DEV_BACKEND`: Vite proxy target; defaults to `http://127.0.0.1:7070`.
-- `PIANO_PI_CLI`: override the bundled Pi CLI entry path.
-- `PIANO_PI_ARGS`: extra Pi arguments, such as `-e ./ext.ts`.
-- Incoming WebSocket messages/RPC lines and pending work have [bounded input limits](docs/runtime-input-limits.md), with reserved capacity for answers and cancellation. Overload is rejected, never queued for automatic retry.
-- `PIANO_IDLE_MINUTES`: idle time before retiring a session's Pi process; defaults to `30`, or `0` to disable.
+The code lives in `server/` (backend), `web/` (React UI), `shared/` (wire schemas) and `test/`.
+Read these next:
 
-### Browser-origin boundary
-
-Piano supports trusted single-user local use or private authenticated proxy access, not public
-unauthenticated or multi-user hosting. Missing built-in authentication alone is an accepted part of
-that model, not a new exposure finding. Keep listeners on loopback and proxy access private.
-
-All non-GET/HEAD/OPTIONS requests and `/ws` require an exact allowed `Origin` before routing,
-body decoding or upgrade. Foreign, missing, empty and literal `null` origins receive HTTP 403.
-There is no non-browser bypass: scripts must send an allowed `Origin` too. Read-only HTTP requests
-remain usable without it. Host, Forwarded, X-Forwarded-* and identity headers never grant trust.
-Origin validation is browser cross-site defense, **not authentication**: non-browser clients can
-forge the header. It neither replaces private access nor proves the proxy is configured privately.
-Do not allow origins serving untrusted generated previews.
-
-For scratch development on port 7172, start the backend with
-`PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172` alongside its scratch database
-and port settings. See [hosted origin configuration](docs/hosted-development.md#origin-configuration).
-
-## Registry storage
-
-Piano keeps its registry in SQLite at `$XDG_DATA_HOME/piano/piano.db` (default
-`~/.local/share/piano/piano.db`), using Node's built-in SQLite support. SQL tables `folders` hold the
-selected directories and `projects` hold the named session groupings, matching `folders` and
-`projects` in code.
-Workspaces, worktree references and session metadata are separate tables. Pi still owns conversation
-files; Git owns repository facts. Unsupported or corrupt databases fail startup rather than being reset.
-
-Piano upgrades an older database in place when it opens it. Upgrading from version 1 (which had a
-project goal) to version 2 first writes a private copy, `<database>.v1-backup`; an older Piano can open
-that copy, but not the upgraded file.
-
-Run one backend per database; stale writes from a second backend fail explicitly and require a
-restart. SQLite transactions commit before the in-memory view changes.
-
-The database uses mode `0600`. SQLite uses WAL, so `-wal` and `-shm` files may appear beside the
-database. For a file-copy backup, stop Piano cleanly first; for live backups use SQLite's backup
-facility rather than copying only the main file.
-
-For scratch development, set `PIANO_DB_PATH` to a file in your scratch directory; a new database
-starts empty. Workspace revision captures live in `<database>.revisions` unless
-`PIANO_REVISION_STORE` overrides it. Browser fixtures seed scratch databases directly.
+- [Development checks and policy](docs/development.md): formatting, lint, CI and merging.
+- [Development direction](docs/README.md): architecture, invariants and roadmap.
+- [Evidence-based development and testing](docs/testing.md): what to test and how.
+- [AGENTS.md](AGENTS.md): the rules coding agents follow in this repository.
