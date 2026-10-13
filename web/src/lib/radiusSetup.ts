@@ -155,8 +155,7 @@ export function createRadiusSetup({
         providers,
         running: changes.running,
         refreshing,
-        loadFailed:
-          (!!observed.error && !observed.loading) || (!!account.error && !account.loading),
+        loadFailed: !!observed.failure || !!account.failure,
         actionError: changes.error,
       }),
     };

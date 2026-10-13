@@ -45,6 +45,7 @@ export function useObservation<T>(
   return {
     value: current ? state.value : undefined,
     error: current ? state.error : undefined,
+    failure: current ? state.failure : undefined,
     loading: current && state.loading,
     mutating: current && state.mutating,
     refresh: observation.refresh,

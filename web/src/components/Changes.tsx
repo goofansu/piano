@@ -75,16 +75,15 @@ function useWorkspaceChanges(
   refreshKey: string,
 ) {
   const key = active && workspace ? JSON.stringify([workspace.id, workspace.path]) : null;
-  const { value, error, loading, refresh } = useObservation<WorkspaceChanges>(
+  const { value, failure, loading, refresh } = useObservation<WorkspaceChanges>(
     key,
     async (signal) =>
       checkWorkspaceResponse(workspace!, await workspaceChanges(workspace!.id, { signal })),
     { focus: true, trigger: refreshKey, debounce: 600 },
   );
-  // A refresh in progress replaces the last failure, as the first read does.
   return {
     observation: value ?? null,
-    error: loading ? undefined : error,
+    error: failure,
     busy: loading,
     refresh: () => void refresh(),
   };
@@ -109,7 +108,7 @@ export function ChangesSheet({
     open,
     refreshKey(session),
   );
-  const result = observation?.workspace.id === workspace?.id ? observation?.result : undefined;
+  const result = observation?.result;
   const ready = result?.status === "ready" ? result : undefined;
   const files = ready?.files ?? [];
   const seed = useMemo(() => seedFiles(ready), [ready]);
@@ -286,7 +285,7 @@ function LiveFile({
     if (fetched.value) setKept(true);
   }, [fetched.value]);
   const loaded = seeded ?? fetched.value;
-  const error = fetched.loading ? undefined : fetched.error,
+  const error = fetched.failure,
     busy = fetched.loading;
   const file: DiffFile = loaded?.file ?? {
     ...metadata,

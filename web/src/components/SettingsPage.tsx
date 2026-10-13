@@ -156,7 +156,7 @@ function ProvidersSettings({
   // Radius has its own section below, with the steps that sign-in alone does not cover.
   const providers = observed.value?.filter((provider) => provider.id !== "radius");
   const catalogEmpty = observed.value?.length === 0;
-  const error = observed.error && !observed.loading ? "Could not load providers." : "";
+  const error = observed.failure ? "Could not load providers." : "";
   // Signing in or out changes the usable models; the server invalidates every catalog itself.
   const actions = useSetupActions<OAuthProvider, string>({
     refresh: () => void providerAccounts.refresh(),

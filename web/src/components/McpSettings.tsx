@@ -43,10 +43,9 @@ export function McpSettings() {
   const { confirmation, confirming, signIn } = actions;
   const busy = actions.running !== undefined;
   const servers = setup.value?.servers;
-  const error =
-    setup.error && !setup.loading
-      ? "Could not load MCP servers. Check your connection and try again."
-      : "";
+  const error = setup.failure
+    ? "Could not load MCP servers. Check your connection and try again."
+    : "";
   const act = (request: McpSetupRequest, done: string) =>
     actions.run({
       id: request.action,
