@@ -43,8 +43,9 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
-import type { GlobalCommand, GlobalCommandGroup } from "@/lib/globalCommands";
+import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
 import {
   assignProjectCommand,
@@ -53,7 +54,7 @@ import {
   projectCommands,
 } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
-import { pickCommands, SESSION_ROW_COMMANDS, type SessionTarget } from "@/lib/sessionCommands";
+import { type SessionTarget, sessionMenu } from "@/lib/sessionCommands";
 import { sessionProject } from "@/lib/sessionContext";
 import type { SidebarSection } from "@/lib/sidebarList";
 import { useNavigation } from "@/lib/useNavigation";
@@ -215,25 +216,28 @@ export function Sidebar({ state }: Props) {
 /** One menu for grouping and sorting the list; appearance lives here too. Each choice is a global command, as the palette offers it. */
 function ViewMenu() {
   const { commands, run } = useGlobalCommands();
-  const choices = (group: GlobalCommandGroup) => commands.filter((c) => c.group === group);
+  const groupBy = radioChoice(commands, "group-by");
+  const sortBy = radioChoice(commands, "sort-by");
+  const appearance = radioChoice(commands, "appearance");
   // The label takes the slack so the current value sits beside the trigger's own chevron.
-  const choice = (label: string, group: GlobalCommandGroup) => (
+  const choice = (label: string, { currentLabel }: RadioChoice<GlobalCommand>) => (
     <>
       <span className="flex-1">{label}</span>
-      <span className="text-muted-foreground">
-        {choices(group).find((c) => c.checked)?.menuLabel ?? ""}
-      </span>
+      <span className="text-muted-foreground">{currentLabel}</span>
     </>
   );
-  const radio = (group: GlobalCommandGroup, item: (c: GlobalCommand) => React.ReactNode) => (
+  const radio = (
+    { value, items }: RadioChoice<GlobalCommand>,
+    item: (c: GlobalCommand) => React.ReactNode,
+  ) => (
     <DropdownMenuRadioGroup
-      value={choices(group).find((c) => c.checked)?.id ?? ""}
+      value={value}
       onValueChange={(id) => {
-        const c = commands.find((c) => c.id === id);
+        const c = items.find((c) => c.id === id);
         if (c) run(c);
       }}
     >
-      {choices(group).map(item)}
+      {items.map(item)}
     </DropdownMenuRadioGroup>
   );
   return (
@@ -250,10 +254,10 @@ function ViewMenu() {
       </Tooltip>
       <DropdownMenuContent align="end" className="min-w-48">
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Group by", "group-by")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>{choice("Group by", groupBy)}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {/* No grouping comes last, set apart from the groupings. */}
-            {radio("group-by", (c) => (
+            {radio(groupBy, (c) => (
               <Fragment key={c.id}>
                 {c.id === "group-none" && <DropdownMenuSeparator />}
                 <DropdownMenuRadioItem value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>
@@ -262,9 +266,9 @@ function ViewMenu() {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Sort by", "sort-by")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>{choice("Sort by", sortBy)}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            {radio("sort-by", (c) => (
+            {radio(sortBy, (c) => (
               <DropdownMenuRadioItem key={c.id} value={c.id}>
                 {c.menuLabel}
               </DropdownMenuRadioItem>
@@ -273,10 +277,10 @@ function ViewMenu() {
         </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Appearance", "appearance")}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>{choice("Appearance", appearance)}</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {/* The chosen mode carries the check; the icons say what each one does. */}
-            {radio("appearance", (c) => (
+            {radio(appearance, (c) => (
               <DropdownMenuRadioItem key={c.id} value={c.id}>
                 <GlobalCommandIcon icon={c.icon} /> {c.menuLabel}
               </DropdownMenuRadioItem>
@@ -363,10 +367,7 @@ function SessionRow({
   const [enter] = useState(reveal);
   const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
   const { commands, run } = useSessionCommands(target);
-  const menu = pickCommands(commands, SESSION_ROW_COMMANDS);
-  const item = (c: (typeof menu)[number]) => (
-    <SessionCommandMenuItem key={c.id} command={c} run={run} />
-  );
+  const { sections } = sessionMenu(commands, "row");
   const { selected, disabled, hint, activity } = t;
   // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
   const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
@@ -429,22 +430,16 @@ function SessionRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuGroup>
-            {menu.filter((c) => c.id === "rename" || c.id === "pin").map(item)}
-          </DropdownMenuGroup>
-          {menu.some((c) => c.id === "share") && (
-            <>
-              <DropdownMenuSeparator />
+          {sections.map((section) => (
+            <Fragment key={section[0]?.id}>
               <DropdownMenuGroup>
-                {menu.filter((c) => c.id === "share").map(item)}
+                {section.map((c) => (
+                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                ))}
               </DropdownMenuGroup>
-            </>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            {menu.filter((c) => c.id === "archive" || c.id === "delete").map(item)}
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
+              <DropdownMenuSeparator />
+            </Fragment>
+          ))}
           <DropdownMenuGroup>
             <ProjectMenu state={state} session={target} />
           </DropdownMenuGroup>
@@ -635,7 +630,7 @@ function FolderGroup({
 }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const [enter] = useState(reveal);
   const { run } = useCommands();
-  const [create, close] = folderCommands(state, folder);
+  const { create, close } = folderCommands(state, folder);
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>

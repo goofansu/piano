@@ -4,6 +4,7 @@ import type { SessionState } from "../shared/wire.ts";
 import {
   type GlobalCommandContext,
   globalCommands,
+  radioChoice,
   trustCommand,
 } from "../web/src/lib/globalCommands.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
@@ -117,6 +118,27 @@ test("one list of appearances serves the palette and the View menu", () => {
     appearances.map((c) => c.intent),
     ["light", "dark", "system"].map((appearance) => ({ kind: "appearance", appearance })),
   );
+});
+
+test("each View-menu radio reports exactly one current choice, by its short label", () => {
+  const view = { ...ctx, view: { groupBy: "folder", sortBy: "name" }, theme: "light" } as const;
+  const commands = globalCommands(onNewPage, view);
+  const report = (group: "group-by" | "sort-by" | "appearance") => {
+    const { value, currentLabel, items } = radioChoice(commands, group);
+    assert.equal(items.filter((c) => c.checked).length, 1, group);
+    return [value, currentLabel, items.map((c) => c.menuLabel)];
+  };
+  assert.deepEqual(report("group-by"), [
+    "group-folder",
+    "Folder",
+    ["Date", "Folder", "Project", "None"],
+  ]);
+  assert.deepEqual(report("sort-by"), ["sort-name", "Name", ["Activity", "Name"]]);
+  assert.deepEqual(report("appearance"), [
+    "appearance-light",
+    "Light",
+    ["Light", "Dark", "System"],
+  ]);
 });
 
 test("the palette keeps a Radius row, which opens Providers", () => {

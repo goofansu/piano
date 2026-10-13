@@ -1,5 +1,5 @@
 import { GitBranchIcon, MoreHorizontalIcon, SplitIcon } from "lucide-react";
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
 import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import {
   DropdownMenu,
@@ -15,7 +15,7 @@ import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Button } from "@/components/ui/button";
-import { pickCommands, SESSION_HEADER_COMMANDS } from "@/lib/sessionCommands";
+import { sessionMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
@@ -43,10 +43,8 @@ export function SessionHeader({
     folderName: folder,
     worktreeName: worktree,
   } = sessionContext(state);
-  const { commands, run, display } = useSessionCommands();
-  const header = pickCommands(commands, SESSION_HEADER_COMMANDS);
-  const copyAll = header.find((c) => c.id === "copy-all");
-  const displays = header.filter((c) => c.group === "display");
+  const { commands, run } = useSessionCommands();
+  const { details = [], sections, display } = sessionMenu(commands, "header");
   return (
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
@@ -145,37 +143,40 @@ export function SessionHeader({
                   </dd>
                 </div>
               </dl>
-              {copyAll && (
+              {details.map((c) => (
                 <DropdownMenuItem
+                  key={c.id}
                   className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
-                  aria-label={copyAll.label}
-                  onSelect={() => run(copyAll)}
+                  aria-label={c.label}
+                  onSelect={() => run(c)}
                 >
-                  <CommandIcon icon={copyAll.icon} />
+                  <CommandIcon icon={c.icon} />
                 </DropdownMenuItem>
-              )}
+              ))}
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              {header
-                .filter((c) => c.group === "open")
-                .map((c) => (
-                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                ))}
-            </DropdownMenuGroup>
+            {sections.map((section) => (
+              <Fragment key={section[0]?.id}>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  {section.map((c) => (
+                    <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                  ))}
+                </DropdownMenuGroup>
+              </Fragment>
+            ))}
             <DropdownMenuSeparator />
             {/* Inline rather than a submenu: the menu is nearly full width on phones, leaving a submenu no room. */}
             <DropdownMenuGroup>
               <DropdownMenuLabel>Display</DropdownMenuLabel>
               <DropdownMenuRadioGroup
-                value={display}
-                onValueChange={(value) => {
-                  const choice = displays.find((c) => c.id === `display-${value}`);
+                value={display?.value ?? ""}
+                onValueChange={(id) => {
+                  const choice = display?.items.find((c) => c.id === id);
                   if (choice) run(choice);
                 }}
               >
-                {displays.map((c) => (
-                  <DropdownMenuRadioItem key={c.id} value={c.id.slice("display-".length)}>
+                {display?.items.map((c) => (
+                  <DropdownMenuRadioItem key={c.id} value={c.id}>
                     <CommandIcon icon={c.icon} /> {c.label}
                   </DropdownMenuRadioItem>
                 ))}

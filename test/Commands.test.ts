@@ -47,7 +47,7 @@ test("a disabled command does nothing, whichever surface offers it", () => {
     )[0]!,
     newProjectCommand(offline),
     assignProjectCommand(offline, other, "p1"),
-    folderCommands(offline, folder)[1]!,
+    folderCommands(offline, folder).close,
     ...sessionCommands(offline, other),
   ];
   for (const command of disabled) {
@@ -87,8 +87,8 @@ test("enabled commands reach the effect their intent names", () => {
       assignProjectCommand(online, other, null),
       ["send", { _tag: "assign_project", cwd: "/repo", sessionId: "s2", projectId: null }],
     ],
-    [folderCommands(online, folder)[0]!, ["openNew", "/repo", undefined]],
-    [folderCommands(online, folder)[1]!, ["openForm", { kind: "close-folder", folder }]],
+    [folderCommands(online, folder).create, ["openNew", "/repo", undefined]],
+    [folderCommands(online, folder).close, ["openForm", { kind: "close-folder", folder }]],
     [
       byId(sessionCommands(online, other), "rename"),
       ["openForm", { kind: "rename-session", target: other }],

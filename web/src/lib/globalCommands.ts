@@ -6,6 +6,7 @@
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
+import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
 import { directoryTrust, focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
@@ -85,6 +86,14 @@ export interface GlobalCommandContext {
   view: SidebarView;
   /** The chosen appearance, for a surface that marks it; without it no appearance is checked. */
   theme?: string;
+}
+
+/** One of the View menu's choices (appearance, grouping or sorting) as a radio group. */
+export function radioChoice(
+  commands: readonly GlobalCommand[],
+  group: "appearance" | "group-by" | "sort-by",
+): RadioChoice<GlobalCommand> {
+  return radioChoiceOf(commands.filter((c) => c.group === group));
 }
 
 /**
