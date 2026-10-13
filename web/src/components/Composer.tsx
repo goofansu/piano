@@ -80,11 +80,12 @@ export function Composer({
     catalog,
     {
       kind: "session",
+      cwd: t?.cwd,
+      sessionId: t?.sessionId,
       hosted: !!t?.hosted,
       model: t?.state.model,
       thinkingLevel: t?.state.thinkingLevel,
     },
-    `${t?.cwd}\0${t?.sessionId}\0${t?.hosted}`,
     (action) => sendCommand({ _tag: "act", action }),
     !actionsDisabled,
   );
