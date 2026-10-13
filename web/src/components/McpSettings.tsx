@@ -1,4 +1,4 @@
-import { MCP_CATALOG, type McpServerSetup, type McpSetupRequest } from "@shared/mcp";
+import type { McpSetupRequest } from "@shared/mcp";
 import { CheckCircle2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
@@ -21,31 +21,40 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { mcpLogin, mcpSetup } from "@/lib/api";
+import {
+  type McpServer,
+  type McpServerRow,
+  mcpRemovalCopy,
+  mcpSetupView,
+  signInAfterInstall,
+} from "@/lib/mcpSetupView";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
-type Server = (typeof MCP_CATALOG)[number];
 // Locally bundled Simple Icons logos; omit media for servers without a matching logo.
-const SERVER_LOGOS: Partial<Record<Server["id"], string>> = {
+const SERVER_LOGOS: Partial<Record<McpServer["id"], string>> = {
   linear: "/mcp-logos.svg#linear",
 };
 type Confirmation =
-  | { kind: "sign-out"; server: Server }
-  | { kind: "uninstall"; server: Server; key: string };
+  | { kind: "sign-out"; server: McpServer }
+  | { kind: "uninstall"; server: McpServer; key: string };
 
 /** Catalog MCP servers on this machine: install, sign in, sign out and uninstall, all through Pi. */
 export function McpSettings() {
   const setup = useObservation("mcp", (signal) => mcpSetup(undefined, { signal }));
-  const actions = useSetupActions<Confirmation, Server>({
+  const actions = useSetupActions<Confirmation, McpServer>({
     refresh: () => void setup.refresh(),
     success: (text) => toast.success(text),
   });
   const { confirmation, confirming, signIn } = actions;
   const busy = actions.running !== undefined;
-  const servers = setup.value?.servers;
-  const error = setup.failure
-    ? "Could not load MCP servers. Check your connection and try again."
-    : "";
+  const view = mcpSetupView({
+    state: setup.value,
+    running: actions.running,
+    loading: setup.loading,
+    loadFailed: !!setup.failure,
+    actionError: actions.error,
+  });
   const act = (request: McpSetupRequest, done: string) =>
     actions.run({
       id: request.action,
@@ -53,8 +62,8 @@ export function McpSettings() {
       done,
       fallback: "Could not change MCP setup. Refresh before retrying.",
     });
-  const disabled = busy || setup.loading || !!error;
   const removal = confirmation?.kind === "uninstall" ? confirmation : undefined;
+  const { done: removed, ...removalCopy } = mcpRemovalCopy(removal?.server.name);
   return (
     <SettingsSectionFrame
       title="MCP"
@@ -65,14 +74,12 @@ export function McpSettings() {
             open={confirming && !!removal}
             busy={busy}
             cancel={actions.cancel}
-            action="Uninstall"
-            title={`Uninstall ${removal?.server.name} MCP?`}
-            description={`Removes ${removal?.server.name} MCP and its saved sign-in from Pi on this machine.`}
+            {...removalCopy}
             confirm={() => {
               if (removal)
                 void act(
                   { action: "uninstall", server: removal.server.id, removalKey: removal.key },
-                  `${removal.server.name} MCP uninstalled for new sessions.`,
+                  removed,
                 );
             }}
           />
@@ -105,42 +112,36 @@ export function McpSettings() {
         </>
       }
     >
-      {(error || actions.error) && (
-        <SettingsAlert title="MCP setup needs attention">{error || actions.error}</SettingsAlert>
+      {view.attention && (
+        <SettingsAlert title="MCP setup needs attention">{view.attention}</SettingsAlert>
       )}
-      {!servers ? (
+      {!view.rows ? (
         <SettingsSkeleton label="Loading MCP servers…">
           <Skeleton className="h-20 w-full rounded-xl" />
         </SettingsSkeleton>
       ) : (
         <ItemGroup className="gap-2">
-          {MCP_CATALOG.map((server) => {
-            const state = servers.find((s) => s.id === server.id);
+          {view.rows.map((row) => {
+            const { server } = row;
             return (
-              state && (
-                <McpServerItem
-                  key={server.id}
-                  server={server}
-                  state={state}
-                  disabled={disabled}
-                  install={() =>
-                    void act(
-                      { action: "install", server: server.id },
-                      `${server.name} MCP installed.`,
-                    ).then((next) => {
-                      // Installing is the decision to use it: go straight on to signing in.
-                      const installed = next?.servers.find((s) => s.id === server.id);
-                      if (installed?.status === "ready" && installed.oauth && !installed.signedIn)
-                        actions.openSignIn(server);
-                    })
-                  }
-                  uninstall={() =>
-                    actions.confirm({ kind: "uninstall", server, key: state.removalKey! })
-                  }
-                  signIn={() => actions.openSignIn(server)}
-                  signOut={() => actions.confirm({ kind: "sign-out", server })}
-                />
-              )
+              <McpServerItem
+                key={server.id}
+                row={row}
+                disabled={view.disabled}
+                install={() =>
+                  void act(
+                    { action: "install", server: server.id },
+                    `${server.name} MCP installed.`,
+                  ).then((next) => {
+                    if (signInAfterInstall(next, server.id)) actions.openSignIn(server);
+                  })
+                }
+                uninstall={() =>
+                  actions.confirm({ kind: "uninstall", server, key: row.removalKey! })
+                }
+                signIn={() => actions.openSignIn(server)}
+                signOut={() => actions.confirm({ kind: "sign-out", server })}
+              />
             );
           })}
         </ItemGroup>
@@ -150,23 +151,20 @@ export function McpSettings() {
 }
 
 function McpServerItem({
-  server,
-  state,
+  row: { server, ready, detail, actions },
   disabled,
   install,
   uninstall,
   signIn,
   signOut,
 }: {
-  server: Server;
-  state: McpServerSetup;
+  row: McpServerRow;
   disabled: boolean;
   install: () => void;
   uninstall: () => void;
   signIn: () => void;
   signOut: () => void;
 }) {
-  const ready = state.status === "ready";
   const logo = SERVER_LOGOS[server.id];
   // Only the name and its actions; a line appears only for a configuration problem the user must fix in Pi.
   return (
@@ -181,32 +179,40 @@ function McpServerItem({
       <ItemContent className="min-w-0">
         <ItemTitle>
           {server.name}
-          {ready && (!state.oauth || state.signedIn) && (
+          {ready && (
             <>
               <CheckCircle2Icon className="size-3.5 text-brand" aria-hidden />
               <span className="sr-only">(Ready)</span>
             </>
           )}
         </ItemTitle>
-        {state.detail && (
-          <ItemDescription className="line-clamp-none">{state.detail}</ItemDescription>
-        )}
+        {detail && <ItemDescription className="line-clamp-none">{detail}</ItemDescription>}
       </ItemContent>
       <ItemActions className="shrink-0">
-        {state.status === "missing" && (
-          <Button
-            size="sm"
-            disabled={disabled}
-            aria-label={`Install ${server.name} MCP`}
-            onClick={install}
-          >
-            Install
-          </Button>
-        )}
-        {ready &&
-          state.oauth &&
-          (state.signedIn ? (
+        {actions.map((action) =>
+          action === "install" ? (
             <Button
+              key={action}
+              size="sm"
+              disabled={disabled}
+              aria-label={`Install ${server.name} MCP`}
+              onClick={install}
+            >
+              Install
+            </Button>
+          ) : action === "sign-in" ? (
+            <Button
+              key={action}
+              size="sm"
+              disabled={disabled}
+              aria-label={`Sign in to ${server.name}`}
+              onClick={signIn}
+            >
+              Sign in
+            </Button>
+          ) : action === "sign-out" ? (
+            <Button
+              key={action}
               variant="ghost"
               size="sm"
               className="text-muted-foreground"
@@ -218,25 +224,17 @@ function McpServerItem({
             </Button>
           ) : (
             <Button
+              key={action}
+              variant="ghost"
               size="sm"
+              className="text-muted-foreground"
               disabled={disabled}
-              aria-label={`Sign in to ${server.name}`}
-              onClick={signIn}
+              aria-label={`Uninstall ${server.name} MCP`}
+              onClick={uninstall}
             >
-              Sign in
+              Uninstall
             </Button>
-          ))}
-        {state.removalKey && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            disabled={disabled}
-            aria-label={`Uninstall ${server.name} MCP`}
-            onClick={uninstall}
-          >
-            Uninstall
-          </Button>
+          ),
         )}
       </ItemActions>
     </Item>
