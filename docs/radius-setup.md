@@ -35,6 +35,25 @@ children are not restarted or silently reloaded. A browser reload alone does not
 apply configuration to them. Do not send `/reload` as a Piano prompt: stock Pi
 1.1.0 does not expose it as an RPC command. See [MCP management](research/2026-10-09-mcp-management.md).
 
+## Share a session
+
+When Radius is signed in, **Share** appears between Pin and Archive in a session's sidebar menu,
+and under Session commands in Mod+K. **Radius MCP is not required**: Piano resolves credentials
+through Pi and uploads directly to Radius artifacts.
+
+Confirming Share publishes an **organization-only snapshot** of the saved current branch, including
+instructions, tool output and attachments. Review sensitive content first; Piano's existing secret
+filtering is heuristic, not a guarantee. Sharing waits for the session to be idle and never starts
+another agent. On success, copy or open the link and see its expiration date. Later messages are not
+automatically published; another confirmed Share creates another artifact. Radius owns visibility,
+retention and deletion. Piano currently caps the exported upload at 10 MiB and the operation at one
+minute; these are Piano limits, not Radius quota claims. If upload completion is uncertain, check
+Radius artifacts before sharing again—Piano never automatically retries a publication.
+
+Unlike Pi's interactive `/share`, this reads the saved branch without adding a fresh `pi.share`
+runtime metadata entry or falling back to GitHub. Instructions already saved by Pi remain included.
+It does not store a copy of the transcript or the share link in the registry.
+
 ## Boundaries and recovery
 
 - Radius lives on the Providers page rather than in its own Settings page; the provider list

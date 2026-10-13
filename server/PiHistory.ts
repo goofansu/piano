@@ -8,11 +8,12 @@
  * caller knows and reports the one file, no file, or a conflict: distinct physical files claiming
  * the same session ID. A conflict is never resolved by choosing one.
  */
+import { readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { parseSessionEntries, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
 import type { Snapshot } from "../shared/wire.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
+import { compileRedaction, projectDisplay } from "./DisplayProjection.ts";
 import { directoryPath, sessionDirFor } from "./PiEnv.ts";
 import { type RawMessage, serializeMessages, stateFactsOf } from "./PiRecords.ts";
 import { RunLedger } from "./Subagents.ts";
@@ -39,6 +40,11 @@ export interface PiHistory {
   /** The active branch of a session file as a Snapshot, with Run usage from every entry, or an empty
    * one without a file. Safe while Pi writes it. */
   readonly peek: (sessionId: string, file: string | undefined) => Effect.Effect<Snapshot>;
+  /** Read-only, redacted JSONL of Pi's saved active branch; no agent or extra runtime metadata. */
+  readonly exportBranch: (
+    sessionId: string,
+    file: string | undefined,
+  ) => Effect.Effect<string, PiHistoryError>;
 }
 
 /** A Snapshot with no history: a session Pi has not written yet, or no session at all. */
@@ -131,7 +137,34 @@ const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
     })),
   );
 
+const exportBranch = Effect.fn("PiHistory.exportBranch")(function* (
+  sessionId: string,
+  file: string | undefined,
+) {
+  return yield* Effect.try({
+    try: () => {
+      if (!file) throw new Error("Missing history");
+      // Opening a persistent manager can rewrite legacy/empty files. Pi parses and migrates
+      // this read-only snapshot in memory instead; even an old session stays untouched.
+      const entries = parseSessionEntries(readFileSync(file, "utf8"));
+      if (!entries.some((entry) => entry.type === "session" && entry.id === sessionId))
+        throw new Error("Missing session header");
+      const manager = SessionManager.inMemory(undefined, undefined, entries);
+      const header = manager.getHeader();
+      const branch = manager.getBranch();
+      if (header?.id !== sessionId || !branch.some((entry) => entry.type === "message"))
+        throw new Error("No saved conversation");
+      const redaction = compileRedaction();
+      // Pi chooses the branch. Preserve its entry vocabulary and IDs, not Piano's display messages.
+      return `${[header, ...branch].map((entry) => JSON.stringify(redaction.value(entry))).join("\n")}\n`;
+    },
+    catch: () =>
+      new PiHistoryError({ detail: "This session has no readable saved conversation to share." }),
+  });
+});
+
 export const PiHistory: PiHistory = {
+  exportBranch,
   locate,
   sessionIds,
   peek: (sessionId, file) =>

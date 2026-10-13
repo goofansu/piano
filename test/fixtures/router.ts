@@ -18,6 +18,7 @@ import { Registry, RegistryDatabasePath, RegistryLive } from "../../server/Regis
 import { AppRouter } from "../../server/Router.ts";
 import { type SessionHosts, SessionHostsLive } from "../../server/SessionHosts.ts";
 import { SessionPullRequestsLive } from "../../server/SessionPullRequests.ts";
+import { SessionSharingLive } from "../../server/SessionSharing.ts";
 import { SidebarViewLive } from "../../server/SidebarView.ts";
 import { WorkspaceChangesLive } from "../../server/WorkspaceChanges.ts";
 import { WorkspaceCommandsLive } from "../../server/WorkspaceCommands.ts";
@@ -31,7 +32,7 @@ export interface RouterFixture {
   /** Answer a request as the server would; a relative URL resolves against the server's origin. */
   readonly handle: (input: string, init?: RequestInit) => Promise<Response>;
   /** Run against the same services the router answers from, e.g. to start a session it can see. */
-  readonly run: <A, X>(effect: Effect.Effect<A, X, SessionHosts>) => Promise<A>;
+  readonly run: <A, X>(effect: Effect.Effect<A, X, SessionHosts | Registry>) => Promise<A>;
   readonly dispose: () => Promise<void>;
 }
 
@@ -76,12 +77,13 @@ export async function startRouter<Fakes = never>(
     WorkspaceRevisionsLive,
     WorkspaceChangesLive,
     SessionPullRequestsLive,
+    SessionSharingLive,
   ).pipe(
     Layer.provideMerge(DirectoryFactsLive),
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provideMerge(RegistryLive),
     Layer.provideMerge(PiSessionsLive),
-    Layer.provideMerge(Config),
+    Layer.provideMerge(services ? Layer.merge(Config, services) : Config),
   );
   const Core = WorkspaceCommandsLive.pipe(
     Layer.provideMerge(SidebarViewLive()),

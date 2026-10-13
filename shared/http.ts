@@ -10,6 +10,7 @@
 import { Schema } from "effect";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { RadiusSetupState } from "./radius.ts";
+import { SessionShare } from "./share.ts";
 import {
   DirListing,
   FolderView,
@@ -177,6 +178,15 @@ export const Endpoints = {
     fallback: "Could not load the pull request.",
   }),
 
+  shareSession: endpoint({
+    method: "POST",
+    path: "/api/session/share",
+    query: ["workspaceId", "sessionId"],
+    response: SessionShare,
+    noStore: true,
+    fallback: "Sharing could not be confirmed. Check Radius artifacts before sharing again.",
+  }),
+
   // Composer
 
   /** Before a session starts: the directory's probe answers. The path travels in the body. */
@@ -243,6 +253,7 @@ export const Endpoints = {
   oauthProviders: endpoint({
     method: "GET",
     path: "/api/oauth-providers",
+    noStore: true,
     response: Schema.Struct({ providers: Schema.Array(OAuthProvider) }),
     fallback: "Could not load providers.",
   }),

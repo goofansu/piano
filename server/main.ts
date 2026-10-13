@@ -21,6 +21,7 @@ import { RegistryDatabasePath, RegistryLive } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
+import { SessionSharingLive } from "./SessionSharing.ts";
 import { SidebarViewLive } from "./SidebarView.ts";
 import { WorkspaceChangesLive } from "./WorkspaceChanges.ts";
 import { WorkspaceCommandsLive } from "./WorkspaceCommands.ts";
@@ -65,6 +66,7 @@ const Services = Layer.mergeAll(
   WorkspaceRevisionsLive,
   WorkspaceChangesLive,
   SessionPullRequestsLive,
+  SessionSharingLive,
 ).pipe(
   Layer.provideMerge(DirectoryFactsLive),
   Layer.provideMerge(SessionHostsLive({ idleMs: IDLE_MS })),

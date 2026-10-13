@@ -188,21 +188,44 @@ test("display choices mark the current one", () => {
 });
 
 test("the palette offers every command the session header and the sidebar row menu offer", () => {
-  const palette = new Set(sessionCommands(base).map((c) => c.id));
+  const options = { radiusSignedIn: true };
+  const palette = new Set(sessionCommands(base, undefined, options).map((c) => c.id));
   for (const id of SESSION_HEADER_COMMANDS) assert.ok(palette.has(id), `header ${id}`);
   for (const id of SESSION_ROW_COMMANDS) assert.ok(palette.has(id), `row ${id}`);
   // The selected session's own row menu resolves to the same commands, with the same enablement.
   const row = pickCommands(
-    sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }),
+    sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }, options),
     SESSION_ROW_COMMANDS,
   );
-  const fromPalette = pickCommands(sessionCommands(base), SESSION_ROW_COMMANDS);
+  const fromPalette = pickCommands(sessionCommands(base, undefined, options), SESSION_ROW_COMMANDS);
   assert.deepEqual(
     row.map((c) => [c.id, c.label, c.enabled]),
     fromPalette.map((c) => [c.id, c.label, c.enabled]),
   );
   assert.deepEqual(
     row.map((c) => c.id),
-    ["rename", "pin", "archive", "delete"],
+    ["rename", "pin", "share", "archive", "delete"],
   );
+});
+
+test("Share is Radius-sign-in only and targets the row, independent of selected model or MCP", () => {
+  assert.ok(!sessionCommands(base).some((command) => command.id === "share"));
+  const share = (state: AppState, target = other) =>
+    sessionCommands(state, target, { radiusSignedIn: true }).find(
+      (command) => command.id === "share",
+    )!;
+  assert.equal(share(base).label, "Share");
+  assert.equal(share(base).enabled, true);
+  assert.deepEqual(share(base).intent, { kind: "share", target: other });
+  assert.equal(share({ ...base, connected: false }).enabled, false);
+  assert.equal(share({ ...base, workspaces: [] }).enabled, false);
+  assert.equal(share({ ...base, sessionReferences: [] }).enabled, false);
+  assert.equal(share({ ...base, hosts: [{ ...other, streaming: true }] }).enabled, false);
+  // An unavailable checkout does not prevent sharing its saved history.
+  const withAvailability = (unavailable: "history" | "checkout") => ({
+    ...base,
+    sessionReferences: [sessionReference(other.cwd, other.sessionId, { unavailable })],
+  });
+  assert.equal(share(withAvailability("history")).enabled, false);
+  assert.equal(share(withAvailability("checkout")).enabled, true);
 });

@@ -44,6 +44,9 @@ export function answerForm(
       if (!sessionMutable(state, form.target)) return { allowed: false };
       return { allowed: true, command: { _tag: "delete_session", cwd, sessionId } };
     }
+    // Sharing has its own HTTP confirmation/result form, not a registry command.
+    case "share-session":
+      return { allowed: false };
     case "close-folder":
       if (!state.connected) return { allowed: false };
       return { allowed: true, command: { _tag: "remove_folder", path: form.folder.path } };

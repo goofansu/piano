@@ -10,6 +10,8 @@ import {
   sessionCheckoutMissing,
   sessionContext,
   sessionMutable,
+  sessionReference,
+  workspaceFor,
 } from "./sessionContext.ts";
 
 export type SessionDisplay = "everything" | "messages";
@@ -31,12 +33,20 @@ export type SessionCommandId =
   | "display-messages"
   | "rename"
   | "pin"
+  | "share"
   | "archive"
   | "delete"
   | "new-session-here";
 
 /** Sections a menu separates; the palette lists them in this order under Session commands. */
-export type SessionCommandGroup = "copy" | "open" | "display" | "manage" | "destructive" | "create";
+export type SessionCommandGroup =
+  | "copy"
+  | "open"
+  | "display"
+  | "manage"
+  | "share"
+  | "destructive"
+  | "create";
 
 export type SessionCommandIcon =
   | "copy"
@@ -47,6 +57,7 @@ export type SessionCommandIcon =
   | "rename"
   | "pin"
   | "unpin"
+  | "share"
   | "archive"
   | "delete"
   | "new";
@@ -58,7 +69,7 @@ export type SessionCommandIntent =
   | { kind: "pull-request" }
   | { kind: "display"; display: SessionDisplay }
   /** Without a target the selected session has no Pi session ID yet; such a command is never enabled. */
-  | { kind: "rename" | "archive" | "delete"; target: SessionTarget | undefined }
+  | { kind: "rename" | "share" | "archive" | "delete"; target: SessionTarget | undefined }
   | { kind: "new-session"; cwd: string };
 
 export interface SessionCommand {
@@ -80,6 +91,7 @@ export interface SessionCommand {
 export const SESSION_ROW_COMMANDS = [
   "rename",
   "pin",
+  "share",
   "archive",
   "delete",
 ] as const satisfies readonly SessionCommandId[];
@@ -107,6 +119,21 @@ export function canRenameSession(state: AppState, target: SessionTarget): boolea
   return sessionMutable(state, target) && !sessionCheckoutMissing(state, target);
 }
 
+/** A saved, registered session; capture refuses in-flight work on the server too. */
+export function canShareSession(state: AppState, target: SessionTarget): boolean {
+  const reference = sessionReference(state, target);
+  return (
+    sessionMutable(state, target) &&
+    !!workspaceFor(state, target.cwd) &&
+    !!reference &&
+    !reference.archived &&
+    reference.unavailable !== "history" &&
+    !state.hosts.some(
+      (host) => host.cwd === target.cwd && host.sessionId === target.sessionId && host.streaming,
+    )
+  );
+}
+
 /**
  * Commands for `target`, or for the selected session when it is omitted. The selected session gets
  * every command; any other session only the management actions (rename, pin, archive, delete).
@@ -123,7 +150,7 @@ export function canRenameSession(state: AppState, target: SessionTarget): boolea
 export function sessionCommands(
   state: AppState,
   target?: SessionTarget,
-  options: { display?: SessionDisplay } = {},
+  options: { display?: SessionDisplay; radiusSignedIn?: boolean } = {},
 ): SessionCommand[] {
   const session = state.session;
   const ctx = sessionContext(state);
@@ -240,6 +267,19 @@ export function sessionCommands(
                   pinned: !reference?.pinned,
                 },
               },
+            },
+          ]
+        : []),
+      ...(options.radiusSignedIn
+        ? [
+            {
+              id: "share" as const,
+              label: "Share",
+              icon: "share" as const,
+              group: "share" as const,
+              enabled: !!subject && canShareSession(state, subject),
+              keywords: ["radius", "link", "publish"],
+              intent: { kind: "share" as const, target: subject },
             },
           ]
         : []),

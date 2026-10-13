@@ -102,6 +102,11 @@ export class SessionHosts extends Context.Service<
       cwd: string,
       sessionId: string,
     ) => Effect.Effect<{ cwd: string; snapshot: Snapshot }, PiSessionError>;
+    /** Capture Pi's saved branch under the ownership lock, without starting a child. */
+    readonly exportBranch: (
+      cwd: string,
+      sessionId: string,
+    ) => Effect.Effect<string, PiSessionError>;
     /** Stop, then change retention under the same ownership lock. Stale opens fail. */
     readonly archive: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly delete: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
@@ -613,6 +618,16 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                   },
                 },
               };
+            }),
+          ),
+        exportBranch: (cwd, id) =>
+          resolved(cwd, id, ({ ref, host }) =>
+            Effect.gen(function* () {
+              if (host && (host.actions || !(yield* host.session.state).isQuiescent))
+                return yield* rejected("Wait for this session to finish before sharing.");
+              return yield* PiHistory.exportBranch(id, ref.file).pipe(
+                Effect.mapError((error) => rejected(error.detail)),
+              );
             }),
           ),
         archive: (cwd, id) => retire(cwd, id, false),

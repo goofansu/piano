@@ -10,6 +10,7 @@ import {
   PinIcon,
   PinOffIcon,
   PlusIcon,
+  ShareIcon,
   TextCursorInputIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import {
 } from "@/components/PianoDialog";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { ProjectDialogView } from "@/components/Projects";
+import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -39,6 +41,7 @@ import {
   sessionCommands,
 } from "@/lib/sessionCommands";
 import { useNavigation } from "@/lib/useNavigation";
+import { useRadiusSignedIn } from "@/lib/useRadiusSignedIn";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -62,6 +65,7 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   rename: TextCursorInputIcon,
   pin: PinIcon,
   unpin: PinOffIcon,
+  share: ShareIcon,
   archive: ArchiveIcon,
   delete: Trash2Icon,
   new: PlusIcon,
@@ -76,6 +80,7 @@ interface CommandsValue {
   run: (command: Command) => void;
   display: SessionDisplay;
   state: AppState;
+  radiusSignedIn: boolean;
 }
 const CommandsContext = createContext<CommandsValue | null>(null);
 
@@ -88,8 +93,8 @@ export function useCommands() {
 
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
-  const { state, run, display } = useCommands();
-  return { commands: sessionCommands(state, target, { display }), run, display };
+  const { state, run, display, radiusSignedIn } = useCommands();
+  return { commands: sessionCommands(state, target, { display, radiusSignedIn }), run, display };
 }
 
 /** A descriptor as a menu row, by its label and icon. */
@@ -127,6 +132,7 @@ export function CommandHost({
 }) {
   const { openNew, openPanel, openSettings, closeSettings } = useNavigation();
   const [display, setDisplay] = useSessionDisplay();
+  const radiusSignedIn = useRadiusSignedIn(state.connected);
   const { setView } = useSidebarView();
   const { setTheme } = useTheme();
   const sidebar = useSidebarLayout();
@@ -166,8 +172,17 @@ export function CommandHost({
   };
 
   return (
-    <CommandsContext.Provider value={{ run, display, state }}>
+    <CommandsContext.Provider value={{ run, display, state, radiusSignedIn }}>
       {children}
+      {form?.kind === "share-session" && (
+        <ShareSessionDialog
+          key={JSON.stringify(form.target)}
+          target={form.target}
+          state={state}
+          signedIn={radiusSignedIn}
+          close={close}
+        />
+      )}
       <Dialog open={!!renaming} onOpenChange={(open) => !open && close()}>
         <DialogContent
           className="sm:max-w-md"

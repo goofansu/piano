@@ -20,6 +20,7 @@ import { RadiusSetup, type RadiusSetupError } from "./RadiusSetup.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
+import { SessionSharing } from "./SessionSharing.ts";
 import { SidebarView } from "./SidebarView.ts";
 import type { SignInError, SignInState } from "./SignInAttempts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
@@ -270,6 +271,12 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(SessionPullRequests, (prs) => prs.change(session, body)).pipe(
         pullRequestFailure,
       ),
+    );
+
+    yield* serve(Endpoints.shareSession, ({ session }) =>
+      Effect.flatMap(SessionSharing, (sharing) =>
+        sharing.share(session.cwd, session.sessionId),
+      ).pipe(Effect.catchTag("ShareError", (error) => fail(409, error.detail))),
     );
 
     const commandsFailure = failAs(

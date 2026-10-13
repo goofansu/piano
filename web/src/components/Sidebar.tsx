@@ -466,6 +466,14 @@ function SessionRow({
           <DropdownMenuGroup>
             {menu.filter((c) => c.id === "rename" || c.id === "pin").map(item)}
           </DropdownMenuGroup>
+          {menu.some((c) => c.id === "share") && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                {menu.filter((c) => c.id === "share").map(item)}
+              </DropdownMenuGroup>
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             {menu.filter((c) => c.id === "archive" || c.id === "delete").map(item)}
