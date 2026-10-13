@@ -2,7 +2,6 @@ import { isWorking } from "@shared/sessionProjection";
 import type { ClientCommand, ModelCatalog } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
-import { useState } from "react";
 import { ContextDetails } from "@/components/ContextDetails";
 import { DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { JumpTo } from "@/components/JumpTo";
@@ -28,10 +27,11 @@ import {
 } from "@/lib/composerControl";
 import { contextFigures } from "@/lib/contextUsage";
 import type { DraftKey } from "@/lib/messageDraft";
+import { createPreference } from "@/lib/preference";
 import type { SessionNotice } from "@/lib/sessionNotices";
-import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerInput, picker } from "@/lib/styles";
 import { useModelChoice } from "@/lib/useModelChoice";
+import { usePreference } from "@/lib/usePreference";
 import type { SessionView } from "@/store";
 
 interface Props {
@@ -51,9 +51,12 @@ interface Props {
   send: (m: ClientCommand) => void;
 }
 
-const QUEUE_MODE_KEY = "piano.queueMode";
-const loadQueueMode = (): DeliveryMode =>
-  readStorage(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering";
+/** The delivery mode is a sticky preference; the alternative always stays on Alt+Enter. */
+const queueModePreference = createPreference<DeliveryMode>({
+  key: "piano.queueMode",
+  decode: (raw) => (raw === "follow-up" ? "follow-up" : "steering"),
+  encode: (mode) => mode,
+});
 
 /**
  * The composer: a layer-1 card that lines up with the transcript column. It owns the session's
@@ -95,12 +98,7 @@ export function Composer({
       ? () => sendCommand({ _tag: "models", cwd: t.cwd, refresh: true })
       : undefined;
   const editor = useDraftEditor(draftKey);
-  // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
-  const [queueMode, setQueueModeState] = useState<DeliveryMode>(loadQueueMode);
-  const setQueueMode = (mode: DeliveryMode) => {
-    setQueueModeState(mode);
-    writeStorage(QUEUE_MODE_KEY, mode);
-  };
+  const [queueMode, setQueueMode] = usePreference(queueModePreference);
   const control = composerControl({
     text: editor.message,
     images: editor.attachments,

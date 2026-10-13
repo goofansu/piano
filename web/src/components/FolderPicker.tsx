@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { listDirectory, makeDirectory } from "@/lib/api";
 import { abbrevHome } from "@/lib/format";
-import { readStorage, writeStorage } from "@/lib/storage";
+import { createPreference } from "@/lib/preference";
 import { listRow } from "@/lib/styles";
 import { useObservation } from "@/lib/useObservation";
 
@@ -36,7 +36,12 @@ interface Props {
   initialPath?: string;
 }
 
-const LAST_KEY = "piano.pickerPath";
+/** The last folder picked, where the picker opens next; empty for none. */
+const lastPicked = createPreference<string>({
+  key: "piano.pickerPath",
+  decode: (raw) => raw ?? "",
+  encode: (path) => path,
+});
 const MAX_VISIBLE = 500;
 
 /**
@@ -66,7 +71,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
 
   useEffect(() => {
     if (!open) return;
-    const start = initialPath || readStorage(LAST_KEY) || "";
+    const start = initialPath || lastPicked.get();
     setInput(start ? withSlash(start) : "~/");
     setCreating(false);
     const timer = setTimeout(() => inputRef.current?.focus(), 0);
@@ -86,7 +91,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
   const select = () => {
     if (!ready || !dir) return;
     const path = entries.length === 1 && prefix ? entries[0].path : dir.path;
-    writeStorage(LAST_KEY, path);
+    lastPicked.set(path);
     onPick(path);
     onOpenChange(false);
   };
