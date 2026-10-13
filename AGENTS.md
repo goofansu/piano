@@ -17,29 +17,6 @@ development invariants and roadmap it links, and cite affected invariant IDs in 
 form of INV-01: Pi owns history, Git owns repository facts, Worktrunk sits behind the lifecycle
 adapter, Piano owns workspace and integration policy.
 
-## Scratch verification
-
-The user's own Piano (local on 7070; on exe.dev the systemd units on 8000/8001) uses the real
-registry. Leave it, its backend and its registry alone, and verify in scratch processes:
-
-```bash
-HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 PIANO_DB_PATH=<scratchpad>/piano.db PORT=7171 node server/main.ts &
-PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort &
-```
-
-Drive the scratch UI on 7172 with `npx agent-browser`. A new scratch database starts empty;
-register only a throwaway git repo in the scratchpad. Stop only the processes you started, by pid.
-When a check creates worktrees or pi session files, remove them afterwards: `git worktree remove
---force` plus `git branch -D` in the scratch repo, and the directory under `~/.pi/agent/sessions`
-whose name encodes the scratch path.
-
-## Deploy
-
-Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
-[the shortest deploy path](docs/hosted-development.md#shortest-deploy-path); to update every
-machine, the user runs the `sync-piano` skill (user-invoked only). On exe.dev the server has no
-authentication: it stays on loopback behind exe.dev private access (INV-11).
-
 ## Verification
 
 Follow [evidence-based development and testing](docs/testing.md): before changing behavior, name
@@ -47,8 +24,9 @@ the claim, the relevant invariant and the smallest useful check. Add a regressio
 meaningful failure not already protected, testing observable contracts rather than private helpers
 or mock choreography. Documentation-only changes need document/link review, not tests or an app run.
 
-- **Application behavior:** observe the affected journey through `npx agent-browser` and keep the
-  output as PR evidence; the browser script stays uncommitted.
+- **Application behavior:** observe the affected journey through `npx agent-browser` on a
+  [scratch instance](#scratch-instance) and keep the output as PR evidence; the browser script
+  stays uncommitted.
 - **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
   journey there only for a new critical path.
 - **Model calls** cost real credits: prompt "Reply with exactly: X" and read the reply back.
@@ -58,11 +36,34 @@ or mock choreography. Documentation-only changes need document/link review, not 
 Report command outcomes, the tested revision and environment, and limitations. Stop once the
 relevant risk is covered.
 
+### Scratch instance
+
+The user's own Piano (local on 7070; on exe.dev the systemd units on 8000/8001) uses the real
+registry. Leave it, its backend and its registry alone, and verify in scratch processes:
+
+```bash
+HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 PIANO_DB_PATH=<scratchpad>/piano.db PORT=7171 node server/main.ts &
+PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort &
+```
+
+Drive the scratch UI on 7172. A new scratch database starts empty; register only a throwaway git
+repo in the scratchpad. Stop only the processes you started, by pid. When a check creates
+worktrees or pi session files, remove them afterwards: `git worktree remove --force` plus
+`git branch -D` in the scratch repo, and the directory under `~/.pi/agent/sessions` whose name
+encodes the scratch path.
+
 ## Committing
 
 After a change passes verification, commit it on the branch that is checked out (usually `main`)
 and push that branch. Stay on that branch; create or switch branches only when the user asks.
 Report the commit and push outcome; a blocked push is not completion.
+
+## Deploy
+
+Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
+[the shortest deploy path](docs/hosted-development.md#shortest-deploy-path); to update every
+machine, the user runs the `sync-piano` skill (user-invoked only). On exe.dev the server has no
+authentication: it stays on loopback behind exe.dev private access (INV-11).
 
 ## GitHub on exe.dev
 
