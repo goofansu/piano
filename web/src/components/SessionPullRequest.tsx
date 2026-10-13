@@ -14,8 +14,7 @@ import {
   XCircleIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useId, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import {
   Popover,
@@ -156,47 +155,26 @@ function PullRequestStatusBadge({ status }: { status: NonNullable<PullRequestVie
 
 type PullRequestControl = ReturnType<typeof useSessionPullRequest>;
 
+/** Renders the surface `pr` decides on and moves focus between its controls. */
 export function SessionPullRequestControl({
-  open,
-  onOpenChange,
   pr,
   menuTrigger,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   pr: PullRequestControl;
   /** The session menu, which opens this control while no PR is linked. */
   menuTrigger: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [linking, setLinking] = useState(false);
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const link = pr.value?.link;
   const view = pullRequestView(pr.value);
-  const showingDetails = !!view && !editing;
-  // Opening samples the latest link and refresh function. Background observations must not
-  // restart linking, reset an edit, or trigger a refresh -> observation -> refresh loop.
-  const opened = useEffectEvent(() => {
-    if (!link) setLinking(true);
-    else void pr.refresh();
-  });
+  const showingDetails = !!view && pr.surface === "details";
+  // Opening, cancel and successful discovery replace the focused form controls.
   useEffect(() => {
-    if (!open) {
-      setEditing(false);
-      setLinking(false);
-    } else opened();
-  }, [open]);
-  // A discovered or manually linked PR reveals the header, not a second overlay.
-  useEffect(() => {
-    if (open && linking && link) onOpenChange(false);
-  }, [open, linking, link, onOpenChange]);
-  // Cancel and successful discovery replace the focused form controls.
-  useEffect(() => {
-    if (open && showingDetails) closeRef.current?.focus();
-  }, [open, showingDetails]);
-  const close = () => onOpenChange(false);
+    if (showingDetails) closeRef.current?.focus();
+  }, [showingDetails]);
+  const onOpenChange = (open: boolean) => (open ? pr.open() : pr.close());
   // Closing returns to whichever control can reopen this: the PR button once linked, else the menu.
   const restoreFocus = (event: Event) => {
     event.preventDefault();
@@ -204,7 +182,7 @@ export function SessionPullRequestControl({
   };
   return (
     <>
-      <Dialog open={open && (!link || linking)} onOpenChange={onOpenChange}>
+      <Dialog open={pr.surface === "link-form"} onOpenChange={onOpenChange}>
         <DialogContent
           className="sm:max-w-sm"
           aria-describedby={undefined}
@@ -213,10 +191,13 @@ export function SessionPullRequestControl({
           <DialogHeader>
             <DialogTitle>Pull request</DialogTitle>
           </DialogHeader>
-          <PullRequestForm pr={pr} editing={false} onCancel={close} onSave={close} />
+          <PullRequestForm pr={pr} editing={false} />
         </DialogContent>
       </Dialog>
-      <Popover open={open && !!link && !linking} onOpenChange={onOpenChange}>
+      <Popover
+        open={pr.surface === "details" || pr.surface === "editing"}
+        onOpenChange={onOpenChange}
+      >
         {view && <SessionPullRequestTrigger view={view} ref={triggerRef} />}
         <PopoverContent
           onCloseAutoFocus={restoreFocus}
@@ -243,7 +224,7 @@ export function SessionPullRequestControl({
               variant="ghost"
               size="icon-xs"
               aria-label="Close pull request"
-              onClick={close}
+              onClick={pr.close}
             >
               <XIcon />
             </Button>
@@ -291,20 +272,15 @@ export function SessionPullRequestControl({
               <Separator className="opacity-50" />
               {/* Pull the ghost buttons' padding out so their labels meet the content edge. */}
               <div className="-mr-2 -mb-1 flex justify-end gap-1">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={pr.busy}
-                  onClick={() => setEditing(true)}
-                >
+                <Button variant="ghost" size="xs" disabled={pr.busy} onClick={pr.edit}>
                   Change link
                 </Button>
                 <Button
                   variant="ghost"
                   size="xs"
                   disabled={pr.busy}
-                  onClick={async () => {
-                    if (await pr.change({ action: "remove" })) close();
+                  onClick={() => {
+                    void pr.remove();
                   }}
                 >
                   Remove link
@@ -312,12 +288,7 @@ export function SessionPullRequestControl({
               </div>
             </>
           ) : (
-            <PullRequestForm
-              pr={pr}
-              editing={editing}
-              onCancel={() => (link ? setEditing(false) : close())}
-              onSave={close}
-            />
+            <PullRequestForm pr={pr} editing={pr.surface === "editing"} />
           )}
         </PopoverContent>
       </Popover>
@@ -326,32 +297,8 @@ export function SessionPullRequestControl({
 }
 
 /** Mount a draft only when editing; background refreshes must not replace typed input. */
-function PullRequestForm({
-  pr,
-  editing,
-  onCancel,
-  onSave,
-}: {
-  pr: PullRequestControl;
-  editing: boolean;
-  onCancel: () => void;
-  onSave: () => void;
-}) {
+function PullRequestForm({ pr, editing }: { pr: PullRequestControl; editing: boolean }) {
   const [url, setUrl] = useState(pr.value?.link?.url ?? "");
-  const [finding, setFinding] = useState(false);
-  const find = async () => {
-    setFinding(true);
-    try {
-      const result = await pr.change({ action: "discover" });
-      // Only the explicit search reports absence; polling stays silent.
-      if (result) {
-        if (result.link) onSave();
-        else if (!result.error) toast("No open PR found for this branch.");
-      }
-    } finally {
-      setFinding(false);
-    }
-  };
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -360,7 +307,7 @@ function PullRequestForm({
     <form
       onSubmit={async (event) => {
         event.preventDefault();
-        if (await pr.change({ action: "link", url })) onSave();
+        await pr.link(url);
       }}
       className="flex flex-col gap-4"
     >
@@ -379,24 +326,24 @@ function PullRequestForm({
         </Field>
       </FieldGroup>
       <div className="flex flex-col gap-2">
-        <Button type="submit" disabled={pr.busy || finding || !url.trim()}>
+        <Button type="submit" disabled={pr.busy || !url.trim()}>
           {editing ? "Save link" : "Link"}
         </Button>
         {editing ? (
-          <Button type="button" variant="ghost" onClick={onCancel}>
+          <Button type="button" variant="ghost" onClick={pr.cancel}>
             Cancel
           </Button>
         ) : (
           <Button
             type="button"
             variant="outline"
-            disabled={pr.busy || finding}
+            disabled={pr.busy}
             onClick={() => {
-              void find();
+              void pr.discover();
             }}
           >
             <GitBranchIcon data-icon="inline-start" />
-            {finding ? "Finding…" : "Find from branch"}
+            {pr.finding ? "Finding…" : "Find from branch"}
           </Button>
         )}
       </div>
