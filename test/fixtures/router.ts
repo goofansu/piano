@@ -14,6 +14,7 @@ import { PiCli } from "../../server/PiCli.ts";
 import { PiSessionsLive } from "../../server/PiSessions.ts";
 import { PiSettingsLive } from "../../server/PiSettings.ts";
 import { type ProviderLogin, ProviderLoginLive } from "../../server/ProviderLogin.ts";
+import { RadiusArtifactsLive } from "../../server/RadiusArtifacts.ts";
 import { RadiusSetupLive } from "../../server/RadiusSetup.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../../server/Registry.ts";
 import { AppRouter } from "../../server/Router.ts";
@@ -72,6 +73,8 @@ export async function startRouter<Fakes = never>(
     Layer.succeed(RegistryDatabasePath, join(root, "registry.db")),
     NodeServices.layer,
   );
+  // Production adapters a test may replace through `services`: a later layer wins a merge.
+  const Adapters = Layer.merge(Config, RadiusArtifactsLive);
   const Services = Layer.mergeAll(
     PiSettingsLive,
     RadiusSetupLive,
@@ -86,7 +89,7 @@ export async function startRouter<Fakes = never>(
     Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
     Layer.provideMerge(RegistryLive),
     Layer.provideMerge(PiSessionsLive),
-    Layer.provideMerge(services ? Layer.merge(Config, services) : Config),
+    Layer.provideMerge(services ? Layer.merge(Adapters, services) : Adapters),
   );
   const Core = WorkspaceCommandsLive.pipe(
     Layer.provideMerge(SidebarViewLive()),

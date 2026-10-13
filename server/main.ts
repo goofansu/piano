@@ -17,6 +17,7 @@ import { agentDir } from "./PiEnv.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
 import { PiSettingsLive } from "./PiSettings.ts";
 import { ProviderLoginLive } from "./ProviderLogin.ts";
+import { RadiusArtifactsLive } from "./RadiusArtifacts.ts";
 import { RadiusSetupLive } from "./RadiusSetup.ts";
 import { RegistryDatabasePath, RegistryLive } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
@@ -67,7 +68,10 @@ const Services = Layer.mergeAll(
   WorkspaceChangesLive,
   SessionPullRequestsLive.pipe(Layer.provide(GitHubPullRequestsLive)),
   // Sharing reads the Radius credential through the one ProviderLogin that the routes use.
-  SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
+  SessionSharingLive.pipe(
+    Layer.provide(RadiusArtifactsLive),
+    Layer.provideMerge(ProviderLoginLive),
+  ),
 ).pipe(
   Layer.provideMerge(DirectoryFactsLive),
   Layer.provideMerge(SessionHostsLive({ idleMs: IDLE_MS })),
