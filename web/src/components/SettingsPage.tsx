@@ -39,7 +39,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-
+import { providersSettingsView } from "@/lib/providersSettingsView";
 import {
   SETTINGS_PAGES,
   type SettingsPage as SettingsPageId,
@@ -50,18 +50,6 @@ import { providerAccounts, useProviderAccounts } from "@/lib/useProviderAccounts
 import { useSetupActions } from "@/lib/useSetupActions";
 
 export type { SettingsSection } from "@/lib/routes";
-
-// Pi owns the provider catalog; unknown/custom providers intentionally have no logo. Radius is
-// absent because its own section, not a list row, carries it.
-const PROVIDER_LOGOS: Readonly<Record<string, string | undefined>> = {
-  anthropic: "anthropic",
-  openai: "openai",
-  "github-copilot": "github-copilot",
-  "kimi-coding": "kimi",
-  meta: "meta",
-  openrouter: "openrouter",
-  xai: "xai",
-};
 
 export function SettingsNavigation({
   compact,
@@ -153,10 +141,6 @@ function ProvidersSettings({
   const observed = useProviderAccounts();
   // Opening the page reads again, as returning to it from another page always has.
   useEffect(() => void providerAccounts.refresh(), []);
-  // Radius has its own section below, with the steps that sign-in alone does not cover.
-  const providers = observed.value?.filter((provider) => provider.id !== "radius");
-  const catalogEmpty = observed.value?.length === 0;
-  const error = observed.failure ? "Could not load providers." : "";
   // Signing in or out changes the usable models; the server invalidates every catalog itself.
   const actions = useSetupActions<OAuthProvider, string>({
     refresh: () => void providerAccounts.refresh(),
@@ -165,6 +149,11 @@ function ProvidersSettings({
   });
   const { confirmation: signOutTarget, confirming, signIn } = actions;
   const signingOut = actions.running;
+  const { body, providers } = providersSettingsView({
+    value: observed.value,
+    failure: !!observed.failure,
+    signingOut,
+  });
   const signOut = (provider: OAuthProvider) =>
     actions.run({
       id: provider.id,
@@ -191,7 +180,7 @@ function ProvidersSettings({
             <ProviderLoginDialog
               key={signIn.key}
               initialProvider={signIn.subject}
-              providers={providers ?? []}
+              providers={providers}
               close={actions.closeSignIn}
               signedIn={() => void providerAccounts.signedIn()}
             />
@@ -201,7 +190,7 @@ function ProvidersSettings({
     >
       <div className="flex flex-col gap-8">
         <RadiusSection reveal={revealRadius} />
-        {(!providers || providers.length > 0 || catalogEmpty || error) && (
+        {body.kind !== "hidden" && (
           <section aria-labelledby="settings-other-providers-title" className="flex flex-col gap-3">
             <h2
               id="settings-other-providers-title"
@@ -209,41 +198,37 @@ function ProvidersSettings({
             >
               Other providers
             </h2>
-            {error ? (
+            {body.kind === "error" ? (
               <SettingsAlert title="Could not load providers" icon={<AlertCircleIcon />}>
                 <p>Check your connection and try again.</p>
                 <Button variant="outline" size="sm" onClick={() => void providerAccounts.refresh()}>
                   Retry
                 </Button>
               </SettingsAlert>
-            ) : !providers ? (
+            ) : body.kind === "loading" ? (
               <SettingsSkeleton label="Loading providers…" className="flex flex-col gap-2">
                 {[0, 1, 2].map((row) => (
                   <Skeleton key={row} className="h-16 w-full" />
                 ))}
               </SettingsSkeleton>
-            ) : providers.length === 0 ? (
-              // Radius alone is already covered by its own section below; only a catalog with nothing
-              // in it needs explaining.
-              catalogEmpty && (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <PlugIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>No OAuth providers available</EmptyTitle>
-                    <EmptyDescription>Providers supported by Pi will appear here.</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )
+            ) : body.kind === "empty" ? (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <PlugIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>No OAuth providers available</EmptyTitle>
+                  <EmptyDescription>Providers supported by Pi will appear here.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
               <ItemGroup className="gap-2">
-                {providers.map((provider) => (
+                {body.rows.map(({ provider, logo, action }) => (
                   <Item key={provider.id} role="listitem" variant="outline" className="flex-nowrap">
-                    {Object.hasOwn(PROVIDER_LOGOS, provider.id) && PROVIDER_LOGOS[provider.id] && (
+                    {logo && (
                       <ItemMedia variant="icon">
                         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                          <use href={`/provider-logos/${PROVIDER_LOGOS[provider.id]}.svg#logo`} />
+                          <use href={`/provider-logos/${logo}.svg#logo`} />
                         </svg>
                       </ItemMedia>
                     )}
@@ -260,21 +245,17 @@ function ProvidersSettings({
                     </ItemContent>
                     <ItemActions className="shrink-0">
                       <Button
-                        variant={provider.signedIn ? "ghost" : "default"}
+                        variant={action.primary ? "default" : "ghost"}
                         size="sm"
-                        className={provider.signedIn ? "text-muted-foreground" : undefined}
-                        disabled={!!signingOut}
-                        aria-label={`${provider.signedIn ? "Sign out of" : "Sign in to"} ${provider.name}`}
+                        className={action.primary ? undefined : "text-muted-foreground"}
+                        disabled={!action.enabled}
+                        aria-label={action.ariaLabel}
                         onClick={() => {
-                          if (provider.signedIn) actions.confirm(provider);
+                          if (action.intent === "confirm-sign-out") actions.confirm(provider);
                           else actions.openSignIn(provider.id);
                         }}
                       >
-                        {signingOut === provider.id
-                          ? "Signing out…"
-                          : provider.signedIn
-                            ? "Sign out"
-                            : "Sign in"}
+                        {action.label}
                       </Button>
                     </ItemActions>
                   </Item>
