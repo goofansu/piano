@@ -32,7 +32,6 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { newSessionCommand, newSessionReady } from "@/lib/composerControl";
-import { abbrevHome } from "@/lib/format";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
 import {
@@ -42,7 +41,7 @@ import {
   projectChoices,
   projectCommand,
 } from "@/lib/projectCommands";
-import { completionTarget, folderFor } from "@/lib/sessionContext";
+import { completionTarget, directoryChoices, folderFor } from "@/lib/sessionContext";
 import { composerAction, composerInput, picker } from "@/lib/styles";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
@@ -363,9 +362,7 @@ function DirectorySelect({
   // A pending worktree operation keeps the picker open until its receipt, timeout or disconnect.
   const wtPending = worktrees.request.status === "pending";
   const search = useRef<HTMLInputElement>(null);
-  const known = state.folders.flatMap((p) => p.worktrees.map((w) => ({ folder: p.name, ...w })));
-  const current = known.find((k) => k.path === value);
-  const roots = known.filter((k) => k.root);
+  const { trigger, roots, worktreesFolder } = directoryChoices(state, value);
   return (
     <Popover
       open={open}
@@ -386,22 +383,17 @@ function DirectorySelect({
           title={value}
         >
           <FolderIcon className="text-ink-3" />
-          {!value ? (
+          {trigger.kind === "none" ? (
             <span>Choose a folder</span>
-          ) : current ? (
+          ) : trigger.kind === "checkout" ? (
             <>
-              <span className="truncate font-mono">{current.folder}</span>
-              {!current.root && (
-                <BranchLabel
-                  branch={
-                    current.branch ?? (current.facts?.detached ? "Detached" : "Unknown branch")
-                  }
-                  className="text-ink-3"
-                />
+              <span className="truncate font-mono">{trigger.folder}</span>
+              {trigger.branchLabel && (
+                <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
               )}
             </>
           ) : (
-            <span className="truncate font-mono">{abbrevHome(value)}</span>
+            <span className="truncate font-mono">{trigger.label}</span>
           )}
         </Button>
       </PopoverTrigger>
@@ -415,19 +407,19 @@ function DirectorySelect({
               <CommandEmpty>No folder matches.</CommandEmpty>
               {roots.length > 0 && (
                 <CommandGroup heading="Folders">
-                  {roots.map((k) => (
+                  {roots.map((root) => (
                     <CommandItem
-                      key={k.path}
-                      value={k.path}
-                      keywords={[k.folder]}
-                      disabled={k.status === "missing"}
+                      key={root.path}
+                      value={root.path}
+                      keywords={[root.label]}
+                      disabled={root.disabled}
                       onSelect={() => {
-                        onChange(k.path);
+                        onChange(root.path);
                         setOpen(false);
                       }}
                     >
-                      <span className="min-w-0 flex-1 truncate">{k.folder}</span>
-                      <PickerCheck selected={k.path === value} />
+                      <span className="min-w-0 flex-1 truncate">{root.label}</span>
+                      <PickerCheck selected={root.selected} />
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -444,12 +436,12 @@ function DirectorySelect({
                   <FolderOpenIcon /> Browse…
                 </CommandItem>
                 {/* Worktrees belong to the chosen folder's repository. */}
-                {current && (
+                {worktreesFolder && (
                   <CommandItem
                     value="__worktree"
                     onSelect={() => {
                       setWtOpen(true);
-                      worktrees.open(folderFor(state, value)?.path);
+                      worktrees.open(worktreesFolder.path);
                     }}
                   >
                     <GitBranchPlusIcon /> Worktrees
