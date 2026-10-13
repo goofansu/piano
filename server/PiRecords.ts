@@ -2,8 +2,9 @@
  * Pi-only translation: every Pi record, readback and history message becomes the browser's wire
  * vocabulary here, with content-indexed reconstruction of streaming output, and every Snapshot,
  * live or saved, comes from one projection of Pi's facts (`PiSessionFacts`). Originals stay in Pi.
- * Outbound, browser actions become Pi's CLI arguments and RPC commands here, and each readback
- * names its query and decodes its reply, so a reply of the wrong shape is a protocol failure.
+ * Outbound, browser actions become Pi's CLI arguments and RPC commands here, and each exchange
+ * (a readback or an action's command) decodes its own reply, so a reply of the wrong shape is a
+ * protocol failure.
  * PiSessions owns the child, locking, publication and readback scheduling; it never inspects or
  * builds a record's fields itself.
  */
@@ -232,14 +233,17 @@ type Block =
 // ── Readbacks ────────────────────────────────────────────────────────────────
 
 /**
- * A Pi query and the decoding of its reply. `decode` returns undefined when the reply breaks the
+ * A Pi command and the decoding of its reply. `decode` returns undefined when the reply breaks the
  * protocol, which the caller reports as `invalid` rather than trusting the shape.
  */
-export interface PiReadback<A> {
+export interface PiExchange<A> {
   readonly command: PiCommand;
   readonly decode: (data: unknown) => A | undefined;
   readonly invalid: string;
 }
+
+/** An exchange that only queries Pi, so it changes nothing. */
+export type PiReadback<A> = PiExchange<A>;
 
 /** The `get_state` facts Piano reads; Pi's other state fields stay in Pi. */
 const RawState = Schema.Struct({
@@ -340,7 +344,7 @@ export const snapshotOf = (facts: PiSessionFacts): Snapshot =>
   snapshotFrom(facts, new SubagentProjection());
 
 /** Pi's steering and follow-up queue, from `queue_update` or `clear_queue`. Undefined when malformed. */
-export const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
+const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
   if (!value || typeof value !== "object") return;
   const { steering, followUp } = value as { steering?: unknown; followUp?: unknown };
   if (
@@ -525,8 +529,8 @@ export const sessionArgs = (spec: {
 /** One RPC record for Pi's stdin; the transport adds the request id. */
 export type PiCommand = { readonly type: string; readonly [key: string]: unknown };
 
-/** A browser action as Pi's command, or why it cannot be sent. Stop has no single Pi command; listing commands is a readback. */
-export type PiTranslation = { readonly command: PiCommand } | { readonly rejected: string };
+/** Why a browser action cannot be sent to Pi. */
+export type PiRejection = { readonly rejected: string };
 
 const imagesValid = (attachments: unknown) =>
   Schema.is(Attachments)(attachments) &&
@@ -542,25 +546,50 @@ export const dialogCancellation = (id: string): PiCommand => ({
   cancelled: true,
 });
 
-/** An answer translates against the open dialog it targets. */
-export function piCommandFor(
-  action: Extract<SessionAction, { _tag: "answer" }>,
-  dialog: Dialog,
-): PiTranslation;
-export function piCommandFor(
-  action: Exclude<SessionAction, { _tag: "stop" | "answer" | "commands" }>,
-): PiTranslation;
-export function piCommandFor(
-  action: Exclude<SessionAction, { _tag: "stop" | "commands" }>,
-  dialog?: Dialog,
-): PiTranslation {
+/** How Pi took a prompt (INV-03), from its acknowledgement. */
+export type PiDisposition = "started" | "queued" | "handled";
+
+/** The decoded reply to each exchanged action's command. Null: Pi's acknowledgement is all. */
+interface PiReplies {
+  readonly prompt: PiDisposition;
+  readonly steer: PiDisposition;
+  readonly restore_queue: ReadonlyArray<QueuedMessage>;
+  readonly abort: null;
+  readonly set_model: null;
+  readonly set_thinking_level: null;
+  readonly set_name: null;
+}
+
+/** A browser action Piano sends as one Pi command with a reply. */
+export type PiExchangedAction = Extract<SessionAction, { _tag: keyof PiReplies }>;
+
+const acknowledged = (command: PiCommand): PiExchange<null> => ({
+  command,
+  decode: () => null,
+  invalid: "",
+});
+
+/**
+ * A browser action as Pi's command and how its reply decodes, or why it cannot be sent. Stop has
+ * no single Pi command, listing commands is a readback, and an answer gets no reply.
+ */
+export function piExchangeFor<A extends PiExchangedAction>(
+  action: A,
+): PiExchange<PiReplies[A["_tag"]]> | PiRejection;
+export function piExchangeFor(
+  action: PiExchangedAction,
+): PiExchange<PiReplies[keyof PiReplies]> | PiRejection {
   switch (action._tag) {
     case "abort":
-      return { command: { type: "abort" } };
+      return acknowledged({ type: "abort" });
     case "restore_queue":
-      return { command: { type: "clear_queue" } };
+      return {
+        command: { type: "clear_queue" },
+        decode: queuedMessagesOf,
+        invalid: "Pi returned an invalid cleared queue.",
+      };
     case "set_thinking_level":
-      return { command: { type: "set_thinking_level", level: action.level } };
+      return acknowledged({ type: "set_thinking_level", level: action.level });
     case "prompt":
     case "steer": {
       const { attachments } = action;
@@ -581,57 +610,59 @@ export function piCommandFor(
             streamingBehavior: action._tag === "steer" ? "steer" : "followUp",
           }),
         },
+        decode: (data) => {
+          const disposition = fieldOf(data, "disposition");
+          return disposition === "started" || disposition === "queued" || disposition === "handled"
+            ? disposition
+            : undefined;
+        },
+        invalid:
+          "Pi acknowledged the input without a recognized disposition. Inspect the session before sending again.",
       };
     }
     case "set_model": {
       const slash = action.model.indexOf("/");
       if (slash <= 0) return { rejected: `Model must be provider/id, got "${action.model}"` };
-      return {
-        command: {
-          type: "set_model",
-          provider: action.model.slice(0, slash),
-          modelId: action.model.slice(slash + 1),
-        },
-      };
+      return acknowledged({
+        type: "set_model",
+        provider: action.model.slice(0, slash),
+        modelId: action.model.slice(slash + 1),
+      });
     }
     case "set_name": {
       const name = action.name.replace(/[\r\n]+/g, " ").trim();
       if (!name) return { rejected: "A session name cannot be empty." };
-      return { command: { type: "set_session_name", name } };
-    }
-    case "answer": {
-      if (!dialog) throw new Error("piCommandFor: an answer needs its dialog");
-      if (action.cancelled) return { command: dialogCancellation(dialog.id) };
-      let value = action.value ?? "";
-      if (dialog.method === "select") {
-        // Keep protocol values private. Redacted labels must not change
-        // what Pi receives, nor silently choose between colliding labels.
-        const redaction = compileRedaction();
-        const options = dialog.options?.filter((option) => redaction.text(option) === value) ?? [];
-        if (options.length !== 1)
-          return {
-            rejected:
-              "This option is unavailable or ambiguous after redaction. Cancel the dialog instead.",
-          };
-        value = options[0];
-      }
-      return {
-        command: {
-          type: "extension_ui_response",
-          id: dialog.id,
-          ...(action.confirmed !== undefined ? { confirmed: action.confirmed } : { value }),
-        },
-      };
+      return acknowledged({ type: "set_session_name", name });
     }
   }
 }
 
-/** How Pi took a prompt (INV-03), from its acknowledgement. Undefined when unrecognized. */
-export const dispositionOf = (data: unknown): "started" | "queued" | "handled" | undefined => {
-  const disposition = (data as { disposition?: unknown } | undefined)?.disposition;
-  return disposition === "started" || disposition === "queued" || disposition === "handled"
-    ? disposition
-    : undefined;
+/** A dialog answer as the record Pi takes for the open dialog it targets; Pi sends no reply. */
+export const dialogAnswerFor = (
+  action: Extract<SessionAction, { _tag: "answer" }>,
+  dialog: Dialog,
+): { readonly command: PiCommand } | PiRejection => {
+  if (action.cancelled) return { command: dialogCancellation(dialog.id) };
+  let value = action.value ?? "";
+  if (dialog.method === "select") {
+    // Keep protocol values private. Redacted labels must not change
+    // what Pi receives, nor silently choose between colliding labels.
+    const redaction = compileRedaction();
+    const options = dialog.options?.filter((option) => redaction.text(option) === value) ?? [];
+    if (options.length !== 1)
+      return {
+        rejected:
+          "This option is unavailable or ambiguous after redaction. Cancel the dialog instead.",
+      };
+    value = options[0];
+  }
+  return {
+    command: {
+      type: "extension_ui_response",
+      id: dialog.id,
+      ...(action.confirmed !== undefined ? { confirmed: action.confirmed } : { value }),
+    },
+  };
 };
 
 // ── Live records ─────────────────────────────────────────────────────────────
