@@ -3,9 +3,16 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import type { McpServerConfig } from "@earendil-works/pi-coding-agent";
 import { Effect, Layer } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
-import { type McpCatalogEntry, McpConfigEntries } from "../server/McpConfigEntries.ts";
+import {
+  authOf,
+  type McpAuth,
+  type McpCatalogEntry,
+  McpConfigEntries,
+  withProviderAuth,
+} from "../server/McpConfigEntries.ts";
 import { PiSessions } from "../server/PiSessions.ts";
 
 const URL = "https://example.test/mcp";
@@ -190,4 +197,52 @@ test("INV-01/10: removal targets only the reviewed entry, refuses stale identiti
       }
     }),
   );
+});
+
+test("INV-12: Pi's auth order is provider, then Authorization header, then OAuth; provider auth drops competing credentials", () => {
+  const cases: [string, McpServerConfig, McpAuth][] = [
+    ["stdio", { command: "run", env: { TOKEN: "x" } }, { _tag: "stdio" }],
+    ["plain HTTP", { url: URL }, { _tag: "oauth", url: URL }],
+    ["OAuth settings", { url: URL, oauth: { clientId: "c" } }, { _tag: "oauth", url: URL }],
+    ["other headers", { url: URL, headers: { "X-Key": "k" } }, { _tag: "oauth", url: URL }],
+    ["header in any case", { url: URL, headers: { AUTHORIZATION: "t" } }, { _tag: "header" }],
+    [
+      "provider",
+      { url: URL, auth: { provider: "radius" } },
+      { _tag: "provider", provider: "radius", competing: false },
+    ],
+    [
+      "provider with a header",
+      { url: URL, auth: { provider: "radius" }, headers: { authorization: "t" } },
+      { _tag: "provider", provider: "radius", competing: true },
+    ],
+    [
+      "provider with OAuth settings",
+      { url: URL, auth: { provider: "radius" }, oauth: { clientId: "c" } },
+      { _tag: "provider", provider: "radius", competing: true },
+    ],
+  ];
+  for (const [name, config, auth] of cases) assert.deepEqual(authOf(config), auth, name);
+
+  const configured = withProviderAuth(
+    {
+      url: `${URL}/`,
+      headers: { Authorization: "old", "X-Custom": "keep" },
+      oauth: { clientId: "old" },
+      timeout: 30,
+    },
+    URL,
+    "radius",
+  );
+  assert.deepEqual(configured, {
+    url: URL,
+    headers: { "X-Custom": "keep" },
+    auth: { provider: "radius" },
+    timeout: 30,
+  });
+  assert.deepEqual(authOf(configured), { _tag: "provider", provider: "radius", competing: false });
+  assert.deepEqual(withProviderAuth(undefined, URL, "radius"), {
+    url: URL,
+    auth: { provider: "radius" },
+  });
 });

@@ -9,7 +9,7 @@
  */
 import { Schema } from "effect";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
-import { RadiusSetupState } from "./radius.ts";
+import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
 import {
   DirListing,
@@ -98,23 +98,6 @@ const endpoint = <
   redact: e.redact ?? true,
   fallback: e.fallback,
 });
-
-export const RadiusSetupAction = Schema.Literals([
-  "configure-mcp",
-  "install-web-search",
-  "remove-mcp",
-  "uninstall-web-search",
-]);
-export type RadiusSetupAction = typeof RadiusSetupAction.Type;
-
-/** Removal names the configuration the user reviewed, so a changed one is not removed blindly. */
-const RadiusSetupRequest = Schema.Union([
-  Schema.Struct({ action: Schema.Literals(["configure-mcp", "install-web-search"]) }),
-  Schema.Struct({
-    action: Schema.Literals(["remove-mcp", "uninstall-web-search"]),
-    removalKey: Schema.String,
-  }),
-]);
 
 const RadiusReply = Schema.Struct({ state: RadiusSetupState });
 const McpReply = Schema.Struct({ state: McpSetupState });

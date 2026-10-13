@@ -1,8 +1,8 @@
 /** One catalog entry in Pi's global `mcp.json`: finding it, adding or merging it, and removing it.
  * Pi owns the file format and its loader; this module wraps Pi's helpers with the rules both
  * machine-wide setups share (INV-01/12): match by endpoint, refuse duplicates and name clashes,
- * report Pi's disable switches, and bind removal to the configuration the user reviewed.
- * Callers keep their own policy for what a ready entry must contain. */
+ * report Pi's disable switches, bind removal to the configuration the user reviewed, and read how
+ * Pi authenticates an entry. Callers keep their own policy for what a ready entry must contain. */
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
@@ -39,6 +39,48 @@ export type McpConfigObservation =
       readonly entry?: McpServerEntry;
       readonly removalKey?: string;
     };
+
+/** How Pi authenticates an entry, in Pi's order: a stdio server needs nothing; an HTTP server sends
+ * a `/login` provider's token when `auth` names one, else its own `Authorization` header, else
+ * signs in with MCP OAuth at its URL. `competing` marks a provider entry that also carries OAuth
+ * settings or an `Authorization` header: credentials that would compete with the provider's. */
+export type McpAuth =
+  | { readonly _tag: "stdio" }
+  | { readonly _tag: "provider"; readonly provider: string; readonly competing: boolean }
+  | { readonly _tag: "header" }
+  | { readonly _tag: "oauth"; readonly url: string };
+
+const isAuthorization = (header: string) => header.toLowerCase() === "authorization";
+
+export const authOf = (config: McpServerConfig): McpAuth => {
+  if (!("url" in config)) return { _tag: "stdio" };
+  const header = Object.keys(config.headers ?? {}).some(isAuthorization);
+  if (config.auth)
+    return {
+      _tag: "provider",
+      provider: config.auth.provider,
+      competing: header || !!config.oauth,
+    };
+  return header ? { _tag: "header" } : { _tag: "oauth", url: config.url };
+};
+
+/** `config` (or a new entry) at `url`, authenticated by `provider` alone: the user's other keys
+ * are kept; OAuth settings and `Authorization` headers are dropped. */
+export const withProviderAuth = (
+  config: McpServerConfig | undefined,
+  url: string,
+  provider: string,
+): McpServerConfig => {
+  const next: McpServerConfig = { ...(config ?? {}), url, auth: { provider } };
+  if ("url" in next) {
+    delete next.oauth;
+    if (next.headers)
+      next.headers = Object.fromEntries(
+        Object.entries(next.headers).filter(([key]) => !isAuthorization(key)),
+      );
+  }
+  return next;
+};
 
 export class McpConfigEntryError extends Data.TaggedError("McpConfigEntryError")<{
   readonly detail: string;

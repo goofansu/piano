@@ -19,3 +19,21 @@ export const RadiusSetupState = Schema.Struct({
   }),
 });
 export type RadiusSetupState = typeof RadiusSetupState.Type;
+
+export const RadiusSetupAction = Schema.Literals([
+  "configure-mcp",
+  "install-web-search",
+  "remove-mcp",
+  "uninstall-web-search",
+]);
+export type RadiusSetupAction = typeof RadiusSetupAction.Type;
+
+/** Removal names the configuration the user reviewed, so a changed one is not removed blindly. */
+export const RadiusSetupRequest = Schema.Union([
+  Schema.Struct({ action: Schema.Literals(["configure-mcp", "install-web-search"]) }),
+  Schema.Struct({
+    action: Schema.Literals(["remove-mcp", "uninstall-web-search"]),
+    removalKey: Schema.String,
+  }),
+]);
+export type RadiusSetupRequest = typeof RadiusSetupRequest.Type;

@@ -13,10 +13,10 @@ import {
   Endpoints,
   type IdParam,
   type Json,
-  type RadiusSetupAction,
   type SignInEndpoints,
 } from "../../../shared/http.ts";
 import type { McpSetupRequest } from "../../../shared/mcp.ts";
+import type { RadiusSetupAction } from "../../../shared/radius.ts";
 import type { SessionPullRequestAction, ThinkingLevel } from "../../../shared/wire.ts";
 
 export type { RadiusSetupAction };
