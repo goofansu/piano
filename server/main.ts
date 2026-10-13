@@ -8,26 +8,12 @@ import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
-import { DirectoryFactsLive } from "./DirectoryFacts.ts";
-import { GitHubPullRequestsLive } from "./GitHubPullRequests.ts";
 import { inboundLimits } from "./InboundCapacity.ts";
-import { McpSetupLive } from "./McpSetup.ts";
 import { AllowedOrigins, configuredOrigins } from "./OriginPolicy.ts";
+import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
 import { agentDir } from "./PiEnv.ts";
-import { PiSessionsLive } from "./PiSessions.ts";
-import { PiSettingsLive } from "./PiSettings.ts";
-import { ProviderLoginLive } from "./ProviderLogin.ts";
-import { RadiusArtifactsLive } from "./RadiusArtifacts.ts";
-import { RadiusSetupLive } from "./RadiusSetup.ts";
-import { RegistryDatabasePath, RegistryLive } from "./Registry.ts";
+import { RegistryDatabasePath } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
-import { SessionHostsLive } from "./SessionHosts.ts";
-import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
-import { SessionSharingLive } from "./SessionSharing.ts";
-import { SidebarViewLive } from "./SidebarView.ts";
-import { WorkspaceChangesLive } from "./WorkspaceChanges.ts";
-import { WorkspaceCommandsLive } from "./WorkspaceCommands.ts";
-import { WorkspaceRevisionsLive } from "./WorkspaceRevisions.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -60,28 +46,9 @@ const Infra = NodeHttpServer.layer(() => server, {
 });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-const Services = Layer.mergeAll(
-  PiSettingsLive,
-  RadiusSetupLive,
-  McpSetupLive,
-  WorkspaceRevisionsLive,
-  WorkspaceChangesLive,
-  SessionPullRequestsLive.pipe(Layer.provide(GitHubPullRequestsLive)),
-  // Sharing reads the Radius credential through the one ProviderLogin that the routes use.
-  SessionSharingLive.pipe(
-    Layer.provide(RadiusArtifactsLive),
-    Layer.provideMerge(ProviderLoginLive),
-  ),
-).pipe(
-  Layer.provideMerge(DirectoryFactsLive),
-  Layer.provideMerge(SessionHostsLive({ idleMs: IDLE_MS })),
-  Layer.provideMerge(RegistryLive),
-  Layer.provideMerge(PiSessionsLive),
+const Services = PianoServicesLive({ idleMs: IDLE_MS }).pipe(
+  Layer.provide(PianoAdaptersLive),
   Layer.provide(Infra),
-);
-const Core = WorkspaceCommandsLive.pipe(
-  Layer.provideMerge(SidebarViewLive()),
-  Layer.provideMerge(Services),
 );
 
 const Routes = Layer.mergeAll(
@@ -91,7 +58,7 @@ const Routes = Layer.mergeAll(
 );
 
 const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog: true }).pipe(
-  Layer.provide(Core),
+  Layer.provide(Services),
   Layer.provide(Layer.succeed(AllowedOrigins, origins)),
   Layer.provide(Infra),
 );

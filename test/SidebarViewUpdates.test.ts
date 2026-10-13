@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, type Scope, Stream } from "effect";
-import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
+import { DirectoryFacts } from "../server/DirectoryFacts.ts";
+import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { PiSessionsLive } from "../server/PiSessions.ts";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
-import { type SidebarMessage, SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
+import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
+import { SessionHosts } from "../server/SessionHosts.ts";
+import { type SidebarMessage, SidebarView } from "../server/SidebarView.ts";
 import type { WorktreeDiscovery } from "../shared/wire.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-sidebar-")));
@@ -60,11 +60,7 @@ const run = <A, E>(
   git: ReturnType<typeof slowGit>,
   effect: Effect.Effect<A, E, SidebarView | DirectoryFacts | Registry | SessionHosts | Scope.Scope>,
 ) => {
-  const layer = SidebarViewLive({ discover: git.discover }).pipe(
-    Layer.provideMerge(DirectoryFactsLive),
-    Layer.provideMerge(SessionHostsLive({ idleMs: 0 })),
-    Layer.provide(PiSessionsLive),
-    Layer.provideMerge(RegistryLive),
+  const layer = PianoCoreLive({ idleMs: 0, discover: git.discover }).pipe(
     Layer.provide(NodeServices.layer),
   );
   return Effect.runPromise(
