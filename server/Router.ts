@@ -1,12 +1,9 @@
-import { mkdirSync } from "node:fs";
-import { access, readdir, stat } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
 import { Cause, Data, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type Endpoint, Endpoints, type IdParam, type Json } from "../shared/http.ts";
 import type { RadiusSetupState } from "../shared/radius.ts";
-import type { DirListing, Workspace } from "../shared/wire.ts";
+import type { Workspace } from "../shared/wire.ts";
+import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { errorText } from "./ErrorText.ts";
@@ -25,64 +22,7 @@ import { SidebarView } from "./SidebarView.ts";
 import type { SignInError, SignInState } from "./SignInAttempts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
-import { gitHeadSubject, gitTopLevel } from "./Worktrees.ts";
 import { handleSocket } from "./WsClient.ts";
-
-/** Subdirectories for the folder picker, with git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
-const listDirectory = Effect.fn("Router.listDirectory")(function* (raw: string) {
-  const path = directoryPath(raw || "~");
-  const directory = yield* Effect.tryPromise({
-    try: () => stat(path),
-    catch: (error) =>
-      (error as NodeJS.ErrnoException).code === "ENOENT"
-        ? new Error(`No such directory: ${path}`)
-        : error,
-  });
-  if (!directory.isDirectory())
-    return yield* Effect.fail(new Error(`${path} is a file, not a directory`));
-  const children = (yield* Effect.tryPromise({
-    try: () => readdir(path),
-    catch: (error) => error,
-  })).filter((name) => !name.startsWith("."));
-  // Follow directory symlinks as before, with bounded IO and no synchronous filesystem waits.
-  const directories = yield* Effect.forEach(
-    children,
-    (name) =>
-      Effect.tryPromise(() => stat(join(path, name))).pipe(
-        Effect.map((entry) => entry.isDirectory()),
-        Effect.orElseSucceed(() => false),
-      ),
-    { concurrency: 8 },
-  );
-  const names = children.filter((_, i) => directories[i]);
-  names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-  const entries = yield* Effect.forEach(
-    names,
-    (name) =>
-      Effect.gen(function* () {
-        const full = join(path, name);
-        const hasGit = yield* Effect.tryPromise(() => access(join(full, ".git"))).pipe(
-          Effect.as(true),
-          Effect.orElseSucceed(() => false),
-        );
-        const gitSubject = hasGit ? yield* gitHeadSubject(full) : undefined;
-        return { name, path: full, gitSubject: gitSubject || undefined };
-      }),
-    { concurrency: 8 },
-  );
-  const gitRoot = yield* gitTopLevel(path);
-  const gitSubject = gitRoot ? yield* gitHeadSubject(path) : undefined;
-  const parent = dirname(path);
-  const listing: DirListing = {
-    path,
-    parent: parent === path ? null : parent,
-    home: homedir(),
-    gitSubject: gitSubject || undefined,
-    gitRoot: gitRoot || undefined,
-    entries,
-  };
-  return listing;
-});
 
 /** A failed request as the browser sees it: a status and the `error` message it shows. */
 class ApiFailure extends Data.TaggedError("ApiFailure")<{
@@ -219,31 +159,18 @@ export const AppRouter = HttpRouter.use((router) =>
 
     const serve = route(router);
 
-    yield* serve(Endpoints.listDirectory, ({ body }) => {
-      const raw = body.path ?? "~";
-      // Answer with the failure's own message, never the Effect cause wrapper.
-      return listDirectory(raw).pipe(
-        failAs(400, (e) =>
-          e instanceof Error
-            ? (e as NodeJS.ErrnoException).code === "EACCES"
-              ? `Cannot read ${raw}: permission denied`
-              : e.message
-            : String(e),
-        ),
-      );
-    });
+    yield* serve(Endpoints.listDirectory, ({ body }) =>
+      Directories.list(body.path ?? "~").pipe(
+        Effect.catchTag("DirectoryError", (error) => fail(400, error.detail)),
+      ),
+    );
 
     yield* serve(Endpoints.makeDirectory, ({ body }) =>
       Effect.gen(function* () {
-        const path = directoryPath(body.path);
-        if (!body.path || path === "/") return yield* fail(400, Endpoints.makeDirectory.invalid);
-        yield* Effect.try({
-          try: () => mkdirSync(path, { recursive: true }),
-          catch: (e) =>
-            new ApiFailure({ status: 400, error: e instanceof Error ? e.message : String(e) }),
-        });
-        return { path };
-      }),
+        if (!body.path || directoryPath(body.path) === "/")
+          return yield* fail(400, Endpoints.makeDirectory.invalid);
+        return { path: yield* Directories.make(body.path) };
+      }).pipe(Effect.catchTag("DirectoryError", (error) => fail(400, error.detail))),
     );
 
     yield* serve(Endpoints.folders, () =>
