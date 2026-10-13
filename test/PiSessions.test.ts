@@ -43,16 +43,14 @@ test("command discovery is read-only, distinguishes probe/live resources and kee
       assert.ok(preliminary.commands.some((c) => c.name === "probe-only"));
       const session = yield* sessions.open({ cwd: process.cwd(), sessionId: "commands" });
       const before = yield* session.state;
-      const result = yield* session.act({ _tag: "commands" });
-      assert.equal(result?._tag, "commands");
-      if (result?._tag !== "commands") return;
-      assert.ok(result.commands.some((c) => c.name === "live-only"));
+      const commands = yield* session.commands;
+      assert.ok(commands.some((c) => c.name === "live-only"));
       assert.equal(
-        result.commands.some((c) => c.name === "probe-only"),
+        commands.some((c) => c.name === "probe-only"),
         false,
       );
       assert.deepEqual(
-        result.commands.filter((c) => c.name === "handled"),
+        commands.filter((c) => c.name === "handled"),
         [{ name: "handled", description: "Handle without a model call", source: "extension" }],
       );
       assert.deepEqual(
@@ -797,7 +795,7 @@ for (const mode of ["success", "abort-failure", "abort-exit", "clear-failure", "
           ] as const) {
             assert.equal((yield* session.act(action).pipe(Effect.flip)).reason, "rejected");
           }
-          yield* session.act({ _tag: "commands" }); // release the held clear acknowledgement
+          yield* session.commands; // release the held clear acknowledgement
         }
         const result = yield* Fiber.join(stop);
         assert.equal(result?._tag, "queue_restored");
@@ -952,7 +950,7 @@ test("a timed-out readback leaves no pending work; a timed-out command does", as
         cwd: process.cwd(),
         sessionId: "silent-commands",
       });
-      const read = yield* t.act({ _tag: "commands" }).pipe(Effect.flip);
+      const read = yield* t.commands.pipe(Effect.flip);
       assert.equal(read.reason, "timeout");
       // Quiescence also waits for projected output, so poll rather than read once.
       for (let n = 0; n < 200 && !(yield* t.state).isQuiescent; n++)

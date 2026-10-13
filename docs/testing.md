@@ -46,8 +46,8 @@ that every PR add tests applies.
 ## Unit and module test guardrails
 
 - Test observable inputs, outputs, errors and state transitions through stable public boundaries.
-  For PiSessions, use `open`, `events`, `act`, `state`, `probe` and `history`. Do not export private helpers
-  or restructure production code merely to assert incidental internals.
+  For PiSessions, use `open`, `events`, `act`, `state`, `commands`, `probe` and `history`. Do not
+  export private helpers or restructure production code merely to assert incidental internals.
 - Derive expected results from the contract, a worked example or a known fixture. Do not calculate
   expectations using the same algorithm as the implementation under test.
 - Assert the behavior that matters. Exact calls or ordering are appropriate only when they are

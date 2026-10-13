@@ -452,7 +452,6 @@ export const SessionAction = Schema.Union([
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("stop", {}),
   Schema.TaggedStruct("restore_queue", {}),
-  Schema.TaggedStruct("commands", {}),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
   Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
   /** Name the session in Pi's own history, as `/name` does. */
@@ -473,7 +472,6 @@ export const SessionActionResult = Schema.Union([
     messages: Schema.Array(QueuedMessage),
     stopError: Schema.optional(Schema.String),
   }),
-  Schema.TaggedStruct("commands", { commands: Schema.Array(SlashCommand) }),
 ]);
 export type SessionActionResult = typeof SessionActionResult.Type;
 

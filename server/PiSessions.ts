@@ -93,6 +93,9 @@ export interface PiSession {
   ) => Effect.Effect<SessionActionResult | undefined, PiSessionError>;
   /** Current state without subscribing. */
   readonly state: Effect.Effect<SessionState>;
+  /** Pi's slash commands for this session, in invocation precedence. A query: it starts no
+   * operation and changes nothing in Pi. */
+  readonly commands: Effect.Effect<ReadonlyArray<SlashCommand>, PiSessionError>;
 }
 
 export interface ProbeResult {
@@ -184,13 +187,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     needsCheckout: true,
     activity: false,
   },
-  commands: {
-    priority: false,
-    supersedes: false,
-    blockedWhileStopping: false,
-    needsCheckout: true,
-    activity: false,
-  },
   set_model: {
     priority: false,
     supersedes: true,
@@ -254,6 +250,15 @@ const settled = ({ state, dialogs }: Snapshot) =>
   state.dialogResolution?.delivery !== "uncertain" &&
   state.submission?.outcome !== "submitting" &&
   state.submission?.outcome !== "uncertain";
+
+/** What leaves the session seam, results and error details alike, is display-projected. */
+const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>
+  effect.pipe(
+    Effect.map(projectDisplay),
+    Effect.mapError(
+      (error) => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }),
+    ),
+  );
 
 const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
@@ -523,16 +528,17 @@ const openSession = (spec: PiSessionSpec) =>
     );
 
     let stopping = false;
+    const exited = () =>
+      new PiSessionError({
+        reason: "exited",
+        detail:
+          "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume.",
+      });
     const act = (
       action: SessionAction,
     ): Effect.Effect<SessionActionResult | undefined, PiSessionError> =>
       Effect.gen(function* () {
-        if (announced)
-          return yield* new PiSessionError({
-            reason: "exited",
-            detail:
-              "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume.",
-          });
+        if (announced) return yield* exited();
         // Answer/abort/queue restoration do not supersede the command whose
         // dialog they unblock. Keep its subsequent model/effort readback valid.
         const operation = sessionActionPolicy[action._tag].supersedes
@@ -540,8 +546,6 @@ const openSession = (spec: PiSessionSpec) =>
           : readbacks.operation();
         const lane = laneOf(action._tag);
         switch (action._tag) {
-          case "commands":
-            return { _tag: "commands", commands: yield* child.read(piReadbacks.commands) };
           case "prompt":
           case "steer": {
             const exchange = yield* exchangeOf(piExchangeFor(action));
@@ -711,14 +715,13 @@ const openSession = (spec: PiSessionSpec) =>
               Effect.flatMap((fiber) => restore(Fiber.join(fiber))),
             );
           }),
-        ).pipe(
-          Effect.map(projectDisplay),
-          Effect.mapError(
-            (error) =>
-              new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }),
-          ),
-        ),
+        ).pipe(displayed),
       state: Semaphore.withPermits(lock, 1)(currentState).pipe(Effect.map(projectDisplay)),
+      // The read belongs to the session, not the requester: an abandoned request leaves no
+      // half-written command on Pi's input.
+      commands: Effect.suspend(() =>
+        announced ? Effect.fail(exited()) : child.read(piReadbacks.commands),
+      ).pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join), displayed),
     };
     return session;
   });

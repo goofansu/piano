@@ -6,9 +6,15 @@
  * keys ownership by the physical checkout it returns and calls it under that key's lock.
  */
 import { randomUUID } from "node:crypto";
-import { Context, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
+import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
 import { isWorking } from "../shared/sessionProjection.ts";
-import type { HostInfo, SessionClosure, Snapshot, StartOptions } from "../shared/wire.ts";
+import type {
+  HostInfo,
+  SessionClosure,
+  SlashCommand,
+  Snapshot,
+  StartOptions,
+} from "../shared/wire.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
 import { makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
@@ -44,6 +50,11 @@ interface Resolved {
   readonly ref: SessionLocation;
   readonly host: SessionHost | undefined;
 }
+/** Slash commands a session could not answer with; `detail` is written for people. */
+export class SessionCommandsError extends Data.TaggedError("SessionCommandsError")<{
+  readonly detail: string;
+}> {}
+
 const hostKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 
@@ -55,6 +66,12 @@ export class SessionHosts extends Context.Service<
       sessionId: string,
     ) => Effect.Effect<PiSession | undefined, PiSessionError>;
     readonly open: (spec: OpenSpec) => Effect.Effect<PiSession, PiSessionError>;
+    /** A running session's slash commands, from its own child. A stopped session is refused,
+     * never started to answer (INV-02). */
+    readonly commands: (
+      cwd: string,
+      sessionId: string,
+    ) => Effect.Effect<ReadonlyArray<SlashCommand>, SessionCommandsError>;
     /**
      * Start a new session under a fresh server-generated ID. The project is checked before the
      * folder is registered; the folder, reference and project are written before Pi starts.
@@ -240,6 +257,27 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const get = (cwd: string, id: string) =>
         resolved(cwd, id, ({ host }) => Effect.succeed(host?.session));
 
+      // Pi is read outside the ownership lock, as input runs. `get` has already stopped a host
+      // whose checkout is gone, and a query writes nothing, so the checkout is not re-checked.
+      const commands = Effect.fn("SessionHosts.commands")(
+        function* (cwd: string, sessionId: string) {
+          const session = yield* get(cwd, sessionId);
+          if (!session)
+            return yield* new SessionCommandsError({
+              detail: "Session is no longer running. Reopen the suggestions.",
+            });
+          return yield* session.commands;
+        },
+        // Pi's own error text is not for people here; they can only retry.
+        Effect.catchTag("PiSessionError", () =>
+          Effect.fail(
+            new SessionCommandsError({
+              detail: "Could not load commands. Reopen the suggestions to retry.",
+            }),
+          ),
+        ),
+      );
+
       const rename = Effect.fn("SessionHosts.rename")(function* (
         cwd: string,
         sessionId: string,
@@ -295,6 +333,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       );
       return SessionHosts.of({
         open,
+        commands,
         create,
         rename,
         release,
