@@ -1,10 +1,11 @@
 /// <reference lib="dom" />
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { RenderMsg, ToolExecution } from "../shared/wire.ts";
+import type { RenderMsg, SubagentCard, ToolExecution } from "../shared/wire.ts";
 import { messageError } from "../web/src/lib/messageError.ts";
 import {
   jumpEntries,
+  nestedStatus,
   type TranscriptOptions,
   type TranscriptRow,
   transcriptRows,
@@ -271,6 +272,7 @@ test("a delegation card shows its run's settled status from a later card, with b
         runId: "run-d1",
         status: "Completed",
         terminalStatus: "completed",
+        attention: false,
       },
     },
     {
@@ -281,6 +283,7 @@ test("a delegation card shows its run's settled status from a later card, with b
         kind: "cancellation",
         status: "Checked",
         outcomes: [{ kind: "already terminal", runId: "run-d2", phase: "failed" }],
+        attention: false,
       },
     },
   ];
@@ -324,6 +327,7 @@ test("a delegation card shows its run's settled status from a later card, with b
         unknown: 0,
         unavailable: 0,
         noActiveRuns: false,
+        attention: true,
       },
     },
     {
@@ -337,6 +341,7 @@ test("a delegation card shows its run's settled status from a later card, with b
           { kind: "requested", runId: "run-d1" },
           { kind: "requested", runId: "run-d3" },
         ],
+        attention: true,
       },
     },
     {
@@ -348,6 +353,7 @@ test("a delegation card shows its run's settled status from a later card, with b
         source: "tool",
         runId: "run-d1",
         status: "Still running when checked",
+        attention: true,
       },
     },
   ]);
@@ -378,7 +384,13 @@ test("a card's own settled status keeps its fuller status text, and its label ne
     id: status,
     role: "tool_result",
     text: "",
-    subagent: { kind: "result", source: "tool", status, terminalStatus: "failed" },
+    subagent: {
+      kind: "result",
+      source: "tool",
+      status,
+      terminalStatus: "failed",
+      attention: false,
+    },
   });
   const labels = transcriptRows([card("Failed · Result unavailable"), card("Started")]).map(
     (row) =>
@@ -391,6 +403,236 @@ test("a card's own settled status keeps its fuller status text, and its label ne
   assert.deepEqual(labels, [
     ["Failed · Result unavailable", "destructive", false],
     ["Failed", "destructive", false],
+  ]);
+});
+
+const cardRow = (id: string, subagent: SubagentCard, text = ""): RenderMsg => ({
+  id,
+  role: "tool_result",
+  text,
+  subagent,
+});
+const cardFacts = (messages: RenderMsg[]) =>
+  transcriptRows(messages).flatMap((row) => (row.kind === "subagent" ? [row.subagent] : []));
+
+test("each subagent card kind has its title and accessible name, and opens exactly when it has details", () => {
+  const facts = cardFacts([
+    cardRow("refused", { kind: "delegation", action: "start", status: "Refused", admitted: false }),
+    cardRow("resumed", {
+      kind: "delegation",
+      action: "resume",
+      label: "Fix tests",
+      subagentId: "sub-1",
+      runId: "run-1",
+      prompt: "Fix them",
+      status: "Resumed",
+      admitted: true,
+    }),
+    cardRow("steer", {
+      kind: "control",
+      action: "steer",
+      message: "Hurry",
+      status: "Accepted",
+      attention: false,
+    }),
+    cardRow("wait", {
+      kind: "collection",
+      scope: "named",
+      status: "Delivered 1 result",
+      runs: [{ runId: "run-1", profile: "reviewer", status: "completed" }],
+      stillRunning: 0,
+      unknown: 2,
+      unavailable: 1,
+      noActiveRuns: false,
+      attention: true,
+    }),
+    cardRow("instant", {
+      kind: "result",
+      source: "notification",
+      status: "Completed",
+      terminalStatus: "completed",
+      durationMillis: 0,
+      attention: false,
+    }),
+    cardRow("bare", { kind: "result", source: "tool", status: "unknown Run", attention: true }),
+    cardRow(
+      "answered",
+      { kind: "result", source: "tool", status: "unknown Run", attention: true },
+      "Answer",
+    ),
+    cardRow("cancel", {
+      kind: "cancellation",
+      status: "Checked",
+      outcomes: [
+        { kind: "requested", runId: "run-2" },
+        { kind: "already terminal", runId: "run-1", phase: "completed" },
+      ],
+      attention: true,
+    }),
+    cardRow("empty", {
+      kind: "cancellation",
+      status: "No run ids were given",
+      outcomes: [],
+      attention: false,
+    }),
+  ]);
+  assert.deepEqual(
+    facts.map(({ title, ariaLabel, isResult, hasDetails }) => [
+      title,
+      ariaLabel,
+      isResult,
+      hasDetails,
+    ]),
+    [
+      ["Delegate task", "Delegation: Delegate task", false, false],
+      ["Fix tests", "Delegation: Fix tests", false, true],
+      ["Subagent guidance", "Subagent operation: Subagent guidance", false, true],
+      ["Subagent results", "Subagent result: Subagent results", true, true],
+      ["Subagent result", "Subagent result: Subagent result", true, true],
+      ["Subagent result", "Subagent result: Subagent result", true, false],
+      ["Subagent result", "Subagent result: Subagent result", true, true],
+      ["Subagent cancellation", "Subagent operation: Subagent cancellation", false, true],
+      ["Subagent cancellation", "Subagent operation: Subagent cancellation", false, false],
+    ],
+  );
+  for (const card of facts)
+    assert.equal(card.hasDetails, !!card.output || card.details.length > 0, card.title);
+  assert.deepEqual(
+    facts.map((card) => card.details),
+    [
+      [],
+      [
+        { kind: "identity", subagentId: "sub-1", runId: "run-1" },
+        { kind: "text", label: "Prompt", text: "Fix them" },
+      ],
+      [{ kind: "text", label: "Guidance", text: "Hurry" }],
+      [
+        {
+          kind: "note",
+          text: "Delivered 1 · Unavailable 1 · Still running when checked 0 · Unknown 2",
+        },
+        { kind: "run", text: "run-1 · reviewer · completed" },
+      ],
+      [{ kind: "note", text: "Duration 0.0s" }],
+      [],
+      [],
+      [
+        { kind: "run", text: "run-2 · requested" },
+        { kind: "run", text: "run-1 · already terminal · completed" },
+      ],
+      [],
+    ],
+  );
+});
+
+test("a subagent card's badge warns only on attention, after its Run's outcome and a refused delegation", () => {
+  const delegation = (id: string, admitted = true): RenderMsg =>
+    cardRow(id, {
+      kind: "delegation",
+      action: "start",
+      runId: `run-${id}`,
+      status: admitted ? "Started" : "Start refused · unknown Agent",
+      admitted,
+    });
+  const facts = cardFacts([
+    delegation("cancelled"),
+    delegation("open"),
+    delegation("refused", false),
+    cardRow("checked", {
+      kind: "result",
+      source: "tool",
+      runId: "run-open",
+      status: "Still running when checked",
+      attention: true,
+    }),
+    cardRow("expired", {
+      kind: "result",
+      source: "tool",
+      runId: "run-expired",
+      status: "Failed · Result unavailable",
+      terminalStatus: "failed",
+      attention: true,
+    }),
+    cardRow("steer", {
+      kind: "control",
+      action: "steer",
+      runId: "run-open",
+      status: "Control refused · mailbox full",
+      attention: false,
+    }),
+    cardRow("steer-unknown", {
+      kind: "control",
+      action: "steer",
+      runId: "run-gone",
+      status: "Control refused · unknown Run",
+      attention: true,
+    }),
+    cardRow("cancel", {
+      kind: "cancellation",
+      status: "Already finished: 1",
+      outcomes: [{ kind: "already terminal", runId: "run-cancelled", phase: "cancelled" }],
+      attention: false,
+    }),
+  ]);
+  assert.deepEqual(
+    facts.map(({ terminal, statusLabel, badge, dot }) => [terminal, statusLabel, badge, dot]),
+    [
+      ["cancelled", "Cancelled", "secondary", "idle"],
+      [undefined, "Started", "secondary", "idle"],
+      [undefined, "Start refused · unknown Agent", "destructive", "idle"],
+      [undefined, "Still running when checked", "warning", "idle"],
+      ["failed", "Failed · Result unavailable", "destructive", "err"],
+      [undefined, "Control refused · mailbox full", "secondary", "idle"],
+      [undefined, "Control refused · unknown Run", "warning", "idle"],
+      [undefined, "Already finished: 1", "secondary", "idle"],
+    ],
+  );
+});
+
+test("a subagent card's dot shows a failed call even when its Run completed", () => {
+  const rows = transcriptRows([
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [
+        { id: "ok", name: "agent_result", args: "{}" },
+        { id: "bad", name: "agent_result", args: "{}" },
+      ],
+    },
+    ...["ok", "bad"].map(
+      (id): RenderMsg => ({
+        id: `r-${id}`,
+        role: "tool_result",
+        toolCallId: id,
+        text: "",
+        isError: id === "bad",
+        subagent: {
+          kind: "result",
+          source: "tool",
+          runId: "run-1",
+          status: "Completed",
+          terminalStatus: "completed",
+          attention: false,
+        },
+      }),
+    ),
+  ]);
+  assert.deepEqual(
+    reply(rows, "a").tools.map((tool) => [tool.subagent!.dot, tool.subagent!.badge]),
+    [
+      ["ok", "success"],
+      ["err", "success"],
+    ],
+  );
+});
+
+test("a nested call's badge names what became of it", () => {
+  assert.deepEqual((["running", "success", "error", "incomplete"] as const).map(nestedStatus), [
+    { label: "Running", badge: "warning" },
+    { label: "Done", badge: "success" },
+    { label: "Failed", badge: "destructive" },
+    { label: "Incomplete", badge: "secondary" },
   ]);
 });
 

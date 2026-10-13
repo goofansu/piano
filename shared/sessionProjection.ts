@@ -3,35 +3,7 @@
  * the browser keeps its view with it, so a snapshot followed by its live events gives every tab
  * the state the server would hand a newly attached one (INV-05).
  */
-import type {
-  RenderMsg,
-  SessionEvent,
-  SessionState,
-  SessionStats,
-  Snapshot,
-  SubagentCard,
-} from "./wire.ts";
-
-type TerminalStatus = NonNullable<Extract<SubagentCard, { kind: "delegation" }>["terminalStatus"]>;
-
-/** Reported Run outcomes apply only to delegation cards. The last qualifying observation wins;
- * a cancellation request alone never settles a Run or erases an observed outcome (INV-03). */
-export function reportedSubagentStatus(
-  messages: ReadonlyArray<RenderMsg>,
-): (card: SubagentCard | undefined) => TerminalStatus | undefined {
-  const terminalRuns = new Map<string, TerminalStatus>();
-  for (const { subagent: card } of messages) {
-    if (card?.kind === "result" && card.runId && card.terminalStatus)
-      terminalRuns.set(card.runId, card.terminalStatus);
-    if (card?.kind === "collection")
-      for (const run of card.runs) terminalRuns.set(run.runId, run.status);
-    if (card?.kind === "cancellation")
-      for (const outcome of card.outcomes)
-        if (outcome.kind === "already terminal") terminalRuns.set(outcome.runId, outcome.phase);
-  }
-  return (card) =>
-    card?.kind === "delegation" && card.runId ? terminalRuns.get(card.runId) : undefined;
-}
+import type { SessionEvent, SessionState, SessionStats, Snapshot } from "./wire.ts";
 
 /** Pi has session-level work in flight: a run, a compaction or an automatic retry. */
 export const isWorking = (

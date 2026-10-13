@@ -9,7 +9,6 @@
  */
 import { Option, Schema } from "effect";
 import { imageType } from "../shared/attachments.ts";
-import { reportedSubagentStatus } from "../shared/sessionProjection.ts";
 import type {
   Dialog,
   ModelChoice,
@@ -26,7 +25,7 @@ import type {
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
 import { compileRedaction, type DisplayRedaction } from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
-import { RunLedger, SubagentProjection, titleStatus } from "./Subagents.ts";
+import { RunLedger, SubagentProjection } from "./Subagents.ts";
 
 interface RawContent {
   type: string;
@@ -196,17 +195,9 @@ function serializeWithProjection(
 ): RenderMsg[] {
   projection.reset();
   const redaction = compileRedaction();
-  const rendered = msgs.flatMap((m, i) => {
+  return msgs.flatMap((m, i) => {
     const result = serializeMessage(`${prefix}${i}`, m, projection, redaction);
     return result ? [result] : [];
-  });
-  const reportedStatus = reportedSubagentStatus(rendered);
-  return rendered.map((message) => {
-    const card = message.subagent;
-    const status = reportedStatus(card);
-    return card && status
-      ? { ...message, subagent: { ...card, status: titleStatus(status), terminalStatus: status } }
-      : message;
   });
 }
 export interface PiRecord {

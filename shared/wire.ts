@@ -97,6 +97,10 @@ const SubagentIdentity = {
   profile: Schema.optional(Schema.String),
 };
 const TerminalSubagentStatus = Schema.Literals(["completed", "failed", "cancelled"]);
+/** The card reports something left unresolved for the reader: a Run still running or unknown, a
+ * result unavailable, a cancellation not yet settled, or Control refused for an unknown or
+ * cancelled Run. Subagents derives it from the card's facts so readers never parse `status`. */
+const attention = Schema.Boolean;
 
 /** Validated presentation facts from pi-subagent. This is a historical projection,
  * not a live child registry: "Started" means last observed admission, never "Running".
@@ -107,8 +111,8 @@ export const SubagentCard = Schema.Union([
     action: Schema.Literals(["start", "resume"]),
     ...SubagentIdentity,
     prompt: Schema.optional(Schema.String),
+    /** As pi-subagent reported the call; the transcript settles its Run from later cards. */
     status: Schema.String,
-    terminalStatus: Schema.optional(TerminalSubagentStatus),
     admitted: Schema.Boolean,
   }),
   Schema.Struct({
@@ -117,6 +121,7 @@ export const SubagentCard = Schema.Union([
     ...SubagentIdentity,
     message: Schema.optional(Schema.String),
     status: Schema.String,
+    attention,
   }),
   Schema.Struct({
     kind: Schema.Literal("collection"),
@@ -137,6 +142,7 @@ export const SubagentCard = Schema.Union([
     unknown: Schema.Number,
     unavailable: Schema.Number,
     noActiveRuns: Schema.Boolean,
+    attention,
   }),
   Schema.Struct({
     kind: Schema.Literal("result"),
@@ -146,6 +152,7 @@ export const SubagentCard = Schema.Union([
     terminalStatus: Schema.optional(TerminalSubagentStatus),
     durationMillis: Schema.optional(Schema.Number),
     ...RunSpend,
+    attention,
   }),
   Schema.Struct({
     kind: Schema.Literal("cancellation"),
@@ -163,6 +170,7 @@ export const SubagentCard = Schema.Union([
         }),
       ]),
     ),
+    attention,
   }),
 ]);
 export type SubagentCard = typeof SubagentCard.Type;

@@ -292,11 +292,12 @@ test("subagent details project through PiSessions with correlation, lifecycle li
         assert.deepEqual(
           admitted.map((card) => [card.action, card.label, card.profile, card.status, card.runId]),
           [
-            ["start", "Same label", "reviewer", "Completed", "run-done"],
-            ["resume", "Same label", "reviewer", "Failed", "run-failed"],
-            ["start", "Same label", "reviewer", "Cancelled", "run-cancelled"],
+            ["start", "Same label", "reviewer", "Started", "run-done"],
+            ["resume", "Same label", "reviewer", "Resumed", "run-failed"],
+            ["start", "Same label", "reviewer", "Started", "run-cancelled"],
             ["start", "Same label", "reviewer", "Started", "run-open"],
           ],
+          "a delegation card keeps the call's own status; the transcript settles its Run from later cards",
         );
         assert.match(admitted[0].prompt ?? "", /\[REDACTED\]/);
         const notice = cards.find(
@@ -337,9 +338,21 @@ test("subagent details project through PiSessions with correlation, lifecycle li
             card.outcomes.some((outcome) => outcome.kind === "requested"),
         )!;
         assert.equal(cancellation.status, "Cancellation requested: 1");
-        assert.equal(
-          admitted.find((card) => card.runId === "run-cancelled")?.terminalStatus,
-          "cancelled",
+        assert.deepEqual(
+          [
+            "start-done",
+            "wait-failed",
+            "cancel-terminal",
+            "wait-mixed",
+            "steer-open",
+            "result-open",
+            "cancel-open",
+          ].map((id) => {
+            const card = initial.messages.find((message) => message.toolCallId === id)?.subagent;
+            return card && "attention" in card ? card.attention : card?.kind;
+          }),
+          ["delegation", false, false, true, false, true, true],
+          "attention marks partial collections, unsettled queries and pending cancellations",
         );
         const steering = cards.find(
           (card): card is Extract<typeof card, { kind: "control" }> => card.kind === "control",
@@ -367,11 +380,6 @@ test("subagent details project through PiSessions with correlation, lifecycle li
           checkedOpen?.terminalStatus,
           undefined,
           "a query or cancellation request does not settle a Run",
-        );
-        assert.equal(
-          admitted.find((card) => card.runId === "run-open")?.status,
-          "Started",
-          "a query and cancellation request do not manufacture a terminal state",
         );
         assert.equal(
           initial.messages.find((message) => message.toolCallId === "bad-start")?.subagent,
