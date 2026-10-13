@@ -1,19 +1,14 @@
 # piano
 
-Web UI that starts and continues pi sessions across projects and worktrunk worktrees. One piano
-session is one pi session; each running session is one `pi --mode rpc` child. Server on Effect 4,
-client on React + shadcn/ui.
+Web UI that starts and continues pi sessions across folders and their worktrees. Server on
+Effect 4, client on React + shadcn/ui.
 
 ## Words
 
-Use these in code and docs: **folder** (a directory the user added, shown with its worktrees),
-**worktree** (a Git checkout of a folder; Piano lists them from Git and creates new ones with `wt`),
-**workspace** (a folder root or worktree as the registry records it, with the ID that URLs carry),
-**project** (a named group of sessions from any folders, toward one outcome), **session** (one pi
-session; never "thread"), **registry** (the SQLite store that records folders, workspaces, projects
-and session references; Pi owns session history). Pi's own "project trust" keeps Pi's name. When
-talking to the user, name what they see in the UI ("Piano's database", not "the registry").
-See [the glossary](docs/glossary.md) for the planned task and evidence vocabulary.
+Name things as [the glossary](docs/glossary.md) does in code, UI and docs: it is the source of
+truth for folder, worktree, workspace, project, session, registry and the planned task and evidence
+terms. When talking to the user, name what they see in the UI ("Piano's database", not "the
+registry").
 
 ## Direction and guardrails
 
