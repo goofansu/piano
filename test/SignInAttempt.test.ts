@@ -5,8 +5,11 @@ import type { SignInRequest } from "../web/src/lib/api.ts";
 import {
   CANCEL_FAILED,
   CONNECTION_LOST,
+  canSubmitAnswer,
   createSignInAttempt,
   POLL_MS,
+  type SignInAttemptState,
+  signInDialogView,
 } from "../web/src/lib/signInAttempt.ts";
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -237,4 +240,78 @@ test("dismissing while anything is in flight is ignored", async () => {
   assert.deepEqual(h.methods(), ["GET", "POST", "PUT", "DELETE"]);
   await h.last().reply({ id: "a1", provider: "acme", status: "cancelled" });
   assert.equal(h.closed(), 1);
+});
+
+const providers = [{ id: "acme", name: "Acme", signedIn: false }];
+const view = (attempt: ProviderLoginState | null, patch: Partial<SignInAttemptState> = {}) =>
+  signInDialogView({
+    state: { attempt, busy: false, error: "", connectionError: "", ...patch },
+    provider: "acme",
+    providers,
+  });
+const select = { id: "p1", type: "select", message: "Method?", options: [] } as const;
+
+test("the dialog links only to http(s) sign-in pages without credentials", () => {
+  for (const url of [
+    "javascript:alert(1)",
+    "https://user:pw@evil.example/login",
+    "https://user@evil.example/login",
+    "data:text/html,hi",
+    "not a url",
+    "",
+  ]) {
+    const v = view(running("a1", { url }));
+    assert.equal(v.url, undefined, url);
+    assert.equal(v.link, null, url);
+  }
+  const page = "https://acme.example/device";
+  assert.equal(view(running("a1", { url: page })).url, page);
+  // A finished attempt's page is no longer offered.
+  assert.equal(view({ ...succeeded("a1"), url: page }).link, null);
+});
+
+test("the sign-in link shows beside a prompt or in the footer, never both", () => {
+  const url = "https://acme.example/device";
+  const prompt = { id: "p1", type: "manual_code", message: "Paste the code" } as const;
+  const answering = view(running("a1", { url, prompt }));
+  assert.equal(answering.link, "body");
+  assert.equal(answering.footer, undefined);
+  const waiting = view(running("a1", { url }));
+  assert.equal(waiting.link, "footer");
+  assert.equal(waiting.description, "Waiting for authorization…");
+  assert.equal(view(running("a1", { prompt: select })).description, "Choose a sign-in method.");
+});
+
+test("each status gives the dialog its dismiss label and retry", () => {
+  const footer = (attempt: ProviderLoginState | null, busy = false) =>
+    view(attempt, { busy }).footer;
+  const cancel = { dismissLabel: "Cancel", dismissPrimary: false, retry: false };
+  assert.deepEqual(footer(null, true), cancel);
+  assert.deepEqual(footer(running("a1")), cancel);
+  assert.deepEqual(footer(succeeded("a1")), {
+    dismissLabel: "Done",
+    dismissPrimary: true,
+    retry: false,
+  });
+  for (const status of ["error", "cancelled"] as const)
+    assert.deepEqual(footer({ id: "a1", provider: "acme", status }), {
+      dismissLabel: "Close",
+      dismissPrimary: false,
+      retry: true,
+    });
+  assert.equal(view(null).title, "Sign in to Acme");
+  assert.equal(view(null, { busy: true }).loading, true);
+  assert.equal(view(running("a1", { prompt: select }), { busy: true }).loading, false);
+  const lost = { connectionError: CONNECTION_LOST };
+  assert.equal(view(running("a1"), lost).alert, CONNECTION_LOST);
+  assert.equal(view(running("a1"), { ...lost, error: "denied" }).alert, "denied");
+});
+
+test("a prompt's answer can be sent only when idle and, for a select, once chosen", () => {
+  assert.equal(canSubmitAnswer({ prompt: select, busy: false, value: "" }), false);
+  assert.equal(canSubmitAnswer({ prompt: select, busy: false, value: "device" }), true);
+  assert.equal(canSubmitAnswer({ prompt: select, busy: true, value: "device" }), false);
+  const text = { id: "p2", type: "text", message: "Code?" } as const;
+  assert.equal(canSubmitAnswer({ prompt: text, busy: false, value: "" }), true);
+  assert.equal(canSubmitAnswer({ prompt: text, busy: true, value: "x" }), false);
 });

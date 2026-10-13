@@ -1,4 +1,4 @@
-import type { OAuthProvider, ProviderLoginState } from "@shared/wire";
+import type { LoginPrompt, OAuthProvider } from "@shared/wire";
 import { CheckCircleIcon, CopyIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -29,18 +29,18 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { providerLogin } from "@/lib/api";
-import type { SignInApi } from "@/lib/signInAttempt";
+import { canSubmitAnswer, type SignInApi, signInDialogView } from "@/lib/signInAttempt";
 import { useSignInAttempt } from "@/lib/useSignInAttempt";
 
-function safeUrl(raw?: string) {
-  try {
-    const url = new URL(raw!);
-    return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password
-      ? url.href
-      : undefined;
-  } catch {
-    return undefined;
-  }
+/** `url` is already checked safe by `signInDialogView`. */
+function SignInLink({ url, variant }: { url: string; variant?: "outline" }) {
+  return (
+    <Button asChild variant={variant}>
+      <a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
+        Open sign-in page
+      </a>
+    </Button>
+  );
 }
 
 /** Explicit dismissal cancels pending sign-in; browser disconnect still preserves it.
@@ -58,21 +58,18 @@ export function ProviderLoginDialog({
   signedIn: () => void;
   api?: SignInApi;
 }) {
-  const {
-    attempt: state,
-    busy,
-    error,
-    connectionError,
-    answer,
-    retry,
-    dismiss,
-  } = useSignInAttempt({ api, provider: initialProvider, signedIn, close });
-  const running = state?.status === "running";
-  const prompt = running ? state.prompt : undefined;
-  const url = running ? safeUrl(state.url) : undefined;
-  const providerId = state?.provider ?? initialProvider;
-  const providerName = providers.find((provider) => provider.id === providerId)?.name ?? providerId;
-  const dismissLabel = state?.status === "success" ? "Done" : running || busy ? "Cancel" : "Close";
+  const { attempt, busy, error, connectionError, answer, retry, dismiss } = useSignInAttempt({
+    api,
+    provider: initialProvider,
+    signedIn,
+    close,
+  });
+  const view = signInDialogView({
+    state: { attempt, busy, error, connectionError },
+    provider: initialProvider,
+    providers,
+  });
+  const { prompt, url, deviceCode, footer } = view;
   return (
     <Dialog
       open
@@ -86,36 +83,24 @@ export function ProviderLoginDialog({
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Sign in to {providerName}</DialogTitle>
-          <DialogDescription>
-            {prompt?.type === "select"
-              ? "Choose a sign-in method."
-              : running && url && !prompt
-                ? "Waiting for authorization…"
-                : "Follow the steps to connect your account."}
-          </DialogDescription>
+          <DialogTitle>{view.title}</DialogTitle>
+          <DialogDescription>{view.description}</DialogDescription>
         </DialogHeader>
-        {state?.status === "success" ? (
+        {view.success ? (
           <Alert role="status">
             <CheckCircleIcon />
             <AlertTitle>You’re signed in.</AlertTitle>
-            <AlertDescription>{state.message}</AlertDescription>
+            <AlertDescription>{view.message}</AlertDescription>
           </Alert>
         ) : (
-          state?.message && (
+          view.message && (
             <p role="status" className="text-sm text-muted-foreground">
-              {state.message}
+              {view.message}
             </p>
           )
         )}
-        {prompt && url && (
-          <Button asChild variant="outline">
-            <a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
-              Open sign-in page
-            </a>
-          </Button>
-        )}
-        {state?.userCode && (
+        {view.link === "body" && url && <SignInLink url={url} variant="outline" />}
+        {deviceCode && (
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="login-device-code">Device code</FieldLabel>
@@ -123,7 +108,7 @@ export function ProviderLoginDialog({
                 <InputGroupInput
                   id="login-device-code"
                   className="font-mono"
-                  value={state.userCode}
+                  value={deviceCode}
                   readOnly
                   spellCheck={false}
                 />
@@ -133,7 +118,7 @@ export function ProviderLoginDialog({
                     aria-label="Copy device code"
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(state.userCode!);
+                        await navigator.clipboard.writeText(deviceCode);
                         toast.success("Device code copied.");
                       } catch {
                         toast.error("Could not copy. Select the code and copy it manually.");
@@ -150,48 +135,37 @@ export function ProviderLoginDialog({
         {prompt && (
           <LoginPromptForm
             key={prompt.id}
-            state={state!}
+            prompt={prompt}
             busy={busy}
             cancel={dismiss}
             answer={(value) => answer(prompt.id, value)}
           />
         )}
-        {busy && !prompt && (
+        {view.loading && (
           <p role="status" className="text-sm text-muted-foreground">
             Loading…
           </p>
         )}
-        {(error || connectionError) && (
+        {view.alert && (
           <Alert variant="destructive">
-            <AlertDescription>{error || connectionError}</AlertDescription>
+            <AlertDescription>{view.alert}</AlertDescription>
           </Alert>
         )}
-        {!prompt && (
+        {footer && (
           <DialogFooter>
             <Button
-              variant={state?.status === "success" ? "default" : "outline"}
+              variant={footer.dismissPrimary ? "default" : "outline"}
               disabled={busy}
               onClick={dismiss}
             >
-              {dismissLabel}
+              {footer.dismissLabel}
             </Button>
-            {(state?.status === "error" || state?.status === "cancelled") && (
+            {footer.retry && (
               <Button disabled={busy} onClick={retry}>
                 Try again
               </Button>
             )}
-            {url && (
-              <Button asChild>
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  referrerPolicy="no-referrer"
-                >
-                  Open sign-in page
-                </a>
-              </Button>
-            )}
+            {view.link === "footer" && url && <SignInLink url={url} />}
           </DialogFooter>
         )}
       </DialogContent>
@@ -199,23 +173,23 @@ export function ProviderLoginDialog({
   );
 }
 function LoginPromptForm({
-  state,
+  prompt,
   busy,
   answer,
   cancel,
 }: {
-  state: ProviderLoginState;
+  prompt: LoginPrompt;
   busy: boolean;
   answer: (value: string) => void;
   cancel: () => void;
 }) {
-  const prompt = state.prompt!;
   const [value, setValue] = useState("");
+  const canSubmit = canSubmitAnswer({ prompt, busy, value });
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (!busy) {
+        if (canSubmit) {
           answer(value);
           setValue("");
         }
@@ -261,7 +235,7 @@ function LoginPromptForm({
           <Button type="button" variant="outline" disabled={busy} onClick={cancel}>
             Cancel
           </Button>
-          <Button type="submit" disabled={busy || (prompt.type === "select" && !value)}>
+          <Button type="submit" disabled={!canSubmit}>
             Continue
           </Button>
         </DialogFooter>

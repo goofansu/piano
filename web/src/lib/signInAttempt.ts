@@ -7,9 +7,10 @@
  * change's result. A failed poll reports a lost connection until the next poll answers. `signedIn`
  * runs once per attempt, including when only the cancellation's reply shows the attempt had
  * already succeeded. Explicit dismissal cancels a running attempt; stopping (a browser leaving)
- * keeps it. Nothing here depends on React.
+ * keeps it. `signInDialogView` derives what the dialog shows from the attempt's state. Nothing here
+ * depends on React.
  */
-import type { ProviderLoginState } from "@shared/wire";
+import type { LoginPrompt, OAuthProvider, ProviderLoginState } from "@shared/wire";
 import type { SignInRequest } from "./api.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
 
@@ -223,4 +224,97 @@ export function createSignInAttempt({
       })();
     },
   };
+}
+
+/** The sign-in page's address when it is safe to link: http(s) without credentials. */
+function safeUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export interface SignInDialogView {
+  title: string;
+  description: string;
+  /** The attempt succeeded; `message` is then the success detail. */
+  success: boolean;
+  message: string | undefined;
+  /** The sign-in page to open, only when the attempt runs and it is a safe http(s) link. */
+  url: string | undefined;
+  /** Where "Open sign-in page" shows: beside a prompt, in the footer, or nowhere. */
+  link: "body" | "footer" | null;
+  deviceCode: string | undefined;
+  /** The running attempt's question; its form replaces the footer. */
+  prompt: LoginPrompt | undefined;
+  busy: boolean;
+  /** Something is in flight and no prompt is showing. */
+  loading: boolean;
+  /** The last action's failure, else a lost connection. */
+  alert: string | undefined;
+  /** Absent while a prompt shows its own Cancel and Continue. */
+  footer: { dismissLabel: string; dismissPrimary: boolean; retry: boolean } | undefined;
+}
+
+/** What the sign-in dialog shows. Pure; the component renders it. */
+export function signInDialogView({
+  state: { attempt, busy, error, connectionError },
+  provider,
+  providers,
+}: {
+  state: SignInAttemptState;
+  /** The provider the dialog was opened for, named until the attempt names its own. */
+  provider: string;
+  providers: readonly OAuthProvider[];
+}): SignInDialogView {
+  const running = attempt?.status === "running";
+  const success = attempt?.status === "success";
+  const prompt = running ? attempt.prompt : undefined;
+  const url = running ? safeUrl(attempt.url) : undefined;
+  const id = attempt?.provider ?? provider;
+  const name = providers.find((candidate) => candidate.id === id)?.name ?? id;
+  return {
+    title: `Sign in to ${name}`,
+    description:
+      prompt?.type === "select"
+        ? "Choose a sign-in method."
+        : url && !prompt
+          ? "Waiting for authorization…"
+          : "Follow the steps to connect your account.",
+    success,
+    message: attempt?.message,
+    url,
+    link: url ? (prompt ? "body" : "footer") : null,
+    deviceCode: attempt?.userCode,
+    prompt,
+    busy,
+    loading: busy && !prompt,
+    alert: error || connectionError || undefined,
+    footer: prompt
+      ? undefined
+      : {
+          dismissLabel: success ? "Done" : running || busy ? "Cancel" : "Close",
+          dismissPrimary: success,
+          retry: attempt?.status === "error" || attempt?.status === "cancelled",
+        },
+  };
+}
+
+/** A prompt's answer may be sent: nothing is in flight and a select has a choice. The Continue
+ * button and the form's submit guard both read this. */
+export function canSubmitAnswer({
+  prompt,
+  busy,
+  value,
+}: {
+  prompt: LoginPrompt;
+  busy: boolean;
+  value: string;
+}): boolean {
+  return !busy && !(prompt.type === "select" && !value);
 }
