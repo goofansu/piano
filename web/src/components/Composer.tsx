@@ -23,7 +23,10 @@ import {
   DELIVERY,
   DELIVERY_MODES,
   type DeliveryMode,
-  deliveryAction,
+  messageCommand,
+  queuePanel,
+  RESTORE_QUEUE,
+  STOP,
 } from "@/lib/composerControl";
 import { contextFigures } from "@/lib/contextUsage";
 import type { DraftKey } from "@/lib/messageDraft";
@@ -94,8 +97,6 @@ export function Composer({
   const usage = t?.state;
   const messages = t?.messages ?? [];
   const queuedMessages = t?.state.queuedMessages ?? [];
-  const onStop = () => sendCommand({ _tag: "act", action: { _tag: "stop" } });
-  const onRestoreQueue = () => sendCommand({ _tag: "act", action: { _tag: "restore_queue" } });
   const editor = useDraftEditor(draftKey);
   const [queueMode, setQueueMode] = usePreference(queueModePreference);
   const control = composerControl({
@@ -114,20 +115,12 @@ export function Composer({
     const kind = control.delivery(alt);
     if (!kind) return;
     editor.submit((message) => {
-      sendCommand({
-        _tag: "act",
-        action: {
-          _tag: deliveryAction(kind),
-          text: message.text,
-          attachments: message.attachments,
-        },
-        start: choice.start(),
-      });
+      sendCommand(messageCommand(kind, message, choice.start()));
       choice.submitted();
     });
   };
   const figures = contextFigures(usage?.context, catalog, model);
-  const showQueueKinds = queuedMessages.some((message) => message.kind === "steering");
+  const queue = queuePanel(queuedMessages, streaming);
 
   if (readOnly) {
     return (
@@ -157,10 +150,9 @@ export function Composer({
         }}
         onSend={send}
         onKeyDown={(e) => {
-          if (e.key === "Escape" && control.escape !== "none") {
+          if (e.key === "Escape" && control.escape) {
             e.preventDefault();
-            if (control.escape === "restore-queue") onRestoreQueue();
-            else onStop();
+            sendCommand(control.escape);
           }
         }}
         above={
@@ -173,33 +165,27 @@ export function Composer({
                 Images are ready. Wait for Pi to finish before sending.
               </p>
             )}
-            {queuedMessages.length > 0 && (
+            {queue && (
               <section
                 className="control-enter flex max-h-[min(14rem,30dvh)] flex-col border-b border-line px-4 py-3 text-sm"
                 aria-label="Queued messages"
               >
                 <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
-                  <h2 className="font-medium text-ink-2">
-                    {streaming ? "Queued messages" : "Paused queue"} ({queuedMessages.length})
-                  </h2>
+                  <h2 className="font-medium text-ink-2">{queue.heading}</h2>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-11 shrink-0 md:h-8"
-                    aria-label={
-                      queuedMessages.length === 1
-                        ? "Edit queued message"
-                        : "Edit all queued messages"
-                    }
+                    aria-label={queue.editAriaLabel}
                     title="Move queued messages back to the draft without stopping Pi (Esc)"
                     disabled={!control.canRestoreQueue}
                     onClick={() => {
-                      onRestoreQueue();
+                      sendCommand(RESTORE_QUEUE);
                       editor.ref.current?.focus();
                     }}
                   >
                     <PencilIcon data-icon="inline-start" aria-hidden />
-                    {queuedMessages.length === 1 ? "Edit" : "Edit all"}
+                    {queue.editLabel}
                   </Button>
                 </div>
                 <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
@@ -209,7 +195,7 @@ export function Composer({
                       key={`${message.kind}-${index}`}
                       className="flex min-w-0 animate-in flex-col gap-1 fade-in-0"
                     >
-                      {showQueueKinds && (
+                      {queue.showKinds && (
                         <span className="text-xs text-ink-3">
                           {message.kind === "steering" ? "Steering" : "Follow-up"}
                         </span>
@@ -269,7 +255,7 @@ export function Composer({
                   className={cn(composerAction, "relative")}
                   aria-label={control.label}
                   disabled={!control.enabled}
-                  onClick={showStop ? onStop : () => send(false)}
+                  onClick={showStop ? () => sendCommand(STOP) : () => send(false)}
                 >
                   <span
                     aria-hidden
