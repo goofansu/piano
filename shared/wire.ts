@@ -834,7 +834,12 @@ export const WorktreeResult = Schema.Union([
       Schema.Struct({ baseBranch: Schema.String, hooks: Schema.Literals(["enabled", "skipped"]) }),
     ),
   }),
-  Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
+  Schema.Struct({
+    status: Schema.Literal("error"),
+    detail: Schema.String,
+    /** The operation may have changed a checkout; the browser asks for rediscovery. */
+    unconfirmed: Schema.optional(Schema.Boolean),
+  }),
 ]);
 export type WorktreeResult = typeof WorktreeResult.Type;
 

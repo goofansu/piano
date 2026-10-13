@@ -94,6 +94,8 @@ function picker() {
 
 const failure = (state: WorktreeOperationState) =>
   state.request.status === "failed" ? state.request.detail : undefined;
+const unconfirmed = (state: WorktreeOperationState) =>
+  state.request.status === "failed" && state.request.unconfirmed;
 
 test("creating sends one command and is pending until its own receipt opens the checkout", () => {
   const p = picker();
@@ -137,6 +139,7 @@ test("selecting sends one add_worktree; an error receipt fails with Worktrunk's 
   });
   p.receipt("r1", { status: "error", detail: "branch exists" });
   assert.equal(failure(p.state()), "branch exists");
+  assert.equal(unconfirmed(p.state()), false, "an error before Worktrunk ran changed nothing");
   assert.deepEqual(p.opened, []);
   p.receipt("r1", { status: "ready", path: "/late" });
   assert.deepEqual(p.opened, [], "a settled request opens nothing");
@@ -148,6 +151,7 @@ test("losing the connection while pending fails with reconnect guidance and is n
   p.operation.select("/repo-other");
   p.connection(false);
   assert.equal(failure(p.state()), CONNECTION_LOST);
+  assert.equal(unconfirmed(p.state()), true);
   p.connection(true);
   p.elapse();
   assert.equal(failure(p.state()), CONNECTION_LOST, "a settled failure is not overwritten");
@@ -165,6 +169,7 @@ test("a pending operation with no receipt times out after 75 seconds", () => {
   assert.equal(p.timers.size, 1);
   p.elapse();
   assert.equal(failure(p.state()), NO_RECEIPT);
+  assert.equal(unconfirmed(p.state()), true);
   p.receipt("r1", { status: "ready", path: "/late" });
   assert.deepEqual(p.opened, [], "a receipt after the timeout opens nothing");
 });

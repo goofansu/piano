@@ -16,6 +16,7 @@ import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceCommands } from "./WorkspaceCommands.ts";
+import { WorktreeError } from "./Worktrees.ts";
 
 /** Every client message except delivery acknowledgements, which belong to the transport. */
 export type ClientRequest = Exclude<ClientMessage, { _tag: "ack" }>;
@@ -63,7 +64,14 @@ const unansweredReply = (request: ClientRequest, reason: Unanswered): ServerMess
       return {
         _tag: "worktree_result",
         requestId: request.requestId,
-        result: { status: "error", detail: message },
+        result: {
+          status: "error",
+          detail: message,
+          // A refused request never started. An unexpected failure may have run Worktrunk.
+          unconfirmed:
+            reason._tag === "failed" &&
+            (!(reason.error instanceof WorktreeError) || reason.error.unconfirmed === true),
+        },
       };
     case "worktrees":
       return {

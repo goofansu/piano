@@ -9,7 +9,11 @@ import type { WorktreeDiscovery, WorktreeFacts } from "../shared/wire.ts";
 import { gitRead } from "./GitCheckout.ts";
 import { run as runProcess } from "./Subprocess.ts";
 
-export class WorktreeError extends Data.TaggedError("WorktreeError")<{ readonly detail: string }> {}
+export class WorktreeError extends Data.TaggedError("WorktreeError")<{
+  readonly detail: string;
+  /** Worktrunk ran, so a checkout may exist even though creation failed. */
+  readonly unconfirmed?: boolean;
+}> {}
 export const WorktrunkCommand = Context.Reference<string>("piano/WorktrunkCommand", {
   defaultValue: () => process.env.PIANO_WT_CLI ?? "wt",
 });
@@ -202,24 +206,29 @@ export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
 });
 
 /** New branches only. No prose-based retry of a possibly partially completed operation. */
-export const createWorktree = Effect.fn("Worktrees.createWorktree")(
-  function* (folder: string, branch: string, options: { hooks?: boolean } = {}) {
-    yield* compatible;
-    if (!(yield* isGit(folder)))
-      return yield* new WorktreeError({
-        detail: "This folder is non-Git. Create a Git repository before creating a worktree.",
-      });
-    // Reject shortcuts/options before passing a branch name to Worktrunk.
-    if (!branch || branch.startsWith("-") || branch !== branch.trim())
-      return yield* new WorktreeError({ detail: "Enter a valid new branch name." });
-    if (
-      (yield* git(folder, ["check-ref-format", "--branch", branch])).trim() !== branch ||
-      branch === "@"
-    ) {
-      return yield* new WorktreeError({
-        detail: "Enter a literal new branch name, not a checkout shortcut.",
-      });
-    }
+export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
+  folder: string,
+  branch: string,
+  options: { hooks?: boolean } = {},
+) {
+  yield* compatible;
+  if (!(yield* isGit(folder)))
+    return yield* new WorktreeError({
+      detail: "This folder is non-Git. Create a Git repository before creating a worktree.",
+    });
+  // Reject shortcuts/options before passing a branch name to Worktrunk.
+  if (!branch || branch.startsWith("-") || branch !== branch.trim())
+    return yield* new WorktreeError({ detail: "Enter a valid new branch name." });
+  if (
+    (yield* git(folder, ["check-ref-format", "--branch", branch])).trim() !== branch ||
+    branch === "@"
+  ) {
+    return yield* new WorktreeError({
+      detail: "Enter a literal new branch name, not a checkout shortcut.",
+    });
+  }
+  // Only a failure from here on may leave a checkout behind; the checks above create nothing.
+  return yield* Effect.gen(function* () {
     const result = yield* json(
       Created,
       yield* wt(
@@ -246,11 +255,13 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(
       baseBranch: result.base_branch,
       hooks: options.hooks ? ("enabled" as const) : ("skipped" as const),
     };
-  },
-  Effect.mapError(
-    (e) =>
-      new WorktreeError({
-        detail: `${e.detail}\nCreation was not confirmed; a checkout may remain after a hook or transport failure. Refresh discovery before retrying. For unapproved hooks, review and approve them with wt config approvals in a terminal, or explicitly leave hooks off.`,
-      }),
-  ),
-);
+  }).pipe(
+    Effect.mapError(
+      (e) =>
+        new WorktreeError({
+          unconfirmed: true,
+          detail: `${e.detail}\nCreation was not confirmed; a checkout may remain after a hook or transport failure. Refresh discovery before retrying. For unapproved hooks, review and approve them with wt config approvals in a terminal, or explicitly leave hooks off.`,
+        }),
+    ),
+  );
+});

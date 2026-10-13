@@ -15,7 +15,7 @@ export type WorktreeRequestKind = "create" | "select";
 export type WorktreeRequestStatus =
   | { status: "idle" }
   | { status: "pending"; requestId: string; kind: WorktreeRequestKind }
-  | { status: "failed"; detail: string };
+  | { status: "failed"; detail: string; unconfirmed: boolean };
 
 export interface WorktreeOperationState {
   /** The folder the picker was last opened on. */
@@ -131,7 +131,8 @@ export function createWorktreeOperation({
     publish({ request: { status: "pending", requestId, kind } });
     timer = timers.setTimeout(() => {
       timer = undefined;
-      if (pendingId() === requestId) settle({ status: "failed", detail: NO_RECEIPT });
+      if (pendingId() === requestId)
+        settle({ status: "failed", detail: NO_RECEIPT, unconfirmed: true });
     }, RECEIPT_TIMEOUT_MS);
     client.send(command(requestId));
   };
@@ -153,7 +154,8 @@ export function createWorktreeOperation({
         if (now) return;
         // Requests on the lost connection are never answered; a pending one may still have run.
         awaiting.clear();
-        if (pendingId() !== undefined) settle({ status: "failed", detail: CONNECTION_LOST });
+        if (pendingId() !== undefined)
+          settle({ status: "failed", detail: CONNECTION_LOST, unconfirmed: true });
         else publish();
       });
       const stopMessages = client.listen((m) => {
@@ -164,7 +166,12 @@ export function createWorktreeOperation({
           else awaiting.delete(m.folder);
           publish();
         } else if (m._tag === "worktree_result" && m.requestId === pendingId()) {
-          if (m.result.status === "error") settle({ status: "failed", detail: m.result.detail });
+          if (m.result.status === "error")
+            settle({
+              status: "failed",
+              detail: m.result.detail,
+              unconfirmed: m.result.unconfirmed === true,
+            });
           else {
             settle(IDLE);
             ready(m.result.path);

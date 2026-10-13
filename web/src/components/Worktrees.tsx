@@ -50,7 +50,8 @@ export function WorktreesPopover({
   const [creating, setCreating] = useState(false);
   const errorRef = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
-  const error = operation.request.status === "failed" ? operation.request.detail : null;
+  const failure = operation.request.status === "failed" ? operation.request : null;
+  const error = failure?.detail ?? null;
   useEffect(() => {
     if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
   }, [error]);
@@ -80,16 +81,32 @@ export function WorktreesPopover({
       variant="destructive"
       className="animate-in fade-in-0 slide-in-from-top-1"
     >
-      <AlertTitle>Worktree operation not confirmed</AlertTitle>
-      <AlertDescription>
-        <p>Refresh discovery before retrying.</p>
-        {creating && hooks && (
-          <p>For unapproved hooks, review and approve them in a terminal, or leave hooks off.</p>
-        )}
-        <AlertDetails label="Error details">
-          <p className="whitespace-pre-wrap break-words">{error}</p>
-        </AlertDetails>
-      </AlertDescription>
+      {failure?.unconfirmed ? (
+        <>
+          <AlertTitle>Worktree operation not confirmed</AlertTitle>
+          <AlertDescription>
+            <p>Refresh discovery before retrying.</p>
+            {creating && hooks && (
+              <p>
+                For unapproved hooks, review and approve them in a terminal, or leave hooks off.
+              </p>
+            )}
+            <AlertDetails label="Error details">
+              <p className="whitespace-pre-wrap break-words">{error}</p>
+            </AlertDetails>
+          </AlertDescription>
+        </>
+      ) : (
+        // Nothing changed on disk, so the error itself is the whole story.
+        <>
+          <AlertTitle>
+            {creating ? "Could not create the worktree" : "Could not open the worktree"}
+          </AlertTitle>
+          <AlertDescription>
+            <p className="whitespace-pre-wrap break-words">{error}</p>
+          </AlertDescription>
+        </>
+      )}
     </Alert>
   );
   return (

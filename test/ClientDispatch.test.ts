@@ -386,7 +386,12 @@ test("INV-06: a failed worktree request is answered, then the sidebar is redisco
       assert.deepEqual(sent[answered], {
         _tag: "worktree_result",
         requestId: "r1",
-        result: { status: "error", detail: "Select a registered folder first." },
+        // Nothing ran, so the browser need not ask for rediscovery.
+        result: {
+          status: "error",
+          detail: "Select a registered folder first.",
+          unconfirmed: false,
+        },
       });
       // Without a rediscovery this waits until the test times out.
       assert.ok(
@@ -428,6 +433,8 @@ test("INV-06: a worktree request failing outside the lifecycle adapter still set
             failure(operation) ?? "",
             kind === "registry" ? /Registry write failed/ : /Unexpected failure/,
           );
+          const request = operation.getState().request;
+          assert.ok(request.status === "failed" && request.unconfirmed, "asks for rediscovery");
         }
       }),
     );

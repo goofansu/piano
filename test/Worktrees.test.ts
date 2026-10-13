@@ -183,8 +183,13 @@ if(a.includes('--version')) console.log('wt v0.80.0');else{const f=JSON.parse(re
     { ...good, base_branch: null },
     { raw: `noise\n${JSON.stringify(good)}` },
     { error: "Branch feature already exists" },
-  ])
-    assert.equal((await create(bad))._tag, "Failure");
+  ]) {
+    const result = await create(bad);
+    assert.equal(result._tag, "Failure");
+    // Worktrunk ran, so a checkout may exist; the error must say so.
+    if (result._tag === "Failure")
+      assert.match(result.failure.detail, /Creation was not confirmed/);
+  }
   const calls = readFileSync(audit, "utf8")
     .trim()
     .split("\n")
@@ -229,7 +234,11 @@ console.log(process.argv.includes('--version')?readFileSync(${JSON.stringify(ver
   for (const reported of ["wt v0.79.9", "wt v0.9.0", "worktrunk 0.81.0", ""]) {
     const result = await create(reported);
     assert.equal(result._tag, "Failure", reported);
-    if (result._tag === "Failure") assert.match(result.failure.detail, /0\.80\.0 or later/);
+    if (result._tag === "Failure") {
+      assert.match(result.failure.detail, /0\.80\.0 or later/);
+      // The version check runs before Worktrunk creates anything.
+      assert.doesNotMatch(result.failure.detail, /Creation was not confirmed/);
+    }
   }
 });
 
