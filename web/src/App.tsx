@@ -17,6 +17,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Toaster } from "@/components/ui/sonner";
+import { checkoutRefresh } from "@/lib/checkoutRefresh";
 import type { NotifyLevel } from "@/lib/client";
 import { type DraftStore, DraftStoreContext } from "@/lib/draftStore";
 import type { DraftKey } from "@/lib/messageDraft";
@@ -50,6 +51,7 @@ export default function App() {
   const { dispatch, send } = client;
   useEffect(() => providerAccounts.follow(client), [client]);
   useEffect(() => modelCatalogs.follow(client), [client]);
+  useEffect(() => checkoutRefresh.follow(client), [client]);
   const layout = useSidebarLayoutController();
 
   const navigation = useNavigationController(client, layout.closeMobile);
