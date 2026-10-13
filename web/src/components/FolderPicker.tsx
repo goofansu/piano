@@ -8,8 +8,7 @@ import {
   HomeIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,12 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { listDirectory, makeDirectory } from "@/lib/api";
-import { browseInput, childPath, listing, parsePathInput, pickTarget } from "@/lib/folderPath";
 import { abbrevHome } from "@/lib/format";
-import { createPreference } from "@/lib/preference";
 import { listRow } from "@/lib/styles";
-import { useObservation } from "@/lib/useObservation";
+import { useFolderBrowser } from "@/lib/useFolderBrowser";
 
 interface Props {
   open: boolean;
@@ -37,89 +33,34 @@ interface Props {
   initialPath?: string;
 }
 
-/** The last folder picked, where the picker opens next; empty for none. */
-const lastPicked = createPreference<string>({
-  key: "piano.pickerPath",
-  decode: (raw) => raw ?? "",
-  encode: (path) => path,
-});
-
 /**
  * Directory picker in the style of Shelley's: one path input is the whole model
- * (`@/lib/folderPath`). Enter selects the directory being typed.
+ * (`@/lib/folderPath`), browsed by `@/lib/folderBrowser`. Enter selects the directory being typed.
  */
 export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props) {
-  const [input, setInput] = useState("");
-  const [creating, setCreating] = useState(false);
+  const browser = useFolderBrowser(open, initialPath);
+  const { input, prefix, dir, error, loading, mutating, ready, creating, goTo } = browser;
+  const { matches, visible, hidden } = browser;
   const [newName, setNewName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  // Disable same-tick duplicate submissions too. Observation aborts this claim on directory/close changes.
-  const creation = useRef<AbortSignal | null>(null);
-
-  const { dirPath, prefix } = useMemo(() => parsePathInput(input), [input]);
-  const {
-    value: dir,
-    error,
-    loading,
-    mutating,
-    mutate,
-  } = useObservation(open ? dirPath : null, (signal, path) => listDirectory(path, { signal }));
-  const ready = open && !!dir && !error && !loading && !mutating;
 
   useEffect(() => {
     if (!open) return;
-    const start = initialPath || lastPicked.get();
-    setInput(browseInput(start || "~"));
-    setCreating(false);
     const timer = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(timer);
-  }, [open, initialPath]);
+  }, [open]);
 
-  const { matches, visible, hidden } = useMemo(
-    () => listing(dir?.entries ?? [], prefix),
-    [dir, prefix],
-  );
-
-  const goTo = (path: string) => setInput(browseInput(path));
   const selected = dir?.path ?? "";
 
   const select = () => {
-    if (!ready || !dir) return;
-    const path = pickTarget(dir.path, matches, prefix);
-    lastPicked.set(path);
+    const path = browser.pick();
+    if (path === undefined) return;
     onPick(path);
     onOpenChange(false);
   };
 
   const createFolder = async () => {
-    if (!newName.trim() || !ready || !dir || (creation.current && !creation.current.aborted))
-      return;
-    const child = childPath(dir.path, newName);
-    if ("error" in child) {
-      toast.error(child.error);
-      return;
-    }
-    let created: string | undefined;
-    try {
-      const parent = await mutate(async (signal, previous) => {
-        creation.current = signal;
-        try {
-          // Closing may stop observing the result, not undo an already submitted mkdir.
-          created = await makeDirectory(child.path, { signal });
-          // Keep the observation associated with its parent until navigation reads the child.
-          return previous;
-        } finally {
-          if (creation.current === signal) creation.current = null;
-        }
-      });
-      // The observation returns nothing if this directory or picker opening was superseded.
-      if (!parent || !created) return;
-      setCreating(false);
-      setNewName("");
-      goTo(created);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not create folder");
-    }
+    if ((await browser.createFolder(newName)) === "created") setNewName("");
   };
 
   return (
@@ -132,7 +73,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
         <Input
           ref={inputRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => browser.setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.nativeEvent.isComposing) {
               e.preventDefault();
@@ -269,7 +210,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
                   size="icon-xs"
                   variant="ghost"
                   aria-label="Cancel"
-                  onClick={() => setCreating(false)}
+                  onClick={browser.cancelCreating}
                 >
                   <XIcon />
                 </Button>
@@ -298,7 +239,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
             variant="ghost"
             size="sm"
             disabled={!ready || creating}
-            onClick={() => setCreating(true)}
+            onClick={browser.startCreating}
           >
             <FolderPlusIcon /> New folder
           </Button>
