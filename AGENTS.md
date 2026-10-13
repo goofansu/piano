@@ -7,12 +7,13 @@ client on React + shadcn/ui.
 ## Words
 
 Use these in code and docs: **folder** (a directory the user added, shown with its worktrees),
-**project** (a named group of sessions from any folders, toward one outcome), **worktree** (a
-checkout created through piano with `wt`), **session** (one pi session; never "thread"),
-**registry** (the SQLite store that records folders, projects, worktrees and session references;
-Pi owns session history). Pi's own "project trust" keeps Pi's name. When talking to the user,
-name what they see in the UI ("Piano's database", not "the registry").
-See [the glossary](docs/glossary.md) for the planned workspace, task and evidence vocabulary.
+**worktree** (a Git checkout of a folder; Piano lists them from Git and creates new ones with `wt`),
+**workspace** (a folder root or worktree as the registry records it, with the ID that URLs carry),
+**project** (a named group of sessions from any folders, toward one outcome), **session** (one pi
+session; never "thread"), **registry** (the SQLite store that records folders, workspaces, projects
+and session references; Pi owns session history). Pi's own "project trust" keeps Pi's name. When
+talking to the user, name what they see in the UI ("Piano's database", not "the registry").
+See [the glossary](docs/glossary.md) for the planned task and evidence vocabulary.
 
 ## Direction and guardrails
 
@@ -41,8 +42,8 @@ whose name encodes the scratch path.
 
 Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
 [the shortest deploy path](docs/hosted-development.md#shortest-deploy-path); to update every
-machine, use the `sync-piano` skill. On exe.dev the server has no authentication: it stays on
-loopback behind exe.dev private access (INV-11).
+machine, the user runs the `sync-piano` skill (user-invoked only). On exe.dev the server has no
+authentication: it stays on loopback behind exe.dev private access (INV-11).
 
 ## Verification
 
@@ -96,8 +97,8 @@ The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the ke
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands,
 and Session commands (only with a selected session). A feature that adds an action the sidebar or
 header offers also adds a row in the appropriate command group, named as its button is.
-Global shortcuts are Mod+K (palette) and stock Sidebar's Mod+B; other actions are reached through
-the palette or their control.
+Global shortcuts are Mod+K (palette) and stock Sidebar's Mod+B; the composer alone binds Mod+/ to
+its model picker. Other actions are reached through the palette or their control.
 
 ## Server
 
