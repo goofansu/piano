@@ -10,10 +10,10 @@ import { type DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFact
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
-import { Registry, RegistryDatabasePath, RegistryError, RegistryLive } from "../server/Registry.ts";
+import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
-import { WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
+import { type WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
 import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import {
@@ -364,17 +364,11 @@ test("INV-06: rejected worktree operations settle the picker immediately without
   );
 });
 
-test("INV-06: a failed worktree request is answered, then the sidebar is rediscovered", async () => {
+test("an admitted worktree request is answered with the command's result under its request ID", async () => {
   await run(
     Effect.gen(function* () {
-      const registry = yield* Registry,
-        sidebar = yield* SidebarView;
-      yield* registry.addFolder(cwd);
       const { receive } = yield* client;
-      // Let the connection's own first discovery finish, so any later one is the request's.
-      yield* sidebar.fresh;
-      const queue = yield* Queue.unbounded<number>();
-      discovered = queue;
+      const from = sent.length;
       yield* yield* receive({
         _tag: "create_worktree",
         requestId: "r1",
@@ -382,62 +376,19 @@ test("INV-06: a failed worktree request is answered, then the sidebar is redisco
         branch: "feature",
         hooks: false,
       });
-      const answered = sent.findIndex((m) => m._tag === "worktree_result");
-      assert.deepEqual(sent[answered], {
-        _tag: "worktree_result",
-        requestId: "r1",
-        // Nothing ran, so the browser need not ask for rediscovery.
-        result: {
-          status: "error",
-          detail: "Select a registered folder first.",
-          unconfirmed: false,
+      assert.deepEqual(answers(from), [
+        {
+          _tag: "worktree_result",
+          requestId: "r1",
+          result: {
+            status: "error",
+            detail: "Select a registered folder first.",
+            unconfirmed: false,
+          },
         },
-      });
-      // Without a rediscovery this waits until the test times out.
-      assert.ok(
-        (yield* Queue.take(queue)) > answered,
-        "a discovery started after the answer was sent",
-      );
+      ]);
     }),
   );
-});
-
-test("INV-06: a worktree request failing outside the lifecycle adapter still settles its request", async () => {
-  // Recording the checkout in the registry, or a defect, fails after Worktrunk or Git answered.
-  const failures = {
-    registry: Effect.fail(new RegistryError({ detail: "Registry write failed." })),
-    defect: Effect.die(new Error("Unexpected failure.")),
-  };
-  for (const [kind, failed] of Object.entries(failures))
-    await run(
-      Effect.gen(function* () {
-        const commands = yield* WorkspaceCommands;
-        const { receive } = yield* client.pipe(
-          Effect.provideService(WorkspaceCommands, {
-            ...commands,
-            createWorktree: () => failed,
-            addWorktree: () => failed,
-          }),
-        );
-        const { operation, exchange } = worktreePicker(receive);
-        operation.open(cwd);
-        yield* exchange;
-        for (const start of [
-          () => operation.create("feature", false),
-          () => operation.select(cwd),
-        ]) {
-          operation.dismiss();
-          start();
-          yield* exchange;
-          assert.match(
-            failure(operation) ?? "",
-            kind === "registry" ? /Registry write failed/ : /Unexpected failure/,
-          );
-          const request = operation.getState().request;
-          assert.ok(request.status === "failed" && request.unconfirmed, "asks for rediscovery");
-        }
-      }),
-    );
 });
 
 test("a request that fails reaches the client as an error for its selection, and the next request is still served", async () => {

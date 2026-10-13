@@ -3,7 +3,7 @@
  * worktrees and to trust a folder. Registry holds references only (INV-01); Worktrees owns Git
  * and Worktrunk; Pi's trust store owns trust. Sessions belong to SessionHosts.
  */
-import { Context, Effect, Layer } from "effect";
+import { Cause, Context, Effect, Layer } from "effect";
 import type {
   ModelCatalog,
   ProjectTrust,
@@ -11,11 +11,13 @@ import type {
   WorktreeResult,
 } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
+import { errorText } from "./ErrorText.ts";
 import type { ProjectTrustError } from "./ProjectTrust.ts";
-import { Registry, type RegistryError } from "./Registry.ts";
+import { Registry } from "./Registry.ts";
+import { SidebarView } from "./SidebarView.ts";
 import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
 
-export type ReadyWorktree = Extract<WorktreeResult, { status: "ready" }>;
+type ReadyWorktree = Extract<WorktreeResult, { status: "ready" }>;
 
 export interface TrustDecision {
   readonly cwd: string;
@@ -29,17 +31,20 @@ export class WorkspaceCommands extends Context.Service<
   {
     /** Git's worktrees for a registered folder; an unregistered one is an error discovery, not a failure. */
     readonly discoverWorktrees: (folder: string) => Effect.Effect<WorktreeDiscovery>;
-    /** Register an existing checkout of a registered folder. */
-    readonly addWorktree: (
-      folder: string,
-      path: string,
-    ) => Effect.Effect<ReadyWorktree, WorktreeError | RegistryError>;
-    /** Create a new branch checkout through Worktrunk and register it. */
+    /**
+     * Register an existing checkout of a registered folder. Like `createWorktree`, it answers every
+     * outcome as a result, failures included, then has the sidebar rediscover (INV-06).
+     */
+    readonly addWorktree: (folder: string, path: string) => Effect.Effect<WorktreeResult>;
+    /**
+     * Create a new branch checkout through Worktrunk and register it. A failed result is
+     * `unconfirmed` when a checkout may exist anyway: Worktrunk ran, or something failed after it.
+     */
     readonly createWorktree: (
       folder: string,
       branch: string,
       options: { readonly hooks?: boolean },
-    ) => Effect.Effect<ReadyWorktree, WorktreeError | RegistryError>;
+    ) => Effect.Effect<WorktreeResult>;
     /**
      * Save Pi's trust decision for a directory. Every client re-probes its models and the sidebar
      * shows the new trust; returns what Pi will now do there and the notice to show the requester.
@@ -56,6 +61,7 @@ export const WorkspaceCommandsLive = Layer.effect(
   Effect.gen(function* () {
     const registry = yield* Registry;
     const facts = yield* DirectoryFacts;
+    const sidebar = yield* SidebarView;
 
     const registered = (folder: string) =>
       registry
@@ -74,6 +80,27 @@ export const WorkspaceCommandsLive = Layer.effect(
         });
       return result;
     });
+    /**
+     * A worktree mutation's complete answer. Failures become error results; only an expected
+     * WorktreeError can confirm that nothing ran. Then rediscover rather than retry: a failure may
+     * have left a checkout behind.
+     */
+    const settled = <E>(work: Effect.Effect<ReadyWorktree, E>): Effect.Effect<WorktreeResult> =>
+      work.pipe(
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
+          const error = Cause.squash(cause);
+          const detail = errorText(error);
+          return Effect.logWarning(`worktree request failed: ${detail}`).pipe(
+            Effect.as<WorktreeResult>({
+              status: "error",
+              detail,
+              unconfirmed: !(error instanceof WorktreeError) || error.unconfirmed === true,
+            }),
+          );
+        }),
+        Effect.ensuring(sidebar.refresh),
+      );
     return WorkspaceCommands.of({
       discoverWorktrees: (folder) =>
         registry.requireFolder(folder).pipe(
@@ -111,21 +138,23 @@ export const WorkspaceCommandsLive = Layer.effect(
               "This checkout is absent or unavailable. Refresh discovery and inspect it before selecting.",
           });
         return yield* record({ status: "ready", folder, path: w.path, branch: w.branch });
-      }),
+      }, settled),
 
-      createWorktree: Effect.fn("WorkspaceCommands.createWorktree")(
-        function* (folder, branch, options) {
-          yield* registered(folder);
-          const w = yield* createWorktree(folder, branch.trim(), { hooks: options.hooks });
-          return yield* record({
-            status: "ready",
-            folder,
-            path: w.path,
-            branch: w.branch,
-            creation: { baseBranch: w.baseBranch, hooks: w.hooks },
-          });
-        },
-      ),
+      createWorktree: Effect.fn("WorkspaceCommands.createWorktree")(function* (
+        folder,
+        branch,
+        options,
+      ) {
+        yield* registered(folder);
+        const w = yield* createWorktree(folder, branch.trim(), { hooks: options.hooks });
+        return yield* record({
+          status: "ready",
+          folder,
+          path: w.path,
+          branch: w.branch,
+          creation: { baseBranch: w.baseBranch, hooks: w.hooks },
+        });
+      }, settled),
     });
   }),
 );
