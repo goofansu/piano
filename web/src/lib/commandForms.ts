@@ -39,10 +39,18 @@ export function answerForm(
       const { cwd, sessionId } = target;
       return { allowed: true, command: { _tag: "rename_session", cwd, sessionId, title } };
     }
+    case "archive-session":
     case "delete-session": {
       const { cwd, sessionId } = form.target;
       if (!sessionMutable(state, form.target)) return { allowed: false };
-      return { allowed: true, command: { _tag: "delete_session", cwd, sessionId } };
+      return {
+        allowed: true,
+        command: {
+          _tag: form.kind === "archive-session" ? "archive_session" : "delete_session",
+          cwd,
+          sessionId,
+        },
+      };
     }
     // Sharing has its own HTTP confirmation/result form, not a registry command.
     case "share-session":

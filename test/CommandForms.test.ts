@@ -33,6 +33,10 @@ const newId = () => "new-id";
 
 const rename = (target: SessionTarget = other): CommandForm => ({ kind: "rename-session", target });
 const del = (target: SessionTarget = other): CommandForm => ({ kind: "delete-session", target });
+const archive = (target: SessionTarget = other): CommandForm => ({
+  kind: "archive-session",
+  target,
+});
 const closeFolder: CommandForm = { kind: "close-folder", folder: { path: "/repo", name: "repo" } };
 
 test("rename sends the trimmed new title, and refuses an empty or unchanged one", () => {
@@ -47,13 +51,15 @@ test("rename sends the trimmed new title, and refuses an empty or unchanged one"
 });
 
 test("a form answered after the connection drops is refused", () => {
-  for (const form of [rename(), del(), closeFolder])
+  for (const form of [rename(), del(), archive(), closeFolder])
     assert.deepEqual(answerForm(offline, form, "Renamed"), { allowed: false }, form.kind);
 });
 
 test("the selected session's forms wait for its resync; other sessions do not", () => {
   assert.equal(answerForm(resyncing, rename(selected), "Renamed").allowed, false);
   assert.equal(answerForm(resyncing, del(selected)).allowed, false);
+  assert.equal(answerForm(resyncing, archive(selected)).allowed, false);
+  assert.equal(answerForm(resyncing, archive(other)).allowed, true);
   assert.equal(answerForm(resyncing, rename(other), "Renamed").allowed, true);
   assert.equal(answerForm(resyncing, del(other)).allowed, true);
   assert.equal(answerForm(online, rename(selected), "Renamed").allowed, true);
@@ -69,7 +75,11 @@ test("rename's form follows the descriptor's rule when the checkout is gone", ()
   assert.equal(answerForm(unavailable, rename(), "Renamed").allowed, false);
 });
 
-test("delete and close folder send their registry change", () => {
+test("archive, delete and close folder send their registry change", () => {
+  assert.deepEqual(answerForm(online, archive()), {
+    allowed: true,
+    command: { _tag: "archive_session", cwd: "/repo", sessionId: "s2" },
+  });
   assert.deepEqual(answerForm(online, del()), {
     allowed: true,
     command: { _tag: "delete_session", cwd: "/repo", sessionId: "s2" },

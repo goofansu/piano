@@ -11,6 +11,7 @@ import {
   sessionContext,
   sessionMutable,
   sessionReference,
+  sessionWorking,
   workspaceFor,
 } from "./sessionContext.ts";
 
@@ -69,7 +70,8 @@ export type SessionCommandIntent =
   | { kind: "pull-request" }
   | { kind: "display"; display: SessionDisplay }
   /** Without a target the selected session has no Pi session ID yet; such a command is never enabled. */
-  | { kind: "rename" | "share" | "archive" | "delete"; target: SessionTarget | undefined }
+  | { kind: "rename" | "share" | "delete"; target: SessionTarget | undefined }
+  | { kind: "archive"; target: SessionTarget | undefined; confirm: boolean }
   | { kind: "new-session"; cwd: string };
 
 export interface SessionCommand {
@@ -289,7 +291,11 @@ export function sessionCommands(
         icon: "archive",
         group: "manage",
         enabled: mutable,
-        intent: { kind: "archive", target: subject },
+        intent: {
+          kind: "archive",
+          target: subject,
+          confirm: !!subject && sessionWorking(state, subject),
+        },
       },
       {
         id: "delete",

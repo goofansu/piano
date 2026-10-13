@@ -40,6 +40,7 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
+import { sessionWorking } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import { useRadiusSignedIn } from "@/lib/useRadiusSignedIn";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
@@ -118,7 +119,7 @@ export function SessionCommandMenuItem({
 
 /**
  * The one owner of command effects and their forms: whichever surface asked, running a command goes
- * through `runCommand`, which refuses a disabled one, and there is a single Rename, Delete, Close
+ * through `runCommand`, which refuses a disabled one, and there is a single Rename, Archive, Delete, Close
  * folder and project dialog. Each form re-checks its rule when it is answered.
  */
 export function CommandHost({
@@ -141,6 +142,8 @@ export function CommandHost({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renaming = form?.kind === "rename-session" ? form.target : null;
   const deleting = form?.kind === "delete-session" ? form.target : null;
+  const archiving = form?.kind === "archive-session" ? form.target : null;
+  const deletingWorking = !!deleting && sessionWorking(state, deleting);
   const closing = form?.kind === "close-folder" ? form.folder : null;
   const close = () => setForm(null);
   // Forms re-check the rule when they are answered: the attachment or connection may have changed since.
@@ -228,12 +231,38 @@ export function CommandHost({
           </form>
         </DialogContent>
       </Dialog>
+      <Dialog open={!!archiving} onOpenChange={(open) => !open && close()}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Stop and archive this session?</DialogTitle>
+            <DialogDescription>
+              This will stop any work still running in "{archiving?.title || "Untitled"}" and remove
+              it from the sidebar. Its transcript will be kept. Changes already made to files will
+              not be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={close}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!answer?.allowed}
+              onClick={() => {
+                if (submit()) close();
+              }}
+            >
+              Stop and archive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!deleting} onOpenChange={(open) => !open && close()}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Delete this session?</DialogTitle>
             <DialogDescription>
-              "{deleting?.title || "Untitled"}" and its transcript are removed from Pi's session
+              {deletingWorking && "This will stop the session and interrupt its current work. "}"
+              {deleting?.title || "Untitled"}" and its transcript are removed from Pi's session
               store. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
@@ -249,7 +278,7 @@ export function CommandHost({
                 close();
               }}
             >
-              Delete
+              {deletingWorking ? "Stop and delete" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

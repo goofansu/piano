@@ -134,6 +134,16 @@ export function sessionMutable(state: AppState, target: SessionRef): boolean {
   return state.connected && (!isSelectedSession(state, target) || sessionReady(state));
 }
 
+/** Activity for either the selected session or a background session in the sidebar. */
+export function sessionWorking(state: AppState, target: SessionRef): boolean {
+  const session = state.session;
+  if (session?.cwd === target.cwd && session.sessionId === target.sessionId)
+    return isWorking(session.state) || session.state.submission?.outcome === "submitting";
+  return state.hosts.some(
+    (host) => host.cwd === target.cwd && host.sessionId === target.sessionId && host.streaming,
+  );
+}
+
 /** Pi cannot run where the checkout or history is gone, and renaming starts Pi. */
 export function sessionCheckoutMissing(state: AppState, target: SessionRef): boolean {
   return (

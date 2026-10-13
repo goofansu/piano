@@ -20,6 +20,7 @@ export type CommandForm =
   | { kind: "rename-session"; target: SessionTarget }
   | { kind: "delete-session"; target: SessionTarget }
   | { kind: "share-session"; target: SessionTarget }
+  | { kind: "archive-session"; target: SessionTarget }
   | { kind: "close-folder"; folder: { path: string; name: string } }
   | { kind: "project"; dialog: ProjectDialog };
 
@@ -100,6 +101,10 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "archive":
       if (!intent.target) return false;
+      if (intent.confirm) {
+        effects.openForm({ kind: "archive-session", target: intent.target });
+        break;
+      }
       effects.send({
         _tag: "archive_session",
         cwd: intent.target.cwd,

@@ -102,6 +102,46 @@ test("enabled commands reach the effect their intent names", () => {
     assert.deepEqual(effectsOf(command), { ran: true, calls: [call] }, command.label);
 });
 
+test("archiving a working background session asks before sending a destructive command", () => {
+  const working: AppState = {
+    ...online,
+    hosts: [{ cwd: other.cwd, sessionId: other.sessionId, streaming: true }],
+  };
+  const archive = sessionCommands(working, other).find((c) => c.id === "archive")!;
+  assert.equal(archive.enabled, true);
+  assert.deepEqual(effectsOf(archive), {
+    ran: true,
+    calls: [["openForm", { kind: "archive-session", target: other }]],
+  });
+});
+
+test("archiving selected streaming, compacting, retrying or submitting work asks first", () => {
+  for (const activity of [
+    { isStreaming: true },
+    { isCompacting: true },
+    { isRetrying: true },
+    { submission: { id: 1, outcome: "submitting" } },
+  ]) {
+    const working: AppState = {
+      ...online,
+      selectionId: "sel",
+      session: {
+        ...other,
+        hosted: true,
+        cursor: null,
+        state: { sessionId: other.sessionId, ...activity } as SessionState,
+        messages: [],
+        dialogs: [],
+      },
+    };
+    const archive = sessionCommands(working, other).find((c) => c.id === "archive")!;
+    assert.deepEqual(effectsOf(archive), {
+      ran: true,
+      calls: [["openForm", { kind: "archive-session", target: other }]],
+    });
+  }
+});
+
 test("the selected session's New session here opens its directory", () => {
   const session = {
     cwd: "/repo/wt",
