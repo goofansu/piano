@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-
-const clamp = (value: number) => Math.min(1, Math.max(0, value));
+import { type SwipeEnd, type SwipeGesture, startSwipe } from "./swipeGesture.ts";
 
 // Do not animate an inherited CSS variable: that invalidates styles throughout the transcript
 // and sidebar on every frame. Update only the three moving/painted surfaces instead.
@@ -60,18 +59,7 @@ export function useSidebarSwipe({
   useEffect(cancelDrag, [open, cancelDrag]);
 
   useEffect(() => {
-    let gesture: {
-      id: number;
-      x: number;
-      y: number;
-      width: number;
-      initial: number;
-      claimed: boolean;
-      position: number;
-      lastX: number;
-      lastTime: number;
-      velocity: number;
-    } | null = null;
+    let gesture: { id: number; swipe: SwipeGesture; position: number | null } | null = null;
     let suppressClickUntil = 0;
     let frame: number | null = null;
     const cancelFrame = () => {
@@ -80,7 +68,7 @@ export function useSidebarSwipe({
     };
     const paint = () => {
       frame = null;
-      if (!gesture?.claimed) return;
+      if (gesture?.position == null) return;
       paintPosition(mainRef.current, revealRef.current, gesture.position);
     };
     const cancel = () => {
@@ -91,10 +79,12 @@ export function useSidebarSwipe({
     // A long press creates its selection after touchstart. Once selection takes over,
     // abandon the whole gesture, even if the range later collapses while dragging a handle.
     const hasSelection = () => window.getSelection()?.isCollapsed === false;
-    const selectionChanged = () => {
-      if (!hasSelection()) return;
+    const yieldToSelection = () => {
       suppressClickUntil = 0;
       cancel();
+    };
+    const selectionChanged = () => {
+      if (hasSelection()) yieldToSelection();
     };
     cancelGesture.current = cancel;
     const start = (event: TouchEvent) => {
@@ -128,71 +118,53 @@ export function useSidebarSwipe({
       if (hasSelection()) return;
       gesture = {
         id: touch.identifier,
-        x: touch.clientX,
-        y: touch.clientY,
-        width: innerWidth * 0.75,
-        initial: open ? 1 : 0,
-        claimed: false,
-        position: open ? 1 : 0,
-        lastX: touch.clientX,
-        lastTime: event.timeStamp,
-        velocity: 0,
+        swipe: startSwipe(
+          { x: touch.clientX, y: touch.clientY, time: event.timeStamp },
+          open,
+          innerWidth * 0.75,
+        ),
+        position: null,
       };
     };
     const move = (event: TouchEvent) => {
       const g = gesture;
       if (!g) return;
-      // selectionchange may not have been delivered yet when this touch event arrives.
-      if (hasSelection()) return selectionChanged();
       const touch = Array.from(event.touches).find((touch) => touch.identifier === g.id);
-      if (!touch || event.touches.length !== 1) return cancel();
-      const dx = touch.clientX - g.x;
-      const dy = Math.abs(touch.clientY - g.y);
-      if (!g.claimed) {
-        if (dy > 10 && dy > Math.abs(dx) / 2) return cancel();
-        if (Math.abs(dx) < 10) return;
-        if ((g.initial === 0 ? dx : -dx) < 0 || !event.cancelable) return cancel();
-        g.claimed = true;
-        if (!g.initial) current().onPreview();
-        setProgress(clamp(g.initial + dx / g.width));
+      const outcome = g.swipe.move({
+        point: touch ? { x: touch.clientX, y: touch.clientY } : null,
+        touches: event.touches.length,
+        time: event.timeStamp,
+        cancelable: event.cancelable,
+        // selectionchange may not have been delivered yet when this touch event arrives.
+        selecting: hasSelection(),
+      });
+      if (outcome.kind === "ignore") return;
+      if (outcome.kind === "yield") return yieldToSelection();
+      if (outcome.kind === "cancel") return cancel();
+      if (outcome.kind === "claim") {
+        if (outcome.opening) current().onPreview();
+        setProgress(outcome.position);
       }
       // A native, non-passive listener is necessary: React's touch listeners are passive.
       // Only a claimed horizontal drag suppresses scrolling; the browser retains edge gestures.
       if (event.cancelable) event.preventDefault();
-      const elapsed = event.timeStamp - g.lastTime;
-      if (elapsed > 0) {
-        const sample = (touch.clientX - g.lastX) / elapsed;
-        // Smooth event-to-event jitter, but respond immediately to a deliberate reversal.
-        const weight = Math.min(1, elapsed / 50);
-        g.velocity =
-          sample * g.velocity <= 0 ? sample : g.velocity + weight * (sample - g.velocity);
-      }
-      g.lastX = touch.clientX;
-      g.lastTime = event.timeStamp;
-      g.position = clamp(g.initial + dx / g.width);
+      g.position = outcome.position;
       if (frame === null) frame = requestAnimationFrame(paint);
       suppressClickUntil = performance.now() + 500;
     };
     const end = (event: TouchEvent) => {
-      if (hasSelection()) return selectionChanged();
-      const g = gesture;
-      if (!g?.claimed || event.touches.length) return cancel();
-      const velocity = event.timeStamp - g.lastTime < 100 ? g.velocity : 0;
-      const moved = Math.abs(g.position - g.initial) * g.width;
-      const next = moved >= 24 && Math.abs(velocity) > 0.5 ? velocity > 0 : g.position >= 0.5;
+      const selecting = hasSelection();
+      const outcome: SwipeEnd = gesture?.swipe.end({
+        touches: event.touches.length,
+        time: event.timeStamp,
+        selecting,
+      }) ?? { kind: selecting ? "yield" : "cancel" };
+      if (outcome.kind === "yield") return yieldToSelection();
+      if (outcome.kind === "cancel") return cancel();
       suppressClickUntil = performance.now() + 500;
       cancel();
-      const remaining = Math.abs(Number(next) - g.position) * g.width;
-      // Keep finger tracking 1:1, then carry its velocity into a gentle stop. Duration alone
-      // cannot do that: a fixed ease-out curve accelerates slow releases into a visible lurch.
-      const speed = velocity * (Number(next) - g.position) > 0 ? Math.abs(velocity) : 0;
-      const duration = Math.round(
-        Math.min(420, Math.max(120, (remaining * 2) / Math.max(0.5, speed))),
-      );
-      // A cubic's initial slope is y1/x1. Match px/ms at the handoff; clamp extreme flicks
-      // to keep the curve monotonic, and finish with a horizontal tangent (zero velocity).
-      const y1 = remaining > 0 ? Math.min(1, (speed * duration) / (remaining * 3)) : 0;
-      setSettle({ target: next, duration, easing: `cubic-bezier(${1 / 3}, ${y1}, 0.5, 1)` });
+      const { open: next, duration, easing } = outcome;
+      setSettle({ target: next, duration, easing });
       const state = current();
       if (next !== state.open) state.onOpenChange(next);
     };
