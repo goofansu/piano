@@ -11,10 +11,8 @@ import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { deliveryAction } from "@/lib/composerControl";
 import { useDraftStore } from "@/lib/draftStore";
 import { sessionDraftKey } from "@/lib/messageDraft";
 import {
@@ -25,7 +23,6 @@ import {
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useCheckoutRefresh } from "@/lib/useCheckoutRefresh";
-import { useModelChoice } from "@/lib/useModelChoice";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
@@ -56,26 +53,11 @@ export function SessionView({ state, send }: Props) {
   const { workspace, changesWorkspace } = sessionContext(state);
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
   const pullRequest = useSessionPullRequest(workspace?.id, t?.sessionId, !!t && isWorking(t.state));
-  const { status, streaming, replyActivity } = sessionActivity(state, display);
+  const { status, replyActivity } = sessionActivity(state, display);
   const pane = sessionPane(state);
   const notices = sessionNotices(state, display);
   const readOnly = notices.find((n) => n.placement === "composer");
   const draftKey = t ? sessionDraftKey(t) : null;
-  const catalog = t ? (state.catalogs[t.cwd] ?? null) : null;
-  // A running Pi owns the selection; a saved session's picks wait for its first prompt and
-  // override only what was picked, so Pi restores the rest of its recorded selection.
-  const choice = useModelChoice(
-    catalog,
-    {
-      kind: "session",
-      hosted: !!t?.hosted,
-      model: t?.state.model,
-      thinkingLevel: t?.state.thinkingLevel,
-    },
-    `${t?.cwd}\0${t?.sessionId}\0${t?.hosted}`,
-    (action) => send({ _tag: "act", action }),
-    !pane.composerDisabled,
-  );
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
 
   return (
@@ -185,45 +167,16 @@ export function SessionView({ state, send }: Props) {
             <StatusLine key={n.id} notice={n} />
           ),
         )}
-      {readOnly ? (
-        <Alert className="mx-4 my-3 w-auto md:mx-6">
-          <AlertTitle>{readOnly.title}</AlertTitle>
-          <AlertDescription>{readOnly.details.join(" ")}</AlertDescription>
-        </Alert>
-      ) : (
-        <Composer
-          draftKey={draftKey}
-          completion={completionTarget(state)}
-          onRestoreQueue={() => send({ _tag: "act", action: { _tag: "restore_queue" } })}
-          disabled={!draftKey || input?.outcome === "starting"}
-          actionsDisabled={pane.composerDisabled}
-          streaming={streaming}
-          compacting={t?.state.isCompacting}
-          onSend={(text, kind, attachments) => {
-            send({
-              _tag: "act",
-              action: { _tag: deliveryAction(kind), text, attachments },
-              start: choice.start(),
-            });
-            choice.submitted();
-          }}
-          onStop={() => send({ _tag: "act", action: { _tag: "stop" } })}
-          stopping={t?.state.isStopping}
-          catalog={catalog}
-          onRefreshModels={
-            t && !pane.composerDisabled
-              ? () => send({ _tag: "models", cwd: t.cwd, refresh: true })
-              : undefined
-          }
-          model={choice.model}
-          onModelChange={choice.onModelChange}
-          effort={choice.effort}
-          onEffortChange={choice.onEffortChange}
-          usage={t?.state}
-          messages={t?.messages}
-          queuedMessages={t?.state.queuedMessages}
-        />
-      )}
+      <Composer
+        session={t}
+        catalog={t ? (state.catalogs[t.cwd] ?? null) : null}
+        draftKey={draftKey}
+        completion={completionTarget(state)}
+        disabled={!draftKey || input?.outcome === "starting"}
+        actionsDisabled={pane.composerDisabled}
+        readOnly={readOnly}
+        send={send}
+      />
     </>
   );
 }
