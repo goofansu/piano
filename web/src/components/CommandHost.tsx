@@ -31,6 +31,7 @@ import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
@@ -41,7 +42,6 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
-import { sessionWorking } from "@/lib/sessionContext";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
@@ -159,10 +159,12 @@ export function CommandHost({
   const { form } = forms;
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renaming = form?.kind === "rename-session" ? form.target : null;
-  const deleting = form?.kind === "delete-session" ? form.target : null;
-  const archiving = form?.kind === "archive-session" ? form.target : null;
-  const deletingWorking = !!deleting && sessionWorking(state, deleting);
-  const closing = form?.kind === "close-folder" ? form.folder : null;
+  // Archive, delete and close folder share one confirm dialog; `confirmation` decides its wording.
+  const asking = form ? confirmation(state, form) : undefined;
+  // The dialog animates closed after its form closes, so it keeps the last question meanwhile.
+  const lastAsked = useRef(asking);
+  if (asking) lastAsked.current = asking;
+  const asked = asking ?? lastAsked.current;
   const close = forms.cancel;
   const answer = forms.answer();
 
@@ -249,61 +251,22 @@ export function CommandHost({
           </form>
         </DialogContent>
       </Dialog>
-      <Dialog open={!!archiving} onOpenChange={(open) => !open && close()}>
+      <Dialog open={!!asking} onOpenChange={(open) => !open && close()}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Stop and archive this session?</DialogTitle>
-            <DialogDescription>
-              This will stop any work still running in "{archiving?.title || "Untitled"}" and remove
-              it from the sidebar. Its transcript will be kept. Changes already made to files will
-              not be undone.
-            </DialogDescription>
+            <DialogTitle>{asked?.title}</DialogTitle>
+            <DialogDescription>{asked?.description}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button disabled={!answer.allowed} onClick={forms.submit}>
-              Stop and archive
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!deleting} onOpenChange={(open) => !open && close()}>
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Delete this session?</DialogTitle>
-            <DialogDescription>
-              {deletingWorking && "This will stop the session and interrupt its current work. "}"
-              {deleting?.title || "Untitled"}" and its transcript are removed from Pi's session
-              store. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={close}>
-              Cancel
-            </Button>
-            <Button variant="destructive" disabled={!answer.allowed} onClick={forms.submit}>
-              {deletingWorking ? "Stop and delete" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!closing} onOpenChange={(open) => !open && close()}>
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Close this folder?</DialogTitle>
-            <DialogDescription>
-              "{closing?.name}" will be removed from the sidebar. Files and session history will not
-              be deleted.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={close}>
-              Cancel
-            </Button>
-            <Button disabled={!answer.allowed} onClick={forms.submit}>
-              Close
+            <Button
+              variant={asked?.destructive ? "destructive" : "default"}
+              disabled={!answer.allowed}
+              onClick={forms.submit}
+            >
+              {asked?.confirmLabel}
             </Button>
           </DialogFooter>
         </DialogContent>

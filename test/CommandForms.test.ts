@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SessionShare } from "../shared/share.ts";
 import type { ClientCommand, Project, SessionState } from "../shared/wire.ts";
-import { answerForm, createCommandForms, SHARE_UNCONFIRMED } from "../web/src/lib/commandForms.ts";
+import {
+  answerForm,
+  confirmation,
+  createCommandForms,
+  SHARE_UNCONFIRMED,
+} from "../web/src/lib/commandForms.ts";
 import type { CommandForm } from "../web/src/lib/commands.ts";
 import { type SessionTarget, sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
@@ -98,6 +103,48 @@ test("archive, delete and close folder send their registry change", () => {
     allowed: true,
     command: { _tag: "remove_folder", path: "/repo" },
   });
+});
+
+test("deleting a working session says it stops the work; an idle one just deletes", () => {
+  const working: AppState = { ...online, hosts: [{ ...other, streaming: true }] };
+  assert.deepEqual(confirmation(working, del()), {
+    title: "Delete this session?",
+    description:
+      'This will stop the session and interrupt its current work. "Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
+    confirmLabel: "Stop and delete",
+    destructive: true,
+  });
+  assert.deepEqual(confirmation(online, del()), {
+    title: "Delete this session?",
+    description:
+      '"Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
+    confirmLabel: "Delete",
+    destructive: true,
+  });
+});
+
+test("archive and close folder name their subject; an untitled session reads Untitled", () => {
+  const untitled = { cwd: "/repo", sessionId: "s2" };
+  assert.deepEqual(confirmation(online, archive(untitled)), {
+    title: "Stop and archive this session?",
+    description:
+      'This will stop any work still running in "Untitled" and remove it from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.',
+    confirmLabel: "Stop and archive",
+    destructive: false,
+  });
+  assert.match(confirmation(online, archive())?.description ?? "", /running in "Other"/);
+  assert.match(confirmation(online, del(untitled))?.description ?? "", /^"Untitled"/);
+  assert.deepEqual(confirmation(online, closeFolder), {
+    title: "Close this folder?",
+    description:
+      '"repo" will be removed from the sidebar. Files and session history will not be deleted.',
+    confirmLabel: "Close",
+    destructive: false,
+  });
+  // Forms with their own dialogs ask nothing here.
+  assert.equal(confirmation(online, rename()), undefined);
+  assert.equal(confirmation(online, { kind: "share-session", target: other }), undefined);
+  assert.equal(confirmation(online, { kind: "project", dialog: {} }), undefined);
 });
 
 test("project answers: a new project opens, an edit keeps its id, create-and-assign stays put", () => {

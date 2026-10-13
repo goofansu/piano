@@ -13,7 +13,7 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
-import { sessionMutable, workspaceFor } from "./sessionContext.ts";
+import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
 
 export interface FormAnswer {
   /** The form may be submitted now; otherwise its submit control is disabled. */
@@ -91,6 +91,52 @@ export function answerForm(
         ...(!project && !assign ? { openProject: id } : {}),
       };
     }
+  }
+}
+
+/** What a confirmation form asks; the one confirm dialog renders this and nothing else. */
+export interface Confirmation {
+  title: string;
+  description: string;
+  /** The confirm button's label. */
+  confirmLabel: string;
+  /** The confirm button is destructive: the change cannot be undone. */
+  destructive: boolean;
+}
+
+/**
+ * The question a confirmation form asks, as of `state`; undefined for a form with its own dialog
+ * (rename, share, project). Deleting a working session warns that it interrupts the work.
+ */
+export function confirmation(state: AppState, form: CommandForm): Confirmation | undefined {
+  switch (form.kind) {
+    case "archive-session":
+      return {
+        title: "Stop and archive this session?",
+        description: `This will stop any work still running in "${form.target.title || "Untitled"}" and remove it from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.`,
+        confirmLabel: "Stop and archive",
+        destructive: false,
+      };
+    case "delete-session": {
+      const working = sessionWorking(state, form.target);
+      return {
+        title: "Delete this session?",
+        description: `${working ? "This will stop the session and interrupt its current work. " : ""}"${form.target.title || "Untitled"}" and its transcript are removed from Pi's session store. This cannot be undone.`,
+        confirmLabel: working ? "Stop and delete" : "Delete",
+        destructive: true,
+      };
+    }
+    case "close-folder":
+      return {
+        title: "Close this folder?",
+        description: `"${form.folder.name}" will be removed from the sidebar. Files and session history will not be deleted.`,
+        confirmLabel: "Close",
+        destructive: false,
+      };
+    case "rename-session":
+    case "share-session":
+    case "project":
+      return undefined;
   }
 }
 
