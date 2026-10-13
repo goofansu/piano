@@ -5,7 +5,6 @@ import type {
   ModelCatalog,
   Project,
   ProjectTrust,
-  RenderMsg,
   ServerMessage,
   SessionCursor,
   SessionReference,
@@ -14,7 +13,10 @@ import type {
 } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { applySessionEvent } from "../../shared/sessionProjection.ts";
+import * as FirstMessage from "./lib/firstMessage.ts";
 import { appendParagraph, type DraftKey, sessionDraftKey } from "./lib/messageDraft.ts";
+
+export type { PendingCreate } from "./lib/firstMessage.ts";
 
 /** The selected session: the server's snapshot folded forward by its live events, plus where it came from. */
 export interface SessionView extends Snapshot {
@@ -22,19 +24,6 @@ export interface SessionView extends Snapshot {
   sessionId: string | null;
   hosted: boolean;
   cursor: SessionCursor | null;
-}
-
-/** Browser-only submitted input, never part of Pi's transcript or registry. */
-export interface PendingCreate {
-  /** The creation request, not a later attachment to the same session. */
-  selectionId: string;
-  cwd: string;
-  text: string;
-  attachments?: RenderMsg["attachments"];
-  outcome: "starting" | "submitted" | "handled" | "rejected" | "uncertain";
-  /** First observed Pi submission; later input supersedes this local receipt. */
-  submissionId?: number;
-  detail?: string;
 }
 
 export interface AppState {
@@ -61,7 +50,7 @@ export interface AppState {
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
   selectionFailure: { cwd: string; sessionId: string | null; message: string } | null;
-  pendingCreate: PendingCreate | null;
+  pendingCreate: FirstMessage.PendingCreate | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
   /** Unsent editor text belongs to this browser; see lib/messageDraft for keys and images. */
@@ -101,7 +90,7 @@ export type Action =
       selectionId: string;
       cwd: string;
       sessionId: string | null;
-      firstMessage?: Pick<PendingCreate, "text" | "attachments">;
+      firstMessage?: Pick<FirstMessage.PendingCreate, "text" | "attachments">;
     }
   /** Opens the New page; without a directory it keeps the one already chosen there. */
   | { type: "new"; cwd?: string; projectId?: string }
@@ -115,43 +104,10 @@ export type Action =
   | { type: "draft_paragraph_appended"; key: DraftKey; text: string };
 
 export function reduce(s: AppState, a: Action): AppState {
-  let next = reduceAction(s, a);
+  const next = reduceAction(s, a);
   if (next === s) return s;
-  let input = next.pendingCreate;
-  const t = next.session;
-  if (!input || !t) return next;
-  // Pi may expand slash commands, so reconcile by the new session's first user
-  // message, not text equality. Never insert the local input into history.
-  if (t.messages.some((m) => m.role === "user") || t.pending?.role === "user")
-    return { ...next, pendingCreate: null };
-  const submission = t.state.submission;
-  if (submission) {
-    if (input.submissionId !== undefined && submission.id > input.submissionId)
-      return { ...next, pendingCreate: null };
-    if (input.submissionId === undefined) {
-      input = { ...input, submissionId: submission.id };
-      next = { ...next, pendingCreate: input };
-    }
-  }
-  if (
-    submission &&
-    (submission.outcome === "handled" ||
-      submission.outcome === "rejected" ||
-      submission.outcome === "uncertain")
-  ) {
-    return {
-      ...next,
-      pendingCreate: { ...input, outcome: submission.outcome, detail: submission.detail },
-    };
-  }
-  if (submission?.outcome === "started" || submission?.outcome === "queued")
-    return { ...next, pendingCreate: { ...input, outcome: "submitted", detail: undefined } };
-  if (t.state.closure && input.outcome !== "submitted")
-    return {
-      ...next,
-      pendingCreate: { ...input, outcome: "uncertain", detail: t.state.closure.detail },
-    };
-  return next;
+  const pendingCreate = FirstMessage.reconcile(next.pendingCreate, next.session);
+  return pendingCreate === next.pendingCreate ? next : { ...next, pendingCreate };
 }
 
 function reduceAction(s: AppState, a: Action): AppState {
@@ -163,14 +119,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         connected: a.connected,
         selectionId: a.connected ? s.selectionId : null,
         selecting: !a.connected && s.pendingCreate ? null : s.selecting,
-        pendingCreate:
-          !a.connected && s.pendingCreate?.outcome === "starting"
-            ? {
-                ...s.pendingCreate,
-                outcome: "uncertain",
-                detail: "Connection lost before delivery was confirmed.",
-              }
-            : s.pendingCreate,
+        pendingCreate: a.connected ? s.pendingCreate : FirstMessage.connectionLost(s.pendingCreate),
       };
     case "selecting":
       return {
@@ -181,7 +130,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         selecting: { cwd: a.cwd, sessionId: a.sessionId },
         selectionFailure: null,
         pendingCreate: a.firstMessage
-          ? { selectionId: a.selectionId, cwd: a.cwd, ...a.firstMessage, outcome: "starting" }
+          ? FirstMessage.started(a.selectionId, a.cwd, a.firstMessage)
           : s.session && sessionKey(s.session) === sessionKey(a)
             ? s.pendingCreate
             : null,
@@ -335,8 +284,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         selectionFailure: { ...s.selecting, message: m.message },
         selecting: null,
         pendingCreate:
-          m._tag === "selection_rejected" && s.pendingCreate?.selectionId === m.selectionId
-            ? { ...s.pendingCreate, outcome: "rejected", detail: m.message }
+          m._tag === "selection_rejected"
+            ? FirstMessage.rejected(s.pendingCreate, m.selectionId, m.message)
             : s.pendingCreate,
       };
     case "error":
@@ -344,7 +293,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       return {
         ...s,
         selecting: null,
-        pendingCreate: { ...s.pendingCreate, outcome: "uncertain", detail: m.message },
+        pendingCreate: FirstMessage.failed(s.pendingCreate, m.message),
       };
     case "action_result": {
       if (m.result._tag !== "queue_restored") return s;
