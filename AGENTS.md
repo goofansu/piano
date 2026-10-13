@@ -24,6 +24,9 @@ the claim, the relevant invariant and the smallest useful check. Add a regressio
 meaningful failure not already protected, testing observable contracts rather than private helpers
 or mock choreography. Documentation-only changes need document/link review, not tests or an app run.
 
+- **Code or dependency changes:** before committing, run `npm run typecheck` and `npm test`
+  (module tests against `test/fake-pi.mjs`, no credentials); the pre-commit hook runs lint. Commit
+  only when all three pass.
 - **Application behavior:** observe the affected journey through `npx agent-browser` on a
   [scratch instance](#scratch-instance) and keep the output as PR evidence; the browser script
   stays uncommitted.
