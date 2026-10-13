@@ -87,11 +87,14 @@ const list = Effect.fn("Directories.list")(function* (
   };
 });
 
-/** Create the directory and any missing parents (mkdir -p); answers with its path. */
+/** Create the directory and any missing parents (mkdir -p); answers with its path. The
+ * filesystem root is refused: it is never a new folder. */
 const make = Effect.fn("Directories.make")(function* (
   raw: string,
 ): Effect.fn.Return<string, DirectoryError> {
   const path = directoryPath(raw);
+  if (path === "/")
+    return yield* new DirectoryError({ detail: "Choose a folder below the filesystem root." });
   yield* Effect.tryPromise({
     try: () => mkdir(path, { recursive: true }),
     catch: (error) => new DirectoryError({ detail: messageOf(error) }),

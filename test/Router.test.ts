@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
 import { PiSettings, PiSettingsError } from "../server/PiSettings.ts";
+import { ProviderLoginRuntime } from "../server/ProviderLogin.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { type Endpoint, Endpoints } from "../shared/http.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
@@ -20,7 +21,12 @@ before(async () => {
           ? Effect.succeed({ candidate: "not defaults" } as never)
           : Effect.die(new Error("EACCES: /home/someone/.pi/agent/settings.json")),
   });
-  server = await startRouter("piano-router-", failingSettings);
+  // Pi's providers fail to load with an error that names a local file.
+  const unreadableProviders = Layer.succeed(ProviderLoginRuntime, {
+    create: () => Promise.reject(new Error("EACCES: /home/someone/.pi/agent/auth.json")),
+    deviceId: () => "unused",
+  });
+  server = await startRouter("piano-router-", Layer.merge(failingSettings, unreadableProviders));
 });
 after(() => server.dispose());
 
@@ -177,4 +183,23 @@ test("a session's slash commands are addressed by IDs; a stopped session's refus
     status: 409,
     body: { error: "Session is no longer running. Reopen the suggestions." },
   });
+});
+
+test("the services refuse what Router used to: the filesystem root, an empty directory, unreadable providers", async () => {
+  const json = (body: unknown) => JSON.stringify(body);
+  assert.deepEqual(await reply(await post("/api/mkdir", json({ path: "/" }))), {
+    status: 400,
+    body: { error: "Choose a folder below the filesystem root." },
+  });
+  assert.deepEqual(await reply(await post("/api/mkdir", json({ path: "" }))), {
+    status: 400,
+    body: { error: Endpoints.makeDirectory.invalid },
+  });
+  assert.deepEqual(await reply(await post("/api/commands", json({ cwd: "" }))), {
+    status: 400,
+    body: { error: Endpoints.slashCommands.invalid },
+  });
+  const providers = await reply(await server.handle(Endpoints.oauthProviders.path));
+  assert.deepEqual(providers, { status: 502, body: { error: "Could not load OAuth providers." } });
+  assert.ok(!JSON.stringify(providers).includes("auth.json"));
 });
