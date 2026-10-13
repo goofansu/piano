@@ -24,6 +24,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { listDirectory, makeDirectory } from "@/lib/api";
+import { browseInput, childPath, listing, parsePathInput, pickTarget } from "@/lib/folderPath";
 import { abbrevHome } from "@/lib/format";
 import { createPreference } from "@/lib/preference";
 import { listRow } from "@/lib/styles";
@@ -42,12 +43,10 @@ const lastPicked = createPreference<string>({
   decode: (raw) => raw ?? "",
   encode: (path) => path,
 });
-const MAX_VISIBLE = 500;
 
 /**
- * Directory picker in the style of Shelley's: one path input is the whole model.
- * A trailing slash browses inside that directory; text after the last slash filters
- * the listing by prefix. Enter selects the directory being typed.
+ * Directory picker in the style of Shelley's: one path input is the whole model
+ * (`@/lib/folderPath`). Enter selects the directory being typed.
  */
 export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props) {
   const [input, setInput] = useState("");
@@ -57,50 +56,47 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
   // Disable same-tick duplicate submissions too. Observation aborts this claim on directory/close changes.
   const creation = useRef<AbortSignal | null>(null);
 
-  const { dirPath, prefix } = useMemo(() => parseInput(input), [input]);
+  const { dirPath, prefix } = useMemo(() => parsePathInput(input), [input]);
   const {
     value: dir,
     error,
     loading,
     mutating,
     mutate,
-  } = useObservation(open ? dirPath || "~" : null, (signal, path) =>
-    listDirectory(path, { signal }),
-  );
+  } = useObservation(open ? dirPath : null, (signal, path) => listDirectory(path, { signal }));
   const ready = open && !!dir && !error && !loading && !mutating;
 
   useEffect(() => {
     if (!open) return;
     const start = initialPath || lastPicked.get();
-    setInput(start ? withSlash(start) : "~/");
+    setInput(browseInput(start || "~"));
     setCreating(false);
     const timer = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(timer);
   }, [open, initialPath]);
 
-  const entries = useMemo(() => {
-    const all = dir?.entries ?? [];
-    return prefix ? all.filter((e) => e.name.toLowerCase().startsWith(prefix.toLowerCase())) : all;
-  }, [dir, prefix]);
-  const visible = entries.slice(0, MAX_VISIBLE);
-  const hidden = entries.length - visible.length;
+  const { matches, visible, hidden } = useMemo(
+    () => listing(dir?.entries ?? [], prefix),
+    [dir, prefix],
+  );
 
-  const goTo = (path: string) => setInput(withSlash(path));
+  const goTo = (path: string) => setInput(browseInput(path));
   const selected = dir?.path ?? "";
 
   const select = () => {
     if (!ready || !dir) return;
-    const path = entries.length === 1 && prefix ? entries[0].path : dir.path;
+    const path = pickTarget(dir.path, matches, prefix);
     lastPicked.set(path);
     onPick(path);
     onOpenChange(false);
   };
 
   const createFolder = async () => {
-    const name = newName.trim();
-    if (!name || !ready || !dir || (creation.current && !creation.current.aborted)) return;
-    if (/[\\/]/.test(name)) {
-      toast.error("Folder name cannot contain slashes");
+    if (!newName.trim() || !ready || !dir || (creation.current && !creation.current.aborted))
+      return;
+    const child = childPath(dir.path, newName);
+    if ("error" in child) {
+      toast.error(child.error);
       return;
     }
     let created: string | undefined;
@@ -109,7 +105,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
         creation.current = signal;
         try {
           // Closing may stop observing the result, not undo an already submitted mkdir.
-          created = await makeDirectory(`${dir.path}/${name}`, { signal });
+          created = await makeDirectory(child.path, { signal });
           // Keep the observation associated with its parent until navigation reads the child.
           return previous;
         } finally {
@@ -284,7 +280,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
                 {hidden.toLocaleString()} more. Type to filter.
               </p>
             )}
-            {dir && entries.length === 0 && !creating && (
+            {dir && matches.length === 0 && !creating && (
               <Empty className="p-6 md:p-6">
                 <EmptyHeader>
                   <EmptyDescription>
@@ -319,17 +315,4 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
       </DialogContent>
     </Dialog>
   );
-}
-
-function withSlash(p: string): string {
-  return p === "/" ? "/" : p.endsWith("/") ? p : `${p}/`;
-}
-
-function parseInput(path: string): { dirPath: string; prefix: string } {
-  if (!path) return { dirPath: "", prefix: "" };
-  if (path.endsWith("/")) return { dirPath: path.slice(0, -1) || "/", prefix: "" };
-  const i = path.lastIndexOf("/");
-  if (i === -1) return { dirPath: "", prefix: path };
-  if (i === 0) return { dirPath: "/", prefix: path.slice(1) };
-  return { dirPath: path.slice(0, i), prefix: path.slice(i + 1) };
 }
