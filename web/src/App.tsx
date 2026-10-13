@@ -26,6 +26,7 @@ import { sessionReady } from "@/lib/sessionContext";
 import { readJson, writeJson } from "@/lib/storage";
 import { useClient } from "@/lib/useClient";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
+import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SidebarLayoutContext, useSidebarLayoutController } from "@/lib/useSidebarLayout";
 import { type AppState, initialState } from "@/store";
 
@@ -49,6 +50,7 @@ export default function App() {
     return { ...seeded, view: initialView(parseRoute(location)) };
   }, notify);
   const { dispatch, send } = client;
+  useEffect(() => providerAccounts.follow(client), [client]);
   useEffect(() => {
     // Without storage the server cache still answers.
     writeJson(

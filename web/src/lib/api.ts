@@ -149,7 +149,6 @@ export const oauthProviders = async (options?: RequestOptions) =>
 
 export const providerLogout = async (provider: string, options?: RequestOptions) => {
   await call(Endpoints.providerLogout, { body: { provider } }, options);
-  providersChanged();
 };
 
 /** Each sign-in request answers with the current attempt, or null when none exists. */
@@ -159,7 +158,7 @@ export type ProviderLoginRequest =
   | { method: "PUT"; body: typeof Endpoints.answerProviderLogin.body.Type }
   | { method: "DELETE"; body: typeof Endpoints.cancelProviderLogin.body.Type };
 
-const requestProviderLogin = async (
+export const providerLogin = async (
   request: ProviderLoginRequest = { method: "GET" },
   options?: RequestOptions,
 ) => {
@@ -173,19 +172,6 @@ const requestProviderLogin = async (
     case "DELETE":
       return (await call(Endpoints.cancelProviderLogin, request, options)).state;
   }
-};
-
-const providersChanged = () => {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("piano:providers-changed"));
-};
-
-export const providerLogin = async (
-  request: ProviderLoginRequest = { method: "GET" },
-  options?: RequestOptions,
-) => {
-  const state = await requestProviderLogin(request, options);
-  if (state?.status === "success") providersChanged();
-  return state;
 };
 
 /** The same sign-in attempt as providers', run by Pi's MCP OAuth for a catalog server. */

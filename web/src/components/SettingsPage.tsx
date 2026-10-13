@@ -1,5 +1,6 @@
 import type { OAuthProvider } from "@shared/wire";
 import { AlertCircleIcon, CheckCircle2Icon, HomeIcon, PlugIcon } from "lucide-react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
@@ -39,14 +40,13 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-import { oauthProviders, providerLogout } from "@/lib/api";
 import {
   SETTINGS_PAGES,
   type SettingsPage as SettingsPageId,
   type SettingsSection,
   settingsPage,
 } from "@/lib/routes";
-import { useObservation } from "@/lib/useObservation";
+import { providerAccounts, useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 export type { SettingsSection } from "@/lib/routes";
@@ -134,17 +134,10 @@ export function SettingsPage({
   request: number;
 }) {
   const page = settingsPage(section);
-  // Kept while another page shows; returning to Providers reads them again.
-  const providers = useObservation("providers", (signal) => oauthProviders({ signal }), {
-    enabled: page === "providers",
-  });
   // Each page; a page named in SETTINGS_SECTIONS without one here fails to typecheck.
   const pages: Record<SettingsPageId, () => React.ReactNode> = {
     providers: () => (
-      <ProvidersSettings
-        observed={providers}
-        revealRadius={section === "radius" ? request : undefined}
-      />
+      <ProvidersSettings revealRadius={section === "radius" ? request : undefined} />
     ),
     mcp: () => <McpSettings />,
   };
@@ -152,20 +145,21 @@ export function SettingsPage({
 }
 
 function ProvidersSettings({
-  observed,
   revealRadius,
 }: {
-  observed: ReturnType<typeof useObservation<readonly OAuthProvider[]>>;
   /** The request that asked for Radius, or `undefined` when the page was opened for itself. */
   revealRadius: number | undefined;
 }) {
+  const observed = useProviderAccounts();
+  // Opening the page reads again, as returning to it from another page always has.
+  useEffect(() => void providerAccounts.refresh(), []);
   // Radius has its own section below, with the steps that sign-in alone does not cover.
   const providers = observed.value?.filter((provider) => provider.id !== "radius");
   const catalogEmpty = observed.value?.length === 0;
   const error = observed.error && !observed.loading ? "Could not load providers." : "";
   // Signing in or out changes the usable models; the server invalidates every catalog itself.
   const actions = useSetupActions<OAuthProvider, string>({
-    refresh: () => void observed.refresh(),
+    refresh: () => void providerAccounts.refresh(),
     success: (text) => toast.success(text),
     failure: (text) => toast.error(text),
   });
@@ -174,7 +168,7 @@ function ProvidersSettings({
   const signOut = (provider: OAuthProvider) =>
     actions.run({
       id: provider.id,
-      run: () => providerLogout(provider.id),
+      run: () => providerAccounts.signOut(provider.id),
       done: `Signed out of ${provider.name}.`,
       fallback: "Could not sign out. Try again.",
     });
@@ -199,7 +193,7 @@ function ProvidersSettings({
               initialProvider={signIn.subject}
               providers={providers ?? []}
               close={actions.closeSignIn}
-              signedIn={() => void observed.refresh()}
+              signedIn={() => void providerAccounts.signedIn()}
             />
           )}
         </>
@@ -218,7 +212,7 @@ function ProvidersSettings({
             {error ? (
               <SettingsAlert title="Could not load providers" icon={<AlertCircleIcon />}>
                 <p>Check your connection and try again.</p>
-                <Button variant="outline" size="sm" onClick={() => void observed.refresh()}>
+                <Button variant="outline" size="sm" onClick={() => void providerAccounts.refresh()}>
                   Retry
                 </Button>
               </SettingsAlert>

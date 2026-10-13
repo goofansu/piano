@@ -33,6 +33,7 @@ import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { answerForm } from "@/lib/commandForms";
 import { type Command, type CommandEffects, type CommandForm, runCommand } from "@/lib/commands";
+import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
   type SessionCommandIcon,
@@ -42,7 +43,7 @@ import {
 } from "@/lib/sessionCommands";
 import { sessionWorking } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
-import { useRadiusSignedIn } from "@/lib/useRadiusSignedIn";
+import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -133,7 +134,7 @@ export function CommandHost({
 }) {
   const { openNew, openPanel, openSettings, closeSettings } = useNavigation();
   const [display, setDisplay] = useSessionDisplay();
-  const radiusSignedIn = useRadiusSignedIn(state.connected);
+  const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
   const { setView } = useSidebarView();
   const { setTheme } = useTheme();
   const sidebar = useSidebarLayout();

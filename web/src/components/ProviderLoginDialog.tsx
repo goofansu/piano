@@ -51,7 +51,7 @@ export function ProviderLoginDialog({
   api = providerLogin,
 }: {
   initialProvider: string;
-  providers: OAuthProvider[];
+  providers: readonly OAuthProvider[];
   close: () => void;
   signedIn: () => void;
   api?: (request?: ProviderLoginRequest) => Promise<ProviderLoginState | null>;
