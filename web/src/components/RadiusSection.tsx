@@ -1,4 +1,3 @@
-import type { RadiusSetupState } from "@shared/radius";
 import { cn } from "cn";
 import {
   CheckCircle2Icon,
@@ -7,8 +6,7 @@ import {
   RefreshCwIcon,
   WrenchIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useRef, useState } from "react";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
@@ -29,24 +27,8 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
-import { type RadiusSetupAction, radiusSetup } from "@/lib/api";
-import {
-  RADIUS_PROGRESS,
-  type RadiusObservation,
-  radiusAnnouncements,
-} from "@/lib/radiusAnnouncements";
-import { type RadiusRemoval, radiusRemovalCopy, radiusSetupView } from "@/lib/radiusSetupView";
-import { useObservation } from "@/lib/useObservation";
-import { providerAccounts, useProviderAccounts } from "@/lib/useProviderAccounts";
-import { useSetupActions } from "@/lib/useSetupActions";
-
-type Confirmation = { kind: "sign-out" } | { kind: RadiusRemoval; key: string };
-
-/** One turn of the refresh icon, so a fast refresh still reads as a refresh instead of a flicker. */
-const REFRESH_SPIN_MS = 600;
-/** Setup toasts share an id, so finishing setup replaces the step's toast instead of stacking. */
-const SETUP_TOAST = "radius-setup";
-const INSTALL_POLL_MS = 1500;
+import { radiusRemovalCopy } from "@/lib/radiusSetupView";
+import { useRadiusSetup } from "@/lib/useRadiusSetup";
 
 /**
  * Radius on the Providers page: the account, and what Pi may use from it. Radius is here rather
@@ -57,85 +39,9 @@ const INSTALL_POLL_MS = 1500;
  * rather than reading a flag lets the same row asked for twice reveal Radius twice.
  */
 export function RadiusSection({ reveal }: { reveal?: number }) {
-  const manualRefresh = useRef(false);
-  const progress = useRef(RADIUS_PROGRESS);
-  const announce = useCallback((observation: RadiusObservation) => {
-    const { progress: next, message } = radiusAnnouncements(progress.current, observation);
-    progress.current = next;
-    if (message) toast.success(message, { id: SETUP_TOAST });
-  }, []);
-  // A running web-search change is polled until it settles.
-  const setup = useObservation<RadiusSetupState>(
-    "radius",
-    async (signal) => {
-      const manual = manualRefresh.current;
-      manualRefresh.current = false;
-      const [next] = await Promise.all([
-        radiusSetup(undefined, { signal }),
-        manual && new Promise((resolve) => setTimeout(resolve, REFRESH_SPIN_MS)),
-      ]);
-      if (signal.aborted) throw signal.reason;
-      announce({ kind: "observed", installation: next.installation, manual });
-      return next;
-    },
-    {
-      interval: (value) => (value?.installation.status === "running" ? INSTALL_POLL_MS : undefined),
-    },
-  );
-  // The account is the page's shared read; its background re-reads do not lock the steps.
-  const accounts = useProviderAccounts();
-  const state = setup.value,
-    providers = accounts.value ?? [];
-  const refreshing =
-    setup.loading || (!setup.value && !setup.error) || (!accounts.value && !accounts.error);
-  const refresh = () => {
-    void providerAccounts.refresh();
-    return setup.refresh();
-  };
-  // Signing in or out changes the usable models; the server invalidates every catalog itself.
-  const actions = useSetupActions<Confirmation, string>({
-    refresh: () => void refresh(),
-    success: (text, id) => toast.success(text, id === "sign-out" ? undefined : { id: SETUP_TOAST }),
-  });
-  const { confirmation, confirming } = actions;
-  const view = radiusSetupView({
-    state,
-    providers,
-    running: actions.running,
-    refreshing,
-    loadFailed: (!!setup.error && !setup.loading) || (!!accounts.error && !accounts.loading),
-    actionError: actions.error,
-  });
-  const { account, tools, mcp, webSearch, configured, settled } = view;
-  const signOut = () =>
-    actions.run({
-      id: "sign-out",
-      // Only acknowledge sign-out after Pi confirms credential removal.
-      run: () => providerAccounts.signOut("radius"),
-      done: "Signed out of Radius.",
-      fallback: "Could not sign out. Try again.",
-    });
-  const act = (action: RadiusSetupAction, removalKey?: string) =>
-    actions.run({
-      id: action,
-      run: () =>
-        setup.mutate(async () => {
-          const next = await radiusSetup({ action, removalKey });
-          announce({ kind: "observed", installation: next.installation });
-          return next;
-        }),
-      done:
-        action === "configure-mcp"
-          ? "Radius MCP added. Start a new session to use it."
-          : action === "remove-mcp"
-            ? "Radius MCP removed for new sessions."
-            : undefined,
-      fallback: "Could not complete setup. Refresh before retrying.",
-    });
-  // Announce completion only when setup turns complete here, not each time a complete setup is opened.
-  useEffect(() => {
-    if (settled) announce({ kind: "settled", configured });
-  }, [settled, configured, announce]);
+  const setup = useRadiusSetup();
+  const { view, confirmation, confirming, refreshing, providers } = setup;
+  const { account, tools, mcp, webSearch } = view;
   const removal = confirmation && confirmation.kind !== "sign-out" ? confirmation : undefined;
   const anchor = useRef<HTMLElement>(null);
   const [toolsOpen, setToolsOpen] = useState(reveal !== undefined);
@@ -162,15 +68,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
           </svg>
           Radius
         </h2>
-        <IconButton
-          label="Refresh setup"
-          disabled={!view.canRefresh}
-          onClick={() => {
-            actions.clearError();
-            manualRefresh.current = true;
-            void refresh();
-          }}
-        >
+        <IconButton label="Refresh setup" disabled={!view.canRefresh} onClick={setup.refreshByHand}>
           <RefreshCwIcon
             className={cn(
               refreshing && "animate-spin [animation-duration:600ms] motion-reduce:animate-none",
@@ -181,7 +79,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
       {view.attention && (
         <SettingsAlert title="Radius setup needs attention">{view.attention}</SettingsAlert>
       )}
-      {!state || !accounts.value ? (
+      {!setup.loaded ? (
         <SettingsSkeleton label="Loading Radius setup…" className="flex flex-col gap-3">
           <Skeleton className="h-20 w-full rounded-xl" />
           <Skeleton className="h-16 w-full rounded-xl" />
@@ -206,7 +104,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                   className="text-muted-foreground max-sm:-mx-2.5"
                   disabled={!account.canSignOut}
                   aria-label="Sign out of Radius"
-                  onClick={() => actions.confirm({ kind: "sign-out" })}
+                  onClick={() => setup.confirm({ kind: "sign-out" })}
                 >
                   {account.signingOut && <Spinner data-icon="inline-start" />}
                   {account.signingOut ? "Signing out…" : "Sign out"}
@@ -216,7 +114,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                   size="sm"
                   disabled={!account.canSignIn}
                   aria-label="Sign in to Radius"
-                  onClick={() => actions.openSignIn("radius")}
+                  onClick={setup.openSignIn}
                 >
                   Sign in
                 </Button>
@@ -275,7 +173,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                         size="sm"
                         disabled={!mcp.canAdd}
                         aria-label="Add Radius MCP"
-                        onClick={() => void act("configure-mcp")}
+                        onClick={() => void setup.act("configure-mcp")}
                       >
                         Add
                       </Button>
@@ -286,9 +184,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                         size="sm"
                         className="text-muted-foreground max-sm:-mx-2.5"
                         disabled={!mcp.canRemove}
-                        onClick={() =>
-                          actions.confirm({ kind: "remove-mcp", key: mcp.removalKey! })
-                        }
+                        onClick={() => setup.confirm({ kind: "remove-mcp", key: mcp.removalKey! })}
                         aria-label="Remove Radius MCP"
                       >
                         Remove
@@ -333,7 +229,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                             size="sm"
                             disabled={!webSearch.canInstall}
                             aria-label="Install web search"
-                            onClick={() => void act("install-web-search")}
+                            onClick={() => void setup.act("install-web-search")}
                           >
                             Install
                           </Button>
@@ -345,7 +241,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                             className="text-muted-foreground max-sm:-mx-2.5"
                             disabled={!webSearch.canRemove}
                             onClick={() =>
-                              actions.confirm({
+                              setup.confirm({
                                 kind: "uninstall-web-search",
                                 key: webSearch.removalKey!,
                               })
@@ -374,33 +270,25 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
         open={confirming && !!removal}
         busy={view.changing}
         disabled={view.locked}
-        cancel={actions.cancel}
+        cancel={setup.cancel}
         {...radiusRemovalCopy(removal?.kind)}
-        confirm={() => {
-          if (removal) void act(removal.kind, removal.key);
-        }}
+        confirm={setup.confirmRemoval}
       />
       {confirming && confirmation?.kind === "sign-out" && (
         <ProviderSignOutDialog
           name="Radius"
           busy={account.signingOut}
-          cancel={actions.cancel}
-          confirm={() => void signOut()}
+          cancel={setup.cancel}
+          confirm={() => void setup.signOut()}
         />
       )}
-      {actions.signIn && (
+      {setup.signIn && (
         <ProviderLoginDialog
-          key={actions.signIn.key}
+          key={setup.signIn.key}
           initialProvider="radius"
           providers={providers}
-          close={() => {
-            actions.closeSignIn();
-            void refresh();
-          }}
-          signedIn={() => {
-            void providerAccounts.signedIn();
-            void setup.refresh();
-          }}
+          close={setup.closeSignIn}
+          signedIn={setup.signedIn}
         />
       )}
     </section>
