@@ -6,14 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopov
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { listRow } from "@/lib/styles";
-import {
-  currentEntry,
-  type JumpEntry,
-  jumpEntries,
-  jumpTo,
-  TRANSCRIPT_SELECTOR,
-  transcriptRows,
-} from "@/lib/transcript";
+import { type JumpEntry, jumpEntries, transcriptRows } from "@/lib/transcript";
+import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
@@ -24,6 +18,7 @@ export function JumpTo({ messages }: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string>("bottom");
   const list = useRef<HTMLUListElement>(null);
+  const viewport = useTranscriptViewport();
   // Built from the rows the transcript renders, so every entry lands on a row that is there.
   const entries = useMemo(() => jumpEntries(transcriptRows(messages)), [messages]);
   const total = entries.filter(
@@ -32,8 +27,7 @@ export function JumpTo({ messages }: Props) {
   // Opening reads where the reader is and centres that entry in the list.
   useEffect(() => {
     if (!open) return;
-    const container = document.querySelector<HTMLElement>(TRANSCRIPT_SELECTOR);
-    const id = container ? currentEntry(container, entries) : "bottom";
+    const id = viewport ? viewport.current(entries) : "bottom";
     setActive(id);
     const frame = requestAnimationFrame(() => {
       const el = list.current?.querySelector<HTMLElement>(`[data-entry="${CSS.escape(id)}"]`);
@@ -41,10 +35,10 @@ export function JumpTo({ messages }: Props) {
       if (el && box) box.scrollTop = el.offsetTop - (box.clientHeight - el.offsetHeight) / 2;
     });
     return () => cancelAnimationFrame(frame);
-  }, [open, entries]);
+  }, [open, entries, viewport]);
   const go = (entry: JumpEntry) => {
     setOpen(false);
-    jumpTo(entry);
+    viewport?.jump(entry);
   };
   if (entries.length <= 2) return null;
   return (

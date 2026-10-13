@@ -1,0 +1,199 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { BOTTOM_ENTRY, type JumpEntry } from "../web/src/lib/transcript.ts";
+import {
+  createTranscriptViewport,
+  type ViewportElement,
+} from "../web/src/lib/transcriptViewport.ts";
+
+/** A scroll container like the browser's: scrollTop stays within [0, scrollHeight - clientHeight]. */
+class FakeElement implements ViewportElement {
+  #top = 0;
+  /** Message tops measured from the content's top edge. */
+  anchors = new Map<string, number>();
+  highlighted = new Set<string>();
+  /** Smooth scrolls start here and land only when `land` is called. */
+  inFlight: number | undefined;
+  scrollHeight: number;
+  clientHeight: number;
+  constructor(scrollHeight: number, clientHeight: number) {
+    this.scrollHeight = scrollHeight;
+    this.clientHeight = clientHeight;
+  }
+  get scrollTop() {
+    return this.#top;
+  }
+  set scrollTop(top: number) {
+    this.#top = Math.max(0, Math.min(top, this.scrollHeight - this.clientHeight));
+  }
+  scrollTo({ top, behavior }: { top: number; behavior: ScrollBehavior }) {
+    if (behavior === "smooth") this.inFlight = top;
+    else this.scrollTop = top;
+  }
+  land() {
+    if (this.inFlight !== undefined) this.scrollTop = this.inFlight;
+    this.inFlight = undefined;
+  }
+  anchorTop(id: string) {
+    const top = this.anchors.get(id);
+    return top === undefined ? undefined : top - this.scrollTop;
+  }
+  highlight(id: string, on: boolean) {
+    if (on) this.highlighted.add(id);
+    else this.highlighted.delete(id);
+  }
+}
+
+const setup = ({ height = 2000, client = 500, reducedMotion = false } = {}) => {
+  const timers: Array<() => void> = [];
+  const viewport = createTranscriptViewport({
+    reducedMotion: () => reducedMotion,
+    setTimeout: (run) => timers.push(run),
+  });
+  const el = new FakeElement(height, client);
+  viewport.attach(el);
+  viewport.rendered();
+  return { viewport, el, timers };
+};
+
+/** The reader scrolls to `top`; the browser then reports the scroll. */
+const scroll = (el: FakeElement, viewport: ReturnType<typeof setup>["viewport"], top: number) => {
+  el.scrollTop = top;
+  viewport.scrolled();
+};
+
+test("a pinned view follows the bottom as content grows", () => {
+  const { viewport, el } = setup();
+  assert.equal(el.scrollTop, 1500, "a new transcript opens on the bottom");
+  el.scrollHeight = 2600;
+  viewport.resized({ container: false });
+  assert.equal(viewport.atBottom(), false, "growth alone only reveals that the bottom moved");
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2100);
+});
+
+test("a reader who scrolled up is never moved by new output", () => {
+  const { viewport, el } = setup();
+  scroll(el, viewport, 1300);
+  assert.equal(viewport.atBottom(), false);
+  el.scrollHeight = 2600;
+  viewport.resized({ container: false });
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1300);
+  assert.equal(viewport.atBottom(), false);
+});
+
+test("scrolling back within 80px of the bottom pins the view again", () => {
+  const { viewport, el } = setup();
+  scroll(el, viewport, 1300);
+  scroll(el, viewport, 1430);
+  assert.equal(viewport.atBottom(), true);
+  el.scrollHeight = 2600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2100);
+});
+
+test("a shrinking container follows the bottom only while pinned", () => {
+  const pinned = setup();
+  pinned.el.clientHeight = 300;
+  pinned.viewport.resized({ container: true });
+  assert.equal(pinned.el.scrollTop, 1700);
+  assert.equal(pinned.viewport.atBottom(), true);
+
+  const reading = setup();
+  scroll(reading.el, reading.viewport, 1000);
+  reading.el.clientHeight = 300;
+  reading.viewport.resized({ container: true });
+  assert.equal(reading.el.scrollTop, 1000);
+  assert.equal(reading.viewport.atBottom(), false);
+});
+
+test("atBottom subscribers hear only changes", () => {
+  const { viewport, el } = setup();
+  let heard = 0;
+  const stop = viewport.subscribe(() => heard++);
+  scroll(el, viewport, 1490);
+  assert.equal(heard, 0);
+  scroll(el, viewport, 1000);
+  scroll(el, viewport, 900);
+  assert.equal(heard, 1);
+  stop();
+  scroll(el, viewport, 1500);
+  assert.equal(heard, 1);
+});
+
+test("a jump to the end stays pinned while content grows mid-scroll", () => {
+  const { viewport, el } = setup();
+  scroll(el, viewport, 200);
+  assert.equal(viewport.jump(BOTTOM_ENTRY), true);
+  assert.equal(el.scrollTop, 200, "the smooth scroll has not moved the reader yet");
+  el.scrollHeight = 2600;
+  viewport.resized({ container: false });
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2100, "the jump re-pinned a reader who had scrolled up");
+});
+
+test("a jump to the end re-pins the view even when the reader scrolled before it landed", () => {
+  const { viewport, el } = setup();
+  scroll(el, viewport, 200);
+  viewport.jump(BOTTOM_ENTRY);
+  assert.equal(el.inFlight, 2000, "smooth scroll targets the full scroll height");
+  el.land();
+  viewport.scrolled();
+  el.scrollHeight = 2600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2100);
+  assert.equal(viewport.atBottom(), true);
+});
+
+test("jumps honour reduced motion", () => {
+  const { viewport, el } = setup({ reducedMotion: true });
+  viewport.jump({ kind: "top", id: "top", label: "Top" });
+  assert.equal(el.scrollTop, 0, "instant scroll, nothing in flight");
+  assert.equal(el.inFlight, undefined);
+});
+
+test("a jump to a message lands it 16px under the top edge and flashes it", () => {
+  const { viewport, el, timers } = setup();
+  el.anchors.set("u2", 900);
+  const entry: JumpEntry = { kind: "user", id: "u2", label: "Second", messageId: "u2" };
+  assert.equal(viewport.jump(entry), true);
+  assert.equal(el.inFlight, 884);
+  assert.deepEqual([...el.highlighted], ["u2"]);
+  for (const run of timers) run();
+  assert.deepEqual([...el.highlighted], []);
+  assert.equal(
+    viewport.jump({ kind: "user", id: "gone", label: "Gone", messageId: "gone" }),
+    false,
+    "a message that is not rendered goes nowhere",
+  );
+});
+
+test("a viewport without a transcript goes nowhere and reports the bottom", () => {
+  const viewport = createTranscriptViewport({ reducedMotion: () => false, setTimeout: () => 0 });
+  assert.equal(viewport.jump(BOTTOM_ENTRY), false);
+  assert.equal(viewport.current([BOTTOM_ENTRY]), "bottom");
+});
+
+test("current is bottom near the end, top near the start, else the last message above the reading line", () => {
+  const { viewport, el } = setup();
+  el.anchors.set("u1", 100).set("a1", 700).set("u2", 1100);
+  const entries: JumpEntry[] = [
+    { kind: "top", id: "top", label: "Top" },
+    { kind: "user", id: "u1", label: "First", messageId: "u1" },
+    { kind: "assistant", id: "a1", label: "Reply", messageId: "a1" },
+    { kind: "user", id: "u2", label: "Second", messageId: "u2" },
+    BOTTOM_ENTRY,
+  ];
+  assert.equal(viewport.current(entries), "bottom");
+  scroll(el, viewport, 1430);
+  assert.equal(viewport.current(entries), "bottom", "within 80px of the end");
+  scroll(el, viewport, 40);
+  assert.equal(viewport.current(entries), "top", "within 40px of the start");
+  scroll(el, viewport, 620);
+  assert.equal(viewport.current(entries), "a1", "a1 sits exactly on the reading line");
+  scroll(el, viewport, 619);
+  assert.equal(viewport.current(entries), "u1", "a1 is 1px below the reading line");
+  el.anchors.delete("u1");
+  assert.equal(viewport.current(entries), "top", "nothing rendered above the line");
+});

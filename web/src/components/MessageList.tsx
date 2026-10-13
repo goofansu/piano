@@ -1,7 +1,15 @@
 import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, SparklesIcon } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { DisclosureChevron } from "@/components/Disclosure";
@@ -15,14 +23,16 @@ import { abbrevHome, clamp } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
 import { disclosureRow } from "@/lib/styles";
 import {
+  BOTTOM_ENTRY,
   messageAnchorId,
-  STICK_EVENT,
   type SubagentFacts,
   type ToolOutcome,
   type ToolRow,
   type TranscriptRow,
   transcriptRows,
 } from "@/lib/transcript";
+import { domViewportElement } from "@/lib/transcriptViewport";
+import { useNewTranscriptViewport, useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
@@ -56,49 +66,33 @@ export function MessageList({
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
-  const stick = useRef(true);
-  const [atBottom, setAtBottom] = useState(true);
+  const own = useNewTranscriptViewport();
+  const viewport = useTranscriptViewport() ?? own;
+  const atBottom = useSyncExternalStore(viewport.subscribe, viewport.atBottom, () => true);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    viewport.attach(domViewportElement(el));
+    return () => viewport.attach(null);
+  }, [viewport]);
   // Keep the view pinned to the bottom unless the reader scrolled up.
   // biome-ignore lint/correctness/useExhaustiveDependencies: these inputs change rendered transcript height; reading the DOM after each change preserves scroll pinning.
   useEffect(() => {
-    const el = ref.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [messages, pending, submittedInput, tools, activity, showTools]);
-  // Content can grow without a scroll event (a prompt opens, output expands). That only
-  // changes whether the bottom is in view; it never moves the reader. The container itself
-  // shrinking (a banner appears below, the composer grows) is not the reader's
-  // doing, so a pinned view follows the bottom.
+    viewport.rendered();
+  }, [viewport, messages, pending, submittedInput, tools, activity, showTools]);
+  // Content can grow without a scroll event (a prompt opens, output expands), and the container
+  // can shrink (a banner appears below, the composer grows); the viewport decides who follows.
   useEffect(() => {
     const el = ref.current;
     const inner = content.current;
     if (!el || !inner) return;
-    const measure = () => setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
-    const ro = new ResizeObserver((entries) => {
-      if (stick.current && entries.some((entry) => entry.target === el))
-        el.scrollTop = el.scrollHeight;
-      measure();
-    });
+    const ro = new ResizeObserver((entries) =>
+      viewport.resized({ container: entries.some((entry) => entry.target === el) }),
+    );
     ro.observe(inner);
     ro.observe(el);
-    // A jump to the end pins the view there even if content grows while the scroll is in flight.
-    const stickToBottom = () => {
-      stick.current = true;
-    };
-    el.addEventListener(STICK_EVENT, stickToBottom);
-    return () => {
-      ro.disconnect();
-      el.removeEventListener(STICK_EVENT, stickToBottom);
-    };
-  }, []);
-  const scrollToBottom = () => {
-    const el = ref.current;
-    if (!el) return;
-    stick.current = true;
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-    });
-  };
+    return () => ro.disconnect();
+  }, [viewport]);
 
   const rows = useMemo(
     () => transcriptRows(messages, { pending, tools, showTools }),
@@ -109,12 +103,7 @@ export function MessageList({
     <div className={cn("relative min-h-0 flex-1", className)}>
       <div
         ref={ref}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-          stick.current = near;
-          setAtBottom(near);
-        }}
+        onScroll={viewport.scrolled}
         data-slot="transcript"
         className="h-full overflow-y-auto px-4 md:px-6"
       >
@@ -154,7 +143,7 @@ export function MessageList({
           variant="outline"
           size="icon-lg"
           aria-label="Scroll to bottom"
-          onClick={scrollToBottom}
+          onClick={() => viewport.jump(BOTTOM_ENTRY)}
           className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full shadow-2 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none [&_svg:not([class*='size-'])]:size-5"
         >
           <ArrowDownIcon />
