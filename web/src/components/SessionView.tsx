@@ -26,6 +26,7 @@ import { useCheckoutRefresh } from "@/lib/useCheckoutRefresh";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
+import { TranscriptViewportContext, useNewTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
 
 interface Props {
@@ -59,9 +60,11 @@ export function SessionView({ state, send }: Props) {
   const readOnly = notices.find((n) => n.placement === "composer");
   const draftKey = t ? sessionDraftKey(t) : null;
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
+  // The transcript reports where the reader is; the composer's jump list reads and moves it.
+  const viewport = useNewTranscriptViewport();
 
   return (
-    <>
+    <TranscriptViewportContext value={viewport}>
       <SessionHeader
         state={state}
         status={status}
@@ -177,7 +180,7 @@ export function SessionView({ state, send }: Props) {
         readOnly={readOnly}
         send={send}
       />
-    </>
+    </TranscriptViewportContext>
   );
 }
 
