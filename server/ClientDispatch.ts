@@ -16,7 +16,6 @@ import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceCommands } from "./WorkspaceCommands.ts";
-import { WorktreeError } from "./Worktrees.ts";
 
 /** Every client message except delivery acknowledgements, which belong to the transport. */
 export type ClientRequest = Exclude<ClientMessage, { _tag: "ack" }>;
@@ -67,10 +66,9 @@ const unansweredReply = (request: ClientRequest, reason: Unanswered): ServerMess
         result: {
           status: "error",
           detail: message,
-          // A refused request never started. An unexpected failure may have run Worktrunk.
-          unconfirmed:
-            reason._tag === "failed" &&
-            (!(reason.error instanceof WorktreeError) || reason.error.unconfirmed === true),
+          // A refused request never started. WorkspaceCommands answers the command's own
+          // failures, so any other is unexpected and may have run Worktrunk.
+          unconfirmed: reason._tag === "failed",
         },
       };
     case "worktrees":
@@ -167,22 +165,21 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
           yield* send({ _tag: "trust", cwd, trust });
           return yield* send({ _tag: "models", catalog });
         }
+        // The command answers every outcome, failures included, and has the sidebar rediscover.
         case "create_worktree":
-        case "add_worktree": {
-          // Settle the request first, whatever the outcome, so the rediscovery below follows it.
-          yield* (
-            request._tag === "create_worktree"
-              ? commands.createWorktree(request.folder, request.branch, { hooks: request.hooks })
-              : commands.addWorktree(request.folder, request.path)
-          ).pipe(
-            Effect.flatMap((result) =>
-              send({ _tag: "worktree_result", requestId: request.requestId, result }),
-            ),
-            answered(request),
-          );
-          // Failure may have left a checkout behind. Rediscover rather than retrying a mutation.
-          return yield* sidebar.refresh;
-        }
+          return yield* send({
+            _tag: "worktree_result",
+            requestId: request.requestId,
+            result: yield* commands.createWorktree(request.folder, request.branch, {
+              hooks: request.hooks,
+            }),
+          });
+        case "add_worktree":
+          return yield* send({
+            _tag: "worktree_result",
+            requestId: request.requestId,
+            result: yield* commands.addWorktree(request.folder, request.path),
+          });
         case "ping":
           return yield* send({ _tag: "pong", nonce: request.nonce });
         case "rename_session":
