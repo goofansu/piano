@@ -126,16 +126,16 @@ test("INV-04: a provider sign-in refusal reaches the browser with its own detail
 });
 
 test("INV-02: a session's slash commands come from its running child, addressed by IDs; a stopped one is not started to answer", async () => {
-  const sessionId = crypto.randomUUID();
+  let sessionId = "";
   const names = async (response: Response) =>
     ((await response.json()) as { commands: { name: string }[] }).commands.map((c) => c.name);
   const commands = () =>
     server.handle(
       `/api/session/commands?${new URLSearchParams({ workspaceId: server.workspaceId, sessionId })}`,
     );
-  await server.run(
+  sessionId = await server.run(
     Effect.flatMap(SessionHosts, (hosts) =>
-      hosts.open({ cwd: server.repo, sessionId, create: true }),
+      hosts.create({ cwd: server.repo, options: {} }).pipe(Effect.map((s) => s.spec.sessionId)),
     ),
   );
   // The fake Pi lists `live-only` in a session and `probe-only` when started without one.
