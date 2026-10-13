@@ -75,3 +75,18 @@ removes its association, not the external artifact. Restoring an old database ba
 A failed initial empty allocation/save can leave an empty orphan; it cannot leave a transcript at an
 unrecorded destination. Concurrent edits or visibility changes performed directly in Radius remain
 Radius's policy boundary. No deployment is implied.
+
+## Success-dialog icon actions
+
+On `4d94f14` plus the UI-only patch, Copy and Open moved into the URL's InputGroup with tooltips
+and accessible names. Copy shows a checkmark for two seconds and announces success inline; failure
+keeps the manual-copy fallback. Open uses a new-tab link. The success footer is gone, replaced by
+the standard top-right close control; confirmation and error actions are unchanged.
+
+`npm test` (480 passed), typecheck and lint passed; logs are `/tmp/piano-share-icons-{tests,types,lint}.log`.
+The scratch-browser journey observed exact clipboard contents, checkmark/reset, denied clipboard
+access, selectable URL, both tooltips, native new-tab opening, close ×, Escape, keyboard order,
+and desktop light/mobile dark layout. The viewer navigation was intercepted, and Radius uploads
+used the same synthetic boundary as above. Evidence: `/tmp/piano-share-icons-browser/run.log` and
+`/tmp/piano-share-icons-browser/evidence/`. Scratch resources were cleaned up. No new module test
+was added: the changed contracts are browser interactions composed from existing controls.

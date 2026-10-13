@@ -1,6 +1,6 @@
 import type { SessionShare } from "@shared/share";
-import { CopyIcon, ExternalLinkIcon, InfoIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { CheckIcon, CopyIcon, ExternalLinkIcon, InfoIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -10,10 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/PianoDialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { shareSession } from "@/lib/api";
 import { canShareSession, type SessionTarget } from "@/lib/sessionCommands";
@@ -34,6 +40,12 @@ export function ShareSessionDialog({
   const [result, setResult] = useState<SessionShare>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const started = useRef(false);
   const workspace = workspaceFor(state, target.cwd);
   const allowed = signedIn && canShareSession(state, target) && !!workspace;
@@ -57,14 +69,15 @@ export function ShareSessionDialog({
     if (!result) return;
     try {
       await navigator.clipboard.writeText(result.url);
-      toast.success("Share link copied");
+      setCopied(true);
     } catch {
+      setCopied(false);
       toast.error("Couldn’t copy the link. Select and copy it below.");
     }
   };
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && close()}>
-      <DialogContent className="sm:max-w-md" showCloseButton={false}>
+      <DialogContent className="sm:max-w-md" showCloseButton={!!result}>
         <DialogHeader>
           <DialogTitle>{result ? "Session shared" : "Share session"}</DialogTitle>
           <DialogDescription>
@@ -77,15 +90,50 @@ export function ShareSessionDialog({
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="session-share-link">Share link</FieldLabel>
-              <Input
-                id="session-share-link"
-                value={result.url}
-                readOnly
-                onFocus={(event) => event.target.select()}
-              />
-              <p className="text-sm text-muted-foreground">
+              <InputGroup>
+                <InputGroupInput
+                  id="session-share-link"
+                  value={result.url}
+                  readOnly
+                  onFocus={(event) => event.target.select()}
+                />
+                <InputGroupAddon align="inline-end">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <InputGroupButton
+                        size="icon-sm"
+                        aria-label="Copy link"
+                        onClick={() => void copy()}
+                      >
+                        {copied ? <CheckIcon /> : <CopyIcon />}
+                      </InputGroupButton>
+                    </TooltipTrigger>
+                    <TooltipContent>{copied ? "Copied" : "Copy link"}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <InputGroupButton size="icon-sm" asChild>
+                        <a
+                          href={result.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open shared session"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <ExternalLinkIcon />
+                        </a>
+                      </InputGroupButton>
+                    </TooltipTrigger>
+                    <TooltipContent>Open shared session</TooltipContent>
+                  </Tooltip>
+                  <span className="sr-only" role="status">
+                    {copied ? "Link copied" : ""}
+                  </span>
+                </InputGroupAddon>
+              </InputGroup>
+              <FieldDescription>
                 Expires {new Date(result.expiresAt).toLocaleDateString()}.
-              </p>
+              </FieldDescription>
             </Field>
           </FieldGroup>
         ) : (
@@ -107,30 +155,19 @@ export function ShareSessionDialog({
             <AlertDescription>Sign in to Radius in Providers before sharing.</AlertDescription>
           </Alert>
         )}
-        <DialogFooter>
-          <Button variant="outline" disabled={busy} onClick={close}>
-            {result || error ? "Done" : "Cancel"}
-          </Button>
-          {result ? (
-            <>
-              <Button variant="outline" asChild>
-                <a href={result.url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLinkIcon data-icon="inline-start" /> Open
-                </a>
-              </Button>
-              <Button onClick={() => void copy()}>
-                <CopyIcon data-icon="inline-start" /> Copy link
-              </Button>
-            </>
-          ) : (
-            !error && (
+        {!result && (
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={close}>
+              {error ? "Done" : "Cancel"}
+            </Button>
+            {!error && (
               <Button disabled={!allowed || busy} onClick={() => void publish()}>
                 {busy && <Spinner data-icon="inline-start" />}
                 {busy ? "Sharing…" : "Share"}
               </Button>
-            )
-          )}
-        </DialogFooter>
+            )}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
