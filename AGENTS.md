@@ -81,7 +81,7 @@ its model picker. Other actions are reached through the palette or their control
 ## Server
 
 `server/PiSessions.ts` is the deep module: `open`, `probe`, `history` (saved sessions read without
-Pi), and per session `events`, `act`, `state`, all in the browser's wire vocabulary from
+Pi), and per session `events`, `act`, `state`, `commands`, all in the browser's wire vocabulary from
 `shared/wire.ts`. Add capabilities as new
 `SessionAction` or `SessionEvent` variants; everything pi-protocol-specific stays behind that seam.
 Tests go through that interface only. Module files are PascalCase after their export; `main.ts` is
