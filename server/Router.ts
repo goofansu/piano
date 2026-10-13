@@ -8,7 +8,6 @@ import {
   type RefusedStatus,
   type SignInEndpoints,
 } from "../shared/http.ts";
-import type { RadiusSetupState } from "../shared/radius.ts";
 import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
@@ -19,7 +18,7 @@ import { AllowedOrigins } from "./OriginPolicy.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
-import { RadiusSetup, type RadiusSetupError } from "./RadiusSetup.ts";
+import { RadiusSetup } from "./RadiusSetup.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
@@ -268,24 +267,13 @@ export const AppRouter = HttpRouter.use((router) =>
       ),
     );
 
-    const radiusAction = (body: typeof Endpoints.changeRadiusSetup.body.Type) =>
-      Effect.flatMap(RadiusSetup, (setup): Effect.Effect<RadiusSetupState, RadiusSetupError> => {
-        switch (body.action) {
-          case "configure-mcp":
-            return setup.configureMcp;
-          case "install-web-search":
-            return setup.installWebSearch;
-          case "remove-mcp":
-            return setup.removeMcp(body.removalKey);
-          case "uninstall-web-search":
-            return setup.uninstallWebSearch(body.removalKey);
-        }
-      });
     yield* serve(Endpoints.radiusSetup, () =>
       Effect.flatMap(RadiusSetup, (setup) => setup.state).pipe(Effect.map((state) => ({ state }))),
     );
     yield* serve(Endpoints.changeRadiusSetup, ({ body }) =>
-      radiusAction(body).pipe(Effect.map((state) => ({ state }))),
+      Effect.flatMap(RadiusSetup, (setup) => setup.change(body)).pipe(
+        Effect.map((state) => ({ state })),
+      ),
     );
 
     yield* serve(Endpoints.mcpSetup, () =>

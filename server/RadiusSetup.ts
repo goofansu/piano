@@ -11,9 +11,14 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-import type { RadiusSetupState, RadiusSetupStep } from "../shared/radius.ts";
+import type { RadiusSetupRequest, RadiusSetupState, RadiusSetupStep } from "../shared/radius.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
-import { type McpCatalogEntry, McpConfigEntries } from "./McpConfigEntries.ts";
+import {
+  authOf,
+  type McpCatalogEntry,
+  McpConfigEntries,
+  withProviderAuth,
+} from "./McpConfigEntries.ts";
 import { agentDir } from "./PiEnv.ts";
 import { runAsync, SubprocessError } from "./Subprocess.ts";
 
@@ -77,10 +82,9 @@ export class RadiusSetup extends Context.Service<
   RadiusSetup,
   {
     readonly state: Effect.Effect<RadiusSetupState>;
-    readonly configureMcp: Effect.Effect<RadiusSetupState, RadiusSetupError>;
-    readonly installWebSearch: Effect.Effect<RadiusSetupState, RadiusSetupError>;
-    readonly removeMcp: (key: string) => Effect.Effect<RadiusSetupState, RadiusSetupError>;
-    readonly uninstallWebSearch: (key: string) => Effect.Effect<RadiusSetupState, RadiusSetupError>;
+    readonly change: (
+      request: RadiusSetupRequest,
+    ) => Effect.Effect<RadiusSetupState, RadiusSetupError>;
   }
 >()("piano/RadiusSetup") {}
 
@@ -107,11 +111,10 @@ export const RadiusSetupLive = Layer.effect(
       return manager;
     };
     /** Radius's policy: Pi sends the `radius` provider token, never OAuth or a fixed Authorization header. */
-    const configured = (config: McpServerConfig) =>
-      "url" in config &&
-      config.auth?.provider === "radius" &&
-      !config.oauth &&
-      !Object.keys(config.headers ?? {}).some((key) => key.toLowerCase() === "authorization");
+    const configured = (config: McpServerConfig) => {
+      const auth = authOf(config);
+      return auth._tag === "provider" && auth.provider === "radius" && !auth.competing;
+    };
     const mcpStep = (): RadiusSetupStep => {
       const observed = entries.observe(RADIUS_MCP);
       if (observed.status === "missing") return { status: "missing" };
@@ -242,55 +245,51 @@ export const RadiusSetupLive = Layer.effect(
               "Could not change the web-search package. Finish any operation in progress and refresh before retrying.",
           }),
       });
+    const configureMcp = entries
+      .save(RADIUS_MCP, (existing) =>
+        existing && configured(existing.config)
+          ? undefined
+          : withProviderAuth(existing?.config, RADIUS_MCP.url, "radius"),
+      )
+      .pipe(
+        Effect.map(snapshot),
+        Effect.filterOrFail(
+          (state) => state.mcp.status === "ready",
+          () => undefined,
+        ),
+        Effect.mapError(
+          () =>
+            new RadiusSetupError({
+              detail:
+                "Could not configure Radius MCP. Check Pi's global configuration and file permissions, then refresh.",
+            }),
+        ),
+      );
+    const removeMcp = (key: string) =>
+      entries.remove(RADIUS_MCP, key).pipe(
+        Effect.map(snapshot),
+        Effect.mapError(
+          () =>
+            new RadiusSetupError({
+              detail:
+                "Could not remove Radius MCP. Its configuration may have changed. Refresh and confirm again.",
+            }),
+        ),
+      );
     return RadiusSetup.of({
       state: Effect.sync(snapshot),
-      configureMcp: entries
-        .save(RADIUS_MCP, (existing) => {
-          if (existing && configured(existing.config)) return undefined;
-          // Keep the user's other keys; drop only credentials that would compete with provider auth.
-          const config: McpServerConfig = {
-            ...(existing?.config ?? {}),
-            url: RADIUS_MCP.url,
-            auth: { provider: "radius" },
-          };
-          if ("url" in config) {
-            delete config.oauth;
-            if (config.headers)
-              config.headers = Object.fromEntries(
-                Object.entries(config.headers).filter(
-                  ([key]) => key.toLowerCase() !== "authorization",
-                ),
-              );
-          }
-          return config;
-        })
-        .pipe(
-          Effect.map(snapshot),
-          Effect.filterOrFail(
-            (state) => state.mcp.status === "ready",
-            () => undefined,
-          ),
-          Effect.mapError(
-            () =>
-              new RadiusSetupError({
-                detail:
-                  "Could not configure Radius MCP. Check Pi's global configuration and file permissions, then refresh.",
-              }),
-          ),
-        ),
-      installWebSearch: changePackage("install"),
-      uninstallWebSearch: (key) => changePackage("uninstall", key),
-      removeMcp: (key) =>
-        entries.remove(RADIUS_MCP, key).pipe(
-          Effect.map(snapshot),
-          Effect.mapError(
-            () =>
-              new RadiusSetupError({
-                detail:
-                  "Could not remove Radius MCP. Its configuration may have changed. Refresh and confirm again.",
-              }),
-          ),
-        ),
+      change: (request) => {
+        switch (request.action) {
+          case "configure-mcp":
+            return configureMcp;
+          case "install-web-search":
+            return changePackage("install");
+          case "remove-mcp":
+            return removeMcp(request.removalKey);
+          case "uninstall-web-search":
+            return changePackage("uninstall", request.removalKey);
+        }
+      },
     });
   }),
 );

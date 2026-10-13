@@ -6,8 +6,7 @@
  * when the section settles, outranking the install that completed it. The section only renders
  * the state and calls these methods. Nothing here depends on React.
  */
-import type { RadiusSetupAction } from "@shared/http";
-import type { RadiusSetupState } from "@shared/radius";
+import type { RadiusSetupAction, RadiusSetupState } from "@shared/radius";
 import type { OAuthProvider } from "@shared/wire";
 import {
   browserEnvironment,

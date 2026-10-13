@@ -24,7 +24,7 @@ import {
   type McpSetupRequest,
   type McpSetupState,
 } from "../shared/mcp.ts";
-import { McpConfigEntries } from "./McpConfigEntries.ts";
+import { authOf, McpConfigEntries } from "./McpConfigEntries.ts";
 import { agentDir } from "./PiEnv.ts";
 import {
   SignInAttempts,
@@ -34,15 +34,11 @@ import {
 } from "./SignInAttempts.ts";
 
 type CatalogServer = { id: McpCatalogId; name: string; url: string };
-/** Pi's rule: an HTTP server without provider auth or an Authorization header signs in with MCP OAuth. */
-const oauthUrl = (entry: McpServerEntry) =>
-  "url" in entry.config &&
-  !entry.config.auth &&
-  !Object.keys(entry.config.headers ?? {}).some(
-    (header) => header.toLowerCase() === "authorization",
-  )
-    ? entry.config.url
-    : undefined;
+/** Where the entry signs in, when Pi authenticates it with MCP OAuth. */
+const oauthUrl = (entry: McpServerEntry) => {
+  const auth = authOf(entry.config);
+  return auth._tag === "oauth" ? auth.url : undefined;
+};
 
 export const McpSetupEnvironment = Context.Reference<{
   directory: () => string;

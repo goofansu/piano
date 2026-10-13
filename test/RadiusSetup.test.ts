@@ -119,7 +119,7 @@ test("INV-01/11/12: Radius MCP uses provider auth, preserves unrelated configura
         },
       });
       assert.equal((yield* setup.state).mcp.status, "missing");
-      assert.equal((yield* setup.configureMcp).mcp.status, "ready");
+      assert.equal((yield* setup.change({ action: "configure-mcp" })).mcp.status, "ready");
       const actual = json(file);
       assert.deepEqual(actual, {
         autoEnableCodemode: false,
@@ -137,7 +137,7 @@ test("INV-01/11/12: Radius MCP uses provider auth, preserves unrelated configura
         },
       });
       const before = readFileSync(file, "utf8");
-      yield* setup.configureMcp;
+      yield* setup.change({ action: "configure-mcp" });
       assert.equal(readFileSync(file, "utf8"), before);
       assert(!JSON.stringify(yield* setup.state).includes("private-"));
     }),
@@ -157,8 +157,14 @@ test("INV-02/11: installation survives observers, deduplicates requests and pres
           defaultProvider: "fake",
           packages: ["/unrelated-package", `${PACKAGE}@1.0.0`],
         });
-        assert.equal((yield* setup.installWebSearch).installation.status, "running");
-        assert.equal((yield* setup.installWebSearch).installation.status, "running");
+        assert.equal(
+          (yield* setup.change({ action: "install-web-search" })).installation.status,
+          "running",
+        );
+        assert.equal(
+          (yield* setup.change({ action: "install-web-search" })).installation.status,
+          "running",
+        );
         assert.equal((yield* setup.state).installation.status, "running");
         release();
         const state = yield* settled(setup);
@@ -169,7 +175,7 @@ test("INV-02/11: installation survives observers, deduplicates requests and pres
           defaultProvider: "fake",
           packages: ["/unrelated-package", `${PACKAGE}@1.0.0`],
         });
-        yield* setup.installWebSearch;
+        yield* setup.change({ action: "install-web-search" });
         assert.equal(sources.length, 1);
       }),
     async (source, directory) => {
@@ -185,23 +191,26 @@ test("Installation failures are sanitized and retryable; success requires observ
   await fixture(
     (setup, directory) =>
       Effect.gen(function* () {
-        yield* setup.installWebSearch;
+        yield* setup.change({ action: "install-web-search" });
         const failure = yield* settled(setup);
         assert.equal(failure.installation.status, "error");
         assert(!JSON.stringify(failure).includes("private-"));
-        yield* setup.installWebSearch;
+        yield* setup.change({ action: "install-web-search" });
         assert.equal(
           (yield* settled(setup)).installation.status,
           "error",
           "exit success without a package is not installed",
         );
-        yield* setup.installWebSearch;
+        yield* setup.change({ action: "install-web-search" });
         assert.equal((yield* settled(setup)).webSearch.status, "ready");
         assert.equal(attempts, 3);
         save(join(directory, "settings.json"), { packages: [{ source: PACKAGE, extensions: [] }] });
         const filtered = readFileSync(join(directory, "settings.json"), "utf8");
         assert.equal((yield* setup.state).webSearch.status, "blocked");
-        assert.equal((yield* Effect.result(setup.installWebSearch))._tag, "Failure");
+        assert.equal(
+          (yield* Effect.result(setup.change({ action: "install-web-search" })))._tag,
+          "Failure",
+        );
         assert.equal(readFileSync(join(directory, "settings.json"), "utf8"), filtered);
         writeFileSync(join(directory, "settings.json"), "malformed-private-token");
         assert.equal((yield* setup.state).webSearch.status, "blocked");
@@ -223,7 +232,7 @@ test("INV-02: stopping the service aborts only its installer and waits for clean
   await fixture(
     (setup) =>
       Effect.gen(function* () {
-        yield* setup.installWebSearch;
+        yield* setup.change({ action: "install-web-search" });
         yield* Effect.promise(() => ready);
       }),
     (_source, _directory, signal) =>
@@ -251,16 +260,22 @@ test("INV-01/10/11: Radius MCP is created under its default name and removal pre
       };
       save(join(directory, "auth.json"), auth);
       save(file, { mcpServers: { other: { command: "do-not-run" } } });
-      assert.equal((yield* setup.configureMcp).mcp.status, "ready");
+      assert.equal((yield* setup.change({ action: "configure-mcp" })).mcp.status, "ready");
       assert.deepEqual(json(file), {
         mcpServers: {
           other: { command: "do-not-run" },
           radius: { url: URL, auth: { provider: "radius" } },
         },
       });
-      assert.equal((yield* Effect.result(setup.removeMcp("stale")))._tag, "Failure");
+      assert.equal(
+        (yield* Effect.result(setup.change({ action: "remove-mcp", removalKey: "stale" })))._tag,
+        "Failure",
+      );
       const key = (yield* setup.state).mcp.removalKey!;
-      assert.equal((yield* setup.removeMcp(key)).mcp.status, "missing");
+      assert.equal(
+        (yield* setup.change({ action: "remove-mcp", removalKey: key })).mcp.status,
+        "missing",
+      );
       assert.deepEqual(json(file), { mcpServers: { other: { command: "do-not-run" } } });
       assert.deepEqual(json(join(directory, "auth.json")), auth);
     }),
@@ -280,7 +295,7 @@ test("INV-02/10: uninstall is confirmation-bound, retryable and serialized with 
         const file = join(directory, "settings.json");
         const auth = { radius: { type: "oauth", access: "private-access" } };
         save(join(directory, "auth.json"), auth);
-        yield* setup.configureMcp;
+        yield* setup.change({ action: "configure-mcp" });
         const mcp = json(join(directory, "mcp.json"));
         const stale = (yield* setup.state).webSearch.removalKey!;
         // Filters and pinned version are part of the review identity. Explicit removal
@@ -289,21 +304,37 @@ test("INV-02/10: uninstall is confirmation-bound, retryable and serialized with 
           defaultThinkingLevel: "high",
           packages: ["/keep", { source: `${PACKAGE}@1.0.0`, extensions: [] }],
         });
-        assert.equal((yield* Effect.result(setup.uninstallWebSearch(stale)))._tag, "Failure");
+        assert.equal(
+          (yield* Effect.result(
+            setup.change({ action: "uninstall-web-search", removalKey: stale }),
+          ))._tag,
+          "Failure",
+        );
         const key = (yield* setup.state).webSearch.removalKey!;
-        assert.equal((yield* setup.uninstallWebSearch(key)).installation.action, "uninstall");
+        assert.equal(
+          (yield* setup.change({ action: "uninstall-web-search", removalKey: key })).installation
+            .action,
+          "uninstall",
+        );
         const failed = yield* settled(setup);
         assert.equal(failed.installation.status, "error");
         assert(!JSON.stringify(failed).includes("private-"));
-        yield* setup.uninstallWebSearch(key);
+        yield* setup.change({ action: "uninstall-web-search", removalKey: key });
         assert.equal(
           (yield* settled(setup)).installation.status,
           "error",
           "successful exit without removing the declaration is not success",
         );
-        yield* setup.uninstallWebSearch(key);
-        assert.equal((yield* setup.uninstallWebSearch(key)).installation.status, "running");
-        assert.equal((yield* Effect.result(setup.installWebSearch))._tag, "Failure");
+        yield* setup.change({ action: "uninstall-web-search", removalKey: key });
+        assert.equal(
+          (yield* setup.change({ action: "uninstall-web-search", removalKey: key })).installation
+            .status,
+          "running",
+        );
+        assert.equal(
+          (yield* Effect.result(setup.change({ action: "install-web-search" })))._tag,
+          "Failure",
+        );
         release();
         const done = yield* settled(setup);
         assert.equal(done.installation.status, "success");
@@ -313,7 +344,11 @@ test("INV-02/10: uninstall is confirmation-bound, retryable and serialized with 
         assert.deepEqual(json(file), { defaultThinkingLevel: "high", packages: ["/keep"] });
         assert.deepEqual(json(join(directory, "auth.json")), auth);
         assert.deepEqual(json(join(directory, "mcp.json")), mcp);
-        assert.equal((yield* Effect.result(setup.uninstallWebSearch(key)))._tag, "Failure");
+        assert.equal(
+          (yield* Effect.result(setup.change({ action: "uninstall-web-search", removalKey: key })))
+            ._tag,
+          "Failure",
+        );
       }),
     undefined,
     async (source, directory) => {
@@ -344,7 +379,7 @@ test("INV-12: changing Pi's packages re-probes every directory's catalog", async
         yield* facts.catalog(cwd);
         yield* facts.catalog(cwd);
         assert.equal(count(), 1, "a cached catalog is not re-probed");
-        yield* setup.installWebSearch;
+        yield* setup.change({ action: "install-web-search" });
         assert.equal((yield* settled(setup)).installation.status, "success");
         yield* facts.catalog(cwd);
         assert.equal(count(), 2, "a web-search install re-probes the catalog");
