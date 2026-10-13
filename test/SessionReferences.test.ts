@@ -11,7 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
+import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
+import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionReferences, SessionReferencesLive } from "../server/SessionReferences.ts";
 
@@ -60,6 +62,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, SessionReferences | Registry>) =>
         SessionReferencesLive.pipe(
           Layer.provideMerge(RegistryLive),
           Layer.provide(Layer.succeed(RegistryDatabasePath, join(root, `${++databases}.db`))),
+          Layer.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer))),
         ),
       ),
     ),

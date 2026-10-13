@@ -2,9 +2,9 @@
  * Heuristic protection: known secret-valued environment variables and common token
  * shapes. Encoded, unknown and tool-specific credentials are not contained by this.
  *
- * Each value is projected once, at the seam where it enters display (INV-11): PiRecords and
- * PiHistory project the transcript as Pi content becomes wire messages, PiSessions projects the
- * rest of what a session publishes (state, notices, dialogs), and socket egress projects
+ * Each value is projected once, at the seam where it enters display (INV-11): PiRecords projects
+ * the transcript as Pi content becomes wire messages, live or saved, PiSessions projects the rest
+ * of what a session publishes or a saved peek returns (state, notices, dialogs), and socket egress projects
  * messages that never passed through a session.
  */
 import { stripVTControlCharacters } from "node:util";

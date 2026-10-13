@@ -1,7 +1,9 @@
 /**
- * Pi's on-disk session history, read without starting an agent. Pi owns history (INV-01): this
- * module only reads it, through the SDK's SessionManager and Pi's session-directory rules
- * (PiEnv), and never moves, merges or repairs a file.
+ * Internal to PiSessions, which exposes it as `history`: Pi's on-disk session history, read
+ * without starting an agent. Pi owns history (INV-01): this module only reads it, through the SDK's
+ * SessionManager and Pi's session-directory rules (PiEnv), and never moves, merges or repairs a
+ * file. It reads a file's facts; PiRecords alone turns them into a Snapshot, as it does a live
+ * session's readbacks.
  *
  * A checkout can be named by more than one spelling (a symlink, an older registry path), and Pi
  * records each file under the spelling its CLI was started in. `locate` searches every spelling a
@@ -11,13 +13,13 @@
 import { readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { parseSessionEntries, SessionManager } from "@earendil-works/pi-coding-agent";
-import { Data, Effect } from "effect";
+import { Effect } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Snapshot } from "../shared/wire.ts";
-import { compileRedaction, projectDisplay } from "./DisplayProjection.ts";
+import { compileRedaction, projectSnapshot } from "./DisplayProjection.ts";
 import { directoryPath, sessionDirFor } from "./PiEnv.ts";
-import { type RawMessage, serializeMessages, stateFactsOf } from "./PiRecords.ts";
-import { RunLedger } from "./Subagents.ts";
+import { type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
+import { PiSessionError } from "./PiTransport.ts";
 
 /** Where a session's Pi history is, across the spellings of its checkout. */
 export type HistoryLocation =
@@ -26,16 +28,13 @@ export type HistoryLocation =
   /** Distinct physical files with the same session ID, as Pi listed them. */
   | { readonly _tag: "conflict"; readonly paths: ReadonlyArray<string> };
 
-export class PiHistoryError extends Data.TaggedError("PiHistoryError")<{
-  readonly detail: string;
-}> {}
-
+/** Saved sessions, read without starting Pi. */
 export interface PiHistory {
   /** Find a session's file under any of these checkout spellings, without moving or copying it. */
   readonly locate: (
     sessionId: string,
     checkouts: Iterable<string>,
-  ) => Effect.Effect<HistoryLocation, PiHistoryError>;
+  ) => Effect.Effect<HistoryLocation, PiSessionError>;
   /** The session IDs Pi has history for in this directory. An unreadable store has none. */
   readonly sessionIds: (cwd: string) => Effect.Effect<ReadonlySet<string>>;
   /** The active branch of a session file as a Snapshot, with Run usage from every entry, or an empty
@@ -45,8 +44,10 @@ export interface PiHistory {
   readonly exportBranch: (
     sessionId: string,
     file: string | undefined,
-  ) => Effect.Effect<string, PiHistoryError>;
+  ) => Effect.Effect<string, PiSessionError>;
 }
+
+const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 
 // Pi filters a shared session directory by the header's cwd, so each spelling lists its own files.
 const listed = (cwd: string) =>
@@ -57,7 +58,7 @@ const listed = (cwd: string) =>
 const locate = Effect.fn("PiHistory.locate")(function* (
   sessionId: string,
   checkouts: Iterable<string>,
-): Effect.fn.Return<HistoryLocation, PiHistoryError> {
+): Effect.fn.Return<HistoryLocation, PiSessionError> {
   // One physical file can be listed through several spellings; count it once.
   const files = new Map<string, string>();
   for (const cwd of new Set([...checkouts].map(directoryPath))) {
@@ -66,10 +67,7 @@ const locate = Effect.fn("PiHistory.locate")(function* (
       // A listed file must resolve; unlike a checkout it has no missing state to fall back on.
       const physical = yield* Effect.tryPromise({
         try: () => realpath(info.path),
-        catch: (error) =>
-          new PiHistoryError({
-            detail: `Cannot resolve Pi history ${info.path}: ${String(error)}`,
-          }),
+        catch: (error) => rejected(`Cannot resolve Pi history ${info.path}: ${String(error)}`),
       });
       files.set(physical, info.path);
     }
@@ -85,39 +83,40 @@ const locate = Effect.fn("PiHistory.locate")(function* (
 const sessionIds = (cwd: string): Effect.Effect<ReadonlySet<string>> =>
   Effect.map(listed(directoryPath(cwd)), (infos) => new Set(infos.map((info) => info.id)));
 
+/** A saved session's facts as Pi would report them, read from its file. */
+const savedFacts = (path: string, sessionId: string): PiSessionFacts => {
+  const sm = SessionManager.open(path);
+  // Use Pi's own compaction/context-edit/active-branch projection, the same
+  // display scope as RPC get_messages. Never infer selection from an answer.
+  const context = sm.buildSessionContext();
+  // Pi's context builder uses the last assistant's physical model. Selection
+  // is recorded separately; this read-only peek cannot check whether a virtual
+  // model is still registered. The next CLI open confirms/falls back itself.
+  const selection = sm.getBranch().findLast((entry) => entry.type === "model_change");
+  const model =
+    selection?.type === "model_change"
+      ? { provider: selection.provider, id: selection.modelId }
+      : context.model
+        ? { provider: context.model.provider, id: context.model.modelId }
+        : undefined;
+  return {
+    source: "saved",
+    state: {
+      sessionId,
+      sessionFile: path,
+      sessionName: sm.getSessionName(),
+      model,
+      thinkingLevel: context.thinkingLevel,
+      isStreaming: false,
+    },
+    messages: context.messages as RawMessage[],
+    entries: sm.getEntries(),
+  };
+};
+
 const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
-  Effect.sync(() => {
-    const sm = SessionManager.open(path);
-    // Use Pi's own compaction/context-edit/active-branch projection, the same
-    // display scope as RPC get_messages. Never infer selection from an answer.
-    const context = sm.buildSessionContext();
-    // Pi's context builder uses the last assistant's physical model. Selection
-    // is recorded separately; this read-only peek cannot check whether a virtual
-    // model is still registered. The next CLI open confirms/falls back itself.
-    const selection = sm.getBranch().findLast((entry) => entry.type === "model_change");
-    const model =
-      selection?.type === "model_change"
-        ? { provider: selection.provider, id: selection.modelId }
-        : context.model
-          ? { provider: context.model.provider, id: context.model.modelId }
-          : undefined;
-    // serializeMessages projects the transcript where Pi content enters; the state is read here.
-    return {
-      state: projectDisplay({
-        ...stateFactsOf({
-          sessionId,
-          sessionFile: path,
-          sessionName: sm.getSessionName(),
-          model,
-          thinkingLevel: context.thinkingLevel,
-          isStreaming: false,
-        }),
-        subagents: new RunLedger().add(sm.getEntries()).usage,
-      }),
-      messages: serializeMessages(context.messages as RawMessage[]),
-      dialogs: [],
-    };
-  }).pipe(
+  // The transcript was projected for display as it was built; the rest is projected here.
+  Effect.sync(() => projectSnapshot(snapshotOf(savedFacts(path, sessionId)))).pipe(
     Effect.orElseSucceed(() => ({
       state: {
         sessionId,
@@ -152,8 +151,7 @@ const exportBranch = Effect.fn("PiHistory.exportBranch")(function* (
       // Pi chooses the branch. Preserve its entry vocabulary and IDs, not Piano's display messages.
       return `${[header, ...branch].map((entry) => JSON.stringify(redaction.value(entry))).join("\n")}\n`;
     },
-    catch: () =>
-      new PiHistoryError({ detail: "This session has no readable saved conversation to share." }),
+    catch: () => rejected("This session has no readable saved conversation to share."),
   });
 });
 

@@ -31,6 +31,7 @@ async function fixture(
     PiSessions,
     PiSessions.of({
       open: () => Effect.die("unused"),
+      history: undefined as never,
       probe: () =>
         Effect.sync(() => {
           count++;

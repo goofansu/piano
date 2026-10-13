@@ -7,7 +7,9 @@
  * - This module: generation, atomic snapshot/live publication, readback
  *   freshness, session-owned actions and shutdown announcement.
  * - SessionDialogs: dialog claims and their one terminal resolution, under this module's lock.
- * - PiRecords: protocol translation, not process or publication lifecycle.
+ * - PiRecords: protocol translation, not process or publication lifecycle. Its one projection
+ *   turns Pi's facts into every Snapshot, a live child's or a saved file's.
+ * - PiHistory: saved sessions read without a child, exposed as `history`.
  * The external dependency seam remains ChildProcessSpawner; tests use PiSessions.
  */
 import { randomUUID } from "node:crypto";
@@ -47,6 +49,7 @@ import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
 import { projectDisplay, projectSessionEvent, projectSnapshot } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
+import { PiHistory } from "./PiHistory.ts";
 import {
   dispositionOf,
   type PiCommand,
@@ -116,6 +119,10 @@ export class PiSessions extends Context.Service<
       cwd: string,
       options?: { globalSettingsOnly?: boolean },
     ) => Effect.Effect<ProbeResult, PiSessionError>;
+    /** Saved sessions without starting Pi: locate a file across checkout spellings, list a
+     * directory's session IDs, peek a file as the Snapshot `open` would start from, and export its
+     * active branch. Never moves, merges or repairs history (INV-01). */
+    readonly history: PiHistory;
   }
 >()("piano/PiSessions") {}
 
@@ -223,6 +230,8 @@ const commandOf = (translation: PiTranslation): Effect.Effect<PiCommand, PiSessi
     ? Effect.fail(new PiSessionError({ reason: "rejected", detail: translation.rejected }))
     : Effect.succeed(translation.command);
 
+// The saved-history types `history` speaks in.
+export type { HistoryLocation, PiHistory } from "./PiHistory.ts";
 // Preserve the public configuration/error imports; transport details stay internal.
 export { PiRequestTimeoutMs, PiSessionError } from "./PiTransport.ts";
 
@@ -266,8 +275,8 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
     const projector = new PiProjector({ generation, recoveryMs });
-    const opened = projector.state(initial[0]);
-    if (opened.sessionId !== spec.sessionId)
+    const opened = projector.snapshot({ source: "live", state: initial[0], messages: initial[1] });
+    if (opened.state.sessionId !== spec.sessionId)
       return yield* new PiSessionError({
         reason: "protocol",
         detail:
@@ -275,9 +284,8 @@ const openSession = (spec: PiSessionSpec) =>
       });
     // Everything a subscriber's snapshot holds except host observations, kept by the shared fold.
     const snapshotRef = yield* Ref.make<Snapshot>({
-      state: withLastKnownStats(opened, spec.lastKnownStats),
-      messages: projector.history(initial[1], "m"),
-      dialogs: [],
+      ...opened,
+      state: withLastKnownStats(opened.state, spec.lastKnownStats),
       tools: [],
     });
     const stateOf = Effect.map(Ref.get(snapshotRef), (snapshot) => snapshot.state);
@@ -904,6 +912,7 @@ export const PiSessionsLive: Layer.Layer<PiSessions, never, ChildProcessSpawner>
       open: (spec) => openSession(spec).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
       probe: (cwd, options) =>
         probe(cwd, options).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
+      history: PiHistory,
     });
   }),
 );
