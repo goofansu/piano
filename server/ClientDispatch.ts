@@ -2,8 +2,9 @@
  * One browser client's requests and the server-wide updates it hears, without the socket.
  * Session requests go to the client's ClientSessions; the rest run their SessionHosts,
  * WorkspaceCommands, Registry or DirectoryFacts step here and answer through the client's
- * output. A request that capacity refuses or that fails gets the one reply its sender awaits
- * (`unansweredReply`); it never ends the connection.
+ * output. Each request kind is described once, in `requests`: how it is admitted, its work, and
+ * the one reply its sender awaits when capacity refuses it or it fails. A refused or failed
+ * request never ends the connection.
  */
 import { Cause, Effect, Stream } from "effect";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
@@ -15,7 +16,7 @@ import { sessionActionPolicy } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SidebarView } from "./SidebarView.ts";
-import { WorkspaceCommands } from "./WorkspaceCommands.ts";
+import { WorkspaceCommands, worktreeFailure } from "./WorkspaceCommands.ts";
 
 /** Every client message except delivery acknowledgements, which belong to the transport. */
 export type ClientRequest = Exclude<ClientMessage, { _tag: "ack" }>;
@@ -42,49 +43,58 @@ const unansweredText = (reason: Unanswered) =>
     : errorText(reason.error);
 
 /**
- * The reply the sender of `request` awaits when it ends without its ordinary answer, correlated
- * the way the browser settles that request: by selection, worktree request ID or folder. Requests
- * nothing waits on get the ordinary error, with their selection when they have one.
+ * How `receive` admits a request, in arrival order:
+ * - `immediate` runs at once without taking capacity;
+ * - `ordinary` and `control` take that lane of inbound capacity, or are refused, and run later;
+ * - `claim` takes ordinary capacity and claims its selection at once, so selections take effect
+ *   in receive order; the work it returns runs later.
  */
-const unansweredReply = (request: ClientRequest, reason: Unanswered): ServerMessage => {
-  const message = unansweredText(reason);
-  switch (request._tag) {
-    case "select":
-      return reason._tag === "refused"
-        ? { _tag: "selection_rejected", selectionId: request.selectionId, message }
-        : { _tag: "selection_failed", selectionId: request.selectionId, message };
-    case "create_session":
-      // Creation may already have submitted its first message; a failure keeps that uncertain.
-      return reason._tag === "refused"
-        ? { _tag: "selection_rejected", selectionId: request.selectionId, message }
-        : { _tag: "error", message, selectionId: request.selectionId };
-    case "create_worktree":
-    case "add_worktree":
-      return {
-        _tag: "worktree_result",
-        requestId: request.requestId,
-        result: {
-          status: "error",
-          detail: message,
-          // A refused request never started. WorkspaceCommands answers the command's own
-          // failures, so any other is unexpected and may have run Worktrunk.
-          unconfirmed: reason._tag === "failed",
-        },
-      };
-    case "worktrees":
-      return {
-        _tag: "worktrees",
-        folder: request.folder,
-        discovery: { status: "error", observedAt: new Date().toISOString(), detail: message },
-      };
-    default:
-      return {
-        _tag: "error",
-        message,
-        selectionId: "selectionId" in request ? request.selectionId : undefined,
-      };
-  }
+type Admission = "immediate" | "ordinary" | "control" | "claim";
+
+type RequestPolicy<R extends ClientRequest> = {
+  /**
+   * The reply the sender awaits when the request ends without its ordinary answer, correlated
+   * the way the browser settles that request: by selection, worktree request ID or folder.
+   */
+  readonly unanswered: (request: R, reason: Unanswered) => ServerMessage;
+} & (
+  | {
+      readonly admission: Exclude<Admission, "claim"> | ((request: R) => "ordinary" | "control");
+      readonly run: (request: R) => Effect.Effect<unknown, unknown>;
+    }
+  | {
+      readonly admission: "claim";
+      readonly claim: (request: R) => Effect.Effect<Effect.Effect<unknown, unknown>>;
+    }
+);
+
+/**
+ * Every request kind's admission, work and unanswered reply. Exhaustive by type, so a new
+ * ClientMessage variant cannot be received until it is described here.
+ */
+type RequestPolicies = {
+  readonly [K in ClientRequest["_tag"]]: RequestPolicy<Extract<ClientRequest, { _tag: K }>>;
 };
+
+/** The unanswered reply of a request nothing waits on: the ordinary error, without a selection. */
+const plainError = (_request: unknown, reason: Unanswered): ServerMessage => ({
+  _tag: "error",
+  message: unansweredText(reason),
+  selectionId: undefined,
+});
+
+/** A worktree mutation's unanswered result. A refused request never started. */
+const worktreeUnanswered = (
+  request: { readonly requestId: string },
+  reason: Unanswered,
+): ServerMessage => ({
+  _tag: "worktree_result",
+  requestId: request.requestId,
+  result:
+    reason._tag === "refused"
+      ? { status: "error", detail: unansweredText(reason), unconfirmed: false }
+      : worktreeFailure(reason.error),
+});
 
 /** Sends the current hosts and sidebar, then forwards updates until the surrounding scope closes. */
 export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
@@ -98,6 +108,155 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   const sessions = yield* makeClientSessions(output);
   const { send } = output;
 
+  const requests: RequestPolicies = {
+    // Heartbeats are immediate transport liveness, not Pi work. Rejecting one
+    // during saturation makes a healthy browser reconnect and abandon controls.
+    ping: {
+      admission: "immediate",
+      run: ({ nonce }) => send({ _tag: "pong", nonce }),
+      unanswered: plainError,
+    },
+    select: {
+      admission: "claim",
+      claim: sessions.select,
+      unanswered: ({ selectionId }, reason) =>
+        reason._tag === "refused"
+          ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
+          : { _tag: "selection_failed", selectionId, message: unansweredText(reason) },
+    },
+    create_session: {
+      admission: "claim",
+      claim: sessions.create,
+      // Creation may already have submitted its first message; a failure keeps that uncertain.
+      unanswered: ({ selectionId }, reason) =>
+        reason._tag === "refused"
+          ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
+          : { _tag: "error", message: unansweredText(reason), selectionId },
+    },
+    act: {
+      admission: ({ action }) =>
+        sessionActionPolicy[action._tag].priority ? "control" : "ordinary",
+      run: ({ selectionId, action, start }) => sessions.act(selectionId, action, start),
+      unanswered: ({ selectionId }, reason) => ({
+        _tag: "error",
+        message: unansweredText(reason),
+        selectionId,
+      }),
+    },
+    registry: { admission: "ordinary", run: () => sidebar.refresh, unanswered: plainError },
+    worktrees: {
+      admission: "ordinary",
+      run: ({ folder }) =>
+        commands
+          .discoverWorktrees(folder)
+          .pipe(Effect.flatMap((discovery) => send({ _tag: "worktrees", folder, discovery }))),
+      unanswered: ({ folder }, reason) => ({
+        _tag: "worktrees",
+        folder,
+        discovery: {
+          status: "error",
+          observedAt: new Date().toISOString(),
+          detail: unansweredText(reason),
+        },
+      }),
+    },
+    models: {
+      admission: "ordinary",
+      run: ({ cwd, refresh }) =>
+        facts
+          .catalog(cwd, { refresh })
+          .pipe(Effect.flatMap((catalog) => send({ _tag: "models", catalog }))),
+      unanswered: plainError,
+    },
+    // Registry writes reach every client's sidebar on their own.
+    save_project: {
+      admission: "ordinary",
+      run: ({ project, assign }) => registry.saveProject(project, assign),
+      unanswered: plainError,
+    },
+    archive_project: {
+      admission: "ordinary",
+      run: ({ id, archived }) => registry.archiveProject(id, archived),
+      unanswered: plainError,
+    },
+    assign_project: {
+      admission: "ordinary",
+      run: ({ cwd, sessionId, projectId }) => registry.assignProject(cwd, sessionId, projectId),
+      unanswered: plainError,
+    },
+    add_folder: {
+      admission: "ordinary",
+      run: ({ path }) => registry.addFolder(path),
+      unanswered: plainError,
+    },
+    remove_folder: {
+      admission: "ordinary",
+      run: ({ path }) => registry.removeFolder(path),
+      unanswered: plainError,
+    },
+    trust: {
+      admission: "ordinary",
+      run: ({ cwd }) =>
+        facts.trust(cwd).pipe(Effect.flatMap((trust) => send({ _tag: "trust", ...trust }))),
+      unanswered: plainError,
+    },
+    set_trust: {
+      admission: "ordinary",
+      // Every client hears `catalogs_invalidated`; the requesting one also gets its answers at once.
+      run: (request) =>
+        Effect.gen(function* () {
+          const { cwd, trust, catalog, notice } = yield* commands.setTrust(
+            request.path,
+            request.trusted,
+          );
+          yield* send({ _tag: "toast", level: "success", message: notice });
+          yield* send({ _tag: "trust", cwd, trust });
+          yield* send({ _tag: "models", catalog });
+        }),
+      unanswered: plainError,
+    },
+    // The command answers every outcome, failures included, and has the sidebar rediscover.
+    create_worktree: {
+      admission: "ordinary",
+      run: ({ requestId, folder, branch, hooks }) =>
+        commands
+          .createWorktree(folder, branch, { hooks })
+          .pipe(Effect.flatMap((result) => send({ _tag: "worktree_result", requestId, result }))),
+      unanswered: worktreeUnanswered,
+    },
+    add_worktree: {
+      admission: "ordinary",
+      run: ({ requestId, folder, path }) =>
+        commands
+          .addWorktree(folder, path)
+          .pipe(Effect.flatMap((result) => send({ _tag: "worktree_result", requestId, result }))),
+      unanswered: worktreeUnanswered,
+    },
+    rename_session: {
+      admission: "ordinary",
+      run: ({ cwd, sessionId, title }) => hosts.rename(cwd, sessionId, title),
+      unanswered: plainError,
+    },
+    pin_session: {
+      admission: "ordinary",
+      run: ({ cwd, sessionId, pinned }) => registry.pinSession(cwd, sessionId, pinned),
+      unanswered: plainError,
+    },
+    archive_session: {
+      admission: "ordinary",
+      run: ({ cwd, sessionId }) => sessions.retire(cwd, sessionId, "archive"),
+      unanswered: plainError,
+    },
+    delete_session: {
+      admission: "ordinary",
+      run: ({ cwd, sessionId }) => sessions.retire(cwd, sessionId, "delete"),
+      unanswered: plainError,
+    },
+  };
+  /** The policy for `request`'s own kind; TypeScript cannot correlate the lookup by itself. */
+  const policyOf = <R extends ClientRequest>(request: R) =>
+    requests[request._tag] as unknown as RequestPolicy<R>;
+
   const report = (error: unknown, selectionId?: string) => {
     const message = errorText(error);
     return Effect.logWarning(`client error: ${message}`).pipe(
@@ -110,7 +269,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     reason: Unanswered,
   ) {
     yield* Effect.logWarning(`${request._tag} ${reason._tag}: ${unansweredText(reason)}`);
-    yield* send(unansweredReply(request, reason));
+    yield* send(policyOf(request).unanswered(request, reason));
   });
 
   /** Runs a request's work; any failure but interruption settles the request instead. */
@@ -126,99 +285,31 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         ),
       );
 
-  const handle = (request: Exclude<ClientRequest, { _tag: "select" | "create_session" | "act" }>) =>
-    Effect.gen(function* () {
-      switch (request._tag) {
-        case "registry":
-          return yield* sidebar.refresh;
-        case "worktrees":
-          return yield* send({
-            _tag: "worktrees",
-            folder: request.folder,
-            discovery: yield* commands.discoverWorktrees(request.folder),
-          });
-        case "models":
-          return yield* send({
-            _tag: "models",
-            catalog: yield* facts.catalog(request.cwd, { refresh: request.refresh }),
-          });
-        // Registry writes reach every client's sidebar on their own.
-        case "save_project":
-          return yield* registry.saveProject(request.project, request.assign);
-        case "archive_project":
-          return yield* registry.archiveProject(request.id, request.archived);
-        case "assign_project":
-          return yield* registry.assignProject(request.cwd, request.sessionId, request.projectId);
-        case "add_folder":
-          return yield* registry.addFolder(request.path);
-        case "remove_folder":
-          return yield* registry.removeFolder(request.path);
-        case "trust":
-          return yield* send({ _tag: "trust", ...(yield* facts.trust(request.cwd)) });
-        case "set_trust": {
-          // Every client hears `catalogs_invalidated`; the requesting one also gets its answers at once.
-          const { cwd, trust, catalog, notice } = yield* commands.setTrust(
-            request.path,
-            request.trusted,
-          );
-          yield* send({ _tag: "toast", level: "success", message: notice });
-          yield* send({ _tag: "trust", cwd, trust });
-          return yield* send({ _tag: "models", catalog });
-        }
-        // The command answers every outcome, failures included, and has the sidebar rediscover.
-        case "create_worktree":
-          return yield* send({
-            _tag: "worktree_result",
-            requestId: request.requestId,
-            result: yield* commands.createWorktree(request.folder, request.branch, {
-              hooks: request.hooks,
-            }),
-          });
-        case "add_worktree":
-          return yield* send({
-            _tag: "worktree_result",
-            requestId: request.requestId,
-            result: yield* commands.addWorktree(request.folder, request.path),
-          });
-        case "ping":
-          return yield* send({ _tag: "pong", nonce: request.nonce });
-        case "rename_session":
-          return yield* hosts.rename(request.cwd, request.sessionId, request.title);
-        case "pin_session":
-          return yield* registry.pinSession(request.cwd, request.sessionId, request.pinned);
-        case "archive_session":
-          return yield* sessions.retire(request.cwd, request.sessionId, "archive");
-        case "delete_session":
-          return yield* sessions.retire(request.cwd, request.sessionId, "delete");
-      }
-    });
-
   const capacity = makeInboundCapacity(inboundLimits.client);
   const receive = Effect.fn("ClientDispatch.receive")(function* (request: ClientRequest) {
-    // Heartbeats are immediate transport liveness, not Pi work. Rejecting one
-    // during saturation makes a healthy browser reconnect and abandon controls.
-    if (request._tag === "ping") {
-      yield* answered(request)(handle(request));
+    const policy = policyOf(request);
+    const admission =
+      typeof policy.admission === "function" ? policy.admission(request) : policy.admission;
+    /** The work, once admitted; a claim is made here, in receive order, and the work runs later. */
+    const admitted: Effect.Effect<Effect.Effect<unknown, unknown>> =
+      "claim" in policy
+        ? policy.claim(request)
+        : Effect.succeed(Effect.suspend(() => policy.run(request)));
+    if (admission === "immediate") {
+      yield* answered(request)(yield* admitted);
       return Effect.void;
     }
-    const priority = request._tag === "act" && sessionActionPolicy[request.action._tag].priority;
-    const release = capacity.acquire(Buffer.byteLength(JSON.stringify(request)), priority);
+    const release = capacity.acquire(
+      Buffer.byteLength(JSON.stringify(request)),
+      admission === "control",
+    );
     if (!release) {
       // Reject before claiming a selection or mutating anything. The receive loop
       // remains available for acknowledgements, dialog answers and cancellation.
       yield* settle(request, { _tag: "refused" });
       return Effect.void;
     }
-    // Selection and creation claim their selection here, in receive order; the work runs later.
-    const work: Effect.Effect<unknown, unknown> =
-      request._tag === "select"
-        ? yield* sessions.select(request)
-        : request._tag === "create_session"
-          ? yield* sessions.create(request)
-          : request._tag === "act"
-            ? sessions.act(request.selectionId, request.action, request.start)
-            : handle(request);
-    return work.pipe(answered(request), Effect.ensuring(Effect.sync(release)));
+    return (yield* admitted).pipe(answered(request), Effect.ensuring(Effect.sync(release)));
   }, Effect.uninterruptible);
 
   // ── initial state and global updates ──
