@@ -43,7 +43,9 @@ PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --po
 ```
 
 Drive the scratch UI on 7172. A new scratch database starts empty; register only a throwaway git
-repo in the scratchpad. Stop only the processes you started, by pid. When a check creates
+repo in the scratchpad. Record each pid with `$!` as you start it and stop only those pids; do not
+look pids up with `pgrep -f` or `ps`, which on macOS can print other processes' environment
+variables, secrets included. When a check creates
 worktrees or pi session files, remove them afterwards: `git worktree remove --force` plus
 `git branch -D` in the scratch repo, and the directory under `~/.pi/agent/sessions` whose name
 encodes the scratch path.
