@@ -198,7 +198,42 @@ if(a.includes('--version')) console.log('wt v0.80.0');else{const f=JSON.parse(re
   assert.ok(!calls[1].includes("--no-hooks"));
 });
 
-test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, unapproved and failed hooks", async (t) => {
+test("INV-06: Worktrunk 0.80.0 and later create worktrees; older or unrecognized versions do not", async (t) => {
+  const { root, repo } = fixture(t),
+    cli = join(root, "wt"),
+    version = join(root, "version");
+  const created = JSON.stringify({
+    action: "created",
+    branch: "feature",
+    path: join(root, "feature"),
+    created_branch: true,
+    base_branch: "main",
+  });
+  writeFileSync(
+    cli,
+    `#!${process.execPath}\nimport {readFileSync} from 'node:fs';
+console.log(process.argv.includes('--version')?readFileSync(${JSON.stringify(version)},'utf8'):${JSON.stringify(created)});\n`,
+    { mode: 0o755 },
+  );
+  const create = (reported: string) => {
+    writeFileSync(version, reported);
+    return Effect.runPromise(
+      createWorktree(repo, "feature").pipe(
+        Effect.result,
+        Effect.provideService(WorktrunkCommand, cli),
+      ),
+    );
+  };
+  for (const reported of ["wt v0.80.0", "wt v0.81.0", "wt v0.80.1", "wt v1.0.0"])
+    assert.equal((await create(reported))._tag, "Success", reported);
+  for (const reported of ["wt v0.79.9", "wt v0.9.0", "worktrunk 0.81.0", ""]) {
+    const result = await create(reported);
+    assert.equal(result._tag, "Failure", reported);
+    if (result._tag === "Failure") assert.match(result.failure.detail, /0\.80\.0 or later/);
+  }
+});
+
+test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved and failed hooks", async (t) => {
   const { root, repo } = fixture(t),
     cli = join(root, "wt"),
     config = join(root, "config"),
@@ -225,7 +260,10 @@ test("INV-06: real Worktrunk 0.80.0 custom paths, external edits/detachment, una
   );
   const run = <A, E>(e: Effect.Effect<A, E>) =>
     Effect.runPromise(e.pipe(Effect.provideService(WorktrunkCommand, cli)));
-  assert.equal(execFileSync(wtPath, ["--version"], { encoding: "utf8", env }).trim(), "wt v0.80.0");
+  assert.match(
+    execFileSync(wtPath, ["--version"], { encoding: "utf8", env }).trim(),
+    /^wt v\d+\.\d+\.\d+/,
+  );
   const created = await run(createWorktree(repo, "feature"));
   assert.equal(created.path, join(root, "custom", "feature"));
   assert.equal(created.baseBranch, "main");

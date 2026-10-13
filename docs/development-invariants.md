@@ -96,8 +96,9 @@ are not authoritative proof that a particular candidate passed checks.
 current path, malformed or failed Git output and failed creation. None of the failure cases becomes
 a healthy project-root-only list or a passing check.
 
-**Guardrail:** hooks, interactive approval and foreground completion follow the pinned Worktrunk
-contract. Worktree removal coordinates running sessions/processes before destroying their checkout.
+**Guardrail:** hooks, interactive approval and foreground completion follow Worktrunk's structured
+contract. Piano supports the latest Worktrunk release, with 0.80.0 as the oldest supported version;
+CI tests the latest release. Worktree removal coordinates running sessions/processes before destroying their checkout.
 Record and test the supported backend version. Do not build another backend until a concrete need
 justifies it; lifecycle implementation details must not become Piano's domain model.
 

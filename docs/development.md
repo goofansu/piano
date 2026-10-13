@@ -26,15 +26,16 @@ commit.
 ## Tests
 
 Module tests (`npm test`) run against a fake Pi and need no model credentials. One test drives a
-real Worktrunk and needs `wt` 0.80.0 on `PATH`. The critical-path browser journeys in
+real Worktrunk and needs `wt` 0.80.0 or later on `PATH`. The critical-path browser journeys in
 `test/browser/` run with `npm run test:browser`.
 
 ## CI and merging
 
 [Quality CI](../.github/workflows/quality.yml) runs on every pull request, every push to `main` and
 every merge-queue candidate, on Node 24. The quality job runs `npm ci`, `npm run typecheck`,
-`npm run lint`, `npm test` and `npm run build`, with checksum-pinned Worktrunk 0.80.0. A second job
-runs `npm run test:browser`. CI gets no model secrets.
+`npm run lint`, `npm test` and `npm run build`, with the latest Worktrunk release, checked against
+the checksum file published with it. A second job runs `npm run test:browser`. CI gets no model
+secrets.
 
 No branch protection enforces these jobs: the owner canceled it (YEJ-17). Before you merge, check
 that **Quality gates** passed on the latest commit. Keep the repository private.

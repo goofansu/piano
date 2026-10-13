@@ -27,16 +27,20 @@ jobs:
           node-version: '24'
           cache: npm
       # The module suite includes a real Worktrunk lifecycle test, not just fake CLI tests.
-      - name: Install Worktrunk 0.80.0
+      # Piano supports the latest Worktrunk, so CI tests the latest release, checked against
+      # the checksum file published with it.
+      - name: Install the latest Worktrunk
         shell: bash
         run: |
-          archive="$RUNNER_TEMP/worktrunk.tar.xz"
-          curl --fail --location --silent --show-error --retry 3 \
-            https://github.com/max-sixty/worktrunk/releases/download/v0.80.0/worktrunk-x86_64-unknown-linux-musl.tar.xz \
-            --output "$archive"
-          echo "532ce3ed5eecb1be274c925b5887f61671e2434a4ca2561b9a8ac9379dbba199  $archive" | sha256sum --check
-          mkdir -p "$RUNNER_TEMP/worktrunk"
-          tar -xJf "$archive" --strip-components=1 -C "$RUNNER_TEMP/worktrunk"
+          cd "$RUNNER_TEMP"
+          asset=worktrunk-x86_64-unknown-linux-musl.tar.xz
+          for file in "$asset" "$asset.sha256"; do
+            curl --fail --location --silent --show-error --retry 3 --remote-name \
+              "https://github.com/max-sixty/worktrunk/releases/latest/download/$file"
+          done
+          sha256sum --check "$asset.sha256"
+          mkdir -p worktrunk
+          tar -xJf "$asset" --strip-components=1 -C worktrunk
           echo "$RUNNER_TEMP/worktrunk" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/worktrunk/wt" --version
       - name: Clean install

@@ -1,5 +1,5 @@
 /** Discovery reads Git through GitCheckout's hardened reads, so inherited GIT_* state cannot
- * redirect it (INV-06); creation goes through Worktrunk 0.80.0 for its paths and hooks. Git and
+ * redirect it (INV-06); creation goes through Worktrunk (0.80.0 or later) for its paths and hooks. Git and
  * CLI details stay behind this module.
  */
 import { lstat, realpath, stat } from "node:fs/promises";
@@ -13,7 +13,8 @@ export class WorktreeError extends Data.TaggedError("WorktreeError")<{ readonly 
 export const WorktrunkCommand = Context.Reference<string>("piano/WorktrunkCommand", {
   defaultValue: () => process.env.PIANO_WT_CLI ?? "wt",
 });
-export const WORKTRUNK_VERSION = "0.80.0";
+/** Oldest supported Worktrunk; newer releases are supported and CI tests the latest. */
+export const MINIMUM_WORKTRUNK_VERSION = "0.80.0";
 
 const run = (
   command: string,
@@ -42,9 +43,12 @@ const wt = Effect.fn("Worktrees.wt")(function* (folder: string, args: string[], 
 const compatible = Effect.gen(function* () {
   const command = yield* WorktrunkCommand;
   const version = (yield* run(command, ["--version"])).trim();
-  if (version !== `wt v${WORKTRUNK_VERSION}`)
+  const found = /^wt v(\d+)\.(\d+)\.(\d+)\b/.exec(version)?.slice(1).map(Number);
+  const minimum = MINIMUM_WORKTRUNK_VERSION.split(".").map(Number);
+  const order = found && (found.map((n, i) => n - minimum[i]!).find((d) => d !== 0) ?? 0);
+  if (order === undefined || order < 0)
     return yield* new WorktreeError({
-      detail: `Unsupported Worktrunk version: ${version}. Install Worktrunk ${WORKTRUNK_VERSION}, then refresh.`,
+      detail: `Unsupported Worktrunk version: ${version}. Install Worktrunk ${MINIMUM_WORKTRUNK_VERSION} or later, then refresh.`,
     });
 });
 
@@ -73,7 +77,7 @@ const json = <T, E>(schema: Schema.Codec<T, E>, text: string) =>
     catch: () =>
       new WorktreeError({
         detail:
-          "Invalid Worktrunk output (expected the supported structured contract). Refresh after checking Worktrunk 0.80.0 and its configuration.",
+          "Invalid Worktrunk output (expected the supported structured contract). Refresh after checking Worktrunk and its configuration.",
       }),
   });
 

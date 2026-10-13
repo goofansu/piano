@@ -9,7 +9,8 @@ continues sessions across your folders and their Git worktrees.
 
 - Node.js 24 and npm.
 - Git.
-- [Worktrunk](https://worktrunk.dev) (`wt`) on `PATH`, to create worktrees.
+- [Worktrunk](https://worktrunk.dev) (`wt`) 0.80.0 or later on `PATH`, to create worktrees from
+  Piano. Piano supports the latest release.
 - Credentials for a model provider. Sign in through Piano, or reuse an existing Pi setup in
   `~/.pi/agent`. Piano installs the Pi runtime with its own dependencies.
 
