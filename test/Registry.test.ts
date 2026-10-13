@@ -86,7 +86,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
+      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
     );
   } finally {
     legacy.close();
@@ -95,7 +95,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 3);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 4);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -150,6 +150,58 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
 });
 
+test("version-3 sharing migration preserves sessions; the first Radius destination survives restart and cannot be replaced", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "folder");
+  await f.run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addSession(cwd, "shared", "Original");
+      yield* registry.pinSession(cwd, "shared", true);
+    }),
+  );
+  const before = (await f.get()).sessions[0]!;
+  const legacy = new DatabaseSync(f.dbPath);
+  try {
+    legacy.exec("ALTER TABLE sessions DROP COLUMN radius_share; PRAGMA user_version = 3;");
+  } finally {
+    legacy.close();
+  }
+  assert.deepEqual((await f.get()).sessions, [before]);
+  const link = {
+    organizationId: "org-a",
+    artifactId: "artifact-a",
+    url: "https://radius.earendil.com/a/artifact-a",
+  };
+  assert.equal(
+    await f.run(Effect.flatMap(Registry, (r) => r.setSessionRadiusShare(before, link))),
+    true,
+  );
+  assert.deepEqual((await f.get()).sessions, [{ ...before, radiusShare: link }]);
+  assert.equal(
+    await f.run(
+      Effect.flatMap(Registry, (r) =>
+        r.setSessionRadiusShare(before, { ...link, artifactId: "replacement" }),
+      ),
+    ),
+    false,
+  );
+  await f.run(
+    Effect.flatMap(Registry, (r) => r.mirrorSession(cwd, "shared", { sessionName: "Renamed" })),
+  );
+  assert.deepEqual((await f.get()).sessions[0]?.radiusShare, link);
+  await f.run(Effect.flatMap(Registry, (r) => r.removeSession(cwd, "shared")));
+  assert.equal(
+    await f.run(Effect.flatMap(Registry, (r) => r.setSessionRadiusShare(before, link))),
+    false,
+  );
+  assert.deepEqual(
+    (await f.get()).sessions,
+    [],
+    "late share results cannot resurrect a deleted session",
+  );
+});
+
 test("INV-01: version-2 sessions start unpinned; pins persist without changing history metadata or activity", async (t) => {
   const f = fixture(t),
     cwd = join(f.root, "folder");
@@ -160,7 +212,9 @@ test("INV-01: version-2 sessions start unpinned; pins persist without changing h
   );
   const legacy = new DatabaseSync(f.dbPath);
   try {
-    legacy.exec("ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;");
+    legacy.exec(
+      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;",
+    );
   } finally {
     legacy.close();
   }

@@ -1,10 +1,12 @@
 /** Explicit Radius publication, independent of MCP and model calls. Pi owns credentials and
- * saved history; SessionHosts captures the branch under its ownership lock. No transcript or
- * token is retained in the registry, and no automatic retry can publish a second artifact. */
+ * saved history; Radius owns artifact contents and revisions. Only a durable destination is
+ * retained in Piano's database. Save it before uploading any transcript so retries/restarts
+ * can add a version without creating a second published URL. */
 import { DEFAULT_RADIUS_GATEWAY } from "@earendil-works/pi-ai/providers/radius-config";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Deferred, Effect, Layer, Schema } from "effect";
-import type { SessionShare } from "../shared/share.ts";
+import type { RadiusShareLink, SessionShare } from "../shared/share.ts";
+import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 
 export class ShareError extends Data.TaggedError("ShareError")<{
@@ -12,6 +14,8 @@ export class ShareError extends Data.TaggedError("ShareError")<{
 }> {}
 const failure = (detail: string) => new ShareError({ detail });
 const uncertain = "Sharing could not be confirmed. Check Radius artifacts before sharing again.";
+const unavailable =
+  "The saved Radius share is unavailable. Check its access or expiration in Radius. Piano has not created a new link.";
 
 /** Only the external credential and HTTP boundaries are replaceable in tests. */
 export const SharingEnvironment = Context.Reference<{
@@ -26,11 +30,16 @@ export const SharingEnvironment = Context.Reference<{
   }),
 });
 
+const OrganizationResponse = Schema.Struct({
+  organization: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
+});
 const ArtifactResponse = Schema.Struct({
   artifact: Schema.Struct({
+    id: Schema.String.check(Schema.isMinLength(1)),
     canonical_url: Schema.String,
     expires_at: Schema.String,
-    visibility: Schema.Literal("organization"),
+    visibility: Schema.Literals(["organization", "private", "public"]),
+    capabilities: Schema.optional(Schema.Struct({ publish_revision: Schema.Boolean })),
   }),
 });
 
@@ -43,9 +52,52 @@ export const SessionSharingLive = Layer.effect(
   SessionSharing,
   Effect.gen(function* () {
     const hosts = yield* SessionHosts;
+    const registry = yield* Registry;
     const environment = yield* SharingEnvironment;
     const scope = yield* Effect.scope;
     const pending = new Map<string, Deferred.Deferred<SessionShare, ShareError>>();
+    // All requests go to Pi's official Radius gateway, never a URL from a browser or stored link.
+    const request = async (token: string, path: string, init: RequestInit, signal: AbortSignal) => {
+      const response = await environment.fetch(new URL(path, DEFAULT_RADIUS_GATEWAY), {
+        ...init,
+        redirect: "error",
+        headers: { ...init.headers, authorization: `Bearer ${token}` },
+        signal,
+      });
+      if (!response.ok) {
+        // Provider bodies may echo tokens or transcript content. Never deliver or log them.
+        await response.body?.cancel();
+        throw new Error("Radius request failed");
+      }
+      return response.json();
+    };
+    const artifact = async (
+      token: string,
+      path: string,
+      init: RequestInit,
+      signal: AbortSignal,
+      expected?: RadiusShareLink,
+    ) => {
+      const { artifact } = Schema.decodeUnknownSync(ArtifactResponse)(
+        await request(token, path, init, signal),
+      );
+      const link = new URL(artifact.canonical_url);
+      if (
+        link.protocol !== "https:" ||
+        link.username ||
+        link.password ||
+        link.port ||
+        !["radius.pi.dev", "radius.earendil.com"].includes(link.hostname) ||
+        !Number.isFinite(Date.parse(artifact.expires_at)) ||
+        (expected && (artifact.id !== expected.artifactId || link.href !== expected.url))
+      )
+        throw new Error("Invalid artifact identity");
+      if (artifact.visibility !== "organization")
+        throw failure(
+          "This share's visibility changed in Radius. Set it to Organization before updating it from Piano.",
+        );
+      return { ...artifact, canonical_url: link.href };
+    };
     const publish = Effect.fn("SessionSharing.publish")(function* (cwd: string, sessionId: string) {
       const token = yield* Effect.tryPromise({
         try: async (signal) => {
@@ -74,35 +126,103 @@ export const SessionSharingLive = Layer.effect(
       // A Piano safety bound, not a claim about Radius's undocumented upload quota.
       if (Buffer.byteLength(content) > 10 * 1024 * 1024)
         return yield* failure("This session exceeds Piano's 10 MiB sharing limit.");
+      const organizationId = yield* Effect.tryPromise({
+        try: async (signal) =>
+          Schema.decodeUnknownSync(OrganizationResponse)(
+            await request(token, "/v1/organization/settings", { method: "GET" }, signal),
+          ).organization.id,
+        catch: () =>
+          failure("Could not verify your Radius organization. No transcript was uploaded."),
+      });
+      const session = (yield* registry.get).sessions.find(
+        (s) => s.cwd === cwd && s.sessionId === sessionId,
+      );
+      if (!session || session.archived)
+        return yield* failure("This session is no longer available to share.");
+      let destination = session.radiusShare;
+      if (destination && destination.organizationId !== organizationId)
+        return yield* failure(
+          "This session was shared with a different Radius organization. Sign in to that organization to update the same link.",
+        );
+      if (!destination) {
+        // Allocate an empty artifact, not a transcript. If allocation or saving fails, any
+        // orphan is empty. Once a transcript can reach Radius its destination is already durable.
+        const created = yield* Effect.tryPromise({
+          try: (signal) =>
+            artifact(
+              token,
+              "/v1/artifacts",
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ title: "Pi session", visibility: "organization" }),
+              },
+              signal,
+            ),
+          catch: () => failure("Could not prepare the Radius share. No transcript was uploaded."),
+        });
+        destination = { organizationId, artifactId: created.id, url: created.canonical_url };
+        const saved = yield* registry
+          .setSessionRadiusShare(session, destination)
+          .pipe(
+            Effect.mapError(() =>
+              failure(
+                "Could not save the share link in Piano's database. No transcript was uploaded.",
+              ),
+            ),
+          );
+        if (!saved)
+          return yield* failure(
+            "The session changed while preparing its share. No transcript was uploaded; reopen Share to try again.",
+          );
+      } else {
+        const target = destination;
+        const existing = yield* Effect.tryPromise({
+          try: (signal) =>
+            artifact(
+              token,
+              `/v1/artifacts/${encodeURIComponent(target.artifactId)}`,
+              { method: "GET" },
+              signal,
+              target,
+            ),
+          catch: (error) => (error instanceof ShareError ? error : failure(unavailable)),
+        });
+        if (existing.capabilities?.publish_revision === false)
+          return yield* failure(
+            "This Radius account cannot update the saved share. Sign in with an account that has access.",
+          );
+      }
+      // A deletion/archive while Radius was being read must not start a new upload.
+      const current = (yield* registry.get).sessions.find(
+        (s) => s.cwd === cwd && s.sessionId === sessionId,
+      );
+      if (
+        !current ||
+        current.archived ||
+        current.createdAt !== session.createdAt ||
+        current.radiusShare?.artifactId !== destination.artifactId
+      )
+        return yield* failure(
+          "The session changed while preparing its share. No transcript was uploaded.",
+        );
+      const target = destination;
       return yield* Effect.tryPromise({
         try: async (signal): Promise<SessionShare> => {
-          const url = new URL("/v1/artifacts", DEFAULT_RADIUS_GATEWAY);
-          url.searchParams.set("visibility", "organization");
-          url.searchParams.set("title", "Pi session");
-          const response = await environment.fetch(url, {
-            method: "POST",
-            redirect: "error",
-            headers: { authorization: `Bearer ${token}`, "content-type": "application/x-ndjson" },
-            body: content,
+          // Explicit visibility keeps an update organization-only even if it changes after our
+          // read. fresh=1 replaces the file set instead of inheriting another member's extra files.
+          const updated = await artifact(
+            token,
+            `/v1/artifacts/${encodeURIComponent(target.artifactId)}/versions?visibility=organization&fresh=1`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/x-ndjson" },
+              body: content,
+            },
             signal,
-          });
-          if (!response.ok) {
-            // Never expose provider response bodies: they can echo tokens or transcript content.
-            await response.body?.cancel();
-            throw new Error("Upload failed");
-          }
-          const { artifact } = Schema.decodeUnknownSync(ArtifactResponse)(await response.json());
-          const link = new URL(artifact.canonical_url);
-          if (
-            link.protocol !== "https:" ||
-            link.username ||
-            link.password ||
-            link.port ||
-            !["radius.pi.dev", "radius.earendil.com"].includes(link.hostname) ||
-            !Number.isFinite(Date.parse(artifact.expires_at))
-          )
-            throw new Error("Invalid artifact");
-          return { url: link.href, expiresAt: artifact.expires_at, visibility: "organization" };
+            target,
+          );
+          return { url: target.url, expiresAt: updated.expires_at, visibility: "organization" };
         },
         catch: () => failure(uncertain),
       });
@@ -125,8 +245,8 @@ export const SessionSharingLive = Layer.effect(
           Effect.ensuring(Effect.sync(() => pending.delete(key))),
           Effect.forkIn(scope),
         );
-        // Browser disconnect does not own publication. A new user action after completion
-        // intentionally creates a fresh snapshot, matching Pi's /share behavior.
+        // Browser disconnect does not own publication. Explicit later shares add versions;
+        // uncertain version responses never discard the durable destination or create a new one.
         return yield* Deferred.await(done);
       }),
     });

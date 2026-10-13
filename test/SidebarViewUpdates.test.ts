@@ -183,14 +183,23 @@ test("INV-01: a registry write made outside any browser request reaches the side
       yield* registry.mirrorSession(first, "pi-named", {
         stats: { cost: 1, statsUpdatedAt: Date.now() },
       });
+      yield* registry.setSessionRadiusShare(
+        (yield* registry.get).sessions.find((s) => s.sessionId === "pi-named")!,
+        {
+          organizationId: "org-a",
+          artifactId: "artifact-a",
+          url: "https://radius.earendil.com/a/artifact-a",
+        },
+      );
       yield* registry.touchSession(first, "pi-named");
       const [, next] = [...(yield* Fiber.join(views))];
       const updatedAt = (yield* registry.get).sessions[0]?.updatedAt;
       assert.equal(
         next?.sessionReferences?.[0]?.updatedAt,
         updatedAt,
-        "the view after the statistics write is the touch",
+        "the view after the statistics and sharing writes is the touch",
       );
+      assert.equal("radiusShare" in (next?.sessionReferences?.[0] ?? {}), false);
     }),
   );
 });

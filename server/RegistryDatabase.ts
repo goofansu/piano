@@ -28,6 +28,7 @@ const schema = `
     archived INTEGER NOT NULL CHECK (archived IN (0, 1)),
     pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
     stats TEXT CHECK (stats IS NULL OR json_valid(stats)),
+    radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)),
     pull_request_state TEXT NOT NULL CHECK (pull_request_state IN ('discover', 'removed', 'linked')),
     pull_request_url TEXT, pull_request_source TEXT, pull_request_api_host TEXT CHECK (pull_request_api_host IS NULL OR pull_request_api_host = 'github.int.exe.xyz'), position INTEGER NOT NULL,
     PRIMARY KEY (cwd, session_id),
@@ -36,7 +37,7 @@ const schema = `
   ) STRICT;
   CREATE INDEX sessions_activity ON sessions(archived, updated_at DESC);
   CREATE INDEX sessions_project ON sessions(project_id, updated_at DESC);
-  PRAGMA user_version = 3;
+  PRAGMA user_version = 4;
 `;
 
 type Row = SQLInputValue[];
@@ -79,6 +80,7 @@ const tables = [
       "archived",
       "pinned",
       "stats",
+      "radius_share",
       "pull_request_state",
       "pull_request_url",
       "pull_request_source",
@@ -97,6 +99,7 @@ const tables = [
         Number(s.archived),
         Number(!!s.pinned),
         s.stats === undefined ? null : JSON.stringify(s.stats),
+        s.radiusShare === undefined ? null : JSON.stringify(s.radiusShare),
         s.pullRequest === undefined ? "discover" : s.pullRequest === null ? "removed" : "linked",
         s.pullRequest?.url ?? null,
         s.pullRequest?.source ?? null,
@@ -173,6 +176,7 @@ function snapshot(db: DatabaseSync): RegistryData {
       ...(r.project_id === null ? {} : { projectId: r.project_id as string }),
       ...(r.title === null ? {} : { title: r.title as string }),
       ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
+      ...(r.radius_share === null ? {} : { radiusShare: JSON.parse(r.radius_share as string) }),
       ...(r.pull_request_state === "discover"
         ? {}
         : {
@@ -239,12 +243,16 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           throw new Error("Unrecognized registry database; refusing to initialize it.");
         db.exec(schema);
         persist(db, empty, initial);
-      } else if (version === 1 || version === 2) {
+      } else if (version === 1 || version === 2 || version === 3) {
         if (version === 1) db.exec("ALTER TABLE projects DROP COLUMN goal;");
+        if (version < 3)
+          db.exec(
+            "ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1));",
+          );
         db.exec(
-          "ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)); PRAGMA user_version = 3;",
+          "ALTER TABLE sessions ADD COLUMN radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)); PRAGMA user_version = 4;",
         );
-      } else if (version !== 3)
+      } else if (version !== 4)
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
         );

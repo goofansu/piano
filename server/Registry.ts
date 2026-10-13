@@ -9,6 +9,7 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
+import { RadiusShareLink } from "../shared/share.ts";
 import { Project, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { openRegistryDatabase } from "./RegistryDatabase.ts";
@@ -49,6 +50,8 @@ export interface SessionEntry {
   readonly stats?: SessionStats;
   /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
   readonly pullRequest?: SessionPullRequestLink | null;
+  /** Stable Radius destination. Its revisions and contents remain owned by Radius. */
+  readonly radiusShare?: RadiusShareLink;
 }
 
 export interface RegistryData {
@@ -87,6 +90,7 @@ const currentSchema = Schema.Struct({
       pinned: Schema.optional(Schema.Boolean),
       stats: Schema.optional(SessionStats),
       pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)),
+      radiusShare: Schema.optional(RadiusShareLink),
       projectId: Schema.optional(Schema.String),
     }),
   ),
@@ -221,6 +225,11 @@ export class Registry extends Context.Service<
     readonly setSessionPullRequest: (
       expected: SessionEntry,
       link: SessionPullRequestLink | null | undefined,
+    ) => Effect.Effect<boolean, RegistryError>;
+    /** First allocation wins; a failed/stale save must never be followed by a transcript upload. */
+    readonly setSessionRadiusShare: (
+      expected: SessionEntry,
+      link: RadiusShareLink,
     ) => Effect.Effect<boolean, RegistryError>;
     readonly pinSession: (
       cwd: string,
@@ -489,6 +498,27 @@ export const RegistryLive = Layer.effect(
             return {
               ...d,
               sessions: d.sessions.map((t) => (t === entry ? { ...t, pullRequest: link } : t)),
+            };
+          });
+          return saved;
+        },
+      ),
+      setSessionRadiusShare: Effect.fn("Registry.setSessionRadiusShare")(
+        function* (expected, link) {
+          let saved = false;
+          yield* update((d) => {
+            const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
+            if (
+              !entry ||
+              entry.archived ||
+              entry.createdAt !== expected.createdAt ||
+              entry.radiusShare
+            )
+              return d;
+            saved = true;
+            return {
+              ...d,
+              sessions: d.sessions.map((s) => (s === entry ? { ...s, radiusShare: link } : s)),
             };
           });
           return saved;

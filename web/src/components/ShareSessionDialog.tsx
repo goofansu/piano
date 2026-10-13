@@ -69,8 +69,8 @@ export function ShareSessionDialog({
           <DialogTitle>{result ? "Session shared" : "Share session"}</DialogTitle>
           <DialogDescription>
             {result
-              ? "Members of your Radius organization can view this snapshot."
-              : "Share a saved snapshot with your Radius organization."}
+              ? "Members of your Radius organization can view this link’s versions."
+              : "Share a snapshot with your Radius organization. Reuses the same link."}
           </DialogDescription>
         </DialogHeader>
         {result ? (
@@ -92,7 +92,9 @@ export function ShareSessionDialog({
           <Alert role="note">
             <InfoIcon />
             <AlertTitle>Check for secrets</AlertTitle>
-            <AlertDescription>Includes instructions, tool output and attachments.</AlertDescription>
+            <AlertDescription>
+              Includes instructions, tool output and attachments. Earlier versions stay available.
+            </AlertDescription>
           </Alert>
         )}
         {error && (

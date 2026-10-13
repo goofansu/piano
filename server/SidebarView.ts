@@ -56,11 +56,13 @@ interface Observation {
 
 const shapeOf = (data: RegistryData) =>
   JSON.stringify([data.folders, data.worktrees.map((w) => [w.folder, w.path])]);
-/** The registry facts the view shows. Cached Pi statistics and pull-request links are not among them. */
+/** The registry facts the view shows. Statistics and integration links are not among them. */
 const visibleOf = (data: RegistryData) =>
   JSON.stringify({
     ...data,
-    sessions: data.sessions.map(({ stats: _stats, pullRequest: _pullRequest, ...shown }) => shown),
+    sessions: data.sessions.map(
+      ({ stats: _stats, pullRequest: _pullRequest, radiusShare: _radiusShare, ...shown }) => shown,
+    ),
   });
 
 export interface SidebarViewOptions {
@@ -179,7 +181,12 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         // References survive closed directories and missing history; discovery never removes them.
         // A member not yet observed counts as available until the next run says otherwise.
         const sessionReferences = data.sessions.map(
-          ({ stats: _stats, pullRequest: _pullRequest, ...s }): SessionReference => ({
+          ({
+            stats: _stats,
+            pullRequest: _pullRequest,
+            radiusShare: _radiusShare,
+            ...s
+          }): SessionReference => ({
             ...s,
             workspaceId: data.workspaces.find((w) => w.path === s.cwd)!.id,
             branch: branchOf.get(s.cwd) ?? null,
@@ -262,7 +269,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
 
       const changed = publish(true).pipe(Effect.andThen(request()));
       // Awaited by the writer, so a session reference is on its way to browsers before its prompt reaches Pi.
-      // A statistics or pull-request cache write changes nothing shown and must not start a Git run.
+      // Statistics and integration links change nothing shown and must not start a Git run.
       yield* registry.onChange((before, after) =>
         visibleOf(before) === visibleOf(after) ? Effect.void : changed,
       );

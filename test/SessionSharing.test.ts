@@ -1,29 +1,65 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
-import { Registry } from "../server/Registry.ts";
+import { Registry, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
-import { SharingEnvironment } from "../server/SessionSharing.ts";
+import {
+  SessionSharing,
+  SessionSharingLive,
+  SharingEnvironment,
+} from "../server/SessionSharing.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
 let server: RouterFixture;
 let signedIn = false;
 let authFails = false;
+let organization = "org-a";
+let metadataStatus = 200;
+let visibility = "organization";
+let canPublish = true;
+let allocationHook = async () => {};
+type Artifact = {
+  id: string;
+  canonical_url: string;
+  expires_at: string;
+  visibility: string;
+  latest_version: number;
+};
+const artifacts: Artifact[] = [];
+const allocations: RequestInit[] = [];
 const uploads: { url: string; init: RequestInit }[] = [];
-let respond = async (_signal: AbortSignal): Promise<Response> => success();
-const success = () =>
-  Response.json({
-    artifact: {
-      canonical_url: "https://radius.earendil.com/artifacts/shared-session",
-      expires_at: "2027-01-01T00:00:00Z",
-      visibility: "organization",
-    },
-  });
+const calls: string[] = [];
+const success = (artifact: Artifact) =>
+  Response.json({ artifact: { ...artifact, capabilities: { publish_revision: canPublish } } });
+const normalPublish = async (_signal: AbortSignal, artifact: Artifact) => {
+  artifact.latest_version++;
+  return success(artifact);
+};
+let respond = normalPublish;
 const id = "11111111-1111-4111-8111-111111111111";
 let file: string;
 let original: string;
+const destination = (sessionId = id) =>
+  server.run(
+    Effect.flatMap(Registry, (registry) =>
+      Effect.map(
+        registry.get,
+        (data) => data.sessions.find((s) => s.sessionId === sessionId)?.radiusShare,
+      ),
+    ),
+  );
+const register = async (sessionId: string) => {
+  await server.run(
+    Effect.flatMap(Registry, (registry) => registry.addSession(server.repo, sessionId)),
+  );
+  writeFileSync(
+    join(server.root, "sessions", `${sessionId}.jsonl`),
+    original.replaceAll(id, sessionId),
+  );
+};
 
 before(async () => {
   server = await startRouter(
@@ -36,14 +72,64 @@ before(async () => {
           return { auth: { headers: { Authorization: "Bearer test-credential" } } };
         },
       }),
-      fetch: async (url, init) => {
-        uploads.push({ url: String(url), init: init! });
-        return respond(init!.signal!);
+      fetch: async (input, init) => {
+        const url = new URL(String(input));
+        calls.push(`${init!.method} ${url.pathname}`);
+        assert.equal(url.origin, "https://radius.pi.dev");
+        assert.equal(init!.redirect, "error");
+        assert.equal(new Headers(init!.headers).get("authorization"), "Bearer test-credential");
+        if (url.pathname === "/v1/organization/settings")
+          return Response.json({ organization: { id: organization } });
+        if (url.pathname === "/v1/artifacts") {
+          assert.equal(init!.method, "POST");
+          assert.equal(new Headers(init!.headers).get("content-type"), "application/json");
+          assert.deepEqual(JSON.parse(String(init!.body)), {
+            title: "Pi session",
+            visibility: "organization",
+          });
+          allocations.push(init!);
+          const artifact = {
+            id: `artifact-${artifacts.length + 1}`,
+            canonical_url: `https://radius.earendil.com/artifacts/artifact-${artifacts.length + 1}`,
+            expires_at: "2027-01-01T00:00:00Z",
+            visibility: "organization",
+            latest_version: 0,
+          };
+          artifacts.push(artifact);
+          await allocationHook();
+          return success(artifact);
+        }
+        const match = url.pathname.match(/^\/v1\/artifacts\/([^/]+)(\/versions)?$/)!;
+        assert.ok(match, url.pathname);
+        const artifact = artifacts.find((a) => a.id === match[1])!;
+        assert.ok(artifact, "every request targets an allocated artifact");
+        if (!match[2]) {
+          assert.equal(init!.method, "GET");
+          return metadataStatus === 200
+            ? success({ ...artifact, visibility })
+            : new Response("private response", { status: metadataStatus });
+        }
+        // The external boundary observes that the destination is durable BEFORE content arrives.
+        const header = JSON.parse(String(init!.body).split("\n")[0]!);
+        const db = new DatabaseSync(join(server.root, "registry.db"), { readOnly: true });
+        try {
+          const row = db
+            .prepare("SELECT radius_share FROM sessions WHERE session_id = ?")
+            .get(header.id)!;
+          assert.deepEqual(JSON.parse(row.radius_share as string), {
+            organizationId: organization,
+            artifactId: artifact.id,
+            url: artifact.canonical_url,
+          });
+        } finally {
+          db.close();
+        }
+        uploads.push({ url: String(input), init: init! });
+        return respond(init!.signal!, artifact);
       },
       timeoutMs: 500,
     }),
   );
-  await server.run(Effect.flatMap(Registry, (registry) => registry.addSession(server.repo, id)));
   file = join(server.root, "sessions", `${id}.jsonl`);
   const entry = (entryId: string, parentId: string | null, text: string) => ({
     type: "message",
@@ -61,7 +147,7 @@ before(async () => {
     ]
       .map((value) => JSON.stringify(value))
       .join("\n") + "\n";
-  writeFileSync(file, original);
+  await register(id);
 });
 after(() => server.dispose());
 const share = (sessionId = id) =>
@@ -73,34 +159,32 @@ test("INV-11: sharing rechecks sign-in and fails closed without disclosing crede
   const missing = await share();
   assert.equal(missing.status, 409);
   assert.match((await missing.json()).error, /Sign in to Radius/);
-  assert.equal(uploads.length, 0);
   signedIn = true;
   authFails = true;
   const denied = await share();
   assert.equal(denied.status, 409);
   assert.doesNotMatch(await denied.text(), /secret-token-response/);
-  assert.equal(uploads.length, 0);
+  assert.equal(calls.length, 0);
   authFails = false;
 });
 
-test("INV-01/02/11: native branch snapshot shares without MCP, an agent, or history mutations", async () => {
+test("INV-01/02/11: allocate and save a destination before publishing the redacted native branch without MCP or an agent", async () => {
   const response = await share();
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(await response.json(), {
-    url: "https://radius.earendil.com/artifacts/shared-session",
+    url: "https://radius.earendil.com/artifacts/artifact-1",
     expiresAt: "2027-01-01T00:00:00Z",
     visibility: "organization",
   });
+  assert.equal(allocations.length, 1);
   assert.equal(uploads.length, 1);
   const upload = uploads[0]!;
   const url = new URL(upload.url);
-  assert.equal(url.origin, "https://radius.pi.dev");
-  assert.equal(url.pathname, "/v1/artifacts");
+  assert.equal(url.pathname, "/v1/artifacts/artifact-1/versions");
   assert.equal(url.searchParams.get("visibility"), "organization");
+  assert.equal(url.searchParams.get("fresh"), "1");
   assert.equal(upload.init.method, "POST");
-  assert.equal(upload.init.redirect, "error");
-  assert.equal(new Headers(upload.init.headers).get("authorization"), "Bearer test-credential");
   assert.equal(new Headers(upload.init.headers).get("content-type"), "application/x-ndjson");
   const content = String(upload.init.body);
   assert.doesNotMatch(content, /abandoned|sk-secret-example|test-credential/);
@@ -115,6 +199,72 @@ test("INV-01/02/11: native branch snapshot shares without MCP, an agent, or hist
   assert.equal(lines[2].message.content, "Selected branch with [REDACTED]");
   assert.equal(readFileSync(file, "utf8"), original);
   assert.deepEqual(await server.run(Effect.flatMap(SessionHosts, (hosts) => hosts.list)), []);
+});
+
+test("later shares and fresh registry/sharing services publish revisions at the same URL; another session has its own destination", async () => {
+  const first = await destination();
+  const count = allocations.length;
+  const firstVersion = artifacts[0]!.latest_version;
+  writeFileSync(
+    file,
+    original +
+      JSON.stringify({
+        type: "message",
+        id: "new-turn",
+        parentId: "leaf",
+        timestamp: "2026-10-13T01:00:00Z",
+        message: { role: "user", content: "New saved turn after the first share", timestamp: 2 },
+      }) +
+      "\n",
+  );
+  const later = await share();
+  assert.equal(later.status, 200);
+  assert.equal((await later.json()).url, first?.url);
+  // Recreate both persistence and sharing services from disk, not their in-memory state.
+  const restarted = await server.run(
+    Effect.flatMap(SessionSharing, (s) => s.share(server.repo, id)).pipe(
+      Effect.provide(SessionSharingLive.pipe(Layer.provide(RegistryLive))),
+    ),
+  );
+  assert.equal(restarted.url, first?.url);
+  assert.equal(allocations.length, count);
+  assert.equal(artifacts[0]!.latest_version, firstVersion + 2);
+  assert.match(String(uploads.at(-1)!.init.body), /New saved turn after the first share/);
+  assert.doesNotMatch(String(uploads[0]!.init.body), /New saved turn/);
+  writeFileSync(file, original);
+  await register("another-session");
+  const other = await share("another-session");
+  assert.equal(other.status, 200);
+  assert.notEqual((await other.json()).url, first?.url);
+  assert.equal(allocations.length, count + 1);
+});
+
+test("deleted/expired shares, changed audiences, denied revision permission and different organizations never allocate replacements", async () => {
+  const allocated = allocations.length,
+    uploaded = uploads.length;
+  for (const status of [403, 404, 410, 503]) {
+    metadataStatus = status;
+    const response = await share();
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /saved Radius share is unavailable/);
+  }
+  metadataStatus = 200;
+  for (const next of ["public", "private"]) {
+    visibility = next;
+    const response = await share();
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /visibility changed/);
+  }
+  visibility = "organization";
+  canPublish = false;
+  assert.match((await (await share()).json()).error, /cannot update/);
+  canPublish = true;
+  organization = "org-b";
+  assert.match((await (await share()).json()).error, /different Radius organization/);
+  organization = "org-a";
+  assert.equal(allocations.length, allocated);
+  assert.equal(uploads.length, uploaded);
+  assert.equal((await share()).status, 200, "restoring access reuses the saved destination");
 });
 
 test("legacy history is migrated for export without rewriting Pi's file", async () => {
@@ -141,7 +291,7 @@ test("in-flight Pi work cannot publish a partial session", async () => {
   );
 });
 
-test("concurrent publications for the same session join one upload", async () => {
+test("concurrent publications for the same session join one revision", async () => {
   let started!: () => void;
   let finish!: (response: Response) => void;
   const began = new Promise<void>((resolve) => {
@@ -158,34 +308,27 @@ test("concurrent publications for the same session join one upload", async () =>
   const first = share();
   await began;
   const second = share();
-  // Both HTTP requests are admitted before resolving the external boundary.
   await new Promise((resolve) => setImmediate(resolve));
-  finish(success());
+  finish(success(artifacts[0]!));
   assert.equal((await first).status, 200);
   assert.equal((await second).status, 200);
   assert.equal(uploads.length, count + 1);
-  respond = async () => success();
+  respond = normalPublish;
 });
 
-test("failed, malformed, unsafe-link and timed-out uploads are not success or automatically retried", async () => {
+test("failed, mismatched and timed-out revisions retain the destination and are not automatically retried", async () => {
+  const saved = await destination();
+  const allocated = allocations.length;
   for (const response of [
     () => new Response("secret-transcript-response", { status: 503 }),
+    () => success({ ...artifacts[0]!, canonical_url: "javascript:alert(1)" }),
     () =>
-      Response.json({
-        artifact: {
-          canonical_url: "javascript:alert(1)",
-          expires_at: "2027-01-01",
-          visibility: "organization",
-        },
+      success({
+        ...artifacts[0]!,
+        canonical_url: "https://radius.earendil.com/artifacts/different",
+        id: "different",
       }),
-    () =>
-      Response.json({
-        artifact: {
-          canonical_url: "https://radius.earendil.com/a/x",
-          expires_at: "2027-01-01",
-          visibility: "public",
-        },
-      }),
+    () => success({ ...artifacts[0]!, visibility: "public" }),
   ]) {
     respond = async () => response();
     const count = uploads.length;
@@ -208,10 +351,60 @@ test("failed, malformed, unsafe-link and timed-out uploads are not success or au
         { once: true },
       );
     });
-  const timedOut = await share();
-  assert.equal(timedOut.status, 409);
+  assert.equal((await share()).status, 409);
   assert.equal(aborted, true);
-  respond = async () => success();
+  respond = normalPublish;
+  assert.equal((await share()).status, 200);
+  assert.deepEqual(await destination(), saved);
+  assert.equal(allocations.length, allocated);
+});
+
+test("an uncertain first revision still retries at its already saved URL", async () => {
+  await register("first-revision-fails");
+  respond = async () => new Response("failed", { status: 503 });
+  assert.equal((await share("first-revision-fails")).status, 409);
+  const saved = await destination("first-revision-fails");
+  assert.ok(saved);
+  const count = allocations.length;
+  respond = normalPublish;
+  const retry = await share("first-revision-fails");
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).url, saved.url);
+  assert.equal(allocations.length, count);
+});
+
+test("allocation cannot upload a transcript if the destination could not be saved", async () => {
+  await register("removed-during-allocation");
+  const count = uploads.length;
+  allocationHook = async () =>
+    server.run(
+      Effect.flatMap(Registry, (r) => r.removeSession(server.repo, "removed-during-allocation")),
+    );
+  const response = await share("removed-during-allocation");
+  allocationHook = async () => {};
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /No transcript was uploaded/);
+  assert.equal(uploads.length, count);
+  assert.equal(artifacts.at(-1)!.latest_version, 0, "the orphan has no transcript revision");
+
+  await register("save-error");
+  const db = new DatabaseSync(join(server.root, "registry.db"));
+  try {
+    db.exec(
+      "CREATE TRIGGER reject_share BEFORE UPDATE OF radius_share ON sessions WHEN NEW.session_id = 'save-error' BEGIN SELECT RAISE(ABORT, 'private database error'); END;",
+    );
+    const rejected = await share("save-error");
+    assert.equal(rejected.status, 409);
+    const text = await rejected.text();
+    assert.match(text, /Could not save the share link/);
+    assert.doesNotMatch(text, /private database error/);
+    assert.equal(uploads.length, count);
+    assert.equal(await destination("save-error"), undefined);
+    assert.equal(artifacts.at(-1)!.latest_version, 0);
+  } finally {
+    db.exec("DROP TRIGGER reject_share;");
+    db.close();
+  }
 });
 
 test("unknown and missing histories never cause uploads; signed-out stale clients are rejected", async () => {

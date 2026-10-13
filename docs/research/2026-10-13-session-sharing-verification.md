@@ -1,5 +1,8 @@
 # Radius session sharing — implementation evidence
 
+The original per-share artifact behavior below is superseded by
+[stable session share links](2026-10-13-stable-session-share-links.md).
+
 ## Claim and boundary
 
 User request: offer Share between Pin and Archive in sidebar session menus and in the command
