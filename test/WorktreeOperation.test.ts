@@ -12,6 +12,7 @@ import {
   filterWorktrees,
   RECEIPT_TIMEOUT_MS,
   type WorktreeOperationState,
+  worktreesView,
 } from "../web/src/lib/worktreeOperation.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
@@ -267,5 +268,153 @@ test("worktrees filter literally by label or path, in discovery order", () => {
     filterWorktrees(worktrees, "mn").map((w) => w.path),
     [],
     "no fuzzy matches",
+  );
+});
+
+const folder = (discovery: WorktreeDiscovery) => ({ name: "repo", discovery });
+const idle = (patch: Partial<WorktreeOperationState> = {}): WorktreeOperationState => ({
+  folder: "/repo",
+  discovery: undefined,
+  refreshing: false,
+  request: { status: "idle" },
+  ...patch,
+});
+const form = { creating: false, branch: "", hooks: false, query: "" };
+const twoWorktrees: WorktreeDiscovery = {
+  status: "ready",
+  observedAt: "own",
+  currentPath: "/repo",
+  worktrees: [
+    { path: "/repo", branch: "main", detached: false, prunable: false },
+    { path: "/repo-feature", branch: "feature", detached: false, prunable: false },
+  ],
+};
+
+test("the sidebar snapshot stands in only until the picker's own discovery answers", () => {
+  const snapshot = folder(discovered("snapshot"));
+  const before = worktreesView({ state: idle(), folder: snapshot, connected: true, form });
+  assert.equal(before.discovery?.observedAt, "snapshot");
+  assert.equal(before.target, snapshot);
+  const after = worktreesView({
+    state: idle({ discovery: twoWorktrees }),
+    folder: snapshot,
+    connected: true,
+    form: { ...form, query: "feat" },
+  });
+  assert.equal(after.discovery?.observedAt, "own");
+  assert.deepEqual(
+    after.visible.map((w) => w.path),
+    ["/repo-feature"],
+  );
+  const closed = worktreesView({
+    state: idle({ discovery: twoWorktrees }),
+    folder: undefined,
+    connected: true,
+    form,
+  });
+  assert.equal(closed.target, undefined, "a closed folder has nothing to create in");
+  assert.deepEqual(closed.visible, []);
+});
+
+test("creating is offered only once discovery found a Git repository", () => {
+  for (const discovery of [
+    { status: "non-git", observedAt: "t" },
+    { status: "error", observedAt: "t", detail: "git exploded" },
+  ] as const) {
+    const view = worktreesView({
+      state: idle({ discovery }),
+      folder: folder(discovered("snapshot")),
+      connected: true,
+      form: { ...form, creating: true, branch: "feature", query: "feature" },
+    });
+    assert.equal(view.target, undefined);
+    assert.equal(view.createFromQuery, undefined, `${discovery.status}: no create offer`);
+    assert.equal(view.canSubmit, false);
+    assert.deepEqual(view.visible, []);
+  }
+  const nonGit = worktreesView({
+    state: idle({ discovery: { status: "non-git", observedAt: "t" } }),
+    folder: folder(discovered("snapshot")),
+    connected: true,
+    form,
+  });
+  assert.equal(nonGit.emptyText, "Non-Git directory");
+  const errored = worktreesView({
+    state: idle({ discovery: { status: "error", observedAt: "t", detail: "git exploded" } }),
+    folder: folder(discovered("snapshot")),
+    connected: false,
+    form,
+  });
+  assert.equal(errored.emptyText, "No worktree matches.");
+  assert.deepEqual(errored.notices, {
+    disconnected: "Disconnected — showing last observation.",
+    discoveryError: "git exploded",
+  });
+  const ready = worktreesView({
+    state: idle({ discovery: twoWorktrees }),
+    folder: folder(discovered("snapshot")),
+    connected: true,
+    form: { ...form, query: "  nothing  " },
+  });
+  assert.equal(ready.createFromQuery, "nothing", "unmatched search text is offered, trimmed");
+  assert.deepEqual(ready.notices, { disconnected: undefined, discoveryError: undefined });
+});
+
+test("one rule enables both the Create button and the submit", () => {
+  const pending = { status: "pending", requestId: "r1", kind: "create" } as const;
+  const cases: [string, Partial<WorktreeOperationState>, boolean, string, boolean][] = [
+    ["ready", {}, true, "feature", true],
+    ["blank branch", {}, true, "   ", false],
+    ["disconnected", {}, false, "feature", false],
+    ["pending", { request: pending }, true, "feature", false],
+  ];
+  for (const [name, patch, connected, branch, expected] of cases) {
+    const { canSubmit }: { canSubmit: boolean } = worktreesView({
+      state: idle({ discovery: twoWorktrees, ...patch }),
+      folder: folder(twoWorktrees),
+      connected,
+      form: { ...form, creating: true, branch },
+    });
+    assert.equal(canSubmit, expected, name);
+  }
+  const refreshing = worktreesView({
+    state: idle({ discovery: twoWorktrees, refreshing: true }),
+    folder: folder(twoWorktrees),
+    connected: true,
+    form: { ...form, creating: true, branch: "feature" },
+  });
+  assert.equal(refreshing.busy, true, "refresh and selection wait for discovery");
+  assert.equal(refreshing.canSubmit, true, "creating does not wait for a refresh");
+});
+
+test("failures name what failed; an unconfirmed one asks to rediscover and hides the raw error", () => {
+  const failed = (unconfirmed: boolean, creating: boolean, hooks: boolean) =>
+    worktreesView({
+      state: idle({
+        discovery: twoWorktrees,
+        request: { status: "failed", detail: "boom\nline two", unconfirmed },
+      }),
+      folder: folder(twoWorktrees),
+      connected: true,
+      form: { ...form, creating, hooks, branch: "feature" },
+    }).failure;
+  assert.deepEqual(failed(false, true, true), {
+    title: "Could not create the worktree",
+    lines: ["boom\nline two"],
+  });
+  assert.equal(failed(false, false, false)?.title, "Could not open the worktree");
+  assert.deepEqual(failed(true, true, false), {
+    title: "Worktree operation not confirmed",
+    lines: ["Refresh discovery before retrying."],
+    details: "boom\nline two",
+  });
+  assert.deepEqual(failed(true, true, true)?.lines, [
+    "Refresh discovery before retrying.",
+    "For unapproved hooks, review and approve them in a terminal, or leave hooks off.",
+  ]);
+  assert.equal(failed(true, false, true)?.lines.length, 1, "the hooks hint is for creation only");
+  assert.equal(
+    worktreesView({ state: idle(), folder: undefined, connected: true, form }).failure,
+    undefined,
   );
 });
