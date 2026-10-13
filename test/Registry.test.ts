@@ -150,6 +150,35 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
 });
 
+test("INV-01: a session with every optional field set, linked without an API host, survives restart", async (t) => {
+  const f = fixture(t),
+    folder = join(f.root, "folder");
+  const original: RegistryData = {
+    version: 2,
+    folders: [folder],
+    worktrees: [],
+    workspaces: [{ id: "folder-id", folder, path: folder }],
+    projects: [{ id: "project-1", name: "Launch", archived: false }],
+    sessions: [
+      {
+        cwd: folder,
+        sessionId: "full",
+        projectId: "project-1",
+        title: "Every field",
+        createdAt: "then",
+        updatedAt: "now",
+        archived: true,
+        pinned: true,
+        stats: { cost: 1, statsUpdatedAt: 2 },
+        radiusShare: { organizationId: "org", artifactId: "art", url: "https://radius.test/a" },
+        pullRequest: { url: "https://github.com/example/repo/pull/2", source: "manual" },
+      },
+    ],
+  };
+  seedRegistry(f.dbPath, original);
+  assert.deepEqual(await f.get(), original);
+});
+
 test("version-3 sharing migration preserves sessions; Radius destinations survive restart and reject stale replacements", async (t) => {
   const f = fixture(t),
     cwd = join(f.root, "folder");

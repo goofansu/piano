@@ -1,7 +1,7 @@
 /** SQLite implementation detail of Registry. Pi history and evidence never enter this store. */
 import { chmodSync, closeSync, lstatSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import type { RegistryData } from "./Registry.ts";
 
 const schema = `
@@ -41,34 +41,66 @@ const schema = `
 `;
 
 type Row = SQLInputValue[];
-/** Ordered parent-first; deletions run in reverse. Column names never come from user input. */
-const tables = [
-  {
+type Stored = Record<string, SQLOutputValue>;
+type Collection = Exclude<keyof RegistryData, "version">;
+type Item<K extends Collection> = RegistryData[K][number];
+
+/**
+ * One table's codec: its SQL table is named after the `RegistryData` collection it stores, and
+ * `encode` and `decode` are inverses (`position` is the array index, implicit on decode). The first
+ * `keys` columns are the primary key. Column names never come from user input.
+ */
+interface Table<K extends Collection> {
+  readonly name: K;
+  readonly columns: ReadonlyArray<string>;
+  readonly keys: number;
+  encode(item: Item<K>, position: number): Row;
+  decode(row: Stored): Item<K>;
+}
+
+/** A session's pull-request link: absent is discovery, null is removal, otherwise a linked URL. */
+const pullRequestState = (link: Item<"sessions">["pullRequest"]) =>
+  link === undefined ? "discover" : link === null ? "removed" : "linked";
+
+/** Every collection has a codec, ordered parent-first; deletions run in reverse. */
+const codecs: { readonly [K in Collection]: Table<K> } = {
+  projects: {
     name: "projects",
     columns: ["id", "name", "archived", "position"],
     keys: 1,
-    rows: (d: RegistryData): Row[] =>
-      d.projects.map((p, i) => [p.id, p.name, Number(p.archived), i]),
+    encode: (p, i) => [p.id, p.name, Number(p.archived), i],
+    decode: (r) => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived) }),
   },
-  {
+  workspaces: {
     name: "workspaces",
     columns: ["path", "id", "folder_path", "position"],
     keys: 1,
-    rows: (d: RegistryData): Row[] => d.workspaces.map((w, i) => [w.path, w.id, w.folder, i]),
+    encode: (w, i) => [w.path, w.id, w.folder, i],
+    decode: (r) => ({
+      id: r.id as string,
+      path: r.path as string,
+      folder: r.folder_path as string,
+    }),
   },
-  {
+  folders: {
     name: "folders",
     columns: ["path", "position"],
     keys: 1,
-    rows: (d: RegistryData): Row[] => d.folders.map((path, i) => [path, i]),
+    encode: (path, i) => [path, i],
+    decode: (r) => r.path as string,
   },
-  {
+  worktrees: {
     name: "worktrees",
     columns: ["path", "folder_path", "branch", "position"],
     keys: 1,
-    rows: (d: RegistryData): Row[] => d.worktrees.map((w, i) => [w.path, w.folder, w.branch, i]),
+    encode: (w, i) => [w.path, w.folder, w.branch, i],
+    decode: (r) => ({
+      path: r.path as string,
+      folder: r.folder_path as string,
+      branch: r.branch as string,
+    }),
   },
-  {
+  sessions: {
     name: "sessions",
     columns: [
       "cwd",
@@ -88,26 +120,54 @@ const tables = [
       "position",
     ],
     keys: 2,
-    rows: (d: RegistryData): Row[] =>
-      d.sessions.map((s, i) => [
-        s.cwd,
-        s.sessionId,
-        s.projectId ?? null,
-        s.title ?? null,
-        s.createdAt,
-        s.updatedAt,
-        Number(s.archived),
-        Number(!!s.pinned),
-        s.stats === undefined ? null : JSON.stringify(s.stats),
-        s.radiusShare === undefined ? null : JSON.stringify(s.radiusShare),
-        s.pullRequest === undefined ? "discover" : s.pullRequest === null ? "removed" : "linked",
-        s.pullRequest?.url ?? null,
-        s.pullRequest?.source ?? null,
-        s.pullRequest?.apiHost ?? null,
-        i,
-      ]),
+    encode: (s, i) => [
+      s.cwd,
+      s.sessionId,
+      s.projectId ?? null,
+      s.title ?? null,
+      s.createdAt,
+      s.updatedAt,
+      Number(s.archived),
+      Number(!!s.pinned),
+      s.stats === undefined ? null : JSON.stringify(s.stats),
+      s.radiusShare === undefined ? null : JSON.stringify(s.radiusShare),
+      pullRequestState(s.pullRequest),
+      s.pullRequest?.url ?? null,
+      s.pullRequest?.source ?? null,
+      s.pullRequest?.apiHost ?? null,
+      i,
+    ],
+    decode: (r) => ({
+      cwd: r.cwd as string,
+      sessionId: r.session_id as string,
+      createdAt: r.created_at as string,
+      updatedAt: r.updated_at as string,
+      archived: Boolean(r.archived),
+      ...(r.pinned ? { pinned: true } : {}),
+      ...(r.project_id === null ? {} : { projectId: r.project_id as string }),
+      ...(r.title === null ? {} : { title: r.title as string }),
+      ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
+      ...(r.radius_share === null ? {} : { radiusShare: JSON.parse(r.radius_share as string) }),
+      ...(r.pull_request_state === "discover"
+        ? {}
+        : {
+            pullRequest:
+              r.pull_request_state === "removed"
+                ? null
+                : {
+                    url: r.pull_request_url as string,
+                    source: r.pull_request_source as "branch" | "manual",
+                    ...(r.pull_request_api_host === null
+                      ? {}
+                      : { apiHost: r.pull_request_api_host as "github.int.exe.xyz" }),
+                  },
+          }),
+    }),
   },
-];
+};
+const tables: ReadonlyArray<Table<Collection>> = Object.values(codecs);
+const rows = (table: Table<Collection>, d: RegistryData): Row[] =>
+  (d[table.name] as ReadonlyArray<Item<Collection>>).map((item, i) => table.encode(item, i));
 
 /** No full-table rewrite: only changed/new rows and removed keys are written. */
 function persist(db: DatabaseSync, before: RegistryData, after: RegistryData) {
@@ -116,8 +176,8 @@ function persist(db: DatabaseSync, before: RegistryData, after: RegistryData) {
     return {
       ...table,
       key,
-      previous: new Map(table.rows(before).map((r) => [key(r), r])),
-      next: new Map(table.rows(after).map((r) => [key(r), r])),
+      previous: new Map(rows(table, before).map((r) => [key(r), r])),
+      next: new Map(rows(table, after).map((r) => [key(r), r])),
     };
   });
   for (const table of [...changes].reverse()) {
@@ -143,56 +203,15 @@ function persist(db: DatabaseSync, before: RegistryData, after: RegistryData) {
 }
 
 function snapshot(db: DatabaseSync): RegistryData {
-  const rows = (table: string) =>
-    db.prepare(`SELECT * FROM ${table} ORDER BY position`).all() as Record<
-      string,
-      string | number | null
-    >[];
-  return {
-    version: 2,
-    folders: rows("folders").map((r) => r.path as string),
-    projects: rows("projects").map((r) => ({
-      id: r.id as string,
-      name: r.name as string,
-      archived: Boolean(r.archived),
-    })),
-    workspaces: rows("workspaces").map((r) => ({
-      id: r.id as string,
-      path: r.path as string,
-      folder: r.folder_path as string,
-    })),
-    worktrees: rows("worktrees").map((r) => ({
-      path: r.path as string,
-      folder: r.folder_path as string,
-      branch: r.branch as string,
-    })),
-    sessions: rows("sessions").map((r) => ({
-      cwd: r.cwd as string,
-      sessionId: r.session_id as string,
-      createdAt: r.created_at as string,
-      updatedAt: r.updated_at as string,
-      archived: Boolean(r.archived),
-      ...(r.pinned ? { pinned: true } : {}),
-      ...(r.project_id === null ? {} : { projectId: r.project_id as string }),
-      ...(r.title === null ? {} : { title: r.title as string }),
-      ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
-      ...(r.radius_share === null ? {} : { radiusShare: JSON.parse(r.radius_share as string) }),
-      ...(r.pull_request_state === "discover"
-        ? {}
-        : {
-            pullRequest:
-              r.pull_request_state === "removed"
-                ? null
-                : {
-                    url: r.pull_request_url as string,
-                    source: r.pull_request_source as "branch" | "manual",
-                    ...(r.pull_request_api_host === null
-                      ? {}
-                      : { apiHost: r.pull_request_api_host as "github.int.exe.xyz" }),
-                  },
-          }),
-    })),
-  };
+  const read = (table: Table<Collection>) => [
+    table.name,
+    db
+      .prepare(`SELECT * FROM ${table.name} ORDER BY position`)
+      .all()
+      .map((r) => table.decode(r)),
+  ];
+  // `codecs` covers every collection, so the entries form a complete RegistryData.
+  return { version: 2, ...Object.fromEntries(tables.map(read)) } as RegistryData;
 }
 
 const empty: RegistryData = {
