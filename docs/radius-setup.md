@@ -38,7 +38,8 @@ apply configuration to them. Do not send `/reload` as a Piano prompt: stock Pi
 ## Share a session
 
 When Radius is signed in, **Share** appears between Pin and Archive in a session's sidebar menu,
-and under Session commands in Mod+K. **Radius MCP is not required**: Piano resolves credentials
+and under Session commands in Mod+K. Artifacts are named `Pi session <full session ID>`; sharing
+again updates an existing artifact’s title as well as its content. **Radius MCP is not required**: Piano resolves credentials
 through Pi and uploads directly to Radius artifacts.
 
 Confirming Share publishes an **organization-only snapshot** of the saved current branch, including

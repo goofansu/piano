@@ -83,10 +83,9 @@ before(async () => {
         if (url.pathname === "/v1/artifacts") {
           assert.equal(init!.method, "POST");
           assert.equal(new Headers(init!.headers).get("content-type"), "application/json");
-          assert.deepEqual(JSON.parse(String(init!.body)), {
-            title: "Pi session",
-            visibility: "organization",
-          });
+          const body = JSON.parse(String(init!.body));
+          assert.match(body.title, /^Pi session .+/);
+          assert.equal(body.visibility, "organization");
           allocations.push(init!);
           const artifact = {
             id: `artifact-${artifacts.length + 1}`,
@@ -111,6 +110,7 @@ before(async () => {
         }
         // The external boundary observes that the destination is durable BEFORE content arrives.
         const header = JSON.parse(String(init!.body).split("\n")[0]!);
+        assert.equal(url.searchParams.get("title"), `Pi session ${header.id}`);
         const db = new DatabaseSync(join(server.root, "registry.db"), { readOnly: true });
         try {
           const row = db
@@ -178,6 +178,10 @@ test("INV-01/02/11: allocate and save a destination before publishing the redact
     visibility: "organization",
   });
   assert.equal(allocations.length, 1);
+  assert.deepEqual(JSON.parse(String(allocations[0]!.body)), {
+    title: "Pi session 11111111-1111-4111-8111-111111111111",
+    visibility: "organization",
+  });
   assert.equal(uploads.length, 1);
   const upload = uploads[0]!;
   const url = new URL(upload.url);
@@ -237,6 +241,7 @@ test("later shares and fresh registry/sharing services publish revisions at the 
   assert.equal(other.status, 200);
   assert.notEqual((await other.json()).url, first?.url);
   assert.equal(allocations.length, count + 1);
+  assert.equal(JSON.parse(String(allocations.at(-1)!.body)).title, "Pi session another-session");
 });
 
 test("deleted/expired shares, changed audiences, denied revision permission and different organizations never allocate replacements", async () => {

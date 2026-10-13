@@ -90,3 +90,13 @@ and desktop light/mobile dark layout. The viewer navigation was intercepted, and
 used the same synthetic boundary as above. Evidence: `/tmp/piano-share-icons-browser/run.log` and
 `/tmp/piano-share-icons-browser/evidence/`. Scratch resources were cleaned up. No new module test
 was added: the changed contracts are browser interactions composed from existing controls.
+
+## Artifact titles
+
+On `fb3c6db` plus the title patch, creation and revision requests name the artifact
+`Pi session <full session ID>` (INV-07). Existing request-boundary tests now assert the title on
+initial allocation and every revision, including a different session. All 480 tests, typecheck and
+lint passed; `/tmp/piano-share-titles-{tests,types,lint}.log`. A scratch-browser share confirmed the
+new title, then updated a simulated old “Pi session” title at the same URL on re-share:
+`/tmp/piano-share-titles-browser/run.log` and `evidence/`. Same Linux/Node/Pi environment and
+synthetic Radius boundary as above; no real artifact was published or renamed, and no deploy.

@@ -139,6 +139,7 @@ export const SessionSharingLive = Layer.effect(
       );
       if (!session || session.archived)
         return yield* failure("This session is no longer available to share.");
+      const title = `Pi session ${sessionId}`;
       let destination = session.radiusShare;
       if (destination && destination.organizationId !== organizationId)
         return yield* failure(
@@ -155,7 +156,7 @@ export const SessionSharingLive = Layer.effect(
               {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ title: "Pi session", visibility: "organization" }),
+                body: JSON.stringify({ title, visibility: "organization" }),
               },
               signal,
             ),
@@ -213,7 +214,7 @@ export const SessionSharingLive = Layer.effect(
           // read. fresh=1 replaces the file set instead of inheriting another member's extra files.
           const updated = await artifact(
             token,
-            `/v1/artifacts/${encodeURIComponent(target.artifactId)}/versions?visibility=organization&fresh=1`,
+            `/v1/artifacts/${encodeURIComponent(target.artifactId)}/versions?visibility=organization&fresh=1&title=${encodeURIComponent(title)}`,
             {
               method: "POST",
               headers: { "content-type": "application/x-ndjson" },
