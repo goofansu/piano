@@ -125,7 +125,8 @@ export function renderMarkdown(src: string): string {
     out += "</tbody></table></div>";
     tbl = [];
   };
-  for (const ln of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
     if (ln.startsWith("```")) {
       if (!fence) {
         if (tbl.length) fT();
@@ -164,10 +165,16 @@ export function renderMarkdown(src: string): string {
       out += "<hr>";
       continue;
     }
-    if (ln.startsWith("> ")) {
+    if (/^>(?:\s|$)/.test(ln)) {
       fp();
       fL();
-      out += `<blockquote>${inline(ln.slice(2))}</blockquote>`;
+      const quote: string[] = [];
+      do {
+        quote.push(lines[i].replace(/^> ?/, ""));
+        i++;
+      } while (i < lines.length && /^>(?:\s|$)/.test(lines[i]));
+      i--;
+      out += `<blockquote>${renderMarkdown(quote.join("\n"))}</blockquote>`;
       continue;
     }
     const um = ln.match(/^[-*] (.*)/);

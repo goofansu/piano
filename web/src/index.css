@@ -490,7 +490,8 @@
   overflow-wrap: anywhere;
   line-height: 1.7;
 }
-.prose-chat > * + * {
+.prose-chat > * + *,
+.prose-chat blockquote > * + * {
   margin-top: 0.8em;
 }
 .prose-chat h1,

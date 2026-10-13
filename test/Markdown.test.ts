@@ -79,6 +79,21 @@ test("ordered lists continue across blank lines and retain their starting number
   );
 });
 
+test("consecutive quoted lines form one quote, including blank lines and lists", () => {
+  assert.equal(
+    renderMarkdown("> Added a copy button.\n>\n> Copies code.\n> Shows a checkmark.\n\nMy reply."),
+    "<blockquote><p>Added a copy button.</p><p>Copies code.<br>Shows a checkmark.</p></blockquote><p>My reply.</p>",
+  );
+  assert.equal(
+    renderMarkdown("> Features:\n>\n> - Copy\n> - Confirm\n\n> Another quote"),
+    "<blockquote><p>Features:</p><ul><li>Copy</li><li>Confirm</li></ul></blockquote><blockquote><p>Another quote</p></blockquote>",
+  );
+  assert.equal(
+    renderMarkdown("```\n> not a quote\n```\n> ```html\n> <script>\n> ```"),
+    "<pre><code>&gt; not a quote</code></pre><blockquote><pre><code>&lt;script&gt;</code></pre></blockquote>",
+  );
+});
+
 test("only closed Mermaid fences are eligible for diagram rendering", () => {
   assert.equal(
     renderMarkdown("```mermaid\ngraph LR\nA-->B"),
