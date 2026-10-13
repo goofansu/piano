@@ -1,0 +1,113 @@
+/**
+ * The command palette's contents, decided once: which groups it shows, in what order, and each row's
+ * name, search text and marks. `CommandPalette` only renders them; cmdk filters rows by `value` and
+ * `keywords`, and `RankedCommandGroups` reorders the groups while searching.
+ */
+
+import type { AppState } from "../store.ts";
+import type { GlobalCommand } from "./globalCommands.ts";
+import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
+import type { SessionCommand } from "./sessionCommands.ts";
+
+/** Before a search the palette offers this many recent sessions; a search reaches every one. */
+export const RECENT_SESSION_LIMIT = 8;
+
+export interface PaletteSessionRow {
+  key: string;
+  /** cmdk's search text: the title, folder, branch, project and session ID. */
+  value: string;
+  keywords: string[];
+  /** The title, or "Untitled". */
+  label: string;
+  untitled: boolean;
+  /** The session on screen, which the row names in bold. */
+  selected: boolean;
+  folder: string;
+  /** The branch, shown only for a session in one of its folder's worktrees. */
+  branch: string | undefined;
+  session: SessionEntry;
+}
+
+export interface PaletteCommandRow<C extends GlobalCommand | SessionCommand> {
+  key: string;
+  value: string;
+  keywords: string[] | undefined;
+  label: string;
+  /** Secondary text after the label: a path. */
+  detail: string | undefined;
+  /** The current choice of its kind (appearance, grouping, sort, session display). */
+  checked: boolean;
+  enabled: boolean;
+  command: C;
+}
+
+export type PaletteGroup =
+  | { id: "sessions"; heading: "Recent sessions" | "Sessions"; rows: PaletteSessionRow[] }
+  | { id: "global"; heading: "Global commands"; rows: PaletteCommandRow<GlobalCommand>[] }
+  | { id: "session"; heading: "Session commands"; rows: PaletteCommandRow<SessionCommand>[] };
+
+export interface PaletteInput {
+  search: string;
+  /** Global commands as the host provides them, with the same context as the sidebar's View menu. */
+  globalCommands: readonly GlobalCommand[];
+  /** The selected session's commands. */
+  sessionCommands: readonly SessionCommand[];
+}
+
+function sessionRow(t: SessionEntry): PaletteSessionRow {
+  const project = t.project?.name ?? "";
+  const label = t.title || "Untitled";
+  return {
+    key: `${t.cwd}\n${t.sessionId}`,
+    value: `${label} ${t.folder} ${t.branch} ${project} ${t.sessionId}`,
+    keywords: [t.folder, t.branch, project],
+    label,
+    untitled: !t.title,
+    selected: t.selected,
+    folder: t.folder,
+    branch: t.branch && t.inWorktree ? t.branch : undefined,
+    session: t,
+  };
+}
+
+function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteCommandRow<C> {
+  return {
+    key: c.id,
+    value: c.label,
+    keywords: c.keywords ? [...c.keywords] : undefined,
+    label: c.label,
+    detail: "detail" in c ? c.detail : undefined,
+    checked: !!c.checked,
+    enabled: c.enabled,
+    command: c,
+  };
+}
+
+/**
+ * The palette's groups in declaration order: sessions (the most recent few, titled "Recent sessions",
+ * until a search reaches them all), Global commands, then Session commands only while a session is
+ * selected. Every session that is not archived is reachable, including those whose folder is closed.
+ */
+export function commandPalette(state: AppState, input: PaletteInput): PaletteGroup[] {
+  const searching = !!input.search.trim();
+  const sessions = recentSessions(state);
+  const groups: PaletteGroup[] = [];
+  if (sessions.length > 0)
+    groups.push({
+      id: "sessions",
+      heading: searching ? "Sessions" : "Recent sessions",
+      rows: (searching ? sessions : sessions.slice(0, RECENT_SESSION_LIMIT)).map(sessionRow),
+    });
+  groups.push({
+    id: "global",
+    heading: "Global commands",
+    rows: input.globalCommands.map(commandRow),
+  });
+  if (state.view.kind === "session" && state.session)
+    groups.push({
+      id: "session",
+      heading: "Session commands",
+      rows: input.sessionCommands.map(commandRow),
+    });
+  return groups;
+}

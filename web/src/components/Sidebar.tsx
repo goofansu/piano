@@ -9,10 +9,14 @@ import {
   TargetIcon,
   XIcon,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
-import { SessionCommandMenuItem, useCommands, useSessionCommands } from "@/components/CommandHost";
+import {
+  SessionCommandMenuItem,
+  useCommands,
+  useGlobalCommands,
+  useSessionCommands,
+} from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { IconButton } from "@/components/IconButton";
@@ -40,7 +44,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { folderCommands } from "@/lib/folderCommands";
-import { type GlobalCommand, type GlobalCommandGroup, globalCommands } from "@/lib/globalCommands";
+import type { GlobalCommand, GlobalCommandGroup } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
 import { createPreference, parseJson } from "@/lib/preference";
 import {
@@ -54,7 +58,6 @@ import { pickCommands, SESSION_ROW_COMMANDS, type SessionTarget } from "@/lib/se
 import { sessionProject } from "@/lib/sessionContext";
 import { projectKey } from "@/lib/sidebarGroups";
 import { sidebarSections } from "@/lib/sidebarSections";
-import type { SidebarView } from "@/lib/sidebarView";
 import { useNavigation } from "@/lib/useNavigation";
 import { usePreference } from "@/lib/usePreference";
 import { useSidebarGroups } from "@/lib/useSidebarGroups";
@@ -194,7 +197,7 @@ export function Sidebar({ state }: Props) {
         >
           <SearchIcon />
         </IconButton>
-        <ViewMenu state={state} view={view} />
+        <ViewMenu />
       </LayoutHeader>
       <div className="px-3 pb-3">
         <Button
@@ -247,10 +250,8 @@ export function Sidebar({ state }: Props) {
 }
 
 /** One menu for grouping and sorting the list; appearance lives here too. Each choice is a global command, as the palette offers it. */
-function ViewMenu({ state, view }: { state: AppState; view: SidebarView }) {
-  const { theme } = useTheme();
-  const { run } = useCommands();
-  const commands = globalCommands(state, { settingsOpen: false, view, theme: theme ?? "system" });
+function ViewMenu() {
+  const { commands, run } = useGlobalCommands();
   const choices = (group: GlobalCommandGroup) => commands.filter((c) => c.group === group);
   // The label takes the slack so the current value sits beside the trigger's own chevron.
   const choice = (label: string, group: GlobalCommandGroup) => (

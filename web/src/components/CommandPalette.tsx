@@ -1,8 +1,8 @@
 import { cn } from "cn";
 import { CheckIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
-import { CommandIcon, useSessionCommands } from "@/components/CommandHost";
+import { CommandIcon, useGlobalCommands, useSessionCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import {
   CommandDialog,
@@ -13,24 +13,31 @@ import {
   CommandList,
 } from "@/components/PianoCommand";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
+import { commandPalette } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
-import { globalCommands } from "@/lib/globalCommands";
 import { hasMod } from "@/lib/keys";
-import { recentSessions } from "@/lib/sessionCatalog";
 import { useNavigation } from "@/lib/useNavigation";
-import { useSidebarView } from "@/lib/useSidebarView";
 import type { AppState } from "@/store";
 
 interface Props {
   state: AppState;
 }
 
+function Current() {
+  return (
+    <>
+      <CheckIcon className="ml-auto" aria-hidden />
+      <span className="sr-only">current</span>
+    </>
+  );
+}
+
 /**
- * The command palette: session navigation/actions, new sessions, and view commands.
- * Search matches a session's title, its directory, its branch and its project.
+ * The command palette: session navigation/actions, new sessions, and view commands. Its groups and
+ * rows come from `commandPalette`; this renders them and runs what is chosen.
  */
 export function CommandPalette({ state }: Props) {
-  const { palette: open, setPalette: onOpenChange, settings, select } = useNavigation();
+  const { palette: open, setPalette: onOpenChange, select } = useNavigation();
   // Mod+K, the only global shortcut, toggles the palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -43,7 +50,6 @@ export function CommandPalette({ state }: Props) {
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
-  const { view } = useSidebarView();
   const [search, setSearch] = useState("");
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -58,14 +64,14 @@ export function CommandPalette({ state }: Props) {
     );
     return () => cancelAnimationFrame(frame);
   }, [open, search]);
-  // The session header's and sidebar row menu's commands, by the same names, for the selected session;
-  // the host runs these and the global commands alike.
-  const { commands: sessionCommandList, run: runCommand } = useSessionCommands();
-  // Every session that is not archived, including those whose folder was closed: reachable here by name.
-  const sessions = useMemo(() => recentSessions(state), [state]);
-  // The sidebar's View menu choices by the same names; trust is for the directory the main pane is about.
-  const globalCommandList = globalCommands(state, { settingsOpen: !!settings, view });
-  const visibleSessions = search.trim() ? sessions : sessions.slice(0, 8);
+  // The View menu's and the session header's commands, by the same names; the host runs them all.
+  const { commands: globalCommandList, run: runCommand } = useGlobalCommands();
+  const { commands: sessionCommandList } = useSessionCommands();
+  const groups = commandPalette(state, {
+    search,
+    globalCommands: globalCommandList,
+    sessionCommands: sessionCommandList,
+  });
   const run = (action: () => void) => {
     onOpenChange(false);
     action();
@@ -89,86 +95,69 @@ export function CommandPalette({ state }: Props) {
       <CommandList ref={list} className="max-h-[min(24rem,60dvh)]">
         <CommandEmpty>No sessions or commands match.</CommandEmpty>
         <RankedCommandGroups search={search}>
-          {sessions.length > 0 && (
-            <CommandGroup key="sessions" heading={search.trim() ? "Sessions" : "Recent sessions"}>
-              {visibleSessions.map((t) => {
-                const project = t.project?.name ?? "";
-                return (
-                  <CommandItem
-                    key={`${t.cwd}\n${t.sessionId}`}
-                    value={`${t.title || "Untitled"} ${t.folder} ${t.branch} ${project} ${t.sessionId}`}
-                    keywords={[t.folder, t.branch, project]}
-                    onSelect={() => run(() => select(t.cwd, t.sessionId))}
-                    className="gap-3"
-                  >
-                    <span
-                      className={cn(
-                        "min-w-0 flex-1 truncate",
-                        !t.title && "text-ink-3",
-                        t.selected && "font-medium",
-                      )}
+          {groups.map((group) => (
+            <CommandGroup key={group.id} heading={group.heading}>
+              {group.id === "sessions"
+                ? group.rows.map((r) => (
+                    <CommandItem
+                      key={r.key}
+                      value={r.value}
+                      keywords={r.keywords}
+                      onSelect={() => run(() => select(r.session.cwd, r.session.sessionId))}
+                      className="gap-3"
                     >
-                      {t.title || "Untitled"}
-                    </span>
-                    <span className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 text-xs text-ink-3">
-                      <span className="truncate">{t.folder}</span>
-                      {t.branch && t.inWorktree && <BranchLabel branch={t.branch} />}
-                    </span>
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          )}
-          <CommandGroup key="global" heading="Global commands">
-            {globalCommandList.map((c) => (
-              <CommandItem
-                key={c.id}
-                value={c.label}
-                keywords={c.keywords ? [...c.keywords] : undefined}
-                disabled={!c.enabled}
-                onSelect={() => run(() => runCommand(c))}
-              >
-                <GlobalCommandIcon icon={c.icon} /> {c.label}
-                {c.checked && (
-                  <>
-                    <CheckIcon className="ml-auto" aria-hidden />
-                    <span className="sr-only">current</span>
-                  </>
-                )}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          {state.view.kind === "session" && state.session && (
-            <CommandGroup key="session" heading="Session commands">
-              {sessionCommandList.map((c) => (
-                <CommandItem
-                  key={c.id}
-                  value={c.label}
-                  keywords={c.keywords ? [...c.keywords] : undefined}
-                  disabled={!c.enabled}
-                  onSelect={() => run(() => runCommand(c))}
-                >
-                  <CommandIcon icon={c.icon} />{" "}
-                  {c.detail ? (
-                    <>
-                      <span className="shrink-0">{c.label}</span>{" "}
-                      <span className="min-w-0 truncate font-mono text-xs text-ink-3">
-                        {abbrevPath(c.detail)}
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 truncate",
+                          r.untitled && "text-ink-3",
+                          r.selected && "font-medium",
+                        )}
+                      >
+                        {r.label}
                       </span>
-                    </>
-                  ) : (
-                    c.label
-                  )}
-                  {c.checked && (
-                    <>
-                      <CheckIcon className="ml-auto" aria-hidden />
-                      <span className="sr-only">current</span>
-                    </>
-                  )}
-                </CommandItem>
-              ))}
+                      <span className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 text-xs text-ink-3">
+                        <span className="truncate">{r.folder}</span>
+                        {r.branch && <BranchLabel branch={r.branch} />}
+                      </span>
+                    </CommandItem>
+                  ))
+                : group.id === "global"
+                  ? group.rows.map((r) => (
+                      <CommandItem
+                        key={r.key}
+                        value={r.value}
+                        keywords={r.keywords}
+                        disabled={!r.enabled}
+                        onSelect={() => run(() => runCommand(r.command))}
+                      >
+                        <GlobalCommandIcon icon={r.command.icon} /> {r.label}
+                        {r.checked && <Current />}
+                      </CommandItem>
+                    ))
+                  : group.rows.map((r) => (
+                      <CommandItem
+                        key={r.key}
+                        value={r.value}
+                        keywords={r.keywords}
+                        disabled={!r.enabled}
+                        onSelect={() => run(() => runCommand(r.command))}
+                      >
+                        <CommandIcon icon={r.command.icon} />{" "}
+                        {r.detail ? (
+                          <>
+                            <span className="shrink-0">{r.label}</span>{" "}
+                            <span className="min-w-0 truncate font-mono text-xs text-ink-3">
+                              {abbrevPath(r.detail)}
+                            </span>
+                          </>
+                        ) : (
+                          r.label
+                        )}
+                        {r.checked && <Current />}
+                      </CommandItem>
+                    ))}
             </CommandGroup>
-          )}
+          ))}
         </RankedCommandGroups>
       </CommandList>
     </CommandDialog>
