@@ -1,4 +1,3 @@
-import type { ClientCommand } from "@shared/wire";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
@@ -7,7 +6,6 @@ import {
   PlusIcon,
   TargetIcon,
 } from "lucide-react";
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,9 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { answerForm } from "@/lib/commandForms";
 import type { ProjectCommandIcon, ProjectDialog } from "@/lib/projectCommands";
-import type { AppState } from "@/store";
 
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: PlusIcon,
@@ -37,23 +33,26 @@ export function ProjectCommandIconView({ icon }: { icon: ProjectCommandIcon }) {
   return <Icon />;
 }
 
-/** Organization only: saving never opens, aborts or releases a Pi child. The command host owns the one instance. */
+/**
+ * Organization only: saving never opens, aborts or releases a Pi child. The command host owns the
+ * one instance and its form (name, whether saving is allowed, submitting); this only renders it.
+ */
 export function ProjectDialogView({
-  state,
-  send,
   dialog,
+  name,
+  allowed,
+  edit,
+  submit,
   close,
-  openProject,
 }: {
-  state: AppState;
-  send: (command: ClientCommand) => void;
   dialog: ProjectDialog;
+  name: string;
+  allowed: boolean;
+  edit: (name: string) => void;
+  submit: () => void;
   close: () => void;
-  openProject: (id: string) => void;
 }) {
-  const [name, setName] = useState(dialog.project?.name ?? "");
   const editing = !!dialog.project;
-  const answer = answerForm(state, { kind: "project", dialog }, name);
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent className="sm:max-w-md">
@@ -61,10 +60,7 @@ export function ProjectDialogView({
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!answer.command) return;
-            send(answer.command);
-            close();
-            if (answer.openProject) openProject(answer.openProject);
+            submit();
           }}
         >
           <DialogHeader>
@@ -81,7 +77,7 @@ export function ProjectDialogView({
               <Input
                 id="project-name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => edit(e.target.value)}
                 maxLength={200}
                 autoFocus
                 required
@@ -92,7 +88,7 @@ export function ProjectDialogView({
             <Button type="button" variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!answer.allowed}>
+            <Button type="submit" disabled={!allowed}>
               {editing ? "Save" : dialog.assign ? "Create and add session" : "Create project"}
             </Button>
           </DialogFooter>

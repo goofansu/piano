@@ -15,7 +15,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { createContext, useContext, useRef, useState } from "react";
+import { createContext, useContext, useRef } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -31,8 +31,7 @@ import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { answerForm } from "@/lib/commandForms";
-import { type Command, type CommandEffects, type CommandForm, runCommand } from "@/lib/commands";
+import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
@@ -42,6 +41,7 @@ import {
   sessionCommands,
 } from "@/lib/sessionCommands";
 import { sessionWorking } from "@/lib/sessionContext";
+import { useCommandForms } from "@/lib/useCommandForms";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
@@ -121,7 +121,7 @@ export function SessionCommandMenuItem({
 /**
  * The one owner of command effects and their forms: whichever surface asked, running a command goes
  * through `runCommand`, which refuses a disabled one, and there is a single Rename, Archive, Delete, Close
- * folder and project dialog. Each form re-checks its rule when it is answered.
+ * folder, Share and project dialog. The forms (`useCommandForms`) own submitting; the dialogs only render.
  */
 export function CommandHost({
   state,
@@ -138,22 +138,21 @@ export function CommandHost({
   const { setView } = useSidebarView();
   const { setTheme } = useTheme();
   const sidebar = useSidebarLayout();
-  const [form, setForm] = useState<CommandForm | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
+  const forms = useCommandForms({
+    state,
+    radiusSignedIn,
+    send,
+    openProject: (id) => openNew(undefined, id),
+  });
+  const { form } = forms;
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renaming = form?.kind === "rename-session" ? form.target : null;
   const deleting = form?.kind === "delete-session" ? form.target : null;
   const archiving = form?.kind === "archive-session" ? form.target : null;
   const deletingWorking = !!deleting && sessionWorking(state, deleting);
   const closing = form?.kind === "close-folder" ? form.folder : null;
-  const close = () => setForm(null);
-  // Forms re-check the rule when they are answered: the attachment or connection may have changed since.
-  const answer = form && form.kind !== "project" ? answerForm(state, form, draftTitle) : null;
-  /** Send the open form's answer, if it is allowed now. */
-  const submit = () => {
-    if (answer?.command) send(answer.command);
-    return !!answer?.allowed;
-  };
+  const close = forms.cancel;
+  const answer = forms.answer();
 
   const effects: CommandEffects = {
     send,
@@ -166,10 +165,7 @@ export function CommandHost({
     setDisplay,
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
-    openForm: (next) => {
-      if (next.kind === "rename-session") setDraftTitle(next.target.title ?? "");
-      setForm(next);
-    },
+    openForm: forms.open,
   };
   const run = (command: Command) => {
     runCommand(command, effects);
@@ -180,10 +176,10 @@ export function CommandHost({
       {children}
       {form?.kind === "share-session" && (
         <ShareSessionDialog
-          key={JSON.stringify(form.target)}
-          target={form.target}
-          state={state}
+          phase={forms.share}
+          allowed={answer.allowed}
           signedIn={radiusSignedIn}
+          submit={forms.submit}
           close={close}
         />
       )}
@@ -199,7 +195,7 @@ export function CommandHost({
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (submit()) close();
+              forms.submit();
             }}
             className="flex flex-col gap-4"
           >
@@ -214,8 +210,8 @@ export function CommandHost({
                 <Input
                   ref={renameInputRef}
                   aria-label="Session name"
-                  value={draftTitle}
-                  onChange={(event) => setDraftTitle(event.target.value)}
+                  value={forms.text}
+                  onChange={(event) => forms.edit(event.target.value)}
                   onFocus={(event) => event.target.select()}
                   maxLength={200}
                 />
@@ -225,7 +221,7 @@ export function CommandHost({
               <Button type="button" variant="outline" onClick={close}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!answer?.allowed}>
+              <Button type="submit" disabled={!answer.allowed}>
                 Rename
               </Button>
             </DialogFooter>
@@ -246,12 +242,7 @@ export function CommandHost({
             <Button variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button
-              disabled={!answer?.allowed}
-              onClick={() => {
-                if (submit()) close();
-              }}
-            >
+            <Button disabled={!answer.allowed} onClick={forms.submit}>
               Stop and archive
             </Button>
           </DialogFooter>
@@ -271,14 +262,7 @@ export function CommandHost({
             <Button variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              disabled={!answer?.allowed}
-              onClick={() => {
-                submit();
-                close();
-              }}
-            >
+            <Button variant="destructive" disabled={!answer.allowed} onClick={forms.submit}>
               {deletingWorking ? "Stop and delete" : "Delete"}
             </Button>
           </DialogFooter>
@@ -297,12 +281,7 @@ export function CommandHost({
             <Button variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button
-              disabled={!answer?.allowed}
-              onClick={() => {
-                if (submit()) close();
-              }}
-            >
+            <Button disabled={!answer.allowed} onClick={forms.submit}>
               Close
             </Button>
           </DialogFooter>
@@ -310,12 +289,12 @@ export function CommandHost({
       </Dialog>
       {form?.kind === "project" && (
         <ProjectDialogView
-          key={JSON.stringify(form.dialog)}
-          state={state}
-          send={send}
           dialog={form.dialog}
+          name={forms.text}
+          allowed={answer.allowed}
+          edit={forms.edit}
+          submit={forms.submit}
           close={close}
-          openProject={(id) => openNew(undefined, id)}
         />
       )}
     </CommandsContext.Provider>

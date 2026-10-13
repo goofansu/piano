@@ -1,6 +1,5 @@
-import type { SessionShare } from "@shared/share";
 import { CheckIcon, CopyIcon, ExternalLinkIcon, InfoIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -21,50 +20,32 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
-import { shareSession } from "@/lib/api";
-import { canShareSession, type SessionTarget } from "@/lib/sessionCommands";
-import { workspaceFor } from "@/lib/sessionContext";
-import type { AppState } from "@/store";
+import type { SharePhase } from "@/lib/commandForms";
 
+/** Renders the share form's phase; the command host's forms publish (once) and close it. */
 export function ShareSessionDialog({
-  target,
-  state,
+  phase,
+  allowed,
   signedIn,
+  submit,
   close,
 }: {
-  target: SessionTarget;
-  state: AppState;
+  phase: SharePhase;
+  allowed: boolean;
   signedIn: boolean;
+  submit: () => void;
   close: () => void;
 }) {
-  const [result, setResult] = useState<SessionShare>();
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const result = phase.phase === "shared" ? phase.share : undefined;
+  const error = phase.phase === "failed" ? phase.error : undefined;
+  const busy = phase.phase === "publishing";
+  // The copy confirmation is the dialog's own: it never reaches the form.
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 2000);
     return () => clearTimeout(timer);
   }, [copied]);
-  const started = useRef(false);
-  const workspace = workspaceFor(state, target.cwd);
-  const allowed = signedIn && canShareSession(state, target) && !!workspace;
-  const publish = async () => {
-    if (started.current || !allowed || !workspace) return;
-    started.current = true;
-    setBusy(true);
-    try {
-      setResult(await shareSession(workspace.id, target.sessionId));
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Sharing could not be confirmed. Check Radius artifacts before sharing again.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
   const copy = async () => {
     if (!result) return;
     try {
@@ -76,7 +57,7 @@ export function ShareSessionDialog({
     }
   };
   return (
-    <Dialog open onOpenChange={(open) => !open && !busy && close()}>
+    <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent
         className="sm:max-w-md"
         showCloseButton={!!result}
@@ -165,7 +146,7 @@ export function ShareSessionDialog({
               {error ? "Done" : "Cancel"}
             </Button>
             {!error && (
-              <Button disabled={!allowed || busy} onClick={() => void publish()}>
+              <Button disabled={!allowed || busy} onClick={submit}>
                 {busy && <Spinner data-icon="inline-start" />}
                 {busy ? "Sharing…" : "Share"}
               </Button>
