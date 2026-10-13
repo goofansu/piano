@@ -57,6 +57,12 @@ that every PR add tests applies.
 - Keep tests isolated and deterministic: scratch repositories, explicit event synchronization,
   controlled deadlines, bounded waits and cleanup of resources the test created. Avoid arbitrary
   sleeps, live model calls and dependence on developer credentials or the user's running instance.
+- Wait for the event you depend on; never infer it from another one finishing first. An
+  acknowledgement does not mean its effects have arrived: Pi answers a prompt before it sends the
+  user message, and file-watch events can arrive long after the write. Subscribe before acting,
+  then wait for the state you assert on, such as Pi going idle. `npm test` runs files in
+  parallel, so a test that passes only on an idle machine is broken. To check whether a test
+  depends on ordering, run several copies of it at once.
 - Cover meaningful error, cancellation, timeout and concurrency paths when the changed behavior
   depends on them. Do not enumerate combinations without identifying a distinct risk.
 - Prefer focused assertions to large snapshots. Snapshots are appropriate for stable structured
