@@ -2,7 +2,7 @@
  * What the Radius section shows and allows: each step's state, which controls are available, the
  * folded tools' summary, and whether the page has settled for announcements. One change, read or
  * failure at a time locks every step; a step Pi reports as blocked, or one that needs the account,
- * stays unavailable on its own. Pure, so the section only observes, mutates and renders.
+ * stays unavailable on its own. Pure; `radiusSetup.ts` feeds it and the section renders it.
  */
 import type { RadiusSetupState } from "@shared/radius";
 import type { OAuthProvider } from "@shared/wire";
