@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { type TestContext, test } from "node:test";
+import { type Effect, Layer, ManagedRuntime } from "effect";
 import {
   facts,
   type GitHubPullRequest,
+  GitHubPullRequests,
+  GitHubPullRequestsLive,
   githubRemote,
   pullRequestIdentity,
 } from "../server/GitHubPullRequests.ts";
+import { GhCommand } from "../server/Subprocess.ts";
 
 const pr = (over: Partial<GitHubPullRequest> = {}): GitHubPullRequest => ({
   url: "https://github.com/example/repo/pull/42",
@@ -106,4 +114,84 @@ test("remotes: github.com in https, scp and ssh forms, the exe.dev integration, 
     "/srv/git/repo.git",
   ])
     assert.equal(githubRemote(remote), null, remote);
+});
+
+const exe = "github.int.exe.xyz";
+const url = "https://github.com/example/repo/pull/42";
+/** A checkout with `remote`, a fake gh that checks the API route, and the adapter. */
+async function routing(t: TestContext, remote: string) {
+  const root = mkdtempSync(join(tmpdir(), "piano-gh-route-")),
+    repo = join(root, "repo"),
+    away = join(root, "not-a-checkout"),
+    gh = join(root, "gh"),
+    forge = join(root, "forge.json");
+  mkdirSync(repo);
+  mkdirSync(away);
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  execFileSync("git", ["-C", repo, "init", "-q", "-b", "feature"], { env });
+  execFileSync("git", ["-C", repo, "remote", "add", "origin", remote], { env });
+  writeFileSync(
+    gh,
+    `#!${process.execPath}\nprocess.env.PIANO_TEST_GH_FIXTURE = ${JSON.stringify(forge)};\nawait import(${JSON.stringify(resolve("test/fixtures/fake-gh.mjs"))});\n`,
+    { mode: 0o755 },
+  );
+  const runtime = ManagedRuntime.make(
+    GitHubPullRequestsLive.pipe(Layer.provide(Layer.succeed(GhCommand, gh))),
+  );
+  t.after(async () => {
+    await runtime.dispose();
+    rmSync(root, { recursive: true, force: true });
+  });
+  const github = await runtime.runPromise(GitHubPullRequests);
+  /** Serve one open pull request, answering only through `host`. */
+  const serve = (host: string) =>
+    writeFileSync(
+      forge,
+      JSON.stringify({
+        prs: [
+          {
+            ...pr({ headRefName: "feature" }),
+            headRepository: { name: "repo" },
+            headRepositoryOwner: { login: "example" },
+          },
+        ],
+        expectedHost: host,
+        expectedRepo: `${host}/example/repo`,
+      }),
+    );
+  const run = <A, E>(effect: Effect.Effect<A, E>) => runtime.runPromise(effect);
+  return { repo, away, github, serve, run };
+}
+
+test("routing: an exe.dev URL overrides a github.com remote, and the link records that route", async (t) => {
+  const f = await routing(t, "git@github.com:example/repo.git");
+  const link = await f.run(f.github.link(`https://${exe}/Example/Repo/pull/42/files`, f.repo));
+  assert.deepEqual(link, { url, apiHost: exe });
+  assert.deepEqual(await f.run(f.github.link(url, f.repo)), { url });
+  await assert.rejects(
+    f.run(f.github.link("https://github.com/example/repo/issues/42", f.repo)),
+    /GitHub pull request URL/,
+  );
+});
+
+test("routing: a saved apiHost wins over the checkout; without one the remote implies the route", async (t) => {
+  const f = await routing(t, "git@github.com:example/repo.git");
+  f.serve(exe);
+  assert.equal((await f.run(f.github.view({ url, apiHost: exe }, f.repo))).number, 42);
+  await assert.rejects(f.run(f.github.view({ url }, f.repo)), /gh authentication/);
+  const g = await routing(t, `https://${exe}/example/repo.git`);
+  g.serve(exe);
+  assert.deepEqual(await g.run(g.github.link(url, g.repo)), { url, apiHost: exe });
+  assert.equal((await g.run(g.github.view({ url }, g.repo))).number, 42);
+  const [found] = await g.run(g.github.openForHead(g.repo, "feature", "example/repo", exe));
+  assert.deepEqual(found?.link, { url, apiHost: exe });
+});
+
+test("routing: github.com is the default when neither a checkout nor a GitHub remote names a route", async (t) => {
+  const f = await routing(t, "https://gitlab.com/example/repo.git");
+  f.serve("github.com");
+  for (const cwd of [f.repo, f.away, join(f.away, "removed")]) {
+    assert.deepEqual(await f.run(f.github.link(url, cwd)), { url }, cwd);
+    assert.equal((await f.run(f.github.view({ url }, cwd))).number, 42, cwd);
+  }
 });

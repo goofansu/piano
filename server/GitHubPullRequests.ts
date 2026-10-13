@@ -1,10 +1,12 @@
 /** GitHub adapter for pull requests: URL identity, remote parsing, the `gh` response shape and
- * its mapping into wire `PullRequest` facts, and host routing through `gh`. Nothing else in
- * Piano knows how GitHub or `gh` phrase a pull request; session-link policy lives in
+ * its mapping into wire `PullRequest` facts, and API host routing through `gh`: which route a
+ * saved link, URL or checkout reads through, and how a link records it. Nothing else in Piano
+ * knows how GitHub or `gh` phrase a pull request; session-link policy lives in
  * SessionPullRequests.
  */
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import type { PullRequest } from "../shared/wire.ts";
+import { observeGit } from "./GitCheckout.ts";
 import { GhCommand, run as runProcess } from "./Subprocess.ts";
 
 export class PullRequestError extends Data.TaggedError("PullRequestError")<{
@@ -19,6 +21,13 @@ const failure = (detail: string) => new PullRequestError({ detail });
 export const EXE_GITHUB = "github.int.exe.xyz";
 /** The API route `gh` authenticates against; browser URLs always name github.com. */
 export type GitHubHost = "github.com" | typeof EXE_GITHUB;
+
+/** A pull request as a session saves it: the canonical github.com URL, plus the API route when
+ * it is not github.com. The saved route outlives the checkout that implied it. */
+export interface PullRequestLink {
+  readonly url: string;
+  readonly apiHost?: typeof EXE_GITHUB;
+}
 
 export interface PullRequestIdentity {
   /** Lower-case "owner/name". */
@@ -165,23 +174,49 @@ export function facts(raw: GitHubPullRequest): PullRequest {
   };
 }
 
+const linkFor = (url: string, host: GitHubHost): PullRequestLink =>
+  host === EXE_GITHUB ? { url, apiHost: EXE_GITHUB } : { url };
+
+const parse = (url: string) => {
+  const identity = pullRequestIdentity(url);
+  return identity
+    ? Effect.succeed(identity)
+    : Effect.fail(failure("Enter a GitHub pull request URL."));
+};
+
+/** The API route `cwd`'s GitHub remote implies; github.com when it names none or is unreadable. */
+const checkoutHost = Effect.fn("GitHubPullRequests.checkoutHost")(function* (
+  cwd: string,
+): Effect.fn.Return<GitHubHost> {
+  const observed = yield* observeGit(cwd, { remote: true });
+  const remote = observed.status === "checkout" ? observed.remote : null;
+  return (remote && githubRemote(remote)?.apiHost) || "github.com";
+});
+
 export class GitHubPullRequests extends Context.Service<
   GitHubPullRequests,
   {
-    /** Live facts for one pull request, read through the given API route. */
+    /** The link to save for a pull request URL. Its route is the URL's own when the URL names
+     * the exe.dev integration, else the one `cwd`'s remote implies, else github.com. */
+    readonly link: (url: string, cwd: string) => Effect.Effect<PullRequestLink, PullRequestError>;
+    /** Live facts for a saved link, read through its saved route, else the one `cwd`'s remote
+     * implies, else github.com. The checkout need not still exist. */
     readonly view: (
-      identity: PullRequestIdentity,
-      host: GitHubHost,
+      link: PullRequestLink,
+      cwd: string,
     ) => Effect.Effect<PullRequest, PullRequestError>;
-    /** Open pull requests whose head is `branch` in head repository `repo` ("owner/name").
-     * `cwd` is the checkout: on github.com, gh resolves the base repository (including a fork
-     * parent) from it. */
+    /** Open pull requests whose head is `branch` in head repository `repo` ("owner/name"),
+     * each with the link that reads it back through `host`. `cwd` is the checkout: on
+     * github.com, gh resolves the base repository (including a fork parent) from it. */
     readonly openForHead: (
       cwd: string,
       branch: string,
       repo: string,
       host: GitHubHost,
-    ) => Effect.Effect<ReadonlyArray<PullRequest>, PullRequestError>;
+    ) => Effect.Effect<
+      ReadonlyArray<{ readonly link: PullRequestLink; readonly pullRequest: PullRequest }>,
+      PullRequestError
+    >;
   }
 >()("piano/GitHubPullRequests") {}
 
@@ -209,7 +244,16 @@ export const GitHubPullRequestsLive = Layer.effect(
         ),
       );
     return GitHubPullRequests.of({
-      view: Effect.fn("GitHubPullRequests.view")(function* (identity, host) {
+      link: Effect.fn("GitHubPullRequests.link")(function* (url, cwd) {
+        const identity = yield* parse(url);
+        return linkFor(
+          identity.url,
+          identity.host === EXE_GITHUB ? EXE_GITHUB : yield* checkoutHost(cwd),
+        );
+      }),
+      view: Effect.fn("GitHubPullRequests.view")(function* (link, cwd) {
+        const identity = yield* parse(link.url);
+        const host = link.apiHost ?? (yield* checkoutHost(cwd));
         // A public URL overrides GH_HOST in gh. Use number + explicit API repository instead.
         // Neither this lookup nor a saved integration route needs the checkout to still exist.
         const output = yield* gh(
@@ -263,7 +307,11 @@ export const GitHubPullRequestsLive = Layer.effect(
             `${p.headRepositoryOwner?.login}/${p.headRepository?.name}`.toLowerCase() === repo,
         );
         return yield* Effect.try({
-          try: () => matches.map(facts),
+          try: () =>
+            matches.map((match) => {
+              const pullRequest = facts(match);
+              return { link: linkFor(pullRequest.url, host), pullRequest };
+            }),
           catch: () => failure("GitHub returned an invalid pull request URL."),
         });
       }),

@@ -8,24 +8,12 @@ import type {
   SessionPullRequestLink,
 } from "../shared/wire.ts";
 import { observeGit } from "./GitCheckout.ts";
-import {
-  EXE_GITHUB,
-  type GitHubHost,
-  GitHubPullRequests,
-  githubRemote,
-  PullRequestError,
-  pullRequestIdentity,
-} from "./GitHubPullRequests.ts";
+import { GitHubPullRequests, githubRemote, PullRequestError } from "./GitHubPullRequests.ts";
 import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
 
 export { PullRequestError };
 
 const failure = (detail: string) => new PullRequestError({ detail });
-
-const parseIdentity = (url: string) => {
-  const key = pullRequestIdentity(url);
-  return key ? Effect.succeed(key) : Effect.fail(failure("Enter a GitHub pull request URL."));
-};
 
 /** Observe both branch and head repository through GitCheckout's observation (INV-06):
  * inherited GIT_* state cannot redirect discovery; the remote is the tracking remote's URL. */
@@ -63,16 +51,6 @@ export const SessionPullRequestsLive = Layer.effect(
   Effect.gen(function* () {
     const registry = yield* Registry;
     const github = yield* GitHubPullRequests;
-    const hostFor = (s: SessionEntry) =>
-      s.pullRequest?.apiHost
-        ? Effect.succeed(s.pullRequest.apiHost)
-        : checkout(s.cwd).pipe(
-            Effect.map((c) => c?.apiHost ?? ("github.com" as GitHubHost)),
-            Effect.orElseSucceed(() => "github.com" as const),
-          );
-    const view = Effect.fn("SessionPullRequests.view")(function* (url: string, host: GitHubHost) {
-      return yield* github.view(yield* parseIdentity(url), host);
-    });
     // Returns the saved entry, so an answer reflects what the registry now holds.
     const save = Effect.fn("SessionPullRequests.save")(function* (
       expected: SessionEntry,
@@ -94,7 +72,7 @@ export const SessionPullRequestsLive = Layer.effect(
       if (!forceDiscovery && s.pullRequest === null)
         return { link: null, pullRequest: null, discovery: false };
       if (!forceDiscovery && s.pullRequest) {
-        const pullRequest = yield* view(s.pullRequest.url, yield* hostFor(s)).pipe(Effect.result);
+        const pullRequest = yield* github.view(s.pullRequest, s.cwd).pipe(Effect.result);
         // A failed lookup retains the association, not stale success/checks.
         return pullRequest._tag === "Success"
           ? { link: s.pullRequest, pullRequest: pullRequest.success, discovery: false }
@@ -122,7 +100,7 @@ export const SessionPullRequestsLive = Layer.effect(
         const after = yield* checkout(s.cwd);
         if (JSON.stringify(before) !== JSON.stringify(after))
           return yield* failure("The checkout changed during lookup. Retry discovery.");
-        return { pullRequest: matches[0]!, apiHost: before.apiHost };
+        return matches[0]!;
       });
       const found = yield* discover.pipe(Effect.result);
       if (found._tag === "Failure")
@@ -141,11 +119,7 @@ export const SessionPullRequestsLive = Layer.effect(
         if (forceDiscovery) yield* save(s, undefined);
         return { link: null, pullRequest: null, discovery: true };
       }
-      const link: SessionPullRequestLink = {
-        url: found.success.pullRequest.url,
-        source: "branch",
-        ...(found.success.apiHost === EXE_GITHUB ? { apiHost: EXE_GITHUB } : {}),
-      };
+      const link: SessionPullRequestLink = { ...found.success.link, source: "branch" };
       yield* save(s, link);
       return { link, pullRequest: found.success.pullRequest, discovery: false };
     });
@@ -154,14 +128,10 @@ export const SessionPullRequestsLive = Layer.effect(
       change: Effect.fn("SessionPullRequests.change")(function* (s, action) {
         if (action.action === "link") {
           // Explicit association is the user's choice, not a claim that GitHub is reachable.
-          const key = yield* parseIdentity(action.url);
           // A new explicit choice follows its URL/workspace route, not a previous link's route.
-          const host =
-            key.host === EXE_GITHUB ? EXE_GITHUB : yield* hostFor({ ...s, pullRequest: undefined });
           const link: SessionPullRequestLink = {
-            url: key.url,
+            ...(yield* github.link(action.url, s.cwd)),
             source: "manual",
-            ...(host === EXE_GITHUB ? { apiHost: EXE_GITHUB } : {}),
           };
           return yield* result(yield* save(s, link));
         }
