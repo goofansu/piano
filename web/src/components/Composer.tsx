@@ -1,10 +1,5 @@
-import type {
-  Attachment,
-  ModelCatalog,
-  QueuedMessage,
-  RenderMsg,
-  ThinkingLevel,
-} from "@shared/wire";
+import { isWorking } from "@shared/sessionProjection";
+import type { ClientCommand, ModelCatalog } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { useState } from "react";
@@ -21,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopov
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
 import type { CompletionContext } from "@/components/SlashTextarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
@@ -28,62 +24,76 @@ import {
   DELIVERY,
   DELIVERY_MODES,
   type DeliveryMode,
+  deliveryAction,
 } from "@/lib/composerControl";
-import { contextFigures, type SessionUsage } from "@/lib/contextUsage";
+import { contextFigures } from "@/lib/contextUsage";
 import type { DraftKey } from "@/lib/messageDraft";
+import type { SessionNotice } from "@/lib/sessionNotices";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { composerAction, composerInput, picker } from "@/lib/styles";
+import { useModelChoice } from "@/lib/useModelChoice";
+import type { SessionView } from "@/store";
 
 interface Props {
+  /** The selected session; `null` while it loads. */
+  session: SessionView | null;
+  /** The session directory's model catalog; `null` until Pi answers. */
+  catalog: ModelCatalog | null;
   /** `null` while the session is loading; the composer is disabled then. */
   draftKey: DraftKey | null;
   completion?: CompletionContext;
-  onRestoreQueue: () => void;
   /** Local drafting is unavailable (for example, before a session has loaded). */
   disabled: boolean;
+  /** The session cannot take input now; model picks stay local until the next send. */
   actionsDisabled: boolean;
-  streaming: boolean;
-  compacting?: boolean;
-  onSend: (text: string, kind: QueuedMessage["kind"], attachments: readonly Attachment[]) => void;
-  onStop: () => void;
-  stopping?: boolean;
-  catalog: ModelCatalog | null;
-  onRefreshModels?: () => void;
-  model: string | undefined;
-  onModelChange: (ref: string) => void;
-  effort: ThinkingLevel;
-  onEffortChange: (level: ThinkingLevel) => void;
-  usage?: SessionUsage;
-  messages?: ReadonlyArray<RenderMsg>;
-  queuedMessages?: ReadonlyArray<QueuedMessage>;
+  /** Shown in place of the composer, which keeps its draft-local model picks meanwhile. */
+  readOnly?: SessionNotice;
+  send: (m: ClientCommand) => void;
 }
 
 const QUEUE_MODE_KEY = "piano.queueMode";
 const loadQueueMode = (): DeliveryMode =>
   readStorage(QUEUE_MODE_KEY) === "follow-up" ? "follow-up" : "steering";
 
-/** The composer: a layer-1 card that lines up with the transcript column. */
+/**
+ * The composer: a layer-1 card that lines up with the transcript column. It owns the session's
+ * input contract: which session actions sending, queueing, stopping and picking a model send.
+ */
 export function Composer({
+  session: t,
+  catalog,
   draftKey,
   completion,
-  onRestoreQueue,
   disabled,
   actionsDisabled,
-  streaming,
-  compacting,
-  onSend,
-  onStop,
-  stopping,
-  catalog,
-  onRefreshModels,
-  model,
-  onModelChange,
-  effort,
-  onEffortChange,
-  usage,
-  messages = [],
-  queuedMessages = [],
+  readOnly,
+  send: sendCommand,
 }: Props) {
+  // A running Pi owns the selection; a saved session's picks wait for its first prompt and
+  // override only what was picked, so Pi restores the rest of its recorded selection.
+  const choice = useModelChoice(
+    catalog,
+    {
+      kind: "session",
+      hosted: !!t?.hosted,
+      model: t?.state.model,
+      thinkingLevel: t?.state.thinkingLevel,
+    },
+    `${t?.cwd}\0${t?.sessionId}\0${t?.hosted}`,
+    (action) => sendCommand({ _tag: "act", action }),
+    !actionsDisabled,
+  );
+  const { model, effort, onModelChange, onEffortChange } = choice;
+  const streaming = !!t && isWorking(t.state);
+  const usage = t?.state;
+  const messages = t?.messages ?? [];
+  const queuedMessages = t?.state.queuedMessages ?? [];
+  const onStop = () => sendCommand({ _tag: "act", action: { _tag: "stop" } });
+  const onRestoreQueue = () => sendCommand({ _tag: "act", action: { _tag: "restore_queue" } });
+  const onRefreshModels =
+    t && !actionsDisabled
+      ? () => sendCommand({ _tag: "models", cwd: t.cwd, refresh: true })
+      : undefined;
   const editor = useDraftEditor(draftKey);
   // The delivery mode is a sticky preference; the alternative always stays on Alt+Enter.
   const [queueMode, setQueueModeState] = useState<DeliveryMode>(loadQueueMode);
@@ -96,8 +106,8 @@ export function Composer({
     images: editor.attachments,
     disabled: disabled || actionsDisabled,
     streaming,
-    compacting: !!compacting,
-    stopping: !!stopping,
+    compacting: !!t?.state.isCompacting,
+    stopping: !!t?.state.isStopping,
     queued: queuedMessages.length,
     mode: queueMode,
   });
@@ -105,10 +115,31 @@ export function Composer({
   const showStop = control.primary === "stop";
   const send = (alt: boolean) => {
     const kind = control.delivery(alt);
-    if (kind) editor.submit((message) => onSend(message.text, kind, message.attachments));
+    if (!kind) return;
+    editor.submit((message) => {
+      sendCommand({
+        _tag: "act",
+        action: {
+          _tag: deliveryAction(kind),
+          text: message.text,
+          attachments: message.attachments,
+        },
+        start: choice.start(),
+      });
+      choice.submitted();
+    });
   };
   const figures = contextFigures(usage?.context, catalog, model);
   const showQueueKinds = queuedMessages.some((message) => message.kind === "steering");
+
+  if (readOnly) {
+    return (
+      <Alert className="mx-4 my-3 w-auto md:mx-6">
+        <AlertTitle>{readOnly.title}</AlertTitle>
+        <AlertDescription>{readOnly.details.join(" ")}</AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-5">

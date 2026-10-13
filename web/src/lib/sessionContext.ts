@@ -219,8 +219,6 @@ export type ReplyActivity = "starting" | "working";
 export interface SessionActivity {
   /** One word or phrase for the session's state, announced to screen readers. */
   status: string;
-  /** Pi is streaming, compacting or retrying. */
-  streaming: boolean;
   /** What the reply area's Piano keys show, if anything. */
   replyActivity: ReplyActivity | undefined;
 }
@@ -264,7 +262,7 @@ export function sessionActivity(
               : t.state.closure
                 ? "Exited"
                 : activity || (streaming ? "Working" : t.hosted ? "Ready" : "Not running");
-  return { status, streaming, replyActivity };
+  return { status, replyActivity };
 }
 
 export interface SessionPane {
