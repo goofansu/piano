@@ -82,7 +82,7 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
   const choice = useModelChoice(catalog, NEW, cwd);
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
   const ready = newSessionReady({
-    text: editor.text,
+    text: editor.message,
     images: editor.attachments,
     connected: state.connected,
     catalog,

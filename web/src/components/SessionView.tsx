@@ -8,6 +8,7 @@ import { ChangesSheet } from "@/components/Changes";
 import { Composer } from "@/components/Composer";
 import { MessageList } from "@/components/MessageList";
 import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
+import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -137,7 +138,10 @@ export function SessionView({ state, send }: Props) {
               : undefined}
           </Banner>
         ))}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <AddToChat
+        draftKey={readOnly ? null : draftKey}
+        className="relative flex min-h-0 flex-1 flex-col"
+      >
         {pane.list && (
           <MessageList
             className="transcript-enter"
@@ -161,7 +165,7 @@ export function SessionView({ state, send }: Props) {
             </span>
           </div>
         )}
-      </div>
+      </AddToChat>
       {notices
         .filter((n) => n.placement === "status")
         .map((n) =>
