@@ -7,7 +7,6 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
-  watch,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -56,13 +55,14 @@ const waitAudit = (id: string, pred: (records: Record[]) => boolean) =>
   Effect.promise(
     (signal) =>
       new Promise<void>((resolve, reject) => {
-        const watcher = watch(root, check);
+        // Poll: on a loaded machine fs.watch can drop the event for the append that matters.
+        const poll = setInterval(check, 20);
         const timer = setTimeout(() => {
           cleanup();
           reject(new Error(`audit deadline for ${id}`));
         }, 5000);
         function cleanup() {
-          watcher.close();
+          clearInterval(poll);
           clearTimeout(timer);
           signal.removeEventListener("abort", cleanup);
         }

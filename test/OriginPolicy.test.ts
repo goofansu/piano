@@ -69,13 +69,15 @@ test("INV-11: real HTTP and WebSocket boundaries reject untrusted origins before
     logs += chunk;
   });
   try {
-    for (let attempt = 0; ; attempt++) {
+    // Startup takes far longer than usual while other test files load the machine.
+    const deadline = Date.now() + 20_000;
+    for (;;) {
       try {
         if ((await fetch(`${base}/api/folders`)).ok) break;
       } catch {
         /* startup */
       }
-      assert.ok(attempt < 100 && child.exitCode === null, logs);
+      assert.ok(Date.now() < deadline && child.exitCode === null, logs);
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     const handshake = (origin?: string, extra: Record<string, string> = {}) =>

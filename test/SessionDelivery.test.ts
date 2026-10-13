@@ -40,15 +40,21 @@ const socket = (limits: Partial<typeof socketLimits> = {}) =>
       (value: string, id) => `${id}:${value}`,
       { ...socketLimits, ackTimeout: "1 second", ...limits },
     );
-    // Drain what the writer could write now; anything still blocked waits for credit.
-    const settle = Effect.sleep("20 millis").pipe(
-      Effect.andThen(Queue.clear(writes)),
-      Effect.map((texts) => {
-        written.push(...texts);
-        return written.map((t) => t.split(":")[0]).join(",");
-      }),
-    );
-    return { delivery, settle };
+    // Wait for the frames the window should allow by now, then give a writer that should be
+    // blocked a moment to write more: a fixed sleep alone loses the race on a loaded machine.
+    const expectWritten = (expected: string, message?: string) =>
+      Effect.gen(function* () {
+        const count = expected === "" ? 0 : expected.split(",").length;
+        while (written.length < count) {
+          const text = yield* Queue.take(writes).pipe(Effect.timeoutOption("1 second"));
+          if (text._tag === "None") break;
+          written.push(text.value);
+        }
+        yield* Effect.sleep("20 millis");
+        written.push(...(yield* Queue.clear(writes)));
+        assert.equal(written.map((t) => t.split(":")[0]).join(","), expected, message);
+      });
+    return { delivery, expectWritten };
   });
 
 const scoped = <A, E>(work: Effect.Effect<A, E, Scope.Scope>) =>
@@ -57,20 +63,20 @@ const scoped = <A, E>(work: Effect.Effect<A, E, Scope.Scope>) =>
 test("INV-05: the socket window holds unacknowledged frames and cumulative acks release them in order", () =>
   scoped(
     Effect.gen(function* () {
-      const { delivery, settle } = yield* socket({ window: { frames: 2, bytes: 1024 } });
+      const { delivery, expectWritten } = yield* socket({ window: { frames: 2, bytes: 1024 } });
       for (const value of ["a", "b", "c", "d", "e", "f"]) yield* delivery.offer(value);
-      assert.equal(yield* settle, "1,2", "a saturated window stops writing");
+      yield* expectWritten("1,2", "a saturated window stops writing");
       yield* delivery.ack(99); // never written: no credit
-      assert.equal(yield* settle, "1,2");
+      yield* expectWritten("1,2");
       yield* delivery.ack(2); // out of order and cumulative: acknowledges 1 and 2
-      assert.equal(yield* settle, "1,2,3,4");
+      yield* expectWritten("1,2,3,4");
       yield* delivery.ack(1);
       yield* delivery.ack(2); // stale: no extra credit
-      assert.equal(yield* settle, "1,2,3,4");
+      yield* expectWritten("1,2,3,4");
       yield* delivery.ack(3);
-      assert.equal(yield* settle, "1,2,3,4,5");
+      yield* expectWritten("1,2,3,4,5");
       yield* delivery.ack(5);
-      assert.equal(yield* settle, "1,2,3,4,5,6");
+      yield* expectWritten("1,2,3,4,5,6");
       assert.equal(
         yield* delivery.closed.pipe(
           Effect.timeoutOption("20 millis"),
@@ -85,11 +91,11 @@ test("INV-05: the socket window holds unacknowledged frames and cumulative acks 
 test("INV-05: the socket window also bounds unacknowledged bytes", () =>
   scoped(
     Effect.gen(function* () {
-      const { delivery, settle } = yield* socket({ window: { frames: 32, bytes: 12 } });
+      const { delivery, expectWritten } = yield* socket({ window: { frames: 32, bytes: 12 } });
       for (const value of ["xxxx", "yyyy", "zzzz"]) yield* delivery.offer(value); // 6 bytes per frame
-      assert.equal(yield* settle, "1,2");
+      yield* expectWritten("1,2");
       yield* delivery.ack(1);
-      assert.equal(yield* settle, "1,2,3");
+      yield* expectWritten("1,2,3");
     }),
   ));
 
@@ -112,7 +118,7 @@ test("INV-05: an oversized frame closes as too large and a lagging consumer clos
       const tooLarge = yield* big.delivery.closed;
       assert.equal(tooLarge.code, 1009);
       assert.match(tooLarge.reason, /delivery limit/);
-      assert.equal(yield* big.settle, "", "an oversized frame is never written");
+      yield* big.expectWritten("", "an oversized frame is never written");
       const lagging = yield* socket({
         window: { frames: 1, bytes: 1024 },
         queue: { messages: 2, bytes: 1024 },

@@ -1033,7 +1033,12 @@ test("open and probe return a typed readiness timeout even while the child stays
           "timeout",
           `${operation} must not wait for child exit after its readiness deadline`,
         );
-        assert.match(error.detail, /get_state/);
+        // Probe also reads models, which the fake answers; on a loaded machine that reply can
+        // miss the 200ms deadline first. Either is the readiness timeout this test is about.
+        assert.match(
+          error.detail,
+          operation === "open" ? /get_state/ : /get_state|get_available_models/,
+        );
       }).pipe(
         Effect.provideService(PiCli, { ...fakeCli, extraArgs: ["--silence-readiness"] }),
         Effect.provideService(PiRequestTimeoutMs, 200),

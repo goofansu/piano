@@ -306,7 +306,9 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
       assert.deepEqual((yield* snapshot(session)).dialogs, []);
       assert.equal((yield* session.act(answer(dialog)).pipe(Effect.result))._tag, "Failure");
     }).pipe(
-      Effect.provideService(PiRequestTimeoutMs, 500),
+      // Nothing here waits on this deadline; it only bounds a hang. A loaded machine can take
+      // longer than 500ms to answer the startup read.
+      Effect.provideService(PiRequestTimeoutMs, 3000),
       Effect.timeout("8 seconds"),
       Effect.scoped,
     ),

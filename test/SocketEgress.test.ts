@@ -45,13 +45,15 @@ test("INV-11: a message Pi did not produce is redacted at socket egress", {
     logs += chunk;
   });
   try {
-    for (let attempt = 0; ; attempt++) {
+    // Startup takes far longer than usual while other test files load the machine.
+    const deadline = Date.now() + 20_000;
+    for (;;) {
       try {
         if ((await fetch(`${base}/api/folders`)).ok) break;
       } catch {
         /* startup */
       }
-      assert.ok(attempt < 100 && child.exitCode === null, logs);
+      assert.ok(Date.now() < deadline && child.exitCode === null, logs);
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     const ws = new NodeWS.WebSocket(`${base.replace("http", "ws")}/ws`, { origin: base });
