@@ -10,13 +10,6 @@ truth for folder, worktree, workspace, project, session, registry and the planne
 terms. When talking to the user, name what they see in the UI ("Piano's database", not "the
 registry").
 
-## Direction and guardrails
-
-For architecture and workflow changes, read [docs/README.md](docs/README.md), then the ADR,
-development invariants and roadmap it links, and cite affected invariant IDs in the PR. The short
-form of INV-01: Pi owns history, Git owns repository facts, Worktrunk sits behind the lifecycle
-adapter, Piano owns workspace and integration policy.
-
 ## Verification
 
 Follow [evidence-based development and testing](docs/testing.md): before changing behavior, name
@@ -60,19 +53,6 @@ encodes the scratch path.
 After a change passes verification, commit it on the branch that is checked out (usually `main`)
 and push that branch. Stay on that branch; create or switch branches only when the user asks.
 Report the commit and push outcome; a blocked push is not completion.
-
-## Deploy
-
-Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
-[the shortest deploy path](docs/hosted-development.md#shortest-deploy-path); to update every
-machine, the user runs the `sync-piano` skill (user-invoked only). On exe.dev the server has no
-authentication: it stays on loopback behind exe.dev private access (INV-11).
-
-## GitHub on exe.dev
-
-When the git remote is `github.int.exe.xyz`, prefix `gh` with `GH_HOST=github.int.exe.xyz` and pass
-`--repo goofansu/piano`. The integration supplies authentication, so try it before asking for
-`gh auth login`. Setup and permission failures: [exe.dev GitHub integration](https://exe.dev/docs/integrations-github.md).
 
 ## Design
 
@@ -123,3 +103,23 @@ a named or service-method effectful function as `Effect.fn("Module.name")(functi
 Two Effect v4 gotchas already paid for: on an upgraded socket, acquire `reader` before `writer`
 (the reader performs the handshake and the writer waits on it); and a `forkScoped` fiber must not
 `ensuring` on an exit that a later finalizer causes, or shutdown deadlocks.
+
+## Direction and guardrails
+
+For architecture and workflow changes, read [docs/README.md](docs/README.md), then the ADR,
+development invariants and roadmap it links, and cite affected invariant IDs in the PR. The short
+form of INV-01: Pi owns history, Git owns repository facts, Worktrunk sits behind the lifecycle
+adapter, Piano owns workspace and integration policy.
+
+## Deploy
+
+Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
+[the shortest deploy path](docs/hosted-development.md#shortest-deploy-path); to update every
+machine, the user runs the `sync-piano` skill (user-invoked only). On exe.dev the server has no
+authentication: it stays on loopback behind exe.dev private access (INV-11).
+
+## GitHub on exe.dev
+
+When the git remote is `github.int.exe.xyz`, prefix `gh` with `GH_HOST=github.int.exe.xyz` and pass
+`--repo goofansu/piano`. The integration supplies authentication, so try it before asking for
+`gh auth login`. Setup and permission failures: [exe.dev GitHub integration](https://exe.dev/docs/integrations-github.md).
