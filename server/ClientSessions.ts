@@ -200,7 +200,14 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     navigate(
       Effect.gen(function* () {
         if (!selected || selected.selectionId !== selectionId) return yield* refuse("stale");
-        if (attachment?.selectionId === selectionId) return attachment.session;
+        if (attachment?.selectionId === selectionId) {
+          const session = attachment.session;
+          // Offline draft choices travel with the input: apply them in order before submission.
+          if (start?.model) yield* session.act({ _tag: "set_model", model: start.model });
+          if (start?.thinkingLevel)
+            yield* session.act({ _tag: "set_thinking_level", level: start.thinkingLevel });
+          return session;
+        }
         const { cwd, sessionId } = selected;
         // Creating belongs to `create`, which registers the folder and project first.
         if (sessionId === null) return yield* refuse("no_session");
