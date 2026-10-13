@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import type { Dialog } from "../shared/wire.ts";
 
 const layer = PiSessionsLive.pipe(Layer.provide(NodeServices.layer));
@@ -78,6 +81,117 @@ for (const control of ["answer", "abort", "stop", "restore_queue"] as const) {
     );
   });
 }
+
+// Above, session admission rejects ordinary input before it reaches Pi's command lane. Here a
+// background usage readback that Pi holds takes one of those slots instead, so session admission
+// has room and a readback must be refused by Pi's command lane itself.
+test("INV-04: a readback stays ordinary work at Pi's command capacity", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "capacity-readback",
+      });
+      const full = yield* Deferred.make<void>();
+      let dialog: Dialog | undefined;
+      const heard = yield* session.events.pipe(
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            if (event._tag === "dialog") dialog = event.dialog;
+            if (
+              event._tag === "notice" &&
+              event.message === `Capacity held: ${inboundLimits.requests.messages}`
+            )
+              yield* Deferred.succeed(full, undefined);
+          }),
+        ),
+        Effect.forkChild,
+      );
+      const pending = [];
+      for (let n = 1; n < inboundLimits.requests.messages; n++)
+        pending.push(
+          yield* session.act({ _tag: "prompt", text: "capacity hold" }).pipe(Effect.forkChild),
+        );
+      yield* Deferred.await(full);
+      const read = yield* session.act({ _tag: "commands" }).pipe(Effect.result);
+      assert.equal(read._tag, "Failure", "a readback must not borrow the control reserve");
+      assert.equal(read.failure.reason, "rejected");
+      assert.match(read.failure.detail, /Pi command capacity is full.*Nothing was sent/);
+      assert.ok(dialog);
+      yield* session.act({
+        _tag: "answer",
+        id: dialog.id,
+        generation: dialog.generation,
+        value: "release",
+      });
+      for (const fiber of pending) yield* Fiber.join(fiber);
+      const result = yield* session.act({ _tag: "commands" });
+      assert.equal(result?._tag, "commands", "capacity is released after work completes");
+      yield* Fiber.interrupt(heard);
+    }).pipe(Effect.scoped, Effect.timeout("15 seconds")),
+  );
+});
+
+// Pi's input lane fills only while Pi stops reading stdin: each ordinary write then keeps its slot
+// after its command times out, until Pi reads it.
+test("INV-04: an answer stays live while ordinary input fills Pi's stdin", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "piano-stdin-"));
+  const resume = join(dir, "resume");
+  try {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: "stdin-backpressure",
+        });
+        const opened = yield* Deferred.make<Dialog>();
+        const received = yield* Deferred.make<void>();
+        const heard = yield* session.events.pipe(
+          Stream.runForEach((event) =>
+            event._tag === "dialog"
+              ? Deferred.succeed(opened, event.dialog)
+              : event._tag === "notice" && event.message === "answered paused with release"
+                ? Deferred.succeed(received, undefined)
+                : Effect.void,
+          ),
+          Effect.forkChild,
+        );
+        const paused = yield* session
+          .act({ _tag: "set_name", name: `pause stdin until ${resume}` })
+          .pipe(Effect.flip);
+        assert.equal(paused.reason, "timeout");
+        const dialog = yield* Deferred.await(opened);
+        // Each record outgrows the pipe, so none is accepted before Pi reads again.
+        const name = "x".repeat(256 * 1024);
+        yield* Effect.forEach(
+          Array.from({ length: inboundLimits.writes.messages }),
+          () => session.act({ _tag: "set_name", name }).pipe(Effect.flip),
+          { concurrency: "unbounded" },
+        );
+        const excess = yield* session.act({ _tag: "set_name", name: "excess" }).pipe(Effect.flip);
+        assert.equal(excess.reason, "rejected");
+        assert.match(excess.detail, /input capacity is full.*Nothing was sent/);
+        // Admitted, so it waits behind the input Pi has not read and times out undelivered.
+        const answer = yield* session
+          .act({ _tag: "answer", id: dialog.id, generation: dialog.generation, value: "release" })
+          .pipe(Effect.flip);
+        assert.equal(answer.reason, "transport", answer.detail);
+        assert.match(answer.detail, /write timed out/);
+        writeFileSync(resume, "");
+        yield* Deferred.await(received);
+        assert.equal((yield* session.state).closure, undefined);
+        yield* Fiber.interrupt(heard);
+      }).pipe(
+        // Bounds each held write; open's readbacks also answer within it.
+        Effect.provideService(PiRequestTimeoutMs, 1000),
+        Effect.scoped,
+        Effect.timeout("15 seconds"),
+      ),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 for (const sessionId of ["capacity-records", "capacity-record-bytes"]) {
   test(`INV-03: ${sessionId} fails readiness without dropping output or waiting for timeout`, async () => {
