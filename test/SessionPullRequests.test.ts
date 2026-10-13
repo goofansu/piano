@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { type TestContext, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionPullRequests, SessionPullRequestsLive } from "../server/SessionPullRequests.ts";
 import { GhCommand } from "../server/Subprocess.ts";
@@ -52,6 +53,7 @@ async function fixture(t: TestContext) {
   const control = (data: object) => writeFileSync(forge, JSON.stringify(data));
   control({ prs: [candidate(42), candidate(99, "feature", "unrelated-fork")] });
   const layer = SessionPullRequestsLive.pipe(
+    Layer.provide(GitHubPullRequestsLive),
     Layer.provideMerge(RegistryLive),
     Layer.provide([Layer.succeed(RegistryDatabasePath, path), Layer.succeed(GhCommand, gh)]),
   );
