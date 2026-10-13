@@ -4,49 +4,38 @@
  *
  * Ownership behind this public seam:
  * - PiTransport: scoped process, framing/capacity, correlation, terminal failure.
- * - This module: generation, atomic snapshot/live publication, session-owned actions and
- *   shutdown announcement.
- * - SessionReadbacks: readback workers and freshness, under this module's lock.
- * - SessionDialogs: dialog claims and their one terminal resolution, under this module's lock.
+ * - This module: generation, the projector, session-owned actions and shutdown.
+ * - SessionPublication: the snapshot, its lock, sequence and cursor, and atomic snapshot/live
+ *   subscription.
+ * - SessionReadbacks: readback workers and freshness, landing through the publication.
+ * - SessionDialogs: dialog claims and their one terminal resolution, under the publication lock.
  * - PiRecords: protocol translation, not process or publication lifecycle. Its one projection
  *   turns Pi's facts into every Snapshot, a live child's or a saved file's.
  * - PiHistory: saved sessions read without a child, exposed as `history`.
  * The external dependency seam remains ChildProcessSpawner; tests use PiSessions.
  */
 import { randomUUID } from "node:crypto";
-import {
-  Cause,
-  Context,
-  Deferred,
-  Effect,
-  Fiber,
-  Layer,
-  Ref,
-  type Scope,
-  Semaphore,
-  Stream,
-} from "effect";
+import { Cause, Context, Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
-import { applySessionEvent, isWorking, withLastKnownStats } from "../shared/sessionProjection.ts";
+import { isWorking, withLastKnownStats } from "../shared/sessionProjection.ts";
 import type {
   ModelChoice,
   PromptSubmission,
   SessionAction,
   SessionActionResult,
   SessionClosure,
-  SessionEvent,
   SessionFrame,
   SessionState,
   SessionStats,
   SlashCommand,
   Snapshot,
 } from "../shared/wire.ts";
-import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
-import { projectDisplay, projectSessionEvent, projectSnapshot } from "./DisplayProjection.ts";
+import type { DeliveryOverflow } from "./BoundedDelivery.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import { PiHistory } from "./PiHistory.ts";
@@ -62,6 +51,7 @@ import {
 } from "./PiRecords.ts";
 import { type PiLane, PiSessionError, PiTransport } from "./PiTransport.ts";
 import { makeSessionDialogs } from "./SessionDialogs.ts";
+import { makeSessionPublication } from "./SessionPublication.ts";
 import { makeSessionReadbacks } from "./SessionReadbacks.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
@@ -291,29 +281,20 @@ const openSession = (spec: PiSessionSpec) =>
         detail:
           "Pi opened a different session ID. History was not merged; check the saved reference.",
       });
-    // Everything a subscriber's snapshot holds except host observations, kept by the shared fold.
-    const snapshotRef = yield* Ref.make<Snapshot>({
-      ...opened,
-      state: withLastKnownStats(opened.state, spec.lastKnownStats),
-      tools: [],
+    // Publication owner: its lock covers projector correlation, snapshot fold, sequence
+    // assignment and subscriber attachment. Transport and readbacks wait outside it.
+    const publication = yield* makeSessionPublication({
+      cwd: spec.cwd,
+      sessionId: spec.sessionId,
+      generation,
+      initial: {
+        ...opened,
+        state: withLastKnownStats(opened.state, spec.lastKnownStats),
+        tools: [],
+      },
     });
-    const stateOf = Effect.map(Ref.get(snapshotRef), (snapshot) => snapshot.state);
-    const dialogsOf = Effect.map(Ref.get(snapshotRef), (snapshot) => snapshot.dialogs);
-    const subscribers = new Set<Effect.Success<ReturnType<typeof makeDelivery<SessionFrame>>>>();
-    let sequence = 0;
-    const cursor = () => ({ cwd: spec.cwd, sessionId: spec.sessionId, generation, sequence });
-    // Publication owner: this lock covers projector correlation, snapshot fold,
-    // sequence assignment and subscriber attachment. Never await a consumer here.
-    // All publish callers hold the lock; transport/readbacks wait outside it.
-    const publish = Effect.fnUntraced(function* (event: SessionEvent) {
-      yield* Ref.update(snapshotRef, (snapshot) => applySessionEvent(snapshot, event));
-      sequence++;
-      const frame: SessionFrame = { ...projectSessionEvent(event), cursor: cursor() };
-      for (const subscriber of subscribers) yield* subscriber.offer(frame);
-    });
-    const lock = yield* Semaphore.make(1);
+    const { locked, publish, apply, mergeState, patchState, announced } = publication;
     let submissionId = 0;
-    let announced = false;
     let processedVersion = 0;
     // Cancellation owner: operation tokens fence late abort/readback results.
     // Work belongs to sessionScope, not the lifetime of the requesting browser.
@@ -322,33 +303,6 @@ const openSession = (spec: PiSessionSpec) =>
       | { dispatched: Deferred.Deferred<void>; pendingPrompts: Set<number>; acknowledged: boolean }
       | undefined;
 
-    /** Fold and publish, atomically with respect to snapshots. */
-    const apply = (events: ReadonlyArray<SessionEvent> | (() => ReadonlyArray<SessionEvent>)) =>
-      Semaphore.withPermits(
-        lock,
-        1,
-      )(
-        Effect.gen(function* () {
-          for (const event of typeof events === "function" ? events() : events)
-            yield* publish(event);
-        }),
-      );
-
-    /** Merge state fields; callers hold the snapshot lock. */
-    const mergeState = Effect.fnUntraced(function* (patch: Partial<SessionState>) {
-      const current = yield* stateOf;
-      const next = { ...current, ...patch };
-      if (isWorking(next) || next.model !== current.model) next.contextIsLastKnown = true;
-      if (JSON.stringify(next) === JSON.stringify(current)) return;
-      readbacks.changed(current, next);
-      yield* publish({ _tag: "state", state: next });
-    });
-    const patchState = (patch: Partial<SessionState> | (() => Partial<SessionState>)) =>
-      Semaphore.withPermits(
-        lock,
-        1,
-      )(Effect.suspend(() => mergeState(typeof patch === "function" ? patch() : patch)));
-
     // Dialog claims share publication's lock: claim under it, write to Pi outside it.
     const dialogs = makeSessionDialogs({
       generation,
@@ -356,14 +310,7 @@ const openSession = (spec: PiSessionSpec) =>
       scope: sessionScope,
       // Every dialog response, an answer or a cancellation, rides the answer's lane.
       write: (command) => child.write(command, { lane: laneOf("answer") }),
-      publication: {
-        locked: Semaphore.withPermits(lock, 1),
-        publish,
-        mergeState,
-        state: stateOf,
-        dialogs: dialogsOf,
-        announced: () => announced,
-      },
+      publication,
       abortInProgress: () => aborting?.dispatched,
     });
 
@@ -380,22 +327,14 @@ const openSession = (spec: PiSessionSpec) =>
       read: child.read,
       observationVersion: child.observationVersion,
       context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
-      publication: {
-        locked: Semaphore.withPermits(lock, 1),
-        publish,
-        mergeState,
-        announced: () => announced,
-      },
+      publication,
     });
 
     const onRecord = ({ record, receivedAt }: { record: PiRecord; receivedAt: number }) =>
       Effect.gen(function* () {
-        if (announced) return;
+        if (announced()) return;
         // Translate under the lock too: a history readback replaces the projector's correlation facts.
-        const { refresh, dialog } = yield* Semaphore.withPermits(
-          lock,
-          1,
-        )(
+        const { refresh, dialog } = yield* locked(
           Effect.gen(function* () {
             const projected = projector.record(record, receivedAt);
             if (projected.state) yield* mergeState(projected.state);
@@ -439,11 +378,10 @@ const openSession = (spec: PiSessionSpec) =>
     // finalizer is registered after the child's, so it runs before Pi is shut down.
     const announceClosed = (closure: Effect.Effect<SessionClosure>) =>
       Effect.suspend(() => {
-        if (announced) return Effect.void;
-        announced = true;
+        if (!publication.announce()) return Effect.void;
         return Effect.gen(function* () {
           const final = yield* closure;
-          const submission = (yield* stateOf).submission;
+          const submission = (yield* publication.state).submission;
           if (submission?.outcome === "submitting")
             yield* apply([
               {
@@ -465,7 +403,7 @@ const openSession = (spec: PiSessionSpec) =>
     yield* Effect.addFinalizer(() =>
       announceClosed(
         Effect.map(
-          Ref.get(snapshotRef),
+          publication.snapshot,
           (snapshot): SessionClosure =>
             settled(snapshot) && !child.hasPendingWork()
               ? { _tag: "released", detail: "Pi was released" }
@@ -484,48 +422,18 @@ const openSession = (spec: PiSessionSpec) =>
       Effect.forkScoped,
     );
 
-    const currentState = Effect.gen(function* () {
-      const snapshot = yield* Ref.get(snapshotRef);
-      return {
-        ...snapshot.state,
-        isQuiescent:
-          !announced &&
-          !child.hasPendingWork() &&
-          processedVersion === child.observationVersion() &&
-          readbacks.idle() &&
-          promptOperations.size === 0 &&
-          settled(snapshot),
-      };
+    // A subscriber's snapshot and `state` add the host's quiescence to the retained state.
+    const present = (snapshot: Snapshot): SessionState => ({
+      ...snapshot.state,
+      isQuiescent:
+        !announced() &&
+        !child.hasPendingWork() &&
+        processedVersion === child.observationVersion() &&
+        readbacks.idle() &&
+        promptOperations.size === 0 &&
+        settled(snapshot),
     });
-
-    const events: Stream.Stream<SessionFrame, DeliveryOverflow> = Stream.unwrap(
-      Semaphore.withPermits(
-        lock,
-        1,
-      )(
-        Effect.gen(function* () {
-          const sub = yield* makeDelivery<SessionFrame>();
-          subscribers.add(sub);
-          const snapshot: Snapshot = {
-            ...(yield* Ref.get(snapshotRef)),
-            state: yield* currentState,
-          };
-          return Stream.make<[SessionFrame]>({
-            _tag: "snapshot",
-            snapshot: projectSnapshot(snapshot),
-            cursor: cursor(),
-          }).pipe(
-            Stream.concat(snapshot.state.closure ? Stream.empty : sub.stream),
-            Stream.takeUntil((e) => e._tag === "closed"),
-            Stream.ensuring(
-              Effect.sync(() => {
-                subscribers.delete(sub);
-              }),
-            ),
-          );
-        }),
-      ),
-    );
+    const events: Stream.Stream<SessionFrame, DeliveryOverflow> = publication.subscribe(present);
 
     let stopping = false;
     const exited = () =>
@@ -538,7 +446,7 @@ const openSession = (spec: PiSessionSpec) =>
       action: SessionAction,
     ): Effect.Effect<SessionActionResult | undefined, PiSessionError> =>
       Effect.gen(function* () {
-        if (announced) return yield* exited();
+        if (announced()) return yield* exited();
         // Answer/abort/queue restoration do not supersede the command whose
         // dialog they unblock. Keep its subsequent model/effort readback valid.
         const operation = sessionActionPolicy[action._tag].supersedes
@@ -550,7 +458,7 @@ const openSession = (spec: PiSessionSpec) =>
           case "steer": {
             const exchange = yield* exchangeOf(piExchangeFor(action));
             // Pi's clear_queue only returns text. Do not offer a lossy image queue.
-            if (action.attachments?.length && isWorking(yield* stateOf))
+            if (action.attachments?.length && isWorking(yield* publication.state))
               return yield* new PiSessionError({
                 reason: "rejected",
                 detail: "Wait for Pi to finish before sending images.",
@@ -576,7 +484,7 @@ const openSession = (spec: PiSessionSpec) =>
               );
               yield* readbacks.refresh("state", operation);
               // Handled commands may edit context without a run/compaction event.
-              if (!(yield* stateOf).isStreaming) {
+              if (!(yield* publication.state).isStreaming) {
                 yield* readbacks.refresh("context");
                 yield* readbacks.schedule("stats");
               }
@@ -598,7 +506,7 @@ const openSession = (spec: PiSessionSpec) =>
                 acknowledged: false,
               };
               aborting = current;
-              const open = yield* dialogsOf;
+              const open = yield* publication.dialogs;
               const native = yield* child
                 .request(exchange, { lane, dispatched })
                 .pipe(Effect.forkChild);
@@ -716,11 +624,11 @@ const openSession = (spec: PiSessionSpec) =>
             );
           }),
         ).pipe(displayed),
-      state: Semaphore.withPermits(lock, 1)(currentState).pipe(Effect.map(projectDisplay)),
+      state: locked(Effect.map(publication.snapshot, present)).pipe(Effect.map(projectDisplay)),
       // The read belongs to the session, not the requester: an abandoned request leaves no
       // half-written command on Pi's input.
       commands: Effect.suspend(() =>
-        announced ? Effect.fail(exited()) : child.read(piReadbacks.commands),
+        announced() ? Effect.fail(exited()) : child.read(piReadbacks.commands),
       ).pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join), displayed),
     };
     return session;
