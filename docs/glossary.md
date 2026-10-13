@@ -7,7 +7,7 @@ SQLite, UI and documentation. Some describe the target model in
 | Term | Meaning |
 | --- | --- |
 | Project | A named, bounded initiative grouping sessions from any folders toward one outcome; see [Projects](#projects). |
-| Folder | An added root directory together with the worktrees created from it. Sessions in a worktree are listed under their folder with the branch beside them. A non-Git directory is listed the same way with a Non-Git badge. |
+| Folder | An added root directory together with the worktrees created from it. Sessions in a worktree are listed under their folder with the branch beside them. A non-Git directory is listed the same way, without a branch label. |
 | Directory | A filesystem path a session runs in: a repository root, one of its worktrees, or any other folder. The New page picks a directory; the sidebar groups by repository. |
 | Worktree | A Git checkout of a folder. Piano lists worktrees from Git and creates new ones through Worktrunk (`wt`), the initial backend for their lifecycle. |
 | Workspace | Piano's context around a folder root or worktree, attaching sessions, revision, processes, evidence and integration state. Each has a registry ID, which URLs carry in place of its path. |
