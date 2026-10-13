@@ -6,134 +6,100 @@ session is one pi session; each running session is one `pi --mode rpc` child. Se
 
 ## Words
 
-Use these in code and prose: **folder** (a directory the user added, shown with its worktrees),
+Use these in code and docs: **folder** (a directory the user added, shown with its worktrees),
 **project** (a named group of sessions from any folders, toward one outcome), **worktree** (a
 checkout created through piano with `wt`), **session** (one pi session; never "thread"),
 **registry** (the SQLite store that records folders, projects, worktrees and session references;
-Pi owns session history). Pi's own "project trust" keeps Pi's name.
+Pi owns session history). Pi's own "project trust" keeps Pi's name. When talking to the user,
+name what they see in the UI ("Piano's database", not "the registry").
 See [the glossary](docs/glossary.md) for the planned workspace, task and evidence vocabulary.
 
 ## Direction and guardrails
 
 For architecture and workflow changes, read [docs/README.md](docs/README.md), then the ADR,
-development invariants and roadmap it links. Reference affected invariant IDs in implementation PRs.
-They are target contracts, not claims that all gaps are fixed. Keep Pi authoritative for history,
-Git authoritative for repository facts, Worktrunk behind the lifecycle adapter, and evidence outside
-the registry config. Piano owns workspace and integration policy. Skills guide development without
-defining product requirements or verification truth. A workspace is
-the product context around a project root or worktree; retain the existing code vocabulary above.
-On exe.dev, keep the unauthenticated server on loopback behind private authenticated access; follow
-[the development handoff](docs/development-on-exe-dev.md).
+development invariants and roadmap it links, and cite affected invariant IDs in the PR. The short
+form of INV-01: Pi owns history, Git owns repository facts, Worktrunk sits behind the lifecycle
+adapter, Piano owns workspace and integration policy.
 
-## Running against the user's instance
+## Scratch verification
 
-The user's systemd instance serves the built UI on port 8000 through the backend on 8001
-with the real registry (local instances may use 7070). Verify in separate scratch processes:
+The user's own Piano (local on 7070; on exe.dev the systemd units on 8000/8001) uses the real
+registry. Leave it, its backend and its registry alone, and verify in scratch processes:
 
 ```bash
 HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 PIANO_DB_PATH=<scratchpad>/piano.db PORT=7171 node server/main.ts &
 PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort &
 ```
 
-Use `npx agent-browser` against the scratch development UI on 7172, not the user's built UI.
-Leave the real registry and running backend alone. Rebuild/deploy only when requested; see
-[the hosted workflow](docs/hosted-development.md).
+Drive the scratch UI on 7172 with `npx agent-browser`. A new scratch database starts empty;
+register only a throwaway git repo in the scratchpad. Stop only the processes you started, by pid.
+When a check creates worktrees or pi session files, remove them afterwards: `git worktree remove
+--force` plus `git branch -D` in the scratch repo, and the directory under `~/.pi/agent/sessions`
+whose name encodes the scratch path.
 
-**Deploy preference:** When explicitly asked to deploy, complete the build/install steps and restart
-`piano.service` promptly, even if it cuts off this session and other active Pi work. Interruption is
-preapproved: do not wait for idle or request extra confirmation. Run the restart and health checks
-outside `piano.service`'s process tree so deployment survives the cutoff.
+## Deploy
 
-**Shortest deploy path** (changes already verified, dependencies installed):
-
-```bash
-cd /home/exedev/piano
-npm run build && sudo systemd-run --collect /bin/bash -c '
-  exec > /tmp/piano-deploy.log 2>&1
-  systemctl restart piano.service &&
-  curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/folders -o /dev/null &&
-  curl -fsS http://127.0.0.1:8000/ -o /dev/null && echo "DEPLOY OK"
-'
-```
-
-Confirm `DEPLOY OK` in `/tmp/piano-deploy.log`, then reload the browser. No proxy restart needed.
-Keep deploy-only requests to this path; no new documents or repeat verification suite required.
-
-Stop only the process you started, by its pid. Register only scratch directories (a throwaway git
-repo in the scratchpad) in the scratch registry. When a check creates worktrees or pi session files,
-remove them afterwards: `git worktree remove --force` plus `git branch -D` in the scratch repo, and
-the session directory under `~/.pi/agent/sessions` whose name encodes the scratch path.
-Use a scratch-local `PIANO_DB_PATH`; a new database starts empty.
-See [registry storage and backup guidance](README.md#registry-storage).
+Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
+[the shortest deploy path](docs/hosted-development.md#shortest-deploy-path); to update every
+machine, use the `sync-piano` skill. On exe.dev the server has no authentication: it stays on
+loopback behind exe.dev private access (INV-11).
 
 ## Verification
 
-Develop Piano using [evidence-based development and testing](docs/testing.md). Before changing
-behavior, identify the claim, relevant invariant and smallest useful check. Add a regression test
-only for a meaningful failure not already protected; test observable contracts, not private helpers,
-mock choreography or implementation shape. No coverage quota or one-test-per-function requirement.
-Documentation-only changes need document/link review, not new unit tests or an application run.
+Follow [evidence-based development and testing](docs/testing.md): before changing behavior, name
+the claim, the relevant invariant and the smallest useful check. Add a regression test only for a
+meaningful failure not already protected, testing observable contracts rather than private helpers
+or mock choreography. Documentation-only changes need document/link review, not tests or an app run.
 
-For application behavior changes, observe the affected journey through `npx agent-browser`, with output
-kept as PR evidence; do not commit a script for it. The only committed browser tests are the critical
-paths in `test/browser/` (start a session; open and continue one), run by `npm run test:browser` and
-CI against a scratch Piano and fake Pi. Run them for changes on those paths, and add a journey only
-for a new critical path. Model calls cost real credits; use short prompts such as "Reply with exactly: X" and read the
-reply back. Radix
-menus and popovers open on pointer events, so open them with `agent-browser click`, not a DOM
-`.click()` from `eval`. `npm test` runs the module tests against `test/fake-pi.mjs` and needs no
-credentials; run it, `npm run typecheck` and `npm run lint` (Biome) for code or dependency changes. Retain command outcomes,
-tested revision/environment and limitations. Stop expanding verification once the relevant risk is
-covered and required gates pass; explain when existing tests or inspection suffice.
+- **Code or dependency changes:** run `npm test` (module tests against `test/fake-pi.mjs`, no
+  credentials), `npm run typecheck` and `npm run lint`.
+- **Application behavior:** observe the affected journey through `npx agent-browser` and keep the
+  output as PR evidence; the browser script stays uncommitted.
+- **Critical paths** (start a session; open and continue one) live in `test/browser/`, run by
+  `npm run test:browser` and CI. Run them when you touch those paths; add a journey only for a new
+  critical path.
+- **Model calls** cost real credits: prompt "Reply with exactly: X" and read the reply back.
+- **Radix menus and popovers** open on pointer events: use `agent-browser click`, not a DOM
+  `.click()` from `eval`.
 
-## Phase completion
+Report command outcomes, the tested revision and environment, and limitations. Stop once the
+relevant risk is covered and the required gates pass.
 
-After a phase passes its required verification and review, commit its changes and push the current
-branch to its upstream. Report the commit and push outcome; a blocked push is not completion.
-Pushing changes does not authorize rebuilding or deploying the user's instance.
+## Committing
+
+After a change passes verification, commit it on the branch that is checked out (usually `main`)
+and push that branch. Stay on that branch; create or switch branches only when the user asks.
+Report the commit and push outcome; a blocked push is not completion.
 
 ## GitHub on exe.dev
 
-When the git remote uses `github.int.exe.xyz`, use the exe.dev integration for GitHub CLI
-operations too: prefix `gh` commands with `GH_HOST=github.int.exe.xyz` and specify `--repo owner/repo`.
-The integration supplies authentication; a plain `gh` login error is not evidence that access is
-missing. Try the integration before asking the user to run `gh auth login` or provide a token.
-
-```bash
-GH_HOST=github.int.exe.xyz gh pr list --repo goofansu/piano
-GH_HOST=github.int.exe.xyz gh pr create --repo goofansu/piano --head "$(git branch --show-current)" --title "..." --body "..."
-```
-
-Check for an existing PR before creating one, and report the returned GitHub URL.
-See the [exe.dev GitHub integration docs](https://exe.dev/docs/integrations-github.md) for setup
-or integration permission failures.
+When the git remote is `github.int.exe.xyz`, prefix `gh` with `GH_HOST=github.int.exe.xyz` and pass
+`--repo goofansu/piano`. The integration supplies authentication, so try it before asking for
+`gh auth login`. Setup and permission failures: [exe.dev GitHub integration](https://exe.dev/docs/integrations-github.md).
 
 ## Design
 
-Follow Codex/T3 Code's **quiet UI**: show only what helps users decide or act. Keep the main view
-to useful values, essential controls and concise status. Internal state, cache freshness and
-diagnostics belong in on-demand details only when useful; persisting data does not justify adding
-an inline label. Surface persistent warnings only for problems the user can act on.
-Keep correctness in authoritative state handling and regression checks, not permanent UI caveats.
+Follow Codex/T3 Code's **quiet UI**: show only what helps users decide or act — useful values,
+essential controls, concise status. Internal state and diagnostics go in on-demand details, if
+anywhere. Show a persistent warning only for a problem the user can act on; keep correctness in
+state handling and regression checks.
 
-Build UI from shadcn/ui components: search the registry first, add with `npx shadcn@latest add`,
-and compose as the `shadcn` skill describes. Hand-written markup is for the case where no
-standard component exists, and says so in a comment.
-
-Keep `web/src/components/ui/` upstream-owned. Piano's variants, overlay styling and focus policy
-live in the `Piano*` wrappers, `StatusBadge` and `PickerRadioItem` in `web/src/components/`; use
-those for customized controls, and raw `ui/` imports for standard controls. Tokens and the few
-internal-slot CSS exceptions live in `web/src/index.css`; no intentional patches remain in
-`ui/`. When adding a customization or upgrading shadcn, read
-[the ownership and upgrade guide](docs/shadcn-ui.md). Preview with
-`add <name> --dry-run --diff <file>`; never `--overwrite` unreviewed.
+Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add with
+`npx shadcn@latest add`). Hand-written markup is for the case where no standard component exists,
+and says so in a comment. `web/src/components/ui/` stays upstream-owned: Piano's variants, overlay
+styling and focus policy live in the `Piano*` wrappers, `StatusBadge` and `PickerRadioItem` in
+`web/src/components/`, and tokens in `web/src/index.css`. Before adding a customization or
+upgrading shadcn, read [the ownership and upgrade guide](docs/shadcn-ui.md); review every
+`--diff` before writing over a file in `ui/`.
 
 The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands,
 and Session commands (only with a selected session). A feature that adds an action the sidebar or
 header offers also adds a row in the appropriate command group, named as its button is.
-Keep Mod+K for the palette and stock Sidebar's Mod+B shortcut; other actions are reached through
+Global shortcuts are Mod+K (palette) and stock Sidebar's Mod+B; other actions are reached through
 the palette or their control.
+
+## Server
 
 `server/PiSessions.ts` is the deep module: `open`, `probe`, and per session `events`, `act`,
 `state`, all in the browser's wire vocabulary from `shared/wire.ts`. Add capabilities as new

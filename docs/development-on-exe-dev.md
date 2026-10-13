@@ -83,7 +83,7 @@ requirement and revision it supports. See INV-09 and INV-13.
 
 ## Scratch verification
 
-Follow root AGENTS.md: leave the user's running instance and real registry alone. Use a throwaway
+Follow [root AGENTS.md](../AGENTS.md#scratch-verification): leave the user's running instance and real registry alone. Use a throwaway
 Git repository, separate registry and port, and isolate Pi resources/session storage as needed.
 Use an absolute scratch path that you created:
 

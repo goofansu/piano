@@ -40,9 +40,30 @@ HMR; its reconnect reload is a development-only behavior.
 
 ## Deliberate updates
 
-Follow the user's [deploy preference](../AGENTS.md#running-against-the-users-instance): an explicit
-deploy includes a prompt backend restart, with active-session interruption preapproved. Ordinary
-development or pushing a commit still does not authorize deployment.
+**Deploy preference:** when explicitly asked to deploy, complete the build/install steps and restart
+`piano.service` promptly, even if it cuts off the deploying session and other active Pi work.
+Interruption is preapproved: do not wait for idle or request extra confirmation. Run the restart
+and health checks outside `piano.service`'s process tree so deployment survives the cutoff. Ordinary
+development or pushing a commit still does not authorize deployment. (The `sync-piano` skill
+deliberately overrides this with its own idle-session gate.)
+
+### Shortest deploy path
+
+When the changes are already verified and dependencies installed:
+
+```bash
+cd /home/exedev/piano
+npm run build && sudo systemd-run --collect /bin/bash -c '
+  exec > /tmp/piano-deploy.log 2>&1
+  systemctl restart piano.service &&
+  curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/folders -o /dev/null &&
+  curl -fsS http://127.0.0.1:8000/ -o /dev/null && echo "DEPLOY OK"
+'
+```
+
+Confirm `DEPLOY OK` in `/tmp/piano-deploy.log`, then reload the browser. No proxy restart needed.
+Keep deploy-only requests to this path; no new documents or repeat verification suite required.
+The cases below cover changes that need more than this path.
 
 - Frontend changes: verify in the separate development process, then run
   `npm run build` when deploying. Include the requested backend restart even for a frontend-only
