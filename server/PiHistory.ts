@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { parseSessionEntries, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
+import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Snapshot } from "../shared/wire.ts";
 import { compileRedaction, projectDisplay } from "./DisplayProjection.ts";
 import { directoryPath, sessionDirFor } from "./PiEnv.ts";
@@ -46,13 +47,6 @@ export interface PiHistory {
     file: string | undefined,
   ) => Effect.Effect<string, PiHistoryError>;
 }
-
-/** A Snapshot with no history: a session Pi has not written yet, or no session at all. */
-export const emptySnapshot = (sessionId: string): Snapshot => ({
-  state: { sessionId, isStreaming: false },
-  messages: [],
-  dialogs: [],
-});
 
 // Pi filters a shared session directory by the header's cwd, so each spelling lists its own files.
 const listed = (cwd: string) =>

@@ -3,7 +3,14 @@
  * the browser keeps its view with it, so a snapshot followed by its live events gives every tab
  * the state the server would hand a newly attached one (INV-05).
  */
-import type { RenderMsg, SessionEvent, SessionState, Snapshot, SubagentCard } from "./wire.ts";
+import type {
+  RenderMsg,
+  SessionEvent,
+  SessionState,
+  SessionStats,
+  Snapshot,
+  SubagentCard,
+} from "./wire.ts";
 
 type TerminalStatus = NonNullable<Extract<SubagentCard, { kind: "delegation" }>["terminalStatus"]>;
 
@@ -30,6 +37,20 @@ export function reportedSubagentStatus(
 export const isWorking = (
   state: Pick<SessionState, "isStreaming" | "isCompacting" | "isRetrying">,
 ): boolean => !!(state.isStreaming || state.isCompacting || state.isRetrying);
+
+/** A Snapshot with no history: a session Pi has not written yet, or no session at all. */
+export const emptySnapshot = (sessionId: string): Snapshot => ({
+  state: { sessionId, isStreaming: false },
+  messages: [],
+  dialogs: [],
+});
+
+/** Pi's state seeded with the registry's last known statistics, shown as last known until Pi
+ * reads them back. */
+export const withLastKnownStats = (
+  state: SessionState,
+  stats: SessionStats | undefined,
+): SessionState => ({ ...state, ...stats, contextIsLastKnown: true });
 
 /** The snapshot after `event`. Events that change nothing return the same snapshot. */
 export function applySessionEvent(snapshot: Snapshot, event: SessionEvent): Snapshot {

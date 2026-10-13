@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -280,28 +280,26 @@ const seedHistory = (cwd: string, id: string) =>
     `${JSON.stringify({ type: "session", version: 3, id, cwd, timestamp: "2026-10-05T00:00:00Z" })}\n`,
   );
 
-test("INV-01: the sidebar marks a project member unavailable exactly when SessionHosts cannot find its history or checkout", async () => {
-  const physical = join(root, "physical"),
-    alias = join(root, "alias"),
+// SessionReferences' tests own which sessions are unavailable and that the opener agrees; this
+// one owns that the sidebar shows that judgement for project members.
+test("INV-01: the sidebar marks a project member unavailable when its history or checkout is gone", async () => {
+  const kept = join(root, "kept"),
     gone = join(root, "gone");
-  mkdirSync(physical);
-  symlinkSync(physical, alias);
+  mkdirSync(kept);
   mkdirSync(gone);
   await run(
     slowGit(),
     Effect.gen(function* () {
       const registry = yield* Registry,
-        view = yield* SidebarView,
-        hosts = yield* SessionHosts;
-      yield* registry.addFolder(alias);
+        view = yield* SidebarView;
+      yield* registry.addFolder(kept);
       yield* registry.addFolder(gone);
       yield* registry.saveProject({ id: "outcome", name: "Outcome" });
-      // Pi was started in the physical directory, so its file names that spelling, not the registry's.
-      seedHistory(physical, "aliased");
+      seedHistory(kept, "written");
       seedHistory(gone, "removed");
       for (const [cwd, id] of [
-        [alias, "aliased"],
-        [alias, "never-written"],
+        [kept, "written"],
+        [kept, "never-written"],
         [gone, "removed"],
       ]) {
         yield* registry.addSession(cwd, id);
@@ -312,15 +310,10 @@ test("INV-01: the sidebar marks a project member unavailable exactly when Sessio
         (yield* view.fresh).sessionReferences?.map((s) => [s.sessionId, s.unavailable]),
       );
       assert.deepEqual(Object.fromEntries(unavailable), {
-        aliased: undefined,
+        written: undefined,
         "never-written": "history",
         removed: "checkout",
       });
-      // The opener agrees: it finds the aliased session's file under the physical spelling.
-      assert.equal(
-        (yield* hosts.peek(alias, "aliased")).snapshot.state.sessionFile,
-        join(root, "sessions", "aliased.jsonl"),
-      );
     }),
   );
 });
