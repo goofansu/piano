@@ -125,6 +125,7 @@ test("INV-04: estimated timeout survives attachment, rejects expired answers, an
       });
       const first = yield* openDialog(session, "/dialog input 1000");
       assert.equal(first.dialog.timeoutMs, 1000);
+      assert.equal(first.dialog.deadlineKind, "pi-timeout", "Pi's timeout precedes host recovery");
       assert.equal(first.dialog.deadlineAt - first.dialog.receivedAt, 1000);
       yield* TestClock.adjust(400);
       assert.equal(
@@ -167,20 +168,28 @@ test("INV-04: invisible extension cancellation is bounded by an explicit host re
         cwd: process.cwd(),
         sessionId: "dialog-recovery",
       });
-      const { dialog, prompt } = yield* openDialog(session);
-      assert.equal(dialog.deadlineKind, "host-recovery");
-      const resolved = yield* watch(
-        session,
-        (e) => e._tag === "state" && e.state.dialogResolution?.delivery === "written",
-      );
-      yield* TestClock.adjust(2000);
-      yield* Fiber.join(resolved);
-      yield* Fiber.join(prompt);
-      assert.deepEqual(yield* audit(session), [
-        { type: "extension_ui_response", id: dialog.id, cancelled: true },
-      ]);
-      assert.equal((yield* session.state).dialogResolution?.reason, "recovery");
-      assert.deepEqual((yield* snapshot(session)).dialogs, []);
+      // Without a Pi timeout, and with one later than the policy, host recovery bounds the dialog.
+      for (const text of ["/dialog input", "/dialog input 120000"]) {
+        const { dialog, prompt } = yield* openDialog(session, text);
+        assert.equal(dialog.deadlineKind, "host-recovery");
+        assert.equal(dialog.deadlineAt - dialog.receivedAt, 2000);
+        const resolved = yield* watch(
+          session,
+          (e) =>
+            e._tag === "state" &&
+            e.state.dialogResolution?.id === dialog.id &&
+            e.state.dialogResolution.delivery === "written",
+        );
+        yield* TestClock.adjust(2000);
+        yield* Fiber.join(resolved);
+        yield* Fiber.join(prompt);
+        assert.deepEqual(
+          (yield* audit(session)).filter((record) => record.id === dialog.id),
+          [{ type: "extension_ui_response", id: dialog.id, cancelled: true }],
+        );
+        assert.equal((yield* session.state).dialogResolution?.reason, "recovery");
+        assert.deepEqual((yield* snapshot(session)).dialogs, []);
+      }
     }).pipe(
       Effect.scoped,
       Effect.provide(TestClock.layer()),

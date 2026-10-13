@@ -278,7 +278,7 @@ const openSession = (spec: PiSessionSpec) =>
         ),
       ),
     );
-    const projector = new PiProjector({ generation, recoveryMs });
+    const projector = new PiProjector({ generation });
     const opened = projector.snapshot({ source: "live", state: initial[0], messages: initial[1] });
     if (opened.state.sessionId !== spec.sessionId)
       return yield* new PiSessionError({
@@ -347,6 +347,7 @@ const openSession = (spec: PiSessionSpec) =>
     // Dialog claims share publication's lock: claim under it, write to Pi outside it.
     const dialogs = makeSessionDialogs({
       generation,
+      recoveryMs,
       scope: sessionScope,
       // Every dialog response, an answer or a cancellation, rides the answer's lane.
       write: (command) => child.write(command, { lane: laneOf("answer") }),
@@ -392,10 +393,12 @@ const openSession = (spec: PiSessionSpec) =>
         )(
           Effect.gen(function* () {
             const projected = projector.record(record, receivedAt);
-            if (projected.dialog) yield* dialogs.opened(projected.dialog);
             if (projected.state) yield* mergeState(projected.state);
             for (const event of projected.events) yield* publish(event);
-            return projected;
+            return {
+              refresh: projected.refresh,
+              dialog: projected.dialog && (yield* dialogs.opened(projected.dialog)),
+            };
           }),
         );
         yield* readbacks.schedule(...refresh);

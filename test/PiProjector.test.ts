@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PiProjector } from "../server/PiRecords.ts";
 
-const projector = () => new PiProjector({ generation: "g1", recoveryMs: 60_000 });
+const projector = () => new PiProjector({ generation: "g1" });
 
 test("INV-03: overlapping turn and summary retries stay retrying until both finish", () => {
   const pi = projector();
@@ -78,24 +78,35 @@ test("closed() marks only still-running tools incomplete and drops nothing else"
   assert.deepEqual(pi.closed(), []);
 });
 
-test("a dialog is constructed once per id with the earlier of Pi's timeout and host recovery", () => {
+test("a dialog request is constructed once per id with Pi's timeout and receipt time", () => {
   const pi = projector();
   const timed = pi.record(
     { type: "extension_ui_request", id: "d1", method: "input", title: "Name", timeout: 5_000 },
     1_000,
   );
-  assert.equal(timed.dialog?.deadlineKind, "pi-timeout");
-  assert.equal(timed.dialog?.deadlineAt, 6_000);
-  assert.equal(timed.dialog?.generation, "g1");
-  assert.deepEqual(timed.events, [{ _tag: "dialog", dialog: timed.dialog }]);
+  assert.deepEqual(timed, {
+    events: [],
+    refresh: [],
+    dialog: {
+      id: "d1",
+      generation: "g1",
+      receivedAt: 1_000,
+      timeoutMs: 5_000,
+      method: "input",
+      title: "Name",
+      message: undefined,
+      options: undefined,
+      placeholder: undefined,
+      prefill: undefined,
+    },
+  });
   assert.deepEqual(pi.record({ type: "extension_ui_request", id: "d1", method: "input" }, 2_000), {
     events: [],
     refresh: [],
   });
-  const untimed = pi.record(
-    { type: "extension_ui_request", id: "d2", method: "confirm", timeout: 120_000 },
+  const unusable = pi.record(
+    { type: "extension_ui_request", id: "d2", method: "confirm", timeout: -1 },
     1_000,
   );
-  assert.equal(untimed.dialog?.deadlineKind, "host-recovery");
-  assert.equal(untimed.dialog?.deadlineAt, 61_000);
+  assert.equal(unusable.dialog?.timeoutMs, undefined, "an unusable Pi timeout is no timeout");
 });

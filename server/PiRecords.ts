@@ -677,9 +677,14 @@ export interface RecordProjection {
   readonly events: ReadonlyArray<SessionEvent>;
   /** Readbacks to schedule after publishing; never awaited by the record consumer. */
   readonly refresh: ReadonlyArray<RefreshKind>;
-  /** A newly opened dialog, also among `events`. The caller owns its deadline and resolution. */
-  readonly dialog?: Dialog;
+  /** A dialog Pi just requested, not among `events`: the caller sets its deadline, publishes it
+   * and owns its resolution. */
+  readonly dialog?: DialogRequest;
 }
+
+/** Pi's facts about a requested dialog: a wire `Dialog` before Piano sets its deadline.
+ * `timeoutMs` is Pi's advertised timeout, if it gave a usable one. */
+export type DialogRequest = Omit<Dialog, "deadlineAt" | "deadlineKind">;
 
 const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
 const EXTENSION_STATE_METHODS = new Set(["setStatus", "setWidget", "setTitle", "set_editor_text"]);
@@ -697,7 +702,7 @@ const notice = (level: "info" | "warning" | "error", message: string): SessionEv
 /**
  * One Pi child's records in the browser's vocabulary. Owns everything a record sequence
  * implies: the streaming partial, tool executions, subagent correlation, retry flags,
- * extension status/widgets and dialog construction. Pure and synchronous; callers serialize
+ * extension status/widgets and dialog requests. Pure and synchronous; callers serialize
  * `record`, `history` and `closed` under their snapshot lock.
  */
 export class PiProjector {
@@ -711,10 +716,9 @@ export class PiProjector {
   private extension: NonNullable<SessionState["extension"]> = { statuses: [], widgets: [] };
   private seenDialogs = new Set<string>();
 
-  /** `generation` names this child in dialog and editor request IDs; `recoveryMs` bounds a
-   * dialog without a usable Pi timeout. */
-  private readonly options: { readonly generation: string; readonly recoveryMs: number };
-  constructor(options: { readonly generation: string; readonly recoveryMs: number }) {
+  /** `generation` names this child in dialog and editor request IDs. */
+  private readonly options: { readonly generation: string };
+  constructor(options: { readonly generation: string }) {
     this.options = options;
   }
 
@@ -850,19 +854,14 @@ export class PiProjector {
     const id = String(raw.id);
     if (!DIALOG_METHODS.has(method) || this.seenDialogs.has(id)) return project();
     this.seenDialogs.add(id);
-    const { generation, recoveryMs } = this.options;
-    const timeoutMs =
-      typeof raw.timeout === "number" && Number.isFinite(raw.timeout) && raw.timeout > 0
-        ? raw.timeout
-        : undefined;
-    const piTimeout = timeoutMs !== undefined && timeoutMs <= recoveryMs;
-    const dialog: Dialog = {
+    const dialog: DialogRequest = {
       id,
-      generation,
+      generation: this.options.generation,
       receivedAt,
-      timeoutMs,
-      deadlineAt: receivedAt + (piTimeout ? timeoutMs : recoveryMs),
-      deadlineKind: piTimeout ? "pi-timeout" : "host-recovery",
+      timeoutMs:
+        typeof raw.timeout === "number" && Number.isFinite(raw.timeout) && raw.timeout > 0
+          ? raw.timeout
+          : undefined,
       method: method as Dialog["method"],
       title: raw.title as string | undefined,
       message: raw.message as string | undefined,
@@ -870,7 +869,7 @@ export class PiProjector {
       placeholder: raw.placeholder as string | undefined,
       prefill: raw.prefill as string | undefined,
     };
-    return { events: [{ _tag: "dialog", dialog }], refresh: [], dialog };
+    return { events: [], refresh: [], dialog };
   }
 
   /** Streaming output: the partial reply, final messages and tool executions. */
