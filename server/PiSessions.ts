@@ -4,8 +4,9 @@
  *
  * Ownership behind this public seam:
  * - PiTransport: scoped process, framing/capacity, correlation, terminal failure.
- * - This module: generation, atomic snapshot/live publication, readback
- *   freshness, session-owned actions and shutdown announcement.
+ * - This module: generation, atomic snapshot/live publication, session-owned actions and
+ *   shutdown announcement.
+ * - SessionReadbacks: readback workers and freshness, under this module's lock.
  * - SessionDialogs: dialog claims and their one terminal resolution, under this module's lock.
  * - PiRecords: protocol translation, not process or publication lifecycle. Its one projection
  *   turns Pi's facts into every Snapshot, a live child's or a saved file's.
@@ -15,7 +16,6 @@
 import { randomUUID } from "node:crypto";
 import {
   Cause,
-  Clock,
   Context,
   Deferred,
   Effect,
@@ -57,13 +57,12 @@ import {
   type PiRejection,
   piExchangeFor,
   piReadbacks,
-  type RefreshKind,
   sessionArgs,
   stateFactsOf,
 } from "./PiRecords.ts";
 import { type PiLane, PiSessionError, PiTransport } from "./PiTransport.ts";
 import { makeSessionDialogs } from "./SessionDialogs.ts";
-import { RunLedger } from "./Subagents.ts";
+import { makeSessionReadbacks } from "./SessionReadbacks.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
 
@@ -308,11 +307,6 @@ const openSession = (spec: PiSessionSpec) =>
       for (const subscriber of subscribers) yield* subscriber.offer(frame);
     });
     const lock = yield* Semaphore.make(1);
-    const metadataFields = ["model", "thinkingLevel", "sessionName", "sessionFile"] as const;
-    const factVersions = { model: 0, thinkingLevel: 0, sessionName: 0, sessionFile: 0 };
-    let statsVersion = 0;
-    let contextVersion = 0;
-    let operationVersion = 0;
     let submissionId = 0;
     let announced = false;
     let processedVersion = 0;
@@ -341,8 +335,7 @@ const openSession = (spec: PiSessionSpec) =>
       const next = { ...current, ...patch };
       if (isWorking(next) || next.model !== current.model) next.contextIsLastKnown = true;
       if (JSON.stringify(next) === JSON.stringify(current)) return;
-      for (const field of metadataFields)
-        if (next[field] !== current[field]) factVersions[field] += 1;
+      readbacks.changed(current, next);
       yield* publish({ _tag: "state", state: next });
     });
     const patchState = (patch: Partial<SessionState> | (() => Partial<SessionState>)) =>
@@ -375,156 +368,18 @@ const openSession = (spec: PiSessionSpec) =>
         if (aborting?.acknowledged && aborting.pendingPrompts.size === 0) aborting = undefined;
       });
 
-    /** Run usage from entries Pi appended since the last read. Only the stats worker reads. */
-    const ledger = new RunLedger();
-    const readRuns = Effect.gen(function* () {
-      const entries = (since?: string) => child.read(piReadbacks.entries(since));
-      const since = ledger.since;
-      // A session that no longer holds the last entry read is counted afresh.
-      ledger.add(
-        yield* entries(since).pipe(
-          Effect.catchTag("PiSessionError", (error) =>
-            since
-              ? Effect.sync(() => ledger.reset()).pipe(Effect.andThen(entries()))
-              : Effect.fail(error),
-          ),
-        ),
-      );
-      return ledger.usage;
-    });
-
-    /** Canonical projected context and billed cost from Pi, not partial response usage.
-     * Refresh at persisted boundaries, never per token/delta. Best effort.
-     */
-    const refreshStats = Effect.gen(function* () {
-      const version = ++statsVersion;
-      const modelVersion = factVersions.model;
-      const outputVersion = child.observationVersion();
-      yield* patchState({ contextIsLastKnown: true });
-      yield* Effect.gen(function* () {
-        const stats = yield* child.read(piReadbacks.stats);
-        const statsUpdatedAt = yield* Clock.currentTimeMillis;
-        const current = () =>
-          version === statsVersion && modelVersion === factVersions.model && !announced;
-        yield* patchState(() =>
-          current()
-            ? {
-                ...stats,
-                statsUpdatedAt,
-                contextIsLastKnown: outputVersion !== child.observationVersion(),
-                statsRefreshError: undefined,
-              }
-            : {},
-        );
-        // Pi's figures above neither wait on nor fail with the Runs' entries; a failed read keeps
-        // the last count, and the next refresh continues from the last entry read.
-        const subagents = yield* readRuns.pipe(Effect.option);
-        if (subagents._tag === "Some")
-          yield* patchState(() => (current() ? { subagents: subagents.value } : {}));
-      }).pipe(
-        Effect.catchTag("PiSessionError", (error) =>
-          patchState(() =>
-            announced || version !== statsVersion
-              ? {}
-              : {
-                  contextIsLastKnown: true,
-                  statsRefreshError: `Usage refresh failed: ${error.detail}`,
-                },
-          ),
-        ),
-      );
-    });
-
-    /** Read command-controlled facts back from Pi. Do not replace session-level
-     * activity with get_state.isStreaming (which describes the low-level run).
-     * Neither a stale observation nor an old command may overwrite newer facts.
-     */
-    const refreshState = Effect.fn("PiSessions.refreshState")(
-      function* (operation: number) {
-        if (operation !== operationVersion) return;
-        const versions = { ...factVersions };
-        const raw = yield* child.read(piReadbacks.state);
-        yield* patchState(() => {
-          if (operation !== operationVersion || announced) return {};
-          const observed = stateFactsOf(raw);
-          const patch: Partial<Record<(typeof metadataFields)[number], string | undefined>> = {};
-          // Unrelated streaming/queue events must not discard a model observation.
-          for (const field of metadataFields)
-            if (versions[field] === factVersions[field]) patch[field] = observed[field];
-          return { ...patch, stateRefreshError: undefined };
-        });
+    // Readbacks land through publication's lock; Pi is read outside it.
+    const readbacks = makeSessionReadbacks({
+      scope: sessionScope,
+      read: child.read,
+      observationVersion: child.observationVersion,
+      context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
+      publication: {
+        locked: Semaphore.withPermits(lock, 1),
+        publish,
+        mergeState,
+        announced: () => announced,
       },
-      (effect, operation) =>
-        effect.pipe(
-          Effect.catchTag("PiSessionError", (error) =>
-            announced || operation !== operationVersion
-              ? Effect.void
-              : patchState({ stateRefreshError: `Session state refresh failed: ${error.detail}` }),
-          ),
-        ),
-    );
-
-    /** Replace current context, never concatenate raw history. Retry readbacks
-     * raced by Pi output; bound churn and make an unresolved projection visible.
-     * This is not historical replay or the phase-5 transport sequencing contract. */
-    const refreshContext = Effect.gen(function* () {
-      const version = ++contextVersion;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const outputVersion = child.observationVersion();
-        const messages = yield* child.read(piReadbacks.messages);
-        if (version !== contextVersion || announced) return;
-        const applied = yield* Semaphore.withPermits(
-          lock,
-          1,
-        )(
-          Effect.gen(function* () {
-            if (
-              version !== contextVersion ||
-              outputVersion !== child.observationVersion() ||
-              announced
-            )
-              return false;
-            yield* publish({ _tag: "context", messages: projector.history(messages) });
-            return true;
-          }),
-        );
-        if (applied) return yield* patchState({ projectionError: undefined });
-      }
-      yield* patchState({
-        projectionError:
-          "Pi context changed during refresh. This view may be stale until the next command or settled boundary.",
-      });
-    }).pipe(
-      Effect.catchTag("PiSessionError", (error) =>
-        patchState({ projectionError: `Current context refresh failed: ${error.detail}` }),
-      ),
-    );
-
-    // At most one worker per readback kind. Never await RPC inspection from the
-    // record consumer: Pi may need a later dialog answered before replying.
-    const refreshers: Record<RefreshKind, Effect.Effect<void>> = {
-      stats: refreshStats,
-      context: refreshContext,
-      state: Effect.suspend(() => refreshState(operationVersion)),
-    };
-    const refreshing = new Set<RefreshKind>();
-    const requested = new Set<RefreshKind>();
-    const scheduleRefresh = Effect.fnUntraced(function* (...kinds: ReadonlyArray<RefreshKind>) {
-      for (const kind of kinds) {
-        requested.add(kind);
-        if (refreshing.has(kind)) continue;
-        refreshing.add(kind);
-        yield* Effect.gen(function* () {
-          while (requested.delete(kind) && !announced) yield* refreshers[kind];
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              refreshing.delete(kind);
-            }),
-          ),
-          Effect.forkIn(sessionScope),
-        );
-      }
     });
 
     const onRecord = ({ record, receivedAt }: { record: PiRecord; receivedAt: number }) =>
@@ -543,7 +398,7 @@ const openSession = (spec: PiSessionSpec) =>
             return projected;
           }),
         );
-        yield* scheduleRefresh(...refresh);
+        yield* readbacks.schedule(...refresh);
         if (dialog) yield* dialogs.watch(dialog);
       });
 
@@ -629,7 +484,7 @@ const openSession = (spec: PiSessionSpec) =>
           !announced &&
           !child.hasPendingWork() &&
           processedVersion === child.observationVersion() &&
-          refreshing.size === 0 &&
+          readbacks.idle() &&
           promptOperations.size === 0 &&
           settled(snapshot),
       };
@@ -678,8 +533,8 @@ const openSession = (spec: PiSessionSpec) =>
         // Answer/abort/queue restoration do not supersede the command whose
         // dialog they unblock. Keep its subsequent model/effort readback valid.
         const operation = sessionActionPolicy[action._tag].supersedes
-          ? ++operationVersion
-          : operationVersion;
+          ? readbacks.supersede()
+          : readbacks.operation();
         const lane = laneOf(action._tag);
         switch (action._tag) {
           case "commands":
@@ -712,11 +567,11 @@ const openSession = (spec: PiSessionSpec) =>
                   ),
                 ),
               );
-              yield* refreshState(operation);
+              yield* readbacks.refresh("state", operation);
               // Handled commands may edit context without a run/compaction event.
               if (!(yield* stateOf).isStreaming) {
-                yield* refreshContext;
-                yield* scheduleRefresh("stats");
+                yield* readbacks.refresh("context");
+                yield* readbacks.schedule("stats");
               }
             });
             yield* work.pipe(
@@ -799,13 +654,13 @@ const openSession = (spec: PiSessionSpec) =>
           }
           case "set_model":
             yield* child.request(yield* exchangeOf(piExchangeFor(action)), { lane });
-            yield* refreshState(operation);
-            yield* refreshStats;
+            yield* readbacks.refresh("state", operation);
+            yield* readbacks.refresh("stats");
             return;
           case "set_thinking_level":
           case "set_name":
             yield* child.request(yield* exchangeOf(piExchangeFor(action)), { lane });
-            yield* refreshState(operation);
+            yield* readbacks.refresh("state", operation);
             return;
           case "answer":
             yield* dialogs.answer(action);
@@ -815,8 +670,8 @@ const openSession = (spec: PiSessionSpec) =>
 
     // Cached values must be available without waiting for a slow/failed readback.
     // Uncached sessions retain the initial statistics readiness contract.
-    if (spec.lastKnownStats) yield* scheduleRefresh("stats");
-    else yield* refreshStats;
+    if (spec.lastKnownStats) yield* readbacks.schedule("stats");
+    else yield* readbacks.refresh("stats");
     const actionCapacity = makeInboundCapacity(inboundLimits.requests);
     const session: PiSession = {
       spec,
