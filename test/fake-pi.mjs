@@ -1,6 +1,6 @@
 // A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
 // exercise PiSessions through its interface. Behaviour is driven by the prompt text.
-import { closeSync } from "node:fs";
+import { closeSync, existsSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
@@ -51,9 +51,19 @@ let heldState;
 let heldClear;
 let holdNextState = false;
 const capacityHeld = [];
+// capacity-readback: usage readbacks Pi holds alongside the held prompts.
+const heldReads = [];
 let capacityRound = 0;
+const capacityCount = () =>
+  out({
+    type: "extension_ui_request",
+    id: "capacity-count",
+    method: "notify",
+    message: `Capacity held: ${capacityHeld.length + heldReads.length}`,
+  });
 function releaseCapacity() {
   for (const cmd of capacityHeld.splice(0)) respond(cmd, { disposition: "handled" });
+  for (const cmd of heldReads.splice(0)) handle(cmd);
 }
 let liveContext;
 let liveStage = 0;
@@ -96,14 +106,19 @@ const expandSkill = (text) => {
 };
 const dec = new StringDecoder("utf8");
 let buf = "";
+/** While set, Pi reads no more input, as a blocked Pi would, until this file exists. */
+let stdinPausedUntil;
 
-process.stdin.on("data", (d) => {
-  buf += dec.write(d);
-  for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+const drain = () => {
+  for (let i = buf.indexOf("\n"); !stdinPausedUntil && i >= 0; i = buf.indexOf("\n")) {
     const line = buf.slice(0, i);
     buf = buf.slice(i + 1);
     if (line.trim()) handle(JSON.parse(line));
   }
+};
+process.stdin.on("data", (d) => {
+  buf += dec.write(d);
+  drain();
 });
 process.stdin.on("end", () => {
   out({ type: "bye" });
@@ -145,6 +160,7 @@ function handle(cmd) {
       }
       return respond(cmd, state());
     case "get_commands":
+      if (sessionId === "silent-commands") return; // a readback Pi never answers
       if (heldClear) {
         respond(heldClear.cmd, heldClear.restored);
         heldClear = undefined;
@@ -207,6 +223,10 @@ function handle(cmd) {
       return respond(cmd, { entries: entries.slice(since + 1), leafId: entries.at(-1).id });
     }
     case "get_session_stats":
+      if (sessionId === "capacity-readback" && capacityHeld.length) {
+        heldReads.push(cmd);
+        return capacityCount();
+      }
       return respond(cmd, {
         cost: 0.01 * messages.length,
         contextUsage: liveContext ?? {
@@ -332,13 +352,13 @@ function handle(cmd) {
           });
         capacityHeld.push(cmd);
         streaming = true;
-        out({
-          type: "extension_ui_request",
-          id: "capacity-count",
-          method: "notify",
-          message: `Capacity held: ${capacityHeld.length}`,
-        });
-        return;
+        // The user message's end makes Piano refresh usage in the background.
+        if (sessionId === "capacity-readback" && capacityHeld.length === 1)
+          out({
+            type: "message_end",
+            message: { role: "user", content: cmd.message, timestamp: Date.now() },
+          });
+        return capacityCount();
       }
       if (cmd.message === "capacity oversized-line") {
         process.stdout.write("x".repeat(32 * 1024 * 1024 + 1));
@@ -544,6 +564,21 @@ function handle(cmd) {
     }
     case "set_session_name":
       sessionName = cmd.name;
+      if (cmd.name === "withhold acknowledgement") return; // applied, never acknowledged
+      if (cmd.name.startsWith("pause stdin until ")) {
+        // Stop reading stdin, so Piano's input backs up, with a dialog open; never acknowledged.
+        stdinPausedUntil = cmd.name.slice("pause stdin until ".length);
+        process.stdin.pause();
+        out({ type: "extension_ui_request", id: "paused", method: "input", title: "Paused" });
+        const poll = setInterval(() => {
+          if (!existsSync(stdinPausedUntil)) return;
+          clearInterval(poll);
+          stdinPausedUntil = undefined;
+          drain();
+          process.stdin.resume();
+        }, 10);
+        return;
+      }
       return respond(cmd, {});
     default:
       return respond(cmd, undefined, `unknown ${cmd.type}`);

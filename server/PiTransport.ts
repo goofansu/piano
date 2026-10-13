@@ -37,15 +37,25 @@ const validResponse = Schema.is(
   }),
 );
 
+/** The inbound capacity a command occupies. "control" is the reserved lane ordinary work cannot
+ * fill; the caller chooses it (PiSessions, from its action policy), never a command's name. */
+export type PiLane = "control" | "ordinary";
+
 /** A spawned Pi child with request correlation. Everything above builds on `request` and `records`. */
 export interface PiTransport {
+  /** A command that may change Pi. One whose delivery becomes uncertain leaves pending work. */
   readonly request: (
     command: Record<string, unknown>,
-    dispatched?: Deferred.Deferred<void>,
+    options: { readonly lane: PiLane; readonly dispatched?: Deferred.Deferred<void> },
   ) => Effect.Effect<unknown, PiSessionError>;
-  /** A readback's query, its reply decoded; a reply of the wrong shape fails as "protocol". */
+  /** A readback's query, its reply decoded; a reply of the wrong shape fails as "protocol".
+   * Ordinary lane; a query changes nothing, so its timeout leaves no pending work. */
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
-  readonly write: (record: Record<string, unknown>) => Effect.Effect<void, PiSessionError>;
+  /** A record Pi sends no response to, such as a dialog answer. */
+  readonly write: (
+    record: Record<string, unknown>,
+    options: { readonly lane: PiLane },
+  ) => Effect.Effect<void, PiSessionError>;
   /** Every non-response record, in stdout order. Ends when the child exits. */
   readonly records: Stream.Stream<{ record: PiRecord; receivedAt: number }>;
   readonly exited: Deferred.Deferred<SessionClosure>;
@@ -324,7 +334,10 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
     }),
   );
 
-  const write = Effect.fn("PiTransport.write")(function* (record: Record<string, unknown>) {
+  const write = Effect.fn("PiTransport.write")(function* (
+    record: Record<string, unknown>,
+    options: { readonly lane: PiLane },
+  ) {
     if (closed)
       return yield* new PiSessionError({
         reason: "exited",
@@ -339,12 +352,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
         detail: "Input exceeds the Pi RPC byte limit. Nothing was sent.",
       });
     const done = yield* Deferred.make<void, PiSessionError>();
-    const release = writeCapacity.acquire(
-      size,
-      record.type === "abort" ||
-        record.type === "clear_queue" ||
-        record.type === "extension_ui_response",
-    );
+    const release = writeCapacity.acquire(size, options.lane === "control");
     if (!release)
       return yield* new PiSessionError({
         reason: "rejected",
@@ -382,16 +390,17 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
     );
   });
 
-  const request = Effect.fn("PiTransport.request")(function* (
+  const send = Effect.fn("PiTransport.request")(function* (
     command: Record<string, unknown>,
-    dispatched?: Deferred.Deferred<void>,
+    {
+      lane,
+      dispatched,
+      readback,
+    }: { lane: PiLane; dispatched?: Deferred.Deferred<void>; readback: boolean },
   ) {
     const size = Buffer.byteLength(JSON.stringify(command));
     const d = yield* Deferred.make<unknown, PiSessionError>();
-    const release = requestCapacity.acquire(
-      size,
-      command.type === "abort" || command.type === "clear_queue",
-    );
+    const release = requestCapacity.acquire(size, lane === "control");
     if (!release) {
       if (dispatched) yield* Deferred.succeed(dispatched, undefined);
       return yield* new PiSessionError({
@@ -404,7 +413,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
     const id = `q${seq}`;
     pending.set(id, d);
     debug("request", id, command.type);
-    return yield* write({ id, ...command }).pipe(
+    return yield* write({ id, ...command }, { lane }).pipe(
       Effect.ensuring(dispatched ? Deferred.succeed(dispatched, undefined) : Effect.void),
       Effect.andThen(Deferred.await(d)),
       Effect.timeoutOrElse({
@@ -421,8 +430,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
         Effect.sync(() => {
           // Timeout is not cancellation. A newer successful command cannot
           // establish that an older, unacknowledged mutation stopped running.
-          if (!String(command.type).startsWith("get_") && error.reason !== "rejected")
-            uncertainMutation = true;
+          if (!readback && error.reason !== "rejected") uncertainMutation = true;
         }),
       ),
       Effect.ensuring(
@@ -434,8 +442,13 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
     );
   });
 
+  const request: PiTransport["request"] = (command, options) =>
+    send(command, { ...options, readback: false });
+
   const read = Effect.fn("PiTransport.read")(function* <A>(readback: PiReadback<A>) {
-    const value = readback.decode(yield* request(readback.command));
+    const value = readback.decode(
+      yield* send(readback.command, { lane: "ordinary", readback: true }),
+    );
     if (value === undefined)
       return yield* new PiSessionError({ reason: "protocol", detail: readback.invalid });
     return value;
