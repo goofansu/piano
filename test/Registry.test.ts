@@ -150,7 +150,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
 });
 
-test("version-3 sharing migration preserves sessions; the first Radius destination survives restart and cannot be replaced", async (t) => {
+test("version-3 sharing migration preserves sessions; Radius destinations survive restart and reject stale replacements", async (t) => {
   const f = fixture(t),
     cwd = join(f.root, "folder");
   await f.run(
@@ -190,6 +190,24 @@ test("version-3 sharing migration preserves sessions; the first Radius destinati
     Effect.flatMap(Registry, (r) => r.mirrorSession(cwd, "shared", { sessionName: "Renamed" })),
   );
   assert.deepEqual((await f.get()).sessions[0]?.radiusShare, link);
+  const replacement = {
+    ...link,
+    artifactId: "replacement",
+    url: "https://radius.earendil.com/a/replacement",
+  };
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      const expected = (yield* r.get).sessions[0]!;
+      assert.equal(yield* r.setSessionRadiusShare(expected, replacement), true);
+      assert.equal(
+        yield* r.setSessionRadiusShare(expected, link),
+        false,
+        "a stale replacement cannot undo the new link",
+      );
+    }),
+  );
+  assert.deepEqual((await f.get()).sessions[0]?.radiusShare, replacement);
   await f.run(Effect.flatMap(Registry, (r) => r.removeSession(cwd, "shared")));
   assert.equal(
     await f.run(Effect.flatMap(Registry, (r) => r.setSessionRadiusShare(before, link))),

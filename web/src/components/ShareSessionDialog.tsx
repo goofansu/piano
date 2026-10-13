@@ -86,7 +86,7 @@ export function ShareSessionDialog({
           <DialogTitle>{result ? "Session shared" : "Share session"}</DialogTitle>
           {!result && (
             <DialogDescription id="share-session-description">
-              Share a snapshot with your Radius organization. Reuses the same link.
+              Share a snapshot with your Radius organization. Reuses the same link when available.
             </DialogDescription>
           )}
         </DialogHeader>

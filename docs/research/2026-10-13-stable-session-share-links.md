@@ -1,5 +1,8 @@
 # Stable Radius links for session sharing
 
+This note records successive changes. [Missing-artifact recovery](#missing-artifact-recovery)
+supersedes the original no-replacement policy below.
+
 ## Claim and policy
 
 Repeated, explicit shares of one registered session publish new Radius versions at one URL,
@@ -110,3 +113,23 @@ confirmed description presence before sharing, absence after success, no danglin
 and unchanged copy/open/close/keyboard behavior. Evidence:
 `/tmp/piano-share-icons-browser/no-description-run.log` and `no-description-evidence/`.
 Same isolated environment and synthetic upload boundary; no new deployment or live publication.
+
+## Missing-artifact recovery
+
+On `49cc40b` plus this patch, a saved artifact lookup returning **404 or 410** now authorizes a
+replacement during the same Share action. Other HTTP errors, failed requests, malformed/mismatched
+metadata, changed visibility and a different organization still stop without replacing the link.
+The confirmation now qualifies link reuse with “when available”. This preserves INV-01/07/11:
+only the current association can be replaced, with its new identity saved before transcript upload.
+A failed allocation/save leaves the old association intact; an uncertain new revision retains the
+replacement. A missing response during publication is not automatically replayed: the next explicit
+Share rechecks the artifact first.
+
+Extended Registry and SessionSharing tests cover 404/410 replacement and reuse after recreating
+services, stale compare-and-set rejection, allocation/database failure, uncertain new publication,
+and non-missing lookup failures. All **482 tests**, typecheck and lint passed;
+`/tmp/piano-share-missing-{tests,types,lint}.log`. The scratch browser observed a replacement URL,
+its session-ID title, reuse through later shares and a full backend restart, no replacement on 403,
+and the mobile confirmation. Evidence: `/tmp/piano-share-missing-browser/run.log` and `evidence/`.
+Same Node/Pi/Linux environment and synthetic Radius boundary as above; scratch processes and files
+were cleaned up. No production artifact, database or deployment was changed.

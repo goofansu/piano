@@ -46,8 +46,8 @@ Confirming Share publishes an **organization-only snapshot** of the saved curren
 instructions, tool output and attachments. Review sensitive content first; Piano's existing secret
 filtering is heuristic, not a guarantee. Sharing waits for the session to be idle and never starts
 another agent. On success, copy or open the link and see its expiration date. Later messages are not
-automatically published; another confirmed Share adds a version at the **same URL**, including
-after restarting Piano. Earlier versions remain available in Radius. Radius owns visibility,
+automatically published; another confirmed Share adds a version at the **same URL** while the
+artifact exists, including after restarting Piano. Earlier versions remain available in Radius. Radius owns visibility,
 retention and deletion. Piano currently caps the exported upload at 10 MiB and the operation at one
 minute; these are Piano limits, not Radius quota claims. If upload completion is uncertain, check
 Radius artifacts before sharing again—Piano never automatically retries a publication.
@@ -56,9 +56,11 @@ Unlike Pi's interactive `/share`, this reads the saved branch without adding a f
 runtime metadata entry or falling back to GitHub. Instructions already saved by Pi remain included.
 Piano's database stores only the artifact ID, URL and Radius organization ID—not a transcript copy.
 An empty artifact is allocated and its identity saved before the first transcript upload. If saving
-fails, no transcript is uploaded. Later shares verify the saved destination and never silently
-replace it if it has expired, been deleted, become inaccessible, or changed visibility. Sign back
-into the original organization to update a link after switching organizations.
+fails, no transcript is uploaded. If Radius reports the saved artifact as not found or gone
+(404/410), Share creates and saves a replacement, then uploads to its **new URL**. Later shares reuse
+that replacement. Permission, network and server errors do not trigger replacement; neither does
+changed visibility. Sign back into the original organization to share after switching organizations.
+If an artifact disappears during an upload, Share again so Piano can check whether it is missing.
 
 The first share after this feature was introduced establishes the reusable link: older Piano
 versions did not save artifact identities, so previously created links cannot be adopted

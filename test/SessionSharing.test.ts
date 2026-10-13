@@ -18,6 +18,7 @@ let signedIn = false;
 let authFails = false;
 let organization = "org-a";
 let metadataStatus = 200;
+let metadataReply: (() => Response) | undefined;
 let visibility = "organization";
 let canPublish = true;
 let allocationHook = async () => {};
@@ -104,6 +105,7 @@ before(async () => {
         assert.ok(artifact, "every request targets an allocated artifact");
         if (!match[2]) {
           assert.equal(init!.method, "GET");
+          if (metadataReply) return metadataReply();
           return metadataStatus === 200
             ? success({ ...artifact, visibility })
             : new Response("private response", { status: metadataStatus });
@@ -244,16 +246,27 @@ test("later shares and fresh registry/sharing services publish revisions at the 
   assert.equal(JSON.parse(String(allocations.at(-1)!.body)).title, "Pi session another-session");
 });
 
-test("deleted/expired shares, changed audiences, denied revision permission and different organizations never allocate replacements", async () => {
+test("lookup failures other than missing, changed audiences, denied permission and different organizations never allocate replacements", async () => {
   const allocated = allocations.length,
     uploaded = uploads.length;
-  for (const status of [403, 404, 410, 503]) {
+  for (const status of [401, 403, 429, 500, 503]) {
     metadataStatus = status;
     const response = await share();
     assert.equal(response.status, 409);
     assert.match((await response.json()).error, /saved Radius share is unavailable/);
   }
   metadataStatus = 200;
+  for (const reply of [
+    () => {
+      throw new Error("network failure");
+    },
+    () => Response.json({ artifact: {} }),
+    () => success({ ...artifacts[0]!, id: "mismatched" }),
+  ]) {
+    metadataReply = reply;
+    assert.equal((await share()).status, 409);
+  }
+  metadataReply = undefined;
   for (const next of ["public", "private"]) {
     visibility = next;
     const response = await share();
@@ -270,6 +283,71 @@ test("deleted/expired shares, changed audiences, denied revision permission and 
   assert.equal(allocations.length, allocated);
   assert.equal(uploads.length, uploaded);
   assert.equal((await share()).status, 200, "restoring access reuses the saved destination");
+});
+
+test("404 and 410 lookups replace and persist the missing artifact, then reuse the new link", async () => {
+  for (const status of [404, 410]) {
+    const sessionId = `missing-${status}`;
+    await register(sessionId);
+    assert.equal((await share(sessionId)).status, 200);
+    const previous = await destination(sessionId);
+    const allocated = allocations.length;
+    metadataStatus = status;
+    const response = await share(sessionId);
+    metadataStatus = 200;
+    assert.equal(response.status, 200);
+    const next = await destination(sessionId);
+    assert.ok(next);
+    assert.notEqual(next.artifactId, previous?.artifactId);
+    assert.notEqual(next.url, previous?.url);
+    assert.equal((await response.json()).url, next.url);
+    assert.equal(allocations.length, allocated + 1);
+    const restarted = await server.run(
+      Effect.flatMap(SessionSharing, (sharing) => sharing.share(server.repo, sessionId)).pipe(
+        Effect.provide(SessionSharingLive.pipe(Layer.provide(RegistryLive))),
+      ),
+    );
+    assert.equal(restarted.url, next.url);
+    assert.equal(allocations.length, allocated + 1);
+  }
+});
+
+test("failed replacement allocation/save preserves the old link; an uncertain new revision preserves the replacement", async () => {
+  const sessionId = "replacement-failure";
+  await register(sessionId);
+  assert.equal((await share(sessionId)).status, 200);
+  const previous = await destination(sessionId);
+  const uploaded = uploads.length;
+  metadataStatus = 404;
+  allocationHook = async () => {
+    throw new Error("allocation failed");
+  };
+  assert.equal((await share(sessionId)).status, 409);
+  allocationHook = async () => {};
+  assert.deepEqual(await destination(sessionId), previous);
+  assert.equal(uploads.length, uploaded);
+  const db = new DatabaseSync(join(server.root, "registry.db"));
+  try {
+    db.exec(
+      "CREATE TRIGGER reject_replacement BEFORE UPDATE OF radius_share ON sessions WHEN NEW.session_id = 'replacement-failure' BEGIN SELECT RAISE(ABORT, 'disk failure'); END;",
+    );
+    assert.equal((await share(sessionId)).status, 409);
+    assert.deepEqual(await destination(sessionId), previous);
+    assert.equal(uploads.length, uploaded);
+  } finally {
+    db.exec("DROP TRIGGER reject_replacement;");
+    db.close();
+  }
+  respond = async () => new Response("failed", { status: 503 });
+  assert.equal((await share(sessionId)).status, 409);
+  const replacement = await destination(sessionId);
+  assert.ok(replacement);
+  assert.notEqual(replacement.url, previous?.url);
+  const allocated = allocations.length;
+  metadataStatus = 200;
+  respond = normalPublish;
+  assert.equal((await (await share(sessionId)).json()).url, replacement.url);
+  assert.equal(allocations.length, allocated);
 });
 
 test("legacy history is migrated for export without rewriting Pi's file", async () => {
@@ -326,6 +404,8 @@ test("failed, mismatched and timed-out revisions retain the destination and are 
   const allocated = allocations.length;
   for (const response of [
     () => new Response("secret-transcript-response", { status: 503 }),
+    // A missing POST response is not a missing lookup: the next explicit share can recheck it.
+    () => new Response("removed during upload", { status: 404 }),
     () => success({ ...artifacts[0]!, canonical_url: "javascript:alert(1)" }),
     () =>
       success({

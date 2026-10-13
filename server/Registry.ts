@@ -226,7 +226,7 @@ export class Registry extends Context.Service<
       expected: SessionEntry,
       link: SessionPullRequestLink | null | undefined,
     ) => Effect.Effect<boolean, RegistryError>;
-    /** First allocation wins; a failed/stale save must never be followed by a transcript upload. */
+    /** Compare-and-set an allocation or missing-artifact replacement before any transcript upload. */
     readonly setSessionRadiusShare: (
       expected: SessionEntry,
       link: RadiusShareLink,
@@ -512,7 +512,7 @@ export const RegistryLive = Layer.effect(
               !entry ||
               entry.archived ||
               entry.createdAt !== expected.createdAt ||
-              entry.radiusShare
+              entry.radiusShare !== expected.radiusShare
             )
               return d;
             saved = true;

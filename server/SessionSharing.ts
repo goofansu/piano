@@ -1,7 +1,7 @@
 /** Explicit Radius publication, independent of MCP and model calls. Pi owns credentials and
  * saved history; Radius owns artifact contents and revisions. Only a durable destination is
  * retained in Piano's database. Save it before uploading any transcript so retries/restarts
- * can add a version without creating a second published URL. */
+ * can add a version at the same URL, replacing it only after Radius reports it missing. */
 import { DEFAULT_RADIUS_GATEWAY } from "@earendil-works/pi-ai/providers/radius-config";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Deferred, Effect, Layer, Schema } from "effect";
@@ -11,6 +11,9 @@ import { SessionHosts } from "./SessionHosts.ts";
 
 export class ShareError extends Data.TaggedError("ShareError")<{
   readonly detail: string;
+}> {}
+class RadiusRequestError extends Data.TaggedError("RadiusRequestError")<{
+  readonly status: number;
 }> {}
 const failure = (detail: string) => new ShareError({ detail });
 const uncertain = "Sharing could not be confirmed. Check Radius artifacts before sharing again.";
@@ -67,7 +70,7 @@ export const SessionSharingLive = Layer.effect(
       if (!response.ok) {
         // Provider bodies may echo tokens or transcript content. Never deliver or log them.
         await response.body?.cancel();
-        throw new Error("Radius request failed");
+        throw new RadiusRequestError({ status: response.status });
       }
       return response.json();
     };
@@ -145,6 +148,37 @@ export const SessionSharingLive = Layer.effect(
         return yield* failure(
           "This session was shared with a different Radius organization. Sign in to that organization to update the same link.",
         );
+      if (destination) {
+        const target = destination;
+        const existing = yield* Effect.tryPromise({
+          try: async (signal) => {
+            try {
+              return await artifact(
+                token,
+                `/v1/artifacts/${encodeURIComponent(target.artifactId)}`,
+                { method: "GET" },
+                signal,
+                target,
+              );
+            } catch (error) {
+              // Only an explicit missing/gone lookup authorizes replacing the saved link.
+              // Auth, malformed replies and transport failures must not allocate duplicates.
+              if (
+                error instanceof RadiusRequestError &&
+                (error.status === 404 || error.status === 410)
+              )
+                return undefined;
+              throw error;
+            }
+          },
+          catch: (error) => (error instanceof ShareError ? error : failure(unavailable)),
+        });
+        if (existing?.capabilities?.publish_revision === false)
+          return yield* failure(
+            "This Radius account cannot update the saved share. Sign in with an account that has access.",
+          );
+        if (!existing) destination = undefined;
+      }
       if (!destination) {
         // Allocate an empty artifact, not a transcript. If allocation or saving fails, any
         // orphan is empty. Once a transcript can reach Radius its destination is already durable.
@@ -175,23 +209,6 @@ export const SessionSharingLive = Layer.effect(
         if (!saved)
           return yield* failure(
             "The session changed while preparing its share. No transcript was uploaded; reopen Share to try again.",
-          );
-      } else {
-        const target = destination;
-        const existing = yield* Effect.tryPromise({
-          try: (signal) =>
-            artifact(
-              token,
-              `/v1/artifacts/${encodeURIComponent(target.artifactId)}`,
-              { method: "GET" },
-              signal,
-              target,
-            ),
-          catch: (error) => (error instanceof ShareError ? error : failure(unavailable)),
-        });
-        if (existing.capabilities?.publish_revision === false)
-          return yield* failure(
-            "This Radius account cannot update the saved share. Sign in with an account that has access.",
           );
       }
       // A deletion/archive while Radius was being read must not start a new upload.
