@@ -9,7 +9,7 @@ import {
   TargetIcon,
   XIcon,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import {
   SessionCommandMenuItem,
@@ -46,7 +46,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { folderCommands } from "@/lib/folderCommands";
 import type { GlobalCommand, GlobalCommandGroup } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import { createPreference, parseJson } from "@/lib/preference";
 import {
   assignProjectCommand,
   newProjectCommand,
@@ -56,11 +55,9 @@ import {
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { pickCommands, SESSION_ROW_COMMANDS, type SessionTarget } from "@/lib/sessionCommands";
 import { sessionProject } from "@/lib/sessionContext";
-import { projectKey } from "@/lib/sidebarGroups";
-import { sidebarSections } from "@/lib/sidebarSections";
+import type { SidebarSection } from "@/lib/sidebarList";
 import { useNavigation } from "@/lib/useNavigation";
-import { usePreference } from "@/lib/usePreference";
-import { useSidebarGroups } from "@/lib/useSidebarGroups";
+import { useSidebarList } from "@/lib/useSidebarList";
 import { useSidebarView } from "@/lib/useSidebarView";
 import { type AppState, sessionKey } from "@/store";
 
@@ -77,39 +74,16 @@ const groupRow = cn(
   row,
   "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover",
 );
-/** The Pinned group starts open and stays as the user leaves it, per browser. */
-const pinnedOpenPreference = createPreference<boolean>({
-  key: "piano.pinnedOpen",
-  decode: (raw) => parseJson(raw) !== false,
-});
 const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 export function Sidebar({ state }: Props) {
   const { select, openNew, openSettings, setPalette } = useNavigation();
   const { view } = useSidebarView();
-  const { openGroups, setOpen } = useSidebarGroups(state, view.groupBy);
-  const [pinnedOpen, togglePinned] = usePreference(pinnedOpenPreference);
-  const [dateNow, setDateNow] = useState(() => new Date());
-
-  // Refresh an idle date view at local midnight; focus also catches sleep and clock changes.
-  useEffect(() => {
-    if (view.groupBy !== "date") return;
-    let timer: ReturnType<typeof setTimeout>;
-    const refresh = () => {
-      clearTimeout(timer);
-      const now = new Date();
-      setDateNow(now);
-      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      timer = setTimeout(refresh, midnight.getTime() - now.getTime());
-    };
-    refresh();
-    window.addEventListener("focus", refresh);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("focus", refresh);
-    };
-  }, [view.groupBy]);
+  const {
+    list: { pinned, body },
+    toggle,
+  } = useSidebarList(state, view);
 
   // Rows already there when the list first loads appear at once, so a reload does not flash;
   // a row added later enters. Each row decides when it mounts (`useState(reveal)`).
@@ -119,14 +93,44 @@ export function Sidebar({ state }: Props) {
   }, [state.registryLoaded]);
   const reveal = () => (settled ? "reveal-row" : undefined);
 
-  const { pinned, body } = useMemo(
-    () => sidebarSections(state, view, dateNow),
-    [state, view, dateNow],
-  );
   const groupProps = { state, select, reveal };
-  const groups = (children: React.ReactNode) => (
-    <div className="flex flex-col gap-1">{children}</div>
-  );
+  const section = (s: SidebarSection) => {
+    const onOpenChange = (open: boolean) => toggle(s.key, open);
+    switch (s.kind) {
+      case "folder":
+        return (
+          <FolderGroup
+            key={s.key}
+            folder={s.folder}
+            sessions={s.sessions}
+            open={s.open}
+            onOpenChange={onOpenChange}
+            {...groupProps}
+          />
+        );
+      case "project":
+        return (
+          <ProjectGroup
+            key={s.key}
+            project={s.project}
+            sessions={s.sessions}
+            open={s.open}
+            onOpenChange={onOpenChange}
+            {...groupProps}
+          />
+        );
+      case "date":
+        return (
+          <section key={s.key} aria-label={s.label}>
+            {/* No standalone shadcn heading fits this noninteractive list section. */}
+            <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">{s.label}</h2>
+            <SessionList sessions={s.sessions} {...groupProps} />
+          </section>
+        );
+      case "list":
+        return <SessionList key={s.key} sessions={s.sessions} {...groupProps} />;
+    }
+  };
   const list = () => {
     switch (body?.kind) {
       case undefined:
@@ -141,49 +145,8 @@ export function Sidebar({ state }: Props) {
             </EmptyHeader>
           </Empty>
         );
-      case "folders":
-        return groups(
-          body.groups.map(({ folder, sessions }) => (
-            <FolderGroup
-              key={folder.path}
-              folder={folder}
-              sessions={sessions}
-              open={openGroups.has(folder.path)}
-              onOpenChange={(open) => setOpen(folder.path, open)}
-              {...groupProps}
-            />
-          )),
-        );
-      case "projects":
-        return groups(
-          body.groups.map((g) => {
-            const key = projectKey(g.project?.id ?? "");
-            return (
-              <ProjectGroup
-                key={key}
-                project={g.project}
-                sessions={g.sessions}
-                open={openGroups.has(key)}
-                onOpenChange={(open) => setOpen(key, open)}
-                {...groupProps}
-              />
-            );
-          }),
-        );
-      case "dates":
-        return groups(
-          body.groups.map((g) => (
-            <section key={g.label} aria-label={g.label}>
-              {/* No standalone shadcn heading fits this noninteractive list section. */}
-              <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">
-                {g.label}
-              </h2>
-              <SessionList sessions={g.sessions} {...groupProps} />
-            </section>
-          )),
-        );
-      case "list":
-        return <SessionList sessions={body.sessions} {...groupProps} />;
+      case "sections":
+        return <div className="flex flex-col gap-1">{body.sections.map(section)}</div>;
     }
   };
 
@@ -210,17 +173,17 @@ export function Sidebar({ state }: Props) {
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <nav className="relative px-3 pb-4" aria-label="Sessions">
-          {pinned.length > 0 && (
+          {pinned && (
             <Collapsible
-              open={pinnedOpen}
-              onOpenChange={togglePinned}
+              open={pinned.open}
+              onOpenChange={(open) => toggle(pinned.key, open)}
               aria-label="Pinned"
               className="mb-1"
             >
               <div className={groupRow}>
                 <CollapsibleTrigger asChild>
                   <button type="button" className={groupTrigger}>
-                    <Chevron open={pinnedOpen} />
+                    <Chevron open={pinned.open} />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">
                       Pinned
                     </span>
@@ -230,7 +193,7 @@ export function Sidebar({ state }: Props) {
               <CollapsibleContent className="disclosure-content">
                 <SessionRows
                   className="flex flex-col gap-1 py-1"
-                  sessions={pinned}
+                  sessions={pinned.sessions}
                   {...groupProps}
                 />
               </CollapsibleContent>
