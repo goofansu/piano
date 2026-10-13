@@ -69,7 +69,8 @@ const started = (id?: string) =>
     yield* (yield* Registry).addSession(cwd, sessionId);
     return yield* (yield* SessionHosts).open({ cwd, sessionId });
   });
-const commands = { _tag: "commands" } as const;
+/** An action whose result (an empty restored queue) reaches only its requester. */
+const restoreQueue = { _tag: "restore_queue" } as const;
 const resultFor = (sent: ServerMessage[]) =>
   sent
     .filter((m) => m._tag === "action_result")
@@ -117,10 +118,10 @@ test("acting for a selection that was replaced is refused as stale and reaches n
         b = yield* started();
       const { sessions, sent } = yield* client;
       yield* yield* sessions.select({ cwd, sessionId: a.spec.sessionId, selectionId: "A" });
-      yield* sessions.act("A", commands);
+      yield* sessions.act("A", restoreQueue);
       assert.deepEqual(resultFor(sent), [a.spec.sessionId]);
       yield* yield* sessions.select({ cwd, sessionId: b.spec.sessionId, selectionId: "B" });
-      const error = yield* Effect.flip(sessions.act("A", commands, {}));
+      const error = yield* Effect.flip(sessions.act("A", restoreQueue, {}));
       assert.deepEqual(
         [error._tag, error._tag === "ActRefused" && error.reason],
         ["ActRefused", "stale"],
@@ -130,7 +131,7 @@ test("acting for a selection that was replaced is refused as stale and reaches n
         [a.spec.sessionId],
         "the stale action reached neither session",
       );
-      yield* sessions.act("B", commands);
+      yield* sessions.act("B", restoreQueue);
       assert.deepEqual(resultFor(sent), [a.spec.sessionId, b.spec.sessionId]);
     }),
   );
@@ -184,7 +185,7 @@ test("INV-02/05: starting from a stopped selection attaches before the first pro
           m._tag === "session" && m.event._tag === "message_end" && m.event.message.role === "user",
       );
       assert.ok(seen._tag === "session" && seen.selectionId === "S");
-      yield* sessions.act("S", commands, {});
+      yield* sessions.act("S", restoreQueue, {});
       assert.deepEqual(resultFor(sent), [id]);
       assert.equal(
         (yield* hosts.list).filter((h) => h.sessionId === id).length,
@@ -251,7 +252,7 @@ test("a new-session selection shows what it creates only while it is still selec
       );
       assert.equal((yield* hosts.list).length, 2);
       // The shown session is the new selection's own.
-      yield* sessions.act("new", commands);
+      yield* sessions.act("new", restoreQueue);
       assert.deepEqual(resultFor(sent), [selected.sessionId]);
     }),
   );

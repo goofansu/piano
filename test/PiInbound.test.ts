@@ -74,8 +74,7 @@ for (const control of ["answer", "abort", "stop", "restore_queue"] as const) {
         } else yield* session.act(control === "answer" ? answer : { _tag: control });
         for (const fiber of pending) yield* Fiber.join(fiber);
         assert.equal((yield* session.state).closure, undefined);
-        const result = yield* session.act({ _tag: "commands" });
-        assert.equal(result?._tag, "commands", "capacity is released after work completes");
+        yield* session.commands; // capacity is released after work completes
         yield* Fiber.interrupt(heard);
       }).pipe(Effect.scoped, Effect.timeout("15 seconds")),
     );
@@ -113,7 +112,7 @@ test("INV-04: a readback stays ordinary work at Pi's command capacity", async ()
           yield* session.act({ _tag: "prompt", text: "capacity hold" }).pipe(Effect.forkChild),
         );
       yield* Deferred.await(full);
-      const read = yield* session.act({ _tag: "commands" }).pipe(Effect.result);
+      const read = yield* session.commands.pipe(Effect.result);
       assert.equal(read._tag, "Failure", "a readback must not borrow the control reserve");
       assert.equal(read.failure.reason, "rejected");
       assert.match(read.failure.detail, /Pi command capacity is full.*Nothing was sent/);
@@ -125,8 +124,7 @@ test("INV-04: a readback stays ordinary work at Pi's command capacity", async ()
         value: "release",
       });
       for (const fiber of pending) yield* Fiber.join(fiber);
-      const result = yield* session.act({ _tag: "commands" });
-      assert.equal(result?._tag, "commands", "capacity is released after work completes");
+      yield* session.commands; // capacity is released after work completes
       yield* Fiber.interrupt(heard);
     }).pipe(Effect.scoped, Effect.timeout("15 seconds")),
   );

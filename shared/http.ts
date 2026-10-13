@@ -240,13 +240,14 @@ export const Endpoints = {
     refused: 502,
     fallback: "Could not load commands.",
   }),
-  /** A running session answers from its own child; a stopped one is never started to answer (409). */
+  /** A running session answers from its own child; a stopped one is never started to answer. */
   sessionCommands: endpoint({
     method: "GET",
     path: "/api/session/commands",
     query: ["workspaceId", "sessionId"],
     response: Schema.Struct({ commands: Schema.Array(SlashCommand) }),
     noStore: true,
+    refused: 409,
     fallback: "Could not load commands.",
   }),
 

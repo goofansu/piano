@@ -152,15 +152,17 @@ for (const control of ["answer", "abort"] as const) {
         yield* yield* receive({
           _tag: "act",
           selectionId: "current",
-          action: { _tag: "commands" },
+          action: { _tag: "set_thinking_level", level: "high" },
         });
         for (;;) {
           const m = yield* Queue.take(queue);
           if (m._tag === "error") assert.fail(m.message);
-          if (m._tag === "action_result" && m.result._tag === "commands") {
-            assert.equal(m.sessionId, session.spec.sessionId);
+          if (
+            m._tag === "session" &&
+            m.event._tag === "state" &&
+            m.event.state.thinkingLevel === "high"
+          )
             break;
-          }
         }
       }),
     );

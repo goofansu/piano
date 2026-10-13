@@ -242,22 +242,9 @@ export const AppRouter = HttpRouter.use((router) =>
         return { commands: yield* facts.commands(body.cwd) };
       }),
     );
-    // INV-02: discovery asks the running child and never opens a saved session or a second writer.
     yield* serve(Endpoints.sessionCommands, ({ session }) =>
-      Effect.gen(function* () {
-        const running = yield* Effect.flatMap(SessionHosts, (hosts) =>
-          hosts.get(session.cwd, session.sessionId),
-        );
-        if (!running)
-          return yield* fail(409, "Session is no longer running. Reopen the suggestions.");
-        const result = yield* running.act({ _tag: "commands" });
-        if (result?._tag !== "commands") return yield* fail(502, "Command catalog unavailable.");
-        return { commands: result.commands };
-      }).pipe(
-        // Pi's own error text is not for people here; the user can only retry.
-        Effect.catchTag("PiSessionError", () =>
-          fail(502, "Could not load commands. Reopen the suggestions to retry."),
-        ),
+      Effect.flatMap(SessionHosts, (hosts) => hosts.commands(session.cwd, session.sessionId)).pipe(
+        Effect.map((commands) => ({ commands })),
       ),
     );
 

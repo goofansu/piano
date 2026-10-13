@@ -778,10 +778,30 @@ test("INV-01: a prompt or steer records activity on every path to a running sess
       assert.deepEqual(bumps, [id, id], "each records activity");
       yield* tick;
       yield* session.act({ _tag: "set_thinking_level", level: "low" });
-      yield* session.act({ _tag: "commands" });
-      assert.equal(bumps.length, 2, "other input is not activity");
+      yield* hosts.commands(cwd, id);
+      assert.equal(bumps.length, 2, "other input and queries are not activity");
     }),
     { fakePi: "activity" },
+  );
+});
+
+test("INV-02: a session's slash commands come from its running child; a stopped one is refused, not started", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const id = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
+      // The fake Pi lists `live-only` in a session and `probe-only` when started without one.
+      const names = (yield* hosts.commands(cwd, id)).map((c) => c.name);
+      assert.ok(names.includes("live-only") && !names.includes("probe-only"), names.join());
+      yield* hosts.release(cwd, id);
+      const refused = yield* hosts.commands(cwd, id).pipe(Effect.flip);
+      assert.deepEqual(
+        [refused._tag, refused.detail],
+        ["SessionCommandsError", "Session is no longer running. Reopen the suggestions."],
+      );
+      assert.deepEqual(yield* hosts.list, [], "no child was started to answer");
+    }),
+    { fakePi: "commands" },
   );
 });
 
