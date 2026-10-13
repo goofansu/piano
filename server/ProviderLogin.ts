@@ -10,7 +10,7 @@ import {
   ModelRuntime,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { Context, Effect, Layer } from "effect";
+import { Context, Data, Effect, Layer } from "effect";
 import type { OAuthProvider } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { agentDir } from "./PiEnv.ts";
@@ -36,10 +36,16 @@ export const ProviderLoginRuntime = Context.Reference<{
   }),
 });
 
+/** Pi's providers could not be read; `detail` is the text shown to the person. Pi's own error may
+ * name local files, so it never reaches the detail; the user can only retry. */
+export class ProvidersError extends Data.TaggedError("ProvidersError")<{
+  readonly detail: string;
+}> {}
+
 export class ProviderLogin extends Context.Service<
   ProviderLogin,
   {
-    readonly providers: Effect.Effect<readonly OAuthProvider[], Error>;
+    readonly providers: Effect.Effect<readonly OAuthProvider[], ProvidersError>;
     /** Sign-in to a provider, by its id. */
     readonly signIn: SignInLane;
     readonly signOut: (provider: string) => Effect.Effect<void, SignInError>;
@@ -132,14 +138,17 @@ export const ProviderLoginLive = Layer.effect(
       },
     });
     return ProviderLogin.of({
-      providers: Effect.tryPromise(async () => {
-        const runtime = await factory.create();
-        const oauth = await signedIn(runtime);
-        return runtime
-          .getProviders()
-          .filter((p) => p.auth.oauth && p.id !== "openai-codex")
-          .map((p) => ({ id: p.id, name: p.name, signedIn: oauth.has(p.id) }))
-          .sort((a, b) => a.id.localeCompare(b.id));
+      providers: Effect.tryPromise({
+        try: async () => {
+          const runtime = await factory.create();
+          const oauth = await signedIn(runtime);
+          return runtime
+            .getProviders()
+            .filter((p) => p.auth.oauth && p.id !== "openai-codex")
+            .map((p) => ({ id: p.id, name: p.name, signedIn: oauth.has(p.id) }))
+            .sort((a, b) => a.id.localeCompare(b.id));
+        },
+        catch: () => new ProvidersError({ detail: "Could not load OAuth providers." }),
       }),
       // The flow itself reports a provider without OAuth sign-in, so the attempt shows why.
       signIn: attempts.lane((provider) => Effect.succeed(source(provider))),

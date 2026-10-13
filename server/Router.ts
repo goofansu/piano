@@ -15,7 +15,6 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
-import { directoryPath } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup } from "./RadiusSetup.ts";
@@ -199,11 +198,7 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.listDirectory, ({ body }) => Directories.list(body.path ?? "~"));
 
     yield* serve(Endpoints.makeDirectory, ({ body }) =>
-      Effect.gen(function* () {
-        if (!body.path || directoryPath(body.path) === "/")
-          return yield* fail(400, Endpoints.makeDirectory.invalid);
-        return { path: yield* Directories.make(body.path) };
-      }),
+      Effect.map(Directories.make(body.path), (path) => ({ path })),
     );
 
     yield* serve(Endpoints.folders, () =>
@@ -232,11 +227,9 @@ export const AppRouter = HttpRouter.use((router) =>
     );
 
     yield* serve(Endpoints.slashCommands, ({ body }) =>
-      Effect.gen(function* () {
-        if (!body.cwd) return yield* fail(400, Endpoints.slashCommands.invalid);
-        const facts = yield* DirectoryFacts;
-        return { commands: yield* facts.commands(body.cwd) };
-      }),
+      Effect.flatMap(DirectoryFacts, (facts) => facts.commands(body.cwd)).pipe(
+        Effect.map((commands) => ({ commands })),
+      ),
     );
     yield* serve(Endpoints.sessionCommands, ({ session }) =>
       Effect.flatMap(SessionHosts, (hosts) => hosts.commands(session.cwd, session.sessionId)).pipe(
@@ -271,8 +264,6 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.oauthProviders, () =>
       Effect.flatMap(ProviderLogin, (login) => login.providers).pipe(
         Effect.map((providers) => ({ providers })),
-        // Pi's error may name local files; the user can only retry.
-        Effect.catch(() => fail(502, "Could not load OAuth providers.")),
       ),
     );
 

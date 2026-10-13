@@ -154,7 +154,7 @@ export const Endpoints = {
   makeDirectory: endpoint({
     method: "POST",
     path: "/api/mkdir",
-    body: Schema.Struct({ path: Schema.String }),
+    body: Schema.Struct({ path: Schema.NonEmptyString }),
     invalid: "path is required",
     response: Schema.Struct({ path: Schema.String }),
     refused: 400,
@@ -226,7 +226,7 @@ export const Endpoints = {
   slashCommands: endpoint({
     method: "POST",
     path: "/api/commands",
-    body: Schema.Struct({ cwd: Schema.String }),
+    body: Schema.Struct({ cwd: Schema.NonEmptyString }),
     invalid: "Directory is required.",
     response: Schema.Struct({ commands: Schema.Array(SlashCommand) }),
     refused: 502,
@@ -297,6 +297,7 @@ export const Endpoints = {
     path: "/api/oauth-providers",
     noStore: true,
     response: Schema.Struct({ providers: Schema.Array(OAuthProvider) }),
+    refused: 502,
     fallback: "Could not load providers.",
   }),
   providerLogout: endpoint({
