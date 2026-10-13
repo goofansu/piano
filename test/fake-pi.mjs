@@ -145,6 +145,7 @@ function handle(cmd) {
       }
       return respond(cmd, state());
     case "get_commands":
+      if (sessionId === "silent-commands") return; // a readback Pi never answers
       if (heldClear) {
         respond(heldClear.cmd, heldClear.restored);
         heldClear = undefined;
@@ -544,6 +545,7 @@ function handle(cmd) {
     }
     case "set_session_name":
       sessionName = cmd.name;
+      if (cmd.name === "withhold acknowledgement") return; // applied, never acknowledged
       return respond(cmd, {});
     default:
       return respond(cmd, undefined, `unknown ${cmd.type}`);

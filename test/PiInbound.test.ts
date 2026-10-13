@@ -20,7 +20,9 @@ const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>) =>
     ),
   );
 
-for (const control of ["answer", "abort", "stop"] as const) {
+// Each action whose policy is priority, sent while ordinary prompts hold every ordinary slot from
+// session admission down to Pi's command lane.
+for (const control of ["answer", "abort", "stop", "restore_queue"] as const) {
   test(`INV-03/04: ${control} stays live at ordinary Pi capacity; excess input is never sent`, async () => {
     await run(
       Effect.gen(function* () {
@@ -55,11 +57,18 @@ for (const control of ["answer", "abort", "stop"] as const) {
         assert.equal(rejected.reason, "rejected");
         assert.match(rejected.detail, /capacity.*Nothing was sent/);
         assert.ok(dialog);
-        yield* session.act(
-          control === "answer"
-            ? { _tag: "answer", id: dialog.id, generation: dialog.generation, value: "release" }
-            : { _tag: control },
-        );
+        const answer = {
+          _tag: "answer",
+          id: dialog.id,
+          generation: dialog.generation,
+          value: "release",
+        } as const;
+        if (control === "restore_queue") {
+          // Pi answers clear_queue past the held prompts; the dialog answer then releases them.
+          const restored = yield* session.act({ _tag: "restore_queue" });
+          assert.equal(restored?._tag, "queue_restored");
+          yield* session.act(answer);
+        } else yield* session.act(control === "answer" ? answer : { _tag: control });
         for (const fiber of pending) yield* Fiber.join(fiber);
         assert.equal((yield* session.state).closure, undefined);
         const result = yield* session.act({ _tag: "commands" });

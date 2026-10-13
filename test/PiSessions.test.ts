@@ -945,6 +945,37 @@ test("missing acknowledgement is delivery-uncertain, never retried; a late respo
   );
 });
 
+test("a timed-out readback leaves no pending work; a timed-out command does", async () => {
+  await run(
+    Effect.gen(function* () {
+      const t = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "silent-commands",
+      });
+      const read = yield* t.act({ _tag: "commands" }).pipe(Effect.flip);
+      assert.equal(read.reason, "timeout");
+      // Quiescence also waits for projected output, so poll rather than read once.
+      for (let n = 0; n < 200 && !(yield* t.state).isQuiescent; n++)
+        yield* Effect.sleep("10 millis");
+      assert.equal((yield* t.state).isQuiescent, true, "a query changes nothing in Pi");
+      const changed = yield* t
+        .act({ _tag: "set_name", name: "withhold acknowledgement" })
+        .pipe(Effect.flip);
+      assert.equal(changed.reason, "timeout");
+      assert.equal(
+        (yield* t.state).isQuiescent,
+        false,
+        "an unacknowledged command may still be running",
+      );
+    }).pipe(
+      // Open's own readbacks share this deadline; leave a loaded machine room to answer them.
+      Effect.provideService(PiRequestTimeoutMs, 1000),
+      Effect.timeout("10 seconds"),
+      Effect.scoped,
+    ),
+  );
+});
+
 test("submission acknowledgement outlives its disconnected caller", async () => {
   await run(
     Effect.gen(function* () {

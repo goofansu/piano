@@ -63,7 +63,7 @@ import {
   sessionArgs,
   stateFactsOf,
 } from "./PiRecords.ts";
-import { PiSessionError, PiTransport } from "./PiTransport.ts";
+import { type PiLane, PiSessionError, PiTransport } from "./PiTransport.ts";
 import { makeSessionDialogs } from "./SessionDialogs.ts";
 import { RunLedger } from "./Subagents.ts";
 
@@ -131,6 +131,7 @@ export interface SessionActionPolicy {
   /**
    * Admitted ahead of ordinary work when inbound capacity is saturated, so a
    * saturated session can still be answered, aborted, stopped or have its queue restored.
+   * The one decision of the control lane: the action, and the Pi commands it sends, ride it.
    */
   readonly priority: boolean;
   /**
@@ -224,6 +225,10 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
 };
 
 // ── Implementation ───────────────────────────────────────────────────────────
+
+/** The transport lane an action's Pi commands occupy, from its policy alone. */
+const laneOf = (tag: SessionAction["_tag"]): PiLane =>
+  sessionActionPolicy[tag].priority ? "control" : "ordinary";
 
 const commandOf = (translation: PiTranslation): Effect.Effect<PiCommand, PiSessionError> =>
   "rejected" in translation
@@ -350,7 +355,8 @@ const openSession = (spec: PiSessionSpec) =>
     const dialogs = makeSessionDialogs({
       generation,
       scope: sessionScope,
-      write: child.write,
+      // Every dialog response, an answer or a cancellation, rides the answer's lane.
+      write: (command) => child.write(command, { lane: laneOf("answer") }),
       publication: {
         locked: Semaphore.withPermits(lock, 1),
         publish,
@@ -674,6 +680,7 @@ const openSession = (spec: PiSessionSpec) =>
         const operation = sessionActionPolicy[action._tag].supersedes
           ? ++operationVersion
           : operationVersion;
+        const lane = laneOf(action._tag);
         switch (action._tag) {
           case "commands":
             return { _tag: "commands", commands: yield* child.read(piReadbacks.commands) };
@@ -697,7 +704,7 @@ const openSession = (spec: PiSessionSpec) =>
             // not the browser/caller that may disconnect while Pi handles input.
             const work = Effect.gen(function* () {
               yield* submit("submitting");
-              yield* child.request(command).pipe(
+              yield* child.request(command, { lane }).pipe(
                 Effect.flatMap((data) => {
                   const disposition = dispositionOf(data);
                   if (!disposition) {
@@ -742,7 +749,9 @@ const openSession = (spec: PiSessionSpec) =>
               };
               aborting = current;
               const open = yield* dialogsOf;
-              const native = yield* child.request(command, dispatched).pipe(Effect.forkChild);
+              const native = yield* child
+                .request(command, { lane, dispatched })
+                .pipe(Effect.forkChild);
               // Order abort before releasing an extension that may continue work.
               // This waits for the transport attempt, NOT Pi's acknowledgement.
               yield* Deferred.await(dispatched);
@@ -796,7 +805,7 @@ const openSession = (spec: PiSessionSpec) =>
           }
           case "restore_queue": {
             const messages = queuedMessagesOf(
-              yield* child.request(yield* commandOf(piCommandFor(action))),
+              yield* child.request(yield* commandOf(piCommandFor(action)), { lane }),
             );
             if (!messages)
               return yield* new PiSessionError({
@@ -806,13 +815,13 @@ const openSession = (spec: PiSessionSpec) =>
             return { _tag: "queue_restored", messages };
           }
           case "set_model":
-            yield* child.request(yield* commandOf(piCommandFor(action)));
+            yield* child.request(yield* commandOf(piCommandFor(action)), { lane });
             yield* refreshState(operation);
             yield* refreshStats;
             return;
           case "set_thinking_level":
           case "set_name":
-            yield* child.request(yield* commandOf(piCommandFor(action)));
+            yield* child.request(yield* commandOf(piCommandFor(action)), { lane });
             yield* refreshState(operation);
             return;
           case "answer":
