@@ -1,27 +1,17 @@
 /** Canonical execution ownership and the session lifecycle around it: create (folder, project
- * and reference before Pi starts), act (activity recorded before Pi sees it), rename, archive and
- * delete. Browser lifetimes never own acquisition or shutdown.
+ * and reference before Pi starts), open, rename, release, archive and delete. A SessionHost owns
+ * each running session; this module keys hosts, locks keys, and orders retirement. Browser
+ * lifetimes never own acquisition or shutdown.
  * SessionReferences finds a session's history and judges whether it can be opened; this module
  * keys ownership by the physical checkout it returns and calls it under that key's lock.
  */
 import { randomUUID } from "node:crypto";
-import {
-  Clock,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  PubSub,
-  Scope,
-  Semaphore,
-  Stream,
-} from "effect";
+import { Context, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
 import { isWorking } from "../shared/sessionProjection.ts";
 import type { HostInfo, SessionClosure, Snapshot, StartOptions } from "../shared/wire.ts";
-import { type PiSession, PiSessionError, PiSessions, sessionActionPolicy } from "./PiSessions.ts";
+import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
+import { makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
 import {
   checkoutMissing,
   type SessionLocation,
@@ -35,10 +25,6 @@ export interface OpenSpec {
   readonly model?: string;
   readonly thinkingLevel?: string;
   readonly name?: string;
-  /** Only a newly generated server ID may create a registry reference; `SessionHosts.create` generates one. */
-  readonly create?: boolean;
-  /** Initial registry membership for creation only; never passed to Pi or applied on reopen. */
-  readonly projectId?: string;
 }
 /** A new session in a directory, which becomes a folder if it is not registered yet. */
 export interface CreateSpec {
@@ -47,18 +33,16 @@ export interface CreateSpec {
   readonly projectId?: string;
   readonly options: StartOptions;
 }
-interface Host {
-  session: PiSession;
-  readonly scope: Scope.Closeable;
-  lastActivity: number;
-  actions: number;
-  closing: boolean;
+/** Only `create`'s fresh server-generated ID may create a registry reference. */
+interface Creation {
+  /** Initial registry membership; never passed to Pi or applied on reopen. */
+  readonly projectId?: string;
 }
 /** A session resolved under its ownership lock. `host` is live: a dead one has been stopped. */
 interface Resolved {
   readonly key: string;
   readonly ref: SessionLocation;
-  readonly host: Host | undefined;
+  readonly host: SessionHost | undefined;
 }
 const hostKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
@@ -108,11 +92,11 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
   Layer.effect(
     SessionHosts,
     Effect.gen(function* () {
-      const sessions = yield* PiSessions;
       const registry = yield* Registry;
       const references = yield* SessionReferences;
       const layerScope = yield* Effect.scope;
-      const hosts = new Map<string, Host>();
+      const hostServices = yield* Effect.context<PiSessions | Registry | SessionReferences>();
+      const hosts = new Map<string, SessionHost>();
       const locks = new Map<string, Semaphore.Semaphore>();
       // Runtime diagnostics, not a competing history. Retained across child reopen,
       // not across server restart; no execution records are written into registry.
@@ -163,52 +147,14 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         Effect.asVoid,
       );
 
-      // Pi owns the session name and statistics; the registry only mirrors them for the sidebar.
-      const mirror = (
-        cwd: string,
-        id: string,
-        facts: Parameters<typeof registry.mirrorSession>[2],
-      ) =>
-        registry
-          .mirrorSession(cwd, id, facts)
-          .pipe(
-            Effect.catchTag("RegistryError", (error) =>
-              Effect.logWarning(`Could not mirror the session into the registry: ${error.detail}`),
-            ),
-          );
-
-      const cacheStats = Effect.fn("SessionHosts.cacheStats")(function* (session: PiSession) {
-        const state = yield* session.state;
-        yield* mirror(session.spec.cwd, session.spec.sessionId, {
-          sessionName: state.sessionName,
-          stats:
-            state.statsUpdatedAt === undefined
-              ? undefined
-              : {
-                  context: state.context,
-                  cost: state.cost,
-                  tokens: state.tokens,
-                  statsUpdatedAt: state.statsUpdatedAt,
-                },
-        });
-      });
-
       // Caller holds this key's lock through actual process exit, not just close intent.
       const close = Effect.fn("SessionHosts.close")(function* (
         key: string,
-        host: Host,
+        host: SessionHost,
         closure?: SessionClosure,
       ) {
         if (hosts.get(key) !== host) return;
-        host.closing = true;
-        yield* Scope.close(host.scope, Exit.void);
-        // PiSessions announces how its child stopped, including whether a release interrupted work.
-        exits.set(
-          key,
-          closure ??
-            (yield* host.session.state).closure ?? { _tag: "released", detail: "Pi was released" },
-        );
-        yield* cacheStats(host.session);
+        exits.set(key, yield* host.close(closure));
         hosts.delete(key);
         yield* announce;
       }, Effect.uninterruptible);
@@ -241,7 +187,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           }),
         );
 
-      const open = (spec: OpenSpec) =>
+      const start = (spec: OpenSpec, creation?: Creation) =>
         resolved(
           spec.cwd,
           spec.sessionId,
@@ -250,131 +196,33 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               if (stopping) return yield* rejected("Piano is shutting down.");
               if (ref.checkoutMissing) return yield* checkoutMissing;
               if (existing) return existing.session;
-              const { create, projectId, ...piSpec } = spec;
-              if (create)
+              if (creation)
                 yield* registry
-                  .addSession(ref.cwd, spec.sessionId, spec.name, projectId)
+                  .addSession(ref.cwd, spec.sessionId, spec.name, creation.projectId)
                   .pipe(Effect.mapError((e) => rejected(e.detail)));
-              const scope = yield* Scope.make();
-              const raw = yield* sessions
-                .open({
-                  ...piSpec,
-                  cwd: ref.cwd,
-                  sessionFile: ref.file,
-                  lastKnownStats: ref.stats,
-                })
-                .pipe(
-                  Scope.provide(scope),
-                  Effect.onExit((exit) =>
-                    Exit.isFailure(exit) ? Scope.close(scope, Exit.void) : Effect.void,
+              const lock = yield* lockFor(key);
+              const host: SessionHost = yield* makeSessionHost({
+                spec: { ...spec, cwd: ref.cwd, sessionFile: ref.file, lastKnownStats: ref.stats },
+                lock,
+                onChange: announce,
+                // Retire only this incarnation. A late event must never close a replacement.
+                // The observer reaches this only after taking the lock this open holds.
+                onExit: (closure) =>
+                  owned(
+                    Semaphore.withPermits(lock, 1)(Effect.suspend(() => close(key, host, closure))),
                   ),
-                );
+              }).pipe(Scope.provide(layerScope), Effect.provideContext(hostServices));
+              hosts.set(key, host);
               if (stopping) {
-                yield* Scope.close(scope, Exit.void);
+                yield* close(key, host);
                 return yield* rejected("Piano is shutting down.");
               }
-              const host: Host = {
-                session: raw,
-                scope,
-                lastActivity: yield* Clock.currentTimeMillis,
-                actions: 0,
-                closing: false,
-              };
-              const session: PiSession = {
-                ...raw,
-                act: Effect.fn("SessionHosts.act")(function* (action) {
-                  if (host.closing)
-                    return yield* rejected(
-                      "Pi is closing. Wait for shutdown before reopening history.",
-                    );
-                  // Outside the ownership lock, like the work itself: the reference and its
-                  // project already exist, so activity is recorded before Pi sees the input.
-                  if (sessionActionPolicy[action._tag].activity)
-                    yield* registry
-                      .touchSession(
-                        raw.spec.cwd,
-                        raw.spec.sessionId,
-                        "text" in action ? action.text : undefined,
-                      )
-                      .pipe(Effect.mapError((e) => rejected(e.detail)));
-                  const lock = yield* lockFor(key);
-                  // Admit an action atomically against retirement, but don't hold the lock
-                  // while awaiting a command whose dialog another action must answer.
-                  const fiber = yield* Semaphore.withPermits(
-                    lock,
-                    1,
-                  )(
-                    Effect.gen(function* () {
-                      if (hosts.get(key) !== host || host.closing)
-                        return yield* rejected(
-                          "Pi is closing or has stopped. Refresh before sending new input.",
-                        );
-                      if (sessionActionPolicy[action._tag].needsCheckout)
-                        yield* references.requireCheckout(raw.spec.cwd);
-                      host.actions++;
-                      host.lastActivity = yield* Clock.currentTimeMillis;
-                      return yield* raw.act(action).pipe(
-                        Effect.ensuring(
-                          Effect.gen(function* () {
-                            host.actions--;
-                            host.lastActivity = yield* Clock.currentTimeMillis;
-                          }),
-                        ),
-                        Effect.forkIn(scope),
-                      );
-                    }),
-                  );
-                  return yield* Fiber.join(fiber);
-                }),
-              };
-              host.session = session;
-              hosts.set(key, host);
-              yield* cacheStats(session);
-              const ready = yield* Deferred.make<void>();
-              yield* session.events.pipe(
-                Stream.runForEach((event) =>
-                  Effect.gen(function* () {
-                    // Signal attachment before taking ownership's lock: open holds it until ready.
-                    if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
-                    if (event._tag === "state" || event._tag === "snapshot") {
-                      const lock = yield* lockFor(key);
-                      yield* Semaphore.withPermits(
-                        lock,
-                        1,
-                      )(
-                        Effect.gen(function* () {
-                          // Serialize against close/replacement and read current state, not an old
-                          // queued frame. A retired observer must never overwrite a newer cache.
-                          if (hosts.get(key) === host && !host.closing) yield* cacheStats(session);
-                        }),
-                      );
-                    }
-                    host.lastActivity = yield* Clock.currentTimeMillis;
-                    const closure =
-                      event._tag === "closed"
-                        ? event.closure
-                        : event._tag === "snapshot"
-                          ? event.snapshot.state.closure
-                          : undefined;
-                    if (closure) {
-                      // Retire only this incarnation. A late event must never close a replacement.
-                      const lock = yield* lockFor(key);
-                      yield* owned(Semaphore.withPermits(lock, 1)(close(key, host, closure)));
-                    } else if (event._tag === "state" || event._tag === "snapshot") yield* announce;
-                  }),
-                ),
-                // The host observer also recaptures after overflow; it must never lose exit
-                // ownership just because sidebar observation briefly fell behind.
-                Effect.retry({}),
-                Effect.ignore,
-                Effect.forkIn(layerScope),
-              );
-              yield* Deferred.await(ready);
               yield* announce;
-              return session;
+              return host.session;
             }),
-          spec.create,
+          creation !== undefined,
         );
+      const open = (spec: OpenSpec) => start(spec);
 
       const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
         // Registry writes run before the ownership lock; an unavailable project registers nothing.
@@ -383,15 +231,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         const { model, thinkingLevel, name } = spec.options;
         // Only a fresh server-generated ID may create a reference. Registration and initial
         // membership survive a disconnected requester, as acquisition is server-owned.
-        return yield* open({
-          cwd,
-          sessionId: randomUUID(),
-          create: true,
-          projectId: spec.projectId,
-          model,
-          thinkingLevel,
-          name,
-        });
+        return yield* start(
+          { cwd, sessionId: randomUUID(), model, thinkingLevel, name },
+          { projectId: spec.projectId },
+        );
       });
 
       const get = (cwd: string, id: string) =>
@@ -437,15 +280,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               1,
             )(
               Effect.gen(function* () {
-                if (
-                  hosts.get(key) !== host ||
-                  host.closing ||
-                  host.actions ||
-                  (yield* Clock.currentTimeMillis) - host.lastActivity < options.idleMs
-                )
-                  return;
-                if (!(yield* host.session.state).isQuiescent) return;
-                yield* close(key, host);
+                if (hosts.get(key) === host && (yield* host.idle(options.idleMs)))
+                  yield* close(key, host);
               }),
             );
           }
@@ -467,7 +303,9 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           resolved(cwd, id, ({ key, ref }) =>
             Effect.gen(function* () {
               const snapshot = yield* references.peek(ref);
-              yield* mirror(ref.cwd, id, { sessionName: snapshot.state.sessionName });
+              yield* mirrorSession(registry, ref.cwd, id, {
+                sessionName: snapshot.state.sessionName,
+              });
               return {
                 cwd: ref.cwd,
                 snapshot: { ...snapshot, state: { ...snapshot.state, closure: exits.get(key) } },
@@ -477,7 +315,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         exportBranch: (cwd, id) =>
           resolved(cwd, id, ({ ref, host }) =>
             Effect.gen(function* () {
-              if (host && (host.actions || !(yield* host.session.state).isQuiescent))
+              if (host && (yield* host.busy))
                 return yield* rejected("Wait for this session to finish before sharing.");
               return yield* references.exportBranch(ref);
             }),

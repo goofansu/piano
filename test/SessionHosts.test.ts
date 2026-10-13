@@ -144,6 +144,12 @@ const quiescent = (s: PiSession) =>
   Effect.gen(function* () {
     while (!(yield* s.state).isQuiescent) yield* Effect.yieldNow;
   });
+/** A registered session, running. */
+const registered = (sessionId: string) =>
+  Effect.gen(function* () {
+    yield* (yield* Registry).addSession(cwd, sessionId);
+    return yield* (yield* SessionHosts).open({ cwd, sessionId });
+  });
 const seed = (path: string, id: string, name: string) => {
   const file = join(root, "sessions", `${name}.jsonl`);
   writeFileSync(
@@ -424,31 +430,36 @@ test("INV-02: a disconnected opener cannot interrupt or duplicate server-owned a
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* registry.saveProject({ id: "abandoned", name: "Abandoned" });
+      // Registration precedes Pi, so the fresh ID is learned from the registry write.
+      const registered = yield* Deferred.make<string>();
+      yield* registry.onChange((_, after) => {
+        const entry = after.sessions.find((s) => s.projectId === "abandoned");
+        return entry ? Deferred.succeed(registered, entry.sessionId) : Effect.void;
+      });
       const abandoned = yield* hosts
-        .open({ cwd, sessionId: "abandoned-open", create: true, projectId: "launch" })
+        .create({ cwd, projectId: "abandoned", options: {} })
         .pipe(Effect.forkChild);
-      yield* waitAudit("abandoned-open", (rs) => rs.some((r) => r.command === "get_state"));
+      const id = yield* Deferred.await(registered);
+      yield* waitAudit(id, (rs) => rs.some((r) => r.command === "get_state"));
       yield* Fiber.interrupt(abandoned);
-      const entry = (yield* registry.get).sessions.find((s) => s.sessionId === "abandoned-open")!;
+      const entry = (yield* registry.get).sessions.find((s) => s.sessionId === id)!;
       assert.deepEqual(
         [entry.cwd, entry.projectId],
-        [cwd, "launch"],
+        [cwd, "abandoned"],
         "registration already includes membership while Pi is starting",
       );
-      const returning = yield* hosts
-        .open({ cwd: alias, sessionId: "abandoned-open", projectId: "ignored-on-reopen" })
-        .pipe(Effect.forkChild);
-      process.kill(records("abandoned-open")[0].pid, "SIGCONT");
+      const returning = yield* hosts.open({ cwd: alias, sessionId: id }).pipe(Effect.forkChild);
+      process.kill(records(id)[0].pid, "SIGCONT");
       const session = yield* Fiber.join(returning);
-      assert.equal((yield* session.state).sessionId, "abandoned-open");
-      assert.equal(records("abandoned-open").filter((r) => r.event === "spawn").length, 1);
+      assert.equal((yield* session.state).sessionId, id);
+      assert.equal(records(id).filter((r) => r.event === "spawn").length, 1);
       assert.equal("projectId" in session.spec, false);
       assert.equal(
-        (yield* registry.get).sessions.find((s) => s.sessionId === "abandoned-open")?.projectId,
-        "launch",
+        (yield* registry.get).sessions.find((s) => s.sessionId === id)?.projectId,
+        "abandoned",
       );
-      yield* hosts.release(cwd, "abandoned-open");
+      yield* hosts.release(cwd, id);
     }),
     { holdReadiness: true },
   );
@@ -460,14 +471,14 @@ test("INV-02: release holds ownership through blocked shutdown; a late close can
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
-      const first = yield* hosts.open({ cwd, sessionId: "reopen", create: true });
+      const first = yield* registered("reopen");
       const release = yield* hosts.release(cwd, "reopen").pipe(Effect.forkChild);
       yield* waitAudit("reopen", (rs) => rs.some((r) => r.event === "stdin-end"));
       const reopening = yield* hosts
         .open({ cwd: alias, sessionId: "reopen" })
         .pipe(Effect.forkChild);
       // Another checkout/session remains usable while this shutdown is blocked.
-      const independent = yield* hosts.open({ cwd, sessionId: "independent", create: true });
+      const independent = yield* registered("independent");
       assert.equal(records("reopen").filter((r) => r.event === "spawn").length, 1);
       assert.equal(
         (yield* first.act({ _tag: "prompt", text: "must not send" }).pipe(Effect.result))._tag,
@@ -501,7 +512,7 @@ for (const operation of ["archive", "delete"] as const)
     await run(
       Effect.gen(function* () {
         const hosts = yield* SessionHosts;
-        const s = yield* hosts.open({ cwd, sessionId: operation, create: true });
+        const s = yield* registered(operation);
         yield* prompt(s, "/hold");
         const file = (yield* s.state).sessionFile!;
         const retirement = yield* hosts[operation](cwd, operation).pipe(Effect.forkChild);
@@ -561,7 +572,7 @@ test("INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and
       const hosts = yield* SessionHosts;
       for (const mode of ["queue", "retry", "compact", "dialog", "uncertain"]) {
         const id = `idle-${mode}`;
-        const s = yield* hosts.open({ cwd, sessionId: id, create: true });
+        const s = yield* registered(id);
         if (mode === "uncertain") {
           const received = yield* observe(
             s,
@@ -580,7 +591,7 @@ test("INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and
         assert.equal(records(id).filter((r) => r.event === "exit").length, 0);
         yield* hosts.release(cwd, id);
       }
-      const s = yield* hosts.open({ cwd, sessionId: "actually-idle", create: true });
+      const s = yield* registered("actually-idle");
       yield* prompt(s, "/settle");
       yield* quiescent(s);
       yield* TestClock.adjust(2000);
@@ -591,13 +602,53 @@ test("INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and
   );
 });
 
+test("INV-02/03: idle release and branch export agree on busy; a retired host rejects input", {
+  timeout: 15000,
+}, async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const busy = /Wait for this session to finish/;
+      // An admitted action Pi has not answered keeps the session busy for both.
+      const held = yield* registered("busy-held");
+      const received = yield* observe(
+        held,
+        (e) => e._tag === "notice" && e.message.includes("without acknowledgement"),
+      );
+      const pending = yield* held
+        .act({ _tag: "prompt", text: "/uncertain" })
+        .pipe(Effect.forkChild);
+      yield* Fiber.join(received);
+      assert.match((yield* hosts.exportBranch(cwd, "busy-held").pipe(Effect.flip)).detail, busy);
+      yield* TestClock.adjust(500); // past the idle deadline, before the command times out
+      assert.equal(yield* hosts.get(cwd, "busy-held"), held, "in-flight input is not idle");
+      yield* hosts.release(cwd, "busy-held");
+      yield* Fiber.await(pending); // release interrupts the admitted action
+      // Settled with no action in flight: both see it as not busy.
+      const s = yield* registered("busy-settled");
+      yield* prompt(s, "/final");
+      yield* quiescent(s);
+      assert.match(yield* hosts.exportBranch(cwd, "busy-settled"), /Final busy-settled/);
+      yield* TestClock.adjust(2000);
+      yield* waitAudit("busy-settled", (rs) => rs.some((r) => r.event === "exit"));
+      assert.equal(yield* hosts.get(cwd, "busy-settled"), undefined);
+      assert.match(
+        (yield* s.act({ _tag: "prompt", text: "after retirement" }).pipe(Effect.flip)).detail,
+        /closing|stopped/,
+      );
+      assert.equal(records("busy-settled").filter((r) => r.text === "after retirement").length, 0);
+    }),
+    { idleMs: 100, clock: true, timeoutMs: 1000 },
+  );
+});
+
 test("INV-02/03: hung readbacks time out visibly without blocking a later dialog or exit; crash history never resumes work", {
   timeout: 15000,
 }, async () => {
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
-      const s = yield* hosts.open({ cwd, sessionId: "hung-inspection", create: true });
+      const s = yield* registered("hung-inspection");
       const silenced = yield* observe(
         s,
         (e) => e._tag === "notice" && e.message === "barrier /silence",

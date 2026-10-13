@@ -165,7 +165,8 @@ test("INV-01: a registry write made outside any browser request reaches the side
         hosts = yield* SessionHosts;
       yield* registry.addFolder(first);
       yield* view.fresh;
-      const session = yield* hosts.open({ cwd: first, sessionId: "pi-named", create: true });
+      yield* registry.addSession(first, "pi-named");
+      const session = yield* hosts.open({ cwd: first, sessionId: "pi-named" });
       // Pi renames the session (a /name command or an extension); SessionHosts mirrors the name into the registry.
       yield* session.act({ _tag: "set_name", name: "Named by Pi" });
       assert.equal(

@@ -40,6 +40,12 @@ const discover = (_folder: string) =>
     return { status: "non-git", observedAt: new Date().toISOString() };
   });
 
+/** A registered session, running. */
+const registered = (sessionId: string) =>
+  Effect.gen(function* () {
+    yield* (yield* Registry).addSession(cwd, sessionId);
+    return yield* (yield* SessionHosts).open({ cwd, sessionId });
+  });
 let databases = 0;
 const run = <A, E>(
   effect: Effect.Effect<
@@ -91,11 +97,7 @@ for (const control of ["answer", "abort"] as const) {
   test(`INV-02/04/05: client saturation rejects before selection changes and leaves ${control} live`, async () => {
     await run(
       Effect.gen(function* () {
-        const session = yield* (yield* SessionHosts).open({
-          cwd,
-          sessionId: `client-capacity-${control}`,
-          create: true,
-        });
+        const session = yield* registered(`client-capacity-${control}`);
         const queue = yield* Queue.unbounded<ServerMessage>();
         const { receive } = yield* makeClientDispatch({
           send: (m) => Queue.offer(queue, m).pipe(Effect.asVoid),
@@ -175,11 +177,7 @@ for (const control of ["answer", "abort"] as const) {
 test("INV-05: browser client recovers from dispatch saturation with a fresh explicit selection", async () => {
   await run(
     Effect.gen(function* () {
-      const session = yield* (yield* SessionHosts).open({
-        cwd,
-        sessionId: "browser-retry",
-        create: true,
-      });
+      const session = yield* registered("browser-retry");
       const requests: ClientMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
@@ -247,7 +245,7 @@ test("INV-05: an admitted selection failure settles the browser and permits expl
       assert.ok(browser.getState().selectionFailure?.message);
       assert.equal(requests.filter((m) => m._tag === "select").length, 1, "no automatic retry");
       // Remove the resolution failure, then retry the exact same reference explicitly.
-      yield* (yield* SessionHosts).open({ cwd, sessionId, create: true });
+      yield* registered(sessionId);
       browser.select(cwd, sessionId);
       const selections = requests.filter((m) => m._tag === "select");
       assert.equal(selections.length, 2);

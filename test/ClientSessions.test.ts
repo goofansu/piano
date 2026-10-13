@@ -65,8 +65,9 @@ const client = Effect.gen(function* () {
 });
 const started = (id?: string) =>
   Effect.gen(function* () {
-    const hosts = yield* SessionHosts;
-    return yield* hosts.open({ cwd, sessionId: id ?? crypto.randomUUID(), create: true });
+    const sessionId = id ?? crypto.randomUUID();
+    yield* (yield* Registry).addSession(cwd, sessionId);
+    return yield* (yield* SessionHosts).open({ cwd, sessionId });
   });
 const commands = { _tag: "commands" } as const;
 const resultFor = (sent: ServerMessage[]) =>
