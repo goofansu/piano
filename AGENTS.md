@@ -1,8 +1,8 @@
 # piano
 
 Web UI that starts and continues pi sessions across projects and worktrunk worktrees. One piano
-session is one pi session; each running session is one `pi --mode rpc` child. Server on Effect 4
-(keep Effect packages aligned and verify lockfile upgrades), client on React + shadcn/ui.
+session is one pi session; each running session is one `pi --mode rpc` child. Server on Effect 4,
+client on React + shadcn/ui.
 
 ## Words
 
@@ -110,6 +110,10 @@ the sole entry point.
 Keep filesystem paths out of HTTP URLs, so access logs and proxies never record them. Address a
 registered workspace or session by its ID (`?workspaceId=`, `/s/<sessionId>`); send an arbitrary
 path, such as a directory that is not registered yet, in a POST JSON body.
+
+## Effect
+
+Keep Effect packages on aligned versions, and verify lockfile upgrades.
 
 Before writing Effect code, read `node_modules/effect/AGENTS.md`: it is the installed version's own
 guide, so prefer it to web docs or memory. For idioms, read the installed source and examples in
