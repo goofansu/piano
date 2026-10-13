@@ -1,9 +1,11 @@
 /**
  * SessionDialogs: every path one dialog can end by (INV-04: a dialog has one terminal resolution).
- * Answer, cancel, deadline, abort and exit compete for one claim taken under the session's
- * snapshot lock; the response is written to Pi only after the claim, outside the lock, and no
- * transport acknowledgement reopens it. Internal to PiSessions, which owns the lock, publication
- * and the child; this module owns the claims, resolution reasons and their detail texts.
+ * It sets each dialog's host deadline from Pi's advertised timeout and the recovery policy, and
+ * publishes the dialog with it. Answer, cancel, deadline, abort and exit compete for one claim
+ * taken under the session's snapshot lock; the response is written to Pi only after the claim,
+ * outside the lock, and no transport acknowledgement reopens it. Internal to PiSessions, which
+ * owns the lock, publication and the child; this module owns the deadlines, claims, resolution
+ * reasons and their detail texts.
  */
 import { Clock, Deferred, Effect, Fiber, type Scope } from "effect";
 import type {
@@ -13,7 +15,12 @@ import type {
   SessionEvent,
   SessionState,
 } from "../shared/wire.ts";
-import { dialogAnswerFor, dialogCancellation, type PiCommand } from "./PiRecords.ts";
+import {
+  type DialogRequest,
+  dialogAnswerFor,
+  dialogCancellation,
+  type PiCommand,
+} from "./PiRecords.ts";
 import { PiSessionError } from "./PiTransport.ts";
 
 /** The session publication a dialog resolution goes through. */
@@ -32,6 +39,9 @@ export interface DialogPublication {
 
 export interface SessionDialogsOptions {
   readonly generation: string;
+  /** Bounds a dialog whose Pi timeout is absent or later: Pi does not report an extension
+   * cancelling its own dialog, so an unbounded one could block the session forever. */
+  readonly recoveryMs: number;
   /** Watchers and answers belong to the session, not to the requesting browser. */
   readonly scope: Scope.Scope;
   readonly write: (command: PiCommand) => Effect.Effect<void, PiSessionError>;
@@ -40,8 +50,13 @@ export interface SessionDialogsOptions {
   readonly abortInProgress: () => Deferred.Deferred<void> | undefined;
 }
 
+/** The reason a dialog ends at its deadline: Pi's own timeout, or Piano's recovery policy. */
+const lapsed = (dialog: Dialog) =>
+  dialog.deadlineKind === "pi-timeout" ? ("expired" as const) : ("recovery" as const);
+
 export const makeSessionDialogs = ({
   generation,
+  recoveryMs,
   scope,
   write,
   publication,
@@ -61,7 +76,7 @@ export const makeSessionDialogs = ({
         if (!(yield* publication.dialogs).some((open) => open.id === dialog.id)) return;
         const now = yield* Clock.currentTimeMillis;
         if ((reason === "answered" || reason === "cancelled") && now >= dialog.deadlineAt) {
-          reason = dialog.deadlineKind === "pi-timeout" ? "expired" : "recovery";
+          reason = lapsed(dialog);
         }
         const send = reason !== "expired" && reason !== "exited";
         const detail =
@@ -120,9 +135,21 @@ export const makeSessionDialogs = ({
     return final;
   });
 
-  /** Register a dialog's claim as it is published; callers hold the lock. */
-  const opened = Effect.fnUntraced(function* (dialog: Dialog) {
+  /**
+   * Open a dialog Pi requested: the earlier of Pi's timeout and host recovery becomes its
+   * deadline, its claim is registered and it is published. Callers hold the lock.
+   */
+  const opened = Effect.fnUntraced(function* (request: DialogRequest): Effect.fn.Return<Dialog> {
+    const { receivedAt, timeoutMs } = request;
+    const piTimeout = timeoutMs !== undefined && timeoutMs <= recoveryMs;
+    const dialog: Dialog = {
+      ...request,
+      deadlineAt: receivedAt + (piTimeout ? timeoutMs : recoveryMs),
+      deadlineKind: piTimeout ? "pi-timeout" : "host-recovery",
+    };
     closed.set(dialog.id, yield* Deferred.make<void>());
+    yield* publication.publish({ _tag: "dialog", dialog });
+    return dialog;
   });
 
   /** End an open dialog at its deadline, or once an abort in progress has been dispatched. */
@@ -137,10 +164,7 @@ export const makeSessionDialogs = ({
         yield* Effect.sleep(Math.max(0, dialog.deadlineAt - (yield* Clock.currentTimeMillis))).pipe(
           Effect.raceFirst(Deferred.await(signal)),
         );
-      yield* resolve(
-        dialog,
-        abort ? "aborted" : dialog.deadlineKind === "pi-timeout" ? "expired" : "recovery",
-      );
+      yield* resolve(dialog, abort ? "aborted" : lapsed(dialog));
     }).pipe(Effect.ignore, Effect.forkIn(scope));
   });
 
