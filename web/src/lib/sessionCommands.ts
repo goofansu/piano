@@ -5,6 +5,7 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
+import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import {
   isSelectedSession,
   sessionCheckoutMissing,
@@ -89,28 +90,39 @@ export interface SessionCommand {
   intent: SessionCommandIntent;
 }
 
-/** What the sidebar's session row menu offers, in its order. */
-export const SESSION_ROW_COMMANDS = [
-  "rename",
-  "pin",
-  "share",
-  "archive",
-  "delete",
-] as const satisfies readonly SessionCommandId[];
-/** What the session header menu offers, in order. */
-export const SESSION_HEADER_COMMANDS = [
-  "copy-all",
-  "changes",
-  "pull-request",
-  "display-everything",
-  "display-messages",
-] as const satisfies readonly SessionCommandId[];
+/** A session menu as a surface renders it: separated sections in order, then any display choice. */
+export interface SessionMenu {
+  /** The header's icon actions beside the session's details. */
+  details?: SessionCommand[];
+  /** Each section is one menu group; an empty one is left out. */
+  sections: SessionCommand[][];
+  /** The header's display radio. */
+  display?: RadioChoice<SessionCommand>;
+}
 
-export function pickCommands<Id extends SessionCommandId>(
+/** Each surface's sections, by command. The row puts archive beside delete, though only delete is destructive. */
+const MENU_SECTIONS = {
+  row: [["rename", "pin"], ["share"], ["archive", "delete"]],
+  header: [["changes", "pull-request"]],
+} as const satisfies Record<string, readonly (readonly SessionCommandId[])[]>;
+
+const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
+  commands.filter((c) => ids.includes(c.id));
+
+/** The sidebar row's or the session header's menu, from `sessionCommands`' descriptors. */
+export function sessionMenu(
   commands: readonly SessionCommand[],
-  ids: readonly Id[],
-): (SessionCommand & { id: Id })[] {
-  return ids.flatMap((id) => commands.filter((c): c is SessionCommand & { id: Id } => c.id === id));
+  surface: "row" | "header",
+): SessionMenu {
+  const sections = MENU_SECTIONS[surface]
+    .map((ids) => pick(commands, ids))
+    .filter((section) => section.length > 0);
+  if (surface === "row") return { sections };
+  return {
+    details: pick(commands, ["copy-all"]),
+    sections,
+    display: radioChoiceOf(commands.filter((c) => c.group === "display")),
+  };
 }
 
 /**

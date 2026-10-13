@@ -23,26 +23,27 @@ export interface FolderCommand {
 }
 
 /**
- * New session here, then Close. Enablement: New session here always (the New session page's send
- * waits for a connection); Close when connected, since it changes the registry.
+ * The row's button creates a session there; its menu closes the folder. Enablement: create always
+ * (the New session page's send waits for a connection); close when connected, since it changes the
+ * registry.
  */
 export function folderCommands(
   state: AppState,
   folder: Pick<FolderView, "path" | "name">,
-): FolderCommand[] {
-  return [
-    {
+): { create: FolderCommand; close: FolderCommand } {
+  return {
+    create: {
       id: "new-session",
       label: "New session here",
       ariaLabel: `New session in ${folder.name}`,
       enabled: true,
       intent: { kind: "new-session", cwd: folder.path },
     },
-    {
+    close: {
       id: "close",
       label: "Close",
       enabled: state.connected,
       intent: { kind: "close-folder", folder: { path: folder.path, name: folder.name } },
     },
-  ];
+  };
 }

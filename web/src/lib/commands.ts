@@ -15,6 +15,27 @@ import type { SidebarView } from "./sidebarView.ts";
 
 export type Command = GlobalCommand | ProjectCommand | FolderCommand | SessionCommand;
 
+/**
+ * A radio group as a menu renders it: the checked choice's id (the group's value), that choice's
+ * name for a submenu trigger, and every choice in order. With none checked both are empty.
+ */
+export interface RadioChoice<C> {
+  value: string;
+  currentLabel: string;
+  items: C[];
+}
+
+export function radioChoiceOf<
+  C extends { id: string; label: string; menuLabel?: string; checked?: boolean },
+>(items: C[]): RadioChoice<C> {
+  const current = items.find((c) => c.checked);
+  return {
+    value: current?.id ?? "",
+    currentLabel: current ? (current.menuLabel ?? current.label) : "",
+    items,
+  };
+}
+
 /** A form the host owns, which asks before anything changes; `answerForm` re-checks its rule. */
 export type CommandForm =
   | { kind: "rename-session"; target: SessionTarget }
