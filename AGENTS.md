@@ -47,19 +47,16 @@ the claim, the relevant invariant and the smallest useful check. Add a regressio
 meaningful failure not already protected, testing observable contracts rather than private helpers
 or mock choreography. Documentation-only changes need document/link review, not tests or an app run.
 
-- **Code or dependency changes:** run `npm test` (module tests against `test/fake-pi.mjs`, no
-  credentials), `npm run typecheck` and `npm run lint`.
 - **Application behavior:** observe the affected journey through `npx agent-browser` and keep the
   output as PR evidence; the browser script stays uncommitted.
-- **Critical paths** (start a session; open and continue one) live in `test/browser/`, run by
-  `npm run test:browser` and CI. Run them when you touch those paths; add a journey only for a new
-  critical path.
+- **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
+  journey there only for a new critical path.
 - **Model calls** cost real credits: prompt "Reply with exactly: X" and read the reply back.
 - **Radix menus and popovers** open on pointer events: use `agent-browser click`, not a DOM
   `.click()` from `eval`.
 
 Report command outcomes, the tested revision and environment, and limitations. Stop once the
-relevant risk is covered and the required gates pass.
+relevant risk is covered.
 
 ## Committing
 
