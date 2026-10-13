@@ -69,9 +69,9 @@ function firstLine(range: Range): DOMRect {
 }
 
 /**
- * Text selected inside `children` offers "Add to chat" just above it, which adds the selection to
- * `draftKey`'s quotes. The pill waits until the pointer is released, and keeps the selection while
- * it is pressed.
+ * Text selected with desktop input inside `children` offers "Add to chat" just above it, which
+ * adds the selection to `draftKey`'s quotes. Touch devices keep their native selection menu.
+ * The pill waits until the pointer is released, and keeps the selection while it is pressed.
  */
 export function AddToChat({
   draftKey,
@@ -86,6 +86,7 @@ export function AddToChat({
   const pill = useRef<HTMLDivElement>(null);
   const [range, setRange] = useState<Range | null>(null);
   useEffect(() => {
+    const touchInput = window.matchMedia("(pointer: coarse)");
     let pressed = false;
     let frame = 0;
     const read = () => {
@@ -93,7 +94,11 @@ export function AddToChat({
       frame = requestAnimationFrame(() => {
         const selection = document.getSelection();
         const selected =
-          !pressed && selection && selection.rangeCount > 0 && !selection.isCollapsed
+          !touchInput.matches &&
+          !pressed &&
+          selection &&
+          selection.rangeCount > 0 &&
+          !selection.isCollapsed
             ? selection.getRangeAt(0)
             : null;
         setRange(
@@ -114,12 +119,14 @@ export function AddToChat({
       pressed = false;
       read();
     };
+    touchInput.addEventListener("change", read);
     document.addEventListener("selectionchange", read);
     document.addEventListener("pointerdown", press, true);
     document.addEventListener("pointerup", release, true);
     document.addEventListener("pointercancel", release, true);
     return () => {
       cancelAnimationFrame(frame);
+      touchInput.removeEventListener("change", read);
       document.removeEventListener("selectionchange", read);
       document.removeEventListener("pointerdown", press, true);
       document.removeEventListener("pointerup", release, true);
