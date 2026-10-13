@@ -1,7 +1,7 @@
 # Development checks and policy
 
 How Piano's formatting, lint, CI and dependency policy work. For setup, see the
-[README](../README.md#develop-piano). For what to test, see
+[README](../README.md#develop). For what to test, see
 [evidence-based development and testing](testing.md).
 
 ## Formatting and lint

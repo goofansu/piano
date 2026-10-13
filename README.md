@@ -3,7 +3,7 @@
 Piano is a browser UI for [Pi](https://github.com/earendil-works/pi) sessions. It starts and
 continues sessions across your folders and their Git worktrees.
 
-## Use Piano
+## Use
 
 ### Requirements
 
@@ -37,14 +37,14 @@ Open **Settings** at the bottom of the sidebar, then click **Sign in** next to a
 **Providers**. Start a new session afterwards, because a running session keeps the models it started
 with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-in.md).
 
-### Configure Piano
+### Configure
 
 Piano reads environment variables such as `PORT`, `HOST`, `PIANO_DB_PATH` and
 `PIANO_ALLOWED_ORIGINS`. Its registry lives in `~/.local/share/piano/piano.db` by default. For every
 variable, the origin policy, and backup steps, see
 [configuration and storage](docs/configuration.md).
 
-## Develop Piano
+## Develop
 
 1. Install dependencies. `npm install` also installs the pre-commit hook that runs lint.
 2. Start the backend and the UI together:

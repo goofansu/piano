@@ -113,8 +113,8 @@ adapter, Piano owns workspace and integration policy.
 
 ## README
 
-`README.md` holds two guides and nothing else: **Use Piano**, how a user sets up and uses Piano,
-and **Develop Piano**, how a developer sets up the project and starts developing. Put reference and
+`README.md` holds two guides and nothing else: **Use**, how a user sets up and uses Piano,
+and **Develop**, how a developer sets up the project and starts developing. Put reference and
 explanation in `docs/` and link to it from the guide that needs it.
 
 ## Deploy
