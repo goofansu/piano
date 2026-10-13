@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
+import { ProviderLoginRuntime } from "../server/ProviderLogin.ts";
 import { Registry, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import {
@@ -65,72 +66,88 @@ const register = async (sessionId: string) => {
 before(async () => {
   server = await startRouter(
     "piano-sharing-",
-    Layer.succeed(SharingEnvironment, {
-      runtime: async () => ({
-        listCredentials: async () => (signedIn ? [{ providerId: "radius", type: "oauth" }] : []),
-        getAuth: async () => {
-          if (authFails) throw new Error("secret-token-response");
-          return { auth: { headers: { Authorization: "Bearer test-credential" } } };
-        },
+    Layer.mergeAll(
+      // Pi's credentials, read only through ProviderLogin. An API key never authorizes sharing.
+      Layer.succeed(ProviderLoginRuntime, {
+        create: async () => ({
+          getProviders: () => [],
+          listCredentials: async () => [
+            { providerId: "radius", type: "api_key" },
+            ...(signedIn ? [{ providerId: "radius", type: "oauth" } as const] : []),
+          ],
+          getAuth: async () => {
+            if (authFails) throw new Error("secret-token-response");
+            return { auth: { headers: { Authorization: "Bearer test-credential" } } };
+          },
+          login: async () => {
+            throw new Error("unused");
+          },
+          logout: async () => {
+            throw new Error("unused");
+          },
+        }),
+        deviceId: () => "unused",
       }),
-      fetch: async (input, init) => {
-        const url = new URL(String(input));
-        calls.push(`${init!.method} ${url.pathname}`);
-        assert.equal(url.origin, "https://radius.pi.dev");
-        assert.equal(init!.redirect, "error");
-        assert.equal(new Headers(init!.headers).get("authorization"), "Bearer test-credential");
-        if (url.pathname === "/v1/organization/settings")
-          return Response.json({ organization: { id: organization } });
-        if (url.pathname === "/v1/artifacts") {
-          assert.equal(init!.method, "POST");
-          assert.equal(new Headers(init!.headers).get("content-type"), "application/json");
-          const body = JSON.parse(String(init!.body));
-          assert.match(body.title, /^Pi session .+/);
-          assert.equal(body.visibility, "organization");
-          allocations.push(init!);
-          const artifact = {
-            id: `artifact-${artifacts.length + 1}`,
-            canonical_url: `https://radius.earendil.com/artifacts/artifact-${artifacts.length + 1}`,
-            expires_at: "2027-01-01T00:00:00Z",
-            visibility: "organization",
-            latest_version: 0,
-          };
-          artifacts.push(artifact);
-          await allocationHook();
-          return success(artifact);
-        }
-        const match = url.pathname.match(/^\/v1\/artifacts\/([^/]+)(\/versions)?$/)!;
-        assert.ok(match, url.pathname);
-        const artifact = artifacts.find((a) => a.id === match[1])!;
-        assert.ok(artifact, "every request targets an allocated artifact");
-        if (!match[2]) {
-          assert.equal(init!.method, "GET");
-          if (metadataReply) return metadataReply();
-          return metadataStatus === 200
-            ? success({ ...artifact, visibility })
-            : new Response("private response", { status: metadataStatus });
-        }
-        // The external boundary observes that the destination is durable BEFORE content arrives.
-        const header = JSON.parse(String(init!.body).split("\n")[0]!);
-        assert.equal(url.searchParams.get("title"), `Pi session ${header.id}`);
-        const db = new DatabaseSync(join(server.root, "registry.db"), { readOnly: true });
-        try {
-          const row = db
-            .prepare("SELECT radius_share FROM sessions WHERE session_id = ?")
-            .get(header.id)!;
-          assert.deepEqual(JSON.parse(row.radius_share as string), {
-            organizationId: organization,
-            artifactId: artifact.id,
-            url: artifact.canonical_url,
-          });
-        } finally {
-          db.close();
-        }
-        uploads.push({ url: String(input), init: init! });
-        return respond(init!.signal!, artifact);
-      },
-      timeoutMs: 500,
-    }),
+      Layer.succeed(SharingEnvironment, {
+        fetch: async (input, init) => {
+          const url = new URL(String(input));
+          calls.push(`${init!.method} ${url.pathname}`);
+          assert.equal(url.origin, "https://radius.pi.dev");
+          assert.equal(init!.redirect, "error");
+          assert.equal(new Headers(init!.headers).get("authorization"), "Bearer test-credential");
+          if (url.pathname === "/v1/organization/settings")
+            return Response.json({ organization: { id: organization } });
+          if (url.pathname === "/v1/artifacts") {
+            assert.equal(init!.method, "POST");
+            assert.equal(new Headers(init!.headers).get("content-type"), "application/json");
+            const body = JSON.parse(String(init!.body));
+            assert.match(body.title, /^Pi session .+/);
+            assert.equal(body.visibility, "organization");
+            allocations.push(init!);
+            const artifact = {
+              id: `artifact-${artifacts.length + 1}`,
+              canonical_url: `https://radius.earendil.com/artifacts/artifact-${artifacts.length + 1}`,
+              expires_at: "2027-01-01T00:00:00Z",
+              visibility: "organization",
+              latest_version: 0,
+            };
+            artifacts.push(artifact);
+            await allocationHook();
+            return success(artifact);
+          }
+          const match = url.pathname.match(/^\/v1\/artifacts\/([^/]+)(\/versions)?$/)!;
+          assert.ok(match, url.pathname);
+          const artifact = artifacts.find((a) => a.id === match[1])!;
+          assert.ok(artifact, "every request targets an allocated artifact");
+          if (!match[2]) {
+            assert.equal(init!.method, "GET");
+            if (metadataReply) return metadataReply();
+            return metadataStatus === 200
+              ? success({ ...artifact, visibility })
+              : new Response("private response", { status: metadataStatus });
+          }
+          // The external boundary observes that the destination is durable BEFORE content arrives.
+          const header = JSON.parse(String(init!.body).split("\n")[0]!);
+          assert.equal(url.searchParams.get("title"), `Pi session ${header.id}`);
+          const db = new DatabaseSync(join(server.root, "registry.db"), { readOnly: true });
+          try {
+            const row = db
+              .prepare("SELECT radius_share FROM sessions WHERE session_id = ?")
+              .get(header.id)!;
+            assert.deepEqual(JSON.parse(row.radius_share as string), {
+              organizationId: organization,
+              artifactId: artifact.id,
+              url: artifact.canonical_url,
+            });
+          } finally {
+            db.close();
+          }
+          uploads.push({ url: String(input), init: init! });
+          return respond(init!.signal!, artifact);
+        },
+        timeoutMs: 500,
+      }),
+    ),
   );
   file = join(server.root, "sessions", `${id}.jsonl`);
   const entry = (entryId: string, parentId: string | null, text: string) => ({

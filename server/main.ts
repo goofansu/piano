@@ -60,13 +60,13 @@ const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)))
 
 const Services = Layer.mergeAll(
   PiSettingsLive,
-  ProviderLoginLive,
   RadiusSetupLive,
   McpSetupLive,
   WorkspaceRevisionsLive,
   WorkspaceChangesLive,
   SessionPullRequestsLive,
-  SessionSharingLive,
+  // Sharing reads the Radius credential through the one ProviderLogin that the routes use.
+  SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
 ).pipe(
   Layer.provideMerge(DirectoryFactsLive),
   Layer.provideMerge(SessionHostsLive({ idleMs: IDLE_MS })),
