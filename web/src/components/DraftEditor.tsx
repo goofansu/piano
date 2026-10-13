@@ -1,6 +1,6 @@
 import type { Attachment, ModelCatalog, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   AttachButton,
   AttachmentDraftView,
@@ -8,16 +8,17 @@ import {
   useAttachments,
 } from "@/components/Attachments";
 import { ModelSelect } from "@/components/ModelSelect";
+import { QuoteChips, useQuotes } from "@/components/Quotes";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
 import { useDraftStore } from "@/lib/draftStore";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
-import type { DraftKey } from "@/lib/messageDraft";
+import { type DraftKey, withQuotes } from "@/lib/messageDraft";
 import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
 
-/** What a send takes from the draft: its text trimmed and its images. */
+/** What a send takes from the draft: its quotes and trimmed text as one message, and its images. */
 export interface DraftMessage {
   text: string;
   attachments: readonly Attachment[];
@@ -32,6 +33,9 @@ export function useDraftEditor(key: DraftKey | null) {
   const { drafts, change, append: appendTo } = useDraftStore();
   const text = (key && drafts[key]) || "";
   const attachments = useAttachments(key);
+  const quotes = useQuotes(key);
+  /** The text a send delivers; send rules read this, not `text`, so quotes alone can be sent. */
+  const message = withQuotes(quotes.items, text.trim());
   const ref = useRef<HTMLTextAreaElement>(null);
   const setText = (value: string) => {
     if (key) change(key, value);
@@ -45,11 +49,12 @@ export function useDraftEditor(key: DraftKey | null) {
   );
   /** Hands the draft to `deliver`, then empties it. Callers decide beforehand whether it may send. */
   const submit = (deliver: (message: DraftMessage) => void) => {
-    deliver({ text: text.trim(), attachments: attachments.items });
+    deliver({ text: message, attachments: attachments.items });
     setText("");
     attachments.clear();
+    quotes.clear();
   };
-  return { key, text, attachments, ref, setText, append, submit };
+  return { key, text, message, attachments, quotes, ref, setText, append, submit };
 }
 export type DraftEditorState = ReturnType<typeof useDraftEditor>;
 
@@ -104,10 +109,16 @@ export function DraftEditor({
   above,
   actions,
 }: Props) {
-  const { ref, text, attachments } = editor;
+  const { ref, text, attachments, quotes } = editor;
   const [modelOpen, setModelOpen] = useState(false);
   useAutoGrow(ref, text, maxHeight);
   useTypeToFocus(ref, editor.append, !disabled);
+  // A quote added from the transcript leaves the reader ready to type about it.
+  const quoteCount = useRef(quotes.items.length);
+  useEffect(() => {
+    if (quotes.items.length > quoteCount.current && !disabled) ref.current?.focus();
+    quoteCount.current = quotes.items.length;
+  }, [quotes.items.length, disabled, ref]);
   // Mod+/ opens the picker exactly when its trigger could.
   const pickerAvailable = modelPickerEnabled({
     disabled,
@@ -120,6 +131,7 @@ export function DraftEditor({
       {...attachmentEvents(attachments, attachmentsDisabled)}
     >
       <AttachmentDraftView draft={attachments} disabled={attachmentsDisabled} />
+      <QuoteChips draft={quotes} disabled={disabled} />
       {above}
       <SlashTextarea
         ref={ref}
@@ -138,6 +150,10 @@ export function DraftEditor({
           } else if (isSendKey(e)) {
             e.preventDefault();
             onSend(e.altKey);
+          } else if (e.key === "Backspace" && !text && quotes.items.length) {
+            // An empty draft's Backspace takes back the last quote, as in a token field.
+            e.preventDefault();
+            quotes.remove(quotes.items.length - 1);
           } else onKeyDown?.(e);
         }}
       />

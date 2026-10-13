@@ -228,7 +228,8 @@ function TranscriptRowView({ row }: { row: TranscriptRow }) {
                 )
               }
             >
-              <span className="sr-only">Pi said</span>
+              {/* Labels and controls are select-none, so copied or quoted text is only what was said. */}
+              <span className="sr-only select-none">Pi said</span>
               <Markdown text={text} className={cn("prose-chat", streaming && "streaming-caret")} />
               {row.jump && <CopyResponse text={text} />}
             </Row>
@@ -297,7 +298,7 @@ function CopyResponse({ text }: { text: string }) {
       size="xs"
       aria-label={copied ? "Response copied" : "Copy response"}
       className={cn(
-        "mt-2 -ml-2 text-ink-3 opacity-0 transition-opacity group-hover/reply:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
+        "mt-2 -ml-2 text-ink-3 opacity-0 transition-opacity select-none group-hover/reply:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
         copied && "text-brand opacity-100",
       )}
       onClick={async () => {
@@ -363,7 +364,7 @@ function UserMessage({
       }
     >
       <Row glyph={<span className="font-semibold text-brand">›</span>}>
-        <span className="sr-only">You said</span>
+        <span className="sr-only select-none">You said</span>
         {skill && <SkillExpansion skill={skill} />}
         {(text || !skill) && (
           <div

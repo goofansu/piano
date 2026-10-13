@@ -6,8 +6,10 @@ import {
   hasContent,
   type ImageCandidate,
   imageDrafts,
+  quoteDrafts,
   sendable,
   sessionDraftKey,
+  withQuotes,
 } from "../web/src/lib/messageDraft.ts";
 
 // Limits and formats from docs/image-attachments.md, written out rather than imported.
@@ -162,4 +164,35 @@ test("a draft is sendable with visible text or an image, and not while images ar
   );
   assert.equal(sendable({ text: "hi", images: { items: [], busy: true } }), false);
   assert.equal(hasContent({ text: "", images: { items: [held(1)] } }), true);
+});
+
+test("quotes from the transcript go before the typed text, one blockquote each, line breaks kept", () => {
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "quotes" });
+  quoteDrafts.add(key, "  the parser skips blank lines\r\n");
+  quoteDrafts.add(key, "Alpha by Ann   \nBeta by Ben\n\n\n\nGamma by Cy");
+  quoteDrafts.add(key, "the parser skips blank lines");
+  quoteDrafts.add(key, " \n ");
+  quoteDrafts.add(key, "the lexer is fine");
+  assert.equal(
+    withQuotes(quoteDrafts.get(key), "Why?"),
+    [
+      "> the parser skips blank lines",
+      "> Alpha by Ann\n> Beta by Ben\n>\n> Gamma by Cy",
+      "> the lexer is fine",
+      "Why?",
+    ].join("\n\n"),
+    "a repeated or blank selection adds no quote",
+  );
+  quoteDrafts.remove(key, 1);
+  assert.equal(
+    withQuotes(quoteDrafts.get(key), ""),
+    "> the parser skips blank lines\n\n> the lexer is fine",
+  );
+  assert.equal(
+    sendable({ text: withQuotes(quoteDrafts.get(key), ""), images: { items: [], busy: false } }),
+    true,
+    "quotes alone can be sent",
+  );
+  quoteDrafts.clear(key);
+  assert.equal(withQuotes(quoteDrafts.get(key), "hi"), "hi");
 });

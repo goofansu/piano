@@ -92,7 +92,7 @@ export function Composer({
     writeStorage(QUEUE_MODE_KEY, mode);
   };
   const control = composerControl({
-    text: editor.text,
+    text: editor.message,
     images: editor.attachments,
     disabled: disabled || actionsDisabled,
     streaming,

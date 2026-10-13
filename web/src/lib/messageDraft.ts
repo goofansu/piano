@@ -1,7 +1,8 @@
 /**
  * A message the user has not sent yet, on the New page or for one session. Its text lives in the
  * store and its images in browser memory, both under one draft key; this module decides the keys,
- * which images a draft accepts, how text is appended as a paragraph and when a draft can be sent.
+ * which images a draft accepts, how text is appended as a paragraph, how quotes from the transcript
+ * join the message and when a draft can be sent.
  * Image bytes never go to localStorage or the registry (INV-01). Nothing here depends on React.
  */
 import type { Attachment } from "@shared/wire";
@@ -151,5 +152,69 @@ export const imageDrafts = {
   },
   clear(key: DraftKey | null) {
     if (key && !imageDrafts.get(key).busy) put(key, EMPTY);
+  },
+};
+
+/**
+ * Text selected in the transcript as a quote: line breaks kept (list items stay separate lines),
+ * runs of blank lines folded to one, trailing spaces and the ends trimmed. Empty when nothing is left.
+ */
+export const quoteText = (selected: string) =>
+  selected
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+/** The message a draft sends: each quote as its own Markdown blockquote, in order, then the typed text. */
+export const withQuotes = (quotes: readonly string[], text: string) =>
+  [
+    ...quotes.map((quote) =>
+      quote
+        .split("\n")
+        .map((line) => (line ? `> ${line}` : ">"))
+        .join("\n"),
+    ),
+    text,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+const NO_QUOTES: readonly string[] = [];
+const quotes = new Map<DraftKey, readonly string[]>();
+const quoteListeners = new Set<() => void>();
+function putQuotes(key: DraftKey, value: readonly string[]) {
+  if (value.length) quotes.set(key, value);
+  else quotes.delete(key);
+  for (const notify of quoteListeners) notify();
+}
+
+/** Each draft's quotes, kept in memory for this page load only, like its images. */
+export const quoteDrafts = {
+  get: (key: DraftKey | null): readonly string[] => (key && quotes.get(key)) || NO_QUOTES,
+  subscribe(notify: () => void) {
+    quoteListeners.add(notify);
+    return () => {
+      quoteListeners.delete(notify);
+    };
+  },
+  /** Adds `selected` as a quote; empty text and a quote the draft already holds are ignored. */
+  add(key: DraftKey | null, selected: string) {
+    const quote = quoteText(selected);
+    const current = quoteDrafts.get(key);
+    if (key && quote && !current.includes(quote)) putQuotes(key, [...current, quote]);
+  },
+  remove(key: DraftKey | null, index: number) {
+    if (key)
+      putQuotes(
+        key,
+        quoteDrafts.get(key).filter((_, i) => i !== index),
+      );
+  },
+  clear(key: DraftKey | null) {
+    if (key) putQuotes(key, NO_QUOTES);
   },
 };
