@@ -1,0 +1,137 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { SessionState, WorktreeView } from "../shared/wire.ts";
+import { commandPalette, RECENT_SESSION_LIMIT } from "../web/src/lib/commandPalette.ts";
+import { type GlobalCommandContext, globalCommands } from "../web/src/lib/globalCommands.ts";
+import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
+import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
+
+const worktree = (path: string, branch: string, root: boolean): WorktreeView => ({
+  workspace: { id: `ws:${path}`, folder: "/repo", path },
+  trust: { required: false, trusted: false },
+  branch,
+  path,
+  root,
+  status: "current",
+});
+// Ten sessions, s0 the oldest; s9 runs in a worktree and belongs to a project.
+const references = Array.from({ length: 10 }, (_, i) =>
+  sessionReference(i === 9 ? "/work/repo.feature" : "/repo", `s${i}`, {
+    title: i === 3 ? undefined : `Session ${i}`,
+    branch: i === 9 ? "feature" : "main",
+    ...(i === 9 ? { projectId: "launch" } : {}),
+    createdAt: `2026-10-0${1 + Math.floor(i / 2)}T0${i % 2}:00:00Z`,
+  }),
+);
+const home: AppState = {
+  ...initialState,
+  connected: true,
+  folders: [
+    {
+      path: "/repo",
+      name: "repo",
+      worktrees: [
+        worktree("/repo", "main", true),
+        worktree("/work/repo.feature", "feature", false),
+      ],
+      discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
+    },
+  ],
+  projects: [{ id: "launch", name: "Launch", archived: false }],
+  sessionReferences: references,
+};
+const selected: SessionView = {
+  cwd: "/repo",
+  sessionId: "s1",
+  hosted: true,
+  cursor: null,
+  state: { sessionId: "s1" } as SessionState,
+  messages: [],
+  dialogs: [],
+};
+const inSession: AppState = { ...home, view: { kind: "session" }, session: selected };
+const ctx: GlobalCommandContext = {
+  settingsOpen: false,
+  view: { groupBy: "date", sortBy: "recent" },
+  theme: "dark",
+};
+/** The palette as the host feeds it: global commands from the shared context, the selected session's commands. */
+const palette = (state: AppState, search = "", c = ctx) =>
+  commandPalette(state, {
+    search,
+    globalCommands: globalCommands(state, c),
+    sessionCommands: sessionCommands(state),
+  });
+const headings = (state: AppState, search = "") => palette(state, search).map((g) => g.heading);
+const sessionIds = (state: AppState, search = "") => {
+  const group = palette(state, search).find((g) => g.id === "sessions");
+  return group?.id === "sessions" ? group.rows.map((r) => r.session.sessionId) : [];
+};
+
+test("before a search the palette offers the most recent sessions; a search reaches every one", () => {
+  assert.deepEqual(
+    sessionIds(home),
+    ["s9", "s8", "s7", "s6", "s5", "s4", "s3", "s2"],
+    "newest first, at most the recent limit",
+  );
+  assert.equal(RECENT_SESSION_LIMIT, 8);
+  assert.equal(
+    sessionIds(home, "session").length,
+    10,
+    "searching lists them all for cmdk to filter",
+  );
+  assert.equal(sessionIds(home, "   ").length, 8, "blank input is not a search");
+  assert.deepEqual(headings(home).slice(0, 1), ["Recent sessions"]);
+  assert.deepEqual(headings(home, "s").slice(0, 1), ["Sessions"]);
+});
+
+test("a session row is found by its title, folder, branch, project and ID, and names an untitled one", () => {
+  const group = palette(home).find((g) => g.id === "sessions");
+  assert.ok(group?.id === "sessions");
+  const member = group.rows.find((r) => r.session.sessionId === "s9")!;
+  assert.equal(member.value, "Session 9 repo feature Launch s9");
+  assert.deepEqual(member.keywords, ["repo", "feature", "Launch"]);
+  assert.equal(member.branch, "feature", "a worktree session shows its branch");
+  const plain = group.rows.find((r) => r.session.sessionId === "s2")!;
+  assert.equal(plain.branch, undefined, "the folder's own checkout shows no branch");
+  const untitled = group.rows.find((r) => r.session.sessionId === "s3")!;
+  assert.deepEqual([untitled.label, untitled.untitled], ["Untitled", true]);
+  assert.match(untitled.value, /^Untitled repo main/);
+});
+
+test("groups come in order, with Session commands only while a session is selected", () => {
+  assert.deepEqual(headings(home), ["Recent sessions", "Global commands"]);
+  assert.deepEqual(headings(inSession), ["Recent sessions", "Global commands", "Session commands"]);
+  assert.deepEqual(
+    headings({ ...inSession, view: { kind: "new", cwd: "/repo" } }),
+    ["Recent sessions", "Global commands"],
+    "a session still loaded behind the New page offers no session commands",
+  );
+  assert.deepEqual(
+    headings({ ...initialState, connected: true }),
+    ["Global commands"],
+    "no sessions, no sessions group",
+  );
+  const commands = palette(inSession).find((g) => g.id === "session");
+  assert.ok(commands?.id === "session" && commands.rows.length > 0);
+});
+
+test("the current appearance is checked, as in the View menu", () => {
+  const global = palette(home).find((g) => g.id === "global");
+  assert.ok(global?.id === "global");
+  const appearances = global.rows.filter((r) => r.command.group === "appearance");
+  assert.deepEqual(
+    appearances.map((r) => [r.label, r.checked]),
+    [
+      ["Light appearance", false],
+      ["Dark appearance", true],
+      ["System appearance", false],
+    ],
+  );
+  assert.deepEqual(
+    global.rows.filter((r) => r.checked).map((r) => r.key),
+    ["appearance-dark", "group-date", "sort-recent"],
+    "one current choice per kind",
+  );
+});

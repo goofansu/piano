@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
+import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
@@ -83,6 +84,7 @@ interface CommandsValue {
   display: SessionDisplay;
   state: AppState;
   radiusSignedIn: boolean;
+  global: GlobalCommandContext;
 }
 const CommandsContext = createContext<CommandsValue | null>(null);
 
@@ -97,6 +99,16 @@ export function useCommands() {
 export function useSessionCommands(target?: SessionTarget) {
   const { state, run, display, radiusSignedIn } = useCommands();
   return { commands: sessionCommands(state, target, { display, radiusSignedIn }), run, display };
+}
+
+/**
+ * Global commands with the host's runner, from one context: whether Settings is open, the sidebar's
+ * view and the chosen appearance. The palette and the sidebar's View menu both list these, so each
+ * marks the same choices current.
+ */
+export function useGlobalCommands() {
+  const { state, run, global } = useCommands();
+  return { commands: globalCommands(state, global), run };
 }
 
 /** A descriptor as a menu row, by its label and icon. */
@@ -132,11 +144,11 @@ export function CommandHost({
   send: (command: ClientCommand) => void;
   children: React.ReactNode;
 }) {
-  const { openNew, openPanel, openSettings, closeSettings } = useNavigation();
+  const { openNew, openPanel, openSettings, closeSettings, settings } = useNavigation();
   const [display, setDisplay] = useSessionDisplay();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
-  const { setView } = useSidebarView();
-  const { setTheme } = useTheme();
+  const { view, setView } = useSidebarView();
+  const { theme, setTheme } = useTheme();
   const sidebar = useSidebarLayout();
   const forms = useCommandForms({
     state,
@@ -172,7 +184,16 @@ export function CommandHost({
   };
 
   return (
-    <CommandsContext.Provider value={{ run, display, state, radiusSignedIn }}>
+    <CommandsContext.Provider
+      value={{
+        run,
+        display,
+        state,
+        radiusSignedIn,
+        // The one global command context; "system" is next-themes' default before it reads storage.
+        global: { settingsOpen: !!settings, view, theme: theme ?? "system" },
+      }}
+    >
       {children}
       {form?.kind === "share-session" && (
         <ShareSessionDialog
