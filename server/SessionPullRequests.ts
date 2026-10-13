@@ -8,7 +8,7 @@ import type {
   SessionPullRequestAction,
   SessionPullRequestLink,
 } from "../shared/wire.ts";
-import { gitRead } from "./GitCheckout.ts";
+import { observeGit } from "./GitCheckout.ts";
 import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
 import { GhCommand, run as runProcess } from "./Subprocess.ts";
 
@@ -137,38 +137,14 @@ function facts(raw: typeof RawPr.Type): PullRequest {
   };
 }
 
-/** GitCheckout's hardened read (INV-06): inherited GIT_* state cannot redirect discovery. */
-const git = (cwd: string, args: string[], options: { readonly userConfig?: boolean } = {}) =>
-  gitRead(args, { cwd, timeout: 15000, limit: 4 * 1024 * 1024, ...options }).pipe(
-    Effect.map((result) => result.stdout.toString().trim()),
-    Effect.mapError((error) => failure(error.message)),
-  );
-
-/** Observe both branch and head repository, including tracking-remote choice. */
+/** Observe both branch and head repository through GitCheckout's observation (INV-06):
+ * inherited GIT_* state cannot redirect discovery; the remote is the tracking remote's URL. */
 const checkout = Effect.fn("SessionPullRequests.checkout")(function* (cwd: string) {
-  const inside = yield* git(cwd, ["rev-parse", "--is-inside-work-tree"]).pipe(
-    Effect.catchIf(
-      (e) => /not a git repository/.test(e.detail),
-      () => Effect.succeed("false"),
-    ),
-  );
-  if (inside !== "true") return null;
-  const branch = yield* git(cwd, ["branch", "--show-current"]);
-  const tracking = branch
-    ? yield* git(cwd, ["for-each-ref", "--format=%(upstream:remotename)", `refs/heads/${branch}`])
-    : "";
-  // The URL Git would contact, after the user's `url.<base>.insteadOf` rewrites (e.g. an
-  // exe.dev integration proxy configured globally), so this one read keeps user config.
-  const remote = yield* git(
-    cwd,
-    ["remote", "get-url", tracking && tracking !== "." ? tracking : "origin"],
-    { userConfig: true },
-  ).pipe(
-    Effect.catchIf(
-      (e) => /No such remote/.test(e.detail),
-      () => Effect.succeed(""),
-    ),
-  );
+  const observed = yield* observeGit(cwd, { remote: true });
+  if (observed.status === "broken") return yield* failure(observed.detail);
+  if (observed.status === "non-git") return null;
+  const branch = observed.branch ?? "",
+    remote = observed.remote ?? "";
   const proxy = remote.match(
     /^https:\/\/github\.int\.exe\.xyz\/([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i,
   );

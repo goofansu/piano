@@ -6,10 +6,11 @@
  * (a remote URL after `url.<base>.insteadOf`) opts back into global and system config with
  * `userConfig`; inherited GIT_* state stays cleared. Output is bounded, UTF-8 checked and NUL lists
  * must be complete; repository paths must be relative and stay out of embedded repositories.
+ * `observeGit` is the one answer to "is this path a Git checkout, and of what branch".
  */
-import { realpath } from "node:fs/promises";
-import { isAbsolute } from "node:path";
-import { Effect, Semaphore } from "effect";
+import { lstat, realpath, stat } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
+import { Data, Effect, Semaphore } from "effect";
 import type { Workspace } from "../shared/wire.ts";
 import {
   GitCommand,
@@ -71,19 +72,135 @@ async function runGit(
   }
 }
 
-/** One hardened Git read in `cwd`, for callers that need no checkout root (worktree discovery,
- * directory hints). Interruption kills the child.
- */
-export const gitRead = (
+/** A failed Git read: a rejected exit (`Git <subcommand> failed: <stderr>`), a timeout or output
+ * over the size cap. */
+export class GitReadError extends Data.TaggedError("GitReadError")<{ readonly detail: string }> {
+  override get message() {
+    return this.detail;
+  }
+}
+
+/** One hardened Git read in `cwd`, stdout as text, under one timeout and one size cap; only a
+ * best-effort hint shortens `timeout`. Interruption kills the child. */
+export const gitText = Effect.fn("GitCheckout.gitText")(function* (
+  cwd: string,
   args: readonly string[],
-  options: Pick<GitOptions, "cwd" | "timeout" | "limit" | "userConfig">,
-): Effect.Effect<RunResult, Error> =>
-  Effect.flatMap(GitCommand, (git) =>
-    Effect.tryPromise({
-      try: (signal) => runGit(git, args, options, signal),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-    }),
+  options: Pick<GitOptions, "timeout" | "userConfig"> = {},
+): Effect.fn.Return<string, GitReadError> {
+  const git = yield* GitCommand;
+  const { timeout = 20_000, userConfig } = options;
+  const result = yield* Effect.tryPromise({
+    try: (signal) =>
+      runGit(git, args, { cwd, timeout, userConfig, limit: 8 * 1024 * 1024 }, signal),
+    catch: (error) =>
+      new GitReadError({ detail: error instanceof Error ? error.message : String(error) }),
+  });
+  return result.stdout.toString();
+});
+
+/** The checked-out branch, empty when detached (an unborn branch still has its name). */
+const BRANCH = ["branch", "--show-current"];
+
+/** What Git says about a path: outside any repository, inside a working checkout, or `broken`:
+ * metadata Git cannot read, a bare repository, a missing directory, a failed or timed-out read. */
+export type GitObservation =
+  | { readonly status: "non-git" }
+  | {
+      readonly status: "checkout";
+      /** The root of the checkout `path` is in. */
+      readonly toplevel: string;
+      /** With `branch` or `remote`: null when detached. Discovery does not pay for it. */
+      readonly branch?: string | null;
+      /** With `remote`: the URL Git would contact for the branch's tracking remote (else
+       * `origin`), after the user's `url.<base>.insteadOf` rewrites; null without that remote. */
+      readonly remote?: string | null;
+    }
+  | { readonly status: "broken"; readonly detail: string };
+
+/** Whether directory `path` or a parent holds a `.git` entry. Git's own "not a git repository"
+ * also covers metadata it cannot read, so only both together mean non-Git. */
+async function hasGitMetadata(path: string): Promise<boolean> {
+  let dir = await realpath(path);
+  if (!(await stat(dir)).isDirectory()) throw new Error(`Not a directory: ${path}`);
+  for (;;) {
+    try {
+      await lstat(join(dir, ".git"));
+      return true;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+/** One point-in-time Git observation of any path. Never fails: anything short of a positive
+ * non-Git or checkout answer is `broken`, never a healthy fallback (INV-06). */
+export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
+  path: string,
+  options: {
+    readonly branch?: boolean;
+    /** Implies `branch`. */
+    readonly remote?: boolean;
+    readonly timeout?: number;
+  } = {},
+): Effect.fn.Return<GitObservation> {
+  const read = (args: readonly string[], userConfig?: boolean) =>
+    gitText(path, args, { timeout: options.timeout, userConfig });
+  return yield* Effect.gen(function* () {
+    const metadata = yield* Effect.tryPromise({
+      try: () => hasGitMetadata(path),
+      catch: (e) => new GitReadError({ detail: String(e) }),
+    });
+    const bare = new GitReadError({
+      detail: "This directory is not a Git working checkout (bare repositories are unsupported).",
+    });
+    // One process: outside a work tree (a bare repository, inside `.git`) Git refuses the
+    // toplevel half, so that refusal is the bare case.
+    const answer = yield* read(["rev-parse", "--is-inside-work-tree", "--show-toplevel"]).pipe(
+      Effect.catchIf(
+        (e) => !metadata && e.detail.includes("fatal: not a git repository"),
+        () => Effect.succeed(null),
+      ),
+      Effect.catchIf(
+        (e) => e.detail.includes("must be run in a work tree"),
+        () => Effect.fail(bare),
+      ),
+    );
+    if (answer === null) return { status: "non-git" } as const;
+    const [inside, toplevel] = answer.trim().split("\n");
+    if (inside !== "true" || !toplevel) return yield* bare;
+    const checkout = { status: "checkout", toplevel: toplevel.trim() } as const;
+    if (!options.branch && !options.remote) return checkout;
+    const branch = (yield* read(BRANCH)).trim() || null;
+    if (!options.remote) return { ...checkout, branch };
+    const tracking = branch
+      ? (yield* read([
+          "for-each-ref",
+          "--format=%(upstream:remotename)",
+          `refs/heads/${branch}`,
+        ])).trim()
+      : "";
+    // The one read whose answer the user's Git config defines (e.g. an exe.dev integration
+    // proxy configured globally), so it keeps user config.
+    const remote = yield* read(
+      ["remote", "get-url", tracking && tracking !== "." ? tracking : "origin"],
+      true,
+    ).pipe(
+      Effect.map((out) => out.trim() || null),
+      Effect.catchIf(
+        (e) => e.detail.includes("No such remote"),
+        () => Effect.succeed(null),
+      ),
+    );
+    return { ...checkout, branch, remote };
+  }).pipe(
+    Effect.catchTag("GitReadError", (e) =>
+      Effect.succeed({ status: "broken", detail: e.detail } as const),
+    ),
   );
+});
 
 /** A failure this module detects. Callers keep their own phrasing through `messages`. */
 export class CheckoutError extends Error {
@@ -209,7 +326,7 @@ export async function openCheckout(path: string, options: CheckoutOptions): Prom
           ? fail("path", messages.path(path))
           : path,
       head: () => optional(["rev-parse", "--verify", "--quiet", "HEAD"]),
-      branch: () => optional(["symbolic-ref", "--quiet", "--short", "HEAD"]),
+      branch: async () => decode((await run(BRANCH)).stdout).trim() || null,
       with: (extra) => make([...config, ...(extra.config ?? [])], { ...env, ...extra.env }),
     };
   };

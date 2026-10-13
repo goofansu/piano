@@ -1,12 +1,11 @@
-/** Discovery reads Git through GitCheckout's hardened reads, so inherited GIT_* state cannot
- * redirect it (INV-06); creation goes through Worktrunk (0.80.0 or later) for its paths and hooks. Git and
+/** Discovery reads Git through GitCheckout's observation and hardened reads, so inherited GIT_*
+ * state cannot redirect it (INV-06); creation goes through Worktrunk (0.80.0 or later) for its paths and hooks. Git and
  * CLI details stay behind this module.
  */
-import { lstat, realpath, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { isAbsolute } from "node:path";
 import { Context, Data, Effect, Schema } from "effect";
 import type { WorktreeDiscovery, WorktreeFacts } from "../shared/wire.ts";
-import { gitRead } from "./GitCheckout.ts";
+import { gitText, observeGit } from "./GitCheckout.ts";
 import { run as runProcess } from "./Subprocess.ts";
 
 export class WorktreeError extends Data.TaggedError("WorktreeError")<{
@@ -35,10 +34,16 @@ const run = (
     Effect.map((result) => result.stdout.toString()),
     Effect.mapError((e) => new WorktreeError({ detail: `${command}: ${e.message}` })),
   );
-const git = (cwd: string, args: string[], timeout = 20_000): Effect.Effect<string, WorktreeError> =>
-  gitRead(args, { cwd, timeout, limit: 8 * 1024 * 1024 }).pipe(
-    Effect.map((result) => result.stdout.toString()),
-    Effect.mapError((e) => new WorktreeError({ detail: e.message })),
+const git = (cwd: string, args: string[]): Effect.Effect<string, WorktreeError> =>
+  gitText(cwd, args).pipe(Effect.mapError((e) => new WorktreeError({ detail: e.detail })));
+/** A Git working checkout, or false for a non-Git directory; broken metadata fails. */
+const checkoutOf = (path: string) =>
+  observeGit(path).pipe(
+    Effect.flatMap((observed) =>
+      observed.status === "broken"
+        ? Effect.fail(new WorktreeError({ detail: observed.detail }))
+        : Effect.succeed(observed.status === "checkout" && observed),
+    ),
   );
 const wt = Effect.fn("Worktrees.wt")(function* (folder: string, args: string[], timeout?: number) {
   const command = yield* WorktrunkCommand;
@@ -63,14 +68,13 @@ export const checkoutHint = Effect.fn("Worktrees.checkoutHint")(function* (
   path: string,
   options: { readonly subjectOnly?: boolean } = {},
 ): Effect.fn.Return<{ readonly root?: string; readonly subject?: string }> {
-  const root = options.subjectOnly
-    ? undefined
-    : yield* git(path, ["rev-parse", "--show-toplevel"], 2000).pipe(
-        Effect.map((out) => out.trim()),
-        Effect.orElseSucceed(() => ""),
-      );
-  if (root === "") return {};
-  const subject = yield* git(path, ["log", "-1", "--format=%s"], 2000).pipe(
+  let root: string | undefined;
+  if (!options.subjectOnly) {
+    const observed = yield* observeGit(path, { timeout: 2000 });
+    if (observed.status !== "checkout") return {};
+    root = observed.toplevel;
+  }
+  const subject = yield* gitText(path, ["log", "-1", "--format=%s"], { timeout: 2000 }).pipe(
     Effect.map((out) => out.trim().slice(0, 120)),
     Effect.orElseSucceed(() => ""),
   );
@@ -93,46 +97,6 @@ const json = <T, E>(schema: Schema.Codec<T, E>, text: string) =>
           "Invalid Worktrunk output (expected the supported structured contract). Refresh after checking Worktrunk and its configuration.",
       }),
   });
-
-/** Positively distinguish non-Git directories from broken/inaccessible repository metadata. */
-const isGit = Effect.fn("Worktrees.isGit")(function* (path: string) {
-  const metadata = yield* Effect.tryPromise({
-    try: async () => {
-      let dir = await realpath(path);
-      if (!(await stat(dir)).isDirectory()) throw new Error(`Not a directory: ${path}`);
-      for (;;) {
-        try {
-          await lstat(join(dir, ".git"));
-          return true;
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        }
-        const parent = dirname(dir);
-        if (parent === dir) return false;
-        dir = parent;
-      }
-    },
-    catch: (e) => new WorktreeError({ detail: String(e) }),
-  });
-  return yield* git(path, ["rev-parse", "--is-inside-work-tree"]).pipe(
-    Effect.flatMap((out) =>
-      out.trim() === "true"
-        ? Effect.succeed(true)
-        : Effect.fail(
-            new WorktreeError({
-              detail:
-                "This directory is not a Git working checkout (bare repositories are unsupported).",
-            }),
-          ),
-    ),
-    Effect.catchTag("WorktreeError", (e) =>
-      !metadata &&
-      e.detail.includes("fatal: not a git repository (or any of the parent directories): .git")
-        ? Effect.succeed(false)
-        : Effect.fail(e),
-    ),
-  );
-});
 
 /** One `git worktree list --porcelain -z` record. Unknown attributes are ignored. */
 function parseWorktrees(out: string): WorktreeFacts[] | undefined {
@@ -182,21 +146,15 @@ export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
 ): Effect.fn.Return<WorktreeDiscovery> {
   const observedAt = new Date().toISOString();
   return yield* Effect.gen(function* () {
-    if (!(yield* isGit(folder))) return { status: "non-git" as const, observedAt };
-    const [top, out] = yield* Effect.all(
-      [
-        git(folder, ["rev-parse", "--show-toplevel"]),
-        git(folder, ["worktree", "list", "--porcelain", "-z"]),
-      ],
-      { concurrency: 2 },
-    );
-    const worktrees = parseWorktrees(out);
+    const checkout = yield* checkoutOf(folder);
+    if (!checkout) return { status: "non-git" as const, observedAt };
+    const worktrees = parseWorktrees(yield* git(folder, ["worktree", "list", "--porcelain", "-z"]));
     if (!worktrees)
       return yield* new WorktreeError({
         detail:
           "Invalid git worktree list output. Refresh after checking the repository with git worktree list.",
       });
-    const currentPath = top.trim();
+    const currentPath = checkout.toplevel;
     if (!worktrees.some((w) => w.path === currentPath))
       return yield* new WorktreeError({
         detail:
@@ -221,7 +179,7 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
   options: { hooks?: boolean } = {},
 ) {
   yield* compatible;
-  if (!(yield* isGit(folder)))
+  if (!(yield* checkoutOf(folder)))
     return yield* new WorktreeError({
       detail: "This folder is non-Git. Create a Git repository before creating a worktree.",
     });
