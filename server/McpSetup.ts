@@ -29,8 +29,8 @@ import { agentDir } from "./PiEnv.ts";
 import {
   SignInAttempts,
   SignInError,
+  type SignInLane,
   type SignInSource,
-  type SignInState,
 } from "./SignInAttempts.ts";
 
 type CatalogServer = { id: McpCatalogId; name: string; url: string };
@@ -58,15 +58,9 @@ export class McpSetup extends Context.Service<
   {
     readonly state: Effect.Effect<McpSetupState>;
     readonly change: (request: McpSetupRequest) => Effect.Effect<McpSetupState, McpSetupError>;
-    /** The current sign-in attempt, shaped as provider sign-in so the browser shares one dialog. */
-    readonly login: Effect.Effect<SignInState | null>;
-    readonly startLogin: (server: string) => Effect.Effect<SignInState, SignInError>;
-    readonly answerLogin: (
-      id: string,
-      promptId: string,
-      value: string,
-    ) => Effect.Effect<SignInState, SignInError>;
-    readonly cancelLogin: (id: string) => Effect.Effect<SignInState, SignInError>;
+    /** Sign-in to an installed catalog server, by its id; shaped as provider sign-in so the
+     * browser shares one dialog. */
+    readonly signIn: SignInLane;
   }
 >()("piano/McpSetup") {}
 
@@ -267,21 +261,18 @@ export const McpSetupLive = Layer.effect(
             });
         }
       },
-      login: attempts.state,
-      startLogin: (id) =>
+      signIn: attempts.lane((id) =>
         Effect.try({
-          try: () => signedInEntry(id),
+          try: () => {
+            const { server, entry, url } = signedInEntry(id);
+            return source(server, entry, url);
+          },
           catch: (cause) =>
             new SignInError({
               detail: cause instanceof Error ? cause.message : "Could not start sign-in.",
             }),
-        }).pipe(
-          Effect.flatMap(({ server, entry, url }) =>
-            attempts.start(server.id, source(server, entry, url)),
-          ),
-        ),
-      answerLogin: attempts.answer,
-      cancelLogin: attempts.cancel,
+        }),
+      ),
     });
   }),
 );

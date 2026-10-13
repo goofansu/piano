@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ProviderLoginState } from "../shared/wire.ts";
-import type { ProviderLoginRequest } from "../web/src/lib/api.ts";
+import type { SignInRequest } from "../web/src/lib/api.ts";
 import {
   CANCEL_FAILED,
   CONNECTION_LOST,
@@ -14,11 +14,11 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 /** A server whose replies the test gives one request at a time, and a clock the test advances. */
 function harness(provider = "acme") {
   const requests: {
-    request: ProviderLoginRequest;
+    request: SignInRequest;
     reply: (state: ProviderLoginState | null) => Promise<void>;
     fail: () => Promise<void>;
   }[] = [];
-  const api = (request: ProviderLoginRequest = { method: "GET" }) =>
+  const api = (request: SignInRequest = { method: "GET" }) =>
     new Promise<ProviderLoginState | null>((resolve, reject) => {
       requests.push({
         request,

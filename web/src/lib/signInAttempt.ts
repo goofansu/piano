@@ -10,7 +10,7 @@
  * keeps it. Nothing here depends on React.
  */
 import type { ProviderLoginState } from "@shared/wire";
-import type { ProviderLoginRequest } from "./api.ts";
+import type { SignInRequest } from "./api.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
 
 export interface SignInAttemptState {
@@ -24,7 +24,7 @@ export interface SignInAttemptState {
   connectionError: string;
 }
 
-export type SignInApi = (request?: ProviderLoginRequest) => Promise<ProviderLoginState | null>;
+export type SignInApi = (request?: SignInRequest) => Promise<ProviderLoginState | null>;
 
 export interface SignInAttemptOptions {
   api: SignInApi;
@@ -134,7 +134,7 @@ export function createSignInAttempt({
     arm(generation);
   };
 
-  const change = async (request: ProviderLoginRequest) => {
+  const change = async (request: SignInRequest) => {
     halt();
     publish({ busy: true, error: "" });
     try {

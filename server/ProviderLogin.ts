@@ -11,10 +11,15 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, Layer } from "effect";
-import type { OAuthProvider, ProviderLoginState } from "../shared/wire.ts";
+import type { OAuthProvider } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { agentDir } from "./PiEnv.ts";
-import { SignInAttempts, SignInError, type SignInSource } from "./SignInAttempts.ts";
+import {
+  SignInAttempts,
+  SignInError,
+  type SignInLane,
+  type SignInSource,
+} from "./SignInAttempts.ts";
 
 type Interaction = Parameters<ModelRuntime["login"]>[2];
 type Runtime = Pick<
@@ -35,14 +40,8 @@ export class ProviderLogin extends Context.Service<
   ProviderLogin,
   {
     readonly providers: Effect.Effect<readonly OAuthProvider[], Error>;
-    readonly state: Effect.Effect<ProviderLoginState | null>;
-    readonly start: (provider: string) => Effect.Effect<ProviderLoginState, SignInError>;
-    readonly answer: (
-      id: string,
-      promptId: string,
-      value: string,
-    ) => Effect.Effect<ProviderLoginState, SignInError>;
-    readonly cancel: (id: string) => Effect.Effect<ProviderLoginState, SignInError>;
+    /** Sign-in to a provider, by its id. */
+    readonly signIn: SignInLane;
     readonly signOut: (provider: string) => Effect.Effect<void, SignInError>;
     /** A bearer token valid for at least five more minutes, only while the user is signed in to
      * the provider; undefined otherwise. Ambient API keys never authorize a Piano feature. */
@@ -142,10 +141,8 @@ export const ProviderLoginLive = Layer.effect(
           .map((p) => ({ id: p.id, name: p.name, signedIn: oauth.has(p.id) }))
           .sort((a, b) => a.id.localeCompare(b.id));
       }),
-      state: attempts.state,
-      start: (provider) => attempts.start(provider, source(provider)),
-      answer: attempts.answer,
-      cancel: attempts.cancel,
+      // The flow itself reports a provider without OAuth sign-in, so the attempt shows why.
+      signIn: attempts.lane((provider) => Effect.succeed(source(provider))),
       signOut: (provider) =>
         attempts.exclusive(
           Effect.tryPromise({

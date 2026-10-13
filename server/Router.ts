@@ -1,6 +1,12 @@
 import { Cause, Data, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { type Endpoint, Endpoints, type IdParam, type Json } from "../shared/http.ts";
+import {
+  type Endpoint,
+  Endpoints,
+  type IdParam,
+  type Json,
+  type SignInEndpoints,
+} from "../shared/http.ts";
 import type { RadiusSetupState } from "../shared/radius.ts";
 import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
@@ -19,7 +25,7 @@ import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { SessionSharing } from "./SessionSharing.ts";
 import { SidebarView } from "./SidebarView.ts";
-import type { SignInError, SignInState } from "./SignInAttempts.ts";
+import type { SignInError, SignInLane, SignInState } from "./SignInAttempts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { WorkspaceRevisions } from "./WorkspaceRevisions.ts";
 import { handleSocket } from "./WsClient.ts";
@@ -306,58 +312,37 @@ export const AppRouter = HttpRouter.use((router) =>
       ),
     );
 
-    // Credential values and callback URLs travel only in bodies. This global
-    // operation creates no session and owns no conversation history.
-    const login = <R>(step: Effect.Effect<SignInState | null, SignInError, R>) =>
-      step.pipe(
-        Effect.map((state) => ({ state })),
-        signInFailure,
+    // One lane's four routes. Credential values and callback URLs travel only in bodies; the state
+    // carries no transcript content and leaves unprojected, so codes and URLs reach the user intact.
+    // This global operation creates no session and owns no conversation history.
+    const serveSignIn = Effect.fnUntraced(function* <R>(
+      endpoints: SignInEndpoints,
+      lane: Effect.Effect<SignInLane, never, R>,
+    ) {
+      const step = (
+        request: (lane: SignInLane) => Effect.Effect<SignInState | null, SignInError>,
+      ) =>
+        Effect.flatMap(lane, request).pipe(
+          Effect.map((state) => ({ state })),
+          signInFailure,
+        );
+      const unredacted = { redact: false };
+      yield* serve(endpoints.state, () => step((l) => l.state), unredacted);
+      yield* serve(endpoints.start, ({ body }) => step((l) => l.start(body.provider)), unredacted);
+      yield* serve(
+        endpoints.answer,
+        ({ body }) => step((l) => l.answer(body.id, body.promptId, body.value)),
+        unredacted,
       );
-    yield* serve(
-      Endpoints.providerLoginState,
-      () => login(Effect.flatMap(ProviderLogin, (l) => l.state)),
-      { redact: false },
+      yield* serve(endpoints.cancel, ({ body }) => step((l) => l.cancel(body.id)), unredacted);
+    });
+    yield* serveSignIn(
+      Endpoints.providerLogin,
+      Effect.map(ProviderLogin, (login) => login.signIn),
     );
-    yield* serve(
-      Endpoints.startProviderLogin,
-      ({ body }) => login(Effect.flatMap(ProviderLogin, (l) => l.start(body.provider))),
-      { redact: false },
-    );
-    yield* serve(
-      Endpoints.answerProviderLogin,
-      ({ body }) =>
-        login(Effect.flatMap(ProviderLogin, (l) => l.answer(body.id, body.promptId, body.value))),
-      { redact: false },
-    );
-    yield* serve(
-      Endpoints.cancelProviderLogin,
-      ({ body }) => login(Effect.flatMap(ProviderLogin, (l) => l.cancel(body.id))),
-      { redact: false },
-    );
-    yield* serve(
-      Endpoints.mcpLoginState,
-      () => login(Effect.flatMap(McpSetup, (setup) => setup.login)),
-      { redact: false },
-    );
-    yield* serve(
-      Endpoints.startMcpLogin,
-      ({ body }) => login(Effect.flatMap(McpSetup, (setup) => setup.startLogin(body.server))),
-      { redact: false },
-    );
-    yield* serve(
-      Endpoints.answerMcpLogin,
-      ({ body }) =>
-        login(
-          Effect.flatMap(McpSetup, (setup) =>
-            setup.answerLogin(body.id, body.promptId, body.value),
-          ),
-        ),
-      { redact: false },
-    );
-    yield* serve(
-      Endpoints.cancelMcpLogin,
-      ({ body }) => login(Effect.flatMap(McpSetup, (setup) => setup.cancelLogin(body.id))),
-      { redact: false },
+    yield* serveSignIn(
+      Endpoints.mcpLogin,
+      Effect.map(McpSetup, (setup) => setup.signIn),
     );
 
     // Image bytes, not JSON: outside the endpoint table. The ID is a content hash, never a path.
