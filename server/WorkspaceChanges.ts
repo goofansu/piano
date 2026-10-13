@@ -12,8 +12,7 @@ import {
   type WorkspaceChanges as Observation,
   type Workspace,
 } from "../shared/wire.ts";
-import { observe, openCheckout } from "./GitCheckout.ts";
-import { GitCommand } from "./Subprocess.ts";
+import { type Checkout, observeCheckout } from "./GitCheckout.ts";
 
 export class WorkspaceChanges extends Context.Service<
   WorkspaceChanges,
@@ -23,44 +22,23 @@ export class WorkspaceChanges extends Context.Service<
 >()("piano/WorkspaceChanges") {}
 
 async function preview(
-  git: string,
-  workspace: Workspace,
+  checkout: Checkout,
   path: string | undefined,
-  signal: AbortSignal,
 ): Promise<Observation["result"]> {
-  const checkout = await openCheckout(workspace.path, {
-    git,
-    signal,
-    limit: 16 * 1024 * 1024,
-    config: ["-c", "core.hooksPath=/dev/null"],
-    messages: {
-      root: "Changes requires the Git checkout root.",
-      limit: "Git metadata exceeds 16 MiB; no partial file list is shown.",
-      path: () => "Unsupported repository path (including embedded repositories).",
-    },
-  });
   if (path !== undefined) checkout.safePath(path);
-  // Disable every locally configured filter driver before diff/add touches working files.
-  const filters = await checkout.records(
-    ["config", "--null", "--name-only", "--get-regexp", "^filter\\..*\\.(clean|process|required)$"],
-    { okCodes: [0, 1] },
-  );
-  const filtered = checkout.with({
-    config: filters.flatMap((key) => ["-c", `${key}=${key.endsWith(".required") ? "false" : ""}`]),
-  });
-  const head = await filtered.head();
-  const branch = await filtered.branch();
+  const head = await checkout.head();
+  const branch = await checkout.branch();
   const base =
     head ??
     (
-      await filtered.text(["hash-object", "-w", "-t", "tree", "--stdin"], {
+      await checkout.text(["hash-object", "-w", "-t", "tree", "--stdin"], {
         input: Buffer.alloc(0),
       })
     ).trim();
   const temp = await mkdtemp(join(tmpdir(), "piano-changes-"));
   try {
     const index = (
-      await filtered.text(["rev-parse", "--path-format=absolute", "--git-path", "index"])
+      await checkout.text(["rev-parse", "--path-format=absolute", "--git-path", "index"])
     ).trimEnd();
     const temporaryIndex = join(temp, "index");
     try {
@@ -68,7 +46,7 @@ async function preview(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    const git = filtered.with({ env: { GIT_INDEX_FILE: temporaryIndex } });
+    const git = checkout.with({ env: { GIT_INDEX_FILE: temporaryIndex } });
     const pathArgs = path === undefined ? [] : [`:(top,literal)${path}`];
     if ((await git.run(["ls-files", "--unmerged", "-z", "--", ...pathArgs])).stdout.length) {
       throw new Error("Unresolved merge conflicts; resolve them before browsing this diff.");
@@ -124,10 +102,22 @@ export const WorkspaceChangesLive = Layer.effect(
   Effect.gen(function* () {
     // Expanding many files must not spawn an unbounded number of Git processes/index copies.
     const slots = yield* Semaphore.make(4);
-    const git = yield* GitCommand;
     return WorkspaceChanges.of({
       preview: (workspace, path) =>
-        observe(workspace, slots, (signal) => preview(git, workspace, path, signal)),
+        observeCheckout(
+          workspace,
+          {
+            slots,
+            limit: 16 * 1024 * 1024,
+            writes: "index",
+            messages: {
+              root: "Changes requires the Git checkout root.",
+              limit: "Git metadata exceeds 16 MiB; no partial file list is shown.",
+              path: () => "Unsupported repository path (including embedded repositories).",
+            },
+          },
+          (checkout) => preview(checkout, path),
+        ),
     });
   }),
 );

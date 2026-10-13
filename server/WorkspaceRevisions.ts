@@ -26,9 +26,8 @@ import type {
   Workspace,
   WorkspaceCapture,
 } from "../shared/wire.ts";
-import { CheckoutError, observe, openCheckout } from "./GitCheckout.ts";
+import { type Checkout, observeCheckout } from "./GitCheckout.ts";
 import { RegistryDatabasePath } from "./Registry.ts";
-import { GitCommand } from "./Subprocess.ts";
 
 export const RevisionStorePath = Context.Reference<string | undefined>("piano/RevisionStorePath", {
   defaultValue: () => process.env.PIANO_REVISION_STORE,
@@ -83,25 +82,13 @@ export const WorkspaceRevisionsLive = Layer.effect(
     const store = resolve(
       (yield* RevisionStorePath) ?? join(dirname(database), `${basename(database)}.revisions`),
     );
-    const git = yield* GitCommand;
     const lock = yield* Semaphore.make(1);
 
     async function capture(
       workspace: Workspace,
+      checkout: Checkout,
       signal: AbortSignal,
     ): Promise<WorkspaceCapture["result"]> {
-      // Checkout failures (root, size, encoding, unsafe paths) are unsupported input.
-      const checkout = await openCheckout(workspace.path, {
-        git,
-        signal,
-        limit: MAX_BYTES,
-        messages: {
-          root: "Capture requires the Git checkout root, not a subdirectory.",
-          limit: "Capture output exceeds the supported size limit.",
-          encoding: "Non-UTF-8 paths are not supported for capture.",
-          path: (path) => `Unsafe or unsupported repository path: ${JSON.stringify(path)}`,
-        },
-      });
       const { cwd, safePath } = checkout;
       // Candidate writes must not be observed as source edits or recursively captured.
       await mkdir(store, { recursive: true, mode: 0o700 });
@@ -431,14 +418,23 @@ export const WorkspaceRevisionsLive = Layer.effect(
     }
     return WorkspaceRevisions.of({
       capture: (workspace) =>
-        observe(workspace, lock, (signal) => capture(workspace, signal), {
-          status: (e) =>
-            e instanceof CaptureProblem
-              ? e.status
-              : e instanceof CheckoutError
-                ? "unsupported"
-                : "error",
-        }),
+        observeCheckout(
+          workspace,
+          {
+            slots: lock,
+            limit: MAX_BYTES,
+            messages: {
+              root: "Capture requires the Git checkout root, not a subdirectory.",
+              limit: "Capture output exceeds the supported size limit.",
+              encoding: "Non-UTF-8 paths are not supported for capture.",
+              path: (path) => `Unsafe or unsupported repository path: ${JSON.stringify(path)}`,
+            },
+            // Checkout failures (root, size, encoding, unsafe paths) are unsupported input.
+            unsupported: "unsupported",
+            status: (e) => (e instanceof CaptureProblem ? e.status : undefined),
+          },
+          (checkout, signal) => capture(workspace, checkout, signal),
+        ),
     });
   }),
 );
