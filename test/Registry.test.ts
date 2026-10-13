@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -148,6 +148,24 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
     projectId: "project-2",
   });
   assert.deepEqual(reopened.sessions.slice(1), original.sessions.slice(1));
+});
+
+test("INV-01/07: a folder keeps its workspace identity when closed and reopened", async (t) => {
+  const f = fixture(t),
+    folder = join(f.root, "folder");
+  mkdirSync(folder);
+  const workspaceId = (data: RegistryData) => data.workspaces.find((w) => w.path === folder)?.id;
+  await f.run(Effect.flatMap(Registry, (r) => r.addFolder(folder)));
+  const id = workspaceId(await f.get());
+  assert.ok(id);
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.removeFolder(folder);
+      yield* r.addFolder(folder);
+    }),
+  );
+  assert.equal(workspaceId(await f.get()), id);
 });
 
 test("INV-01: a session with every optional field set, linked without an API host, survives restart", async (t) => {

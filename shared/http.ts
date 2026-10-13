@@ -20,7 +20,6 @@ import {
   SessionPullRequest,
   SessionPullRequestAction,
   SlashCommand,
-  WorkspaceCapture,
   WorkspaceChanges,
 } from "./wire.ts";
 
@@ -186,13 +185,6 @@ export const Endpoints = {
     invalid: "File path is required in the request body.",
     response: WorkspaceChanges,
     fallback: (status) => `File request failed (${status}).`,
-  }),
-  workspaceCapture: endpoint({
-    method: "POST",
-    path: "/api/workspace/capture",
-    query: ["workspaceId"],
-    response: WorkspaceCapture,
-    fallback: "Could not capture the workspace.",
   }),
 
   // Session pull request (GitHub facts are live)

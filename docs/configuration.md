@@ -12,7 +12,6 @@ and `web/vite.config.ts`.
 | `PORT` | `7070` | Backend port. |
 | `PIANO_ALLOWED_ORIGINS` | `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>`, `http://[::1]:<PORT>` | Comma-separated browser origins that may change state. A set value replaces the defaults. See [browser origins](#browser-origins). |
 | `PIANO_DB_PATH` | `$XDG_DATA_HOME/piano/piano.db`, or `~/.local/share/piano/piano.db` when `XDG_DATA_HOME` is unset | Registry database file. |
-| `PIANO_REVISION_STORE` | `<database>.revisions` | Directory for workspace revision captures. |
 | `PIANO_IDLE_MINUTES` | `30` | Idle minutes before Piano stops a session's Pi process. `0` keeps processes running. |
 | `PIANO_PI_CLI` | the bundled Pi CLI, `server/PiRpcCli.ts` | Path to another Pi CLI entry. It must use Pi's credential format. |
 | `PIANO_PI_ARGS` | none | Extra Pi arguments, split on whitespace, such as `-e ./ext.ts`. |

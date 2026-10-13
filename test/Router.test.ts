@@ -3,26 +3,24 @@ import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
 import { PiSettings, PiSettingsError } from "../server/PiSettings.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
-import { WorkspaceRevisions } from "../server/WorkspaceRevisions.ts";
 import { type Endpoint, Endpoints } from "../shared/http.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
 // The router's half of shared/http.ts, observed over HTTP the way any client sees it.
 let server: RouterFixture;
 before(async () => {
-  // A capture that answers outside WorkspaceCapture, to observe the response contract.
-  const offContract = Layer.succeed(WorkspaceRevisions, {
-    capture: () => Effect.succeed({ candidate: "not a manifest" } as never),
-  });
-  // Settings that refuse one model and fail unexpectedly for any other, to observe failure statuses.
+  // Settings that refuse one model, answer outside the response contract for another and fail
+  // unexpectedly for any other, to observe failure statuses and the response contract.
   const failingSettings = Layer.succeed(PiSettings, {
     defaults: Effect.die("unused"),
     saveDefaults: ({ model }) =>
       model === "refused"
         ? Effect.fail(new PiSettingsError({ detail: "Choose an available model." }))
-        : Effect.die(new Error("EACCES: /home/someone/.pi/agent/settings.json")),
+        : model === "off-contract"
+          ? Effect.succeed({ candidate: "not defaults" } as never)
+          : Effect.die(new Error("EACCES: /home/someone/.pi/agent/settings.json")),
   });
-  server = await startRouter("piano-router-", Layer.merge(offContract, failingSettings));
+  server = await startRouter("piano-router-", failingSettings);
 });
 after(() => server.dispose());
 
@@ -104,11 +102,15 @@ test("a body outside the endpoint's Schema is answered 400 with the endpoint's m
 
 test("a result outside the response Schema is never sent", async () => {
   const { status, body } = await reply(
-    await post(`/api/workspace/capture?workspaceId=${server.workspaceId}`),
+    await server.handle("/api/settings/defaults", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "off-contract", thinkingLevel: "medium" }),
+    }),
   );
   assert.equal(status, 500);
   assert.equal(body.error, "The server answered outside its contract. Inspect the server log.");
-  assert.ok(!JSON.stringify(body).includes("not a manifest"));
+  assert.ok(!JSON.stringify(body).includes("not defaults"));
 });
 
 test("a refusal is answered with the endpoint's status and its detail; an unexpected failure generically, never with its message", async () => {

@@ -62,8 +62,9 @@ Covers INV-01–06 and INV-11–12.
   without renaming every existing worktree type.
 - Expose Worktrunk state, revision/dirty identity and diff alongside the session.
 - Track app/process cwd, lifecycle, logs and preview identity. Make active workspace unmistakable.
-- Keep revision capture and separate evidence-store ownership. Future verification should reuse
-  project tooling rather than require a Piano-specific check-definition format. The custom
+- Rebuild revision capture with its first evidence consumer, and keep separate evidence-store
+  ownership. Future verification should reuse project tooling rather than require a
+  Piano-specific check-definition format. The custom
   [Phase 8 runner has been dropped](vertical-slice-plan.md#phase-8--dropped).
 - Separate agent activity from verification and integration status.
 - Attach lightweight task/acceptance-criterion references to work and evidence, with captured

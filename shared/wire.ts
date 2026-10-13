@@ -475,7 +475,7 @@ export const SessionActionResult = Schema.Union([
 ]);
 export type SessionActionResult = typeof SessionActionResult.Type;
 
-// ── Workspace captures ──────────────────────────────────────────────────────
+// ── Workspaces ──────────────────────────────────────────────────────────────
 
 export const Workspace = Schema.Struct({
   id: Schema.String,
@@ -483,51 +483,8 @@ export const Workspace = Schema.Struct({
   path: Schema.String,
 });
 export type Workspace = typeof Workspace.Type;
-export const RevisionFile = Schema.Struct({
-  path: Schema.String,
-  mode: Schema.Literals(["100644", "100755", "120000"]),
-  sha256: Schema.String,
-  bytes: Schema.Number,
-});
-export type RevisionFile = typeof RevisionFile.Type;
-export const RevisionManifest = Schema.Struct({
-  version: Schema.Literal(1),
-  baseHead: Schema.String,
-  scope: Schema.Struct({
-    included: Schema.String,
-    excluded: Schema.Array(Schema.String),
-    ignored: Schema.Array(Schema.String),
-  }),
-  base: Schema.Array(RevisionFile),
-  index: Schema.Array(RevisionFile),
-  files: Schema.Array(RevisionFile),
-});
-export type RevisionManifest = typeof RevisionManifest.Type;
-export const WorkspaceCapture = Schema.Struct({
-  workspace: Workspace,
-  observedAt: Schema.String,
-  result: Schema.Union([
-    Schema.Struct({
-      status: Schema.Literal("captured"),
-      revision: Schema.String,
-      physicalPath: Schema.String,
-      branch: Schema.NullOr(Schema.String),
-      manifest: RevisionManifest,
-      /** Base HEAD to captured working files, untracked included: what a reviewer reads as one list. */
-      diff: Schema.String,
-      stagedDiff: Schema.String,
-      unstagedDiff: Schema.String,
-      limitations: Schema.Array(Schema.String),
-    }),
-    Schema.Struct({
-      status: Schema.Literals(["error", "unsupported", "inconclusive"]),
-      detail: Schema.String,
-    }),
-  ]),
-});
-export type WorkspaceCapture = typeof WorkspaceCapture.Type;
 
-/** Byte budgets for live Changes only; exact revision capture has separate limits. */
+/** Byte budgets for live Changes. */
 export const CHANGES_INITIAL_PATCH_BYTES = 120_000;
 export const CHANGES_FILE_PATCH_BYTES = 1024 * 1024;
 

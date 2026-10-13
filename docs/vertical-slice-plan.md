@@ -397,6 +397,14 @@ unsupported inputs fail explicitly; ignored/external inputs, execution provision
 and universal filesystem isolation remain outside this acceptance. No checks or previews are shipped
 by this capture slice.
 
+**Removed on October 14, 2026:** revision capture (`WorkspaceRevisions`, `POST /api/workspace/capture`
+and the revision store) had no consumer once Phase 8 was dropped, so it was removed rather than kept
+as unused scaffolding. Workspace identity and the live Changes view remain. INV-08 stays the target
+for whichever evidence feature next needs a revision; rebuild capture alongside that consumer
+(the last implementation is at commit `30201dc`). Its race detection waited one event-loop turn for
+macOS file-watch events, which arrive late under load, so a transient edit could be reported as
+`captured`. A rebuild needs a deterministic flush, such as waiting for a sentinel file's own event.
+
 ### Phase 8 — Dropped
 
 Dropped at the user's request on October 5, 2026: the Piano-specific Checks feature, Node-script
@@ -404,7 +412,8 @@ runner, check-definition schema and configuration are out of scope. The implemen
 feature-specific tests have been removed, rather than retained as unused scaffolding.
 
 Existing check configuration and evidence files are left untouched on disk and are no longer read
-by Piano. Workspace capture/diffs and the broader evidence ownership invariants remain. Future
+by Piano. Workspace identity, live diffs and the broader evidence ownership invariants remain;
+revision capture was removed later (see Phase 7). Future
 verification work needs a concrete project workflow, not another bespoke check-definition format.
 
 ### Phase 9 — Run and inspect the intended workspace's application

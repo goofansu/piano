@@ -27,7 +27,6 @@ import { SessionSharingLive } from "./SessionSharing.ts";
 import { SidebarViewLive, type SidebarViewOptions } from "./SidebarView.ts";
 import { WorkspaceChangesLive } from "./WorkspaceChanges.ts";
 import { WorkspaceCommandsLive } from "./WorkspaceCommands.ts";
-import { WorkspaceRevisionsLive } from "./WorkspaceRevisions.ts";
 
 export interface PianoServicesOptions extends SidebarViewOptions {
   /** How long a quiescent session keeps its Pi child before retirement; 0 never retires one. */
@@ -50,13 +49,12 @@ export const PianoCoreLive = (options: PianoServicesOptions) =>
 /** The network services Piano calls; a test replaces one by providing its own. */
 export const PianoAdaptersLive = Layer.mergeAll(RadiusArtifactsLive, GitHubPullRequestsLive);
 
-/** Everything the router answers from: the core plus settings, setup, revisions, changes, pull requests and sharing. */
+/** Everything the router answers from: the core plus settings, setup, changes, pull requests and sharing. */
 export const PianoServicesLive = (options: PianoServicesOptions) =>
   Layer.mergeAll(
     PiSettingsLive,
     RadiusSetupLive,
     McpSetupLive,
-    WorkspaceRevisionsLive,
     WorkspaceChangesLive,
     SessionPullRequestsLive,
     SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
