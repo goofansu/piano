@@ -4,8 +4,9 @@
  *
  * Ownership behind this public seam:
  * - PiTransport: scoped process, framing/capacity, correlation, terminal failure.
- * - This module: generation, atomic snapshot/live publication, dialog claims,
- *   readback freshness, session-owned actions and shutdown announcement.
+ * - This module: generation, atomic snapshot/live publication, readback
+ *   freshness, session-owned actions and shutdown announcement.
+ * - SessionDialogs: dialog claims and their one terminal resolution, under this module's lock.
  * - PiRecords: protocol translation, not process or publication lifecycle.
  * The external dependency seam remains ChildProcessSpawner; tests use PiSessions.
  */
@@ -30,8 +31,6 @@ type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
 import { applySessionEvent, isWorking, withLastKnownStats } from "../shared/sessionProjection.ts";
 import type {
-  Dialog,
-  DialogResolution,
   ModelChoice,
   PromptSubmission,
   SessionAction,
@@ -49,7 +48,6 @@ import { projectDisplay, projectSessionEvent, projectSnapshot } from "./DisplayP
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import {
-  dialogCancellation,
   dispositionOf,
   type PiCommand,
   PiProjector,
@@ -63,6 +61,7 @@ import {
   stateFactsOf,
 } from "./PiRecords.ts";
 import { PiSessionError, PiTransport } from "./PiTransport.ts";
+import { makeSessionDialogs } from "./SessionDialogs.ts";
 import { RunLedger } from "./Subagents.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
@@ -304,10 +303,6 @@ const openSession = (spec: PiSessionSpec) =>
     let submissionId = 0;
     let announced = false;
     let processedVersion = 0;
-    // Dialog lifecycle stays with publication: claim/removal, deadline wakeup and
-    // resolution frames must share one atomic snapshot boundary. Transport is
-    // attempted only after the claim; no transport acknowledgement reopens it.
-    const dialogClosed = new Map<string, Deferred.Deferred<void>>();
     // Cancellation owner: operation tokens fence late abort/readback results.
     // Work belongs to sessionScope, not the lifetime of the requesting browser.
     const promptOperations = new Set<number>();
@@ -343,77 +338,20 @@ const openSession = (spec: PiSessionSpec) =>
         1,
       )(Effect.suspend(() => mergeState(typeof patch === "function" ? patch() : patch)));
 
-    /** All terminal paths compete under the snapshot lock, before any transport yield. */
-    const resolveDialog = Effect.fn("PiSessions.resolveDialog")(function* (
-      dialog: Dialog,
-      reason: DialogResolution["reason"],
-      answer?: PiCommand,
-    ) {
-      const resolution = yield* Semaphore.withPermits(
-        lock,
-        1,
-      )(
-        Effect.gen(function* () {
-          if (!(yield* dialogsOf).some((open) => open.id === dialog.id)) return;
-          const now = yield* Clock.currentTimeMillis;
-          if ((reason === "answered" || reason === "cancelled") && now >= dialog.deadlineAt) {
-            reason = dialog.deadlineKind === "pi-timeout" ? "expired" : "recovery";
-          }
-          const send = reason !== "expired" && reason !== "exited";
-          const detail =
-            reason === "expired"
-              ? "Estimated Pi deadline elapsed. Pi owns the actual timeout; no closure acknowledgement is available."
-              : reason === "exited"
-                ? "Pi stopped before this dialog was answered. No response sent."
-                : reason === "recovery"
-                  ? "Host recovery deadline elapsed; cancelling an unconfirmed dialog."
-                  : reason === "aborted"
-                    ? "Abort current: cancelling this dialog. Pending queue is not cleared."
-                    : "Response claimed locally; waiting for transport delivery.";
-          const resolution: DialogResolution = {
-            id: dialog.id,
-            generation,
-            reason,
-            delivery: send ? "pending" : "not-sent",
-            detail,
-          };
-          const closed = dialogClosed.get(dialog.id);
-          if (closed) yield* Deferred.succeed(closed, undefined);
-          dialogClosed.delete(dialog.id);
-          yield* publish({ _tag: "dialog_resolved", resolution });
-          yield* publish({
-            _tag: "state",
-            state: { ...(yield* stateOf), dialogResolution: resolution },
-          });
-          return resolution;
-        }),
-      );
-      if (!resolution || resolution.delivery === "not-sent") return resolution;
-      const result = yield* child
-        .write(resolution.reason === "answered" && answer ? answer : dialogCancellation(dialog.id))
-        .pipe(Effect.result);
-      const final: DialogResolution = {
-        ...resolution,
-        delivery: result._tag === "Success" ? "written" : "uncertain",
-        detail:
-          result._tag === "Success"
-            ? `${resolution.reason === "answered" ? "Answer" : "Cancellation"} written to Pi. Consumption is unconfirmed; Pi sends no UI acknowledgement.`
-            : `Dialog response delivery is uncertain. It will not be retried or reopened. Inspect the session; restart Pi if blocked. ${result.failure.detail}`,
-      };
-      yield* Semaphore.withPermits(
-        lock,
-        1,
-      )(
-        Effect.gen(function* () {
-          const state = yield* stateOf;
-          if (state.dialogResolution?.id === dialog.id && !announced)
-            yield* publish({ _tag: "state", state: { ...state, dialogResolution: final } });
-          if (result._tag === "Failure")
-            yield* publish({ _tag: "notice", level: "error", message: final.detail });
-        }),
-      );
-      if (result._tag === "Failure") return yield* result.failure;
-      return final;
+    // Dialog claims share publication's lock: claim under it, write to Pi outside it.
+    const dialogs = makeSessionDialogs({
+      generation,
+      scope: sessionScope,
+      write: child.write,
+      publication: {
+        locked: Semaphore.withPermits(lock, 1),
+        publish,
+        mergeState,
+        state: stateOf,
+        dialogs: dialogsOf,
+        announced: () => announced,
+      },
+      abortInProgress: () => aborting?.dispatched,
     });
 
     const endAbortingPrompt = (operation: number) =>
@@ -585,29 +523,14 @@ const openSession = (spec: PiSessionSpec) =>
         )(
           Effect.gen(function* () {
             const projected = projector.record(record, receivedAt);
-            if (projected.dialog)
-              dialogClosed.set(projected.dialog.id, yield* Deferred.make<void>());
+            if (projected.dialog) yield* dialogs.opened(projected.dialog);
             if (projected.state) yield* mergeState(projected.state);
             for (const event of projected.events) yield* publish(event);
             return projected;
           }),
         );
         yield* scheduleRefresh(...refresh);
-        const closed = dialog && dialogClosed.get(dialog.id);
-        if (!dialog || !closed) return;
-        const abort = aborting;
-        // Never stop stdout consumption while an extension or a pipe is blocked.
-        yield* Effect.gen(function* () {
-          if (abort) yield* Deferred.await(abort.dispatched);
-          else
-            yield* Effect.sleep(
-              Math.max(0, dialog.deadlineAt - (yield* Clock.currentTimeMillis)),
-            ).pipe(Effect.raceFirst(Deferred.await(closed)));
-          yield* resolveDialog(
-            dialog,
-            abort ? "aborted" : dialog.deadlineKind === "pi-timeout" ? "expired" : "recovery",
-          );
-        }).pipe(Effect.ignore, Effect.forkIn(sessionScope));
+        if (dialog) yield* dialogs.watch(dialog);
       });
 
     const recordsDrained = yield* Deferred.make<void>();
@@ -655,17 +578,7 @@ const openSession = (spec: PiSessionSpec) =>
                 },
               },
             ]);
-          for (const dialog of yield* dialogsOf)
-            yield* resolveDialog(dialog, "exited").pipe(Effect.ignore);
-          const resolution = (yield* stateOf).dialogResolution;
-          if (resolution?.delivery === "pending")
-            yield* patchState({
-              dialogResolution: {
-                ...resolution,
-                delivery: "uncertain",
-                detail: "Pi stopped during response delivery. Do not resend this dialog response.",
-              },
-            });
+          yield* dialogs.resolveAll("exited");
           yield* apply(() => [...projector.closed(), { _tag: "closed", closure: final }]);
         });
       });
@@ -820,16 +733,14 @@ const openSession = (spec: PiSessionSpec) =>
                 acknowledged: false,
               };
               aborting = current;
-              const dialogs = yield* dialogsOf;
+              const open = yield* dialogsOf;
               const native = yield* child.request(command, dispatched).pipe(Effect.forkChild);
               // Order abort before releasing an extension that may continue work.
               // This waits for the transport attempt, NOT Pi's acknowledgement.
               yield* Deferred.await(dispatched);
               // Cancellation must not wait for native abort's acknowledgement:
               // idle extension commands often have no signal for it to cancel.
-              for (const dialog of dialogs) {
-                yield* resolveDialog(dialog, "aborted").pipe(Effect.ignore);
-              }
+              yield* dialogs.resolveAll("aborted", open);
               yield* Fiber.join(native).pipe(
                 Effect.ensuring(
                   Effect.sync(() => {
@@ -896,35 +807,9 @@ const openSession = (spec: PiSessionSpec) =>
             yield* child.request(yield* commandOf(piCommandFor(action)));
             yield* refreshState(operation);
             return;
-          case "answer": {
-            const work = Effect.gen(function* () {
-              const dialog = (yield* dialogsOf).find((open) => open.id === action.id);
-              if (!dialog || action.generation !== generation)
-                return yield* new PiSessionError({
-                  reason: "rejected",
-                  detail:
-                    "Dialog is no longer open in this Pi process. Refresh the session; do not resend the answer.",
-                });
-              const answer = yield* commandOf(piCommandFor(action, dialog));
-              const resolution = yield* resolveDialog(
-                dialog,
-                action.cancelled ? "cancelled" : "answered",
-                answer,
-              );
-              if (
-                !resolution ||
-                resolution.reason === "expired" ||
-                resolution.reason === "recovery"
-              )
-                return yield* new PiSessionError({
-                  reason: "rejected",
-                  detail:
-                    "Dialog was already claimed or its host deadline elapsed. The answer was not sent.",
-                });
-            });
-            yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
+          case "answer":
+            yield* dialogs.answer(action);
             return;
-          }
         }
       });
 
