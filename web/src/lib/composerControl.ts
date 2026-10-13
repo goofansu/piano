@@ -1,12 +1,12 @@
 /**
  * What the composer's controls do for one moment of a session: whether the primary button sends,
  * queues or stops, whether it is enabled, what it says, what Esc does and how a send-key press is
- * delivered. The Enter guard and the button read the same `enabled`, so they cannot disagree.
- * The New page's first message has its situation here too.
- * Pure and React-free; the composers render from it.
+ * delivered, down to the wire command each one sends. The Enter guard and the button read the same
+ * `enabled`, so they cannot disagree. The New page's first message has its situation and command
+ * here too. Pure and React-free; the composers render from it.
  */
-import type { ModelCatalog, QueuedMessage } from "@shared/wire";
-import { hasContent, type ImageDraft, sendable } from "./messageDraft.ts";
+import type { ClientCommand, ModelCatalog, QueuedMessage, StartOptions } from "@shared/wire";
+import { type DraftMessage, hasContent, type ImageDraft, sendable } from "./messageDraft.ts";
 
 /** How a message sent while Pi works is delivered. */
 export type DeliveryMode = QueuedMessage["kind"];
@@ -22,8 +22,24 @@ export const otherMode = (mode: DeliveryMode): DeliveryMode =>
   mode === "steering" ? "follow-up" : "steering";
 
 /** The session action that delivers a message of this kind. */
-export const deliveryAction = (kind: DeliveryMode): "steer" | "prompt" =>
+const deliveryAction = (kind: DeliveryMode): "steer" | "prompt" =>
   kind === "steering" ? "steer" : "prompt";
+
+/** Stops Pi: the Stop button, and Esc when nothing is queued. */
+export const STOP: ClientCommand = { _tag: "act", action: { _tag: "stop" } };
+/** Moves queued messages back to the draft without stopping Pi: Edit, and Esc first. */
+export const RESTORE_QUEUE: ClientCommand = { _tag: "act", action: { _tag: "restore_queue" } };
+
+/** Delivers `message` as `kind` (from `delivery`), carrying the picker's start options. */
+export const messageCommand = (
+  kind: DeliveryMode,
+  message: DraftMessage,
+  start: StartOptions,
+): ClientCommand => ({
+  _tag: "act",
+  action: { _tag: deliveryAction(kind), text: message.text, attachments: message.attachments },
+  start,
+});
 
 export interface ComposerSituation {
   text: string;
@@ -56,8 +72,8 @@ export interface ComposerControl {
   showDelivery: boolean;
   /** Images are attached while Pi works; they can only be sent once it finishes. */
   imagesWaiting: boolean;
-  /** Esc acts on the nearest thing first: the queue returns to the draft, then Pi stops. */
-  escape: "restore-queue" | "stop" | "none";
+  /** What Esc sends, nearest thing first: the queue returns to the draft, then Pi stops. */
+  escape: ClientCommand | null;
   /** Queued messages can be moved back to the draft. */
   canRestoreQueue: boolean;
   /** How a send-key press is delivered, or null when it sends nothing. */
@@ -113,7 +129,32 @@ export function composerControl(s: ComposerSituation): ComposerControl {
 }
 
 const escapeAction = (s: ComposerSituation, idle: boolean): ComposerControl["escape"] =>
-  !idle ? "none" : s.queued > 0 ? "restore-queue" : s.streaming ? "stop" : "none";
+  !idle ? null : s.queued > 0 ? RESTORE_QUEUE : s.streaming ? STOP : null;
+
+/** The queued-messages panel above the draft. */
+export interface QueuePanel {
+  /** Whether Pi works through the queue or it waits paused, with the count. */
+  heading: string;
+  editLabel: string;
+  editAriaLabel: string;
+  /** Each message's kind is shown only when a steer is among them. */
+  showKinds: boolean;
+}
+
+/** The panel for `queued`, or null when nothing is queued. */
+export function queuePanel(
+  queued: readonly Pick<QueuedMessage, "kind">[],
+  streaming: boolean,
+): QueuePanel | null {
+  if (queued.length === 0) return null;
+  const one = queued.length === 1;
+  return {
+    heading: `${streaming ? "Queued messages" : "Paused queue"} (${queued.length})`,
+    editLabel: one ? "Edit" : "Edit all",
+    editAriaLabel: one ? "Edit queued message" : "Edit all queued messages",
+    showKinds: queued.some((message) => message.kind === "steering"),
+  };
+}
 
 /** What the New page knows when its first message would create a session. */
 export interface NewSessionSituation {
@@ -137,3 +178,17 @@ export const newSessionReady = (s: NewSessionSituation): boolean =>
   !!s.model &&
   s.projectOpen &&
   sendable({ text: s.text, images: s.images });
+
+/** Creates the session in `cwd`, joining `projectId`, with the first message. */
+export const newSessionCommand = (
+  target: { cwd: string; projectId: string | undefined },
+  message: DraftMessage,
+  options: StartOptions,
+): ClientCommand => ({
+  _tag: "create_session",
+  cwd: target.cwd.trim(),
+  projectId: target.projectId,
+  options,
+  text: message.text,
+  attachments: message.attachments,
+});

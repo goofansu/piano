@@ -31,7 +31,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { WorktreesPopover } from "@/components/Worktrees";
-import { newSessionReady } from "@/lib/composerControl";
+import { newSessionCommand, newSessionReady } from "@/lib/composerControl";
 import { abbrevHome } from "@/lib/format";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
@@ -94,15 +94,8 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
   const submit = () => {
     // Creating switches the main pane to the new session at once, so this page never shows a pending state.
     if (!ready) return;
-    editor.submit(({ text, attachments }) =>
-      send({
-        _tag: "create_session",
-        cwd: cwd.trim(),
-        projectId,
-        options: choice.start(),
-        text,
-        attachments,
-      }),
+    editor.submit((message) =>
+      send(newSessionCommand({ cwd, projectId }, message, choice.start())),
     );
   };
 
