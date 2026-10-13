@@ -30,34 +30,40 @@ export class RegistryLookupError extends Data.TaggedError("RegistryLookupError")
   }
 }
 
-export interface WorktreeEntry {
-  readonly folder: string;
-  readonly path: string;
-  readonly branch: string;
-}
+const WorktreeEntry = Schema.Struct({
+  folder: Schema.String,
+  path: Schema.String,
+  branch: Schema.String,
+});
+export type WorktreeEntry = typeof WorktreeEntry.Type;
 
 /** A session reference's integration links: identities owned by Piano, facts owned by the forge or Radius. */
-export interface SessionLinks {
+const sessionLinkFields = {
   /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
-  readonly pullRequest?: SessionPullRequestLink | null;
+  pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)),
   /** Stable Radius destination. Its revisions and contents remain owned by Radius. */
-  readonly radiusShare?: RadiusShareLink;
-}
+  radiusShare: Schema.optional(RadiusShareLink),
+};
+const SessionLinks = Schema.Struct(sessionLinkFields);
+export type SessionLinks = typeof SessionLinks.Type;
 export type SessionLinkKey = keyof SessionLinks;
 
-export interface SessionEntry extends SessionLinks {
-  readonly projectId?: string;
-  readonly cwd: string;
-  readonly sessionId: string;
-  readonly title?: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly archived: boolean;
+/** One session reference: the registry's single statement of a session's fields. */
+const SessionEntry = Schema.Struct({
+  ...sessionLinkFields,
+  projectId: Schema.optional(Schema.String),
+  cwd: Schema.String,
+  sessionId: Schema.String,
+  title: Schema.optional(Schema.String),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  archived: Schema.Boolean,
   /** Sidebar preference; absent means unpinned. */
-  readonly pinned?: boolean;
+  pinned: Schema.optional(Schema.Boolean),
   /** Replaceable last-known Pi accounting, not session history. */
-  readonly stats?: SessionStats;
-}
+  stats: Schema.optional(SessionStats),
+});
+export type SessionEntry = typeof SessionEntry.Type;
 
 /** What a session reference shows: cached statistics and integration links never reach the sidebar. */
 export const shownReference = ({
@@ -96,26 +102,10 @@ export const RegistryDatabasePath = Context.Reference<string>("piano/RegistryDat
 const currentSchema = Schema.Struct({
   version: Schema.Literal(2),
   folders: Schema.Array(Schema.String),
-  worktrees: Schema.Array(
-    Schema.Struct({ folder: Schema.String, path: Schema.String, branch: Schema.String }),
-  ),
+  worktrees: Schema.Array(WorktreeEntry),
   workspaces: Schema.Array(Workspace),
   projects: Schema.Array(Project),
-  sessions: Schema.Array(
-    Schema.Struct({
-      cwd: Schema.String,
-      sessionId: Schema.String,
-      title: Schema.optional(Schema.String),
-      createdAt: Schema.String,
-      updatedAt: Schema.String,
-      archived: Schema.Boolean,
-      pinned: Schema.optional(Schema.Boolean),
-      stats: Schema.optional(SessionStats),
-      pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)),
-      radiusShare: Schema.optional(RadiusShareLink),
-      projectId: Schema.optional(Schema.String),
-    }),
-  ),
+  sessions: Schema.Array(SessionEntry),
 });
 
 /** Path references keep their spelling: never move or merge Pi's alias-based history. */
