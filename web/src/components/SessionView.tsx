@@ -53,7 +53,15 @@ export function SessionView({ state, send }: Props) {
   const input = state.pendingCreate;
   const { workspace, changesWorkspace } = sessionContext(state);
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
-  const pullRequest = useSessionPullRequest(workspace?.id, t?.sessionId, !!t && isWorking(t.state));
+  const pullRequest = useSessionPullRequest(
+    workspace?.id,
+    t?.sessionId,
+    !!t && isWorking(t.state),
+    {
+      open: pullRequestOpen,
+      onOpenChange: onPullRequestOpenChange,
+    },
+  );
   const { status, replyActivity } = sessionActivity(state, display);
   const pane = sessionPane(state);
   const notices = sessionNotices(state, display);
@@ -72,8 +80,6 @@ export function SessionView({ state, send }: Props) {
           t?.sessionId && (
             <SessionPullRequestControl
               key={sessionKey(t)}
-              open={pullRequestOpen}
-              onOpenChange={onPullRequestOpenChange}
               pr={pullRequest}
               menuTrigger={menuTrigger}
             />
