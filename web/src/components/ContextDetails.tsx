@@ -14,8 +14,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { type ContextFigures, cacheHit, type SessionUsage } from "@/lib/contextUsage";
-import { formatTokenCount } from "@/lib/format";
+import {
+  type ContextFigures,
+  type HistoryMetric,
+  responseHistory,
+  type SessionUsage,
+  subagentRows,
+  usageBreakdown,
+} from "@/lib/contextUsage";
 
 interface Props {
   figures: ContextFigures;
@@ -24,27 +30,20 @@ interface Props {
   messages: ReadonlyArray<RenderMsg>;
 }
 
-const number = (value: number) => value.toLocaleString();
-const dollars = (value: number) => `$${value.toFixed(4)}`;
-
 /** History usage is per response, not a reconstruction of Pi's current context. */
 export function ContextDetails({ figures, usage: session, messages }: Props) {
-  const { cost, tokens: totals, subagents } = session ?? {};
-  const responses = messages.filter((message) => message.role === "assistant" && message.usage);
   const [selectedId, setSelectedId] = useState<string>();
-  const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
-  const selected = responses.find((message) => message.id === selectedId) ?? responses.at(-1);
-  const values = responses.map((message) =>
-    metric === "tokens" ? message.usage!.totalTokens : message.usage!.cost,
+  const [metric, setMetric] = useState<HistoryMetric>("tokens");
+  const { responses, values, peak, peakText, selected, position } = responseHistory(
+    messages,
+    metric,
+    selectedId,
   );
-  const max = Math.max(0, ...values);
-  const usage = selected?.usage;
-  const position = selected ? responses.indexOf(selected) + 1 : 0;
+  const breakdown = usageBreakdown(selected?.usage, session);
+  const subagents = subagentRows(session?.subagents);
+  const totals = session?.tokens;
   const chartRef = useRef<HTMLDivElement>(null);
   const chartWidth = responses.length * 12;
-  // A Run that spent nothing is still a Run, but not a row worth reading.
-  const spent =
-    subagents?.profiles.filter((profile) => profile.totalTokens > 0 || profile.cost > 0) ?? [];
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -61,7 +60,7 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
       <section className="flex flex-col gap-2">
         <h2 className="font-medium">{figures.heading}</h2>
         {figures.window !== undefined && (
-          <p className="text-ink-2">Context window: {number(figures.window)} tokens</p>
+          <p className="text-ink-2">Context window: {figures.window.toLocaleString()} tokens</p>
         )}
         {figures.used && (
           <Progress
@@ -83,7 +82,7 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
             variant="outline"
             value={metric}
             onValueChange={(value) => {
-              if (value) setMetric(value as "tokens" | "cost");
+              if (value) setMetric(value as HistoryMetric);
             }}
             aria-label="Graph metric"
           >
@@ -104,8 +103,7 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
         ) : (
           <>
             <p className="text-xs text-ink-2">
-              {metric === "tokens" ? "Tokens" : "Cost"} per response · peak{" "}
-              {metric === "tokens" ? formatTokenCount(max) : dollars(max)}
+              {metric === "tokens" ? "Tokens" : "Cost"} per response · peak {peakText}
             </p>
             {/* biome-ignore lint/a11y/useSemanticElements: a <section> region would add a landmark inside a popover. */}
             <div
@@ -129,9 +127,9 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
                     key={responses[index].id}
                     className="transition-[opacity,height,y] duration-300"
                     x={index * 12}
-                    y={80 - (max > 0 ? (value / max) * 76 : 0)}
+                    y={80 - (peak > 0 ? (value / peak) * 76 : 0)}
                     width={11}
-                    height={max > 0 ? (value / max) * 76 : 0}
+                    height={peak > 0 ? (value / peak) * 76 : 0}
                     fill="currentColor"
                     opacity={responses[index].id === selected?.id ? 1 : 0.35}
                   />
@@ -173,41 +171,19 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(
-              [
-                ["Input", usage?.input, totals?.input],
-                ["Output", usage?.output, totals?.output],
-                ["Cache read", usage?.cacheRead, totals?.cacheRead],
-                ["Cache write", usage?.cacheWrite, totals?.cacheWrite],
-                ["Cache hit", cacheHit(usage), cacheHit(totals)],
-                ["Total tokens", usage?.totalTokens, totals?.total],
-                ["Cost", usage?.cost, cost],
-              ] as const
-            ).map(([label, response, session]) => (
-              <TableRow key={label}>
+            {breakdown.map((row) => (
+              <TableRow key={row.label}>
                 <TableHead scope="row" className="text-left font-normal text-ink-2">
-                  {label}
+                  {row.label}
                 </TableHead>
-                {[response, session].map((value, index) => (
-                  /* biome-ignore lint/suspicious/noArrayIndexKey: two fixed columns. */ <TableCell
-                    key={index}
-                    className="break-all"
-                  >
-                    {value === undefined
-                      ? "—"
-                      : label === "Cost"
-                        ? dollars(value)
-                        : label === "Cache hit"
-                          ? `${value}%`
-                          : number(value)}
-                  </TableCell>
-                ))}
+                <TableCell className="break-all">{row.response}</TableCell>
+                <TableCell className="break-all">{row.session}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        {totals && <p className="sr-only">Session total: {number(totals.total)} tokens</p>}
-        {subagents && spent.length > 0 && (
+        {totals && <p className="sr-only">Session total: {totals.total.toLocaleString()} tokens</p>}
+        {subagents && (
           <Table
             className="table-fixed text-right text-xs tabular-nums"
             aria-label="Subagent usage by profile"
@@ -221,30 +197,30 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
             </TableHeader>
             <TableBody>
               {/* A Profile row may wrap to two lines: pad it and keep the figures on the Profile's line. */}
-              {spent.map((profile) => (
-                <TableRow key={profile.profile} className="*:py-2.5 *:align-top">
+              {subagents.rows.map((row) => (
+                <TableRow key={row.profile} className="*:py-2.5 *:align-top">
                   <TableHead
                     scope="row"
                     className="h-auto whitespace-normal text-left font-normal text-ink-2"
                   >
-                    <span className="block wrap-anywhere">{profile.profile}</span>
+                    <span className="block wrap-anywhere">{row.profile}</span>
                     {/* The model ID alone; the provider stays in the tooltip. */}
-                    {profile.model && (
-                      <span className="mt-1 block wrap-anywhere text-ink-3" title={profile.model}>
-                        {profile.model.slice(profile.model.indexOf("/") + 1)}
+                    {row.model && (
+                      <span className="mt-1 block wrap-anywhere text-ink-3" title={row.modelRef}>
+                        {row.model}
                       </span>
                     )}
                   </TableHead>
-                  <TableCell className="break-all">{number(profile.totalTokens)}</TableCell>
-                  <TableCell className="break-all">{dollars(profile.cost)}</TableCell>
+                  <TableCell className="break-all">{row.tokens}</TableCell>
+                  <TableCell className="break-all">{row.cost}</TableCell>
                 </TableRow>
               ))}
               <TableRow>
                 <TableHead scope="row" className="text-left font-normal text-ink-2">
                   All subagents
                 </TableHead>
-                <TableCell className="break-all">{number(subagents.total.totalTokens)}</TableCell>
-                <TableCell className="break-all">{dollars(subagents.total.cost)}</TableCell>
+                <TableCell className="break-all">{subagents.total.tokens}</TableCell>
+                <TableCell className="break-all">{subagents.total.cost}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
