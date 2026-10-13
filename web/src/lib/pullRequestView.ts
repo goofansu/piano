@@ -1,8 +1,10 @@
 /**
  * What a session's linked pull request shows: identity, status, the facts that decide whether to
- * open it, and how long ago it last moved. Pure, so the popover and its trigger only render.
+ * open it, and how long ago it last moved; the trigger's face and the link form's wording and
+ * submit rule. Pure, so the popover, its trigger and the form only render.
  */
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
+import { canLink } from "./sessionPullRequest.ts";
 
 export type SignalOutcome = Exclude<PullRequest["checks"] | PullRequest["review"], "none">;
 
@@ -90,5 +92,59 @@ export function pullRequestView(
         ? { additions: pr.additions, deletions: pr.deletions, changedFiles: pr.changedFiles }
         : undefined,
     signals,
+  };
+}
+
+/** Shown wherever a linked PR's live GitHub status could not be read. */
+export const STATUS_UNAVAILABLE = "Status unavailable";
+
+export interface PullRequestTrigger {
+  /** The button's visible face: the number, else "PR". */
+  label: string;
+  ariaLabel: string;
+  /** The status, read after the name; absent when nothing names the PR. */
+  ariaDescription: string | undefined;
+  tooltip: string;
+}
+
+/** The header button that opens a linked PR's details. */
+export function pullRequestTrigger(view: PullRequestView): PullRequestTrigger {
+  const { number, status, title } = view;
+  return {
+    label: number ? `#${number}` : "PR",
+    ariaLabel: number ? `Pull request #${number}` : "PR",
+    ariaDescription: number ? (status?.label ?? STATUS_UNAVAILABLE) : undefined,
+    tooltip: title ?? "Pull request",
+  };
+}
+
+export interface PullRequestForm {
+  /** The submit button and Enter both follow this; `link` refuses whatever it rejects. */
+  canSubmit: boolean;
+  submitLabel: string;
+  /** Changing a link offers Cancel; linking one offers Find from branch, idle unless busy. */
+  secondary:
+    | { action: "cancel"; label: string }
+    | { action: "find"; label: string; disabled: boolean };
+}
+
+/** The link form: a draft URL, linked anew or replacing the saved link while `editing`. */
+export function pullRequestForm({
+  url,
+  busy,
+  finding,
+  editing,
+}: {
+  url: string;
+  busy: boolean;
+  finding: boolean;
+  editing: boolean;
+}): PullRequestForm {
+  return {
+    canSubmit: canLink(url, busy),
+    submitLabel: editing ? "Save link" : "Link",
+    secondary: editing
+      ? { action: "cancel", label: "Cancel" }
+      : { action: "find", label: finding ? "Finding…" : "Find from branch", disabled: busy },
   };
 }

@@ -29,7 +29,9 @@ export type PullRequestOutcome =
   | { _tag: "not-found" }
   | { _tag: "failed"; reason: string }
   /** The session changed, or another change started, before this one settled. */
-  | { _tag: "superseded" };
+  | { _tag: "superseded" }
+  /** Nothing was sent: the URL is blank or another change is in flight. */
+  | { _tag: "refused" };
 
 export interface SessionPullRequestOptions {
   /** Reads with no action; changes with one. */
@@ -61,6 +63,7 @@ export interface SessionPullRequestLink {
   edit: () => void;
   /** Leaves an edit for the details; leaves the link form altogether. */
   cancel: () => void;
+  /** Sends nothing, answering `refused`, unless `canLink` allows it. */
   link: (url: string) => Promise<PullRequestOutcome>;
   discover: () => Promise<PullRequestOutcome>;
   remove: () => Promise<PullRequestOutcome>;
@@ -77,6 +80,9 @@ const fallback = (previous: SessionPullRequest | undefined, error: string): Sess
   discovery: previous?.discovery ?? true,
   error,
 });
+/** A link change needs a URL and no other change in flight; the form's submit follows this rule. */
+export const canLink = (url: string, busy: boolean) => !busy && url.trim() !== "";
+
 /** The identity a session's pull request state belongs to. */
 export const pullRequestKey = (
   workspaceId: string | undefined,
@@ -199,6 +205,7 @@ export function createSessionPullRequest({
       else if (surface === "link-form") closeItself();
     },
     link: async (url) => {
+      if (!canLink(url, observation.getState().mutating)) return { _tag: "refused" };
       const outcome = await change({ action: "link", url });
       if (outcome._tag === "saved") closeItself();
       return outcome;

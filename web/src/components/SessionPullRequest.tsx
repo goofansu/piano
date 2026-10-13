@@ -31,7 +31,14 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { type PullRequestView, pullRequestView, type SignalOutcome } from "@/lib/pullRequestView";
+import {
+  type PullRequestView,
+  pullRequestForm,
+  pullRequestTrigger,
+  pullRequestView,
+  type SignalOutcome,
+  STATUS_UNAVAILABLE,
+} from "@/lib/pullRequestView";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
 const states = {
@@ -59,7 +66,8 @@ function SessionPullRequestTrigger({
   ref: React.Ref<HTMLButtonElement>;
 }) {
   const mobile = useIsMobile();
-  const { number, status } = view;
+  const { status } = view;
+  const face = pullRequestTrigger(view);
   const Icon = status ? states[status.state].Icon : GitPullRequestIcon;
   return (
     <Tooltip>
@@ -69,20 +77,20 @@ function SessionPullRequestTrigger({
             ref={ref}
             variant="ghost"
             size={mobile ? "xs" : "lg"}
-            aria-label={number ? `Pull request #${number}` : "PR"}
-            aria-description={number ? (status?.label ?? "Status unavailable") : undefined}
+            aria-label={face.ariaLabel}
+            aria-description={face.ariaDescription}
           >
             <Icon
               data-icon="inline-start"
               className={status ? states[status.state].color : "text-muted-foreground"}
               aria-hidden
             />{" "}
-            {number ? `#${number}` : "PR"}
+            {face.label}
           </Button>
         </TooltipTrigger>
       </PopoverTrigger>
       <TooltipContent className="max-w-80">
-        <p className="text-wrap">{view.title ?? "Pull request"}</p>
+        <p className="text-wrap">{face.tooltip}</p>
       </TooltipContent>
     </Tooltip>
   );
@@ -247,7 +255,7 @@ export function SessionPullRequestControl({
                   {view.status ? (
                     <PullRequestStatusBadge status={view.status} />
                   ) : (
-                    <Badge variant="secondary">Status unavailable</Badge>
+                    <Badge variant="secondary">{STATUS_UNAVAILABLE}</Badge>
                   )}
                   {(view.author || view.timeLabel) && (
                     <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -303,11 +311,13 @@ function PullRequestForm({ pr, editing }: { pr: PullRequestControl; editing: boo
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);
+  const form = pullRequestForm({ url, busy: pr.busy, finding: pr.finding, editing });
+  const { secondary } = form;
   return (
     <form
       onSubmit={async (event) => {
         event.preventDefault();
-        await pr.link(url);
+        if (form.canSubmit) await pr.link(url);
       }}
       className="flex flex-col gap-4"
     >
@@ -326,24 +336,24 @@ function PullRequestForm({ pr, editing }: { pr: PullRequestControl; editing: boo
         </Field>
       </FieldGroup>
       <div className="flex flex-col gap-2">
-        <Button type="submit" disabled={pr.busy || !url.trim()}>
-          {editing ? "Save link" : "Link"}
+        <Button type="submit" disabled={!form.canSubmit}>
+          {form.submitLabel}
         </Button>
-        {editing ? (
+        {secondary.action === "cancel" ? (
           <Button type="button" variant="ghost" onClick={pr.cancel}>
-            Cancel
+            {secondary.label}
           </Button>
         ) : (
           <Button
             type="button"
             variant="outline"
-            disabled={pr.busy}
+            disabled={secondary.disabled}
             onClick={() => {
               void pr.discover();
             }}
           >
             <GitBranchIcon data-icon="inline-start" />
-            {pr.finding ? "Finding…" : "Find from branch"}
+            {secondary.label}
           </Button>
         )}
       </div>
