@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
@@ -116,7 +116,11 @@ try {
       encoding: "utf8",
     });
     assert.equal(result.status, 0);
-    assert.equal(result.stdout.trim(), "1.0.2");
+    const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
+    assert.equal(
+      result.stdout.trim(),
+      lock.packages["node_modules/@earendil-works/pi-coding-agent"].version,
+    );
     return {
       version: result.stdout.trim(),
       cli: fixture.installedCli,
@@ -411,7 +415,7 @@ try {
         acknowledgementDeadlineMs: 4000,
         shutdownGraceMs: 3000,
       },
-      followUp: "Pi 1.0.2 startup limitation; bounded failure, no startup-dialog support claim",
+      followUp: "Pi startup limitation; bounded failure, no startup-dialog support claim",
     });
     console.log(JSON.stringify(checks[checks.length - 1]));
   }
