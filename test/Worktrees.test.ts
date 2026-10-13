@@ -21,8 +21,8 @@ import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry
 import { SessionHostsLive } from "../server/SessionHosts.ts";
 import { SidebarView, SidebarViewLive } from "../server/SidebarView.ts";
 import {
+  checkoutHint,
   createWorktree,
-  gitHeadSubject,
   listWorktrees,
   WorktrunkCommand,
 } from "../server/Worktrees.ts";
@@ -131,7 +131,10 @@ test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints
     assert.ok(result.status === "ready", JSON.stringify(result));
     assert.equal(result.currentPath, repo);
     assert.deepEqual(result.worktrees.map((w) => w.branch).sort(), ["feature", "main"]);
-    assert.equal(await Effect.runPromise(gitHeadSubject(repo)), "baseline");
+    assert.deepEqual(await Effect.runPromise(checkoutHint(repo)), {
+      root: repo,
+      subject: "baseline",
+    });
   } finally {
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];

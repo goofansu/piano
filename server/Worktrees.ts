@@ -56,17 +56,26 @@ const compatible = Effect.gen(function* () {
     });
 });
 
-/** Lightweight optional hints for the directory browser, not repository health. */
-export const gitHeadSubject = (path: string): Effect.Effect<string> =>
-  git(path, ["log", "-1", "--format=%s"], 2000).pipe(
+/** Lightweight optional hints for the directory browser, not repository health: the root of the
+ * checkout `path` is in, and its HEAD subject; `subjectOnly` skips the root lookup (one Git read)
+ * for a path already known to hold `.git`. Never fails; a hint Git cannot give is absent. */
+export const checkoutHint = Effect.fn("Worktrees.checkoutHint")(function* (
+  path: string,
+  options: { readonly subjectOnly?: boolean } = {},
+): Effect.fn.Return<{ readonly root?: string; readonly subject?: string }> {
+  const root = options.subjectOnly
+    ? undefined
+    : yield* git(path, ["rev-parse", "--show-toplevel"], 2000).pipe(
+        Effect.map((out) => out.trim()),
+        Effect.orElseSucceed(() => ""),
+      );
+  if (root === "") return {};
+  const subject = yield* git(path, ["log", "-1", "--format=%s"], 2000).pipe(
     Effect.map((out) => out.trim().slice(0, 120)),
     Effect.orElseSucceed(() => ""),
   );
-export const gitTopLevel = (path: string): Effect.Effect<string> =>
-  git(path, ["rev-parse", "--show-toplevel"], 2000).pipe(
-    Effect.map((out) => out.trim()),
-    Effect.orElseSucceed(() => ""),
-  );
+  return { root, subject: subject || undefined };
+});
 
 const Created = Schema.Struct({
   action: Schema.Literal("created"),

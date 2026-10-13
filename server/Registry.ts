@@ -5,12 +5,12 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
 import { RadiusShareLink } from "../shared/share.ts";
 import { Project, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
+import { Directories } from "./Directories.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { openRegistryDatabase } from "./RegistryDatabase.ts";
 
@@ -173,6 +173,11 @@ const recovery = (path: string, error: unknown) =>
   new RegistryError({
     detail: `Cannot read or persist registry ${path}. It has not been reset. Restore a known-good backup or repair the database before restarting. ${String(error)}`,
   });
+/** A folder must name an existing directory before it is registered. */
+const requireDirectory = (raw: string) =>
+  Directories.require(raw).pipe(
+    Effect.mapError((error) => new RegistryError({ detail: error.detail })),
+  );
 
 /** Told about each write that changed the data, with the data before and after it. */
 export type RegistryListener = (before: RegistryData, after: RegistryData) => Effect.Effect<void>;
@@ -438,9 +443,7 @@ export const RegistryLive = Layer.effect(
         }),
       addFolder: (raw) =>
         Effect.gen(function* () {
-          const path = directoryPath(raw);
-          if (!existsSync(path) || !statSync(path).isDirectory())
-            return yield* new RegistryError({ detail: `Not a directory: ${path}` });
+          const path = yield* requireDirectory(raw);
           yield* update((d) =>
             d.folders.includes(path) ? d : { ...d, folders: [...d.folders, path] },
           );
@@ -450,8 +453,7 @@ export const RegistryLive = Layer.effect(
           const path = directoryPath(raw);
           const d = yield* Ref.get(state);
           if (d.folders.includes(path) || d.worktrees.some((w) => w.path === path)) return path;
-          if (!existsSync(path) || !statSync(path).isDirectory())
-            return yield* new RegistryError({ detail: `Not a directory: ${path}` });
+          yield* requireDirectory(path);
           yield* update((x) =>
             x.folders.includes(path) ? x : { ...x, folders: [...x.folders, path] },
           );
