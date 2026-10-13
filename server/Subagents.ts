@@ -35,8 +35,11 @@ const tone = (value: unknown, result = false) =>
   value === "warning" ||
   value === "error" ||
   (result && value === "toolOutput");
-export const titleStatus = (value: "completed" | "failed" | "cancelled") =>
+const titleStatus = (value: "completed" | "failed" | "cancelled") =>
   value[0].toUpperCase() + value.slice(1);
+/** Steer details carry only pi-subagent's row phrase, no structured outcome; these are the refusals
+ * that leave the Run's state unresolved for the reader ("unknown Run", "Run cancelled"). */
+const unresolvedControl = (rowPhrase: string) => /unknown|cancell/i.test(rowPhrase);
 const figure = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
 /** A delivered Run's usage and model, each dropped alone when malformed so the card survives.
@@ -189,6 +192,7 @@ export class SubagentProjection {
         ...this.runs.get(facts.runId),
         message: typeof input.message === "string" ? input.message : undefined,
         status: facts.rowPhrase,
+        attention: unresolvedControl(facts.rowPhrase),
       };
     }
     if ((name === "agent_wait" || name === "agent_wait_all") && facts.kind === "collection") {
@@ -252,6 +256,8 @@ export class SubagentProjection {
         unknown: facts.unknown,
         unavailable: facts.unavailable,
         noActiveRuns: facts.noActiveRuns,
+        attention:
+          !facts.noActiveRuns && facts.stillRunning + facts.unknown + facts.unavailable > 0,
       };
     }
     if (
@@ -273,6 +279,7 @@ export class SubagentProjection {
           status: titleStatus(run.status),
           terminalStatus: run.status,
           ...spendOf(run),
+          attention: false,
         };
       }
       if (
@@ -286,6 +293,7 @@ export class SubagentProjection {
           ...this.runs.get(facts.runId),
           status:
             facts.outcome === "still-running" ? "Still running when checked" : facts.rowPhrase,
+          attention: true,
         };
       if (facts.outcome === "unavailable" && identifier(facts.runId) && terminal(facts.status))
         return {
@@ -295,6 +303,7 @@ export class SubagentProjection {
           ...this.runs.get(facts.runId),
           status: `${titleStatus(facts.status)} · Result unavailable`,
           terminalStatus: facts.status,
+          attention: true,
         };
       return undefined;
     }
@@ -327,6 +336,8 @@ export class SubagentProjection {
         kind: "cancellation",
         status: clauses.join(" · ") || "No run ids were given",
         outcomes,
+        // Requested, already requested and unknown outcomes leave their Runs unsettled.
+        attention: requested + already + unknown > 0,
       };
     }
     return undefined;
@@ -358,6 +369,7 @@ export class SubagentProjection {
       terminalStatus: facts.status,
       durationMillis: facts.durationMillis,
       ...spendOf(facts),
+      attention: false,
     };
   }
 }

@@ -1,4 +1,4 @@
-import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
+import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, SparklesIcon } from "lucide-react";
 import {
@@ -25,6 +25,7 @@ import { disclosureRow } from "@/lib/styles";
 import {
   BOTTOM_ENTRY,
   messageAnchorId,
+  nestedStatus,
   type SubagentFacts,
   type ToolOutcome,
   type ToolRow,
@@ -430,77 +431,52 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
   );
 }
 
-function subagentTitle(card: SubagentCard): string {
-  if (card.kind === "collection") return card.label ?? "Subagent results";
-  if (card.kind === "cancellation") return "Subagent cancellation";
-  if (card.kind === "control") return card.label ?? "Subagent guidance";
-  return (
-    card.label ??
-    (card.kind === "delegation"
-      ? card.action === "resume"
-        ? "Resume subagent"
-        : "Delegate task"
-      : "Subagent result")
-  );
-}
-
-function subagentAria(card: SubagentCard, title: string): string {
-  if (card.kind === "delegation") return `Delegation: ${title}`;
-  if (card.kind === "result" || card.kind === "collection") return `Subagent result: ${title}`;
-  return `Subagent operation: ${title}`;
-}
+const SUBAGENT_DOT: Record<SubagentFacts["dot"], string> = {
+  err: "bg-err",
+  ok: "bg-ok",
+  idle: "bg-ink-3",
+};
 
 /** Structured pi-subagent facts use the standard disclosure primitive. The
  * transcript row itself is intentionally quiet; identity and output stay on demand. */
 function SubagentCardView({
   card,
-  terminal,
+  title,
+  ariaLabel,
+  isResult,
+  profile,
+  runId,
   statusLabel,
   badge,
+  dot,
   failed,
   output,
+  details,
   hasDetails,
   markdown = false,
 }: SubagentFacts & { markdown?: boolean }) {
   const [open, setOpen] = useState(false);
-  const title = subagentTitle(card);
-  const runId = "runId" in card ? card.runId : undefined;
   return (
     <Collapsible
       open={open}
       onOpenChange={setOpen}
       role="group"
-      aria-label={subagentAria(card, title)}
+      aria-label={ariaLabel}
       data-slot={card.kind === "delegation" ? "delegation-card" : "subagent-result-card"}
       data-run-id={runId}
       className="text-sm"
     >
       <Row
         className="items-center"
-        glyph={
-          <span
-            className={cn(
-              "block size-2 rounded-full",
-              failed || terminal === "failed"
-                ? "bg-err"
-                : terminal === "completed"
-                  ? "bg-ok"
-                  : "bg-ink-3",
-            )}
-          />
-        }
+        glyph={<span className={cn("block size-2 rounded-full", SUBAGENT_DOT[dot])} />}
       >
         <CollapsibleTrigger asChild disabled={!hasDetails}>
           <button type="button" className={disclosureRow}>
             <span className="min-w-0 flex-1 truncate font-medium text-ink">
-              {(card.kind === "result" || card.kind === "collection") && (
-                <span className="font-normal text-ink-3">Result · </span>
-              )}
+              {isResult && <span className="font-normal text-ink-3">Result · </span>}
               {title}
             </span>
-            {"profile" in card && card.profile && (
-              <span className="max-w-28 shrink truncate text-ink-3">{card.profile}</span>
-            )}
+            {profile && <span className="max-w-28 shrink truncate text-ink-3">{profile}</span>}
             <Badge variant={badge} className="max-w-56 truncate">
               {statusLabel}
             </Badge>
@@ -512,61 +488,44 @@ function SubagentCardView({
         <CollapsibleContent className="disclosure-content">
           <Row glyph={null} className="pt-2">
             <div className="flex flex-col gap-3 border-l-2 border-line pl-3 text-ink-2">
-              {(("subagentId" in card && card.subagentId) || runId) && (
-                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
-                  {"subagentId" in card && card.subagentId && (
-                    <>
-                      <dt className="text-ink-3">Subagent</dt>
-                      <dd className="break-all font-mono">{card.subagentId}</dd>
-                    </>
-                  )}
-                  {runId && (
-                    <>
-                      <dt className="text-ink-3">Run</dt>
-                      <dd className="break-all font-mono">{runId}</dd>
-                    </>
-                  )}
-                </dl>
-              )}
-              {card.kind === "delegation" && card.prompt && (
-                <div>
-                  <p className="mb-1 text-xs text-ink-3">Prompt</p>
-                  <pre className="whitespace-pre-wrap break-words">{clamp(card.prompt, 8000)}</pre>
-                </div>
-              )}
-              {card.kind === "control" && card.message && (
-                <div>
-                  <p className="mb-1 text-xs text-ink-3">Guidance</p>
-                  <pre className="whitespace-pre-wrap break-words">{clamp(card.message, 8000)}</pre>
-                </div>
-              )}
-              {card.kind === "result" && card.durationMillis !== undefined && (
-                <p className="text-xs text-ink-3">
-                  Duration {(card.durationMillis / 1000).toFixed(1)}s
-                </p>
-              )}
-              {card.kind === "collection" && (
-                <p className="text-xs text-ink-3">
-                  Delivered {card.runs.length} · Unavailable {card.unavailable} · Still running when
-                  checked {card.stillRunning} · Unknown {card.unknown}
-                </p>
-              )}
-              {card.kind === "collection" &&
-                card.runs.map((run) => (
-                  <p key={run.runId} className="break-all font-mono text-xs">
-                    {run.runId} · {run.profile} · {run.status}
-                  </p>
-                ))}
-              {card.kind === "cancellation" &&
-                card.outcomes.map((outcome) => (
-                  <p
-                    key={`${outcome.kind}:${outcome.runId}`}
-                    className="break-all font-mono text-xs"
+              {details.map((detail) =>
+                detail.kind === "identity" ? (
+                  <dl
+                    key="identity"
+                    className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs"
                   >
-                    {outcome.runId} · {outcome.kind}
-                    {outcome.kind === "already terminal" ? ` · ${outcome.phase}` : ""}
+                    {detail.subagentId && (
+                      <>
+                        <dt className="text-ink-3">Subagent</dt>
+                        <dd className="break-all font-mono">{detail.subagentId}</dd>
+                      </>
+                    )}
+                    {detail.runId && (
+                      <>
+                        <dt className="text-ink-3">Run</dt>
+                        <dd className="break-all font-mono">{detail.runId}</dd>
+                      </>
+                    )}
+                  </dl>
+                ) : detail.kind === "text" ? (
+                  <div key={detail.label}>
+                    <p className="mb-1 text-xs text-ink-3">{detail.label}</p>
+                    <pre className="whitespace-pre-wrap break-words">
+                      {clamp(detail.text, 8000)}
+                    </pre>
+                  </div>
+                ) : (
+                  <p
+                    key={`${detail.kind}:${detail.text}`}
+                    className={cn(
+                      "text-xs",
+                      detail.kind === "run" ? "break-all font-mono" : "text-ink-3",
+                    )}
+                  >
+                    {detail.text}
                   </p>
-                ))}
+                ),
+              )}
               {output &&
                 (markdown ? (
                   <Markdown text={output} className="prose-chat" />
@@ -695,25 +654,8 @@ function Tool({
           >
             <p className="flex items-center gap-2">
               {child.name}{" "}
-              <Badge
-                variant={
-                  child.status === "error"
-                    ? "destructive"
-                    : child.status === "success"
-                      ? "success"
-                      : child.status === "running"
-                        ? "warning"
-                        : "secondary"
-                }
-              >
-                {
-                  {
-                    running: "Running",
-                    success: "Done",
-                    error: "Failed",
-                    incomplete: "Incomplete",
-                  }[child.status]
-                }
+              <Badge variant={nestedStatus(child.status).badge}>
+                {nestedStatus(child.status).label}
               </Badge>
             </p>
             <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>

@@ -1,6 +1,4 @@
 import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
-// Relative so node tests can load this pure module without the web alias.
-import { reportedSubagentStatus } from "../../../shared/sessionProjection.ts";
 import { abbrevHome } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
@@ -18,18 +16,40 @@ export type TerminalStatus = "completed" | "failed" | "cancelled";
 /** What became of a tool call: still running, settled with or without a result, or not heard from yet. */
 export type ToolOutcome = "running" | "failed" | "incomplete" | "done" | "pending";
 
+export type Badge = "destructive" | "secondary" | "success" | "warning";
+
+/** One part of a subagent card's on-demand details, in the order it is shown. */
+export type SubagentDetail =
+  /** Which Subagent and Run the card is about. */
+  | { kind: "identity"; subagentId?: string; runId?: string }
+  /** What was sent to the Subagent, under its label. */
+  | { kind: "text"; label: "Prompt" | "Guidance"; text: string }
+  /** A quiet summary line, such as a duration or a collection's counts. */
+  | { kind: "note"; text: string }
+  /** One Run's line in a collection or cancellation, led by its Run ID. */
+  | { kind: "run"; text: string };
+
 /** A pi-subagent card with what it means once every card in the transcript has been read. */
 export interface SubagentFacts {
   card: SubagentCard;
+  title: string;
+  ariaLabel: string;
+  /** The card reports on Run results, so its title reads "Result · <title>". */
+  isResult: boolean;
+  profile?: string;
+  runId?: string;
   /** The run's settled status: reported by a later card, else by this card itself. */
   terminal?: TerminalStatus;
   /** The badge text; it names `terminal` whenever there is one, so it agrees with `badge`. */
   statusLabel: string;
-  badge: "destructive" | "secondary" | "success" | "warning";
+  badge: Badge;
+  /** The gutter dot: a failed call or Run, a completed Run, or neither. */
+  dot: "err" | "ok" | "idle";
   /** The tool call that carried the card failed. */
   failed: boolean;
   output?: string;
-  /** Anything to show when opened: identity, prompt, guidance, outcomes or output. */
+  details: SubagentDetail[];
+  /** Anything to show when opened: `details` or output. */
   hasDetails: boolean;
 }
 
@@ -120,6 +140,87 @@ function summarize(args: string): string {
 
 const titleCase = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
+/** Reported Run outcomes apply only to delegation cards. The last qualifying observation wins;
+ * a cancellation request alone never settles a Run or erases an observed outcome (INV-03). */
+function reportedSubagentStatus(
+  messages: ReadonlyArray<RenderMsg>,
+): (card: SubagentCard | undefined) => TerminalStatus | undefined {
+  const terminalRuns = new Map<string, TerminalStatus>();
+  for (const { subagent: card } of messages) {
+    if (card?.kind === "result" && card.runId && card.terminalStatus)
+      terminalRuns.set(card.runId, card.terminalStatus);
+    if (card?.kind === "collection")
+      for (const run of card.runs) terminalRuns.set(run.runId, run.status);
+    if (card?.kind === "cancellation")
+      for (const outcome of card.outcomes)
+        if (outcome.kind === "already terminal") terminalRuns.set(outcome.runId, outcome.phase);
+  }
+  return (card) =>
+    card?.kind === "delegation" && card.runId ? terminalRuns.get(card.runId) : undefined;
+}
+
+function subagentTitle(card: SubagentCard): string {
+  switch (card.kind) {
+    case "delegation":
+      return card.label ?? (card.action === "resume" ? "Resume subagent" : "Delegate task");
+    case "control":
+      return card.label ?? "Subagent guidance";
+    case "collection":
+      return card.label ?? "Subagent results";
+    case "result":
+      return card.label ?? "Subagent result";
+    case "cancellation":
+      return "Subagent cancellation";
+  }
+}
+
+function subagentDetails(card: SubagentCard): SubagentDetail[] {
+  const details: SubagentDetail[] = [];
+  const subagentId = "subagentId" in card ? card.subagentId : undefined;
+  const runId = "runId" in card ? card.runId : undefined;
+  if (subagentId || runId)
+    details.push({
+      kind: "identity",
+      ...(subagentId ? { subagentId } : {}),
+      ...(runId ? { runId } : {}),
+    });
+  if (card.kind === "delegation" && card.prompt)
+    details.push({ kind: "text", label: "Prompt", text: card.prompt });
+  if (card.kind === "control" && card.message)
+    details.push({ kind: "text", label: "Guidance", text: card.message });
+  if (card.kind === "result" && card.durationMillis !== undefined)
+    details.push({ kind: "note", text: `Duration ${(card.durationMillis / 1000).toFixed(1)}s` });
+  if (card.kind === "collection") {
+    details.push({
+      kind: "note",
+      text: `Delivered ${card.runs.length} · Unavailable ${card.unavailable} · Still running when checked ${card.stillRunning} · Unknown ${card.unknown}`,
+    });
+    for (const run of card.runs)
+      details.push({ kind: "run", text: `${run.runId} · ${run.profile} · ${run.status}` });
+  }
+  if (card.kind === "cancellation")
+    for (const outcome of card.outcomes)
+      details.push({
+        kind: "run",
+        text: `${outcome.runId} · ${outcome.kind}${outcome.kind === "already terminal" ? ` · ${outcome.phase}` : ""}`,
+      });
+  return details;
+}
+
+/** A nested tool call's badge, by what became of the call. */
+export function nestedStatus(status: ToolExecution["status"]): { label: string; badge: Badge } {
+  switch (status) {
+    case "running":
+      return { label: "Running", badge: "warning" };
+    case "success":
+      return { label: "Done", badge: "success" };
+    case "error":
+      return { label: "Failed", badge: "destructive" };
+    case "incomplete":
+      return { label: "Incomplete", badge: "secondary" };
+  }
+}
+
 /** A card's facts, given the settled status another card reported for its run. */
 function subagentFacts(
   card: SubagentCard,
@@ -131,35 +232,40 @@ function subagentFacts(
   // The card's own text may add to the status ("Failed · Result unavailable"); keep it when it agrees.
   const statusLabel =
     terminal && !card.status.startsWith(titleCase(terminal)) ? titleCase(terminal) : card.status;
-  const badge =
+  const badge: Badge =
     terminal === "completed"
       ? "success"
       : terminal === "failed"
         ? "destructive"
         : terminal === "cancelled"
           ? "secondary"
-          : card.kind === "delegation" && !card.admitted
-            ? "destructive"
-            : /unknown|unavailable|still running|cancell/i.test(card.status)
+          : card.kind === "delegation"
+            ? card.admitted
+              ? "secondary"
+              : "destructive"
+            : card.attention
               ? "warning"
               : "secondary";
-  const hasDetails =
-    !!output ||
-    card.kind === "collection" ||
-    card.kind === "cancellation" ||
-    ("subagentId" in card && !!card.subagentId) ||
-    ("runId" in card && !!card.runId) ||
-    (card.kind === "delegation" && !!card.prompt) ||
-    (card.kind === "control" && !!card.message) ||
-    (card.kind === "result" && card.durationMillis !== undefined);
+  const title = subagentTitle(card);
+  const isResult = card.kind === "result" || card.kind === "collection";
+  const profile = "profile" in card ? card.profile : undefined;
+  const runId = "runId" in card ? card.runId : undefined;
+  const details = subagentDetails(card);
   return {
     card,
+    title,
+    ariaLabel: `${card.kind === "delegation" ? "Delegation" : isResult ? "Subagent result" : "Subagent operation"}: ${title}`,
+    isResult,
+    ...(profile ? { profile } : {}),
+    ...(runId ? { runId } : {}),
     ...(terminal ? { terminal } : {}),
     statusLabel,
     badge,
+    dot: failed || terminal === "failed" ? "err" : terminal === "completed" ? "ok" : "idle",
     failed,
     ...(output ? { output } : {}),
-    hasDetails,
+    details,
+    hasDetails: !!output || details.length > 0,
   };
 }
 
