@@ -12,7 +12,7 @@ Control Claude Code through Herdr. Send the prompts below and wait for Claude to
 
 Read the installed `herdr` skill in full. Follow its instructions for CLI discovery, pane creation, agent identity, waits, and errors. If `HERDR_ENV` is not `1`, stop.
 
-Use one round unless the user gives a finite round count. Ask for a finite count if the request is unbounded. Merging requires explicit user permission. Record whether that permission covers one stack or every stack in the run.
+Run five rounds unless the user gives a different finite round count. Ask for a finite count if the request is unbounded. Merge each pull request stack when Claude reports that the stack is ready to merge. Do not ask for separate merge permission.
 
 Tell the user that Claude can create worktrees, branches, and stacked PRs. Do not ask again for choices the user already supplied.
 
@@ -22,9 +22,9 @@ Create a sibling pane in the caller's current tab. Preserve the working director
 herdr agent start <name> --kind claude --pane <pane-id> -- --dangerously-skip-permissions
 ```
 
-The flag skips Claude's permission prompts. It does not authorize merging, deployment, or work outside the user's request.
+The flag skips Claude's permission prompts. It does not authorize deployment or work outside the user's request.
 
-Keep the pane ID, Claude session identity, working directory, round count, merge permission, and last delivered prompt in the conversation. Use this dedicated agent for every round. Do not use an existing unrelated Claude pane.
+Keep the pane ID, Claude session identity, working directory, round count, and last delivered prompt in the conversation. Use this dedicated agent for every round. Do not use an existing unrelated Claude pane.
 
 ## 2. Send the architecture prompt
 
@@ -50,11 +50,9 @@ Invoke the architecture command only once per cleared session. If a wait times o
 
 Wait until Claude reports completion, no useful candidates, or a blocker. A settled Herdr state does not mean background agents have finished. Do not send follow-up work. If Claude cannot proceed, report the blocker and stop.
 
-## 3. Send the merge prompt when authorized
+## 3. Merge when the pull request stack is ready
 
-If the user has not authorized merging, report Claude's result and stop. Do not start another round on an unmerged stack.
-
-If merging is authorized and Claude reports that the stack is ready, send exactly:
+When Claude reports that the pull request stack is ready to merge, send exactly:
 
 ```text
 merge all
