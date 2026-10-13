@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "../shared/wire.ts";
 import {
+  emptyChoice,
+  type HeldChoice,
+  type ModelChange,
   type ModelTarget,
-  pickEffort,
-  pickModel,
-  selectModel,
-  startOptions,
+  modelChoice,
 } from "../web/src/lib/modelChoice.ts";
 
 const model = (ref: string, thinkingLevels: ThinkingLevel[]): ModelChoice => {
@@ -32,35 +32,42 @@ const catalog: ModelCatalog = {
     model("a/plain", ["off"]),
   ],
 };
-const fresh: ModelTarget = { kind: "new" };
+const fresh: ModelTarget = { kind: "new", cwd: "/repo" };
 const hosted: ModelTarget = {
   kind: "session",
+  cwd: "/repo",
+  sessionId: "s1",
   hosted: true,
   model: "a/quick",
   thinkingLevel: "low",
 };
-const saved: ModelTarget = {
-  kind: "session",
-  hosted: false,
-  model: "a/quick",
-  thinkingLevel: "medium",
+const saved: ModelTarget = { ...hosted, hosted: false, thinkingLevel: "medium" };
+
+/** The picker's shown selection and start options. */
+const shown = (held: HeldChoice, c: ModelCatalog | null, target: ModelTarget, ready = true) => {
+  const { model, effort, start } = modelChoice(held, c, target, ready);
+  return { model, effort, start };
+};
+const held = (change: ModelChange): HeldChoice => {
+  if (change.kind !== "hold") return assert.fail(`expected a hold, got ${change.kind}`);
+  return change.held;
 };
 
 test("new session: Pi's defaults, then the user's pick, and it starts with what the picker shows", () => {
-  assert.deepEqual(selectModel(catalog, fresh, {}), { model: "a/deep", effort: "high" });
-  assert.deepEqual(startOptions(catalog, fresh, {}), { model: "a/deep", thinkingLevel: "high" });
+  const none = emptyChoice(fresh);
+  assert.deepEqual(shown(none, catalog, fresh), {
+    model: "a/deep",
+    effort: "high",
+    start: { model: "a/deep", thinkingLevel: "high" },
+  });
 
-  const change = pickModel(fresh, {}, "a/quick");
-  assert.deepEqual(change, { kind: "pick", pick: { model: "a/quick" } });
-  if (change.kind !== "pick") return assert.fail("expected a pick");
+  const picked = held(modelChoice(none, catalog, fresh).chooseModel("a/quick"));
+  assert.deepEqual(picked.pick, { model: "a/quick" });
   // a/quick has no "high": the nearest lower level it accepts.
-  assert.deepEqual(selectModel(catalog, fresh, change.pick), {
+  assert.deepEqual(shown(picked, catalog, fresh), {
     model: "a/quick",
     effort: "medium",
-  });
-  assert.deepEqual(startOptions(catalog, fresh, change.pick), {
-    model: "a/quick",
-    thinkingLevel: "medium",
+    start: { model: "a/quick", thinkingLevel: "medium" },
   });
 });
 
@@ -70,83 +77,142 @@ test("without Pi defaults: medium effort, every level while the model is unknown
     defaultModel: undefined,
     defaultThinkingLevel: undefined,
   };
-  assert.deepEqual(selectModel(bare, fresh, {}), { model: undefined, effort: "medium" });
-  assert.deepEqual(selectModel(null, fresh, { thinkingLevel: "max" }), {
-    model: undefined,
-    effort: "max",
-  });
+  assert.deepEqual(modelChoice(emptyChoice(fresh), bare, fresh).effort, "medium");
+  assert.equal(modelChoice(emptyChoice(fresh), bare, fresh).model, undefined);
+  const max = held(modelChoice(emptyChoice(fresh), null, fresh).chooseEffort("max"));
+  assert.equal(modelChoice(max, null, fresh).effort, "max");
 });
 
 test("switching models re-clamps effort and switching back restores the wanted level", () => {
-  const effort = pickEffort(fresh, {}, "xhigh");
-  if (effort.kind !== "pick") return assert.fail("expected a pick");
-  assert.deepEqual(selectModel(catalog, fresh, effort.pick), { model: "a/deep", effort: "xhigh" });
-  const toPlain = pickModel(fresh, effort.pick, "a/plain");
-  if (toPlain.kind !== "pick") return assert.fail("expected a pick");
-  assert.deepEqual(selectModel(catalog, fresh, toPlain.pick), { model: "a/plain", effort: "off" });
-  const back = pickModel(fresh, toPlain.pick, "a/deep");
-  if (back.kind !== "pick") return assert.fail("expected a pick");
-  assert.deepEqual(selectModel(catalog, fresh, back.pick), { model: "a/deep", effort: "xhigh" });
+  const xhigh = held(modelChoice(emptyChoice(fresh), catalog, fresh).chooseEffort("xhigh"));
+  assert.equal(modelChoice(xhigh, catalog, fresh).effort, "xhigh");
+  const plain = held(modelChoice(xhigh, catalog, fresh).chooseModel("a/plain"));
+  assert.equal(modelChoice(plain, catalog, fresh).effort, "off");
+  const back = held(modelChoice(plain, catalog, fresh).chooseModel("a/deep"));
+  assert.deepEqual(shown(back, catalog, fresh).effort, "xhigh");
 });
 
-test("hosted session: shows Pi's selection and changes go to Pi, never to the first prompt", () => {
-  assert.deepEqual(selectModel(catalog, hosted, { model: "a/deep", thinkingLevel: "high" }), {
+test("hosted session: shows Pi's selection and changes go to Pi, never to the next prompt", () => {
+  const choice = modelChoice(emptyChoice(hosted), catalog, hosted);
+  assert.deepEqual(shown(emptyChoice(hosted), catalog, hosted), {
     model: "a/quick",
     effort: "low",
+    start: {},
   });
-  assert.deepEqual(pickModel(hosted, {}, "a/deep"), {
+  assert.deepEqual(choice.chooseModel("a/deep"), {
     kind: "act",
     action: { _tag: "set_model", model: "a/deep" },
   });
-  assert.deepEqual(pickEffort(hosted, {}, "minimal"), {
+  assert.deepEqual(choice.chooseEffort("minimal"), {
     kind: "act",
     action: { _tag: "set_thinking_level", level: "minimal" },
   });
-  assert.deepEqual(startOptions(catalog, hosted, { model: "a/deep" }), {});
   // Before Pi reports a selection: its defaults.
-  assert.deepEqual(selectModel(catalog, { kind: "session", hosted: true }, {}), {
+  const unreported: ModelTarget = { kind: "session", sessionId: "s1", hosted: true };
+  assert.deepEqual(shown(emptyChoice(unreported), catalog, unreported), {
     model: "a/deep",
     effort: "high",
+    start: {},
   });
 });
 
 test("saved session: shows its recorded selection; only deliberate picks override Pi's restore", () => {
-  assert.deepEqual(selectModel(catalog, saved, {}), { model: "a/quick", effort: "medium" });
-  assert.deepEqual(startOptions(catalog, saved, {}), {});
+  const none = emptyChoice(saved);
+  assert.deepEqual(shown(none, catalog, saved), {
+    model: "a/quick",
+    effort: "medium",
+    start: {},
+  });
 
-  const effort = pickEffort(saved, {}, "low");
-  assert.deepEqual(effort, { kind: "pick", pick: { thinkingLevel: "low" } });
-  if (effort.kind !== "pick") return assert.fail("expected a pick");
-  assert.deepEqual(selectModel(catalog, saved, effort.pick), { model: "a/quick", effort: "low" });
-  assert.deepEqual(startOptions(catalog, saved, effort.pick), { thinkingLevel: "low" });
+  const low = held(modelChoice(none, catalog, saved).chooseEffort("low"));
+  assert.deepEqual(low.pick, { thinkingLevel: "low" });
+  assert.deepEqual(shown(low, catalog, saved), {
+    model: "a/quick",
+    effort: "low",
+    start: { thinkingLevel: "low" },
+  });
 
-  const both = pickModel(saved, effort.pick, "a/plain");
-  if (both.kind !== "pick") return assert.fail("expected a pick");
-  assert.deepEqual(selectModel(catalog, saved, both.pick), { model: "a/plain", effort: "off" });
-  assert.deepEqual(startOptions(catalog, saved, both.pick), {
+  const both = held(modelChoice(low, catalog, saved).chooseModel("a/plain"));
+  assert.deepEqual(shown(both, catalog, saved), {
     model: "a/plain",
-    thinkingLevel: "off",
+    effort: "off",
+    start: { model: "a/plain", thinkingLevel: "off" },
   });
 });
 
 test("reconnect: a pick survives a refreshed catalog that still lists its model", () => {
-  const pick = { model: "a/quick", thinkingLevel: "low" as const };
+  const pick = held(modelChoice(emptyChoice(fresh), catalog, fresh).chooseModel("a/quick"));
+  const both = held(modelChoice(pick, catalog, fresh).chooseEffort("low"));
   const refreshed: ModelCatalog = { ...catalog, fetchedAt: "t2" };
-  assert.deepEqual(selectModel(refreshed, fresh, pick), { model: "a/quick", effort: "low" });
+  assert.equal(shown(both, refreshed, fresh).model, "a/quick");
+  assert.equal(shown(both, refreshed, fresh).effort, "low");
   // While the catalog reloads, the pick still stands.
-  assert.deepEqual(selectModel(null, fresh, pick), { model: "a/quick", effort: "low" });
+  assert.equal(shown(both, null, fresh).model, "a/quick");
+  assert.equal(shown(both, null, fresh).effort, "low");
 });
 
 test("reconnect: a picked model that left the catalog falls back to the default, effort re-clamped", () => {
-  const pick = { model: "a/quick", thinkingLevel: "xhigh" as const };
+  const quick = held(modelChoice(emptyChoice(fresh), catalog, fresh).chooseModel("a/quick"));
+  const xhigh = held(modelChoice(quick, catalog, fresh).chooseEffort("xhigh"));
   const shrunk: ModelCatalog = {
     ...catalog,
     fetchedAt: "t2",
     defaultModel: "a/plain",
     models: [catalog.models[0], catalog.models[2]],
   };
-  assert.deepEqual(selectModel(shrunk, fresh, pick), { model: "a/plain", effort: "off" });
-  assert.deepEqual(startOptions(shrunk, fresh, pick), { model: "a/plain", thinkingLevel: "off" });
+  assert.deepEqual(shown(xhigh, shrunk, fresh), {
+    model: "a/plain",
+    effort: "off",
+    start: { model: "a/plain", thinkingLevel: "off" },
+  });
   // A saved session no longer overrides with the vanished model; Pi restores its own.
-  assert.equal(startOptions(shrunk, saved, pick).model, undefined);
+  const savedQuick = held(modelChoice(emptyChoice(saved), catalog, saved).chooseModel("a/quick"));
+  assert.equal(shown(savedQuick, shrunk, saved).start.model, undefined);
+});
+
+test("offline: a pick made while disconnected survives reconnect and travels with the next prompt", () => {
+  // Disconnected, the hosted session's change is held rather than sent as a set_model.
+  const offline = held(
+    modelChoice(emptyChoice(hosted), catalog, hosted, false).chooseModel("a/deep"),
+  );
+  assert.deepEqual(shown(offline, catalog, hosted, false), {
+    model: "a/deep",
+    effort: "low",
+    start: { model: "a/deep" },
+  });
+  // Reconnected: still the pick, still carried in the prompt, and further changes are held too.
+  const online = modelChoice(offline, catalog, hosted, true);
+  assert.deepEqual(
+    { model: online.model, effort: online.effort, start: online.start },
+    { model: "a/deep", effort: "low", start: { model: "a/deep" } },
+  );
+  const both = held(online.chooseEffort("minimal"));
+  assert.deepEqual(modelChoice(both, catalog, hosted).start, {
+    model: "a/deep",
+    thinkingLevel: "minimal",
+  });
+  // Once the prompt carried it, Pi's selection shows again and changes go to Pi.
+  const after = modelChoice(online.submitted, catalog, hosted);
+  assert.deepEqual([after.model, after.effort, after.start], ["a/quick", "low", {}]);
+  assert.equal(after.chooseModel("a/deep").kind, "act");
+});
+
+test("scope: a pick belongs to its session, hosting state, or New-page directory", () => {
+  const sessionPick = held(modelChoice(emptyChoice(saved), catalog, saved).chooseModel("a/plain"));
+  assert.equal(modelChoice(sessionPick, catalog, saved).model, "a/plain");
+  // Switching session drops it.
+  const other: ModelTarget = { ...saved, sessionId: "s2" };
+  assert.equal(modelChoice(sessionPick, catalog, other).model, "a/quick");
+  assert.deepEqual(modelChoice(sessionPick, catalog, other).start, {});
+  // Hosting starting is a new scope: Pi's selection shows and changes go to it.
+  assert.equal(modelChoice(sessionPick, catalog, hosted).model, "a/quick");
+  assert.equal(modelChoice(sessionPick, catalog, hosted).chooseModel("a/deep").kind, "act");
+  // The New page's pick belongs to its directory.
+  const newPick = held(modelChoice(emptyChoice(fresh), catalog, fresh).chooseModel("a/plain"));
+  assert.equal(modelChoice(newPick, catalog, fresh).model, "a/plain");
+  const elsewhere: ModelTarget = { kind: "new", cwd: "/other" };
+  assert.deepEqual(modelChoice(newPick, catalog, elsewhere).start, {
+    model: "a/deep",
+    thinkingLevel: "high",
+  });
 });

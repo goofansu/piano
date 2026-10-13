@@ -63,8 +63,6 @@ interface Props {
   onProjectChange: (projectId?: string) => void;
 }
 
-const NEW = { kind: "new" } as const;
-
 /** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
 export function NewSession({ state, client, chooseDirectory, projectId, onProjectChange }: Props) {
   const { send } = client;
@@ -81,7 +79,7 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
-  const choice = useModelChoice(catalog, NEW, cwd);
+  const choice = useModelChoice(catalog, { kind: "new", cwd });
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
   const ready = newSessionReady({
     text: editor.message,

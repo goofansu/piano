@@ -1,24 +1,39 @@
 /**
  * The model and effort the composer's picker shows, decided once for the session page and the
  * New page: what the picker displays, what a change means (an action for the running Pi, or a
- * choice remembered for the first prompt), and the start options that prompt carries.
+ * choice held for the next prompt), the start options that prompt carries, and which target a
+ * held choice belongs to.
  */
 import type { ModelCatalog, SessionAction, StartOptions, ThinkingLevel } from "@shared/wire";
 
 const ALL: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 /**
- * Whose model the picker sets: a session not started yet (the New page), or a session. A hosted
- * session has a running Pi that owns its selection; an unhosted one shows what its file recorded.
+ * Whose model the picker sets: a session not started yet (the New page, in its directory), or a
+ * session. A hosted session has a running Pi that owns its selection; an unhosted one shows what
+ * its file recorded. `cwd` and `sessionId` name the target, so a pick never outlives it.
  */
 export type ModelTarget =
-  | { kind: "new" }
-  | { kind: "session"; hosted: boolean; model?: string; thinkingLevel?: string };
+  | { kind: "new"; cwd: string }
+  | {
+      kind: "session";
+      cwd?: string;
+      sessionId?: string | null;
+      hosted: boolean;
+      model?: string;
+      thinkingLevel?: string;
+    };
 
 /** The user's own picker changes not yet sent to Pi. */
 export interface ModelPick {
   model?: string;
   thinkingLevel?: ThinkingLevel;
+}
+
+/** The pick the picker holds, and the target it was made for. */
+export interface HeldChoice {
+  readonly scope: string;
+  readonly pick: ModelPick;
 }
 
 /** What the picker shows. */
@@ -27,10 +42,66 @@ export interface ModelSelection {
   effort: ThinkingLevel;
 }
 
-/** A picker change: send `action` to the running Pi, or remember `pick` for the first prompt. */
+/** A picker change: send `action` to the running Pi, or hold `held` until the next prompt. */
 export type ModelChange =
   | { kind: "act"; action: SessionAction }
-  | { kind: "pick"; pick: ModelPick };
+  | { kind: "hold"; held: HeldChoice };
+
+/** The picker for one target, given what it holds. */
+export interface ModelChoice extends ModelSelection {
+  /** The start options the next prompt carries. */
+  start: StartOptions;
+  chooseModel: (model: string) => ModelChange;
+  chooseEffort: (level: ThinkingLevel) => ModelChange;
+  /** What to hold once a prompt has carried the pick. */
+  submitted: HeldChoice;
+}
+
+/**
+ * A pick belongs to one session in one hosting state, or to the New page's directory. Hosting
+ * starting or stopping is a new scope, so a pick never crosses between Pi's own selection and a
+ * saved one; reconnecting keeps the scope.
+ */
+const scopeOf = (target: ModelTarget): string =>
+  target.kind === "new"
+    ? `new\0${target.cwd}`
+    : `session\0${target.cwd}\0${target.sessionId}\0${target.hosted}`;
+
+/** Nothing picked for `target`. */
+export const emptyChoice = (target: ModelTarget): HeldChoice => ({
+  scope: scopeOf(target),
+  pick: {},
+});
+
+/**
+ * The picker for `target`, given what it holds; a pick made for another target is dropped. While
+ * the session cannot take input (`ready` false), or once anything is picked, a session counts as
+ * unhosted: the choice stays local through reconnect and travels in the next prompt's start
+ * options, which the server applies before submitting, instead of a set_model racing reconnect.
+ */
+export function modelChoice(
+  held: HeldChoice,
+  catalog: ModelCatalog | null,
+  target: ModelTarget,
+  ready = true,
+): ModelChoice {
+  const scope = scopeOf(target);
+  const pick = held.scope === scope ? held.pick : {};
+  const local = !ready || pick.model !== undefined || pick.thinkingLevel !== undefined;
+  const effective = local && target.kind === "session" ? { ...target, hosted: false } : target;
+  const change = (next: ModelPick, action: SessionAction): ModelChange =>
+    effective.kind === "session" && effective.hosted
+      ? { kind: "act", action }
+      : { kind: "hold", held: { scope, pick: next } };
+  return {
+    ...selectModel(catalog, effective, pick),
+    start: startOptions(catalog, effective, pick),
+    chooseModel: (model) => change({ ...pick, model }, { _tag: "set_model", model }),
+    chooseEffort: (level) =>
+      change({ ...pick, thinkingLevel: level }, { _tag: "set_thinking_level", level }),
+    submitted: { scope, pick: {} },
+  };
+}
 
 /** Efforts a model accepts, from Pi's catalog; every level while the model is unknown. */
 export function levelsFor(
@@ -62,7 +133,7 @@ const pickedModel = (catalog: ModelCatalog | null, pick: ModelPick) =>
  * pick, then the session's recorded selection, then Pi's defaults. Effort is clamped to what the
  * shown model accepts, so switching models re-clamps it while the pick keeps the wanted level.
  */
-export function selectModel(
+function selectModel(
   catalog: ModelCatalog | null,
   target: ModelTarget,
   pick: ModelPick,
@@ -82,30 +153,12 @@ export function selectModel(
   return { model, effort: clampEffort(levelsFor(catalog, model), wanted) };
 }
 
-/** Choosing a model: a hosted session switches now; otherwise the choice waits for the first prompt. */
-export function pickModel(target: ModelTarget, pick: ModelPick, model: string): ModelChange {
-  return target.kind === "session" && target.hosted
-    ? { kind: "act", action: { _tag: "set_model", model } }
-    : { kind: "pick", pick: { ...pick, model } };
-}
-
-/** Choosing an effort, under the same rule as choosing a model. */
-export function pickEffort(
-  target: ModelTarget,
-  pick: ModelPick,
-  level: ThinkingLevel,
-): ModelChange {
-  return target.kind === "session" && target.hosted
-    ? { kind: "act", action: { _tag: "set_thinking_level", level } }
-    : { kind: "pick", pick: { ...pick, thinkingLevel: level } };
-}
-
 /**
- * The start options the first prompt carries. A new session starts with exactly what the picker
+ * The start options the next prompt carries. A new session starts with exactly what the picker
  * shows. Continuing a saved session lets Pi restore its own selection, overridden only by the
  * user's deliberate picks; a hosted session is already running and takes none.
  */
-export function startOptions(
+function startOptions(
   catalog: ModelCatalog | null,
   target: ModelTarget,
   pick: ModelPick,
