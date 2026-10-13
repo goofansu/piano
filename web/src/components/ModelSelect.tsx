@@ -1,8 +1,7 @@
-import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
+import type { ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { EffortSelect } from "@/components/EffortSelect";
 import { IconButton } from "@/components/IconButton";
 import { PianoButton as Button } from "@/components/PianoButton";
@@ -17,7 +16,7 @@ import { Popover, PopoverTrigger } from "@/components/PianoPopover";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
-import { saveDefaults } from "@/lib/api";
+import type { ModelCatalogView } from "@/lib/modelCatalogs";
 import { modelPickerView } from "@/lib/modelPicker";
 import { picker } from "@/lib/styles";
 
@@ -26,7 +25,8 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
   /** Composers resume editing after Done or Escape; standalone pickers use their trigger. */
   returnFocusRef?: RefObject<HTMLTextAreaElement | null>;
-  catalog: ModelCatalog | null;
+  /** The directory's catalog with its refresh and saved defaults (`useModelCatalog`). */
+  models: ModelCatalogView;
   value: string | undefined;
   onChange: (ref: string) => void;
   effort: ThinkingLevel;
@@ -34,10 +34,6 @@ interface Props {
   disabled?: boolean;
   /** Bordered control for standalone forms; composers retain the quiet trigger. */
   variant?: "ghost" | "outline";
-  /** Re-probe Pi for models, e.g. after adding a provider or logging in. */
-  onRefresh?: () => void;
-  /** HTTP-backed catalogs can finish a refresh without replacing the snapshot on failure. */
-  isRefreshing?: boolean;
   /** No directory is chosen yet, so there is no catalog to wait for. */
   noDirectory?: boolean;
 }
@@ -47,17 +43,16 @@ export function ModelSelect({
   open: controlledOpen,
   onOpenChange,
   returnFocusRef,
-  catalog,
+  models,
   value,
   onChange,
   effort,
   onEffortChange,
   disabled,
   variant = "ghost",
-  onRefresh,
-  isRefreshing,
   noDirectory,
 }: Props) {
+  const { catalog, refresh, refreshing, saving } = models;
   const [localOpen, setLocalOpen] = useState(false);
   const open = controlledOpen ?? localOpen;
   const setOpen = useCallback(
@@ -75,12 +70,6 @@ export function ModelSelect({
     restoreFocus.current = true;
     setOpen(false);
   };
-  // A refresh ends when a newer catalog arrives for this directory.
-  const [refreshing, setRefreshing] = useState<string | null>(null);
-  const refreshPending = isRefreshing ?? refreshing !== null;
-  useEffect(() => {
-    if (refreshing !== null && catalog?.fetchedAt !== refreshing) setRefreshing(null);
-  }, [catalog?.fetchedAt, refreshing]);
   const [query, setQuery] = useState("");
   useEffect(() => {
     if (!open) return;
@@ -89,14 +78,13 @@ export function ModelSelect({
     return () => window.removeEventListener("blur", dismiss);
   }, [open, setOpen]);
   const search = useRef<HTMLInputElement>(null);
-  const [saving, setSaving] = useState(false);
   const view = modelPickerView({
     catalog,
     value,
     effort,
     query,
     disabled: !!disabled,
-    canRefresh: !!onRefresh,
+    canRefresh: !!refresh,
     noDirectory: !!noDirectory,
     chosen: focusModel,
     saving,
@@ -118,18 +106,6 @@ export function ModelSelect({
     (current ?? first ?? done.current)?.focus({ preventScroll: true });
     setFocusModel(null);
   }, [open, focusModel, want]);
-  // Pi owns the saved defaults; its catalog invalidation updates every picker's default.
-  const saveDefault = async () => {
-    setSaving(true);
-    try {
-      await saveDefaults(want, effort);
-      toast.success("Defaults saved for new sessions.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save defaults. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const item = (m: ModelChoice) => (
     <CommandItem
@@ -239,16 +215,13 @@ export function ModelSelect({
             aria-label="Search models"
             placeholder="Search models"
           >
-            {onRefresh && (
+            {refresh && (
               <IconButton
                 label="Refresh models"
-                disabled={disabled || refreshPending}
-                onClick={() => {
-                  if (isRefreshing === undefined) setRefreshing(catalog?.fetchedAt ?? "");
-                  onRefresh();
-                }}
+                disabled={disabled || refreshing}
+                onClick={refresh}
               >
-                {refreshPending ? <Spinner /> : <RefreshCwIcon aria-hidden />}
+                {refreshing ? <Spinner /> : <RefreshCwIcon aria-hidden />}
               </IconButton>
             )}
           </PickerSearch>
@@ -271,7 +244,7 @@ export function ModelSelect({
             variant="outline"
             size="sm"
             disabled={!view.canSaveDefault}
-            onClick={() => void saveDefault()}
+            onClick={() => void models.saveDefaults(want, effort)}
           >
             {saving && <Spinner data-icon="inline-start" />}
             {view.saveLabel}

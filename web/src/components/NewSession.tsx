@@ -44,6 +44,7 @@ import {
 } from "@/lib/projectCommands";
 import { completionTarget, folderFor } from "@/lib/sessionContext";
 import { composerAction, composerInput, picker } from "@/lib/styles";
+import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
 import type { WorktreeOperationOptions } from "@/lib/worktreeOperation";
@@ -77,7 +78,8 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
   const project = findProject(state, projectId);
   const unarchive = project && projectCommand(state, project, "unarchive");
   const trust = trustCommand(state, cwd);
-  const catalog = state.catalogs[cwd] ?? null;
+  const models = useModelCatalog(cwd || undefined);
+  const { catalog } = models;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
   const choice = useModelChoice(catalog, NEW, cwd);
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
@@ -105,7 +107,6 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
       }),
     );
   };
-  const refreshModels = cwd ? () => send({ _tag: "models", cwd, refresh: true }) : undefined;
 
   return (
     <>
@@ -150,8 +151,7 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
               )}
               maxHeight={288}
               model={{
-                catalog,
-                onRefresh: refreshModels,
+                models,
                 value: choice.model,
                 onChange: choice.onModelChange,
                 effort: choice.effort,
