@@ -1,5 +1,4 @@
 import type { RadiusSetupState } from "@shared/radius";
-import type { OAuthProvider } from "@shared/wire";
 import { cn } from "cn";
 import {
   CheckCircle2Icon,
@@ -30,7 +29,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
-import { oauthProviders, providerLogout, type RadiusSetupAction, radiusSetup } from "@/lib/api";
+import { type RadiusSetupAction, radiusSetup } from "@/lib/api";
 import {
   RADIUS_PROGRESS,
   type RadiusObservation,
@@ -38,6 +37,7 @@ import {
 } from "@/lib/radiusAnnouncements";
 import { type RadiusRemoval, radiusRemovalCopy, radiusSetupView } from "@/lib/radiusSetupView";
 import { useObservation } from "@/lib/useObservation";
+import { providerAccounts, useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 type Confirmation = { kind: "sign-out" } | { kind: RadiusRemoval; key: string };
@@ -65,29 +65,33 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
     if (message) toast.success(message, { id: SETUP_TOAST });
   }, []);
   // A running web-search change is polled until it settles.
-  const setup = useObservation<{ state: RadiusSetupState; providers: OAuthProvider[] }>(
+  const setup = useObservation<RadiusSetupState>(
     "radius",
     async (signal) => {
       const manual = manualRefresh.current;
       manualRefresh.current = false;
-      const [next, signIns] = await Promise.all([
+      const [next] = await Promise.all([
         radiusSetup(undefined, { signal }),
-        oauthProviders({ signal }),
         manual && new Promise((resolve) => setTimeout(resolve, REFRESH_SPIN_MS)),
       ]);
       if (signal.aborted) throw signal.reason;
       announce({ kind: "observed", installation: next.installation, manual });
-      return { state: next, providers: [...signIns] };
+      return next;
     },
     {
-      interval: (value) =>
-        value?.state.installation.status === "running" ? INSTALL_POLL_MS : undefined,
+      interval: (value) => (value?.installation.status === "running" ? INSTALL_POLL_MS : undefined),
     },
   );
-  const state = setup.value?.state,
-    providers = setup.value?.providers ?? [];
-  const refreshing = setup.loading || (!setup.value && !setup.error);
-  const { refresh } = setup;
+  // The account is the page's shared read; its background re-reads do not lock the steps.
+  const accounts = useProviderAccounts();
+  const state = setup.value,
+    providers = accounts.value ?? [];
+  const refreshing =
+    setup.loading || (!setup.value && !setup.error) || (!accounts.value && !accounts.error);
+  const refresh = () => {
+    void providerAccounts.refresh();
+    return setup.refresh();
+  };
   // Signing in or out changes the usable models; the server invalidates every catalog itself.
   const actions = useSetupActions<Confirmation, string>({
     refresh: () => void refresh(),
@@ -99,7 +103,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
     providers,
     running: actions.running,
     refreshing,
-    loadFailed: !!setup.error && !setup.loading,
+    loadFailed: (!!setup.error && !setup.loading) || (!!accounts.error && !accounts.loading),
     actionError: actions.error,
   });
   const { account, tools, mcp, webSearch, configured, settled } = view;
@@ -107,18 +111,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
     actions.run({
       id: "sign-out",
       // Only acknowledge sign-out after Pi confirms credential removal.
-      run: () =>
-        setup.mutate(async (_signal, previous) => {
-          await providerLogout("radius");
-          return (
-            previous && {
-              ...previous,
-              providers: previous.providers.map((provider) =>
-                provider.id === "radius" ? { ...provider, signedIn: false } : provider,
-              ),
-            }
-          );
-        }),
+      run: () => providerAccounts.signOut("radius"),
       done: "Signed out of Radius.",
       fallback: "Could not sign out. Try again.",
     });
@@ -126,10 +119,10 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
     actions.run({
       id: action,
       run: () =>
-        setup.mutate(async (_signal, previous) => {
+        setup.mutate(async () => {
           const next = await radiusSetup({ action, removalKey });
           announce({ kind: "observed", installation: next.installation });
-          return previous && { ...previous, state: next };
+          return next;
         }),
       done:
         action === "configure-mcp"
@@ -188,7 +181,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
       {view.attention && (
         <SettingsAlert title="Radius setup needs attention">{view.attention}</SettingsAlert>
       )}
-      {!state ? (
+      {!state || !accounts.value ? (
         <SettingsSkeleton label="Loading Radius setup…" className="flex flex-col gap-3">
           <Skeleton className="h-20 w-full rounded-xl" />
           <Skeleton className="h-16 w-full rounded-xl" />
@@ -404,7 +397,10 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
             actions.closeSignIn();
             void refresh();
           }}
-          signedIn={() => void refresh()}
+          signedIn={() => {
+            void providerAccounts.signedIn();
+            void setup.refresh();
+          }}
         />
       )}
     </section>
