@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
-import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
+import type { ConnectionHandlers, DisconnectReason } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
 /** A client over a fake transport: the test plays the server and the socket's status changes. */
@@ -22,7 +22,8 @@ function harness() {
   });
   client.start();
   const server = (m: ServerMessage) => handlers!.onMessage(m);
-  const status = (connected: boolean) => handlers!.onStatus(connected);
+  const status = (connected: boolean, reason?: DisconnectReason) =>
+    handlers!.onStatus(connected, reason);
   const selects = () => sent.filter((m) => m._tag === "select");
   const lastSelectionId = () => client.getState().selectionId!;
   const selected = (sessionId: string, sequence = 1, generation = "g1"): ServerMessage => ({
@@ -94,6 +95,24 @@ for (const failure of ["selection_rejected", "selection_failed"] as const)
       assert.equal(h.selects().length, before + 1, "ready selection is deduplicated");
     });
   }
+
+test("a connection lost for falling behind or for its size tells the person; a plain loss is quiet", () => {
+  const h = harness();
+  h.status(true);
+  h.status(false);
+  assert.equal(h.notes.length, 0, "a plain loss only disables controls");
+  h.status(true);
+  h.status(false, "behind");
+  assert.equal(h.client.getState().connected, false);
+  h.status(true);
+  h.status(false, "too-large");
+  assert.deepEqual(
+    h.notes.map(([, level]) => level),
+    ["warning", "error"],
+  );
+  assert.match(h.notes[0]![0], /fell behind/i);
+  assert.match(h.notes[1]![0], /delivery limit/i);
+});
 
 test("live state is current before paint, while local actions and disconnect notify renderers immediately", () => {
   const h = harness();
