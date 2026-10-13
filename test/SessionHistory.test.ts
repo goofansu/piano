@@ -12,8 +12,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { Effect } from "effect";
-import { PiHistory } from "../server/PiHistory.ts";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, Layer } from "effect";
+import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 
 // Fixture history only: Pi reads PI_CODING_AGENT_SESSION_DIR and filters it by each file's cwd.
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-history-")));
@@ -47,22 +48,28 @@ const seed = (path: string, id: string, text: string) => {
   return file;
 };
 const run = Effect.runPromise;
+// Saved sessions are read through PiSessions without starting Pi.
+const history = await run(
+  Effect.gen(function* () {
+    return (yield* PiSessions).history;
+  }).pipe(Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer)))),
+);
 
 test("INV-01: history recorded under another checkout spelling is found where Pi wrote it", async () => {
   const file = seed(alias, "legacy", "alias history"),
     before = readFileSync(file, "utf8");
   assert.deepEqual(
-    await run(PiHistory.locate("legacy", [cwd])),
+    await run(history.locate("legacy", [cwd])),
     { _tag: "missing" },
     "an unnamed spelling is never guessed",
   );
-  assert.deepEqual(await run(PiHistory.locate("legacy", [cwd, alias])), {
+  assert.deepEqual(await run(history.locate("legacy", [cwd, alias])), {
     _tag: "file",
     path: file,
   });
-  assert.ok((await run(PiHistory.sessionIds(alias))).has("legacy"));
-  assert.equal((await run(PiHistory.sessionIds(cwd))).has("legacy"), false);
-  const snapshot = await run(PiHistory.peek("legacy", file));
+  assert.ok((await run(history.sessionIds(alias))).has("legacy"));
+  assert.equal((await run(history.sessionIds(cwd))).has("legacy"), false);
+  const snapshot = await run(history.peek("legacy", file));
   assert.equal(snapshot.state.sessionFile, file);
   assert.deepEqual(
     snapshot.messages.map((m) => m.text),
@@ -74,25 +81,25 @@ test("INV-01: history recorded under another checkout spelling is found where Pi
 test("INV-01: distinct files claiming one session are a conflict, never a choice", async () => {
   const first = seed(alias, "claimed", "first claim"),
     second = seed(cwd, "claimed", "second claim");
-  const found = await run(PiHistory.locate("claimed", [alias, cwd]));
+  const found = await run(history.locate("claimed", [alias, cwd]));
   assert.equal(found._tag, "conflict");
   if (found._tag === "conflict") assert.deepEqual([...found.paths].sort(), [first, second].sort());
-  assert.deepEqual(await run(PiHistory.locate("claimed", [alias])), { _tag: "file", path: first });
+  assert.deepEqual(await run(history.locate("claimed", [alias])), { _tag: "file", path: first });
 });
 
 test("INV-01: one physical file listed twice is still one file", async () => {
   const file = seed(cwd, "linked", "linked history");
   symlinkSync(file, join(sessions, "linked-copy.jsonl"));
-  const found = await run(PiHistory.locate("linked", [cwd, alias]));
+  const found = await run(history.locate("linked", [cwd, alias]));
   assert.equal(found._tag, "file");
 });
 
 test("INV-01: a session without history is missing and peeks as empty", async () => {
   const empty = join(root, "empty");
   mkdirSync(empty);
-  assert.deepEqual(await run(PiHistory.locate("never-written", [empty, cwd])), { _tag: "missing" });
-  assert.equal((await run(PiHistory.sessionIds(empty))).size, 0);
-  assert.deepEqual(await run(PiHistory.peek("never-written", undefined)), {
+  assert.deepEqual(await run(history.locate("never-written", [empty, cwd])), { _tag: "missing" });
+  assert.equal((await run(history.sessionIds(empty))).size, 0);
+  assert.deepEqual(await run(history.peek("never-written", undefined)), {
     state: { sessionId: "never-written", isStreaming: false },
     messages: [],
     dialogs: [],
@@ -130,7 +137,7 @@ test("INV-01: peeking uses Pi context edits, compaction and active branch withou
     manager.appendCompaction("summary", reply, 30);
     const file = manager.getSessionFile()!;
     const original = readFileSync(file, "utf8");
-    const snap = await run(PiHistory.peek(manager.getSessionId(), file));
+    const snap = await run(history.peek(manager.getSessionId(), file));
     assert.equal(snap.state.model, "router/auto");
     assert.equal(snap.state.thinkingLevel, "low");
     assert.deepEqual(

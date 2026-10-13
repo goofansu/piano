@@ -1,6 +1,7 @@
 /**
  * Pi-only translation: every Pi record, readback and history message becomes the browser's wire
- * vocabulary here, with content-indexed reconstruction of streaming output. Originals stay in Pi.
+ * vocabulary here, with content-indexed reconstruction of streaming output, and every Snapshot,
+ * live or saved, comes from one projection of Pi's facts (`PiSessionFacts`). Originals stay in Pi.
  * Outbound, browser actions become Pi's CLI arguments and RPC commands here, and each readback
  * names its query and decodes its reply, so a reply of the wrong shape is a protocol failure.
  * PiSessions owns the child, locking, publication and readback scheduling; it never inspects or
@@ -17,6 +18,7 @@ import type {
   SessionAction,
   SessionEvent,
   SessionState,
+  Snapshot,
   ThinkingLevel,
   ToolExecution,
   Usage,
@@ -24,7 +26,7 @@ import type {
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
 import { compileRedaction, type DisplayRedaction } from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
-import { SubagentProjection, titleStatus } from "./Subagents.ts";
+import { RunLedger, SubagentProjection, titleStatus } from "./Subagents.ts";
 
 interface RawContent {
   type: string;
@@ -207,9 +209,6 @@ function serializeWithProjection(
       : message;
   });
 }
-export function serializeMessages(msgs: ReadonlyArray<RawMessage>, prefix = "m"): RenderMsg[] {
-  return serializeWithProjection(msgs, prefix, new SubagentProjection());
-}
 export interface PiRecord {
   type: string;
   id?: string;
@@ -305,6 +304,49 @@ export const stateFactsOf = (raw: RawState) => ({
   thinkingLevel: raw.thinkingLevel,
   isStreaming: raw.isStreaming,
 });
+
+/**
+ * What Pi establishes about one session, and from where: a running child's `get_state` and
+ * `get_messages`, or its saved file read without Pi. Either becomes a Snapshot only through
+ * {@link snapshotOf} or {@link PiProjector.snapshot}.
+ */
+export type PiSessionFacts =
+  | {
+      readonly source: "live";
+      readonly state: RawState;
+      readonly messages: ReadonlyArray<RawMessage>;
+    }
+  | {
+      readonly source: "saved";
+      readonly state: RawState;
+      readonly messages: ReadonlyArray<RawMessage>;
+      /** Every entry in the file, on any branch: Run spend counts all of them, as Pi's totals do.
+       * A live session reads its entries incrementally instead, after its first snapshot. */
+      readonly entries: ReadonlyArray<unknown>;
+    };
+
+/** The one projection of a Pi session into a Snapshot. A live session adds its run's own state
+ * (compacting only if Pi says so, nothing queued); a saved one adds its Runs' spend. */
+const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Snapshot => {
+  const state = stateFactsOf(facts.state);
+  return {
+    state:
+      facts.source === "live"
+        ? {
+            ...state,
+            isCompacting: facts.state.isCompacting ?? false,
+            isRetrying: false,
+            queuedMessages: [],
+          }
+        : { ...state, subagents: new RunLedger().add(facts.entries).usage },
+    messages: serializeWithProjection(facts.messages, "m", projection),
+    dialogs: [],
+  };
+};
+
+/** A session as a Snapshot from Pi's facts, with no projector to seed for later records. */
+export const snapshotOf = (facts: PiSessionFacts): Snapshot =>
+  snapshotFrom(facts, new SubagentProjection());
 
 /** Pi's steering and follow-up queue, from `queue_update` or `clear_queue`. Undefined when malformed. */
 export const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
@@ -654,14 +696,10 @@ export class PiProjector {
     this.options = options;
   }
 
-  /** Initial live state from Pi's `get_state`, before any record arrives. */
-  state(raw: RawState): SessionState {
-    return {
-      ...stateFactsOf(raw),
-      isCompacting: raw.isCompacting ?? false,
-      isRetrying: false,
-      queuedMessages: [],
-    };
+  /** The opening Snapshot from Pi's facts, before any record arrives. Retains its correlation
+   * facts for subsequent live records. */
+  snapshot(facts: PiSessionFacts): Snapshot {
+    return snapshotFrom(facts, this.projection);
   }
 
   /** Seed or replace authoritative history (`get_messages`) and retain its correlation facts

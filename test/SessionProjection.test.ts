@@ -8,7 +8,6 @@ import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli, type PiCliConfig } from "../server/PiCli.ts";
-import { PiHistory } from "../server/PiHistory.ts";
 import { type PiSession, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import type {
   RenderMsg,
@@ -840,7 +839,11 @@ test("a reopened session file counts Run usage from every entry, including compa
       /"type":"custom_message"/,
       "Notifications persist as custom_message entries",
     );
-    const snap = await Effect.runPromise(PiHistory.peek(manager.getSessionId(), file));
+    const snap = await run(
+      Effect.gen(function* () {
+        return yield* (yield* PiSessions).history.peek(manager.getSessionId(), file);
+      }),
+    );
     assert.equal(
       snap.messages.some((message) => message.subagent),
       false,

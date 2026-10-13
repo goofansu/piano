@@ -1,8 +1,9 @@
 /**
  * Where a session reference's Pi history is, and whether the session can be opened from it.
  * Registry owns the reference and Pi owns the file (INV-01); this module joins them without
- * moving, merging or repairing either. It never starts Pi and holds no ownership lock: SessionHosts
- * calls it under its lock, keyed by the physical checkout returned here (INV-02).
+ * moving, merging or repairing either, and reads Pi's files only through PiSessions' `history`.
+ * It never starts Pi and holds no ownership lock: SessionHosts calls it under its lock, keyed by
+ * the physical checkout returned here (INV-02).
  *
  * A checkout has several spellings: the registry's, the caller's, and its physical path. Pi records
  * each file under the spelling its CLI started in, so history is searched under all of them. An
@@ -14,8 +15,7 @@ import { Context, Effect, Layer } from "effect";
 import { withLastKnownStats } from "../shared/sessionProjection.ts";
 import type { SessionReference, SessionStats, Snapshot } from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
-import { PiHistory } from "./PiHistory.ts";
-import { PiSessionError } from "./PiSessions.ts";
+import { PiSessionError, PiSessions } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 
 /** A checkout's physical identity, and whether it is gone from disk. */
@@ -85,6 +85,7 @@ export const SessionReferencesLive = Layer.effect(
   SessionReferences,
   Effect.gen(function* () {
     const registry = yield* Registry;
+    const { history } = yield* PiSessions;
     // Observed aliases for this server lifetime: removing a checkout cannot give an existing
     // child a second ownership key.
     const identities = new Map<string, string>();
@@ -139,10 +140,8 @@ export const SessionReferencesLive = Layer.effect(
       if (entry && create) return yield* rejected("This session ID is already registered.");
       const owner = entry?.cwd ?? directoryPath(cwd);
       const at = yield* observe(owner);
-      const history = yield* PiHistory.locate(sessionId, [...at.spellings, cwd, physical]).pipe(
-        Effect.mapError((e) => rejected(e.detail)),
-      );
-      if (history._tag === "conflict")
+      const located = yield* history.locate(sessionId, [...at.spellings, cwd, physical]);
+      if (located._tag === "conflict")
         return yield* rejected(
           `Conflicting Pi files for checkout aliases (${owner}, ${physical}). Piano has not merged or moved history. Resolve the conflicting session ID before starting it.`,
         );
@@ -150,7 +149,7 @@ export const SessionReferencesLive = Layer.effect(
         cwd: owner,
         sessionId,
         physical,
-        file: history._tag === "file" ? history.path : undefined,
+        file: located._tag === "file" ? located.path : undefined,
         stats: entry?.stats,
         checkoutMissing: at.missing,
       };
@@ -171,7 +170,7 @@ export const SessionReferencesLive = Layer.effect(
                   spellings: new Set([directoryPath(cwd)]),
                 })),
               );
-              const ids = yield* Effect.forEach(spellings, PiHistory.sessionIds);
+              const ids = yield* Effect.forEach(spellings, history.sessionIds);
               return [cwd, { missing, ids }] as const;
             }),
           { concurrency: 4 },
@@ -191,7 +190,7 @@ export const SessionReferencesLive = Layer.effect(
     });
 
     const peek = Effect.fn("SessionReferences.peek")(function* (location: SessionLocation) {
-      const snapshot = yield* PiHistory.peek(location.sessionId, location.file);
+      const snapshot = yield* history.peek(location.sessionId, location.file);
       return {
         ...snapshot,
         state: {
@@ -210,10 +209,7 @@ export const SessionReferencesLive = Layer.effect(
       resolve,
       availability,
       peek,
-      exportBranch: (location) =>
-        PiHistory.exportBranch(location.sessionId, location.file).pipe(
-          Effect.mapError((error) => rejected(error.detail)),
-        ),
+      exportBranch: (location) => history.exportBranch(location.sessionId, location.file),
       archive: (location) =>
         registry
           .archiveSession(location.cwd, location.sessionId)

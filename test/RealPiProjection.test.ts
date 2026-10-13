@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import type { Snapshot } from "../shared/wire.ts";
 import { createPiCompatibilityFixture } from "./fixtures/PiCompatibility.ts";
 
 test("real Pi loads project-only virtual models and retained supported UI from the selected cwd", async () => {
@@ -83,6 +85,81 @@ test("real Pi loads project-only virtual models and retained supported UI from t
         const snapshot = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
         if (snapshot[0]._tag === "snapshot")
           assert.deepEqual(snapshot[0].snapshot.state.extension, state.extension);
+      }).pipe(
+        Effect.timeout("20 seconds"),
+        Effect.scoped,
+        Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer))),
+        Effect.provideService(PiCli, fixture.cli()),
+      ),
+    );
+    assert.equal(fixture.observe().requests.length, 0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("INV-01/12: a saved peek is the Snapshot real Pi opens the same file with", async () => {
+  const fixture = await createPiCompatibilityFixture();
+  fixture.configureSentinel("disabled");
+  const cwd = fixture.project("saved-peek");
+  const secret = "sk-file-canary-123456789";
+  // Compaction, a context edit and an abandoned branch: Pi's context rules decide both views.
+  const manager = SessionManager.create(cwd, fixture.sessionDir);
+  manager.appendModelChange("piano-phase0", "global");
+  manager.appendThinkingLevelChange("low");
+  manager.appendSessionInfo("saved peek");
+  manager.appendMessage({ role: "user", content: "old prompt", timestamp: 1 });
+  const reply = manager.appendMessage({
+    role: "assistant",
+    api: "openai-completions",
+    provider: "piano-phase0",
+    model: "global",
+    content: [{ type: "text", text: `original ${secret}` }],
+    usage: {
+      input: 1,
+      output: 2,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 3,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "stop",
+    timestamp: 2,
+  });
+  manager.appendMessage({ role: "user", content: "abandoned branch", timestamp: 3 });
+  manager.branch(reply);
+  manager.appendContextEdit(reply, { content: `edited ${secret}` });
+  manager.appendCompaction("summary", reply, 30);
+  const sessionId = manager.getSessionId();
+  const sessionFile = manager.getSessionFile()!;
+  // The facts both views establish from Pi; live run, host and statistics fields are the open's own.
+  const facts = ({ state, messages, dialogs }: Snapshot) => ({
+    state: {
+      sessionId: state.sessionId,
+      sessionFile: state.sessionFile,
+      sessionName: state.sessionName,
+      model: state.model,
+      thinkingLevel: state.thinkingLevel,
+      isStreaming: state.isStreaming,
+      subagents: state.subagents,
+    },
+    messages,
+    dialogs,
+  });
+  try {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const sessions = yield* PiSessions;
+        const saved = yield* sessions.history.peek(sessionId, sessionFile);
+        const session = yield* sessions.open({ cwd, sessionId, sessionFile });
+        const opened = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
+        assert.equal(opened[0]._tag, "snapshot");
+        if (opened[0]._tag !== "snapshot") return;
+        assert.deepEqual(facts(saved), facts(opened[0].snapshot));
+        assert.deepEqual(
+          saved.messages.map((message) => message.text),
+          ["summary", "edited [REDACTED]"],
+        );
       }).pipe(
         Effect.timeout("20 seconds"),
         Effect.scoped,
