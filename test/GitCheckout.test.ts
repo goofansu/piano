@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Effect } from "effect";
-import { observeGit } from "../server/GitCheckout.ts";
+import { Effect, Semaphore } from "effect";
+import { observeCheckout, observeGit } from "../server/GitCheckout.ts";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync(
@@ -72,4 +72,42 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
     const result = await observe(path);
     assert.ok(result.status === "broken" && /bare repositories/.test(result.detail), path);
   }
+});
+
+test("INV-06: an observation that writes an index runs no configured filter driver or hook", async (t) => {
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "piano-git-checkout-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repo = join(root, "repo");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet", "-b", "main");
+  writeFileSync(join(repo, ".gitattributes"), "* filter=trap\n");
+  git(repo, "config", "filter.trap.clean", `touch ${join(root, "FILTER_RAN")}; cat`);
+  git(repo, "config", "filter.trap.required", "true");
+  mkdirSync(join(repo, ".git/hooks"), { recursive: true });
+  writeFileSync(
+    join(repo, ".git/hooks/post-index-change"),
+    `#!/bin/sh\ntouch ${join(root, "HOOK_RAN")}\n`,
+    { mode: 0o755 },
+  );
+  writeFileSync(join(repo, "file"), "content\n");
+  const slots = await Effect.runPromise(Semaphore.make(1));
+  const add = (writes?: "index") =>
+    Effect.runPromise(
+      observeCheckout(
+        { id: "w", folder: repo, path: repo },
+        { slots, limit: 1024 * 1024, writes },
+        async (checkout) => {
+          const index = checkout.with({ env: { GIT_INDEX_FILE: join(root, `index-${writes}`) } });
+          await index.run(["add", "--", "file"]);
+          return "added";
+        },
+      ),
+    );
+  assert.equal((await add("index")).result, "added");
+  assert.equal(existsSync(join(root, "FILTER_RAN")), false);
+  assert.equal(existsSync(join(root, "HOOK_RAN")), false);
+  // The same read without the option runs both, so the traps are live.
+  assert.equal((await add()).result, "added");
+  assert.equal(existsSync(join(root, "FILTER_RAN")), true);
+  assert.equal(existsSync(join(root, "HOOK_RAN")), true);
 });

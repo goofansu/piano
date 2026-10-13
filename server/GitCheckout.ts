@@ -1,8 +1,8 @@
 /** The one place Piano decides how it reads Git safely. Every Git read runs without inherited
  * GIT_* state (GIT_DIR/INDEX/OBJECT overrides), global or system config, replace refs,
  * optional locks, fsmonitor or pager, so the environment cannot redirect an answer (INV-06).
- * Source-local repository config is still read by Git; a caller that writes (an index) adds
- * `-c` config to disable hooks and filters. A read whose answer the user's Git config defines
+ * Source-local repository config is still read by Git; an observation that writes (an index)
+ * declares `writes: "index"` and this module disables hooks and filter drivers. A read whose answer the user's Git config defines
  * (a remote URL after `url.<base>.insteadOf`) opts back into global and system config with
  * `userConfig`; inherited GIT_* state stays cleared. Output is bounded, UTF-8 checked and NUL lists
  * must be complete; repository paths must be relative and stay out of embedded repositories.
@@ -203,7 +203,7 @@ export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
 });
 
 /** A failure this module detects. Callers keep their own phrasing through `messages`. */
-export class CheckoutError extends Error {
+class CheckoutError extends Error {
   readonly reason: "root" | "limit" | "encoding" | "incomplete" | "path";
   constructor(reason: CheckoutError["reason"], message: string) {
     super(message);
@@ -227,14 +227,10 @@ const MESSAGES: CheckoutMessages = {
     `Unsupported repository path (including embedded repositories): ${JSON.stringify(path)}`,
 };
 
-export interface CheckoutOptions {
+interface CheckoutOptions extends Pick<ObserveOptions<string>, "limit" | "writes" | "messages"> {
   /** The Git executable (`GitCommand`). */
   readonly git: string;
   readonly signal: AbortSignal;
-  /** Default stdout bound for each read. */
-  readonly limit: number;
-  readonly config?: readonly string[];
-  readonly messages?: Partial<CheckoutMessages>;
 }
 export interface ReadOptions extends Pick<RunOptions, "input" | "limit" | "okCodes"> {
   /** Run outside the checkout with the same hardening, e.g. `diff --no-index` over copies. */
@@ -269,7 +265,7 @@ export interface Checkout {
 }
 
 /** Fails with CheckoutError("root") unless `path` is the root of a Git checkout. */
-export async function openCheckout(path: string, options: CheckoutOptions): Promise<Checkout> {
+async function openCheckout(path: string, options: CheckoutOptions): Promise<Checkout> {
   const cwd = await realpath(path);
   const messages = { ...MESSAGES, ...options.messages };
   const fail = (reason: CheckoutError["reason"], message: string): never => {
@@ -330,41 +326,84 @@ export async function openCheckout(path: string, options: CheckoutOptions): Prom
       with: (extra) => make([...config, ...(extra.config ?? [])], { ...env, ...extra.env }),
     };
   };
-  const checkout = make(options.config ?? [], {});
+  const checkout = make(options.writes ? ["-c", "core.hooksPath=/dev/null"] : [], {});
   const top = (await checkout.text(["rev-parse", "--show-toplevel"])).replace(/\n$/, "");
   if ((await realpath(top)) !== cwd) fail("root", messages.root);
-  return checkout;
+  if (!options.writes) return checkout;
+  // Disable every locally configured filter driver before diff/add touches working files.
+  const filters = await checkout.records(
+    ["config", "--null", "--name-only", "--get-regexp", "^filter\\..*\\.(clean|process|required)$"],
+    { okCodes: [0, 1] },
+  );
+  return checkout.with({
+    config: filters.flatMap((key) => ["-c", `${key}=${key.endsWith(".required") ? "false" : ""}`]),
+  });
 }
 
-/** A point-in-time observation of `workspace` (INV-07): one of `slots` permits, cancelled after
- * `timeout`, any failure kept as `{ status, detail }` rather than thrown.
+export interface ObserveOptions<S extends string> {
+  /** The permits this observation takes one of: the caller's concurrency policy. */
+  readonly slots: Semaphore.Semaphore;
+  /** Default stdout bound for each read. */
+  readonly limit: number;
+  /** `"index"`: the read writes a disposable index, so hooks and every locally configured
+   * filter driver are disabled before it runs (INV-06). */
+  readonly writes?: "index";
+  /** The caller's phrasing for failures this module detects. */
+  readonly messages?: Partial<CheckoutMessages>;
+  /** Cancels the read after this many milliseconds (default 30 s). */
+  readonly timeout?: number;
+  /** The status of a checkout this module refuses: not the root, over `limit`, non-UTF-8,
+   * incomplete or with unsafe paths. Default `"error"`. */
+  readonly unsupported?: S;
+  /** The status of the caller's own failure; `undefined` means `"error"`. */
+  readonly status?: (error: unknown) => S | undefined;
+}
+
+export interface CheckoutObservation<R, S extends string> {
+  readonly workspace: Workspace;
+  readonly observedAt: string;
+  readonly result: R | { readonly status: S | "error"; readonly detail: string };
+}
+
+/** A point-in-time observation of the checkout at `workspace.path` (INV-07): one of `slots`
+ * permits, the path opened as a checkout root with `GitCommand` under this module's hardening,
+ * `read` cancelled after `timeout`, any failure kept as `{ status, detail }` rather than thrown.
  */
-export const observe = <R, S extends string = "error">(
+export const observeCheckout = Effect.fn("GitCheckout.observeCheckout")(function* <
+  R,
+  S extends string = never,
+>(
   workspace: Workspace,
-  slots: Semaphore.Semaphore,
-  read: (signal: AbortSignal) => Promise<R>,
-  options: { readonly timeout?: number; readonly status?: (error: unknown) => S } = {},
-): Effect.Effect<{
-  workspace: Workspace;
-  observedAt: string;
-  result: R | { status: S; detail: string };
-}> =>
-  Semaphore.withPermits(
+  options: ObserveOptions<S>,
+  read: (checkout: Checkout, signal: AbortSignal) => Promise<R>,
+): Effect.fn.Return<CheckoutObservation<R, S>> {
+  const git = yield* GitCommand;
+  const { slots, limit, writes, messages, timeout = 30_000 } = options;
+  return yield* Semaphore.withPermits(
     slots,
     1,
   )(
-    Effect.promise(async (signal) => {
-      let result: R | { status: S; detail: string };
+    Effect.promise(async (interrupt): Promise<CheckoutObservation<R, S>> => {
+      const signal = AbortSignal.any([interrupt, AbortSignal.timeout(timeout)]);
+      let result: CheckoutObservation<R, S>["result"];
       try {
-        result = await read(
-          AbortSignal.any([signal, AbortSignal.timeout(options.timeout ?? 30_000)]),
-        );
+        const checkout = await openCheckout(workspace.path, {
+          git,
+          signal,
+          limit,
+          writes,
+          messages,
+        });
+        result = await read(checkout, signal);
       } catch (error) {
         result = {
-          status: options.status?.(error) ?? ("error" as S),
+          status:
+            (error instanceof CheckoutError ? options.unsupported : options.status?.(error)) ??
+            "error",
           detail: error instanceof Error ? error.message : String(error),
         };
       }
       return { workspace, observedAt: new Date().toISOString(), result };
     }),
   );
+});
