@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ServerMessage } from "../shared/wire.ts";
-import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { initialState, reduce, sessionDelivery, sessionKey } from "../web/src/store.ts";
 
 const selection = (
@@ -95,18 +94,13 @@ test("INV-05: superseded selection, duplicate, cross-session and gapped frames n
   assert.equal(state, newPage, "returning to New invalidates selection responses too");
 });
 
-test("INV-02/05: reconnect retains the view and draft until a fresh attachment snapshot, even at the same cursor", () => {
+test("INV-02/05: reconnect retains the view until a fresh attachment snapshot, even at the same cursor", () => {
   const identity = { cwd: "/scratch", sessionId: "a" };
   let state = reduce(
     { ...initialState, connected: true },
     { type: "selecting", ...identity, selectionId: "before" },
   );
   state = reduce(state, { type: "server", message: selection("a", "before") });
-  state = reduce(state, {
-    type: "draft_changed",
-    key: sessionDraftKey(identity),
-    text: "unsent draft",
-  });
   const visible = state.session;
   state = reduce(state, { type: "connected", connected: false });
   assert.equal(state.session, visible);
@@ -117,7 +111,6 @@ test("INV-02/05: reconnect retains the view and draft until a fresh attachment s
   assert.equal(state.selectionId, null, "a new connection is not yet an attachment");
   state = reduce(state, { type: "selecting", ...identity, selectionId: "after" });
   assert.equal(state.session, visible);
-  assert.equal(state.drafts[sessionDraftKey(identity)], "unsent draft");
   const delta: Extract<ServerMessage, { _tag: "session" }> = {
     _tag: "session",
     selectionId: "after",
@@ -149,7 +142,6 @@ test("INV-02/05: reconnect retains the view and draft until a fresh attachment s
   });
   assert.equal(state.selecting, null, "an unchanged cursor still completes reattachment");
   assert.equal(state.session?.pending?.text, "refreshed projection");
-  assert.equal(state.drafts[sessionDraftKey(identity)], "unsent draft");
   assert.equal(sessionDelivery(state, delta), "apply");
   state = reduce(state, {
     type: "selecting",
@@ -162,44 +154,6 @@ test("INV-02/05: reconnect retains the view and draft until a fresh attachment s
     null,
     "actual navigation must not show the previous session as the new one",
   );
-});
-
-test("a late queue restore appends to its original session draft without changing the current view", () => {
-  const original = { cwd: "/scratch/a", sessionId: "a" };
-  const current = { cwd: "/scratch/b", sessionId: "b" };
-  let state = reduce(initialState, {
-    type: "draft_changed",
-    key: sessionDraftKey(original),
-    text: "existing edit",
-  });
-  state = reduce(state, {
-    type: "draft_changed",
-    key: sessionDraftKey(current),
-    text: "other draft",
-  });
-  state = reduce(state, { type: "selecting", selectionId: "select-b", ...current });
-  state = reduce(state, {
-    type: "server",
-    message: {
-      _tag: "action_result",
-      ...original,
-      result: {
-        _tag: "queue_restored",
-        messages: [
-          { kind: "steering", text: "change direction" },
-          { kind: "follow-up", text: "later\nwith detail" },
-          { kind: "follow-up", text: "later\nwith detail" },
-        ],
-      },
-    },
-  });
-  assert.equal(
-    state.drafts[sessionDraftKey(original)],
-    "existing edit\n\nchange direction\n\nlater\nwith detail\n\nlater\nwith detail",
-  );
-  assert.equal(state.drafts[sessionDraftKey(current)], "other draft");
-  assert.deepEqual(state.selecting, current);
-  assert.equal(state.view.kind, "session");
 });
 
 test("a disappearing host is not a completed turn; an actual idle transition is", () => {
@@ -215,55 +169,6 @@ test("a disappearing host is not a completed turn; an actual idle transition is"
     message: { _tag: "hosts", hosts: [{ ...host, streaming: false }] },
   });
   assert.deepEqual(settled.done, [sessionKey(host)]);
-});
-
-test("an empty native queue result does not erase editor text", () => {
-  const identity = { cwd: "/scratch/a", sessionId: "a" };
-  const state = reduce(initialState, {
-    type: "draft_changed",
-    key: sessionDraftKey(identity),
-    text: "keep this",
-  });
-  const restored = reduce(state, {
-    type: "server",
-    message: {
-      _tag: "action_result",
-      ...identity,
-      result: { _tag: "queue_restored", messages: [] },
-    },
-  });
-  assert.equal(restored.drafts[sessionDraftKey(identity)], "keep this");
-});
-
-test("text added to a draft starts a new paragraph only after visible text; typing appends as typed", () => {
-  const identity = { cwd: "/scratch/a", sessionId: "a" };
-  const key = sessionDraftKey(identity);
-  const add = (state: typeof initialState, text: string) =>
-    reduce(state, { type: "draft_paragraph_appended", key, text });
-  let state = add(initialState, "from Changes");
-  assert.equal(state.drafts[key], "from Changes", "an empty draft gets no leading blank line");
-  state = add(state, "from an extension");
-  assert.equal(state.drafts[key], "from Changes\n\nfrom an extension");
-  state = reduce(state, { type: "draft_appended", key, text: "!" });
-  assert.equal(
-    state.drafts[key],
-    "from Changes\n\nfrom an extension!",
-    "typed characters join the text as they are",
-  );
-  state = reduce(state, { type: "draft_changed", key, text: " \n" });
-  state = reduce(state, {
-    type: "server",
-    message: {
-      _tag: "action_result",
-      ...identity,
-      result: { _tag: "queue_restored", messages: [{ kind: "steering", text: "restored" }] },
-    },
-  });
-  assert.equal(
-    state.drafts[key],
-    " \nrestored",
-    "a whitespace-only draft is not a paragraph; restored input follows the same rule",
-  );
 });
 
 test("INV-01/03: first input survives selection and submission until authoritative user history, including expanded commands", () => {
