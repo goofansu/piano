@@ -29,16 +29,24 @@ export type Method = "GET" | "POST" | "PUT" | "DELETE";
 /** The only values a URL carries: IDs the registry resolves. The server answers 404 for an unknown one. */
 export type IdParam = "workspaceId" | "sessionId";
 
-/** The browser's message when the server sent no `error` of its own (`status` 0: no response). */
+/**
+ * The message for a failure the user cannot act on: the browser shows it when the server sent no
+ * `error` of its own (`status` 0: no response), and the server answers an unexpected failure (500)
+ * with it, never with the failure's own message.
+ */
 export type Fallback = string | ((status: number) => string);
 
 /** A JSON Schema that needs no services to decode or encode. */
 export type Json = Schema.ConstraintCodec<unknown, unknown, never, never>;
 
+/** The status a service's refusal (a tagged error carrying a `detail` for people) is answered with. */
+export type RefusedStatus = 400 | 409 | 502;
+
 export interface Endpoint<
   Q extends IdParam = IdParam,
   B extends Json | undefined = Json | undefined,
   R extends Json = Json,
+  F extends RefusedStatus | undefined = RefusedStatus | undefined,
 > {
   readonly method: Method;
   readonly path: `/api/${string}`;
@@ -50,6 +58,11 @@ export interface Endpoint<
   readonly response: R;
   /** Live facts: the server marks the response uncacheable and the browser bypasses its cache. */
   readonly noStore: boolean;
+  /** The server answers a refusal with this status and its `detail`; anything else is a 500. */
+  readonly refused: F;
+  /** False for state that carries no transcript content, such as sign-in and setup state, so codes
+   * and URLs reach the user intact; everything else leaves through the display projection. */
+  readonly redact: boolean;
   readonly fallback: Fallback;
 }
 
@@ -61,6 +74,7 @@ const endpoint = <
   Q extends IdParam = never,
   B extends Json | undefined = undefined,
   R extends Json = Json,
+  F extends RefusedStatus | undefined = undefined,
 >(e: {
   method: M;
   path: NoPathParams<P>;
@@ -69,8 +83,10 @@ const endpoint = <
   invalid?: string;
   response: R;
   noStore?: boolean;
+  refused?: F;
+  redact?: boolean;
   fallback: Fallback;
-}): Endpoint<Q, B, R> => ({
+}): Endpoint<Q, B, R, F> => ({
   method: e.method,
   path: e.path,
   query: e.query ?? [],
@@ -78,6 +94,8 @@ const endpoint = <
   invalid: e.invalid ?? "Invalid request.",
   response: e.response,
   noStore: e.noStore ?? false,
+  refused: e.refused as F,
+  redact: e.redact ?? true,
   fallback: e.fallback,
 });
 
@@ -113,6 +131,8 @@ const signInEndpoints = <const P extends `/api/${string}`>(path: NoPathParams<P>
     invalid: "Invalid sign-in request.",
     response: Schema.Struct({ state: Schema.NullOr(ProviderLoginState) }),
     noStore: true,
+    refused: 409,
+    redact: false,
     fallback: "Could not complete sign-in.",
   } as const;
   return {
@@ -145,6 +165,7 @@ export const Endpoints = {
     path: "/api/ls",
     body: Schema.Struct({ path: Schema.optional(Schema.String) }),
     response: DirListing,
+    refused: 400,
     fallback: "Could not list this folder.",
   }),
   /** mkdir -p for the folder picker's "New folder". */
@@ -154,6 +175,7 @@ export const Endpoints = {
     body: Schema.Struct({ path: Schema.String }),
     invalid: "path is required",
     response: Schema.Struct({ path: Schema.String }),
+    refused: 400,
     fallback: "Could not create folder",
   }),
   folders: endpoint({
@@ -198,6 +220,7 @@ export const Endpoints = {
     query: ["workspaceId", "sessionId"],
     response: SessionPullRequest,
     noStore: true,
+    refused: 400,
     fallback: "Could not load the pull request.",
   }),
   changeSessionPullRequest: endpoint({
@@ -208,6 +231,7 @@ export const Endpoints = {
     invalid: "Invalid pull request request.",
     response: SessionPullRequest,
     noStore: true,
+    refused: 400,
     fallback: "Could not load the pull request.",
   }),
 
@@ -217,6 +241,7 @@ export const Endpoints = {
     query: ["workspaceId", "sessionId"],
     response: SessionShare,
     noStore: true,
+    refused: 409,
     fallback: "Sharing could not be confirmed. Check Radius artifacts before sharing again.",
   }),
 
@@ -229,6 +254,7 @@ export const Endpoints = {
     body: Schema.Struct({ cwd: Schema.String }),
     invalid: "Directory is required.",
     response: Schema.Struct({ commands: Schema.Array(SlashCommand) }),
+    refused: 502,
     fallback: "Could not load commands.",
   }),
   /** A running session answers from its own child; a stopped one is never started to answer (409). */
@@ -249,6 +275,7 @@ export const Endpoints = {
     body: SessionDefaults,
     invalid: "Choose a valid default model and effort.",
     response: Schema.Struct({ defaults: SessionDefaults }),
+    refused: 400,
     fallback: "Could not save defaults. Try again.",
   }),
   radiusSetup: endpoint({
@@ -256,6 +283,7 @@ export const Endpoints = {
     path: "/api/settings/radius",
     response: RadiusReply,
     noStore: true,
+    redact: false,
     fallback: "Could not load Radius setup.",
   }),
   changeRadiusSetup: endpoint({
@@ -265,6 +293,8 @@ export const Endpoints = {
     invalid: "Invalid Radius setup action.",
     response: RadiusReply,
     noStore: true,
+    refused: 409,
+    redact: false,
     fallback: "Could not load Radius setup.",
   }),
   mcpSetup: endpoint({
@@ -272,6 +302,7 @@ export const Endpoints = {
     path: "/api/settings/mcp",
     response: McpReply,
     noStore: true,
+    redact: false,
     fallback: "Could not load MCP servers.",
   }),
   changeMcpSetup: endpoint({
@@ -281,6 +312,8 @@ export const Endpoints = {
     invalid: "Invalid MCP setup action.",
     response: McpReply,
     noStore: true,
+    refused: 409,
+    redact: false,
     fallback: "Could not change MCP setup.",
   }),
   oauthProviders: endpoint({
@@ -296,6 +329,7 @@ export const Endpoints = {
     body: Schema.Struct({ provider: Schema.String }),
     invalid: "Invalid sign-out request.",
     response: Schema.Struct({ ok: Schema.Literal(true) }),
+    refused: 409,
     fallback: "Could not sign out. Try again.",
   }),
 

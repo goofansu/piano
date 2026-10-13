@@ -1,10 +1,11 @@
-import { Cause, Data, Effect, Schema } from "effect";
+import { Cause, Data, Effect, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import {
   type Endpoint,
   Endpoints,
   type IdParam,
   type Json,
+  type RefusedStatus,
   type SignInEndpoints,
 } from "../shared/http.ts";
 import type { RadiusSetupState } from "../shared/radius.ts";
@@ -12,9 +13,8 @@ import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
-import { errorText } from "./ErrorText.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
-import { McpSetup, type McpSetupError } from "./McpSetup.ts";
+import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiSettings } from "./PiSettings.ts";
@@ -38,19 +38,37 @@ class ApiFailure extends Data.TaggedError("ApiFailure")<{
 
 const fail = (status: number, error: string) => Effect.fail(new ApiFailure({ status, error }));
 
-/** Every other failure becomes `status` with its own `detail`, or `fallback` when it has none. */
-const failAs =
-  (status: number, fallback: string | ((error: unknown) => string)) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(
-      Effect.catchCause((cause) => {
-        const error = Cause.squash(cause);
-        if (error instanceof ApiFailure) return Effect.fail(error);
-        return fail(status, typeof fallback === "string" ? fallback : fallback(error));
-      }),
-    );
+/** A service's refusal: a tagged error whose `detail` is written for people. Its endpoint
+ * declares the status (`refused`). SignInAttempts keeps token responses out of sign-in details (INV-11). */
+interface Refusal {
+  readonly _tag: string;
+  readonly detail: string;
+}
 
-const detailOr = (fallback: string) => (error: unknown) => errorText(error, fallback);
+const isRefusal = (error: unknown): error is Refusal =>
+  !!error &&
+  typeof error === "object" &&
+  typeof (error as Partial<Refusal>)._tag === "string" &&
+  typeof (error as Partial<Refusal>).detail === "string";
+
+/** The failure a request ends with: a handler's own ApiFailure, a refusal at the endpoint's
+ * status, or anything else (a defect included) as a logged 500 with the endpoint's fallback,
+ * never its own message. */
+const failure = (endpoint: Endpoint, cause: Cause.Cause<unknown>) => {
+  const error = Option.getOrUndefined(Cause.findErrorOption(cause));
+  if (error instanceof ApiFailure) return Effect.succeed(error);
+  if (endpoint.refused && isRefusal(error))
+    return Effect.succeed(new ApiFailure({ status: endpoint.refused, error: error.detail }));
+  const { fallback } = endpoint;
+  return Effect.logError(`${endpoint.method} ${endpoint.path} failed unexpectedly`, cause).pipe(
+    Effect.as(
+      new ApiFailure({
+        status: 500,
+        error: typeof fallback === "string" ? fallback : fallback(500),
+      }),
+    ),
+  );
+};
 
 /** What a handler receives: the decoded body, and the registered workspace and session its IDs name. */
 type Input<Q extends IdParam, B extends Json | undefined> = (B extends Json
@@ -73,11 +91,22 @@ const respond = (body: unknown, status: number, { noStore = false, redact = true
  */
 const route =
   (router: HttpRouter.HttpRouter) =>
-  <Q extends IdParam, B extends Json | undefined, R extends Json, Req>(
-    endpoint: Endpoint<Q, B, R>,
-    handler: (input: Input<Q, B>) => Effect.Effect<R["Type"], ApiFailure, Req>,
-    /** Sign-in and Radius setup state carry no transcript content and leave unprojected, so codes and URLs reach the user intact. */
-    options: { readonly redact?: boolean } = {},
+  <
+    Q extends IdParam,
+    B extends Json | undefined,
+    R extends Json,
+    F extends RefusedStatus | undefined,
+    Req,
+  >(
+    endpoint: Endpoint<Q, B, R, F>,
+    /** May fail with a refusal only when the endpoint declares a status for it. */
+    handler: (
+      input: Input<Q, B>,
+    ) => Effect.Effect<
+      R["Type"],
+      ApiFailure | ([F] extends [RefusedStatus] ? Refusal : never),
+      Req
+    >,
   ) =>
     router.add(
       endpoint.method,
@@ -123,10 +152,14 @@ const route =
             "The server answered outside its contract. Inspect the server log.",
           );
         }
-        return respond(encoded.value, 200, { noStore: endpoint.noStore, redact: options.redact });
+        return respond(encoded.value, 200, { noStore: endpoint.noStore, redact: endpoint.redact });
       }).pipe(
-        Effect.catchTag("ApiFailure", (failure) =>
-          Effect.succeed(respond({ error: failure.error }, failure.status)),
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : Effect.map(failure(endpoint, cause), ({ status, error }) =>
+                respond({ error }, status),
+              ),
         ),
       ),
     );
@@ -165,18 +198,14 @@ export const AppRouter = HttpRouter.use((router) =>
 
     const serve = route(router);
 
-    yield* serve(Endpoints.listDirectory, ({ body }) =>
-      Directories.list(body.path ?? "~").pipe(
-        Effect.catchTag("DirectoryError", (error) => fail(400, error.detail)),
-      ),
-    );
+    yield* serve(Endpoints.listDirectory, ({ body }) => Directories.list(body.path ?? "~"));
 
     yield* serve(Endpoints.makeDirectory, ({ body }) =>
       Effect.gen(function* () {
         if (!body.path || directoryPath(body.path) === "/")
           return yield* fail(400, Endpoints.makeDirectory.invalid);
         return { path: yield* Directories.make(body.path) };
-      }).pipe(Effect.catchTag("DirectoryError", (error) => fail(400, error.detail))),
+      }),
     );
 
     yield* serve(Endpoints.folders, () =>
@@ -196,35 +225,23 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(WorkspaceRevisions, (revisions) => revisions.capture(workspace)),
     );
 
-    const pullRequestFailure = failAs(400, detailOr("Invalid pull request request."));
     yield* serve(Endpoints.sessionPullRequest, ({ session }) =>
-      Effect.flatMap(SessionPullRequests, (prs) => prs.get(session)).pipe(pullRequestFailure),
+      Effect.flatMap(SessionPullRequests, (prs) => prs.get(session)),
     );
     yield* serve(Endpoints.changeSessionPullRequest, ({ session, body }) =>
-      Effect.flatMap(SessionPullRequests, (prs) => prs.change(session, body)).pipe(
-        pullRequestFailure,
-      ),
+      Effect.flatMap(SessionPullRequests, (prs) => prs.change(session, body)),
     );
 
     yield* serve(Endpoints.shareSession, ({ session }) =>
-      Effect.flatMap(SessionSharing, (sharing) => sharing.share(session)).pipe(
-        Effect.catchTag("ShareError", (error) => fail(409, error.detail)),
-      ),
+      Effect.flatMap(SessionSharing, (sharing) => sharing.share(session)),
     );
 
-    const commandsFailure = failAs(
-      502,
-      "Could not load commands. Reopen the suggestions to retry.",
-    );
     yield* serve(Endpoints.slashCommands, ({ body }) =>
       Effect.gen(function* () {
         if (!body.cwd) return yield* fail(400, Endpoints.slashCommands.invalid);
         const facts = yield* DirectoryFacts;
         return { commands: yield* facts.commands(body.cwd) };
-      }).pipe(
-        Effect.catchTag("DirectoryCommandsError", (error) => fail(502, error.detail)),
-        commandsFailure,
-      ),
+      }),
     );
     // INV-02: discovery asks the running child and never opens a saved session or a second writer.
     yield* serve(Endpoints.sessionCommands, ({ session }) =>
@@ -237,13 +254,17 @@ export const AppRouter = HttpRouter.use((router) =>
         const result = yield* running.act({ _tag: "commands" });
         if (result?._tag !== "commands") return yield* fail(502, "Command catalog unavailable.");
         return { commands: result.commands };
-      }).pipe(commandsFailure),
+      }).pipe(
+        // Pi's own error text is not for people here; the user can only retry.
+        Effect.catchTag("PiSessionError", () =>
+          fail(502, "Could not load commands. Reopen the suggestions to retry."),
+        ),
+      ),
     );
 
     yield* serve(Endpoints.saveDefaults, ({ body }) =>
       Effect.flatMap(PiSettings, (settings) => settings.saveDefaults(body)).pipe(
         Effect.map((defaults) => ({ defaults })),
-        Effect.catchTag("PiSettingsError", (error) => fail(400, error.detail)),
       ),
     );
 
@@ -260,81 +281,51 @@ export const AppRouter = HttpRouter.use((router) =>
             return setup.uninstallWebSearch(body.removalKey);
         }
       });
-    yield* serve(
-      Endpoints.radiusSetup,
-      () =>
-        Effect.flatMap(RadiusSetup, (setup) => setup.state).pipe(
-          Effect.map((state) => ({ state })),
-        ),
-      { redact: false },
+    yield* serve(Endpoints.radiusSetup, () =>
+      Effect.flatMap(RadiusSetup, (setup) => setup.state).pipe(Effect.map((state) => ({ state }))),
     );
-    yield* serve(
-      Endpoints.changeRadiusSetup,
-      ({ body }) =>
-        radiusAction(body).pipe(
-          Effect.map((state) => ({ state })),
-          Effect.catchTag("RadiusSetupError", (error) => fail(409, error.detail)),
-        ),
-      { redact: false },
+    yield* serve(Endpoints.changeRadiusSetup, ({ body }) =>
+      radiusAction(body).pipe(Effect.map((state) => ({ state }))),
     );
 
-    const mcp = <A>(step: (setup: McpSetup["Service"]) => Effect.Effect<A, McpSetupError>) =>
-      Effect.flatMap(McpSetup, step).pipe(
+    yield* serve(Endpoints.mcpSetup, () =>
+      Effect.flatMap(McpSetup, (setup) => setup.state).pipe(Effect.map((state) => ({ state }))),
+    );
+    yield* serve(Endpoints.changeMcpSetup, ({ body }) =>
+      Effect.flatMap(McpSetup, (setup) => setup.change(body)).pipe(
         Effect.map((state) => ({ state })),
-        Effect.catchTag("McpSetupError", (error) => fail(409, error.detail)),
-      );
-    yield* serve(Endpoints.mcpSetup, () => mcp((setup) => setup.state), { redact: false });
-    yield* serve(Endpoints.changeMcpSetup, ({ body }) => mcp((setup) => setup.change(body)), {
-      redact: false,
-    });
+      ),
+    );
 
     yield* serve(Endpoints.oauthProviders, () =>
       Effect.flatMap(ProviderLogin, (login) => login.providers).pipe(
         Effect.map((providers) => ({ providers })),
-        failAs(502, "Could not load OAuth providers."),
+        // Pi's error may name local files; the user can only retry.
+        Effect.catch(() => fail(502, "Could not load OAuth providers.")),
       ),
     );
-
-    // A refused sign-in request answers with its own detail; SignInAttempts keeps token responses out of it (INV-11).
-    const signInFailure = <A, R>(effect: Effect.Effect<A, SignInError, R>) =>
-      effect.pipe(
-        Effect.catchTag("SignInError", (error) => fail(409, error.detail)),
-        failAs(
-          409,
-          "Sign-in request could not be completed. Resume the current sign-in or try again.",
-        ),
-      );
 
     yield* serve(Endpoints.providerLogout, ({ body }) =>
       Effect.flatMap(ProviderLogin, (login) => login.signOut(body.provider)).pipe(
         Effect.as({ ok: true as const }),
-        signInFailure,
       ),
     );
 
-    // One lane's four routes. Credential values and callback URLs travel only in bodies; the state
-    // carries no transcript content and leaves unprojected, so codes and URLs reach the user intact.
-    // This global operation creates no session and owns no conversation history.
+    // One lane's four routes. Credential values and callback URLs travel only in bodies. This
+    // global operation creates no session and owns no conversation history.
     const serveSignIn = Effect.fnUntraced(function* <R>(
       endpoints: SignInEndpoints,
       lane: Effect.Effect<SignInLane, never, R>,
     ) {
       const step = (
         request: (lane: SignInLane) => Effect.Effect<SignInState | null, SignInError>,
-      ) =>
-        Effect.flatMap(lane, request).pipe(
-          Effect.map((state) => ({ state })),
-          signInFailure,
-        );
-      const unredacted = { redact: false };
-      yield* serve(endpoints.state, () => step((l) => l.state), unredacted);
-      yield* serve(endpoints.start, ({ body }) => step((l) => l.start(body.provider)), unredacted);
-      yield* serve(
-        endpoints.answer,
-        ({ body }) => step((l) => l.answer(body.id, body.promptId, body.value)),
-        unredacted,
+      ) => Effect.flatMap(lane, request).pipe(Effect.map((state) => ({ state })));
+      yield* serve(endpoints.state, () => step((l) => l.state));
+      yield* serve(endpoints.start, ({ body }) => step((l) => l.start(body.provider)));
+      yield* serve(endpoints.answer, ({ body }) =>
+        step((l) => l.answer(body.id, body.promptId, body.value)),
       );
-      yield* serve(endpoints.cancel, ({ body }) => step((l) => l.cancel(body.id)), unredacted);
+      yield* serve(endpoints.cancel, ({ body }) => step((l) => l.cancel(body.id)));
     });
     yield* serveSignIn(
       Endpoints.providerLogin,
