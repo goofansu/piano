@@ -22,7 +22,6 @@ import {
   sessionPane,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
-import { useCheckoutRefresh } from "@/lib/useCheckoutRefresh";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
@@ -44,7 +43,6 @@ export function SessionView({ state, send }: Props) {
   const onPullRequestOpenChange = (open: boolean) => (open ? openPanel("pr") : closePanel());
   const [display] = useSessionDisplay();
   const t = state.session;
-  useCheckoutRefresh(state, send);
   // The transcript looks executions up by tool call ID.
   const tools = useMemo(
     () => Object.fromEntries((t?.tools ?? []).map((tool) => [tool.id, tool])),
