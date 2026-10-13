@@ -21,8 +21,8 @@ import { checkoutRefresh } from "@/lib/checkoutRefresh";
 import type { NotifyLevel } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
 import { initialView } from "@/lib/navigation";
+import { pendingDialogs } from "@/lib/piDialogs";
 import { parseRoute } from "@/lib/routes";
-import { sessionReady } from "@/lib/sessionContext";
 import { useClient } from "@/lib/useClient";
 import { modelCatalogs } from "@/lib/useModelCatalog";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
@@ -139,11 +139,7 @@ export default function App() {
               toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
             />
             <CommandPalette state={state} />
-            <DialogHost
-              dialogs={state.resync ? [] : (state.session?.dialogs ?? [])}
-              send={send}
-              connected={sessionReady(state)}
-            />
+            <DialogHost pending={pendingDialogs(state)} send={send} />
           </AppLayout>
         </CommandHost>
       </NavigationContext.Provider>
