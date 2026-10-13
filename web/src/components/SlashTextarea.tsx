@@ -3,7 +3,6 @@ import { cn } from "cn";
 import {
   type ComponentProps,
   type RefObject,
-  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -12,7 +11,19 @@ import {
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopover";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionCommands, slashCommands } from "@/lib/api";
-import { acceptCompletion, commandToken, completionRange, rankSkills } from "@/lib/slashCompletion";
+import {
+  commandToken,
+  completionRange,
+  initialSlashState,
+  rankSkills,
+  type SlashEvent,
+  type SlashView,
+  slashAccept,
+  slashActive,
+  slashKeyDown,
+  slashOpen,
+  slashUpdate,
+} from "@/lib/slashCompletion";
 import { useObservation } from "@/lib/useObservation";
 
 export interface CompletionContext {
@@ -45,19 +56,20 @@ export function SlashTextarea({
   ...props
 }: Props) {
   const id = useId();
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
-  const [focused, setFocused] = useState(false);
-  const [composing, setComposing] = useState(false);
-  const [dismissed, setDismissed] = useState<string>();
-  const [selected, setSelected] = useState(0);
+  const [state, setState] = useState(initialSlashState);
   const list = useRef<HTMLUListElement>(null);
   const mirror = useRef<HTMLDivElement>(null);
   const tokenElement = useRef<HTMLSpanElement>(null);
-  const [accepted, setAccepted] = useState<string>();
   const [hovered, setHovered] = useState(false);
   const key = JSON.stringify(completion);
-  const range = completionRange(value, selection);
-  const token = commandToken(value, accepted);
+  const view: SlashView = {
+    value,
+    enabled: !!completion?.cwd && !props.disabled,
+    readOnly: !!props.readOnly,
+    context: key,
+  };
+  const range = completionRange(value, state.selection);
+  const token = commandToken(value, state.accepted);
   // The native textarea remains the editor (selection, undo, IME and accessibility).
   // A non-interactive mirror paints command color and hover without replacing native editing.
   // biome-ignore lint/correctness/useExhaustiveDependencies: resync DOM metrics when draft text or input styling changes, not on streaming renders.
@@ -105,14 +117,7 @@ export function SlashTextarea({
       window.removeEventListener("resize", sync);
     };
   }, [ref, value, props.className, props.style]);
-  const position = JSON.stringify([key, value, selection]);
-  const open =
-    !!completion?.cwd &&
-    !props.disabled &&
-    focused &&
-    !composing &&
-    !!range &&
-    dismissed !== position;
+  const open = slashOpen(state, view);
   const cwd = completion?.cwd;
   const session = completion?.session;
   // Fetch once per opening, not per keystroke. Reopening gets the live catalog
@@ -128,41 +133,34 @@ export function SlashTextarea({
       ? { commands: [], error: catalog.error }
       : undefined;
   const commands = rankSkills(current?.commands ?? [], range?.query ?? "");
-  const active = Math.min(selected, Math.max(0, commands.length - 1));
-  // biome-ignore lint/correctness/useExhaustiveDependencies: changing the completion position/query resets selection; arrow-key selection alone must not reset it.
-  useEffect(() => setSelected(0), [position]);
+  const active = slashActive(state, view, commands.length);
   useLayoutEffect(() => {
     if (open) list.current?.children[active]?.scrollIntoView({ block: "nearest" });
   }, [open, active]);
-  const syncSelection = (element: HTMLTextAreaElement) =>
-    setSelection({ start: element.selectionStart, end: element.selectionEnd });
-  const close = () => setDismissed(position);
+  const snapshot = (element: HTMLTextAreaElement) => ({
+    value: element.value,
+    selection: { start: element.selectionStart, end: element.selectionEnd },
+  });
+  const update = (event: SlashEvent) => setState((current) => slashUpdate(current, view, event));
   const accept = (command: SlashCommand) => {
     const element = ref.current;
-    if (!element || !range || composing || !open) return;
-    // Guard against a pointer action or delayed render accepting an obsolete range.
-    if (
-      element.value !== value ||
-      element.selectionStart !== selection.start ||
-      element.selectionEnd !== selection.end
-    )
-      return;
-    const { text: next, caret } = acceptCompletion(value, range, command.name);
-    setAccepted(command.name);
+    const result = element && slashAccept(state, view, command.name, snapshot(element));
+    if (!element || !result) return;
+    const { text: next, caret } = result;
+    setState(result.state);
     onValueChange(next);
-    setDismissed(JSON.stringify([key, next, { start: caret, end: caret }]));
     requestAnimationFrame(() => {
       if (ref.current !== element || element.value !== next) return;
       element.focus({ preventScroll: true });
       element.setSelectionRange(caret, caret);
-      syncSelection(element);
+      update({ type: "select", ...snapshot(element) });
     });
   };
   return (
     <Popover
       open={open}
       onOpenChange={(next) => {
-        if (!next) close();
+        if (!next) update({ type: "dismiss" });
       }}
     >
       <PopoverAnchor asChild>
@@ -197,75 +195,54 @@ export function SlashTextarea({
             }}
             onChange={(event) => {
               setHovered(false);
-              syncSelection(event.currentTarget);
+              update({ type: "select", ...snapshot(event.currentTarget) });
               onValueChange(event.currentTarget.value);
             }}
             onSelect={(event) => {
-              syncSelection(event.currentTarget);
+              update({ type: "select", ...snapshot(event.currentTarget) });
               onSelect?.(event);
             }}
             onFocus={(event) => {
-              setFocused(true);
-              setDismissed(undefined);
-              syncSelection(event.currentTarget);
+              update({ type: "focus", ...snapshot(event.currentTarget) });
               onFocus?.(event);
             }}
             onBlur={(event) => {
-              setFocused(false);
+              update({ type: "blur" });
               onBlur?.(event);
             }}
             onCompositionStart={(event) => {
-              setComposing(true);
+              update({ type: "composition-start" });
               onCompositionStart?.(event);
             }}
             onCompositionEnd={(event) => {
-              setComposing(false);
-              syncSelection(event.currentTarget);
+              update({ type: "composition-end", ...snapshot(event.currentTarget) });
               onCompositionEnd?.(event);
             }}
             onKeyDown={(event) => {
-              if (composing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
-                return;
               const element = event.currentTarget;
-              if (
-                token &&
-                !props.readOnly &&
-                event.key === "Backspace" &&
-                !event.metaKey &&
-                !event.ctrlKey &&
-                !event.altKey &&
-                element.selectionEnd === token.to &&
-                (element.selectionStart === token.to ||
-                  (event.repeat && element.selectionStart === token.from))
-              ) {
-                event.preventDefault();
-                element.setSelectionRange(token.from, token.to);
-                syncSelection(element);
-                close();
-                return;
-              }
-              if (open && event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                close();
-                return;
-              }
-              if (open && commands.length && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-                if (!event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-                  event.preventDefault();
-                  setSelected(
-                    (active + (event.key === "ArrowDown" ? 1 : -1) + commands.length) %
-                      commands.length,
-                  );
-                  return;
-                }
-                if ((event.key === "Tab" && !event.altKey) || event.key === "Enter") {
-                  event.preventDefault();
-                  if (!event.repeat) accept(commands[active]);
-                  return;
-                }
-              }
-              onKeyDown?.(event);
+              const { state: next, effect } = slashKeyDown(
+                state,
+                view,
+                {
+                  key: event.key,
+                  repeat: event.repeat,
+                  shiftKey: event.shiftKey,
+                  ctrlKey: event.ctrlKey,
+                  metaKey: event.metaKey,
+                  altKey: event.altKey,
+                  isComposing: event.nativeEvent.isComposing,
+                  keyCode: event.nativeEvent.keyCode,
+                  selection: snapshot(element).selection,
+                },
+                commands.length,
+              );
+              if (effect.type === "ignore") return;
+              if (effect.type === "pass") return onKeyDown?.(event);
+              event.preventDefault();
+              setState(next);
+              if (effect.type === "select-token") element.setSelectionRange(effect.from, effect.to);
+              else if (effect.type === "close") event.stopPropagation();
+              else if (effect.type === "accept") accept(commands[effect.index]);
             }}
           />
           {/* No shadcn primitive paints inline ranges inside a native textarea. */}
@@ -330,7 +307,7 @@ export function SlashTextarea({
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => accept(command)}
               onPointerMove={(event) => {
-                if (event.pointerType === "mouse") setSelected(index);
+                if (event.pointerType === "mouse") update({ type: "highlight", index });
               }}
             >
               <span className="flex items-center gap-3">
