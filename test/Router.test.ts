@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
+import { PiSettings, PiSettingsError } from "../server/PiSettings.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { WorkspaceRevisions } from "../server/WorkspaceRevisions.ts";
 import { type Endpoint, Endpoints } from "../shared/http.ts";
@@ -13,7 +14,15 @@ before(async () => {
   const offContract = Layer.succeed(WorkspaceRevisions, {
     capture: () => Effect.succeed({ candidate: "not a manifest" } as never),
   });
-  server = await startRouter("piano-router-", offContract);
+  // Settings that refuse one model and fail unexpectedly for any other, to observe failure statuses.
+  const failingSettings = Layer.succeed(PiSettings, {
+    defaults: Effect.die("unused"),
+    saveDefaults: ({ model }) =>
+      model === "refused"
+        ? Effect.fail(new PiSettingsError({ detail: "Choose an available model." }))
+        : Effect.die(new Error("EACCES: /home/someone/.pi/agent/settings.json")),
+  });
+  server = await startRouter("piano-router-", Layer.merge(offContract, failingSettings));
 });
 after(() => server.dispose());
 
@@ -100,6 +109,25 @@ test("a result outside the response Schema is never sent", async () => {
   assert.equal(status, 500);
   assert.equal(body.error, "The server answered outside its contract. Inspect the server log.");
   assert.ok(!JSON.stringify(body).includes("not a manifest"));
+});
+
+test("a refusal is answered with the endpoint's status and its detail; an unexpected failure generically, never with its message", async () => {
+  const save = (model: string) =>
+    server.handle("/api/settings/defaults", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model, thinkingLevel: "medium" }),
+    });
+  assert.deepEqual(await reply(await save("refused")), {
+    status: 400,
+    body: { error: "Choose an available model." },
+  });
+  const unexpected = await reply(await save("other"));
+  assert.deepEqual(unexpected, {
+    status: 500,
+    body: { error: Endpoints.saveDefaults.fallback },
+  });
+  assert.ok(!JSON.stringify(unexpected).includes("EACCES"));
 });
 
 test("INV-04: a provider sign-in refusal reaches the browser with its own detail, as MCP sign-in's does", async () => {
