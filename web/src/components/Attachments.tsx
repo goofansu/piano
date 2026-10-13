@@ -1,7 +1,7 @@
 import { base64Bytes, IMAGE_TYPES } from "@shared/attachments";
 import type { Attachment as AttachmentData, RenderMsg } from "@shared/wire";
 import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
-import { useId, useRef, useState, useSyncExternalStore } from "react";
+import { useId, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/attachment";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { type DraftKey, imageDrafts } from "@/lib/messageDraft";
+import { type DraftKey, drafts, type ImageDraft } from "@/lib/messageDraft";
 
 /** Reads a file as base64 with the browser's native encoder. */
 const encode = (file: File) =>
@@ -27,17 +27,15 @@ const encode = (file: File) =>
     reader.onerror = () => reject(new Error(`Could not read ${file.name}. Try again.`));
     reader.readAsDataURL(file);
   });
-/** A draft's images (`null` while no draft is addressed), bound to React; messageDraft owns them and their policy. */
-export function useAttachments(key: DraftKey | null) {
-  const state = useSyncExternalStore(imageDrafts.subscribe, () => imageDrafts.get(key));
+/** A draft's images (`null` while no draft is addressed) with the moves these controls offer; messageDraft owns them and their policy. */
+export function attachmentDraft(key: DraftKey | null, images: ImageDraft) {
   return {
-    ...state,
-    add: (files: File[]) => imageDrafts.add(key, files, encode),
-    remove: (index: number) => imageDrafts.remove(key, index),
-    clear: () => imageDrafts.clear(key),
+    ...images,
+    add: (files: File[]) => drafts.addImages(key, files, encode),
+    remove: (index: number) => drafts.removeImage(key, index),
   };
 }
-export type AttachmentDraft = ReturnType<typeof useAttachments>;
+export type AttachmentDraft = ReturnType<typeof attachmentDraft>;
 
 const TYPE_LABEL: Record<AttachmentData["mimeType"], string> = {
   "image/png": "PNG",

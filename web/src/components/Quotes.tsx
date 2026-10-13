@@ -1,20 +1,15 @@
 import { MessageSquareQuoteIcon, XIcon } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Button } from "@/components/ui/button";
-import { type DraftKey, quoteDrafts } from "@/lib/messageDraft";
+import { type DraftKey, drafts } from "@/lib/messageDraft";
 
-/** A draft's quotes, bound to React; messageDraft owns them and how they join the message. */
-export function useQuotes(key: DraftKey | null) {
-  const items = useSyncExternalStore(quoteDrafts.subscribe, () => quoteDrafts.get(key));
-  return {
-    items,
-    remove: (index: number) => quoteDrafts.remove(key, index),
-    clear: () => quoteDrafts.clear(key),
-  };
+/** A draft's quotes and the chips' remove move; messageDraft owns them and how they join the message. */
+export interface QuoteDraft {
+  items: readonly string[];
+  remove: (index: number) => void;
 }
-export type QuoteDraft = ReturnType<typeof useQuotes>;
 
 /**
  * The draft's quotes as a row of chips: the start of each quote, the whole of it on hover, and a
@@ -146,7 +141,7 @@ export function AddToChat({
   );
   const add = () => {
     const selection = document.getSelection();
-    quoteDrafts.add(draftKey, selection?.toString() ?? "");
+    drafts.addQuote(draftKey, selection?.toString() ?? "");
     selection?.removeAllRanges();
     setRange(null);
   };

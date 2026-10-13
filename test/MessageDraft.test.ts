@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Attachment } from "../shared/wire.ts";
+import type { Attachment, ServerMessage } from "../shared/wire.ts";
 import {
   checkImages,
+  createDrafts,
+  type DraftMessage,
+  EMPTY_DRAFT,
   hasContent,
   type ImageCandidate,
-  imageDrafts,
-  quoteDrafts,
   sendable,
   sessionDraftKey,
-  withQuotes,
 } from "../web/src/lib/messageDraft.ts";
 
 // Limits and formats from docs/image-attachments.md, written out rather than imported.
@@ -124,33 +124,34 @@ test("PNG, JPEG, GIF and WebP are recognized by signature; the declared type mus
   );
 });
 
+const PNG_BASE64 = Buffer.from(SIGNATURES["image/png"]).toString("base64");
+const pngFile = (name: string) =>
+  new File([Uint8Array.from(SIGNATURES["image/png"])], name, { type: "image/png" });
+const encode = async (file: File) => Buffer.from(await file.arrayBuffer()).toString("base64");
+
 test("an addition the policy refuses leaves the draft's accepted images in place", async () => {
+  const drafts = createDrafts();
   const key = sessionDraftKey({ cwd: "/scratch", sessionId: "images" });
-  const encode = async (file: File) => Buffer.from(await file.arrayBuffer()).toString("base64");
-  const image = (name: string) =>
-    new File([Uint8Array.from(SIGNATURES["image/png"])], name, { type: "image/png" });
-  await imageDrafts.add(key, [image("a.png")], encode);
+  await drafts.addImages(key, [pngFile("a.png")], encode);
   assert.deepEqual(
-    imageDrafts.get(key).items.map((a) => [a.name, a.mimeType, a.data]),
-    [["a.png", "image/png", Buffer.from(SIGNATURES["image/png"]).toString("base64")]],
+    drafts.get(key).images.items.map((a) => [a.name, a.mimeType, a.data]),
+    [["a.png", "image/png", PNG_BASE64]],
   );
-  await imageDrafts.add(
+  await drafts.addImages(
     key,
     [new File(["Not an image"], "notes.txt", { type: "text/plain" })],
     encode,
   );
   assert.deepEqual(
-    imageDrafts.get(key).items.map((a) => a.name),
+    drafts.get(key).images.items.map((a) => a.name),
     ["a.png"],
   );
-  assert.match(imageDrafts.get(key).error, /notes\.txt/);
+  assert.match(drafts.get(key).images.error, /notes\.txt/);
   assert.deepEqual(
-    imageDrafts.get(sessionDraftKey({ cwd: "/scratch", sessionId: "other" })).items,
+    drafts.get(sessionDraftKey({ cwd: "/scratch", sessionId: "other" })).images.items,
     [],
     "drafts are per session",
   );
-  imageDrafts.clear(key);
-  assert.deepEqual(imageDrafts.get(key), { items: [], busy: false, error: "" });
 });
 
 test("a draft is sendable with visible text or an image, and not while images are being read", () => {
@@ -167,32 +168,178 @@ test("a draft is sendable with visible text or an image, and not while images ar
 });
 
 test("quotes from the transcript go before the typed text, one blockquote each, line breaks kept", () => {
+  const drafts = createDrafts();
   const key = sessionDraftKey({ cwd: "/scratch", sessionId: "quotes" });
-  quoteDrafts.add(key, "  the parser skips blank lines\r\n");
-  quoteDrafts.add(key, "Alpha by Ann   \nBeta by Ben\n\n\n\nGamma by Cy");
-  quoteDrafts.add(key, "the parser skips blank lines");
-  quoteDrafts.add(key, " \n ");
-  quoteDrafts.add(key, "the lexer is fine");
+  drafts.addQuote(key, "  the parser skips blank lines\r\n");
+  drafts.addQuote(key, "Alpha by Ann   \nBeta by Ben\n\n\n\nGamma by Cy");
+  drafts.addQuote(key, "the parser skips blank lines");
+  drafts.addQuote(key, " \n ");
+  drafts.addQuote(key, "the lexer is fine");
+  drafts.setText(key, "  Why?\n");
   assert.equal(
-    withQuotes(quoteDrafts.get(key), "Why?"),
+    drafts.message(key).text,
     [
       "> the parser skips blank lines",
       "> Alpha by Ann\n> Beta by Ben\n>\n> Gamma by Cy",
       "> the lexer is fine",
       "Why?",
     ].join("\n\n"),
-    "a repeated or blank selection adds no quote",
+    "a repeated or blank selection adds no quote; typed text is trimmed",
   );
-  quoteDrafts.remove(key, 1);
+  drafts.removeQuote(key, 1);
+  drafts.setText(key, " \n");
+  assert.equal(drafts.message(key).text, "> the parser skips blank lines\n\n> the lexer is fine");
+  assert.equal(drafts.sendable(key), true, "quotes alone can be sent");
+  drafts.removeQuote(key, 0);
+  drafts.removeQuote(key, 0);
+  assert.equal(drafts.sendable(key), false, "whitespace alone cannot");
+});
+
+test("submit delivers text, quotes and images as one message, then empties all three", async () => {
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "submit" });
+  const other = sessionDraftKey({ cwd: "/scratch", sessionId: "other" });
+  drafts.setText(other, "untouched");
+  drafts.setText(key, "Explain this ");
+  drafts.addQuote(key, "a quoted line");
+  await drafts.addImages(key, [pngFile("shot.png")], encode);
+  const delivered: DraftMessage[] = [];
   assert.equal(
-    withQuotes(quoteDrafts.get(key), ""),
-    "> the parser skips blank lines\n\n> the lexer is fine",
-  );
-  assert.equal(
-    sendable({ text: withQuotes(quoteDrafts.get(key), ""), images: { items: [], busy: false } }),
+    drafts.submit(key, (message) => delivered.push(message)),
     true,
-    "quotes alone can be sent",
   );
-  quoteDrafts.clear(key);
-  assert.equal(withQuotes(quoteDrafts.get(key), "hi"), "hi");
+  assert.deepEqual(delivered, [
+    {
+      text: "> a quoted line\n\nExplain this",
+      attachments: [{ kind: "image", name: "shot.png", mimeType: "image/png", data: PNG_BASE64 }],
+    },
+  ]);
+  assert.equal(drafts.get(key), EMPTY_DRAFT, "text, quotes and images are all gone");
+  assert.equal(drafts.get(other).text, "untouched", "only the submitted draft empties");
+  assert.equal(
+    drafts.submit(key, () => assert.fail("an empty draft delivers nothing")),
+    false,
+  );
+});
+
+test("submit refuses while images are being read and keeps the whole draft", async () => {
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "busy" });
+  drafts.setText(key, "with a screenshot");
+  drafts.addQuote(key, "context");
+  let finish!: () => void;
+  const reading = drafts.addImages(key, [pngFile("slow.png")], async (file) => {
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return encode(file);
+  });
+  // Let the head read finish so the encoder is waiting.
+  while (!finish) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(drafts.get(key).images.busy, true);
+  assert.equal(drafts.sendable(key), false);
+  assert.equal(
+    drafts.submit(key, () => assert.fail("nothing is delivered while images are read")),
+    false,
+  );
+  drafts.setText(key, "with a screenshot, edited");
+  finish();
+  await reading;
+  const draft = drafts.get(key);
+  assert.equal(draft.text, "with a screenshot, edited", "typing while reading is kept");
+  assert.deepEqual(draft.quotes, ["context"]);
+  assert.deepEqual(
+    draft.images.items.map((a) => a.name),
+    ["slow.png"],
+    "the image read joins the kept draft",
+  );
+  const delivered: DraftMessage[] = [];
+  assert.equal(
+    drafts.submit(key, (message) => delivered.push(message)),
+    true,
+  );
+  assert.equal(delivered[0]?.attachments.length, 1);
+  assert.equal(drafts.get(key), EMPTY_DRAFT);
+});
+
+/** The page's client, as far as drafts listen to it. */
+function source() {
+  const listeners = new Set<(message: ServerMessage) => void>();
+  return {
+    listen: (listener: (message: ServerMessage) => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    restore: (
+      session: { cwd: string; sessionId: string },
+      messages: { kind: "steering" | "follow-up"; text: string }[],
+    ) => {
+      for (const listener of listeners)
+        listener({
+          _tag: "action_result",
+          ...session,
+          result: { _tag: "queue_restored", messages },
+        } as ServerMessage);
+    },
+  };
+}
+
+test("a restored queue appends as a paragraph to its own session's draft, whichever is on screen", () => {
+  const drafts = createDrafts();
+  const client = source();
+  const stop = drafts.follow(client);
+  const original = { cwd: "/scratch/a", sessionId: "a" };
+  const current = { cwd: "/scratch/b", sessionId: "b" };
+  drafts.setText(sessionDraftKey(original), "existing edit");
+  drafts.setText(sessionDraftKey(current), "other draft");
+  client.restore(original, [
+    { kind: "steering", text: "change direction" },
+    { kind: "follow-up", text: "later\nwith detail" },
+    { kind: "follow-up", text: "later\nwith detail" },
+  ]);
+  assert.equal(
+    drafts.get(sessionDraftKey(original)).text,
+    "existing edit\n\nchange direction\n\nlater\nwith detail\n\nlater\nwith detail",
+  );
+  assert.equal(drafts.get(sessionDraftKey(current)).text, "other draft");
+
+  client.restore(current, []);
+  assert.equal(
+    drafts.get(sessionDraftKey(current)).text,
+    "other draft",
+    "an empty queue erases nothing",
+  );
+
+  drafts.setText(sessionDraftKey(current), " \n");
+  client.restore(current, [{ kind: "steering", text: "restored" }]);
+  assert.equal(
+    drafts.get(sessionDraftKey(current)).text,
+    " \nrestored",
+    "a whitespace-only draft is not a paragraph",
+  );
+
+  stop();
+  client.restore(current, [{ kind: "steering", text: "after stop" }]);
+  assert.equal(
+    drafts.get(sessionDraftKey(current)).text,
+    " \nrestored",
+    "stopping stops following",
+  );
+});
+
+test("text added to a draft starts a new paragraph only after visible text; typing appends as typed", () => {
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch/a", sessionId: "a" });
+  drafts.paragraph(key, "from Changes");
+  assert.equal(drafts.get(key).text, "from Changes", "an empty draft gets no leading blank line");
+  drafts.paragraph(key, "from an extension");
+  assert.equal(drafts.get(key).text, "from Changes\n\nfrom an extension");
+  drafts.append(key, "!");
+  assert.equal(
+    drafts.get(key).text,
+    "from Changes\n\nfrom an extension!",
+    "typed characters join the text as they are",
+  );
 });

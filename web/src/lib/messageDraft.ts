@@ -1,11 +1,12 @@
 /**
- * A message the user has not sent yet, on the New page or for one session. Its text lives in the
- * store and its images in browser memory, both under one draft key; this module decides the keys,
- * which images a draft accepts, how text is appended as a paragraph, how quotes from the transcript
- * join the message and when a draft can be sent.
- * Image bytes never go to localStorage or the registry (INV-01). Nothing here depends on React.
+ * A message the user has not sent yet, on the New page or for one session: its text, its images
+ * and its quotes from the transcript, all kept here under one draft key. This module decides the
+ * keys, which images a draft accepts, how text is appended as a paragraph, how quotes join the
+ * message, when a draft can be sent, and that sending empties all three parts at once.
+ * Drafts live in browser memory for this page load only; image bytes never go to localStorage or
+ * the registry (INV-01). Nothing here depends on React.
  */
-import type { Attachment } from "@shared/wire";
+import type { Attachment, ServerMessage } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import {
   base64Bytes,
@@ -34,7 +35,7 @@ export const appendParagraph = (existing: string, text: string) =>
 
 export interface ImageDraft {
   items: readonly Attachment[];
-  /** Files are being read; the draft takes no other change until they are. */
+  /** Files are being read; the draft takes no other image change, and is not sent, until they are. */
   busy: boolean;
   /** Why the last addition was refused; the images already accepted stay. */
   error: string;
@@ -94,67 +95,6 @@ export function checkImages(
   return { ok: true, mimeTypes };
 }
 
-const EMPTY: ImageDraft = { items: [], busy: false, error: "" };
-const images = new Map<DraftKey, ImageDraft>();
-const listeners = new Set<() => void>();
-function put(key: DraftKey, value: ImageDraft) {
-  if (value.items.length || value.busy || value.error) images.set(key, value);
-  else images.delete(key);
-  for (const notify of listeners) notify();
-}
-
-/** Each draft's images, kept in memory for this page load only; a reload discards them. */
-export const imageDrafts = {
-  get: (key: DraftKey | null): ImageDraft => (key && images.get(key)) || EMPTY,
-  subscribe(notify: () => void) {
-    listeners.add(notify);
-    return () => {
-      listeners.delete(notify);
-    };
-  },
-  /** Checks and reads `files` into the draft; `encode` returns a file's base64 content. */
-  async add(key: DraftKey | null, files: readonly File[], encode: (file: File) => Promise<string>) {
-    const before = imageDrafts.get(key);
-    if (!key || !files.length || before.busy) return;
-    put(key, { ...before, busy: true, error: "" });
-    try {
-      const candidates = await Promise.all(
-        files.map(async (f) => ({
-          name: f.name,
-          size: f.size,
-          type: f.type,
-          head: new Uint8Array(await f.slice(0, IMAGE_HEAD_BYTES).arrayBuffer()),
-        })),
-      );
-      const check = checkImages(before.items, candidates);
-      if (!check.ok) throw new Error(check.reason);
-      const added: Attachment[] = [];
-      for (const [i, file] of files.entries())
-        added.push({
-          kind: "image",
-          name: file.name.slice(0, 255),
-          mimeType: check.mimeTypes[i],
-          data: await encode(file),
-        });
-      put(key, { items: [...before.items, ...added], busy: false, error: "" });
-    } catch (e) {
-      put(key, {
-        ...before,
-        busy: false,
-        error: e instanceof Error ? e.message : "Could not read images.",
-      });
-    }
-  },
-  remove(key: DraftKey | null, index: number) {
-    const draft = imageDrafts.get(key);
-    if (key && !draft.busy)
-      put(key, { ...draft, items: draft.items.filter((_, i) => i !== index) });
-  },
-  clear(key: DraftKey | null) {
-    if (key && !imageDrafts.get(key).busy) put(key, EMPTY);
-  },
-};
-
 /**
  * Text selected in the transcript as a quote: line breaks kept (list items stay separate lines),
  * runs of blank lines folded to one, trailing spaces and the ends trimmed. Empty when nothing is left.
@@ -162,7 +102,7 @@ export const imageDrafts = {
 export const quoteText = (selected: string) =>
   selected
     .replace(/\r\n?/g, "\n")
-    .replace(/\u00a0/g, " ")
+    .replace(/ /g, " ")
     .split("\n")
     .map((line) => line.trimEnd())
     .join("\n")
@@ -183,38 +123,166 @@ export const withQuotes = (quotes: readonly string[], text: string) =>
     .filter(Boolean)
     .join("\n\n");
 
-const NO_QUOTES: readonly string[] = [];
-const quotes = new Map<DraftKey, readonly string[]>();
-const quoteListeners = new Set<() => void>();
-function putQuotes(key: DraftKey, value: readonly string[]) {
-  if (value.length) quotes.set(key, value);
-  else quotes.delete(key);
-  for (const notify of quoteListeners) notify();
+/** One draft's parts. A draft no one has touched is `EMPTY_DRAFT`. */
+export interface Draft {
+  text: string;
+  images: ImageDraft;
+  quotes: readonly string[];
 }
 
-/** Each draft's quotes, kept in memory for this page load only, like its images. */
-export const quoteDrafts = {
-  get: (key: DraftKey | null): readonly string[] => (key && quotes.get(key)) || NO_QUOTES,
-  subscribe(notify: () => void) {
-    quoteListeners.add(notify);
-    return () => {
-      quoteListeners.delete(notify);
-    };
-  },
+/** What a send takes from the draft: its quotes and trimmed text as one message, and its images. */
+export interface DraftMessage {
+  text: string;
+  attachments: readonly Attachment[];
+}
+
+const NO_IMAGES: ImageDraft = { items: [], busy: false, error: "" };
+export const EMPTY_DRAFT: Draft = { text: "", images: NO_IMAGES, quotes: [] };
+
+/** The message `draft` would send now. */
+export const draftMessage = (draft: Draft): DraftMessage => ({
+  text: withQuotes(draft.quotes, draft.text.trim()),
+  attachments: draft.images.items,
+});
+
+/** The client to follow for restored queues; the page's `Client` is one. */
+export interface DraftSource {
+  listen: (listener: (message: ServerMessage) => void) => () => void;
+}
+
+/** Every draft on the page. A `null` key addresses no draft: reads are empty and changes do nothing. */
+export interface Drafts {
+  /** The draft's parts; the same object until one of them changes, so React can subscribe to it. */
+  get: (key: DraftKey | null) => Draft;
+  subscribe: (listener: () => void) => () => void;
+  /** The message the draft would send now. */
+  message: (key: DraftKey | null) => DraftMessage;
+  /** The draft has text, a quote or an image to send, and no image is still being read. */
+  sendable: (key: DraftKey | null) => boolean;
+  setText: (key: DraftKey | null, text: string) => void;
+  /** Adds text at the end as typed, e.g. a key pressed outside the editor. */
+  append: (key: DraftKey | null, text: string) => void;
+  /** Adds text as a new paragraph (see `appendParagraph`): Ask from Changes, an extension's suggestion. */
+  paragraph: (key: DraftKey | null, text: string) => void;
+  /** Checks and reads `files` into the draft; `encode` returns a file's base64 content. */
+  addImages: (
+    key: DraftKey | null,
+    files: readonly File[],
+    encode: (file: File) => Promise<string>,
+  ) => Promise<void>;
+  removeImage: (key: DraftKey | null, index: number) => void;
   /** Adds `selected` as a quote; empty text and a quote the draft already holds are ignored. */
-  add(key: DraftKey | null, selected: string) {
-    const quote = quoteText(selected);
-    const current = quoteDrafts.get(key);
-    if (key && quote && !current.includes(quote)) putQuotes(key, [...current, quote]);
-  },
-  remove(key: DraftKey | null, index: number) {
-    if (key)
-      putQuotes(
-        key,
-        quoteDrafts.get(key).filter((_, i) => i !== index),
+  addQuote: (key: DraftKey | null, selected: string) => void;
+  removeQuote: (key: DraftKey | null, index: number) => void;
+  /**
+   * Hands the draft's message to `deliver`, then empties its text, images and quotes together.
+   * While the draft is not sendable (nothing to send, or images still being read) it delivers
+   * nothing and keeps the draft. Returns whether it delivered.
+   */
+  submit: (key: DraftKey | null, deliver: (message: DraftMessage) => void) => boolean;
+  /** Appends each queue Pi hands back to its own session's draft as a paragraph; returns the stop function. */
+  follow: (source: DraftSource) => () => void;
+}
+
+export function createDrafts(): Drafts {
+  const drafts = new Map<DraftKey, Draft>();
+  const listeners = new Set<() => void>();
+  const get = (key: DraftKey | null): Draft => (key && drafts.get(key)) || EMPTY_DRAFT;
+  const update = (key: DraftKey | null, change: (draft: Draft) => Draft) => {
+    if (!key) return;
+    const before = get(key);
+    const next = change(before);
+    if (next === before) return;
+    if (next.text || next.quotes.length || next.images !== NO_IMAGES) drafts.set(key, next);
+    else drafts.delete(key);
+    for (const notify of listeners) notify();
+  };
+  const setImages = (key: DraftKey, images: ImageDraft) =>
+    update(key, (d) => ({
+      ...d,
+      images: images.items.length || images.busy || images.error ? images : NO_IMAGES,
+    }));
+  const isSendable = (draft: Draft) =>
+    sendable({ text: draftMessage(draft).text, images: draft.images });
+  const paragraph = (key: DraftKey | null, text: string) =>
+    update(key, (d) => ({ ...d, text: appendParagraph(d.text, text) }));
+
+  return {
+    get,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    message: (key) => draftMessage(get(key)),
+    sendable: (key) => isSendable(get(key)),
+    setText: (key, text) => update(key, (d) => (d.text === text ? d : { ...d, text })),
+    append: (key, text) => update(key, (d) => (text ? { ...d, text: d.text + text } : d)),
+    paragraph,
+    async addImages(key, files, encode) {
+      const before = get(key).images;
+      if (!key || !files.length || before.busy) return;
+      setImages(key, { ...before, busy: true, error: "" });
+      try {
+        const candidates = await Promise.all(
+          files.map(async (f) => ({
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            head: new Uint8Array(await f.slice(0, IMAGE_HEAD_BYTES).arrayBuffer()),
+          })),
+        );
+        const check = checkImages(before.items, candidates);
+        if (!check.ok) throw new Error(check.reason);
+        const added: Attachment[] = [];
+        for (const [i, file] of files.entries())
+          added.push({
+            kind: "image",
+            name: file.name.slice(0, 255),
+            mimeType: check.mimeTypes[i],
+            data: await encode(file),
+          });
+        // Nothing removes or sends images while they are read, so `before` is still the draft's.
+        setImages(key, { items: [...before.items, ...added], busy: false, error: "" });
+      } catch (e) {
+        setImages(key, {
+          ...before,
+          busy: false,
+          error: e instanceof Error ? e.message : "Could not read images.",
+        });
+      }
+    },
+    removeImage(key, index) {
+      const { images } = get(key);
+      if (key && !images.busy)
+        setImages(key, { ...images, items: images.items.filter((_, i) => i !== index) });
+    },
+    addQuote(key, selected) {
+      const quote = quoteText(selected);
+      update(key, (d) =>
+        quote && !d.quotes.includes(quote) ? { ...d, quotes: [...d.quotes, quote] } : d,
       );
-  },
-  clear(key: DraftKey | null) {
-    if (key) putQuotes(key, NO_QUOTES);
-  },
-};
+    },
+    removeQuote: (key, index) =>
+      update(key, (d) =>
+        index in d.quotes ? { ...d, quotes: d.quotes.filter((_, i) => i !== index) } : d,
+      ),
+    submit(key, deliver) {
+      const draft = get(key);
+      if (!key || !isSendable(draft)) return false;
+      deliver(draftMessage(draft));
+      update(key, () => EMPTY_DRAFT);
+      return true;
+    },
+    follow: (source) =>
+      source.listen((m) => {
+        if (m._tag !== "action_result" || m.result._tag !== "queue_restored") return;
+        const restored = m.result.messages.map((message) => message.text).join("\n\n");
+        if (restored) paragraph(sessionDraftKey(m), restored);
+      }),
+  };
+}
+
+/** The page's drafts; App follows the client with them so restored queues reach their drafts. */
+export const drafts = createDrafts();

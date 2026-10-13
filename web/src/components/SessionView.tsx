@@ -13,8 +13,7 @@ import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { useDraftStore } from "@/lib/draftStore";
-import { sessionDraftKey } from "@/lib/messageDraft";
+import { drafts, sessionDraftKey } from "@/lib/messageDraft";
 import {
   completionTarget,
   sessionActivity,
@@ -34,7 +33,6 @@ interface Props {
 }
 
 export function SessionView({ state, send }: Props) {
-  const { paragraph } = useDraftStore();
   // The selected session's Changes sheet and PR popover; hidden while Settings covers the view.
   const { settings, panel, openPanel, closePanel } = useNavigation();
   const changesOpen = !settings && panel === "changes";
@@ -92,7 +90,7 @@ export function SessionView({ state, send }: Props) {
           session={t}
           onAsk={(text) => {
             if (!draftKey) return;
-            paragraph(draftKey, text);
+            drafts.paragraph(draftKey, text);
             onChangesOpenChange(false);
             toast.success("Added to your message");
           }}
@@ -165,7 +163,7 @@ export function SessionView({ state, send }: Props) {
               used={usedEditorRequest}
               onAppend={(request) => {
                 if (draftKey) {
-                  paragraph(draftKey, request.text);
+                  drafts.paragraph(draftKey, request.text);
                   setUsedEditorRequest(request.id);
                 }
               }}

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
-import { NEW_SESSION_DRAFT } from "../web/src/lib/messageDraft.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
@@ -96,7 +95,7 @@ for (const failure of ["selection_rejected", "selection_failed"] as const)
     });
   }
 
-test("live state is current before paint, while typing and disconnect notify renderers immediately", () => {
+test("live state is current before paint, while local actions and disconnect notify renderers immediately", () => {
   const h = harness();
   h.status(true);
   let rendered = h.client.getState();
@@ -111,8 +110,8 @@ test("live state is current before paint, while typing and disconnect notify ren
   h.server({ _tag: "hosts", hosts: [{ cwd: "/scratch", sessionId: "a", streaming: true }] });
   assert.equal(rendered.hosts.length, 0, "rendering a live update may wait for a paint");
   assert.equal(h.client.getState().hosts.length, 1, "projection never waits for a paint");
-  h.client.dispatch({ type: "draft_changed", key: NEW_SESSION_DRAFT, text: "typing" });
-  assert.equal(rendered, h.client.getState(), "controlled input must not wait for a paint");
+  h.client.dispatch({ type: "new_directory", cwd: "/scratch" });
+  assert.equal(rendered, h.client.getState(), "a local action must not wait for a paint");
   h.server({ _tag: "hosts", hosts: [] });
   h.status(false);
   assert.equal(
@@ -353,8 +352,8 @@ test("INV-05: picking a New-page directory asks for its models and trust exactly
     { kind: "new", cwd: "/a", projectId: "p1" },
     "picking a project keeps the directory",
   );
-  h.client.dispatch({ type: "draft_changed", key: NEW_SESSION_DRAFT, text: "typing" });
-  assert.deepEqual(h.asked(), [], "the same directory is not asked about again");
+  h.client.dispatch({ type: "new", projectId: "p2" });
+  assert.deepEqual(h.asked(), [], "another project in the same directory asks nothing again");
   h.client.dispatch({ type: "new_directory", cwd: "/b" });
   assert.deepEqual(h.asked(), ["models /b", "trust /b"]);
 });

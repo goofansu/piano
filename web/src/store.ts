@@ -14,7 +14,6 @@ import type {
 // Relative, not @shared: module tests load this file directly in Node.
 import { applySessionEvent } from "../../shared/sessionProjection.ts";
 import * as FirstMessage from "./lib/firstMessage.ts";
-import { appendParagraph, type DraftKey, sessionDraftKey } from "./lib/messageDraft.ts";
 
 export type { PendingCreate } from "./lib/firstMessage.ts";
 
@@ -53,8 +52,6 @@ export interface AppState {
   pendingCreate: FirstMessage.PendingCreate | null;
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
-  /** Unsent editor text belongs to this browser; see lib/messageDraft for keys and images. */
-  drafts: Record<DraftKey, string>;
 }
 
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) =>
@@ -79,7 +76,6 @@ export const initialState: AppState = {
   selectionFailure: null,
   pendingCreate: null,
   done: [],
-  drafts: {},
 };
 
 export type Action =
@@ -96,12 +92,7 @@ export type Action =
   | { type: "new"; cwd?: string; projectId?: string }
   /** Picks the New page's directory; ignored on any other view. */
   | { type: "new_directory"; cwd: string }
-  | { type: "missing-session"; sessionId: string }
-  | { type: "draft_changed"; key: DraftKey; text: string }
-  /** Typed characters, appended as they are. */
-  | { type: "draft_appended"; key: DraftKey; text: string }
-  /** Text added from elsewhere (Changes, an extension, the restored queue), as a new paragraph. */
-  | { type: "draft_paragraph_appended"; key: DraftKey; text: string };
+  | { type: "missing-session"; sessionId: string };
 
 export function reduce(s: AppState, a: Action): AppState {
   const next = reduceAction(s, a);
@@ -167,15 +158,6 @@ function reduceAction(s: AppState, a: Action): AppState {
         selecting: null,
         session: null,
         pendingCreate: null,
-      };
-    case "draft_changed":
-      return { ...s, drafts: { ...s.drafts, [a.key]: a.text } };
-    case "draft_appended":
-      return { ...s, drafts: { ...s.drafts, [a.key]: (s.drafts[a.key] ?? "") + a.text } };
-    case "draft_paragraph_appended":
-      return {
-        ...s,
-        drafts: { ...s.drafts, [a.key]: appendParagraph(s.drafts[a.key] ?? "", a.text) },
       };
     case "server":
       return applyServer(s, a.message);
@@ -295,16 +277,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         selecting: null,
         pendingCreate: FirstMessage.failed(s.pendingCreate, m.message),
       };
-    case "action_result": {
-      if (m.result._tag !== "queue_restored") return s;
-      const restored = m.result.messages.map((message) => message.text).join("\n\n");
-      if (!restored) return s;
-      return reduceAction(s, {
-        type: "draft_paragraph_appended",
-        key: sessionDraftKey(m),
-        text: restored,
-      });
-    }
+    // A restored queue goes to its session's draft, which lib/messageDraft keeps (`drafts.follow`).
     case "session": {
       const disposition = sessionDelivery(s, m);
       if (disposition === "ignore") return s;

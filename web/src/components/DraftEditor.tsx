@@ -1,61 +1,56 @@
-import type { Attachment, ThinkingLevel } from "@shared/wire";
+import type { ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   AttachButton,
   AttachmentDraftView,
+  attachmentDraft,
   attachmentEvents,
-  useAttachments,
 } from "@/components/Attachments";
 import { ModelSelect } from "@/components/ModelSelect";
-import { QuoteChips, useQuotes } from "@/components/Quotes";
+import { QuoteChips, type QuoteDraft } from "@/components/Quotes";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
-import { useDraftStore } from "@/lib/draftStore";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
-import { type DraftKey, withQuotes } from "@/lib/messageDraft";
+import { type DraftKey, type DraftMessage, draftMessage, drafts } from "@/lib/messageDraft";
 import type { ModelCatalogView } from "@/lib/modelCatalogs";
 import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
 
-/** What a send takes from the draft: its quotes and trimmed text as one message, and its images. */
-export interface DraftMessage {
-  text: string;
-  attachments: readonly Attachment[];
-}
-
 /**
- * One draft, addressed by its key (`null` while none is): its text from the draft store, its images,
+ * One draft, addressed by its key (`null` while none is), bound to React: its parts from `drafts`,
  * the textarea it is edited in, and send-then-clear. A page calls this first so its own send rules
  * (see composerControl) can read the draft, then renders `DraftEditor` with the result.
  */
 export function useDraftEditor(key: DraftKey | null) {
-  const { drafts, change, append: appendTo } = useDraftStore();
-  const text = (key && drafts[key]) || "";
-  const attachments = useAttachments(key);
-  const quotes = useQuotes(key);
-  /** The text a send delivers; send rules read this, not `text`, so quotes alone can be sent. */
-  const message = withQuotes(quotes.items, text.trim());
+  const draft = useSyncExternalStore(drafts.subscribe, () => drafts.get(key));
   const ref = useRef<HTMLTextAreaElement>(null);
-  const setText = (value: string) => {
-    if (key) change(key, value);
-  };
   // Stable per key, so type-to-focus does not resubscribe on every keystroke.
-  const append = useCallback(
-    (value: string) => {
-      if (key) appendTo(key, value);
-    },
-    [key, appendTo],
-  );
-  /** Hands the draft to `deliver`, then empties it. Callers decide beforehand whether it may send. */
-  const submit = (deliver: (message: DraftMessage) => void) => {
-    deliver({ text: message, attachments: attachments.items });
-    setText("");
-    attachments.clear();
-    quotes.clear();
+  const append = useCallback((value: string) => drafts.append(key, value), [key]);
+  return {
+    key,
+    text: draft.text,
+    /** The text a send delivers; send rules read this, not `text`, so quotes alone can be sent. */
+    message: draftMessage(draft).text,
+    attachments: attachmentDraft(key, draft.images),
+    quotes: {
+      items: draft.quotes,
+      remove: (index: number) => drafts.removeQuote(key, index),
+    } satisfies QuoteDraft,
+    ref,
+    setText: (value: string) => drafts.setText(key, value),
+    append,
+    /** Hands the draft to `deliver`, then empties it; see `Drafts.submit`. */
+    submit: (deliver: (message: DraftMessage) => void) => drafts.submit(key, deliver),
   };
-  return { key, text, message, attachments, quotes, ref, setText, append, submit };
 }
 export type DraftEditorState = ReturnType<typeof useDraftEditor>;
 
