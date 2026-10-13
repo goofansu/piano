@@ -2,18 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ChangeFile, WorkspaceChanges } from "../shared/wire.ts";
 import {
-  allCollapsed,
   askText,
+  type ChangesSheetView,
   changedFile,
+  changesSheet,
   checkWorkspaceResponse,
+  type Disclosure,
   fileMessage,
   initialDisclosure,
-  isOpen,
   refreshKey,
-  seedFiles,
-  setOpen,
-  summary,
-  toggleAll,
+  toggleEvery,
+  toggleFile,
 } from "../web/src/lib/changesView.ts";
 
 const workspace = { id: "w1", path: "/repo" };
@@ -46,7 +45,17 @@ const changes = (
     truncated,
   },
 });
-const ready = (value: WorkspaceChanges) => checkWorkspaceResponse(workspace, value).result;
+const sheet = (
+  observation: WorkspaceChanges | null,
+  {
+    error,
+    busy = false,
+    disclosure = initialDisclosure,
+  }: { error?: string; busy?: boolean; disclosure?: Disclosure } = {},
+) => changesSheet({ observation, error, busy, disclosure });
+/** Each listed file's path and whether it is open, in order. */
+const opens = (view: ChangesSheetView) =>
+  view.body.kind === "files" ? view.body.files.map((f) => [f.metadata.path, f.open]) : [];
 
 test("only a new checkout-changing tool result or a streaming change asks for a re-read", () => {
   const msg = (id: string, role: "assistant" | "tool_result", toolName?: string) => ({
@@ -141,22 +150,20 @@ test("a truncated initial read never seeds a partial last file", () => {
       diff: patch("a.ts", 1) + patch("b.ts", 3).split("\n").slice(0, 5).join("\n"),
     },
   );
-  const seed = seedFiles(ready(value));
-  assert.deepEqual([...seed.keys()], ["a.ts"]);
+  const truncated = sheet(value);
+  assert.equal(truncated.body.kind, "files");
+  if (truncated.body.kind !== "files") return;
   assert.deepEqual(
+    truncated.body.files.map((f) => [f.metadata.path, f.initial !== undefined]),
     [
-      ...seedFiles(
-        ready(
-          changes([
-            ["a.ts", 1],
-            ["b.ts", 3],
-          ]),
-        ),
-      ).keys(),
+      ["a.ts", true],
+      ["b.ts", false],
     ],
-    ["a.ts", "b.ts"],
   );
-  assert.equal(isOpen(initialDisclosure, "b.ts", seed), false, "an unseeded file starts closed");
+  assert.deepEqual(opens(truncated), [
+    ["a.ts", true],
+    ["b.ts", false],
+  ]);
 });
 
 test("small seeded files start open; large ones start folded until expanded", () => {
@@ -164,12 +171,19 @@ test("small seeded files start open; large ones start folded until expanded", ()
     ["small.ts", 3],
     ["large.ts", 801],
   ]);
-  const seed = seedFiles(ready(value)),
-    files = value.result.status === "ready" ? value.result.files : [];
-  assert.equal(isOpen(initialDisclosure, "small.ts", seed), true);
-  assert.equal(isOpen(initialDisclosure, "large.ts", seed), false);
-  assert.equal(isOpen(setOpen(initialDisclosure, "large.ts", true), "large.ts", seed), true);
-  assert.equal(allCollapsed(initialDisclosure, files, seed), false);
+  const view = sheet(value);
+  assert.deepEqual(opens(view), [
+    ["small.ts", true],
+    ["large.ts", false],
+  ]);
+  assert.equal(view.everyCollapsed, false);
+  assert.deepEqual(
+    opens(sheet(value, { disclosure: toggleFile(initialDisclosure, "large.ts", true) })),
+    [
+      ["small.ts", true],
+      ["large.ts", true],
+    ],
+  );
 });
 
 test("Collapse all then Expand all opens every file, large ones included", () => {
@@ -177,65 +191,97 @@ test("Collapse all then Expand all opens every file, large ones included", () =>
     ["small.ts", 3],
     ["large.ts", 801],
   ]);
-  const seed = seedFiles(ready(value)),
-    files = value.result.status === "ready" ? value.result.files : [];
-  const folded = toggleAll(initialDisclosure, files, seed);
-  assert.equal(allCollapsed(folded, files, seed), true);
-  const expanded = toggleAll(folded, files, seed);
-  assert.deepEqual(
-    files.map((f) => isOpen(expanded, f.path, seed)),
-    [true, true],
-  );
+  const collapsed = toggleEvery(initialDisclosure, sheet(value));
+  const folded = sheet(value, { disclosure: collapsed });
+  assert.equal(folded.everyCollapsed, true);
+  assert.deepEqual(opens(folded), [
+    ["small.ts", false],
+    ["large.ts", false],
+  ]);
+  const expanded = sheet(value, { disclosure: toggleEvery(collapsed, folded) });
+  assert.deepEqual(opens(expanded), [
+    ["small.ts", true],
+    ["large.ts", true],
+  ]);
 });
 
 test("a refresh keeps a collapsed file collapsed and an opened large file open", () => {
-  const before = seedFiles(
-    ready(
-      changes([
-        ["a.ts", 3],
-        ["large.ts", 900],
-      ]),
-    ),
-  );
-  const state = setOpen(setOpen(initialDisclosure, "a.ts", false), "large.ts", true);
-  assert.deepEqual(
-    [isOpen(state, "a.ts", before), isOpen(state, "large.ts", before)],
-    [false, true],
-  );
-  const after = seedFiles(
-    ready(
-      changes([
-        ["a.ts", 4],
-        ["large.ts", 950],
-        ["new.ts", 1],
-      ]),
-    ),
-  );
-  assert.deepEqual(
-    [
-      isOpen(state, "a.ts", after),
-      isOpen(state, "large.ts", after),
-      isOpen(state, "new.ts", after),
-    ],
-    [false, true, true],
-  );
+  const disclosure = toggleFile(toggleFile(initialDisclosure, "a.ts", false), "large.ts", true);
+  const before = changes([
+    ["a.ts", 3],
+    ["large.ts", 900],
+  ]);
+  assert.deepEqual(opens(sheet(before, { disclosure })), [
+    ["a.ts", false],
+    ["large.ts", true],
+  ]);
+  const after = changes([
+    ["a.ts", 4],
+    ["large.ts", 950],
+    ["new.ts", 1],
+  ]);
+  assert.deepEqual(opens(sheet(after, { disclosure })), [
+    ["a.ts", false],
+    ["large.ts", true],
+    ["new.ts", true],
+  ]);
+});
+
+test("a failed refresh keeps the previous files with a stale note", () => {
+  const view = sheet(changes([["a.ts", 2]]), { error: "network down" });
+  assert.equal(view.body.kind, "files");
+  assert.equal(view.branch, "main");
+  assert.deepEqual(view.staleNote, {
+    text: "Refresh failed. Showing previous changes.",
+    detail: "network down",
+  });
+  assert.equal(view.status, "1 file · +2 −0");
+  assert.equal(sheet(changes([]), { error: "network down" }).body.kind, "empty");
+  assert.equal(sheet(changes([["a.ts", 2]])).staleNote, undefined);
+});
+
+test("a first read that fails shows one unavailable body and nothing of a read", () => {
+  const view = sheet(null, { error: "not a git repository" });
+  assert.deepEqual(view.body, { kind: "failed", detail: "not a git repository" });
+  assert.equal(view.status, "Changes unavailable");
+  assert.equal(view.staleNote, undefined);
+  assert.equal(view.branch, undefined);
+  assert.equal(view.changes, undefined);
+  assert.deepEqual(toggleEvery(initialDisclosure, view), initialDisclosure);
+});
+
+test("a server error result and a transport error never both show", () => {
+  const failed: WorkspaceChanges = {
+    ...changes([]),
+    result: { status: "error", detail: "not a git repository" },
+  };
+  assert.deepEqual(sheet(failed).body, { kind: "failed", detail: "not a git repository" });
+  assert.deepEqual(sheet(failed, { error: "network down" }).body, {
+    kind: "failed",
+    detail: "network down",
+  });
+  assert.equal(sheet(failed, { busy: true }).body.kind, "failed");
+});
+
+test("before a read settles the sheet reads, or waits; a re-read keeps the files", () => {
+  assert.deepEqual(sheet(null, { busy: true }).body, { kind: "reading" });
+  assert.deepEqual(sheet(null).body, { kind: "idle" });
+  assert.equal(sheet(null).status, "Loading…");
+  assert.equal(sheet(null, { busy: true }).refreshing, false);
+  const refreshing = sheet(changes([["a.ts", 1]]), { busy: true });
+  assert.equal(refreshing.body.kind, "files");
+  assert.equal(refreshing.refreshing, true);
 });
 
 test("summary and file messages", () => {
-  assert.equal(summary(undefined, false), "Loading…");
-  assert.equal(summary(undefined, true), "Changes unavailable");
-  assert.equal(summary({ status: "error", detail: "x" }, false), "Changes unavailable");
-  assert.equal(summary(ready(changes([])), false), "no changes");
+  assert.equal(sheet(changes([])).status, "no changes");
   assert.equal(
-    summary(
-      ready(
-        changes([
-          ["a.ts", 2],
-          ["b.ts", 1],
-        ]),
-      ),
-      false,
-    ),
+    sheet(
+      changes([
+        ["a.ts", 2],
+        ["b.ts", 1],
+      ]),
+    ).status,
     "2 files · +3 −0",
   );
   assert.equal(fileMessage({ error: "boom", busy: false, loaded: { truncated: false } }), "boom");

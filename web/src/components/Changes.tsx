@@ -46,22 +46,20 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { workspaceChangedFile, workspaceChanges } from "@/lib/api";
 import {
-  allCollapsed,
   askText,
   changedFile,
+  changesSheet,
   checkWorkspaceResponse,
   type Disclosure,
   FILE_PATCH_LIMIT,
   fileMessage,
   initialDisclosure,
   isLarge,
-  isOpen,
   type LoadedFile,
   refreshKey,
-  seedFiles,
-  setOpen,
-  summary,
-  toggleAll,
+  type SheetBody,
+  toggleEvery,
+  toggleFile,
 } from "@/lib/changesView";
 import { type DiffFile, lineCount } from "@/lib/diff";
 import { abbrevHome } from "@/lib/format";
@@ -108,12 +106,9 @@ export function ChangesSheet({
     open,
     refreshKey(session),
   );
-  const result = observation?.result;
-  const ready = result?.status === "ready" ? result : undefined;
-  const files = ready?.files ?? [];
-  const seed = useMemo(() => seedFiles(ready), [ready]);
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
-  const everyCollapsed = allCollapsed(disclosure, files, seed);
+  const sheet = changesSheet({ observation, error, busy, disclosure });
+  const { changes, body } = sheet;
   const ask = (loaded: LoadedFile) => onAsk(askText(loaded));
 
   return (
@@ -128,12 +123,12 @@ export function ChangesSheet({
           <SheetDescription className="flex min-w-0 flex-wrap items-center gap-x-2">
             <span>Working tree against HEAD</span>
             <span aria-hidden>·</span>
-            {ready && <BranchLabel branch={ready.branch ?? "Detached HEAD"} />}
-            {ready && <span aria-hidden>·</span>}
+            {sheet.branch && <BranchLabel branch={sheet.branch} />}
+            {sheet.branch && <span aria-hidden>·</span>}
             <span role="status" className="truncate">
-              {summary(result, !!error)}
+              {sheet.status}
             </span>
-            {busy && ready && <Spinner className="size-3" />}
+            {sheet.refreshing && <Spinner className="size-3" />}
           </SheetDescription>
           <div className="-ml-2 flex items-center gap-1">
             <Button
@@ -148,69 +143,28 @@ export function ChangesSheet({
             <Button
               variant="ghost"
               size="sm"
-              disabled={files.length === 0}
-              onClick={() => setDisclosure((d) => toggleAll(d, files, seed))}
+              disabled={body.kind !== "files"}
+              onClick={() => setDisclosure(toggleEvery(disclosure, sheet))}
             >
-              {everyCollapsed ? "Expand all" : "Collapse all"}
+              {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
             </Button>
           </div>
-          {error && ready && (
-            <p role="status" title={error} className="text-xs text-ink-2">
-              Refresh failed. Showing previous changes.
+          {sheet.staleNote && (
+            <p role="status" title={sheet.staleNote.detail} className="text-xs text-ink-2">
+              {sheet.staleNote.text}
             </p>
           )}
         </SheetHeader>
         <ScrollArea className="min-h-0 flex-1">
           <div className="flex flex-col gap-3 p-4">
-            {error && !ready && (
-              <Alert variant="destructive">
-                <AlertTitle>Changes unavailable</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            {result?.status === "error" && (
-              <Alert variant="destructive">
-                <AlertTitle>Changes unavailable</AlertTitle>
-                <AlertDescription>{result.detail}</AlertDescription>
-              </Alert>
-            )}
-            {busy && !observation && !error && (
-              <div className="flex items-center gap-2 py-10 text-sm text-ink-2" role="status">
-                <Spinner className="size-4" /> Reading changes…
-              </div>
-            )}
-            {ready && files.length === 0 && (
-              <Empty className="py-10">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <FileDiffIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>No changes</EmptyTitle>
-                  <EmptyDescription>
-                    The working tree matches HEAD. Untracked files would appear here too.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
-            {files.length > 0 && (
-              <ItemGroup className="gap-2" aria-label="Changed files">
-                {files.map((file) => (
-                  <LiveFile
-                    key={`${observation!.workspace.id}:${observation!.observedAt}:${file.path}`}
-                    metadata={file}
-                    initial={seed.get(file.path)}
-                    workspace={observation!.workspace}
-                    observedAt={observation!.observedAt}
-                    open={isOpen(disclosure, file.path, seed)}
-                    onOpenChange={(next) => setDisclosure((d) => setOpen(d, file.path, next))}
-                    onAsk={ask}
-                  />
-                ))}
-              </ItemGroup>
-            )}
+            <SheetBodyView
+              body={body}
+              onOpenChange={(path, next) => setDisclosure((d) => toggleFile(d, path, next))}
+              onAsk={ask}
+            />
           </div>
         </ScrollArea>
-        {ready && (
+        {changes && (
           <SheetFooter className="mt-0 border-t border-line py-3">
             <Collapsible className="text-xs text-ink-2">
               <CollapsibleTrigger asChild>
@@ -221,11 +175,11 @@ export function ChangesSheet({
               <CollapsibleContent className="disclosure-content">
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all font-mono">
                   <dt>Checkout</dt>
-                  <dd>{abbrevHome(observation!.workspace.path)}</dd>
+                  <dd>{abbrevHome(changes.workspace.path)}</dd>
                   <dt>HEAD</dt>
-                  <dd>{ready.head ?? "No commits yet"}</dd>
+                  <dd>{changes.result.head ?? "No commits yet"}</dd>
                   <dt>Observed</dt>
-                  <dd>{new Date(observation!.observedAt).toLocaleString()}</dd>
+                  <dd>{new Date(changes.observedAt).toLocaleString()}</dd>
                 </dl>
                 <p className="mt-2 font-sans">
                   Live Git reads, not an immutable review or verification evidence. Expanding
@@ -235,7 +189,7 @@ export function ChangesSheet({
                 <p className="mt-2 font-sans">
                   Initial patch: {CHANGES_INITIAL_PATCH_BYTES.toLocaleString("en-US")} bytes.
                   Per-file patch: {FILE_PATCH_LIMIT}.{" "}
-                  {ready.truncated ? "Expand unloaded files to read their patches." : ""}
+                  {changes.result.truncated ? "Expand unloaded files to read their patches." : ""}
                 </p>
               </CollapsibleContent>
             </Collapsible>
@@ -244,6 +198,65 @@ export function ChangesSheet({
       </SheetContent>
     </Sheet>
   );
+}
+
+function SheetBodyView({
+  body,
+  onOpenChange,
+  onAsk,
+}: {
+  body: SheetBody;
+  onOpenChange: (path: string, open: boolean) => void;
+  onAsk: (loaded: LoadedFile) => void;
+}) {
+  switch (body.kind) {
+    case "idle":
+      return null;
+    case "reading":
+      return (
+        <div className="flex items-center gap-2 py-10 text-sm text-ink-2" role="status">
+          <Spinner className="size-4" /> Reading changes…
+        </div>
+      );
+    case "failed":
+      return (
+        <Alert variant="destructive">
+          <AlertTitle>Changes unavailable</AlertTitle>
+          <AlertDescription>{body.detail}</AlertDescription>
+        </Alert>
+      );
+    case "empty":
+      return (
+        <Empty className="py-10">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileDiffIcon />
+            </EmptyMedia>
+            <EmptyTitle>No changes</EmptyTitle>
+            <EmptyDescription>
+              The working tree matches HEAD. Untracked files would appear here too.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      );
+    case "files":
+      return (
+        <ItemGroup className="gap-2" aria-label="Changed files">
+          {body.files.map(({ metadata, initial, open }) => (
+            <LiveFile
+              key={`${body.changes.workspace.id}:${body.changes.observedAt}:${metadata.path}`}
+              metadata={metadata}
+              initial={initial}
+              workspace={body.changes.workspace}
+              observedAt={body.changes.observedAt}
+              open={open}
+              onOpenChange={(next) => onOpenChange(metadata.path, next)}
+              onAsk={onAsk}
+            />
+          ))}
+        </ItemGroup>
+      );
+  }
 }
 
 function LiveFile({
