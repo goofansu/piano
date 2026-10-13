@@ -1,5 +1,5 @@
 import type { ClientCommand as ClientMessage, Dialog as PiDialog } from "@shared/wire";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,23 +11,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { createDialogAnswer, type DialogReply, type PendingDialogs } from "@/lib/piDialogs";
 
 /** Extension dialogs (select / confirm / input / editor) raised by Pi; answered one at a time. */
 export function DialogHost({
-  dialogs,
+  pending: { head, more, connected },
   send,
-  connected,
 }: {
-  dialogs: ReadonlyArray<PiDialog>;
+  pending: PendingDialogs;
   send: (m: ClientMessage) => void;
-  connected: boolean;
 }) {
-  const d = dialogs[0];
-  return d ? (
+  return head ? (
     <DialogView
-      key={`${d.generation}/${d.id}`}
-      d={d}
-      more={dialogs.length - 1}
+      key={`${head.generation}/${head.id}`}
+      d={head}
+      more={more}
       send={send}
       connected={connected}
     />
@@ -46,21 +44,21 @@ function DialogView({
   connected: boolean;
 }) {
   const [value, setValue] = useState(d.prefill ?? "");
-  const [submitted, setSubmitted] = useState(false);
+  const [dialogAnswer] = useState(() => createDialogAnswer({ dialog: d, send }));
+  useSyncExternalStore(dialogAnswer.subscribe, dialogAnswer.getState);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
   }, []);
-  const disabled = submitted || !connected || now >= d.deadlineAt;
-  const answer = (a: { value?: string; confirmed?: boolean; cancelled?: boolean }) => {
-    if (disabled) return;
-    setSubmitted(true);
-    send({ _tag: "act", action: { _tag: "answer", id: d.id, generation: d.generation, ...a } });
-  };
+  const { submitted, disabled, abortDisabled, remainingSeconds } = dialogAnswer.view(
+    now,
+    connected,
+  );
+  const answer = (reply: DialogReply) => dialogAnswer.answer(reply, Date.now(), connected);
 
   return (
-    <Dialog open onOpenChange={(open) => !open && answer({ cancelled: true })}>
+    <Dialog open onOpenChange={(open) => !open && dialogAnswer.cancel(Date.now(), connected)}>
       <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{d.title || "Pi needs an answer"}</DialogTitle>
@@ -74,7 +72,7 @@ function DialogView({
             {d.deadlineKind === "pi-timeout"
               ? "Estimated Pi timeout"
               : "Host recovery cancellation"}
-            : {Math.max(0, Math.ceil((d.deadlineAt - now) / 1000))}s remaining.{" "}
+            : {remainingSeconds}s remaining.{" "}
             <time dateTime={new Date(d.deadlineAt).toISOString()}>
               {new Date(d.deadlineAt).toLocaleTimeString()}
             </time>
@@ -154,11 +152,8 @@ function DialogView({
           <Button
             variant="outline"
             size="sm"
-            disabled={!connected || submitted}
-            onClick={() => {
-              setSubmitted(true);
-              send({ _tag: "act", action: { _tag: "abort" } });
-            }}
+            disabled={abortDisabled}
+            onClick={() => dialogAnswer.abort(Date.now(), connected)}
           >
             Abort current
           </Button>
