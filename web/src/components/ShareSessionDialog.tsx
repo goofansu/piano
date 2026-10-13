@@ -1,5 +1,5 @@
 import type { SessionShare } from "@shared/share";
-import { CopyIcon, ExternalLinkIcon } from "lucide-react";
+import { CopyIcon, ExternalLinkIcon, InfoIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/PianoDialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -70,7 +70,7 @@ export function ShareSessionDialog({
           <DialogDescription>
             {result
               ? "Members of your Radius organization can view this snapshot."
-              : `Share “${target.title || "Untitled"}” with your Radius organization.`}
+              : "Share a saved snapshot with your Radius organization."}
           </DialogDescription>
         </DialogHeader>
         {result ? (
@@ -89,11 +89,11 @@ export function ShareSessionDialog({
             </Field>
           </FieldGroup>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Uploads the saved current branch, including instructions, tool output and attachments.
-            Review it for sensitive content first; secret filtering is not complete. Later messages
-            aren’t shared automatically. Radius retention settings apply.
-          </p>
+          <Alert role="note">
+            <InfoIcon />
+            <AlertTitle>Check for secrets</AlertTitle>
+            <AlertDescription>Includes instructions, tool output and attachments.</AlertDescription>
+          </Alert>
         )}
         {error && (
           <Alert variant="destructive">

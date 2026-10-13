@@ -72,3 +72,21 @@ but does not append Pi interactive mode's fresh `pi.share` metadata, and has no 
 Heuristic redaction cannot remove all secrets (including secrets inside images). A lost response
 or restart can leave an artifact on Radius without a recovered URL; the error instructs the user
 to inspect Radius before another publication. Links are not persisted in Piano.
+
+## Concise confirmation follow-up
+
+On `f5d0055` plus the dialog-only patch, replaced the long session-title repetition and explanatory
+paragraph with a short snapshot/audience description and the same Alert composition used for
+provider sign-in: Info icon, “Check for secrets”, and the included-content reminder. Upload behavior
+is unchanged (INV-11). No new regression test is needed for copy and standard component composition.
+
+`npm test` (474 passed) and `npm run typecheck` passed; pre-commit lint passed. The same scratch
+browser journey passed on desktop and 390×844 mobile, including confirmation, Cancel, successful
+copy, error and sign-out states. Its final rerun includes a shorter callout title after screenshot
+review caught mobile truncation. Evidence: `/tmp/piano-share-browser/concise-run.log` and
+`/tmp/piano-share-browser/concise-evidence/`; gate logs: `/tmp/piano-share-concise-{tests,typecheck}.log`.
+Same synthetic credentials/upload boundary and cleanup as above; no live publication or new deploy.
+
+After rebasing onto `bbc60bb` (unrelated Worktrunk updates), reran all gates: 475 tests, typecheck
+and lint passed. Logs: `/tmp/piano-share-concise-rebased-{tests,typecheck,lint}.log`. The Share
+component and its browser-tested patch were unchanged by the rebase.
