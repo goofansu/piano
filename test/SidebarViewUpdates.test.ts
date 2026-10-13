@@ -155,7 +155,7 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
   );
 });
 
-test("INV-01: a registry write made outside any browser request reaches the sidebar; cached statistics do not", async () => {
+test("INV-01: a registry write made outside any browser request reaches the sidebar; cached statistics and integration links do not", async () => {
   const git = slowGit();
   await run(
     git,
@@ -183,23 +183,27 @@ test("INV-01: a registry write made outside any browser request reaches the side
       yield* registry.mirrorSession(first, "pi-named", {
         stats: { cost: 1, statsUpdatedAt: Date.now() },
       });
-      yield* registry.setSessionRadiusShare(
-        (yield* registry.get).sessions.find((s) => s.sessionId === "pi-named")!,
-        {
-          organizationId: "org-a",
-          artifactId: "artifact-a",
-          url: "https://radius.earendil.com/a/artifact-a",
-        },
-      );
+      const named = (yield* registry.get).sessions.find((s) => s.sessionId === "pi-named")!;
+      const shared = yield* registry.setSessionLink(named, "radiusShare", {
+        organizationId: "org-a",
+        artifactId: "artifact-a",
+        url: "https://radius.earendil.com/a/artifact-a",
+      });
+      yield* registry.setSessionLink(shared!, "pullRequest", {
+        url: "https://github.com/o/r/pull/1",
+        source: "manual",
+      });
       yield* registry.touchSession(first, "pi-named");
       const [, next] = [...(yield* Fiber.join(views))];
       const updatedAt = (yield* registry.get).sessions[0]?.updatedAt;
       assert.equal(
         next?.sessionReferences?.[0]?.updatedAt,
         updatedAt,
-        "the view after the statistics and sharing writes is the touch",
+        "the view after the statistics and link writes is the touch",
       );
-      assert.equal("radiusShare" in (next?.sessionReferences?.[0] ?? {}), false);
+      const shown = next?.sessionReferences?.[0] ?? {};
+      for (const hidden of ["stats", "pullRequest", "radiusShare"])
+        assert.equal(hidden in shown, false, `${hidden} stays off the wire`);
     }),
   );
 });

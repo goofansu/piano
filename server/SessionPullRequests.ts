@@ -209,14 +209,6 @@ export const SessionPullRequestsLive = Layer.effect(
   Effect.gen(function* () {
     const registry = yield* Registry;
     const ghCli = yield* GhCommand;
-    // After a save, read the entry back so the answer reflects whatever the registry now holds.
-    const reread = Effect.fn("SessionPullRequests.reread")(function* (s: SessionEntry) {
-      const found = (yield* registry.get).sessions.find(
-        (t) => t.cwd === s.cwd && t.sessionId === s.sessionId,
-      );
-      if (!found) return yield* failure("Session is not registered. Refresh the session list.");
-      return found;
-    });
     // Scope routing to this subprocess; never change global gh config or credentials.
     const gh = (cwd: string, args: string[], host: GitHubHost) =>
       run(ghCli, args, cwd, { ...process.env, GH_HOST: host, GH_REPO: undefined }).pipe(
@@ -249,14 +241,17 @@ export const SessionPullRequestsLive = Layer.effect(
         catch: () => failure("GitHub returned an invalid pull request response."),
       });
     });
+    // Returns the saved entry, so an answer reflects what the registry now holds.
     const save = Effect.fn("SessionPullRequests.save")(function* (
       expected: SessionEntry,
       link: SessionEntry["pullRequest"],
     ) {
-      if (!(yield* registry.setSessionPullRequest(expected, link)))
+      const saved = yield* registry.setSessionLink(expected, "pullRequest", link);
+      if (!saved)
         return yield* failure(
           "The session's pull request changed during lookup. Refresh and try again.",
         );
+      return saved;
     });
     const result: (
       s: SessionEntry,
@@ -367,8 +362,7 @@ export const SessionPullRequestsLive = Layer.effect(
             source: "manual",
             ...(host === EXE_GITHUB ? { apiHost: EXE_GITHUB } : {}),
           };
-          yield* save(s, link);
-          return yield* result(yield* reread(s));
+          return yield* result(yield* save(s, link));
         }
         if (action.action === "discover") return yield* result(s, true);
         yield* save(s, null);

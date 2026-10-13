@@ -274,9 +274,9 @@ export const AppRouter = HttpRouter.use((router) =>
     );
 
     yield* serve(Endpoints.shareSession, ({ session }) =>
-      Effect.flatMap(SessionSharing, (sharing) =>
-        sharing.share(session.cwd, session.sessionId),
-      ).pipe(Effect.catchTag("ShareError", (error) => fail(409, error.detail))),
+      Effect.flatMap(SessionSharing, (sharing) => sharing.share(session)).pipe(
+        Effect.catchTag("ShareError", (error) => fail(409, error.detail)),
+      ),
     );
 
     const commandsFailure = failAs(

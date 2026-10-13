@@ -36,7 +36,16 @@ export interface WorktreeEntry {
   readonly branch: string;
 }
 
-export interface SessionEntry {
+/** A session reference's integration links: identities owned by Piano, facts owned by the forge or Radius. */
+export interface SessionLinks {
+  /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
+  readonly pullRequest?: SessionPullRequestLink | null;
+  /** Stable Radius destination. Its revisions and contents remain owned by Radius. */
+  readonly radiusShare?: RadiusShareLink;
+}
+export type SessionLinkKey = keyof SessionLinks;
+
+export interface SessionEntry extends SessionLinks {
   readonly projectId?: string;
   readonly cwd: string;
   readonly sessionId: string;
@@ -48,11 +57,24 @@ export interface SessionEntry {
   readonly pinned?: boolean;
   /** Replaceable last-known Pi accounting, not session history. */
   readonly stats?: SessionStats;
-  /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
-  readonly pullRequest?: SessionPullRequestLink | null;
-  /** Stable Radius destination. Its revisions and contents remain owned by Radius. */
-  readonly radiusShare?: RadiusShareLink;
 }
+
+/** What a session reference shows: cached statistics and integration links never reach the sidebar. */
+export const shownReference = ({
+  stats: _stats,
+  pullRequest: _pullRequest,
+  radiusShare: _radiusShare,
+  ...shown
+}: SessionEntry): Omit<SessionEntry, "stats" | SessionLinkKey> => shown;
+
+/**
+ * `entry` is still the reference `expected` was read as: not recreated (same creation time), not
+ * archived since, and, when `link` is named, that link unchanged.
+ */
+const sameReference = (entry: SessionEntry, expected: SessionEntry, link?: SessionLinkKey) =>
+  entry.createdAt === expected.createdAt &&
+  (!entry.archived || expected.archived) &&
+  (link === undefined || entry[link] === expected[link]);
 
 export interface RegistryData {
   readonly version: 2;
@@ -221,16 +243,26 @@ export class Registry extends Context.Service<
       sessionId: string,
       facts: { readonly sessionName?: string; readonly stats?: SessionStats },
     ) => Effect.Effect<void, RegistryError>;
-    /** Compare-and-set the association: delayed forge reads cannot undo removal or overwrite a newer choice. */
-    readonly setSessionPullRequest: (
+    /**
+     * The registered entry for `expected` while it is still that reference: not removed,
+     * recreated or archived since it was read, and, when `link` is named, with that link
+     * unchanged. Undefined otherwise.
+     */
+    readonly current: (
       expected: SessionEntry,
-      link: SessionPullRequestLink | null | undefined,
-    ) => Effect.Effect<boolean, RegistryError>;
-    /** Compare-and-set an allocation or missing-artifact replacement before any transcript upload. */
-    readonly setSessionRadiusShare: (
+      link?: SessionLinkKey,
+    ) => Effect.Effect<SessionEntry | undefined>;
+    /**
+     * Compare-and-set one integration link, applied only while `expected` is `current` with
+     * that link unchanged, so a delayed forge or Radius result cannot undo a removal, overwrite
+     * a newer choice or resurrect a deleted reference. Returns the saved entry, or undefined
+     * when refused.
+     */
+    readonly setSessionLink: <K extends SessionLinkKey>(
       expected: SessionEntry,
-      link: RadiusShareLink,
-    ) => Effect.Effect<boolean, RegistryError>;
+      link: K,
+      value: SessionLinks[K],
+    ) => Effect.Effect<SessionEntry | undefined, RegistryError>;
     readonly pinSession: (
       cwd: string,
       sessionId: string,
@@ -293,6 +325,10 @@ export const RegistryLive = Layer.effect(
     const now = () => new Date().toISOString();
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) =>
       t.cwd === cwd && t.sessionId === sessionId;
+    const currentIn = (d: RegistryData, expected: SessionEntry, link?: SessionLinkKey) => {
+      const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
+      return entry && sameReference(entry, expected, link) ? entry : undefined;
+    };
 
     const workspace = (id: string) =>
       Effect.flatMap(Ref.get(state), (d) => {
@@ -483,47 +519,22 @@ export const RegistryLive = Layer.effect(
             sessions: d.sessions.map((t) => (t === entry ? { ...t, title, stats } : t)),
           };
         }),
-      setSessionPullRequest: Effect.fn("Registry.setSessionPullRequest")(
-        function* (expected, link) {
-          let saved = false;
-          yield* update((d) => {
-            const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
-            if (
-              !entry ||
-              entry.createdAt !== expected.createdAt ||
-              entry.pullRequest !== expected.pullRequest
-            )
-              return d;
-            saved = true;
-            return {
-              ...d,
-              sessions: d.sessions.map((t) => (t === entry ? { ...t, pullRequest: link } : t)),
-            };
-          });
-          return saved;
-        },
-      ),
-      setSessionRadiusShare: Effect.fn("Registry.setSessionRadiusShare")(
-        function* (expected, link) {
-          let saved = false;
-          yield* update((d) => {
-            const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
-            if (
-              !entry ||
-              entry.archived ||
-              entry.createdAt !== expected.createdAt ||
-              entry.radiusShare !== expected.radiusShare
-            )
-              return d;
-            saved = true;
-            return {
-              ...d,
-              sessions: d.sessions.map((s) => (s === entry ? { ...s, radiusShare: link } : s)),
-            };
-          });
-          return saved;
-        },
-      ),
+      current: (expected, link) => Effect.map(Ref.get(state), (d) => currentIn(d, expected, link)),
+      setSessionLink: Effect.fn("Registry.setSessionLink")(function* <K extends SessionLinkKey>(
+        expected: SessionEntry,
+        link: K,
+        value: SessionLinks[K],
+      ) {
+        let saved: SessionEntry | undefined;
+        yield* update((d) => {
+          const entry = currentIn(d, expected, link);
+          if (!entry) return d;
+          const next: SessionEntry = { ...entry, [link]: value };
+          saved = next;
+          return { ...d, sessions: d.sessions.map((s) => (s === entry ? next : s)) };
+        });
+        return saved;
+      }),
       pinSession: Effect.fn("Registry.pinSession")(function* (cwd, sessionId, pinned) {
         yield* update((d) => {
           const entry = d.sessions.find(isSession(cwd, sessionId));
