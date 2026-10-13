@@ -24,7 +24,7 @@ import type {
   WorktreeView,
 } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
-import { Registry, type RegistryData } from "./Registry.ts";
+import { Registry, type RegistryData, shownReference } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { listWorktrees } from "./Worktrees.ts";
 
@@ -60,9 +60,7 @@ const shapeOf = (data: RegistryData) =>
 const visibleOf = (data: RegistryData) =>
   JSON.stringify({
     ...data,
-    sessions: data.sessions.map(
-      ({ stats: _stats, pullRequest: _pullRequest, radiusShare: _radiusShare, ...shown }) => shown,
-    ),
+    sessions: data.sessions.map(shownReference),
   });
 
 export interface SidebarViewOptions {
@@ -181,13 +179,8 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         // References survive closed directories and missing history; discovery never removes them.
         // A member not yet observed counts as available until the next run says otherwise.
         const sessionReferences = data.sessions.map(
-          ({
-            stats: _stats,
-            pullRequest: _pullRequest,
-            radiusShare: _radiusShare,
-            ...s
-          }): SessionReference => ({
-            ...s,
+          (s): SessionReference => ({
+            ...shownReference(s),
             workspaceId: data.workspaces.find((w) => w.path === s.cwd)!.id,
             branch: branchOf.get(s.cwd) ?? null,
             unavailable:

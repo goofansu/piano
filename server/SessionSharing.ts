@@ -6,7 +6,7 @@ import { DEFAULT_RADIUS_GATEWAY } from "@earendil-works/pi-ai/providers/radius-c
 import { Context, Data, Deferred, Effect, Layer, Schema } from "effect";
 import type { RadiusShareLink, SessionShare } from "../shared/share.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
-import { Registry } from "./Registry.ts";
+import { Registry, type SessionEntry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 
 export class ShareError extends Data.TaggedError("ShareError")<{
@@ -46,7 +46,10 @@ const ArtifactResponse = Schema.Struct({
 
 export class SessionSharing extends Context.Service<
   SessionSharing,
-  { readonly share: (cwd: string, sessionId: string) => Effect.Effect<SessionShare, ShareError> }
+  {
+    /** Share the session reference the caller resolved by ID. */
+    readonly share: (session: SessionEntry) => Effect.Effect<SessionShare, ShareError>;
+  }
 >()("piano/SessionSharing") {}
 
 export const SessionSharingLive = Layer.effect(
@@ -100,7 +103,8 @@ export const SessionSharingLive = Layer.effect(
         );
       return { ...artifact, canonical_url: link.href };
     };
-    const publish = Effect.fn("SessionSharing.publish")(function* (cwd: string, sessionId: string) {
+    const publish = Effect.fn("SessionSharing.publish")(function* (expected: SessionEntry) {
+      const { cwd, sessionId } = expected;
       // The Providers UI's signed-in rule; ambient API keys alone do not authorize this feature.
       const token = yield* login
         .bearer("radius")
@@ -124,13 +128,13 @@ export const SessionSharingLive = Layer.effect(
         catch: () =>
           failure("Could not verify your Radius organization. No transcript was uploaded."),
       });
-      const session = (yield* registry.get).sessions.find(
-        (s) => s.cwd === cwd && s.sessionId === sessionId,
-      );
+      const session = yield* registry.current(expected);
       if (!session || session.archived)
         return yield* failure("This session is no longer available to share.");
       const title = `Pi session ${sessionId}`;
       let destination = session.radiusShare;
+      // The reference as it holds `destination`: a fresh allocation replaces it.
+      let reference = session;
       if (destination && destination.organizationId !== organizationId)
         return yield* failure(
           "This session was shared with a different Radius organization. Sign in to that organization to update the same link.",
@@ -185,7 +189,7 @@ export const SessionSharingLive = Layer.effect(
         });
         destination = { organizationId, artifactId: created.id, url: created.canonical_url };
         const saved = yield* registry
-          .setSessionRadiusShare(session, destination)
+          .setSessionLink(session, "radiusShare", destination)
           .pipe(
             Effect.mapError(() =>
               failure(
@@ -197,17 +201,10 @@ export const SessionSharingLive = Layer.effect(
           return yield* failure(
             "The session changed while preparing its share. No transcript was uploaded; reopen Share to try again.",
           );
+        reference = saved;
       }
-      // A deletion/archive while Radius was being read must not start a new upload.
-      const current = (yield* registry.get).sessions.find(
-        (s) => s.cwd === cwd && s.sessionId === sessionId,
-      );
-      if (
-        !current ||
-        current.archived ||
-        current.createdAt !== session.createdAt ||
-        current.radiusShare?.artifactId !== destination.artifactId
-      )
+      // A deletion/archive or another destination while Radius was being read must not start a new upload.
+      if (!(yield* registry.current(reference, "radiusShare")))
         return yield* failure(
           "The session changed while preparing its share. No transcript was uploaded.",
         );
@@ -233,14 +230,14 @@ export const SessionSharingLive = Layer.effect(
       });
     });
     return SessionSharing.of({
-      share: Effect.fn("SessionSharing.share")(function* (cwd, sessionId) {
-        const key = JSON.stringify([cwd, sessionId]);
+      share: Effect.fn("SessionSharing.share")(function* (session) {
+        const key = JSON.stringify([session.cwd, session.sessionId]);
         const current = pending.get(key);
         if (current) return yield* Deferred.await(current);
         // Claim before yielding; concurrent requests for this session join the same publication.
         const done = Deferred.makeUnsafe<SessionShare, ShareError>();
         pending.set(key, done);
-        yield* publish(cwd, sessionId).pipe(
+        yield* publish(session).pipe(
           Effect.timeoutOrElse({
             duration: environment.timeoutMs,
             orElse: () => Effect.fail(failure(uncertain)),

@@ -53,6 +53,13 @@ const destination = (sessionId = id) =>
       ),
     ),
   );
+/** The reference the router resolves; a restarted service must find it still current. */
+const reference = (sessionId = id) =>
+  server.run(
+    Effect.flatMap(Registry, (registry) =>
+      Effect.map(registry.get, (data) => data.sessions.find((s) => s.sessionId === sessionId)!),
+    ),
+  );
 const register = async (sessionId: string) => {
   await server.run(
     Effect.flatMap(Registry, (registry) => registry.addSession(server.repo, sessionId)),
@@ -244,8 +251,9 @@ test("later shares and fresh registry/sharing services publish revisions at the 
   assert.equal(later.status, 200);
   assert.equal((await later.json()).url, first?.url);
   // Recreate both persistence and sharing services from disk, not their in-memory state.
+  const session = await reference();
   const restarted = await server.run(
-    Effect.flatMap(SessionSharing, (s) => s.share(server.repo, id)).pipe(
+    Effect.flatMap(SessionSharing, (s) => s.share(session)).pipe(
       Effect.provide(SessionSharingLive.pipe(Layer.provide(RegistryLive))),
     ),
   );
@@ -319,8 +327,9 @@ test("404 and 410 lookups replace and persist the missing artifact, then reuse t
     assert.notEqual(next.url, previous?.url);
     assert.equal((await response.json()).url, next.url);
     assert.equal(allocations.length, allocated + 1);
+    const session = await reference(sessionId);
     const restarted = await server.run(
-      Effect.flatMap(SessionSharing, (sharing) => sharing.share(server.repo, sessionId)).pipe(
+      Effect.flatMap(SessionSharing, (sharing) => sharing.share(session)).pipe(
         Effect.provide(SessionSharingLive.pipe(Layer.provide(RegistryLive))),
       ),
     );

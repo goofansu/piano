@@ -174,17 +174,19 @@ test("version-3 sharing migration preserves sessions; Radius destinations surviv
     url: "https://radius.earendil.com/a/artifact-a",
   };
   assert.equal(
-    await f.run(Effect.flatMap(Registry, (r) => r.setSessionRadiusShare(before, link))),
+    await f
+      .run(Effect.flatMap(Registry, (r) => r.setSessionLink(before, "radiusShare", link)))
+      .then(Boolean),
     true,
   );
   assert.deepEqual((await f.get()).sessions, [{ ...before, radiusShare: link }]);
   assert.equal(
     await f.run(
       Effect.flatMap(Registry, (r) =>
-        r.setSessionRadiusShare(before, { ...link, artifactId: "replacement" }),
+        r.setSessionLink(before, "radiusShare", { ...link, artifactId: "replacement" }),
       ),
     ),
-    false,
+    undefined,
   );
   await f.run(
     Effect.flatMap(Registry, (r) => r.mirrorSession(cwd, "shared", { sessionName: "Renamed" })),
@@ -199,10 +201,10 @@ test("version-3 sharing migration preserves sessions; Radius destinations surviv
     Effect.gen(function* () {
       const r = yield* Registry;
       const expected = (yield* r.get).sessions[0]!;
-      assert.equal(yield* r.setSessionRadiusShare(expected, replacement), true);
+      assert.ok(yield* r.setSessionLink(expected, "radiusShare", replacement));
       assert.equal(
-        yield* r.setSessionRadiusShare(expected, link),
-        false,
+        yield* r.setSessionLink(expected, "radiusShare", link),
+        undefined,
         "a stale replacement cannot undo the new link",
       );
     }),
@@ -210,13 +212,71 @@ test("version-3 sharing migration preserves sessions; Radius destinations surviv
   assert.deepEqual((await f.get()).sessions[0]?.radiusShare, replacement);
   await f.run(Effect.flatMap(Registry, (r) => r.removeSession(cwd, "shared")));
   assert.equal(
-    await f.run(Effect.flatMap(Registry, (r) => r.setSessionRadiusShare(before, link))),
+    await f
+      .run(Effect.flatMap(Registry, (r) => r.setSessionLink(before, "radiusShare", link)))
+      .then(Boolean),
     false,
   );
   assert.deepEqual(
     (await f.get()).sessions,
     [],
     "late share results cannot resurrect a deleted session",
+  );
+});
+
+test("INV-01/07: a session link is set only on the same reference, not archived or recreated since, with that link unchanged", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "folder");
+  const linked = { url: "https://github.com/o/r/pull/1", source: "manual" as const };
+  const share = {
+    organizationId: "org-a",
+    artifactId: "artifact-a",
+    url: "https://radius.earendil.com/a/artifact-a",
+  };
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.addSession(cwd, "one", "One");
+      const expected = (yield* r.get).sessions[0]!;
+      const saved = yield* r.setSessionLink(expected, "pullRequest", linked);
+      assert.deepEqual(saved, { ...expected, pullRequest: linked });
+      assert.deepEqual(yield* r.current(saved!, "pullRequest"), saved);
+
+      assert.equal(
+        yield* r.setSessionLink(expected, "pullRequest", null),
+        undefined,
+        "a link changed since it was read is not overwritten",
+      );
+      assert.equal(yield* r.current(expected, "pullRequest"), undefined);
+      assert.ok(
+        yield* r.setSessionLink(expected, "radiusShare", share),
+        "another link's change does not block this one",
+      );
+
+      const latest = (yield* r.get).sessions[0]!;
+      const earlier = { ...latest, createdAt: "2000-01-01T00:00:00.000Z" };
+      assert.equal(
+        yield* r.setSessionLink(earlier, "pullRequest", null),
+        undefined,
+        "a recreated reference refuses a result read from its predecessor",
+      );
+      assert.equal(yield* r.current(earlier), undefined);
+
+      yield* r.archiveSession(cwd, "one");
+      assert.equal(yield* r.setSessionLink(latest, "pullRequest", null), undefined);
+      assert.equal(yield* r.current(latest), undefined, "archived since it was read");
+      const archived = (yield* r.get).sessions[0]!;
+      assert.ok(
+        yield* r.setSessionLink(archived, "pullRequest", null),
+        "a reference read as archived still keeps its links",
+      );
+    }),
+  );
+  const persisted = (await f.get()).sessions[0];
+  assert.deepEqual(
+    persisted && [persisted.archived, persisted.pullRequest, persisted.radiusShare],
+    [true, null, share],
+    "links persist across restart",
   );
 });
 
