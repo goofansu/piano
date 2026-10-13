@@ -88,6 +88,14 @@ export function useSidebarSwipe({
       gesture = null;
       setProgress(null);
     };
+    // A long press creates its selection after touchstart. Once selection takes over,
+    // abandon the whole gesture, even if the range later collapses while dragging a handle.
+    const hasSelection = () => window.getSelection()?.isCollapsed === false;
+    const selectionChanged = () => {
+      if (!hasSelection()) return;
+      suppressClickUntil = 0;
+      cancel();
+    };
     cancelGesture.current = cancel;
     const start = (event: TouchEvent) => {
       cancel();
@@ -117,7 +125,7 @@ export function useSidebarSwipe({
           return;
         if (element === surface) break;
       }
-      if (window.getSelection()?.toString()) return;
+      if (hasSelection()) return;
       gesture = {
         id: touch.identifier,
         x: touch.clientX,
@@ -134,6 +142,8 @@ export function useSidebarSwipe({
     const move = (event: TouchEvent) => {
       const g = gesture;
       if (!g) return;
+      // selectionchange may not have been delivered yet when this touch event arrives.
+      if (hasSelection()) return selectionChanged();
       const touch = Array.from(event.touches).find((touch) => touch.identifier === g.id);
       if (!touch || event.touches.length !== 1) return cancel();
       const dx = touch.clientX - g.x;
@@ -164,6 +174,7 @@ export function useSidebarSwipe({
       suppressClickUntil = performance.now() + 500;
     };
     const end = (event: TouchEvent) => {
+      if (hasSelection()) return selectionChanged();
       const g = gesture;
       if (!g?.claimed || event.touches.length) return cancel();
       const velocity = event.timeStamp - g.lastTime < 100 ? g.velocity : 0;
@@ -191,6 +202,7 @@ export function useSidebarSwipe({
         event.stopPropagation();
       }
     };
+    document.addEventListener("selectionchange", selectionChanged);
     document.addEventListener("touchstart", start, { passive: true, capture: true });
     document.addEventListener("touchmove", move, { passive: false, capture: true });
     document.addEventListener("touchend", end, true);
@@ -201,6 +213,7 @@ export function useSidebarSwipe({
     return () => {
       cancelGesture.current = () => {};
       cancelFrame();
+      document.removeEventListener("selectionchange", selectionChanged);
       document.removeEventListener("touchstart", start, true);
       document.removeEventListener("touchmove", move, true);
       document.removeEventListener("touchend", end, true);
