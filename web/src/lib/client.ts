@@ -1,15 +1,15 @@
 /**
  * The browser's side of the wire: one client per page owns the projected state, the connection,
  * selection correlation, re-selection after reconnect or resync (INV-02/05), which server
- * messages become notifications, the New page's default directory, and asking Pi about the
- * focused directory's models and trust. React only subscribes and sends; nothing here depends on
- * render timing.
+ * messages and connection losses become notifications, the New page's default directory, and
+ * asking Pi about the focused directory's models and trust. React only subscribes and sends;
+ * nothing here depends on render timing.
  */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { closureNeedsAttention, focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { readStorage, writeStorage } from "./storage.ts";
-import type { Connection, ConnectionHandlers } from "./ws.ts";
+import type { Connection, ConnectionHandlers, DisconnectReason } from "./ws.ts";
 
 export type NotifyLevel = "success" | "info" | "warning" | "error";
 export type Notify = (message: string, level?: NotifyLevel) => void;
@@ -22,6 +22,18 @@ export interface LastDirectory {
   read: () => string | null;
   write: (cwd: string) => void;
 }
+
+/** What the person is told when the connection closes for a reason they should know. */
+const disconnectNotices: Record<DisconnectReason, [string, NotifyLevel]> = {
+  behind: [
+    "Connection fell behind. Reconnecting for a current view; some live notices may have been missed.",
+    "warning",
+  ],
+  "too-large": [
+    "Session view exceeds the delivery limit. Reduce its context before reloading.",
+    "error",
+  ],
+};
 
 const LAST_DIR = "piano.lastDir";
 const storedLastDirectory: LastDirectory = {
@@ -138,9 +150,10 @@ export function createClient({
     if (current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
   };
 
-  const onStatus = (connected: boolean) => {
+  const onStatus = (connected: boolean, reason?: DisconnectReason) => {
     apply({ type: "connected", connected });
     if (connected) reselect(state.session ?? state.selecting);
+    else if (reason) notify(...disconnectNotices[reason]);
   };
 
   const onMessage = (m: ServerMessage) => {
