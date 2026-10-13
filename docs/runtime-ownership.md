@@ -11,7 +11,7 @@ second session implementation or a new registry store.
 | Owner | State and obligations |
 | --- | --- |
 | `PiTransport` (internal) | One scoped process, bounded stdin/record queues and byte framing, request IDs/deferreds, capacity leases, pending/uncertain delivery, stdout/stderr/exit readers. `fail` settles callers and ends records before killing Pi. Scope cleanup closes stdin then kills after its deadline. |
-| `PiSessions` publication | One generation per open; one lock for projector correlation, snapshot fold, sequence assignment and subscriber attachment. Publish never waits on a browser. A subscriber receives an atomic snapshot/cursor and then contiguous frames (INV-05). |
+| `PiSessions` publication (`SessionPublication`) | One generation per open, created by PiSessions. `SessionPublication` owns the snapshot, its one lock (held for projector correlation, snapshot fold, sequence assignment and subscriber attachment), sequence numbers, the cursor, subscribers, state merges and the closure announcement. State changes reach SessionReadbacks through its `onStateChange` listener. Publish never waits on a browser. A subscriber receives an atomic snapshot/cursor and then contiguous frames (INV-05). |
 | `PiSessions` dialog lifecycle (`SessionDialogs`) | Open dialogs live in the snapshot. `SessionDialogs` sets each dialog's deadline (Pi's advertised timeout, or the earlier host recovery bound `PiDialogRecoveryMs`), publishes it and owns its deadline wakeup. Answer/cancel/abort/deadline/exit compete under the publication lock. Claim and publish before transport yields; no late acknowledgement or uncertain write reopens a claim (INV-04). |
 | `PiSessions` actions/readbacks | Session scope owns admitted work, independent of the browser join. Operation/fact/output versions prevent old readbacks and abort acknowledgements from overwriting newer work. Abort does not clear queue; Stop restores queue first (INV-02/03). |
 | `PiSessions` shutdown | Transport termination settles callers; record consumer completion signals `recordsDrained`. Only then announce closure once, resolving remaining dialog/submission uncertainty. The consumer finalizer signals completion but never waits on a later child finalizer. Scope release judges retained state and transport uncertainty, not already-interrupted action fibers. |
@@ -27,10 +27,10 @@ Its `observationVersion` counts **received**, not merely projected, output; cont
 readbacks must not overtake queued records. `hasPendingWork` includes uncertainty
 left after caller timeout so retirement cannot infer false quiescence.
 
-Dialog and publication code deliberately remain together. Extracting them now would
-require passing the snapshot lock, publish functions, generation and shutdown gates
-back and forth, making their shared atomicity harder to see. PiRecords likewise is
-not split by size; `Subagents` is a split by concept (the pi-subagent extension contract versus
+Publication, dialogs and readbacks share one atomicity boundary: SessionDialogs and
+SessionReadbacks take the session's `SessionPublication` itself, its lock and gates included,
+rather than a bag of functions, so the boundary has one owner and readback tests use the real
+one. PiRecords is not split by size; `Subagents` is a split by concept (the pi-subagent extension contract versus
 the Pi RPC protocol), so the run ledger reads Pi entries without serializing a transcript. These are explicit ownership choices, not deferred mechanical
 file splitting.
 

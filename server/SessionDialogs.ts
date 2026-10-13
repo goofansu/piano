@@ -4,17 +4,11 @@
  * publishes the dialog with it. Answer, cancel, deadline, abort and exit compete for one claim
  * taken under the session's snapshot lock; the response is written to Pi only after the claim,
  * outside the lock, and no transport acknowledgement reopens it. Internal to PiSessions, which
- * owns the lock, publication and the child; this module owns the deadlines, claims, resolution
- * reasons and their detail texts.
+ * owns the child; resolutions go through the session's SessionPublication. This module owns the
+ * deadlines, claims, resolution reasons and their detail texts.
  */
 import { Clock, Deferred, Effect, Fiber, type Scope } from "effect";
-import type {
-  Dialog,
-  DialogResolution,
-  SessionAction,
-  SessionEvent,
-  SessionState,
-} from "../shared/wire.ts";
+import type { Dialog, DialogResolution, SessionAction } from "../shared/wire.ts";
 import {
   type DialogRequest,
   dialogAnswerFor,
@@ -22,20 +16,7 @@ import {
   type PiCommand,
 } from "./PiRecords.ts";
 import { PiSessionError } from "./PiTransport.ts";
-
-/** The session publication a dialog resolution goes through. */
-export interface DialogPublication {
-  /** Run under the session's snapshot lock. */
-  readonly locked: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
-  /** Fold and send one event; callers hold the lock. */
-  readonly publish: (event: SessionEvent) => Effect.Effect<void>;
-  /** Merge state fields; callers hold the lock. */
-  readonly mergeState: (patch: Partial<SessionState>) => Effect.Effect<void>;
-  readonly state: Effect.Effect<SessionState>;
-  readonly dialogs: Effect.Effect<ReadonlyArray<Dialog>>;
-  /** True once subscribers have been told Pi is gone. */
-  readonly announced: () => boolean;
-}
+import type { SessionPublication } from "./SessionPublication.ts";
 
 export interface SessionDialogsOptions {
   readonly generation: string;
@@ -45,7 +26,7 @@ export interface SessionDialogsOptions {
   /** Watchers and answers belong to the session, not to the requesting browser. */
   readonly scope: Scope.Scope;
   readonly write: (command: PiCommand) => Effect.Effect<void, PiSessionError>;
-  readonly publication: DialogPublication;
+  readonly publication: SessionPublication;
   /** The in-progress abort's dispatch signal, if an abort is cancelling the current run. */
   readonly abortInProgress: () => Deferred.Deferred<void> | undefined;
 }

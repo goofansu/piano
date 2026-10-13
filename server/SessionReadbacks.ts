@@ -3,11 +3,12 @@
  * INV-05: older observations never overwrite newer ones). A readback started before an operation,
  * a fact change or Pi output must not overwrite what is newer than it. This module owns one worker
  * per readback kind, the coalescing of requests, the context retry rule and each readback's error
- * field. Internal to PiSessions, which owns the lock, publication and the child: it reports fact
- * changes and new operations here, and asks for readbacks.
+ * field. Internal to PiSessions, which owns the child and reports new operations here and asks
+ * for readbacks. Readbacks land through the session's SessionPublication, whose state changes this
+ * module hears to keep its fact versions.
  */
 import { Clock, Effect, type Scope } from "effect";
-import type { SessionEvent, SessionState } from "../shared/wire.ts";
+import type { SessionEvent } from "../shared/wire.ts";
 import {
   type PiReadback,
   piReadbacks,
@@ -16,19 +17,8 @@ import {
   stateFactsOf,
 } from "./PiRecords.ts";
 import type { PiSessionError } from "./PiTransport.ts";
+import type { SessionPublication } from "./SessionPublication.ts";
 import { RunLedger } from "./Subagents.ts";
-
-/** The session publication a readback lands through. */
-export interface ReadbackPublication {
-  /** Run under the session's snapshot lock. */
-  readonly locked: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
-  /** Fold and send one event; callers hold the lock. */
-  readonly publish: (event: SessionEvent) => Effect.Effect<void>;
-  /** Merge state fields, reporting the change through `changed`; callers hold the lock. */
-  readonly mergeState: (patch: Partial<SessionState>) => Effect.Effect<void>;
-  /** True once subscribers have been told Pi is gone. */
-  readonly announced: () => boolean;
-}
 
 export interface SessionReadbacksOptions {
   /** Workers belong to the session, not to the requesting browser. */
@@ -38,7 +28,7 @@ export interface SessionReadbacksOptions {
   readonly observationVersion: () => number;
   /** Pi's current context as the event replacing projected history; called under the lock. */
   readonly context: (messages: ReadonlyArray<RawMessage>) => SessionEvent;
-  readonly publication: ReadbackPublication;
+  readonly publication: SessionPublication;
 }
 
 /** An operation token: a state readback owed to one is dropped once a later one starts. */
@@ -55,9 +45,6 @@ export interface SessionReadbacks {
   readonly supersede: () => ReadbackOperation;
   /** The current operation, for work that continues it rather than starting a new one. */
   readonly operation: () => ReadbackOperation;
-  /** Report a published state change; callers hold the lock. A readback started before it keeps
-   * the newer model, effort, name and session file. */
-  readonly changed: (previous: SessionState, next: SessionState) => void;
   /** No readback worker is running. */
   readonly idle: () => boolean;
 }
@@ -78,12 +65,12 @@ export const makeSessionReadbacks = ({
   let statsVersion = 0;
   let contextVersion = 0;
   let operationVersion = 0;
-  const { announced } = publication;
-
-  const patchState = (patch: Partial<SessionState> | (() => Partial<SessionState>)) =>
-    publication.locked(
-      Effect.suspend(() => publication.mergeState(typeof patch === "function" ? patch() : patch)),
-    );
+  const { announced, patchState } = publication;
+  // A readback started before a published change keeps the newer model, effort, name and file.
+  publication.onStateChange((previous, next) => {
+    for (const field of metadataFields)
+      if (next[field] !== previous[field]) factVersions[field] += 1;
+  });
 
   /** Run usage from entries Pi appended since the last read. Only the stats worker reads. */
   const ledger = new RunLedger();
@@ -237,10 +224,6 @@ export const makeSessionReadbacks = ({
     refresh,
     supersede: () => ++operationVersion,
     operation: () => operationVersion,
-    changed: (previous, next) => {
-      for (const field of metadataFields)
-        if (next[field] !== previous[field]) factVersions[field] += 1;
-    },
     idle: () => refreshing.size === 0,
   };
 };

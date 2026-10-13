@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Deferred, Effect, Fiber, Queue, Ref, type Scope, Semaphore } from "effect";
+import { Deferred, Effect, Fiber, Queue, type Scope } from "effect";
 import type { PiReadback } from "../server/PiRecords.ts";
 import { PiSessionError } from "../server/PiTransport.ts";
-import { makeSessionReadbacks, type SessionReadbacks } from "../server/SessionReadbacks.ts";
-import type { SessionEvent, SessionState } from "../shared/wire.ts";
+import { makeSessionPublication } from "../server/SessionPublication.ts";
+import { makeSessionReadbacks } from "../server/SessionReadbacks.ts";
+import type { RenderMsg, SessionState } from "../shared/wire.ts";
 
 /** One readback Pi has been asked for, answered when the test resolves its raw reply. */
 interface PendingRead {
@@ -19,26 +20,22 @@ const initial: SessionState = {
   sessionName: "before",
 };
 
-/** SessionReadbacks over a fake Pi whose reads wait on the test, and a publication shaped as
- * PiSessions provides it: one lock, merged state, fact changes reported. */
+/** The message a context readback publishes, so its landing shows in the snapshot. */
+const contextMessage: RenderMsg = { id: "context", role: "user", text: "from Pi's context" };
+
+/** SessionReadbacks over a fake Pi whose reads wait on the test, landing through the session's
+ * real SessionPublication. */
 const harness = Effect.gen(function* () {
   const scope = yield* Effect.scope;
-  const lock = yield* Semaphore.make(1);
-  const state = yield* Ref.make(initial);
-  const published: SessionEvent[] = [];
   const reads = yield* Queue.unbounded<PendingRead>();
   let observation = 0;
-  let readbacks: SessionReadbacks | undefined;
-  const mergeState = Effect.fnUntraced(function* (patch: Partial<SessionState>) {
-    const current = yield* Ref.get(state);
-    const next = { ...current, ...patch };
-    if (JSON.stringify(next) === JSON.stringify(current)) return;
-    readbacks?.changed(current, next);
-    yield* Ref.set(state, next);
-    published.push({ _tag: "state", state: next });
+  const publication = yield* makeSessionPublication({
+    cwd: "/readbacks",
+    sessionId: initial.sessionId,
+    generation: "test",
+    initial: { state: initial, messages: [], dialogs: [] },
   });
-  const locked = Semaphore.withPermits(lock, 1);
-  readbacks = makeSessionReadbacks({
+  const readbacks = makeSessionReadbacks({
     scope,
     read: <A>({ command, decode, invalid }: PiReadback<A>) =>
       Effect.gen(function* () {
@@ -50,21 +47,19 @@ const harness = Effect.gen(function* () {
         return value;
       }),
     observationVersion: () => observation,
-    context: () => ({ _tag: "context", messages: [] }),
-    publication: {
-      locked,
-      publish: (event) => Effect.sync(() => published.push(event)),
-      mergeState,
-      announced: () => false,
-    },
+    context: () => ({ _tag: "context", messages: [contextMessage] }),
+    publication,
   });
   return {
     readbacks,
-    state: Ref.get(state),
-    published,
+    state: publication.state,
+    /** Whether a context readback has replaced the projected history. */
+    contextLanded: Effect.map(publication.snapshot, (snapshot) =>
+      snapshot.messages.some((message) => message.id === contextMessage.id),
+    ),
     /** A Pi record arrives: state facts change under the lock, and observed output moves. */
     record: (patch: Partial<SessionState>) =>
-      locked(mergeState(patch)).pipe(Effect.tap(() => Effect.sync(() => observation++))),
+      publication.patchState(patch).pipe(Effect.tap(() => Effect.sync(() => observation++))),
     /** Pi's output moves without a state change. */
     output: () => {
       observation++;
@@ -160,11 +155,7 @@ test("a context raced by Pi output is read three times, then becomes a projectio
       }
       yield* Fiber.join(refresh);
       assert.equal(yield* pi.pending, 0, "no fourth attempt");
-      assert.equal(
-        pi.published.some((event) => event._tag === "context"),
-        false,
-        "a raced context is never published",
-      );
+      assert.equal(yield* pi.contextLanded, false, "a raced context is never published");
       assert.equal(
         (yield* pi.state).projectionError,
         "Pi context changed during refresh. This view may be stale until the next command or settled boundary.",
@@ -174,7 +165,7 @@ test("a context raced by Pi output is read three times, then becomes a projectio
       const retry = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
       yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
       yield* Fiber.join(retry);
-      assert.ok(pi.published.some((event) => event._tag === "context"));
+      assert.ok(yield* pi.contextLanded);
       assert.equal((yield* pi.state).projectionError, undefined);
     }),
   );
