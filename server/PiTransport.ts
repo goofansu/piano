@@ -7,7 +7,7 @@ import type { SessionClosure } from "../shared/wire.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { PiCli } from "./PiCli.ts";
-import type { PiReadback, PiRecord } from "./PiRecords.ts";
+import type { PiExchange, PiReadback, PiRecord } from "./PiRecords.ts";
 
 export class PiSessionError extends Data.TaggedError("PiSessionError")<{
   readonly reason: "spawn" | "exited" | "protocol" | "rejected" | "timeout" | "transport";
@@ -43,11 +43,12 @@ export type PiLane = "control" | "ordinary";
 
 /** A spawned Pi child with request correlation. Everything above builds on `request` and `records`. */
 export interface PiTransport {
-  /** A command that may change Pi. One whose delivery becomes uncertain leaves pending work. */
-  readonly request: (
-    command: Record<string, unknown>,
+  /** An exchange's command, which may change Pi, its reply decoded; a reply of the wrong shape
+   * fails as "protocol". One whose delivery becomes uncertain leaves pending work. */
+  readonly request: <A>(
+    exchange: PiExchange<A>,
     options: { readonly lane: PiLane; readonly dispatched?: Deferred.Deferred<void> },
-  ) => Effect.Effect<unknown, PiSessionError>;
+  ) => Effect.Effect<A, PiSessionError>;
   /** A readback's query, its reply decoded; a reply of the wrong shape fails as "protocol".
    * Ordinary lane; a query changes nothing, so its timeout leaves no pending work. */
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
@@ -442,16 +443,23 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
     );
   });
 
+  // Decoded after `send`: a reply of the wrong shape still proves delivery, so it marks no
+  // uncertain mutation.
+  const exchange = Effect.fnUntraced(function* <A>(
+    { command, decode, invalid }: PiExchange<A>,
+    options: { lane: PiLane; dispatched?: Deferred.Deferred<void>; readback: boolean },
+  ) {
+    const value = decode(yield* send(command, options));
+    if (value === undefined)
+      return yield* new PiSessionError({ reason: "protocol", detail: invalid });
+    return value;
+  });
+
   const request: PiTransport["request"] = (command, options) =>
-    send(command, { ...options, readback: false });
+    exchange(command, { ...options, readback: false });
 
   const read = Effect.fn("PiTransport.read")(function* <A>(readback: PiReadback<A>) {
-    const value = readback.decode(
-      yield* send(readback.command, { lane: "ordinary", readback: true }),
-    );
-    if (value === undefined)
-      return yield* new PiSessionError({ reason: "protocol", detail: readback.invalid });
-    return value;
+    return yield* exchange(readback, { lane: "ordinary", readback: true });
   });
 
   const recordStream = Stream.fromEffectRepeat(Queue.take(records)).pipe(

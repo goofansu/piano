@@ -51,14 +51,12 @@ import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import { PiHistory } from "./PiHistory.ts";
 import {
-  dispositionOf,
-  type PiCommand,
+  type PiExchange,
   PiProjector,
   type PiRecord,
-  type PiTranslation,
-  piCommandFor,
+  type PiRejection,
+  piExchangeFor,
   piReadbacks,
-  queuedMessagesOf,
   type RefreshKind,
   sessionArgs,
   stateFactsOf,
@@ -230,10 +228,12 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
 const laneOf = (tag: SessionAction["_tag"]): PiLane =>
   sessionActionPolicy[tag].priority ? "control" : "ordinary";
 
-const commandOf = (translation: PiTranslation): Effect.Effect<PiCommand, PiSessionError> =>
+const exchangeOf = <A>(
+  translation: PiExchange<A> | PiRejection,
+): Effect.Effect<PiExchange<A>, PiSessionError> =>
   "rejected" in translation
     ? Effect.fail(new PiSessionError({ reason: "rejected", detail: translation.rejected }))
-    : Effect.succeed(translation.command);
+    : Effect.succeed(translation);
 
 // The saved-history types `history` speaks in.
 export type { HistoryLocation, PiHistory } from "./PiHistory.ts";
@@ -686,7 +686,7 @@ const openSession = (spec: PiSessionSpec) =>
             return { _tag: "commands", commands: yield* child.read(piReadbacks.commands) };
           case "prompt":
           case "steer": {
-            const command = yield* commandOf(piCommandFor(action));
+            const exchange = yield* exchangeOf(piExchangeFor(action));
             // Pi's clear_queue only returns text. Do not offer a lossy image queue.
             if (action.attachments?.length && isWorking(yield* stateOf))
               return yield* new PiSessionError({
@@ -704,20 +704,8 @@ const openSession = (spec: PiSessionSpec) =>
             // not the browser/caller that may disconnect while Pi handles input.
             const work = Effect.gen(function* () {
               yield* submit("submitting");
-              yield* child.request(command, { lane }).pipe(
-                Effect.flatMap((data) => {
-                  const disposition = dispositionOf(data);
-                  if (!disposition) {
-                    return Effect.fail(
-                      new PiSessionError({
-                        reason: "protocol",
-                        detail:
-                          "Pi acknowledged the input without a recognized disposition. Inspect the session before sending again.",
-                      }),
-                    );
-                  }
-                  return submit(disposition);
-                }),
+              yield* child.request(exchange, { lane }).pipe(
+                Effect.flatMap((disposition) => submit(disposition)),
                 Effect.catchTag("PiSessionError", (error) =>
                   submit(error.reason === "rejected" ? "rejected" : "uncertain", error.detail).pipe(
                     Effect.andThen(Effect.fail(error)),
@@ -739,7 +727,7 @@ const openSession = (spec: PiSessionSpec) =>
             return;
           }
           case "abort": {
-            const command = yield* commandOf(piCommandFor(action));
+            const exchange = yield* exchangeOf(piExchangeFor(action));
             const work = Effect.gen(function* () {
               const dispatched = yield* Deferred.make<void>();
               const current = {
@@ -750,7 +738,7 @@ const openSession = (spec: PiSessionSpec) =>
               aborting = current;
               const open = yield* dialogsOf;
               const native = yield* child
-                .request(command, { lane, dispatched })
+                .request(exchange, { lane, dispatched })
                 .pipe(Effect.forkChild);
               // Order abort before releasing an extension that may continue work.
               // This waits for the transport attempt, NOT Pi's acknowledgement.
@@ -804,24 +792,19 @@ const openSession = (spec: PiSessionSpec) =>
             return yield* work.pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join));
           }
           case "restore_queue": {
-            const messages = queuedMessagesOf(
-              yield* child.request(yield* commandOf(piCommandFor(action)), { lane }),
-            );
-            if (!messages)
-              return yield* new PiSessionError({
-                reason: "protocol",
-                detail: "Pi returned an invalid cleared queue.",
-              });
+            const messages = yield* child.request(yield* exchangeOf(piExchangeFor(action)), {
+              lane,
+            });
             return { _tag: "queue_restored", messages };
           }
           case "set_model":
-            yield* child.request(yield* commandOf(piCommandFor(action)), { lane });
+            yield* child.request(yield* exchangeOf(piExchangeFor(action)), { lane });
             yield* refreshState(operation);
             yield* refreshStats;
             return;
           case "set_thinking_level":
           case "set_name":
-            yield* child.request(yield* commandOf(piCommandFor(action)), { lane });
+            yield* child.request(yield* exchangeOf(piExchangeFor(action)), { lane });
             yield* refreshState(operation);
             return;
           case "answer":

@@ -13,7 +13,7 @@ import type {
   SessionEvent,
   SessionState,
 } from "../shared/wire.ts";
-import { dialogCancellation, type PiCommand, piCommandFor } from "./PiRecords.ts";
+import { dialogAnswerFor, dialogCancellation, type PiCommand } from "./PiRecords.ts";
 import { PiSessionError } from "./PiTransport.ts";
 
 /** The session publication a dialog resolution goes through. */
@@ -156,7 +156,7 @@ export const makeSessionDialogs = ({
           detail:
             "Dialog is no longer open in this Pi process. Refresh the session; do not resend the answer.",
         });
-      const translation = piCommandFor(action, dialog);
+      const translation = dialogAnswerFor(action, dialog);
       if ("rejected" in translation)
         return yield* new PiSessionError({ reason: "rejected", detail: translation.rejected });
       const resolution = yield* resolve(
