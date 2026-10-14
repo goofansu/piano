@@ -1,7 +1,7 @@
 /**
  * What is on screen and how it maps to the address bar. The client owns the main pane's view
  * (session, New page, missing session); navigation owns what sits over it (Settings, the selected
- * session's Changes or PR panel, the palette), reconciles the address bar's route with the
+ * session's right sidebar and PR, the palette), reconciles the address bar's route with the
  * registry once it loads, and keeps the URL and title following the screen. Sessions are
  * addressed by ID, never by directory. Nothing here depends on render timing.
  */
@@ -10,8 +10,13 @@ import type { Client } from "./client.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { catalogEntry } from "./sessionCatalog.ts";
 
-/** A sheet or popover that belongs to the selected session; it closes when that session changes. */
-export type Panel = "changes" | "pr" | { kind: "file"; path: string };
+/** What the selected session's right sidebar shows: its Changes, or a file a link opened. */
+export type SidebarPanel = "changes" | { kind: "file"; path: string };
+/**
+ * Something that belongs to the selected session and closes when that session changes: a right
+ * sidebar view, or the PR. The sidebar is nonmodal, so the PR opens over it without replacing it.
+ */
+export type Panel = SidebarPanel | "pr";
 
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
@@ -21,7 +26,8 @@ export interface NavigationState {
    * that reveals part of a page reads it so asking again reveals it again (INV-07).
    */
   settingsRequest: number;
-  panel: Panel | null;
+  sidebar: SidebarPanel | null;
+  pullRequest: boolean;
   palette: boolean;
 }
 
@@ -53,7 +59,8 @@ export interface Navigation {
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
   openPanel: (panel: Panel) => void;
-  closePanel: () => void;
+  closeSidebar: () => void;
+  closePullRequest: () => void;
   setPalette: (open: boolean) => void;
 }
 
@@ -139,7 +146,8 @@ export function createNavigation({
   let state: NavigationState = {
     settings: wanted.kind === "settings" ? wanted.section : null,
     settingsRequest: 0,
-    panel: null,
+    sidebar: null,
+    pullRequest: false,
     palette: false,
   };
   let notified = state;
@@ -195,7 +203,7 @@ export function createNavigation({
       const next = panelOwner(client.getState());
       if (next !== owner) {
         owner = next;
-        set({ panel: null });
+        set({ sidebar: null, pullRequest: false });
       }
     } finally {
       depth--;
@@ -278,10 +286,15 @@ export function createNavigation({
     closeSettings,
     openPanel: (panel) =>
       batch(() => {
-        set({ settings: null, panel });
+        set(
+          panel === "pr"
+            ? { settings: null, pullRequest: true }
+            : { settings: null, sidebar: panel },
+        );
         moved();
       }),
-    closePanel: () => batch(() => set({ panel: null })),
+    closeSidebar: () => batch(() => set({ sidebar: null })),
+    closePullRequest: () => batch(() => set({ pullRequest: false })),
     setPalette: (open) => batch(() => set({ palette: open })),
   };
 }

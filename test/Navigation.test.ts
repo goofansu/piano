@@ -200,7 +200,7 @@ test("back and forward apply the address bar's route; back onto the same New pag
   assert.ok(p.moves() > 0);
 });
 
-test("a session's panel closes when another session is selected, and opening one leaves Settings", () => {
+test("a session's panels close when another session is selected, and opening one leaves Settings", () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -210,20 +210,35 @@ test("a session's panel closes when another session is selected, and opening one
   assert.deepEqual(p.navigation.getState(), {
     settings: null,
     settingsRequest: 1,
-    panel: "changes",
+    sidebar: "changes",
+    pullRequest: false,
     palette: false,
   });
   assert.equal(p.path(), "/s/a");
   p.navigation.openPanel({ kind: "file", path: "docs/guide.md" });
-  assert.deepEqual(p.navigation.getState().panel, { kind: "file", path: "docs/guide.md" });
+  assert.deepEqual(p.navigation.getState().sidebar, { kind: "file", path: "docs/guide.md" });
   assert.equal(p.path(), "/s/a", "a file preview never puts its path in the address bar");
 
+  p.navigation.openPanel("pr");
+  assert.equal(p.navigation.getState().pullRequest, true);
+  assert.deepEqual(
+    p.navigation.getState().sidebar,
+    { kind: "file", path: "docs/guide.md" },
+    "the PR opens over the nonmodal sidebar without replacing it",
+  );
+  p.navigation.closePullRequest();
+  assert.deepEqual(p.navigation.getState().sidebar, { kind: "file", path: "docs/guide.md" });
+
+  p.navigation.openPanel("pr");
   p.navigation.select("/scratch", "b");
   p.selected("b");
-  assert.equal(p.navigation.getState().panel, null);
+  assert.equal(p.navigation.getState().sidebar, null);
+  assert.equal(p.navigation.getState().pullRequest, false);
+  p.navigation.openPanel("changes");
   p.navigation.openPanel("pr");
   p.navigation.openNew();
-  assert.equal(p.navigation.getState().panel, null, "the New page has no session panel");
+  assert.equal(p.navigation.getState().sidebar, null, "the New page has no session panel");
+  assert.equal(p.navigation.getState().pullRequest, false);
 });
 
 test("each request to open Settings is counted, so a repeat reveals its section again", () => {

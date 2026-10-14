@@ -9,9 +9,9 @@ import { type AppState, sessionKey } from "@/store";
 /** What the right sidebar shows for the selected session: its Changes, or a file a link opened.
  * Keyed by session, workspace and path, so a new destination never flashes old content. */
 export function SessionPanel({ state }: { state: AppState }) {
-  const { settings, panel, openPanel, closePanel } = useNavigation();
+  const { settings, sidebar: panel, openPanel, closeSidebar } = useNavigation();
   const t = state.session;
-  if (settings || !t || !panel || panel === "pr") return null;
+  if (settings || !t || !panel) return null;
   const { workspace, changesWorkspace } = sessionContext(state);
   const draftKey = sessionDraftKey(t);
   if (panel === "changes")
@@ -20,7 +20,7 @@ export function SessionPanel({ state }: { state: AppState }) {
         key={sessionKey(t)}
         workspace={changesWorkspace}
         session={t}
-        close={closePanel}
+        close={closeSidebar}
         onAsk={(text) => {
           if (!draftKey) return;
           drafts.paragraph(draftKey, text);
@@ -34,7 +34,7 @@ export function SessionPanel({ state }: { state: AppState }) {
       workspaceId={workspace?.id}
       file={panel}
       open={(path) => openPanel({ kind: "file", path })}
-      close={closePanel}
+      close={closeSidebar}
     />
   );
 }
