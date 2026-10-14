@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { Markdown } from "@/components/Markdown";
+import { PianoButton } from "@/components/PianoButton";
 import { Keys } from "@/components/PianoMark";
 import { StatusBadge as Badge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -154,16 +155,16 @@ export function MessageList({
         </div>
       </div>
       {!atBottom && (
-        <Button
+        <PianoButton
           type="button"
-          variant="outline"
+          variant="outline-solid"
           size="icon-lg"
           aria-label="Scroll to bottom"
           onClick={() => viewport.jump(BOTTOM_ENTRY)}
           className="absolute inset-x-0 bottom-4 mx-auto rounded-full shadow-2 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none [&_svg:not([class*='size-'])]:size-5"
         >
           <ArrowDownIcon />
-        </Button>
+        </PianoButton>
       )}
     </div>
   );
