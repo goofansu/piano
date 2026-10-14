@@ -6,7 +6,7 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Queue, type Scope } from "effect";
 import { type ClientRequest, makeClientDispatch } from "../server/ClientDispatch.ts";
-import type { DirectoryFacts } from "../server/DirectoryFacts.ts";
+import { DirectoryFacts } from "../server/DirectoryFacts.ts";
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
@@ -16,6 +16,7 @@ import { SidebarView } from "../server/SidebarView.ts";
 import type { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
 import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
+import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import {
   createWorktreeOperation,
   type WorktreeOperation,
@@ -211,6 +212,73 @@ test("INV-05: browser client recovers from dispatch saturation with a fresh expl
   );
 });
 
+for (const outcome of ["refused", "probe failure", "dispatch failure"] as const) {
+  test(`INV-05: ${outcome} settles a model refresh and allows one explicit retry`, async () => {
+    await run(
+      Effect.gen(function* () {
+        // Preserve the caller's spelling for correlation even when DirectoryFacts normalizes it.
+        const cwd = `${join(root, outcome)}/.`;
+        if (outcome !== "probe failure") mkdirSync(cwd, { recursive: true });
+        const requests: ClientMessage[] = [];
+        const notes: string[] = [];
+        let handlers: ConnectionHandlers | undefined;
+        const cached = { cwd, models: [], fetchedAt: "cached" };
+        const catalogs = createModelCatalogs({
+          storage: { read: () => ({ [cwd]: cached }), write: () => {} },
+          notify: (message) => notes.push(message),
+          saveDefaults: async () => {},
+        });
+        const browser = createClient({
+          initial: { ...initialState, catalogs: { ...catalogs.seed() } },
+          connect: (h) => {
+            handlers = h;
+            return { send: (m) => requests.push(m), close: () => {} };
+          },
+          notify: () => {},
+          lastDirectory: { read: () => null, write: () => {} },
+        });
+        browser.start();
+        catalogs.follow(browser);
+        handlers!.onStatus(true);
+        const facts = yield* DirectoryFacts;
+        let failDispatch = outcome === "dispatch failure";
+        const dispatch = yield* makeClientDispatch({
+          send: (m) => Effect.sync(() => handlers!.onMessage(m)),
+          overflow: (e) => Effect.die(e),
+        }).pipe(
+          Effect.provideService(DirectoryFacts, {
+            ...facts,
+            catalog: (...args) =>
+              failDispatch ? Effect.die("catalog defect") : facts.catalog(...args),
+          }),
+        );
+        const held = [];
+        if (outcome === "refused")
+          for (let n = 0; n < inboundLimits.client.messages; n++)
+            held.push(yield* dispatch.receive({ _tag: "registry" }));
+        const refreshes = () =>
+          requests.filter((m) => m._tag === "models").filter((m) => m.refresh);
+        const view = () => catalogs.view(catalogs.getState(), cwd);
+        catalogs.refresh(cwd);
+        yield* yield* dispatch.receive(refreshes()[0]);
+        assert.equal(view().refreshing, false, "failure must end the refresh");
+        assert.deepEqual(view().catalog, cached, "failure keeps the last good catalog");
+        assert.equal(notes.length, 1, "the failure is reported once");
+        assert.equal(refreshes().length, 1, "no automatic retry");
+        for (const work of held) yield* work;
+        failDispatch = false;
+        if (outcome === "probe failure") mkdirSync(cwd, { recursive: true });
+        catalogs.refresh(cwd);
+        catalogs.refresh(cwd);
+        assert.equal(refreshes().length, 2, "explicit retry sends exactly one request");
+        yield* yield* dispatch.receive(refreshes()[1]);
+        assert.equal(view().refreshing, false);
+        assert.ok(view().catalog!.models.length > 0, "accepted retry loads Pi's models");
+      }),
+    );
+  });
+}
+
 test("INV-05: an admitted selection failure settles the browser and permits explicit retry", async () => {
   await run(
     Effect.gen(function* () {
@@ -403,7 +471,7 @@ const refusals: {
   registry: [{ _tag: "registry" }, { _tag: "error", message: "REFUSED" }],
   models: [
     { _tag: "models", cwd },
-    { _tag: "error", message: "REFUSED" },
+    { _tag: "models_failed", cwd, message: "REFUSED" },
   ],
   save_project: [
     { _tag: "save_project", project: { id: "p", name: "P" } },

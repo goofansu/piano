@@ -1,12 +1,12 @@
 /**
  * Each directory's model catalog as the picker uses it. Catalogs outlive reloads: the page seeds
  * them from this browser's storage, so the picker opens at once, and keeps storing each one Pi
- * sends unless it reports an error. A refresh re-probes Pi and stays pending until a newer
- * catalog for its directory arrives or the connection drops. Saving Pi's defaults for new
+ * sends unless it reports an error. A refresh re-probes Pi and stays pending until its own
+ * terminal reply arrives or the connection drops. Saving Pi's defaults for new
  * sessions is one request at a time, reported once. The client's store stays the source of the
  * server-pushed catalogs; nothing here depends on React.
  */
-import type { ClientCommand, ModelCatalog, ThinkingLevel } from "@shared/wire";
+import type { ClientCommand, ModelCatalog, ServerMessage, ThinkingLevel } from "@shared/wire";
 import type { Notify } from "./client.ts";
 import { readJson, writeJson } from "./storage.ts";
 
@@ -30,6 +30,7 @@ export interface CatalogSource {
   getState: () => { connected: boolean; catalogs: Catalogs };
   subscribe: (listener: () => void) => () => void;
   send: (command: ClientCommand) => void;
+  listen: (listener: (message: ServerMessage) => void) => () => void;
 }
 
 export interface ModelCatalogsOptions {
@@ -42,7 +43,7 @@ export interface ModelCatalogsOptions {
 export interface ModelCatalogsState {
   catalogs: Catalogs;
   connected: boolean;
-  /** Directories with a refresh in flight, each with the `fetchedAt` it is waiting to replace. */
+  /** Directories with a refresh in flight, each with its request ID. */
   refreshing: Readonly<Record<string, string>>;
   saving: boolean;
 }
@@ -95,19 +96,19 @@ export function createModelCatalogs({
     for (const listener of listeners) listener();
   };
 
-  /** Pending refreshes end on a newer catalog for their directory, or all at once on a disconnect. */
-  const settle = (
-    refreshing: ModelCatalogsState["refreshing"],
-    catalogs: Catalogs,
-    connected: boolean,
-  ) => {
-    if (!connected) return Object.keys(refreshing).length ? {} : refreshing;
-    const pending = Object.entries(refreshing).filter(
-      ([cwd, fetchedAt]) => (catalogs[cwd]?.fetchedAt ?? "") === fetchedAt,
-    );
-    return pending.length === Object.keys(refreshing).length
-      ? refreshing
-      : Object.fromEntries(pending);
+  /** A background catalog or a late reply cannot finish a different explicit refresh. */
+  const settle = (message: ServerMessage) => {
+    if (message._tag !== "models" && message._tag !== "models_failed") return;
+    const cwd = message._tag === "models" ? message.catalog.cwd : message.cwd;
+    if (message.requestId === undefined) {
+      if (message._tag === "models_failed") notify(message.message, "error");
+      return;
+    }
+    if (state.refreshing[cwd] !== message.requestId) return;
+    const refreshing = { ...state.refreshing };
+    delete refreshing[cwd];
+    set({ ...state, refreshing });
+    if (message._tag === "models_failed") notify(message.message, "error");
   };
 
   const sync = () => {
@@ -119,19 +120,16 @@ export function createModelCatalogs({
       ...state,
       catalogs,
       connected,
-      refreshing: settle(state.refreshing, catalogs, connected),
+      refreshing: connected ? state.refreshing : {},
     });
   };
 
   const refresh = (cwd: string) => {
-    if (!source || state.refreshing[cwd] !== undefined) return;
-    source.send({ _tag: "models", cwd, refresh: true });
     // Offline, nothing will answer; the next connection asks again on its own.
-    if (state.connected)
-      set({
-        ...state,
-        refreshing: { ...state.refreshing, [cwd]: state.catalogs[cwd]?.fetchedAt ?? "" },
-      });
+    if (!source || !state.connected || state.refreshing[cwd] !== undefined) return;
+    const requestId = crypto.randomUUID();
+    set({ ...state, refreshing: { ...state.refreshing, [cwd]: requestId } });
+    source.send({ _tag: "models", cwd, refresh: true, requestId });
   };
 
   // Pi owns the saved defaults; its catalog invalidation updates every picker's default.
@@ -164,8 +162,10 @@ export function createModelCatalogs({
       source = next;
       sync();
       const unsubscribe = next.subscribe(sync);
+      const unlisten = next.listen(settle);
       return () => {
         unsubscribe();
+        unlisten();
         if (source === next) source = null;
       };
     },

@@ -709,8 +709,12 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("registry", {}),
   /** Rediscover one registered folder's worktrees; only the requesting client gets the answer. */
   Schema.TaggedStruct("worktrees", { folder: Schema.String }),
-  /** The cached catalog for `cwd`; `refresh` re-runs Pi's probe. */
-  Schema.TaggedStruct("models", { cwd: Schema.String, refresh: Schema.optional(Schema.Boolean) }),
+  /** The cached catalog for `cwd`; explicit refreshes use `requestId` for terminal replies. */
+  Schema.TaggedStruct("models", {
+    cwd: Schema.String,
+    refresh: Schema.optional(Schema.Boolean),
+    requestId: Schema.optional(Schema.String),
+  }),
   /** Create or rename a project; with `assign`, that session joins it in the same registry write. */
   Schema.TaggedStruct("save_project", {
     project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }),
@@ -814,7 +818,17 @@ export const ServerMessage = Schema.Union([
     sessionReferences: Schema.optional(Schema.Array(SessionReference)),
     workspaces: Schema.optional(Schema.Array(Workspace)),
   }),
-  Schema.TaggedStruct("models", { catalog: ModelCatalog }),
+  /** With a request ID, catalog.cwd echoes the requested directory spelling. */
+  Schema.TaggedStruct("models", {
+    catalog: ModelCatalog,
+    requestId: Schema.optional(Schema.String),
+  }),
+  /** Terminal refusal or failure; never replaces a last good catalog. */
+  Schema.TaggedStruct("models_failed", {
+    cwd: Schema.String,
+    requestId: Schema.optional(Schema.String),
+    message: Schema.String,
+  }),
   Schema.TaggedStruct("catalogs_invalidated", {}),
   Schema.TaggedStruct("worktrees", { folder: Schema.String, discovery: WorktreeDiscovery }),
   Schema.TaggedStruct("trust", { cwd: Schema.String, trust: ProjectTrust }),

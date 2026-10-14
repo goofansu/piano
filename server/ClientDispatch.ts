@@ -162,11 +162,26 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     },
     models: {
       admission: "ordinary",
-      run: ({ cwd, refresh }) =>
-        facts
-          .catalog(cwd, { refresh })
-          .pipe(Effect.flatMap((catalog) => send({ _tag: "models", catalog }))),
-      unanswered: plainError,
+      run: ({ cwd, refresh, requestId }) =>
+        facts.catalog(cwd, { refresh }).pipe(
+          Effect.flatMap((catalog) =>
+            send(
+              requestId !== undefined && catalog.error
+                ? { _tag: "models_failed", cwd, requestId, message: catalog.error }
+                : {
+                    _tag: "models",
+                    catalog: requestId === undefined ? catalog : { ...catalog, cwd },
+                    requestId,
+                  },
+            ),
+          ),
+        ),
+      unanswered: ({ cwd, requestId }, reason) => ({
+        _tag: "models_failed",
+        cwd,
+        requestId,
+        message: unansweredText(reason),
+      }),
     },
     // Registry writes reach every client's sidebar on their own.
     save_project: {
