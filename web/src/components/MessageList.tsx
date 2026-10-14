@@ -437,91 +437,99 @@ function UserMessage({
   const long = overflows || open;
   const toggle = () => setOpen((o) => !o);
   // A long prompt opens and closes from its toggle button, or by clicking anywhere on it.
-  const bubble = text || !skill || (attachments && attachments.length > 0);
   return (
-    <div
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a pointer shortcut for the toggle button below, which keyboard users reach.
+    <article
       id={id ? messageAnchorId(id) : undefined}
       data-slot={id ? undefined : "submitted-input"}
-      className="flex flex-col gap-3"
-    >
-      {/* Labels and controls are select-none, so copied or quoted text is only what was said. */}
-      <span className="sr-only select-none">You said</span>
-      {/* The skill Pi put in place of the command is a row of its own, folded, not part of the bubble. */}
-      {skill && <SkillExpansion skill={skill} />}
-      {bubble && (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a pointer shortcut for the toggle button below, which keyboard users reach.
-        <article
-          className={cn(
-            "rounded-2xl border border-line bg-fill px-4 py-3.5 transition-colors",
-            long && "cursor-pointer select-text hover:border-line-strong",
-          )}
-          onClick={(event) =>
-            long &&
-            !(event.target as Element).closest("a, button, [role='dialog']") &&
-            !window.getSelection()?.toString() &&
-            toggle()
-          }
-        >
-          <Row glyph={<span className="font-semibold text-brand">›</span>}>
-            <div
-              ref={ref}
-              id={textId}
-              className={cn(
-                "break-words",
-                !open && "overflow-hidden",
-                clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
-              )}
-              style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
-            >
-              <Markdown text={text} className="prose-chat" />
-            </div>
-            {long && (
-              <div className="flex justify-end">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  className="-mr-2 text-ink-3"
-                  aria-expanded={open}
-                  aria-controls={textId}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggle();
-                  }}
-                >
-                  {open ? "Show less" : "Show more"}
-                  <ChevronDownIcon
-                    className={cn("transition-transform duration-200", open && "rotate-180")}
-                    aria-hidden
-                  />
-                </Button>
-              </div>
-            )}
-            <MessageAttachments items={attachments} />
-          </Row>
-        </article>
+      className={cn(
+        "rounded-2xl border border-line bg-fill px-4 py-3.5 transition-colors",
+        long && "cursor-pointer select-text hover:border-line-strong",
       )}
-    </div>
+      onClick={(event) =>
+        long &&
+        !(event.target as Element).closest("a, button, [role='dialog']") &&
+        !window.getSelection()?.toString() &&
+        toggle()
+      }
+    >
+      <Row glyph={<span className="font-semibold text-brand">›</span>}>
+        <span className="sr-only select-none">You said</span>
+        {skill && <SkillExpansion skill={skill} />}
+        {(text || !skill) && (
+          <div
+            ref={ref}
+            id={textId}
+            className={cn(
+              "break-words",
+              skill && "mt-2",
+              !open && "overflow-hidden",
+              clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
+            )}
+            style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
+          >
+            <Markdown text={text} className="prose-chat" />
+          </div>
+        )}
+        {long && (
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="xs"
+              className="-mr-2 text-ink-3"
+              aria-expanded={open}
+              aria-controls={textId}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle();
+              }}
+            >
+              {open ? "Show less" : "Show more"}
+              <ChevronDownIcon
+                className={cn("transition-transform duration-200", open && "rotate-180")}
+                aria-hidden
+              />
+            </Button>
+          </div>
+        )}
+        <MessageAttachments items={attachments} />
+      </Row>
+    </article>
   );
 }
 
 /**
- * A `/skill:name` prompt. The row names the command the way it was typed; the skill file Pi
- * put in its place is reference material, so it stays folded until the reader asks for it.
+ * A `/skill:name` prompt. It is part of what was said, so it sits inside the prompt bubble; the
+ * row names the command the way it was typed, and the skill file Pi put in its place is reference
+ * material, so it stays folded until the reader asks for it.
  */
 function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
   const [open, setOpen] = useState(false);
   return (
-    <FoldRow
-      glyph={<SparklesIcon className="size-3.5 text-brand" aria-hidden />}
-      title="Skill"
-      note={`/skill:${skill.name}`}
-      label={`${skill.name} skill`}
+    // Clicks here open the skill, never the prompt's own long-text disclosure around it.
+    <Collapsible
       open={open}
       onOpenChange={setOpen}
+      role="group"
+      aria-label={`${skill.name} skill`}
+      className="text-sm"
+      onClick={(e) => e.stopPropagation()}
     >
-      <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
-      <Markdown text={skill.body} className="prose-chat" />
-    </FoldRow>
+      <CollapsibleTrigger asChild>
+        {/* The bubble's line height, so the prompt's › glyph centres on this first line. */}
+        <button type="button" className={cn(disclosureRow, "leading-6")}>
+          <SparklesIcon className="size-3.5 shrink-0 text-brand" aria-hidden />
+          <span className="min-w-0 flex-1 truncate font-mono text-ink">/skill:{skill.name}</span>
+          <DisclosureChevron open={open} className="ml-auto" />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="disclosure-content">
+        <div className="mt-2 border-l-2 border-line pl-3">
+          <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
+          <Markdown text={skill.body} className="prose-chat text-ink-2" />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

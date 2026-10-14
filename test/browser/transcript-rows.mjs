@@ -96,8 +96,7 @@ const expected = [
   "Ran",
   "Find CSS regression test seam",
   "Result ·",
-  "Skill",
-  "Focus on login.",
+  "/skill:",
   "Rate limited",
   "Done: every row kind is above.",
 ];
