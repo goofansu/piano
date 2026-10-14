@@ -189,15 +189,17 @@ export function serializeMessage(
   if (projected.role === "assistant") projection.assistant(projected);
   return projected;
 }
+/** A message's id is its position in Pi's message list, so a live message and the readback that
+ * later contains it name it alike, and the browser keeps its row. */
+const messageId = (index: number) => `m${index}`;
 function serializeWithProjection(
   msgs: ReadonlyArray<RawMessage>,
-  prefix: string,
   projection: SubagentProjection,
 ): RenderMsg[] {
   projection.reset();
   const redaction = compileRedaction();
   return msgs.flatMap((m, i) => {
-    const result = serializeMessage(`${prefix}${i}`, m, projection, redaction);
+    const result = serializeMessage(messageId(i), m, projection, redaction);
     return result ? [result] : [];
   });
 }
@@ -334,7 +336,7 @@ const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Sn
             queuedMessages: [],
           }
         : { ...state, subagents: new RunLedger().add(facts.entries).usage },
-    messages: serializeWithProjection(facts.messages, "m", projection),
+    messages: serializeWithProjection(facts.messages, projection),
     dialogs: [],
   };
 };
@@ -709,7 +711,8 @@ export class PiProjector {
   private blocks = new Map<number, Block>();
   private tools = new Map<string, ToolExecution>();
   private projection = new SubagentProjection();
-  private seq = 0;
+  /** Pi's message count as last read back plus the messages ended since: the next one's position. */
+  private messages = 0;
   private turnRetry = false;
   private summaryRetry = false;
   private extension: NonNullable<SessionState["extension"]> = { statuses: [], widgets: [] };
@@ -724,13 +727,15 @@ export class PiProjector {
   /** The opening Snapshot from Pi's facts, before any record arrives. Retains its correlation
    * facts for subsequent live records. */
   snapshot(facts: PiSessionFacts): Snapshot {
+    this.messages = facts.messages.length;
     return snapshotFrom(facts, this.projection);
   }
 
   /** Seed or replace authoritative history (`get_messages`) and retain its correlation facts
    * for subsequent live records. The messages themselves remain owned by Pi. */
-  history(msgs: ReadonlyArray<RawMessage>, prefix = "m"): RenderMsg[] {
-    return serializeWithProjection(msgs, prefix, this.projection);
+  history(msgs: ReadonlyArray<RawMessage>): RenderMsg[] {
+    this.messages = msgs.length;
+    return serializeWithProjection(msgs, this.projection);
   }
 
   record(raw: PiRecord, receivedAt: number): RecordProjection {
@@ -986,7 +991,7 @@ export class PiProjector {
   }
 
   private nextId(): string {
-    return `e${++this.seq}`;
+    return messageId(this.messages++);
   }
 
   /** Pi will not continue this run: drop the partial and mark unfinished tools incomplete. */
