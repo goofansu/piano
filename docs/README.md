@@ -37,6 +37,10 @@ registry-based evidence proposal and broad Worktrunk ownership wording are super
 The [remote task execution research](research/2026-10-14-remote-task-execution.md) compares Pi over
 SSH with Codex, Claude Code, Amp and HumanLayer, and recommends a persistent remote Piano worker.
 It is a proposal, not an implemented remote capability or an accepted security ADR.
+The [Herdr follow-up](research/2026-10-14-herdr-remote-execution.md) assesses reusing its saved SSH
+machines and persistent terminals, and identifies the missing interface for structured Pi RPC.
+The [practical runner synthesis](research/2026-10-14-practical-remote-runners.md) checks five GitHub
+implementations and recommends federating existing Piano backends over SSH, with Herdr optional.
 The [MCP management research](research/2026-10-09-mcp-management.md) documents setup through Pi,
 current RPC/browser limitations and a proposed management surface; it does not claim that surface exists.
 [Radius setup](radius-setup.md) describes the implemented, narrower Radius section of the
