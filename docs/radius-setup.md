@@ -18,7 +18,7 @@ machine-wide for the OS account running Piano, not a browser account or a Projec
    and settings persistence. **Installed** means a global package declaration and
    package manifest were observed, not that search has been authorized or used.
 
-**Remove MCP** and **Uninstall extension** undo steps 2 and 3 after confirmation.
+The **Uninstall** actions on Radius MCP and Web search undo steps 2 and 3 after confirmation.
 They work even while signed out, affect only the matching global Radius entry/package,
 and do not sign you out or remove the other tool. Uninstall delegates to `pi remove`,
 removing the global package declaration and Pi-managed installation; externally managed

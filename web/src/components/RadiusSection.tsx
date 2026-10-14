@@ -20,7 +20,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
-import { radiusRemovalCopy } from "@/lib/radiusSetupView";
+import { type RadiusToolView, radiusUninstallCopy } from "@/lib/radiusSetupView";
 import { useRadiusSetup } from "@/lib/useRadiusSetup";
 
 /**
@@ -146,102 +146,9 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                 </a>
               </div>
               <ItemGroup className="border-t">
-                <Item className="rounded-none px-4 sm:px-5">
-                  <ItemContent className="min-w-0">
-                    <ItemTitle>
-                      Radius MCP
-                      <ReadyMark ready={mcp.ready} label="Installed" />
-                    </ItemTitle>
-                    <ItemDescription className="line-clamp-none">
-                      Give Pi your Radius tools, using the same sign-in.
-                    </ItemDescription>
-                    {mcp.detail && <p className="text-xs text-muted-foreground">{mcp.detail}</p>}
-                  </ItemContent>
-                  <ItemActions>
-                    {!mcp.ready && (
-                      <Button
-                        size="sm"
-                        disabled={!mcp.canAdd}
-                        aria-label="Install Radius MCP"
-                        onClick={() => void setup.act("configure-mcp")}
-                      >
-                        Install
-                      </Button>
-                    )}
-                    {mcp.removalKey && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground"
-                        disabled={!mcp.canRemove}
-                        onClick={() => setup.confirm({ kind: "remove-mcp", key: mcp.removalKey! })}
-                        aria-label="Uninstall Radius MCP"
-                      >
-                        Uninstall
-                      </Button>
-                    )}
-                  </ItemActions>
-                </Item>
+                <RadiusToolRow tool={mcp} setup={setup} />
                 <ItemSeparator />
-                <Item className="rounded-none px-4 sm:px-5">
-                  <ItemContent className="min-w-0">
-                    <ItemTitle>
-                      Web search
-                      <ReadyMark ready={webSearch.ready} label="Installed" />
-                    </ItemTitle>
-                    <ItemDescription className="line-clamp-none">
-                      Let Pi search the web with the Radius extension.
-                    </ItemDescription>
-                    {webSearch.detail && (
-                      <p className="text-xs text-muted-foreground">{webSearch.detail}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      An organization owner or admin must enable Web search separately in Radius.
-                    </p>
-                  </ItemContent>
-                  <ItemActions>
-                    {webSearch.change ? (
-                      <Button
-                        variant={webSearch.change.action === "uninstall" ? "ghost" : "default"}
-                        size="sm"
-                        disabled
-                      >
-                        <Spinner data-icon="inline-start" />
-                        {webSearch.change.label}
-                      </Button>
-                    ) : (
-                      <>
-                        {!webSearch.ready && (
-                          <Button
-                            size="sm"
-                            disabled={!webSearch.canInstall}
-                            aria-label="Install web search"
-                            onClick={() => void setup.act("install-web-search")}
-                          >
-                            Install
-                          </Button>
-                        )}
-                        {webSearch.removalKey && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground"
-                            disabled={!webSearch.canRemove}
-                            onClick={() =>
-                              setup.confirm({
-                                kind: "uninstall-web-search",
-                                key: webSearch.removalKey!,
-                              })
-                            }
-                            aria-label="Uninstall web search"
-                          >
-                            Uninstall
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </ItemActions>
-                </Item>
+                <RadiusToolRow tool={webSearch} setup={setup} />
               </ItemGroup>
             </CollapsibleContent>
           </Collapsible>
@@ -258,7 +165,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
         busy={view.changing}
         disabled={view.locked}
         cancel={setup.cancel}
-        {...radiusRemovalCopy(removal?.kind)}
+        {...radiusUninstallCopy(removal?.kind)}
         confirm={setup.confirmRemoval}
       />
       {confirming && confirmation?.kind === "sign-out" && (
@@ -279,6 +186,63 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
         />
       )}
     </section>
+  );
+}
+
+/** One tool's row: its wording, its install and uninstall actions, or the change Pi is running. */
+function RadiusToolRow({
+  tool,
+  setup,
+}: {
+  tool: RadiusToolView;
+  setup: Pick<ReturnType<typeof useRadiusSetup>, "act" | "confirm">;
+}) {
+  const { install, uninstall, change } = tool;
+  return (
+    <Item className="rounded-none px-4 sm:px-5">
+      <ItemContent className="min-w-0">
+        <ItemTitle>
+          {tool.title}
+          <ReadyMark ready={tool.ready} label={tool.readyLabel} />
+        </ItemTitle>
+        <ItemDescription className="line-clamp-none">{tool.description}</ItemDescription>
+        {tool.detail && <p className="text-xs text-muted-foreground">{tool.detail}</p>}
+        {tool.note && <p className="text-xs text-muted-foreground">{tool.note}</p>}
+      </ItemContent>
+      <ItemActions>
+        {change ? (
+          <Button variant={change.action === "uninstall" ? "ghost" : "default"} size="sm" disabled>
+            <Spinner data-icon="inline-start" />
+            {change.label}
+          </Button>
+        ) : (
+          <>
+            {install && (
+              <Button
+                size="sm"
+                disabled={!install.enabled}
+                aria-label={install.ariaLabel}
+                onClick={() => void setup.act(install.action)}
+              >
+                {install.label}
+              </Button>
+            )}
+            {uninstall && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                disabled={!uninstall.enabled}
+                onClick={() => setup.confirm(uninstall.confirmation)}
+                aria-label={uninstall.ariaLabel}
+              >
+                {uninstall.label}
+              </Button>
+            )}
+          </>
+        )}
+      </ItemActions>
+    </Item>
   );
 }
 
