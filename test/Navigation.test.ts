@@ -214,6 +214,9 @@ test("a session's panel closes when another session is selected, and opening one
     palette: false,
   });
   assert.equal(p.path(), "/s/a");
+  p.navigation.openPanel({ kind: "file", path: "docs/guide.md" });
+  assert.deepEqual(p.navigation.getState().panel, { kind: "file", path: "docs/guide.md" });
+  assert.equal(p.path(), "/s/a", "a file preview never puts its path in the address bar");
 
   p.navigation.select("/scratch", "b");
   p.selected("b");

@@ -61,7 +61,6 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-branch": true,
     "copy-session-id": true,
     "copy-all": true,
-    "open-file": true,
     changes: true,
     "pull-request": true,
     "display-everything": true,
@@ -120,8 +119,6 @@ test("session command availability: settled, disconnected, resyncing, missing ch
 
   const noWorkspace = enabled({ ...base, workspaces: [] });
   assert.equal(noWorkspace.changes, false);
-  assert.equal(noWorkspace["open-file"], false);
-  assert.equal(missing["open-file"], false);
   assert.equal(noWorkspace["pull-request"], true);
 
   // Starting a session: no Pi session ID yet, so nothing names it.
@@ -236,7 +233,7 @@ test("the header menu: copy beside the details, changes and pull request, and a 
     );
     assert.deepEqual(
       menu.sections.map((s) => s.map((c) => c.id)),
-      [["open-file", "changes", "pull-request"]],
+      [["changes", "pull-request"]],
     );
     assert.equal(menu.display?.value, `display-${display}`);
     assert.deepEqual(

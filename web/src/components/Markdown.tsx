@@ -1,10 +1,13 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
 import { renderMarkdown } from "@/lib/markdown";
+
+/** The owning session supplies workspace-scoped preview navigation to every prose surface. */
+export const LocalFileContext = createContext<(path: string) => void>(() => {});
 
 function CopyCode({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -34,6 +37,7 @@ function CopyCode({ text }: { text: string }) {
 
 /** HTML-safe prose, enhanced with diagrams only after their closing fence arrives. */
 export function Markdown({ text, className }: { text: string; className?: string }) {
+  const openFile = useContext(LocalFileContext);
   const ref = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const html = useMemo(() => renderMarkdown(text), [text]);
@@ -100,8 +104,21 @@ export function Markdown({ text, className }: { text: string; className?: string
   // Custom prose host: shadcn has no Markdown/Mermaid renderer. HTML is escaped by renderMarkdown.
   return (
     <>
-      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes the source before adding markup. */}
-      <div ref={ref} className={className} dangerouslySetInnerHTML={{ __html: html }} />
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: delegates native button clicks from the HTML-string renderer, including keyboard activation. */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the generated buttons already provide Enter and Space activation. */}
+      <div
+        ref={ref}
+        className={className}
+        onClick={(event) => {
+          const button =
+            event.target instanceof Element
+              ? event.target.closest<HTMLButtonElement>("button[data-local-file]")
+              : null;
+          if (button && event.currentTarget.contains(button)) openFile(button.dataset.localFile!);
+        }}
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes the source before adding markup.
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
       {codeBlocks.map(({ host, text }, index) =>
         createPortal(<CopyCode text={text} />, host, String(index)),
       )}

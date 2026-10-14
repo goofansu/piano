@@ -543,15 +543,25 @@
   font-weight: 600;
 }
 /* A continuous underline: skipping descenders left gaps under p and g. */
-.prose-chat a {
+.prose-chat a,
+.prose-chat .local-file-link {
   color: var(--brand);
   text-decoration: underline;
   text-decoration-color: color-mix(in oklab, var(--brand) 35%, transparent);
   text-decoration-skip-ink: none;
   text-underline-offset: 0.15em;
 }
-.prose-chat a:hover {
+.prose-chat a:hover,
+.prose-chat .local-file-link:hover {
   text-decoration-color: var(--brand);
+}
+.prose-chat .local-file-link {
+  cursor: pointer;
+  text-align: inherit;
+}
+.prose-chat .local-file-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 .prose-chat .github-link {
   display: inline-block;

@@ -11,7 +11,7 @@ import { parseRoute, type Route, routePath, type SettingsSection } from "./route
 import { catalogEntry } from "./sessionCatalog.ts";
 
 /** A sheet or popover that belongs to the selected session; it closes when that session changes. */
-export type Panel = "changes" | "pr" | "file";
+export type Panel = "changes" | "pr" | { kind: "file"; path: string };
 
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */

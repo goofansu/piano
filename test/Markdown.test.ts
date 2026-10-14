@@ -56,6 +56,51 @@ test("GitHub rendering leaves code and unrelated URLs alone and escapes untruste
   assert.ok(!renderMarkdown(`[javascript](javascript:alert(1))`).includes("<a"));
 });
 
+test("local Markdown links are preview actions, never filesystem HTTP URLs", () => {
+  for (const [destination, path] of [
+    ["src/main.ts", "src/main.ts"],
+    ["./docs/guide.md#intro", "./docs/guide.md"],
+    ["../notes.txt", "../notes.txt"],
+    ["/workspace/README.md", "/workspace/README.md"],
+    ["docs/my%20notes.md", "docs/my notes.md"],
+    ["docs/a(b).md", "docs/a(b).md"],
+    ["file:///workspace/README.md", "/workspace/README.md"],
+  ]) {
+    const html = renderMarkdown(`Read [\`source\`](${destination}).`);
+    assert.ok(html.includes(`data-local-file="${path}"`), destination);
+    assert.ok(html.includes("<code>source</code></button>"));
+    assert.ok(!html.includes("href="), "paths never become browser navigation URLs");
+  }
+  assert.ok(!renderMarkdown("`[source](src/main.ts)`").includes("data-local-file"));
+  assert.ok(!renderMarkdown("```\n[source](src/main.ts)\n```").includes("data-local-file"));
+});
+
+test("local file links escape markup and do not turn schemes or remote hosts into file reads", () => {
+  for (const destination of [
+    "javascript:alert(1)",
+    "data:text/html,bad",
+    "mailto:a@b.test",
+    "//example.test/a",
+    "file://other-host/a",
+    "#heading",
+    "bad%ZZ",
+    "bad%00path",
+  ]) {
+    const html = renderMarkdown(`[source](${destination})`);
+    assert.ok(!html.includes("data-local-file"), destination);
+    assert.ok(!html.includes("<a"), destination);
+  }
+  const html = renderMarkdown("[<img src=x>](docs/a%22onclick=%22bad.txt)");
+  assert.ok(html.includes('data-local-file="docs/a&quot;onclick=&quot;bad.txt"'));
+  assert.ok(!html.includes("<img"));
+  assert.ok(!html.includes('"onclick="'));
+  assert.ok(
+    renderMarkdown("[site](https://example.test/readme.md)").includes(
+      'href="https://example.test/readme.md" target="_blank"',
+    ),
+  );
+});
+
 test("ordered lists continue across blank lines and retain their starting number", () => {
   assert.equal(
     renderMarkdown(

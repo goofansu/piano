@@ -38,6 +38,28 @@ function webLink(href: string, label: string): string {
   return `<a href="${escH(href)}" target="_blank" rel="noreferrer"${compact ? ` class="github-link" title="${escH(href)}"` : ""}>${compact ? githubIcon : ""}${text}</a>`;
 }
 
+/** A Markdown destination is either a web URL or a local path, never an executable scheme.
+ * Decode once here; the server resolves the resulting path within the session's workspace. */
+function localFilePath(destination: string): string | undefined {
+  let path = destination.trim();
+  if (!path || path.startsWith("//") || path.startsWith("#") || path.startsWith("?")) return;
+  try {
+    if (/^file:/i.test(path)) {
+      const url = new URL(path);
+      if (url.hostname || url.username || url.password || url.port) return;
+      path = url.pathname;
+    } else {
+      if (/^[a-z][a-z\d+.-]*:/i.test(path)) return;
+      path = path.split(/[?#]/, 1)[0];
+    }
+    path = decodeURIComponent(path);
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: reject path control characters.
+    return path && !/[\u0000-\u001f\u007f]/.test(path) ? path : undefined;
+  } catch {
+    return;
+  }
+}
+
 function inline(s: string, links = true): string {
   const ph: string[] = [];
   s = s.replaceAll("\u0000", "\uFFFD");
@@ -49,7 +71,7 @@ function inline(s: string, links = true): string {
   if (links) {
     // Protect whole links before formatting prose, so URL punctuation never becomes markup.
     s = s.replace(
-      /`([^`\n]+)`|\[([^\]\n]*)\]\((https?:\/\/[^)\n]*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g,
+      /`([^`\n]+)`|(?<!!)\[([^\]\n]*)\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g,
       (
         match,
         code: string | undefined,
@@ -59,8 +81,17 @@ function inline(s: string, links = true): string {
       ) => {
         let html: string;
         if (code !== undefined) html = `<code>${escH(code)}</code>`;
-        else if (href) html = webLink(href, label ?? "");
-        else {
+        else if (href !== undefined) {
+          if (/^https?:\/\//.test(href)) html = webLink(href, label ?? "");
+          else {
+            const path = localFilePath(href);
+            // Custom inline action: shadcn has no HTML-string Markdown renderer.
+            // Paths live in data, not hrefs, so even modified clicks cannot request filesystem URLs.
+            html = path
+              ? `<button type="button" class="local-file-link" data-local-file="${escH(path)}">${inline(label ?? "", false)}</button>`
+              : escH(match);
+          }
+        } else {
           const url = autolink ?? match.replace(/[.,!?;:)'"\]]+$/, "");
           html = githubLabel(url)
             ? webLink(url, url) + (autolink ? "" : escH(match.slice(url.length)))

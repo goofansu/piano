@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { ChangesSheet } from "@/components/Changes";
 import { Composer } from "@/components/Composer";
+import { LocalFileContext } from "@/components/Markdown";
 import { MessageList } from "@/components/MessageList";
 import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { AddToChat } from "@/components/Quotes";
@@ -133,17 +134,19 @@ export function SessionView({ state, send }: Props) {
             className="relative flex min-h-0 flex-1 flex-col"
           >
             {pane.list && (
-              <MessageList
-                className="transcript-enter"
-                showTools={display === "everything"}
-                messages={t?.messages ?? []}
-                pending={t?.pending ?? null}
-                submittedInput={input}
-                tools={tools}
-                activity={replyActivity}
-                working={!!t && isWorking(t.state)}
-                placeholder={pane.placeholder}
-              />
+              <LocalFileContext value={(path) => openPanel({ kind: "file", path })}>
+                <MessageList
+                  className="transcript-enter"
+                  showTools={display === "everything"}
+                  messages={t?.messages ?? []}
+                  pending={t?.pending ?? null}
+                  submittedInput={input}
+                  tools={tools}
+                  activity={replyActivity}
+                  working={!!t && isWorking(t.state)}
+                  placeholder={pane.placeholder}
+                />
+              </LocalFileContext>
             )}
             {pane.skeleton !== "none" && <TranscriptSkeleton hidden={pane.skeleton === "hidden"} />}
             {!state.connected && (
@@ -186,10 +189,11 @@ export function SessionView({ state, send }: Props) {
             send={send}
           />
         </div>
-        {!settings && panel === "file" && workspace && t && (
+        {!settings && typeof panel === "object" && panel?.kind === "file" && t && (
           <WorkspaceFile
-            key={`${workspace.id}:${sessionKey(t)}`}
+            key={`${workspace?.id}:${sessionKey(t)}:${panel.path}`}
             workspace={workspace}
+            file={panel}
             close={closePanel}
           />
         )}
