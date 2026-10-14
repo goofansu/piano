@@ -71,6 +71,9 @@ styling and focus policy live in the `Piano*` wrappers, `StatusBadge` and `Picke
 upgrading shadcn, read [the ownership and upgrade guide](docs/shadcn-ui.md); review every
 `--diff` before writing over a file in `ui/`.
 
+Branding icons use [Simple Icons](https://simpleicons.org/). Bundle SVGs locally, preserve source
+and license attribution, and use `currentColor` to match the UI; see `web/public/mcp-logos.svg`.
+
 The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands,
 and Session commands (only with a selected session). A feature that adds an action the sidebar or
