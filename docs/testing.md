@@ -111,6 +111,35 @@ assert what a user sees and what Pi receives, not markup. Add a journey only for
 path; cover rules and edge cases with module tests. Earlier documents cite `test/browser-*.mjs`
 scripts as the evidence of their time; those scripts were removed for these two journeys.
 
+## Alignment
+
+Every transcript row is a gutter glyph beside its content (`Row` in `MessageList.tsx`). The glyph
+box is one line tall and centres on the content's first text line; a row whose content is one
+folding button (its own vertical padding) passes `items-center` instead. A new row kind needs this
+measurement in its browser evidence, on a scratch instance with the row on screen:
+
+```bash
+agent-browser eval "$(cat <<'JS'
+(() => [...document.querySelectorAll('[data-slot="gutter"]')].map((gutter) => {
+  const glyph = gutter.firstElementChild;
+  const walker = document.createTreeWalker(gutter.nextElementSibling, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => n.textContent.trim() && !n.parentElement.closest('.sr-only') ? 1 : 2,
+  });
+  const text = walker.nextNode();
+  if (!glyph || !text) return null;
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  const line = range.getClientRects()[0], box = glyph.getBoundingClientRect();
+  return { text: text.textContent.trim().slice(0, 40), offset: Math.round((box.top + box.bottom - line.top - line.bottom) / 2) };
+}).filter(Boolean))()
+JS
+)"
+```
+
+`offset` is the glyph centre minus the first line's centre, in pixels; every row passes at 0 or
+±1. Keep the output with the screenshot: the screenshot shows the row, the numbers show it is
+aligned.
+
 ## Completion evidence
 
 For code or dependency changes, run `npm test`, `npm run typecheck` and `npm run lint` as the repository baseline.

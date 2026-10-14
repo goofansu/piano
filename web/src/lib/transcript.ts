@@ -112,26 +112,14 @@ export interface TranscriptOptions {
 export interface ContextFacts {
   kind: "compaction" | "branch" | "shell" | "extension";
   title: string;
-  /** A quiet qualifier beside the title: the shell command, or what a summary stands for. */
+  /** The shell command, beside the title. */
   note?: string;
   markdown: boolean;
 }
 
 export function contextFacts(label: string | undefined): ContextFacts {
-  if (label === "Compaction summary")
-    return {
-      kind: "compaction",
-      title: label,
-      note: "The earlier conversation, as Pi carried it forward",
-      markdown: true,
-    };
-  if (label === "Branch summary")
-    return {
-      kind: "branch",
-      title: label,
-      note: "The branch this session continued from",
-      markdown: true,
-    };
+  if (label === "Compaction summary") return { kind: "compaction", title: label, markdown: true };
+  if (label === "Branch summary") return { kind: "branch", title: label, markdown: true };
   if (label?.startsWith("Shell: "))
     return { kind: "shell", title: "Shell", note: label.slice("Shell: ".length), markdown: false };
   return { kind: "extension", title: label || "Extension context", markdown: false };

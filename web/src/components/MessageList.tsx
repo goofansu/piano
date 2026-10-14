@@ -180,14 +180,19 @@ function Row({
 }) {
   return (
     <div className={cn("flex gap-3", className)}>
-      {/* Exactly one line tall, so the glyph centres on the first line of text beside it. */}
+      {/* Exactly one line tall, so the glyph centres on the first line of text beside it. A
+          folding row pads its own line, so a Row holding only one takes `items-center` instead;
+          docs/testing.md §Alignment measures both. */}
       <span
+        data-slot="gutter"
         className="flex h-[1lh] w-4 shrink-0 items-center justify-center select-none"
         aria-hidden
       >
         {glyph}
       </span>
-      <div className="min-w-0 flex-1">{children}</div>
+      <div data-slot="row-content" className="min-w-0 flex-1">
+        {children}
+      </div>
     </div>
   );
 }
@@ -261,8 +266,7 @@ const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
 
 /**
  * Context Pi inserted rather than said: a compaction or branch summary, shell output, or an
- * extension's note. It opens on a card of its own, so it never reads as Pi's reply, and folds
- * away once read.
+ * extension's note. It folds like a skill expansion, so it never reads as Pi's reply.
  */
 function ContextCard({ msg }: { msg: RenderMsg }) {
   const [open, setOpen] = useState(true);
@@ -278,33 +282,29 @@ function ContextCard({ msg }: { msg: RenderMsg }) {
       data-context={facts.kind}
       className="text-sm"
     >
-      <Row glyph={<Icon className="size-3.5 text-ink-3" aria-hidden />}>
+      <Row className="items-center" glyph={<Icon className="size-3.5 text-ink-3" aria-hidden />}>
         <CollapsibleTrigger asChild>
           <button type="button" className={disclosureRow}>
             <span className="shrink-0 font-medium text-ink">{facts.title}</span>
             {facts.note && (
-              <span
-                className={cn(
-                  "min-w-0 flex-1 truncate text-ink-3",
-                  facts.kind === "shell" && "font-mono",
-                )}
-              >
-                {facts.note}
-              </span>
+              <span className="min-w-0 flex-1 truncate font-mono text-ink-3">{facts.note}</span>
             )}
             <DisclosureChevron open={open} className="ml-auto" />
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="disclosure-content">
-          <div className="mt-2 rounded-xl border border-line bg-surface-2 px-4 py-3 text-ink-2 md:px-5 md:py-4">
+      </Row>
+      <CollapsibleContent className="disclosure-content">
+        <Row glyph={null} className="pt-2">
+          {/* Folded reference material reads like a skill expansion: a rule, muted text. */}
+          <div className="border-l-2 border-line pl-3 text-ink-2">
             {facts.markdown ? (
               <Markdown text={msg.text} className="prose-chat" />
             ) : (
               <pre className="whitespace-pre-wrap break-words text-xs">{msg.text}</pre>
             )}
           </div>
-        </CollapsibleContent>
-      </Row>
+        </Row>
+      </CollapsibleContent>
     </Collapsible>
   );
 }
