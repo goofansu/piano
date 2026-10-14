@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RadiusSetupState } from "../shared/radius.ts";
-import { type RadiusSetupInput, radiusSetupView } from "../web/src/lib/radiusSetupView.ts";
+import {
+  type RadiusSetupInput,
+  radiusDoneMessage,
+  radiusSetupView,
+  radiusUninstallCopy,
+} from "../web/src/lib/radiusSetupView.ts";
 
 const missing: RadiusSetupState = {
   mcp: { status: "missing" },
@@ -33,14 +38,14 @@ test("signed out, the account is offered and neither tool can be set up", () => 
   assert.equal(signedOut.account.canSignIn, true);
   assert.equal(signedOut.account.canSignOut, false);
   assert.equal(signedOut.account.description, "Sign in to set up Radius tools and web search.");
-  assert.equal(signedOut.mcp.canAdd, false);
-  assert.equal(signedOut.webSearch.canInstall, false);
+  assert.equal(signedOut.mcp.install?.enabled, false);
+  assert.equal(signedOut.webSearch.install?.enabled, false);
 
   const signedIn = view();
   assert.equal(signedIn.account.description, undefined);
   assert.equal(signedIn.account.canSignOut, true);
-  assert.equal(signedIn.mcp.canAdd, true);
-  assert.equal(signedIn.webSearch.canInstall, true);
+  assert.equal(signedIn.mcp.install?.enabled, true);
+  assert.equal(signedIn.webSearch.install?.enabled, true);
 });
 
 test("without Radius in this Pi, sign-in is unavailable and says so", () => {
@@ -61,18 +66,18 @@ test("a step Pi reports as blocked stays unavailable after sign-in, and can stil
       webSearch: { status: "blocked", detail: "Custom package filter." },
     },
   });
-  assert.equal(blocked.mcp.canAdd, false);
+  assert.equal(blocked.mcp.install?.enabled, false);
   assert.equal(blocked.mcp.detail, "Disabled in mcp.json.");
-  assert.equal(blocked.mcp.canRemove, true);
-  assert.equal(blocked.webSearch.canInstall, false);
-  assert.equal(blocked.webSearch.canRemove, false);
+  assert.equal(blocked.mcp.uninstall?.enabled, true);
+  assert.equal(blocked.webSearch.install?.enabled, false);
+  assert.equal(blocked.webSearch.uninstall, undefined);
 });
 
 test("removal stays available while signed out", () => {
   const signedOut = view({ state: ready, providers: radius(false) });
-  assert.equal(signedOut.mcp.removalKey, "mcp-key");
-  assert.equal(signedOut.mcp.canRemove, true);
-  assert.equal(signedOut.webSearch.canRemove, true);
+  assert.deepEqual(signedOut.mcp.uninstall?.confirmation, { kind: "remove-mcp", key: "mcp-key" });
+  assert.equal(signedOut.mcp.uninstall?.enabled, true);
+  assert.equal(signedOut.webSearch.uninstall?.enabled, true);
 });
 
 test("a running web-search change locks every step and words the summary by action", () => {
@@ -87,22 +92,22 @@ test("a running web-search change locks every step and words the summary by acti
     assert.equal(running.tools.summary, summary);
     assert.deepEqual(running.webSearch.change, { action, label });
     assert.equal(running.account.canSignOut, false);
-    assert.equal(running.mcp.canRemove, false);
-    assert.equal(running.webSearch.canRemove, false);
+    assert.equal(running.mcp.uninstall?.enabled, false);
+    assert.equal(running.webSearch.uninstall?.enabled, false);
     const fresh = view({ state: { ...missing, installation: { status: "running", action } } });
-    assert.equal(fresh.mcp.canAdd, false);
+    assert.equal(fresh.mcp.install?.enabled, false);
     // Refresh reads Pi again, so it stays available while Pi runs the change.
     assert.equal(running.canRefresh, true);
   }
 });
 
 test("a change in flight locks every step and refresh; sign-out is not a setup change", () => {
-  const adding = view({ running: "configure-mcp" });
-  assert.equal(adding.changing, true);
-  assert.equal(adding.locked, true);
-  assert.equal(adding.canRefresh, false);
-  assert.equal(adding.mcp.canAdd, false);
-  assert.equal(adding.webSearch.canInstall, false);
+  const installing = view({ running: "configure-mcp" });
+  assert.equal(installing.changing, true);
+  assert.equal(installing.locked, true);
+  assert.equal(installing.canRefresh, false);
+  assert.equal(installing.mcp.install?.enabled, false);
+  assert.equal(installing.webSearch.install?.enabled, false);
 
   const signingOut = view({ running: "sign-out" });
   assert.equal(signingOut.changing, false);
@@ -120,8 +125,8 @@ test("the folded summary reports each tool's state", () => {
   const both = view({ state: ready });
   assert.equal(both.tools.summary, "MCP installed · Web search installed");
   assert.equal(both.tools.ready, true);
-  assert.equal(both.mcp.canAdd, false);
-  assert.equal(both.webSearch.canInstall, false);
+  assert.equal(both.mcp.install, undefined);
+  assert.equal(both.webSearch.install, undefined);
 });
 
 test("a failed web-search change is titled by its action", () => {
@@ -175,4 +180,65 @@ test("a failed read or change needs attention, and a failed read locks the steps
   assert.equal(failedChange.attention, "Could not complete setup. Refresh before retrying.");
   assert.equal(failedChange.locked, false);
   assert.equal(view().attention, undefined);
+});
+
+test("each tool offers Install until installed and Uninstall while Pi reports its configuration", () => {
+  const fresh = view();
+  assert.deepEqual(fresh.mcp.install, {
+    label: "Install",
+    ariaLabel: "Install Radius MCP",
+    enabled: true,
+    action: "configure-mcp",
+  });
+  assert.deepEqual(fresh.webSearch.install, {
+    label: "Install",
+    ariaLabel: "Install web search",
+    enabled: true,
+    action: "install-web-search",
+  });
+  assert.equal(fresh.mcp.uninstall, undefined);
+  assert.equal(fresh.webSearch.uninstall, undefined);
+
+  const installed = view({ state: ready });
+  assert.deepEqual(installed.mcp.uninstall, {
+    label: "Uninstall",
+    ariaLabel: "Uninstall Radius MCP",
+    enabled: true,
+    confirmation: { kind: "remove-mcp", key: "mcp-key" },
+  });
+  assert.deepEqual(installed.webSearch.uninstall, {
+    label: "Uninstall",
+    ariaLabel: "Uninstall web search",
+    enabled: true,
+    confirmation: { kind: "uninstall-web-search", key: "package-key" },
+  });
+  assert.equal(installed.mcp.readyLabel, "Installed");
+  assert.equal(installed.webSearch.readyLabel, "Installed");
+  // Only web search carries the organization note.
+  assert.equal(installed.mcp.note, undefined);
+  assert.equal(
+    installed.webSearch.note,
+    "An organization owner or admin must enable Web search separately in Radius.",
+  );
+});
+
+test("each uninstall is confirmed in its own tool's words, and MCP changes announce themselves", () => {
+  assert.deepEqual(radiusUninstallCopy("remove-mcp"), {
+    title: "Uninstall Radius MCP?",
+    description: "Uninstalls Radius MCP from Pi on this machine.",
+    action: "Uninstall",
+  });
+  assert.deepEqual(radiusUninstallCopy("uninstall-web-search"), {
+    title: "Uninstall web search?",
+    description: "Removes the Radius web-search extension from Pi on this machine.",
+    action: "Uninstall",
+  });
+  assert.equal(
+    radiusDoneMessage("configure-mcp"),
+    "Radius MCP installed. Start a new session to use it.",
+  );
+  assert.equal(radiusDoneMessage("remove-mcp"), "Radius MCP uninstalled for new sessions.");
+  // Web search reports its own outcome once Pi's background change settles.
+  assert.equal(radiusDoneMessage("install-web-search"), undefined);
+  assert.equal(radiusDoneMessage("uninstall-web-search"), undefined);
 });

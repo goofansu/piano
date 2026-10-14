@@ -19,10 +19,15 @@ import {
   type RadiusObservation,
   radiusAnnouncements,
 } from "./radiusAnnouncements.ts";
-import { type RadiusRemoval, type RadiusSetupView, radiusSetupView } from "./radiusSetupView.ts";
+import {
+  type RadiusSetupView,
+  type RadiusUninstall,
+  radiusDoneMessage,
+  radiusSetupView,
+} from "./radiusSetupView.ts";
 import { createSetupActions, type SetupActionsState } from "./setupActions.ts";
 
-export type RadiusConfirmation = { kind: "sign-out" } | { kind: RadiusRemoval; key: string };
+export type RadiusConfirmation = { kind: "sign-out" } | { kind: RadiusUninstall; key: string };
 
 /** Reads Pi's setup, or changes it and returns the result. */
 export type RadiusSetupApi = (
@@ -182,12 +187,7 @@ export function createRadiusSetup({
           announce({ kind: "observed", installation: next.installation });
           return next;
         }),
-      done:
-        action === "configure-mcp"
-          ? "Radius MCP installed. Start a new session to use it."
-          : action === "remove-mcp"
-            ? "Radius MCP uninstalled for new sessions."
-            : undefined,
+      done: radiusDoneMessage(action),
       fallback: "Could not complete setup. Refresh before retrying.",
     });
 
