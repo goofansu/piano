@@ -114,6 +114,20 @@ development invariants and roadmap it links, and cite affected invariant IDs in 
 form of INV-01: Pi owns history, Git owns repository facts, Worktrunk sits behind the lifecycle
 adapter, Piano owns workspace and integration policy.
 
+## Architecture reviews
+
+When proposing deepening candidates (`/mattpocock-skills:improve-codebase-architecture`), judge
+the code as it stands this round. A candidate qualifies when it names a cost the code pays now:
+
+- a reachable bug;
+- one decision made in two or more places;
+- a recent `feat` or `fix` commit that touched several modules for one concept;
+- consequential behavior (security, data, protocol, concurrency) that today's interface cannot test;
+- code the deletion test shows can go.
+
+Find hot spots in `feat` and `fix` commits since the last review; `refactor` commits mark settled
+ground. When no candidate qualifies, report "no useful candidates" and stop.
+
 ## README
 
 `README.md` holds two guides and nothing else: **Use**, how a user sets up and uses Piano,
