@@ -265,47 +265,80 @@ const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
 };
 
 /**
- * Context Pi inserted rather than said: a compaction or branch summary, shell output, or an
- * extension's note. It folds like a skill expansion, so it never reads as Pi's reply.
+ * A row for what Pi inserted or expanded rather than said: a gutter icon, a label, a quiet
+ * monospace note and, once opened, a body under a rule. Context rows and skill expansions share
+ * it, so they fold the same way.
  */
-function ContextCard({ msg }: { msg: RenderMsg }) {
-  const [open, setOpen] = useState(true);
-  const facts = contextFacts(msg.label);
-  const Icon = CONTEXT_ICON[facts.kind];
+function FoldRow({
+  glyph,
+  title,
+  note,
+  label,
+  open,
+  onOpenChange,
+  data,
+  children,
+}: {
+  glyph: React.ReactNode;
+  title: string;
+  note?: string;
+  /** The group's accessible name. */
+  label: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** `data-*` attributes for tests and evidence scripts. */
+  data?: Record<`data-${string}`, string | undefined>;
+  children: React.ReactNode;
+}) {
   return (
     <Collapsible
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={onOpenChange}
       role="group"
-      aria-label={facts.title}
-      data-slot="context-card"
-      data-context={facts.kind}
+      aria-label={label}
       className="text-sm"
+      {...data}
     >
-      <Row className="items-center" glyph={<Icon className="size-3.5 text-ink-3" aria-hidden />}>
+      <Row className="items-center" glyph={glyph}>
         <CollapsibleTrigger asChild>
           <button type="button" className={disclosureRow}>
-            <span className="shrink-0 font-medium text-ink">{facts.title}</span>
-            {facts.note && (
-              <span className="min-w-0 flex-1 truncate font-mono text-ink-3">{facts.note}</span>
-            )}
+            <span className="shrink-0 font-medium text-ink">{title}</span>
+            {note && <span className="min-w-0 flex-1 truncate font-mono text-ink-3">{note}</span>}
             <DisclosureChevron open={open} className="ml-auto" />
           </button>
         </CollapsibleTrigger>
       </Row>
       <CollapsibleContent className="disclosure-content">
         <Row glyph={null} className="pt-2">
-          {/* Folded reference material reads like a skill expansion: a rule, muted text. */}
-          <div className="border-l-2 border-line pl-3 text-ink-2">
-            {facts.markdown ? (
-              <Markdown text={msg.text} className="prose-chat" />
-            ) : (
-              <pre className="whitespace-pre-wrap break-words text-xs">{msg.text}</pre>
-            )}
-          </div>
+          <div className="border-l-2 border-line pl-3 text-ink-2">{children}</div>
         </Row>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/** Context Pi inserted rather than said: a compaction or branch summary, shell output, or an
+ * extension's note. It starts open: after a compaction it is the transcript's only earlier record. */
+function ContextCard({ msg }: { msg: RenderMsg }) {
+  const [open, setOpen] = useState(true);
+  const facts = contextFacts(msg.label);
+  const Icon = CONTEXT_ICON[facts.kind];
+  return (
+    <FoldRow
+      glyph={<Icon className="size-3.5 text-ink-3" aria-hidden />}
+      title={facts.title}
+      note={facts.note}
+      label={facts.title}
+      open={open}
+      onOpenChange={setOpen}
+      data={{ "data-slot": "context-card", "data-context": facts.kind }}
+    >
+      {facts.markdown ? (
+        <Markdown text={msg.text} className="prose-chat" />
+      ) : (
+        <pre className="whitespace-pre-wrap break-words text-xs">{msg.text}</pre>
+      )}
+    </FoldRow>
   );
 }
 
@@ -403,64 +436,70 @@ function UserMessage({
   const long = overflows || open;
   const toggle = () => setOpen((o) => !o);
   // A long prompt opens and closes from its toggle button, or by clicking anywhere on it.
+  const bubble = text || !skill || (attachments && attachments.length > 0);
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a pointer shortcut for the toggle button below, which keyboard users reach.
-    <article
+    <div
       id={id ? messageAnchorId(id) : undefined}
       data-slot={id ? undefined : "submitted-input"}
-      className={cn(
-        "rounded-2xl border border-line bg-fill px-4 py-3.5 transition-colors",
-        long && "cursor-pointer select-text hover:border-line-strong",
-      )}
-      onClick={(event) =>
-        long &&
-        !(event.target as Element).closest("a, button, [role='dialog']") &&
-        !window.getSelection()?.toString() &&
-        toggle()
-      }
+      className="flex flex-col gap-3"
     >
-      <Row glyph={<span className="font-semibold text-brand">›</span>}>
-        <span className="sr-only select-none">You said</span>
-        {skill && <SkillExpansion skill={skill} />}
-        {(text || !skill) && (
-          <div
-            ref={ref}
-            id={textId}
-            className={cn(
-              "break-words",
-              skill && "mt-2",
-              !open && "overflow-hidden",
-              clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
-            )}
-            style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
-          >
-            <Markdown text={text} className="prose-chat" />
-          </div>
-        )}
-        {long && (
-          <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              size="xs"
-              className="-mr-2 text-ink-3"
-              aria-expanded={open}
-              aria-controls={textId}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggle();
-              }}
+      {/* Labels and controls are select-none, so copied or quoted text is only what was said. */}
+      <span className="sr-only select-none">You said</span>
+      {/* The skill Pi put in place of the command is a row of its own, folded, not part of the bubble. */}
+      {skill && <SkillExpansion skill={skill} />}
+      {bubble && (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a pointer shortcut for the toggle button below, which keyboard users reach.
+        <article
+          className={cn(
+            "rounded-2xl border border-line bg-fill px-4 py-3.5 transition-colors",
+            long && "cursor-pointer select-text hover:border-line-strong",
+          )}
+          onClick={(event) =>
+            long &&
+            !(event.target as Element).closest("a, button, [role='dialog']") &&
+            !window.getSelection()?.toString() &&
+            toggle()
+          }
+        >
+          <Row glyph={<span className="font-semibold text-brand">›</span>}>
+            <div
+              ref={ref}
+              id={textId}
+              className={cn(
+                "break-words",
+                !open && "overflow-hidden",
+                clamped && "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
+              )}
+              style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
             >
-              {open ? "Show less" : "Show more"}
-              <ChevronDownIcon
-                className={cn("transition-transform duration-200", open && "rotate-180")}
-                aria-hidden
-              />
-            </Button>
-          </div>
-        )}
-        <MessageAttachments items={attachments} />
-      </Row>
-    </article>
+              <Markdown text={text} className="prose-chat" />
+            </div>
+            {long && (
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="-mr-2 text-ink-3"
+                  aria-expanded={open}
+                  aria-controls={textId}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggle();
+                  }}
+                >
+                  {open ? "Show less" : "Show more"}
+                  <ChevronDownIcon
+                    className={cn("transition-transform duration-200", open && "rotate-180")}
+                    aria-hidden
+                  />
+                </Button>
+              </div>
+            )}
+            <MessageAttachments items={attachments} />
+          </Row>
+        </article>
+      )}
+    </div>
   );
 }
 
@@ -471,29 +510,17 @@ function UserMessage({
 function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
   const [open, setOpen] = useState(false);
   return (
-    // Clicks here open the skill, never the prompt's own long-text disclosure around it.
-    <Collapsible
+    <FoldRow
+      glyph={<SparklesIcon className="size-3.5 text-brand" aria-hidden />}
+      title="Skill"
+      note={`/skill:${skill.name}`}
+      label={`${skill.name} skill`}
       open={open}
       onOpenChange={setOpen}
-      role="group"
-      aria-label={`${skill.name} skill`}
-      className="text-sm"
-      onClick={(e) => e.stopPropagation()}
     >
-      <CollapsibleTrigger asChild>
-        <button type="button" className={disclosureRow}>
-          <SparklesIcon className="size-3.5 shrink-0 text-brand" aria-hidden />
-          <span className="min-w-0 flex-1 truncate font-mono text-ink">/skill:{skill.name}</span>
-          <DisclosureChevron open={open} className="ml-auto" />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="disclosure-content">
-        <div className="mt-2 border-l-2 border-line pl-3">
-          <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
-          <Markdown text={skill.body} className="prose-chat text-ink-2" />
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+      <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
+      <Markdown text={skill.body} className="prose-chat" />
+    </FoldRow>
   );
 }
 
