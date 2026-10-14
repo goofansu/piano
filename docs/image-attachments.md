@@ -29,7 +29,8 @@ delivered queue entry by matching its text, so after it delivers an image-only q
 still reports an empty entry in `queue_update` and `get_state`'s `pendingMessageCount`. Piano shows
 what Pi reports: an empty queue row, and a session that counts as working. Until the row is gone,
 Piano does not retire the idle Pi process, refuses to share the session ("Wait for this session to
-finish before sharing.") and, if it closes, reports that Pi was released during work. Edit (Pi's `clear_queue`) or Stop clears the row; including text with an image avoids it.
+finish before sharing.") and, if it closes, reports that Pi was released during work. Edit (Pi's
+`clear_queue`) or Stop clears the row; including text with an image avoids it.
 
 Decision: Pi's events are the source of truth for its queue. Piano does not filter, hide or
 reinterpret entries Pi reports, track the queue locally, patch Pi or send operations Pi lacks to
