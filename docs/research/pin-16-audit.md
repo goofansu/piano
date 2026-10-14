@@ -1,4 +1,4 @@
-# YEJ-16: dependency audit policy and triage
+# PIN-16: dependency audit policy and triage
 
 ## Capture
 
@@ -7,11 +7,11 @@
 `1f3a5dd91f9cb67f7a66d67a76e94bca56b83960` with this policy change.
 The intervening commit changes only MCP logos; dependency manifests and lockfile are unchanged.
 
-Retained reports: [full before](yej-16-audit/full-before.json),
-[production before](yej-16-audit/prod-before.json),
-[full after](yej-16-audit/full-after.json),
-[production after](yej-16-audit/prod-after.json),
-[installed paths](yej-16-audit/dependency-paths.txt).
+Retained reports: [full before](pin-16-audit/full-before.json),
+[production before](pin-16-audit/prod-before.json),
+[full after](pin-16-audit/full-after.json),
+[production after](pin-16-audit/prod-after.json),
+[installed paths](pin-16-audit/dependency-paths.txt).
 Commands: `npm audit --json`, `npm audit --omit=dev --json`, and `npm ls` for the affected packages.
 Full audit exits 1 (seven high package findings); production exits 0 (no findings).
 
@@ -97,5 +97,5 @@ scopes under the policy; `npm test` passed 385/385 with no skips; `npm run typec
 `/tmp/piano-issue-audit/{tests,typecheck,lint}.log` (ephemeral).
 Relevant contracts: INV-09 (bounded verification claim), INV-11 (trust boundary).
 
-YEJ-17 was canceled by the owner (will not implement). Passing this CI job does not establish
+PIN-17 was canceled by the owner (will not implement). Passing this CI job does not establish
 merge enforcement; check Quality gates manually before merging.

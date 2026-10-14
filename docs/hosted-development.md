@@ -123,15 +123,15 @@ For future agent reviews:
   WebSockets, with no unauthenticated alternate route to the backend.
 - Distinguish the owner's stated use case from independently observed deployment configuration.
   An inability to inspect exe.dev sharing settings is a verification limitation, not evidence of
-  exposure. Reuse YEJ-5 for that outstanding verification rather than opening duplicate findings.
+  exposure. Reuse PIN-5 for that outstanding verification rather than opening duplicate findings.
 - Browser-origin protection is a separate defense: private authentication does not establish
-  that a request originated from Piano. YEJ-12 tracks that work; this accepted use case does not
+  that a request originated from Piano. PIN-12 tracks that work; this accepted use case does not
   waive origin validation or establish that it is already implemented.
 - Reopen the access-boundary question when there is concrete evidence of public access, changed
   sharing/listener configuration, or a requirement to support untrusted users—not merely because
   the application has no login screen. Do not suppress genuinely new exposure evidence.
 
-The source and listener inspection for YEJ-5 at `4ceeee79727768a2b511ff778aaed5168dd8b04c`
+The source and listener inspection for PIN-5 at `4ceeee79727768a2b511ff778aaed5168dd8b04c`
 on 2026-10-11 found loopback listeners on ports 8000/8001 and a TCP forwarder to 8001.
 Authoritative sharing inspection failed SSH authentication; a cookie-free HTTPS probe could not
 connect. Neither result proves external access is denied. The actual external HTTP/WebSocket
@@ -166,8 +166,8 @@ binds to loopback for the private proxy connection. Local development defaults a
 configuration are separate from this unit.
 
 Origins are not inferred from Host or forwarded headers: neither Piano nor the TCP forwarder uses proxy identity headers
-as authorization. exe.dev remains responsible for private HTTP/WebSocket access (YEJ-5); browser
-origin checks are a separate control (YEJ-12, INV-11).
+as authorization. exe.dev remains responsible for private HTTP/WebSocket access (PIN-5); browser
+origin checks are a separate control (PIN-12, INV-11).
 
 When deliberately deploying this change, install the configured `piano.service` unit (or configure
 the equivalent environment in a drop-in), daemon-reload, and restart under the authorized deployment

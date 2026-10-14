@@ -1,6 +1,6 @@
 # Runtime ownership behind PiSessions
 
-YEJ-11 follows the [transport failure audit](research/yej-10-transport-failures.md).
+PIN-11 follows the [transport failure audit](research/pin-10-transport-failures.md).
 The public interface remains `PiSessions.open/probe/history` and a session's
 `events/act/state`. Callers and behavioral tests do not import PiTransport.
 Pi stays authoritative for history (INV-01); this is an internal refactor, not a
@@ -65,6 +65,6 @@ Based on `82b042c` plus this extraction, Node v24.21.0, installed dependencies u
 Outputs: `/tmp/piano-yej-evidence/11-{tests,types,lint}.log`.
 Existing public-interface ordering, generation, dialog, cancellation, capacity and
 shutdown tests were retained without rewrites; no new behavior or uncovered risk
-justified an extra test. The preceding YEJ-10 scratch browser evidence covers the
+justified an extra test. The preceding PIN-10 scratch browser evidence covers the
 unchanged application journey; no additional browser run or real-model call was
 made for this refactor. No migration or deployment.

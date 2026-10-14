@@ -1,6 +1,6 @@
-# YEJ-15 — reproducible formatting
+# PIN-15 — reproducible formatting
 
-Applied last, after YEJ-10 (`82b042c`) and YEJ-11 (`850ec29`). The convention is
+Applied last, after PIN-10 (`82b042c`) and PIN-11 (`850ec29`). The convention is
 recorded in README and enforced by the existing pinned Biome 2.5.15, not a new
 dependency: two-space indentation, LF, 100-column target, double quotes, semicolons,
 trailing commas. `npm run format` writes; `npm run format:check` checks only.

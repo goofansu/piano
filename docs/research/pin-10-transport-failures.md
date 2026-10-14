@@ -1,13 +1,13 @@
-# YEJ-10 — transport failure policy
+# PIN-10 — transport failure policy
 
-Audited main `d9b8a4a` after YEJ-7/9, then verified this change on Node 24 with
+Audited main `d9b8a4a` after PIN-7/9, then verified this change on Node 24 with
 fake Pi. Contracts: INV-02/03/04/05/11. No registry migration or deployment.
 
 ## Inventory and decisions
 
 | Boundary | Recovery policy |
 | --- | --- |
-| Pi stdout framing, JSON/envelope, record capacity, reader failure or premature EOF | Fail the session, settle pending requests/writes, end queues, kill the unusable child. No replay. YEJ-7/9 already supplied this path. |
+| Pi stdout framing, JSON/envelope, record capacity, reader failure or premature EOF | Fail the session, settle pending requests/writes, end queues, kill the unusable child. No replay. PIN-7/9 already supplied this path. |
 | Pi stdin sink failure | Previously settled callers but left an uncontrollable live session. Now use the same terminal failure path, after failing writes/requests as transport-uncertain. Raw cause text is not delivered. |
 | Pi record consumer | Unexpected processing failure now terminates the child and publishes closure after the consumer signals completion. Scope interruption is ordinary shutdown, not failure. |
 | Pi exit observation | Unexpected failure terminates the child with a fixed diagnostic; ordinary scope interruption is not a crash. |

@@ -30,7 +30,7 @@ When developing Piano, follow [evidence-based development and testing](testing.m
 from the risk and acceptance claim, and add regression tests only where they provide durable value.
 
 [Runtime ownership](runtime-ownership.md) maps transport, publication, dialog and shutdown
-responsibilities behind the public PiSessions interface, with the [failure policy audit](research/yej-10-transport-failures.md).
+responsibilities behind the public PiSessions interface, with the [failure policy audit](research/pin-10-transport-failures.md).
 
 The [2026-10-02 research note](research/2026-10-02-harness-direction.md) retains the original
 Pi 1.0.0 findings and citations. Its implementation audit is dated, and its phase ordering and

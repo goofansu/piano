@@ -1,4 +1,4 @@
-# YEJ-18: rejected session selection recovery
+# PIN-18: rejected session selection recovery
 
 Base: `465be1e`, plus this implementation diff. Node 24.21.0, npm 11.19.0,
 installed Effect 4.0.2; scratch fake Pi, no model calls. Contracts: INV-02/05.

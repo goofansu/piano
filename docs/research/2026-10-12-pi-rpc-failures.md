@@ -1,4 +1,4 @@
-# Pi RPC failure policy — YEJ-7
+# Pi RPC failure policy — PIN-7
 
 Scope: INV-02, INV-03, INV-05 and INV-12, behind `PiSessions`.
 
@@ -23,7 +23,7 @@ Scope: INV-02, INV-03, INV-05 and INV-12, behind `PiSessions`.
 
 ## Evidence
 
-Environment: Node v24.21.0, Linux, branch `fix/yej-7-pi-rpc-validation`, base
+Environment: Node v24.21.0, Linux, branch `fix/pin-7-pi-rpc-validation`, base
 `542bf85597042452308d6c72afd500b783d96e01` plus this commit's changes.
 
 - Before: `node --test --import ./test/setup.ts --test-name-pattern='invalid Pi output.*null' test/PiSessions.test.ts`
@@ -46,4 +46,4 @@ Environment: Node v24.21.0, Linux, branch `fix/yej-7-pi-rpc-validation`, base
 Limitations: browser fault injection uses fake Pi, not a live-provider compatibility
 claim. Reader-defect injection substitutes the external spawner's stdout stream;
 EOF and malformed records use a real subprocess. Payload validation, queue/frame
-limits (YEJ-9), and the wider suppression audit (YEJ-10) remain separate work.
+limits (PIN-9), and the wider suppression audit (PIN-10) remain separate work.

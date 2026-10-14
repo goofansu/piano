@@ -1,4 +1,4 @@
-# YEJ-19: worktree admission recovery
+# PIN-19: worktree admission recovery
 
 Base `2e39011`, plus this implementation diff; Node 24.21.0, npm 11.19.0,
 Effect/platform-node 4.0.2. Contracts: INV-02/06/07.

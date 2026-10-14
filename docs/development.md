@@ -37,7 +37,7 @@ every merge-queue candidate, on Node 24. The quality job runs `npm ci`, `npm run
 the checksum file published with it. A second job runs `npm run test:browser`. CI gets no model
 secrets.
 
-No branch protection enforces these jobs: the owner canceled it (YEJ-17). Before you merge, check
+No branch protection enforces these jobs: the owner canceled it (PIN-17). Before you merge, check
 that **Quality gates** passed on the latest commit. Keep the repository private.
 
 ## Dependency security
@@ -46,4 +46,4 @@ Dependency security relies on reviewing Dependabot alerts and security-update pu
 a CI audit gate. An owner must turn on **Dependabot alerts** and **Dependabot security updates**
 under **Settings → Security → Advanced Security**. The exe.dev integration cannot read or change
 those settings (it gets HTTP 403), so whether they are on is unverified. See the
-[audit findings and policy](research/yej-16-audit.md).
+[audit findings and policy](research/pin-16-audit.md).

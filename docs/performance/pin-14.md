@@ -1,6 +1,6 @@
-# YEJ-14: folder and registry latency
+# PIN-14: folder and registry latency
 
-Issue: [YEJ-14](https://linear.app/goofansu/issue/YEJ-14/piano-measure-synchronous-folder-and-registry-work-before-optimizing).
+Issue: [PIN-14](https://linear.app/goofansu/issue/PIN-14/piano-measure-synchronous-folder-and-registry-work-before-optimizing).
 Measured 2026-10-12 on base `cba4c63`, with the changes in this PR for the after runs.
 Invariants: INV-01 (unchanged registry ownership/persistence), INV-07/09 (scratch identity and bounded evidence), INV-11 (loopback isolation).
 
@@ -67,8 +67,8 @@ Do not replace files in a running checkout or use the real registry. No builds o
 
 ## Results (milliseconds, rounded)
 
-Raw results: [before local](yej-14/before-local.json), [before slow](yej-14/before-slow.json),
-[after, including direct registry](yej-14/after.json).
+Raw results: [before local](pin-14/before-local.json), [before slow](pin-14/before-slow.json),
+[after, including direct registry](pin-14/after.json).
 
 | Listing workload | Listing p95 before → after | Session commands p95 before → after | Event-loop max before → after |
 | --- | ---: | ---: | ---: |
@@ -104,7 +104,7 @@ This issue's targeted improvement does not resolve large-registry responsiveness
 - `PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 node test/browser-folder-picker.mjs /tmp/yej14-browser-allowed`:
   pass through `npx agent-browser` on scratch backend 7171 / Vite 7172. Covers folder navigation,
   loading/error selection guards, creation, stale responses, draft retention, home and mobile layout.
-  [Retained observations](yej-14/browser.json); full command output/screenshots remain at that `/tmp` path.
+  [Retained observations](pin-14/browser.json); full command output/screenshots remain at that `/tmp` path.
 - The first parallel test/browser attempt overloaded the two-CPU VM: suite hit the 240 s tool timeout
   and a browser command was terminated. The standalone suite then passed. A standalone browser attempt
   without `PIANO_ALLOWED_ORIGINS` failed at listing (the old runner omits it); rerunning with the documented
