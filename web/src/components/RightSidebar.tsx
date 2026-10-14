@@ -2,8 +2,8 @@ import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   useState,
 } from "react";
 import { IconButton } from "@/components/IconButton";
