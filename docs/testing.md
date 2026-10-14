@@ -114,9 +114,11 @@ scripts as the evidence of their time; those scripts were removed for these two 
 ## Alignment
 
 Every transcript row is a gutter glyph beside its content (`Row` in `MessageList.tsx`). The glyph
-box is one line tall and centres on the content's first text line; a row whose content is one
-folding button (its own vertical padding) passes `items-center` instead. A new row kind needs this
-measurement in its browser evidence, on a scratch instance with the row on screen:
+box is one line tall and centres on the content's first text line, so content must not pad its
+first line: a folding row (`disclosureRow`) keeps its padding outside the flow with negative
+margins. `node test/browser/transcript-rows.mjs` seeds a session with every row kind and fails
+when any glyph is more than 1px off its line; a new row kind is added to its `messages` and
+`expected` lists. The same measurement, for a scratch instance with the row on screen:
 
 ```bash
 agent-browser eval "$(cat <<'JS'

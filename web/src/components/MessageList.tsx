@@ -180,9 +180,9 @@ function Row({
 }) {
   return (
     <div className={cn("flex gap-3", className)}>
-      {/* Exactly one line tall, so the glyph centres on the first line of text beside it. A
-          folding row pads its own line, so a Row holding only one takes `items-center` instead;
-          docs/testing.md §Alignment measures both. */}
+      {/* Exactly one line tall, so the glyph centres on the first line of text beside it. Content
+          must not pad its first line (a folding row keeps its padding out of flow); the
+          transcript-rows journey measures every row kind. */}
       <span
         data-slot="gutter"
         className="flex h-[1lh] w-4 shrink-0 items-center justify-center select-none"
@@ -299,7 +299,7 @@ function FoldRow({
       className="text-sm"
       {...data}
     >
-      <Row className="items-center" glyph={glyph}>
+      <Row glyph={glyph}>
         <CollapsibleTrigger asChild>
           <button type="button" className={disclosureRow}>
             <span className="shrink-0 font-medium text-ink">{title}</span>
@@ -673,7 +673,6 @@ function Tool({
       className="text-sm"
     >
       <Row
-        className="items-center"
         glyph={
           <span
             className={cn("block size-2 rounded-full transition-colors duration-300", DOT[outcome])}

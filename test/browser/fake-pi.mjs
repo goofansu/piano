@@ -13,7 +13,14 @@ const entries =
 const sessionId = entries[0]?.id ?? arg("--session-id") ?? "probe";
 const sessionFile =
   file ?? join(process.env.PI_CODING_AGENT_SESSION_DIR ?? process.cwd(), `${sessionId}.jsonl`);
-const messages = entries.filter((e) => e.type === "message").map((e) => e.message);
+// A compaction entry replays as the summary message Pi's get_messages would report.
+const messages = entries
+  .filter((e) => e.type === "message" || e.type === "compaction")
+  .map((e) =>
+    e.type === "compaction"
+      ? { role: "compactionSummary", summary: e.summary, tokensBefore: e.tokensBefore }
+      : e.message,
+  );
 const [provider, id] = (arg("--model") ?? "fake/alpha").split("/");
 let model = { provider, id };
 let thinkingLevel = arg("--thinking") ?? "medium";

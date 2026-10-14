@@ -17,9 +17,11 @@ export const composerToolbar =
 export const composerAction =
   "ml-auto size-11 shrink-0 rounded-xl transition-[background-color,color,border-color,transform,opacity] duration-(--dur-hover) active:scale-95 md:size-9";
 
-/** A folding row in the transcript gutter: full width, quiet hover, a focus ring; the chevron sits at its end. */
+/** A folding row in the transcript gutter: full width, quiet hover, a focus ring; the chevron sits at its end.
+ * Its padding lies outside the flow (negative margins), so its first line stays on the gutter glyph's line
+ * whatever Row holds it; test/browser/transcript-rows.mjs measures every row kind. */
 export const disclosureRow =
-  "-ml-2 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors duration-(--dur-hover) hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring";
+  "-ml-2 -my-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors duration-(--dur-hover) hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring";
 
 /** A plain row in a list (folder entries, the jump list): hover and keyboard focus read the same. */
 export const listRow =

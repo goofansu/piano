@@ -26,9 +26,9 @@ or mock choreography. Documentation-only changes need document/link review, not 
 - **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
   journey there only for a new critical path.
 - **Model calls** cost real credits: prompt "Reply with exactly: X" and read the reply back.
-- **Transcript rows:** a new row's gutter glyph centres on its first text line. Measure it with
-  the [alignment check](docs/testing.md#alignment) in the browser evidence; eyeballing a
-  screenshot has missed a 4px offset before.
+- **Transcript rows:** a new row's gutter glyph centres on its first text line. Add the row kind
+  to `test/browser/transcript-rows.mjs` and run it; the journey measures every row (see
+  [alignment](docs/testing.md#alignment)). Eyeballing a screenshot has missed a 4px offset twice.
 - **Radix menus and popovers** open on pointer events: use `agent-browser click`, not a DOM
   `.click()` from `eval`.
 
