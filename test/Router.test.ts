@@ -73,6 +73,22 @@ test("workspace files use a body path and return uncached text for the registere
   });
 });
 
+test("workspace file downloads are uncached, unsniffed attachments of the exact bytes", async () => {
+  const response = await post(
+    `/api/workspace/file/download?workspaceId=${server.workspaceId}`,
+    JSON.stringify({ path: "README.md" }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(
+    response.headers.get("content-disposition"),
+    `attachment; filename="README.md"; filename*=UTF-8''README.md`,
+  );
+  assert.match(response.headers.get("content-type") ?? "", /^text\/markdown/);
+  assert.equal(await response.text(), "one\ntwo\n");
+});
+
 test("INV-07: IDs resolve through the registry; a missing ID is malformed and an unknown one is not found", async () => {
   assert.deepEqual(await reply(await post("/api/workspace/changes?workspaceId=nope")), {
     status: 404,

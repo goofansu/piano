@@ -25,7 +25,7 @@ import { SessionSharing } from "./SessionSharing.ts";
 import { SidebarView } from "./SidebarView.ts";
 import type { SignInError, SignInLane, SignInState } from "./SignInAttempts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
-import { readWorkspaceFile } from "./WorkspaceFiles.ts";
+import { downloadWorkspaceFile, readWorkspaceFile } from "./WorkspaceFiles.ts";
 import { handleSocket } from "./WsClient.ts";
 
 /** A failed request as the browser sees it: a status and the `error` message it shows. */
@@ -74,6 +74,10 @@ type Input<Q extends IdParam, B extends Json | undefined> = (B extends Json
   : unknown) &
   ("workspaceId" extends Q ? { readonly workspace: Workspace } : unknown) &
   ("sessionId" extends Q ? { readonly session: SessionEntry } : unknown);
+
+/** `attachment` with an ASCII fallback name and the exact name RFC 5987-encoded. */
+const attachment = (name: string) =>
+  `attachment; filename="${name.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 
 const respond = (body: unknown, status: number, { noStore = false, redact = true } = {}) =>
   HttpServerResponse.text(JSON.stringify(redact ? projectDisplay(body) : body, null, 2), {
@@ -224,6 +228,20 @@ export const AppRouter = HttpRouter.use((router) =>
           headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
         });
       },
+    );
+    yield* serve(
+      Endpoints.workspaceFileDownload,
+      ({ workspace, body }) => downloadWorkspaceFile(workspace, body.path),
+      // The file itself: an attachment of exact bytes, outside the display redaction by design.
+      ({ name, mime, bytes }) =>
+        HttpServerResponse.uint8Array(new Uint8Array(bytes), {
+          contentType: mime.startsWith("text/") ? `${mime}; charset=utf-8` : mime,
+          headers: {
+            "cache-control": "no-store",
+            "x-content-type-options": "nosniff",
+            "content-disposition": attachment(name),
+          },
+        }),
     );
     yield* serve(Endpoints.workspaceChanges, ({ workspace }) =>
       Effect.flatMap(WorkspaceChanges, (changes) => changes.preview(workspace)),

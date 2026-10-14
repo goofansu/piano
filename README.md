@@ -40,8 +40,9 @@ with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-i
 ### Preview local files
 
 Click a local file link in a session to read it beside the conversation. Markdown offers
-**Preview / Source**; code, images, audio, video and PDFs use type-aware viewers. Click the link
-again to reread. See [supported formats, limits and privacy](docs/file-previews.md).
+**Preview / Source**; code, images, audio, video and PDFs use type-aware viewers. **Download**
+saves the file as it is on disk. Click the link again to reread. See
+[supported formats, limits and privacy](docs/file-previews.md).
 
 ### Configure
 

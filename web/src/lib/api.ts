@@ -116,6 +116,38 @@ export const workspaceFile = (workspaceId: string, path: string, options?: Reque
     },
   );
 
+/** The exact file, for saving. Its name comes from the server's attachment header, else the path. */
+export const workspaceFileDownload = (
+  workspaceId: string,
+  path: string,
+  options?: RequestOptions,
+) =>
+  call(
+    Endpoints.workspaceFileDownload,
+    { query: { workspaceId }, body: { path } },
+    options,
+    async (response) => ({
+      name:
+        attachmentName(response.headers.get("content-disposition")) ??
+        path.slice(path.lastIndexOf("/") + 1),
+      mime:
+        response.headers.get("content-type")?.split(";")[0].trim() || "application/octet-stream",
+      bytes: new Uint8Array(await response.arrayBuffer()),
+    }),
+  );
+
+function attachmentName(disposition: string | null): string | undefined {
+  const exact = disposition?.match(/filename\*=UTF-8''([^;]+)/i);
+  if (exact) {
+    try {
+      return decodeURIComponent(exact[1]);
+    } catch {
+      /* fall through to the path */
+    }
+  }
+  return undefined;
+}
+
 // Live workspace changes
 
 export const workspaceChanges = (workspaceId: string, options?: RequestOptions) =>

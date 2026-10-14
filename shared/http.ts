@@ -8,7 +8,7 @@
  * and a GET has no body.
  */
 import { Schema } from "effect";
-import { FilePreview } from "./files.ts";
+import { FileDownload, FilePreview } from "./files.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
@@ -179,6 +179,17 @@ export const Endpoints = {
     noStore: true,
     refused: 400,
     fallback: "Could not read this file. Check the path and try again.",
+  }),
+  /** The same files the preview accepts, as exact bytes in an attachment: no display redaction. */
+  workspaceFileDownload: endpoint({
+    method: "POST",
+    path: "/api/workspace/file/download",
+    query: ["workspaceId"],
+    body: Schema.Struct({ path: Schema.NonEmptyString.check(Schema.isMaxLength(4096)) }),
+    response: FileDownload,
+    noStore: true,
+    refused: 400,
+    fallback: "Could not download this file. Check the path and try again.",
   }),
   workspaceChanges: endpoint({
     method: "POST",

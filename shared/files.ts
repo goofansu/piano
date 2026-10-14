@@ -16,3 +16,11 @@ export const FilePreview = Schema.Union([
   }),
 ]);
 export type FilePreview = typeof FilePreview.Type;
+
+/** A workspace file as it is on disk, for saving: the browser's name for it, its type, every byte. */
+export const FileDownload = Schema.Struct({
+  name: Schema.String,
+  mime: Schema.String,
+  bytes: Schema.Uint8Array,
+});
+export type FileDownload = typeof FileDownload.Type;

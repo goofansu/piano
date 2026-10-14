@@ -10,6 +10,7 @@ import {
   workspaceChangedFile,
   workspaceChanges,
   workspaceFile,
+  workspaceFileDownload,
 } from "../web/src/lib/api.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
@@ -98,6 +99,27 @@ test("file previews preserve binary bytes over scoped POST and still redact text
   assert.deepEqual(binary.bytes, new Uint8Array(pdf));
   await assert.rejects(workspaceFile("unknown", "sample.pdf"), /Workspace is not registered/);
   await assert.rejects(workspaceFile(workspaceId, "../outside.pdf"), /inside this workspace/);
+});
+
+test("downloads are the file's exact bytes: text unredacted, binary intact, same containment and refusals", async () => {
+  await writeFile(join(repo, "secret.txt"), "token=example-secret");
+  const text = await workspaceFileDownload(workspaceId, "secret.txt");
+  assert.deepEqual(
+    [text.name, text.mime, new TextDecoder().decode(text.bytes)],
+    ["secret.txt", "text/plain", "token=example-secret"],
+  );
+  const pdf = Buffer.from("%PDF-1.7\ntoken=example-secret");
+  await writeFile(join(repo, "sample.pdf"), pdf);
+  const binary = await workspaceFileDownload(workspaceId, "sample.pdf");
+  assert.equal(binary.mime, "application/pdf");
+  assert.deepEqual(binary.bytes, new Uint8Array(pdf));
+  // A ZIP cannot be previewed, so it cannot be downloaded either.
+  await writeFile(join(repo, "archive.zip"), Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]));
+  await assert.rejects(workspaceFileDownload(workspaceId, "archive.zip"), /not supported/);
+  await assert.rejects(
+    workspaceFileDownload(workspaceId, "../outside.pdf"),
+    /inside this workspace/,
+  );
 });
 
 test("a response outside the contract is rejected with the endpoint's message, not trusted", async () => {

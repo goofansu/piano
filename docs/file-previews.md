@@ -38,6 +38,14 @@ has a 15-second timeout. These are resource bounds, not a sandbox against malici
 Corrupt PDFs ask for a checked/re-exported original; password-protected PDFs require an unlocked
 copy saved locally. Oversized files are refused before their bodies are read.
 
+## Download
+
+The viewer's **Download** control saves the open file as it is on disk, byte for byte: Markdown
+comes down as its source, text without the display redaction, media and PDFs as the original.
+`POST /api/workspace/file/download?workspaceId=…` takes the same body path, applies the same
+containment, format and size rules as the preview, and answers with an uncached, unsniffed
+attachment. A file that cannot be previewed cannot be downloaded.
+
 ## Ownership and privacy
 
 `WorkspaceFiles` owns canonical workspace containment (including symlinks), regular-file checks,

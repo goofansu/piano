@@ -1,4 +1,5 @@
 import {
+  DownloadIcon,
   FileAudioIcon,
   FileCodeIcon,
   FileIcon,
@@ -7,13 +8,15 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { FileNotice as Notice } from "@/components/FileNotice";
 import { FileText } from "@/components/FileText";
+import { IconButton } from "@/components/IconButton";
 import { LocalFileContext, Markdown } from "@/components/Markdown";
 import { NativeFile } from "@/components/NativeFile";
 import { RightSidebar } from "@/components/RightSidebar";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { workspaceFile } from "@/lib/api";
+import { workspaceFile, workspaceFileDownload } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
 
 const relativeTo = (document: string, path: string) =>
@@ -134,6 +137,25 @@ export function WorkspaceFile({
       for (const url of urls.values()) URL.revokeObjectURL(url);
     };
   }, [result, workspaceId]);
+  const [saving, setSaving] = useState(false);
+  // The browser saves the file through a short-lived object URL; the server sends exact bytes.
+  const save = async () => {
+    if (!workspaceId || saving) return;
+    setSaving(true);
+    try {
+      const { name, mime, bytes } = await workspaceFileDownload(workspaceId, file.path);
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mime }));
+      const anchor = Object.assign(document.createElement("a"), { href: url, download: name });
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not download this file.");
+    } finally {
+      setSaving(false);
+    }
+  };
   const path = result?.path ?? file.path;
   const slash = path.lastIndexOf("/");
   const name = path.slice(slash + 1);
@@ -153,20 +175,25 @@ export function WorkspaceFile({
       }
       description={directory && <span className="truncate font-mono">{directory}</span>}
       actions={
-        result?.kind === "markdown" && (
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            value={mode}
-            onValueChange={(value) => value && setMode(value)}
-            aria-label="Markdown view"
-            size="sm"
-            className="mr-1"
-          >
-            <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
-            <ToggleGroupItem value="source">Source</ToggleGroupItem>
-          </ToggleGroup>
-        )
+        <>
+          {result?.kind === "markdown" && (
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={mode}
+              onValueChange={(value) => value && setMode(value)}
+              aria-label="Markdown view"
+              size="sm"
+              className="mr-1"
+            >
+              <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
+              <ToggleGroupItem value="source">Source</ToggleGroupItem>
+            </ToggleGroup>
+          )}
+          <IconButton label="Download file" disabled={!result || saving} onClick={save}>
+            <DownloadIcon />
+          </IconButton>
+        </>
       }
     >
       {status && <Notice>{status}</Notice>}
