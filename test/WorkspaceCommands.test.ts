@@ -79,7 +79,7 @@ test("INV-06: worktree commands require a registered folder, answer the refusal 
       const commands = yield* WorkspaceCommands,
         registry = yield* Registry;
       // Some folder is registered, so the sidebar has something to rediscover.
-      yield* registry.addFolder(cwd);
+      yield* registry.ensureFolder(cwd);
       for (const attempt of [
         commands.addWorktree(repo, linked),
         commands.createWorktree(repo, "other", {}),
@@ -95,7 +95,7 @@ test("INV-06: worktree commands require a registered folder, answer the refusal 
         yield* Queue.take(discoveries);
       }
       assert.deepEqual((yield* registry.get).worktrees, []);
-      yield* registry.addFolder(repo);
+      yield* registry.ensureFolder(repo);
       assert.deepEqual(yield* commands.addWorktree(repo, linked), {
         status: "ready",
         folder: repo,
@@ -152,7 +152,7 @@ else{const r=readFileSync(${JSON.stringify(reply)},'utf8');if(r==='fail'){consol
     await run(
       Effect.gen(function* () {
         const registry = yield* Registry;
-        yield* registry.addFolder(repo);
+        yield* registry.ensureFolder(repo);
         const commands = yield* Effect.gen(function* () {
           return yield* WorkspaceCommands;
         }).pipe(

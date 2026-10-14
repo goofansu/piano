@@ -155,14 +155,14 @@ test("INV-01/07: a folder keeps its workspace identity when closed and reopened"
     folder = join(f.root, "folder");
   mkdirSync(folder);
   const workspaceId = (data: RegistryData) => data.workspaces.find((w) => w.path === folder)?.id;
-  await f.run(Effect.flatMap(Registry, (r) => r.addFolder(folder)));
+  await f.run(Effect.flatMap(Registry, (r) => r.ensureFolder(folder)));
   const id = workspaceId(await f.get());
   assert.ok(id);
   await f.run(
     Effect.gen(function* () {
       const r = yield* Registry;
       yield* r.removeFolder(folder);
-      yield* r.addFolder(folder);
+      yield* r.ensureFolder(folder);
     }),
   );
   assert.equal(workspaceId(await f.get()), id);

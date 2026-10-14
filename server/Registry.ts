@@ -210,7 +210,6 @@ export class Registry extends Context.Service<
       sessionId: string,
       projectId: string | null,
     ) => Effect.Effect<void, RegistryError>;
-    readonly addFolder: (path: string) => Effect.Effect<void, RegistryError>;
     /** Make sure a directory is usable as a session cwd: a folder root or a registered worktree. Adds it as a folder otherwise. */
     readonly ensureFolder: (path: string) => Effect.Effect<string, RegistryError>;
     readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
@@ -430,13 +429,6 @@ export const RegistryLive = Layer.effect(
               isSession(cwd, sessionId)(s) ? { ...s, projectId: projectId ?? undefined } : s,
             ),
           };
-        }),
-      addFolder: (raw) =>
-        Effect.gen(function* () {
-          const path = yield* requireDirectory(raw);
-          yield* update((d) =>
-            d.folders.includes(path) ? d : { ...d, folders: [...d.folders, path] },
-          );
         }),
       ensureFolder: (raw) =>
         Effect.gen(function* () {

@@ -729,7 +729,6 @@ export const ClientMessage = Schema.Union([
     sessionId: Schema.String,
     projectId: Schema.NullOr(Schema.String),
   }),
-  Schema.TaggedStruct("add_folder", { path: Schema.String }),
   Schema.TaggedStruct("remove_folder", { path: Schema.String }),
   /** Save Pi's project-trust decision for a directory; Pi applies it when a session starts there. */
   Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),
