@@ -415,6 +415,11 @@ test("INV-06: rejected worktree operations settle the picker immediately without
         "mutations are never replayed",
       );
       for (const work of held) yield* work;
+      yield* (yield* Registry).addFolder(cwd);
+      operation.refresh();
+      yield* exchange;
+      assert.equal(operation.getState().refreshing, false, "accepted discovery is correlated too");
+      assert.equal(operation.getState().discovery?.status, "non-git");
     }),
   );
 });
@@ -445,10 +450,11 @@ const refusals: {
     { _tag: "error", message: "REFUSED", selectionId: "s3" },
   ],
   worktrees: [
-    { _tag: "worktrees", folder: cwd },
+    { _tag: "worktrees", folder: cwd, requestId: "discovery1" },
     {
       _tag: "worktrees",
       folder: cwd,
+      requestId: "discovery1",
       discovery: { status: "error", observedAt: "OBSERVED", detail: "REFUSED" },
     },
   ],

@@ -146,13 +146,18 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     registry: { admission: "ordinary", run: () => sidebar.refresh, unanswered: plainError },
     worktrees: {
       admission: "ordinary",
-      run: ({ folder }) =>
+      run: ({ folder, requestId }) =>
         commands
           .discoverWorktrees(folder)
-          .pipe(Effect.flatMap((discovery) => send({ _tag: "worktrees", folder, discovery }))),
-      unanswered: ({ folder }, reason) => ({
+          .pipe(
+            Effect.flatMap((discovery) =>
+              send({ _tag: "worktrees", folder, requestId, discovery }),
+            ),
+          ),
+      unanswered: ({ folder, requestId }, reason) => ({
         _tag: "worktrees",
         folder,
+        requestId,
         discovery: {
           status: "error",
           observedAt: new Date().toISOString(),

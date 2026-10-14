@@ -83,11 +83,8 @@ export function createWorktreeOperation({
     refreshing: false,
     request: IDLE,
   };
-  /** Active discovery per folder; true means a trailing observation is also owed.
-   * Replies have no request ID: this assumes this picker is the socket's sole discovery producer.
-   * Other producers would need protocol correlation, not another local counter.
-   */
-  const awaiting = new Map<string, boolean>();
+  /** Correlation also fences replies from a picker unmounted on this same socket. */
+  const awaiting = new Map<string, { requestId: string; trailing: boolean }>();
   const discoveries = new Map<string, WorktreeDiscovery>();
   let timer: unknown;
   const listeners = new Set<() => void>();
@@ -120,16 +117,19 @@ export function createWorktreeOperation({
   const pendingId = () =>
     state.request.status === "pending" ? state.request.requestId : undefined;
 
+  const sendDiscovery = (folder: string) => {
+    const requestId = crypto.randomUUID();
+    awaiting.set(folder, { requestId, trailing: false });
+    publish();
+    client.send({ _tag: "worktrees", folder, requestId });
+  };
+
   const discover = () => {
     const { folder } = state;
     if (folder === undefined || !client.getState().connected) return;
-    if (awaiting.has(folder)) {
-      awaiting.set(folder, true);
-      return;
-    }
-    awaiting.set(folder, false);
-    publish();
-    client.send({ _tag: "worktrees", folder });
+    const pending = awaiting.get(folder);
+    if (pending) pending.trailing = true;
+    else sendDiscovery(folder);
   };
 
   const begin = (kind: WorktreeRequestKind, command: (requestId: string) => ClientCommand) => {
@@ -167,13 +167,14 @@ export function createWorktreeOperation({
       });
       const stopMessages = client.listen((m) => {
         if (m._tag === "worktrees") {
-          if (!awaiting.has(m.folder)) return;
+          const pending = awaiting.get(m.folder);
+          if (!pending || pending.requestId !== m.requestId) return;
           discoveries.set(m.folder, m.discovery);
-          const trailing = awaiting.get(m.folder);
-          if (trailing) awaiting.set(m.folder, false);
-          else awaiting.delete(m.folder);
-          publish();
-          if (trailing) client.send({ _tag: "worktrees", folder: m.folder });
+          if (pending.trailing) sendDiscovery(m.folder);
+          else {
+            awaiting.delete(m.folder);
+            publish();
+          }
         } else if (m._tag === "worktree_result" && m.requestId === pendingId()) {
           if (m.result.status === "error")
             settle({

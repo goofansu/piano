@@ -707,8 +707,11 @@ export type StartOptions = typeof StartOptions.Type;
 
 export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("registry", {}),
-  /** Rediscover one registered folder's worktrees; only the requesting client gets the answer. */
-  Schema.TaggedStruct("worktrees", { folder: Schema.String }),
+  /** Rediscover one registered folder; echo requestId so replies survive picker remounts. */
+  Schema.TaggedStruct("worktrees", {
+    folder: Schema.String,
+    requestId: Schema.optional(Schema.String),
+  }),
   /** The cached catalog for `cwd`; explicit refreshes use `requestId` for terminal replies. */
   Schema.TaggedStruct("models", {
     cwd: Schema.String,
@@ -830,7 +833,11 @@ export const ServerMessage = Schema.Union([
     message: Schema.String,
   }),
   Schema.TaggedStruct("catalogs_invalidated", {}),
-  Schema.TaggedStruct("worktrees", { folder: Schema.String, discovery: WorktreeDiscovery }),
+  Schema.TaggedStruct("worktrees", {
+    folder: Schema.String,
+    requestId: Schema.optional(Schema.String),
+    discovery: WorktreeDiscovery,
+  }),
   Schema.TaggedStruct("trust", { cwd: Schema.String, trust: ProjectTrust }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
   /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */

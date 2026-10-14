@@ -65,6 +65,8 @@ function picker() {
   const server = (m: ServerMessage) => handlers!.onMessage(m);
   const commands = () => sent.filter((m) => m._tag !== "models" && m._tag !== "trust");
   return {
+    client,
+    server,
     operation,
     state: (): WorktreeOperationState => operation.getState(),
     commands,
@@ -74,7 +76,13 @@ function picker() {
     stop,
     connection: (connected: boolean) => handlers!.onStatus(connected),
     answer: (folder: string, discovery: WorktreeDiscovery) =>
-      server({ _tag: "worktrees", folder, discovery }),
+      server({
+        _tag: "worktrees",
+        folder,
+        requestId: sent.filter((m) => m._tag === "worktrees").findLast((m) => m.folder === folder)
+          ?.requestId,
+        discovery,
+      }),
     receipt: (
       requestId: string,
       result: { status: "ready"; path: string } | { status: "error"; detail: string },
@@ -195,7 +203,7 @@ test("nothing starts while disconnected, without a folder or without a branch", 
 test("refreshing lasts until this picker's discovery answers; refresh keeps a failure on screen", () => {
   const p = picker();
   p.operation.open("/repo");
-  assert.deepEqual(p.last(), { _tag: "worktrees", folder: "/repo" });
+  assert.equal(p.last()?._tag, "worktrees");
   assert.equal(p.state().refreshing, true);
   p.answer("/elsewhere", discovered("other"));
   assert.equal(p.state().refreshing, true, "another folder's answer is not this one");
@@ -228,6 +236,29 @@ test("reopen keeps refreshing until the new discovery answers", () => {
   assert.equal(p.state().discovery?.observedAt, "second");
 });
 
+test("a remounted picker ignores the previous picker's discovery on the same connection", () => {
+  const p = picker();
+  p.operation.open("/repo");
+  const first = p.last();
+  assert.ok(first?._tag === "worktrees");
+  p.stop();
+
+  const replacement = createWorktreeOperation({ client: p.client, ready: () => {} });
+  const stop = replacement.start();
+  replacement.open("/repo");
+  const second = p.last();
+  assert.ok(second?._tag === "worktrees");
+  p.server({ ...first, discovery: discovered("old") });
+  assert.equal(replacement.getState().refreshing, true, "A cannot settle B after remount");
+  assert.equal(replacement.getState().discovery, undefined);
+  p.server({ ...second, discovery: discovered("fresh") });
+  assert.equal(replacement.getState().refreshing, false);
+  assert.equal(replacement.getState().discovery?.observedAt, "fresh");
+  p.server({ ...first, discovery: discovered("old") });
+  assert.equal(replacement.getState().discovery?.observedAt, "fresh", "late A cannot overwrite B");
+  stop();
+});
+
 test("overlapping refreshes coalesce behind the active discovery", () => {
   const p = picker();
   p.operation.open("/repo");
@@ -254,7 +285,9 @@ test("queued discoveries survive folder switches and reopen, including error ans
   assert.equal(p.commands().length, 2);
   p.answer("/repo", { status: "error", observedAt: "failed", detail: "busy" });
   assert.equal(p.commands().length, 3);
-  assert.deepEqual(p.last(), { _tag: "worktrees", folder: "/repo" });
+  const trailing = p.last();
+  assert.ok(trailing?._tag === "worktrees");
+  assert.equal(trailing.folder, "/repo");
   assert.equal(p.state().refreshing, true);
   p.answer("/other", discovered("other"));
   assert.equal(p.state().discovery?.observedAt, "failed");
