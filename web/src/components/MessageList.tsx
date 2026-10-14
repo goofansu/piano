@@ -199,8 +199,7 @@ function Row({
 }
 
 function TranscriptRowView({ row }: { row: TranscriptRow }) {
-  if (row.kind === "subagent")
-    return <SubagentCardView {...row.subagent} markdown={row.msg.role === "context"} />;
+  if (row.kind === "subagent") return <SubagentCardView {...row.subagent} />;
   if (row.kind === "context") return <ContextCard msg={row.msg} />;
   if (row.kind === "user")
     return (
@@ -266,54 +265,83 @@ const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
 };
 
 /**
- * A row for what Pi inserted or expanded rather than said: a gutter icon, a label, a quiet
- * monospace note and, once opened, a body under a rule. Context rows and skill expansions share
- * it, so they fold the same way.
+ * A transcript row that folds: a gutter glyph, a header that opens and closes it, and a body under
+ * the header. Context rows, subagent cards, tool calls and skill expansions all fold through it,
+ * so the header's out-of-flow padding (`disclosureRow`), the chevron, the body's indent and its
+ * open and close animation are decided here once. Without a glyph the row sits inside another
+ * row's content (a skill in its prompt bubble), so neither header nor body takes a gutter.
  */
 function FoldRow({
   glyph,
-  title,
-  note,
+  header,
   label,
-  open,
-  onOpenChange,
+  defaultOpen = false,
+  canOpen = true,
+  headerClassName,
+  ruled = true,
+  bodyClassName,
   data,
+  onClick,
   children,
 }: {
-  glyph: React.ReactNode;
-  title: string;
-  note?: string;
+  glyph?: React.ReactNode;
+  /** What the row is: its title, a quiet note, a badge. The chevron follows it. */
+  header: React.ReactNode;
   /** The group's accessible name. */
   label: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  defaultOpen?: boolean;
+  /** False when there is nothing to show: the header stays, without a chevron or a body. */
+  canOpen?: boolean;
+  headerClassName?: string;
+  /** The body sits under a rule; a tool call's body draws its own boxes instead. */
+  ruled?: boolean;
+  bodyClassName?: string;
   /** `data-*` attributes for tests and evidence scripts. */
   data?: Record<`data-${string}`, string | undefined>;
-  children: React.ReactNode;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
+  children?: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  // A horizontal drag that starts on a header still opens the mobile sidebar; a tap folds.
+  const trigger = (
+    <CollapsibleTrigger asChild disabled={!canOpen}>
+      <button
+        type="button"
+        data-sidebar-swipe="true"
+        className={cn(disclosureRow, headerClassName)}
+      >
+        {header}
+        {canOpen && <DisclosureChevron open={open} className="ml-auto" />}
+      </button>
+    </CollapsibleTrigger>
+  );
+  const body = (
+    <div className={cn(ruled && "border-l-2 border-line pl-3 text-ink-2", bodyClassName)}>
+      {children}
+    </div>
+  );
   return (
     <Collapsible
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={setOpen}
       role="group"
       aria-label={label}
       className="text-sm"
+      onClick={onClick}
       {...data}
     >
-      <Row glyph={glyph}>
-        <CollapsibleTrigger asChild>
-          <button type="button" className={disclosureRow}>
-            <span className="shrink-0 font-medium text-ink">{title}</span>
-            {note && <span className="min-w-0 flex-1 truncate font-mono text-ink-3">{note}</span>}
-            <DisclosureChevron open={open} className="ml-auto" />
-          </button>
-        </CollapsibleTrigger>
-      </Row>
-      <CollapsibleContent className="disclosure-content">
-        <Row glyph={null} className="pt-2">
-          <div className="border-l-2 border-line pl-3 text-ink-2">{children}</div>
-        </Row>
-      </CollapsibleContent>
+      {glyph === undefined ? trigger : <Row glyph={glyph}>{trigger}</Row>}
+      {canOpen && (
+        <CollapsibleContent className="disclosure-content">
+          {glyph === undefined ? (
+            <div className="pt-2">{body}</div>
+          ) : (
+            <Row glyph={null} className="pt-2">
+              {body}
+            </Row>
+          )}
+        </CollapsibleContent>
+      )}
     </Collapsible>
   );
 }
@@ -321,17 +349,21 @@ function FoldRow({
 /** Context Pi inserted rather than said: a compaction or branch summary, shell output, or an
  * extension's note. It starts open: after a compaction it is the transcript's only earlier record. */
 function ContextCard({ msg }: { msg: RenderMsg }) {
-  const [open, setOpen] = useState(true);
   const facts = contextFacts(msg.label);
   const Icon = CONTEXT_ICON[facts.kind];
   return (
     <FoldRow
       glyph={<Icon className="size-3.5 text-ink-3" aria-hidden />}
-      title={facts.title}
-      note={facts.note}
+      header={
+        <>
+          <span className="shrink-0 font-medium text-ink">{facts.title}</span>
+          {facts.note && (
+            <span className="min-w-0 flex-1 truncate font-mono text-ink-3">{facts.note}</span>
+          )}
+        </>
+      }
       label={facts.title}
-      open={open}
-      onOpenChange={setOpen}
+      defaultOpen
       data={{ "data-slot": "context-card", "data-context": facts.kind }}
     >
       {facts.markdown ? (
@@ -504,32 +536,23 @@ function UserMessage({
  * material, so it stays folded until the reader asks for it.
  */
 function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
-  const [open, setOpen] = useState(false);
   return (
-    // Clicks here open the skill, never the prompt's own long-text disclosure around it.
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      role="group"
-      aria-label={`${skill.name} skill`}
-      className="text-sm"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <CollapsibleTrigger asChild>
-        {/* The bubble's line height, so the prompt's › glyph centres on this first line. */}
-        <button type="button" className={cn(disclosureRow, "leading-6")}>
+    <FoldRow
+      header={
+        <>
           <SparklesIcon className="size-3.5 shrink-0 text-brand" aria-hidden />
           <span className="min-w-0 flex-1 truncate font-mono text-ink">/skill:{skill.name}</span>
-          <DisclosureChevron open={open} className="ml-auto" />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="disclosure-content">
-        <div className="mt-2 border-l-2 border-line pl-3">
-          <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
-          <Markdown text={skill.body} className="prose-chat text-ink-2" />
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+        </>
+      }
+      label={`${skill.name} skill`}
+      // The bubble's line height, so the prompt's › glyph centres on this first line.
+      headerClassName="leading-6"
+      // Clicks here open the skill, never the prompt's own long-text disclosure around it.
+      onClick={(e) => e.stopPropagation()}
+    >
+      <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
+      <Markdown text={skill.body} className="prose-chat text-ink-2" />
+    </FoldRow>
   );
 }
 
@@ -555,92 +578,77 @@ function SubagentCardView({
   output,
   details,
   hasDetails,
-  markdown = false,
-}: SubagentFacts & { markdown?: boolean }) {
-  const [open, setOpen] = useState(false);
+  markdown,
+}: SubagentFacts) {
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      role="group"
-      aria-label={ariaLabel}
-      data-slot={card.kind === "delegation" ? "delegation-card" : "subagent-result-card"}
-      data-run-id={runId}
-      className="text-sm"
+    <FoldRow
+      glyph={<span className={cn("block size-2 rounded-full", SUBAGENT_DOT[dot])} />}
+      header={
+        <>
+          <span className="min-w-0 flex-1 truncate font-medium text-ink">
+            {isResult && <span className="font-normal text-ink-3">Result · </span>}
+            {title}
+          </span>
+          {profile && <span className="max-w-28 shrink truncate text-ink-3">{profile}</span>}
+          <Badge
+            variant={badge}
+            className="max-w-full min-w-0 whitespace-normal max-sm:order-last max-sm:basis-full sm:max-w-56"
+          >
+            <span className="min-w-0 break-words">{statusLabel}</span>
+          </Badge>
+        </>
+      }
+      label={ariaLabel}
+      canOpen={hasDetails}
+      headerClassName="max-sm:flex-wrap"
+      bodyClassName="flex flex-col gap-3"
+      data={{
+        "data-slot": card.kind === "delegation" ? "delegation-card" : "subagent-result-card",
+        "data-run-id": runId,
+      }}
     >
-      <Row glyph={<span className={cn("block size-2 rounded-full", SUBAGENT_DOT[dot])} />}>
-        <CollapsibleTrigger asChild disabled={!hasDetails}>
-          <button type="button" className={cn(disclosureRow, "max-sm:flex-wrap")}>
-            <span className="min-w-0 flex-1 truncate font-medium text-ink">
-              {isResult && <span className="font-normal text-ink-3">Result · </span>}
-              {title}
-            </span>
-            {profile && <span className="max-w-28 shrink truncate text-ink-3">{profile}</span>}
-            <Badge
-              variant={badge}
-              className="max-w-full min-w-0 whitespace-normal max-sm:order-last max-sm:basis-full sm:max-w-56"
-            >
-              <span className="min-w-0 break-words">{statusLabel}</span>
-            </Badge>
-            {hasDetails && <DisclosureChevron open={open} />}
-          </button>
-        </CollapsibleTrigger>
-      </Row>
-      {hasDetails && (
-        <CollapsibleContent className="disclosure-content">
-          <Row glyph={null} className="pt-2">
-            <div className="flex flex-col gap-3 border-l-2 border-line pl-3 text-ink-2">
-              {details.map((detail) =>
-                detail.kind === "identity" ? (
-                  <dl
-                    key="identity"
-                    className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs"
-                  >
-                    {detail.subagentId && (
-                      <>
-                        <dt className="text-ink-3">Subagent</dt>
-                        <dd className="break-all font-mono">{detail.subagentId}</dd>
-                      </>
-                    )}
-                    {detail.runId && (
-                      <>
-                        <dt className="text-ink-3">Run</dt>
-                        <dd className="break-all font-mono">{detail.runId}</dd>
-                      </>
-                    )}
-                  </dl>
-                ) : detail.kind === "text" ? (
-                  <div key={detail.label}>
-                    <p className="mb-1 text-xs text-ink-3">{detail.label}</p>
-                    <pre className="whitespace-pre-wrap break-words">
-                      {clamp(detail.text, 8000)}
-                    </pre>
-                  </div>
-                ) : (
-                  <p
-                    key={`${detail.kind}:${detail.text}`}
-                    className={cn(
-                      "text-xs",
-                      detail.kind === "run" ? "break-all font-mono" : "text-ink-3",
-                    )}
-                  >
-                    {detail.text}
-                  </p>
-                ),
-              )}
-              {output &&
-                (markdown ? (
-                  <Markdown text={output} className="prose-chat" />
-                ) : (
-                  <pre className={cn("whitespace-pre-wrap break-words", failed && "text-err")}>
-                    {clamp(output, 20000)}
-                  </pre>
-                ))}
-            </div>
-          </Row>
-        </CollapsibleContent>
+      {details.map((detail) =>
+        detail.kind === "identity" ? (
+          <dl
+            key="identity"
+            className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs"
+          >
+            {detail.subagentId && (
+              <>
+                <dt className="text-ink-3">Subagent</dt>
+                <dd className="break-all font-mono">{detail.subagentId}</dd>
+              </>
+            )}
+            {detail.runId && (
+              <>
+                <dt className="text-ink-3">Run</dt>
+                <dd className="break-all font-mono">{detail.runId}</dd>
+              </>
+            )}
+          </dl>
+        ) : detail.kind === "text" ? (
+          <div key={detail.label}>
+            <p className="mb-1 text-xs text-ink-3">{detail.label}</p>
+            <pre className="whitespace-pre-wrap break-words">{clamp(detail.text, 8000)}</pre>
+          </div>
+        ) : (
+          <p
+            key={`${detail.kind}:${detail.text}`}
+            className={cn("text-xs", detail.kind === "run" ? "break-all font-mono" : "text-ink-3")}
+          >
+            {detail.text}
+          </p>
+        ),
       )}
-    </Collapsible>
+      {output &&
+        (markdown ? (
+          <Markdown text={output} className="prose-chat" />
+        ) : (
+          <pre className={cn("whitespace-pre-wrap break-words", failed && "text-err")}>
+            {clamp(output, 20000)}
+          </pre>
+        ))}
+    </FoldRow>
   );
 }
 
@@ -665,7 +673,6 @@ function Tool({
   summary,
   subagent,
 }: ToolRow) {
-  const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   if (subagent) return <SubagentCardView {...subagent} />;
   const failed = outcome === "failed";
@@ -674,47 +681,36 @@ function Tool({
   const hidden = lines.length - shown.length;
 
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      role="group"
-      aria-label={`${call.name} tool call`}
-      className="text-sm"
-    >
-      <Row
-        glyph={
-          <span
-            className={cn("block size-2 rounded-full transition-colors duration-300", DOT[outcome])}
-          />
-        }
-      >
-        <CollapsibleTrigger asChild>
-          <button type="button" data-sidebar-swipe="true" className={disclosureRow}>
-            <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
-              {verb}
-              {!knownTool && (
-                <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>
-              )}
-            </span>
-            {summary && (
-              <span className="min-w-0 flex-1 truncate font-mono text-ink-2">{summary}</span>
+    <FoldRow
+      glyph={
+        <span
+          className={cn("block size-2 rounded-full transition-colors duration-300", DOT[outcome])}
+        />
+      }
+      header={
+        <>
+          <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
+            {verb}
+            {!knownTool && (
+              <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>
             )}
-            {knownTool && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
-            <DisclosureChevron open={open} className="ml-auto" />
-          </button>
-        </CollapsibleTrigger>
-      </Row>
+          </span>
+          {summary && (
+            <span className="min-w-0 flex-1 truncate font-mono text-ink-2">{summary}</span>
+          )}
+          {knownTool && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
+        </>
+      }
+      label={`${call.name} tool call`}
+      ruled={false}
+    >
       {call.args && (
-        <CollapsibleContent className="disclosure-content">
-          <Row glyph={null} className="pt-2">
-            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-fill px-3 py-2 text-ink-2">
-              {clamp(call.args, 4000)}
-            </pre>
-          </Row>
-        </CollapsibleContent>
+        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-fill px-3 py-2 text-ink-2">
+          {clamp(call.args, 4000)}
+        </pre>
       )}
-      {output && open && (
-        <Row glyph={null} className="mt-1">
+      {output && (
+        <div data-slot="tool-output" className={cn(call.args && "mt-1")}>
           <pre
             className={cn(
               "border-l-2 border-line py-1 pl-3 whitespace-pre-wrap break-all",
@@ -743,32 +739,31 @@ function Tool({
               Show less
             </Button>
           )}
-        </Row>
+        </div>
       )}
-      {open &&
-        nested.map((child) => (
-          /* biome-ignore lint/a11y/useSemanticElements: a <fieldset> is for form controls. */ <div
-            key={child.id}
-            role="group"
-            aria-label={`${child.name} tool call`}
-            className="ml-7 mt-2 border-l border-line pl-3 text-xs"
-          >
-            <p className="flex items-center gap-2">
-              {child.name}{" "}
-              <Badge variant={nestedStatus(child.status).badge}>
-                {nestedStatus(child.status).label}
-              </Badge>
-            </p>
-            <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
-            {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}
-            {child.text && (
-              <pre className="whitespace-pre-wrap break-words">{clamp(child.text, 4000)}</pre>
-            )}
-          </div>
-        ))}
-      {open && !nestedComplete && (
-        <p className="pl-7 text-xs text-warning">Some tool details are unavailable.</p>
+      {nested.map((child) => (
+        /* biome-ignore lint/a11y/useSemanticElements: a <fieldset> is for form controls. */ <div
+          key={child.id}
+          role="group"
+          aria-label={`${child.name} tool call`}
+          className="mt-2 border-l border-line pl-3 text-xs"
+        >
+          <p className="flex items-center gap-2">
+            {child.name}{" "}
+            <Badge variant={nestedStatus(child.status).badge}>
+              {nestedStatus(child.status).label}
+            </Badge>
+          </p>
+          <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
+          {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}
+          {child.text && (
+            <pre className="whitespace-pre-wrap break-words">{clamp(child.text, 4000)}</pre>
+          )}
+        </div>
+      ))}
+      {!nestedComplete && (
+        <p className="text-xs text-warning">Some tool details are unavailable.</p>
       )}
-    </Collapsible>
+    </FoldRow>
   );
 }

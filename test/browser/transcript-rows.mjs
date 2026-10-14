@@ -1,6 +1,7 @@
 // Transcript rows: every row kind sits beside a gutter glyph that centres on its first text line.
-// A session with each kind is seeded, and every gutter on the page is measured (docs/testing.md
-// §Alignment). A new row kind is added to `messages` here when it is added to the transcript.
+// A session with each kind is seeded, and every gutter on the page is measured, with the folds as
+// they start and again with every fold open (docs/testing.md §Alignment). A new row kind is added
+// to `messages` here when it is added to the transcript.
 // node test/browser/transcript-rows.mjs [evidence-directory]
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
@@ -147,6 +148,61 @@ await run(
       off,
       [],
       `glyphs off their first line by more than 1px: ${JSON.stringify(off)}`,
+    );
+
+    // Every folding row opens the same way: its whole body, a tool's output included, sits in
+    // the fold's animated content, and the glyphs stay on their lines while open.
+    const closed = await page.evaluate(`[...document.querySelectorAll(
+      '[data-slot="collapsible-trigger"][aria-expanded="false"]:not(:disabled)')].map((trigger, i) => {
+      trigger.setAttribute("data-fold-probe", String(i));
+      return trigger.closest('[role="group"]').getAttribute("aria-label");
+    })`);
+    assert.ok(closed.includes("bash tool call"), `closed folds: ${closed.join(" | ")}`);
+    for (const [i] of closed.entries()) {
+      // Centred, so the scroll-to-bottom button never covers the header.
+      await page.ab(
+        "eval",
+        `document.querySelector('[data-fold-probe="${i}"]').scrollIntoView({ block: "center" })`,
+      );
+      await page.ab("click", `[data-fold-probe="${i}"]`);
+    }
+    await page.until(
+      `[...document.querySelectorAll('[data-slot="collapsible-content"]')].every((c) => c.dataset.state === "open" && !c.getAnimations().length)`,
+    );
+    await page.capture("2-open");
+    const bodies = await page.evaluate(`[...document.querySelectorAll('[role="group"]')]
+      .filter((group) => group.querySelector(':scope [data-slot="collapsible-trigger"]'))
+      .map((group) => {
+        const trigger = group.querySelector('[data-slot="collapsible-trigger"]');
+        const outside = [...group.querySelectorAll('[data-slot="row-content"], pre, p, dl')].filter(
+          (el) => !trigger.contains(el) && !el.contains(trigger) && !el.closest('[data-slot="collapsible-content"]'),
+        );
+        return { label: group.getAttribute("aria-label"), outside: outside.map((el) => el.textContent.slice(0, 40)) };
+      })`);
+    const leaked = bodies.filter((body) => body.outside.length);
+    assert.deepEqual(leaked, [], `fold body outside its content: ${JSON.stringify(leaked)}`);
+    const opened = await page.evaluate(measure);
+    writeFileSync(
+      join(process.argv[2] ?? ".scratch/browser/transcript-rows", "offsets-open.json"),
+      JSON.stringify(opened, null, 2),
+    );
+    const offOpen = opened.filter((row) => Math.abs(row.offset) > 1);
+    assert.deepEqual(offOpen, [], `open glyphs off their line: ${JSON.stringify(offOpen)}`);
+    const tool = '[role="group"][aria-label="bash tool call"]';
+    assert.equal(
+      await page.evaluate(
+        `document.querySelector('${tool} [data-slot="collapsible-content"]').textContent.includes("ok")`,
+      ),
+      true,
+      "the tool's output shows in its open body",
+    );
+    await page.ab(
+      "eval",
+      `document.querySelector('${tool} [data-slot="collapsible-trigger"]').scrollIntoView({ block: "center" })`,
+    );
+    await page.ab("click", `${tool} [data-slot="collapsible-trigger"]`);
+    await page.until(
+      `!document.querySelector('${tool} [data-slot="collapsible-content"]').textContent`,
     );
   },
 );
