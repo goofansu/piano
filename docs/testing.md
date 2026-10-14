@@ -67,6 +67,8 @@ that every PR add tests applies.
   depends on them. Do not enumerate combinations without identifying a distinct risk.
 - Prefer focused assertions to large snapshots. Snapshots are appropriate for stable structured
   contracts only when their scope is intentional and changes can be meaningfully reviewed.
+- To show a new or moved test guards its contract, break the production code it protects once,
+  watch the test fail for that reason, then restore the code exactly.
 - A behavior-preserving refactor should normally retain its tests. If harmless implementation
   changes repeatedly break them, inspect whether they assert implementation details.
 - Fix or explicitly track flaky tests; retries must not manufacture confidence. Remove obsolete
