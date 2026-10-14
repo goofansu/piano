@@ -34,6 +34,7 @@ import { useSetupActions } from "@/lib/useSetupActions";
 // Locally bundled Simple Icons logos; omit media for servers without a matching logo.
 const SERVER_LOGOS: Partial<Record<McpServer["id"], string>> = {
   linear: "/mcp-logos.svg#linear",
+  jira: "/mcp-logos.svg#jira",
 };
 type Confirmation =
   | { kind: "sign-out"; server: McpServer }
