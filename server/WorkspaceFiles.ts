@@ -11,20 +11,56 @@ const refuse = (detail: string): never => {
   throw new FileRefusal({ detail });
 };
 const MiB = 1024 * 1024;
-const binaryTypes: Record<string, { kind: "image" | "audio" | "video" | "pdf"; limit: number }> = {
-  "image/png": { kind: "image", limit: 10 * MiB },
-  "image/jpeg": { kind: "image", limit: 10 * MiB },
-  "image/gif": { kind: "image", limit: 10 * MiB },
-  "image/webp": { kind: "image", limit: 10 * MiB },
-  "audio/mpeg": { kind: "audio", limit: 20 * MiB },
-  "audio/wav": { kind: "audio", limit: 20 * MiB },
-  "audio/ogg": { kind: "audio", limit: 20 * MiB },
-  "audio/flac": { kind: "audio", limit: 20 * MiB },
-  "audio/mp4": { kind: "audio", limit: 20 * MiB },
-  "video/mp4": { kind: "video", limit: 32 * MiB },
-  "video/webm": { kind: "video", limit: 32 * MiB },
-  "application/pdf": { kind: "pdf", limit: 20 * MiB },
-};
+interface BinaryFormat {
+  kind: "image" | "audio" | "video" | "pdf";
+  limit: number;
+  /** Sent to the browser for preview and download. */
+  mime: string;
+  /** Other MIME bases the detector reports for this format. */
+  aliases?: string[];
+  /** Names that claim this format; their bytes must then be it. */
+  extensions: string[];
+}
+/** The one list of binary formats Piano previews; docs/file-previews.md describes it. */
+const binaryFormats: BinaryFormat[] = [
+  {
+    kind: "image",
+    limit: 10 * MiB,
+    mime: "image/png",
+    aliases: ["image/apng"],
+    extensions: ["png"],
+  },
+  { kind: "image", limit: 10 * MiB, mime: "image/jpeg", extensions: ["jpg", "jpeg"] },
+  { kind: "image", limit: 10 * MiB, mime: "image/gif", extensions: ["gif"] },
+  { kind: "image", limit: 10 * MiB, mime: "image/webp", extensions: ["webp"] },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/mpeg", extensions: ["mp3"] },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/wav", extensions: ["wav"] },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/ogg", extensions: ["ogg", "oga", "opus"] },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/flac", extensions: ["flac"] },
+  {
+    kind: "audio",
+    limit: 20 * MiB,
+    mime: "audio/mp4",
+    aliases: ["audio/x-m4a"],
+    extensions: ["m4a"],
+  },
+  { kind: "video", limit: 32 * MiB, mime: "video/mp4", extensions: ["mp4"] },
+  { kind: "video", limit: 32 * MiB, mime: "video/webm", extensions: ["webm"] },
+  { kind: "pdf", limit: 20 * MiB, mime: "application/pdf", extensions: ["pdf"] },
+];
+const binaryTypes = new Map(
+  binaryFormats.flatMap((format) =>
+    [format.mime, ...(format.aliases ?? [])].map((mime) => [mime, format] as const),
+  ),
+);
+const binaryExtensions = new Set(binaryFormats.flatMap((format) => format.extensions));
+/** Detected types that are text: they go through the UTF-8 check like undetected files. */
+const isTextType = (mime: string) =>
+  mime.startsWith("text/") ||
+  ["application/xml", "image/svg+xml", "application/rtf"].includes(mime);
+/** The detector's MIME without parameters, such as `audio/ogg; codecs=opus`. */
+const mimeBase = (detected: { mime: string } | undefined) =>
+  detected?.mime.split(";")[0]?.trim().toLowerCase();
 // The acquisition module owns filename policy; renderers never infer formats themselves.
 const languages: Record<string, string> = {
   js: "javascript",
@@ -66,7 +102,6 @@ const specialLanguages: Record<string, string> = {
   dockerfile: "dockerfile",
   makefile: "make",
   gnumakefile: "make",
-  ".gitignore": "gitignore",
   ".bashrc": "shellscript",
   ".zshrc": "shellscript",
 };
@@ -105,10 +140,11 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
     const detected = await fileTypeFromBuffer(header.subarray(0, initial.bytesRead)).catch(
       () => undefined,
     );
-    const binary = detected && binaryTypes[detected.mime];
-    if (detected && !binary && !["application/xml", "image/svg+xml"].includes(detected.mime))
+    const type = mimeBase(detected);
+    const binary = type ? binaryTypes.get(type) : undefined;
+    if (type && !binary && !isTextType(type))
       refuse("This file type is not supported. Convert it to UTF-8 text, PNG, MP3, MP4 or PDF.");
-    if (!binary && /\.(png|jpe?g|gif|webp|mp3|wav|ogg|flac|m4a|mp4|webm|pdf)$/i.test(requested))
+    if (!binary && binaryExtensions.has(extname(requested).slice(1).toLowerCase()))
       refuse(
         "This file is malformed or its content does not match a supported format. Check or convert the original file.",
       );
@@ -137,14 +173,14 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
       workspaceId: workspace.id,
       path: relative(resolve(workspace.path), requested),
     };
-    if (binary && detected) {
-      const actual = await fileTypeFromBuffer(data).catch(() => undefined);
-      if (actual?.mime !== detected.mime)
+    if (binary) {
+      const actual = mimeBase(await fileTypeFromBuffer(data).catch(() => undefined));
+      if (!actual || binaryTypes.get(actual) !== binary)
         refuse("This file changed while reading. Try the link again.");
       return {
-        preview: { ...identity, kind: binary.kind, mime: detected.mime, bytes: data },
+        preview: { ...identity, kind: binary.kind, mime: binary.mime, bytes: data },
         name: basename(requested),
-        mime: detected.mime,
+        mime: binary.mime,
         data,
       };
     }
