@@ -119,6 +119,8 @@ await run(
 
     await page.ab("fill", '[aria-label="Message"]', "hold");
     await page.ab("press", "Enter");
+    // Submission returns before Pi's running state necessarily reaches the browser.
+    await page.ab("wait", 'button[aria-label="Stop"]');
     await page.click("button", "Stop");
     await page.until(`!!document.querySelector('[aria-label="Send"]')`);
     assert.ok(
