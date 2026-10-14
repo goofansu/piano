@@ -1,4 +1,3 @@
-import type { Workspace } from "@shared/wire";
 import { XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,25 +7,26 @@ import { workspaceFile } from "@/lib/api";
  * No stock shadcn component provides a nonmodal, in-flow file viewer.
  * The owner keys it by session, workspace and path, so new destinations never flash old content. */
 export function WorkspaceFile({
-  workspace,
+  workspaceId,
   file,
   close,
 }: {
-  workspace: Workspace | undefined;
+  workspaceId: string | undefined;
   file: { path: string };
   close: () => void;
 }) {
   const [result, setResult] = useState<{ path: string; content: string }>();
   const [status, setStatus] = useState("Opening…");
+  // A sidebar snapshot replaces workspace objects; only a new identity or link click rereads.
   useEffect(() => {
     const controller = new AbortController();
     setResult(undefined);
     setStatus("Opening…");
-    if (!workspace) {
+    if (!workspaceId) {
       setStatus("Workspace unavailable. Refresh folders and try the link again.");
       return;
     }
-    void workspaceFile(workspace.id, file.path, { signal: controller.signal }).then(
+    void workspaceFile(workspaceId, file.path, { signal: controller.signal }).then(
       (result) => {
         if (controller.signal.aborted) return;
         setResult(result);
@@ -42,7 +42,7 @@ export function WorkspaceFile({
       },
     );
     return () => controller.abort();
-  }, [file, workspace]);
+  }, [file, workspaceId]);
   const path = result?.path ?? file.path;
   return (
     <aside
