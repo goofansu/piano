@@ -96,12 +96,12 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                 <ItemDescription className="line-clamp-none">{account.description}</ItemDescription>
               )}
             </ItemContent>
-            <ItemActions className="max-sm:basis-full">
+            <ItemActions>
               {account.signedIn ? (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground max-sm:-mx-2.5"
+                  className="text-muted-foreground"
                   disabled={!account.canSignOut}
                   aria-label="Sign out of Radius"
                   onClick={() => setup.confirm({ kind: "sign-out" })}
