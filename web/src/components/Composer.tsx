@@ -1,7 +1,7 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { ContextDetails } from "@/components/ContextDetails";
 import { DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { JumpTo } from "@/components/JumpTo";
@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoToolt
 import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
 import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
@@ -109,7 +110,7 @@ export function Composer({
     queued: queuedMessages.length,
     mode: queueMode,
   });
-  const { imagesWaiting, showDelivery } = control;
+  const { showDelivery } = control;
   const showStop = control.primary === "stop";
   const send = (alt: boolean) => {
     const kind = control.delivery(alt);
@@ -156,59 +157,60 @@ export function Composer({
           }
         }}
         above={
-          <>
-            {imagesWaiting && (
-              <p
-                role="status"
-                className="animate-in px-4 pt-2 text-sm text-ink-2 fade-in-0 slide-in-from-top-1"
-              >
-                Images are ready. Wait for Pi to finish before sending.
-              </p>
-            )}
-            {queue && (
-              <section
-                className="control-enter flex max-h-[min(14rem,30dvh)] flex-col border-b border-line px-4 py-3 text-sm"
-                aria-label="Queued messages"
-              >
-                <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
-                  <h2 className="font-medium text-ink-2">{queue.heading}</h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-11 shrink-0 md:h-8"
-                    aria-label={queue.editAriaLabel}
-                    title="Move queued messages back to the draft without stopping Pi (Esc)"
-                    disabled={!control.canRestoreQueue}
-                    onClick={() => {
-                      sendCommand(RESTORE_QUEUE);
-                      editor.ref.current?.focus();
-                    }}
+          queue && (
+            <section
+              className="control-enter flex max-h-[min(14rem,30dvh)] flex-col border-b border-line px-4 py-3 text-sm"
+              aria-label="Queued messages"
+            >
+              <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
+                <h2 className="font-medium text-ink-2">{queue.heading}</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-11 shrink-0 md:h-8"
+                  aria-label={queue.editAriaLabel}
+                  title="Move queued messages back to the draft without stopping Pi (Esc)"
+                  disabled={!control.canRestoreQueue}
+                  onClick={() => {
+                    sendCommand(RESTORE_QUEUE);
+                    editor.ref.current?.focus();
+                  }}
+                >
+                  <PencilIcon data-icon="inline-start" aria-hidden />
+                  {queue.editLabel}
+                </Button>
+              </div>
+              <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
+                {queuedMessages.map((message, index) => (
+                  <li
+                    key={message.id ?? `${message.kind}-${index}`}
+                    className="flex min-w-0 animate-in flex-col gap-1 fade-in-0"
                   >
-                    <PencilIcon data-icon="inline-start" aria-hidden />
-                    {queue.editLabel}
-                  </Button>
-                </div>
-                <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
-                  {queuedMessages.map((message, index) => (
-                    <li
-                      // biome-ignore lint/suspicious/noArrayIndexKey: queued messages carry no id and may repeat text.
-                      key={`${message.kind}-${index}`}
-                      className="flex min-w-0 animate-in flex-col gap-1 fade-in-0"
-                    >
-                      {queue.showKinds && (
-                        <span className="text-xs text-ink-3">
-                          {message.kind === "steering" ? "Steering" : "Follow-up"}
-                        </span>
-                      )}
+                    {queue.showKinds && (
+                      <span className="text-xs text-ink-3">
+                        {message.kind === "steering" ? "Steering" : "Follow-up"}
+                      </span>
+                    )}
+                    <div className="flex min-w-0 items-start gap-2">
                       <span className="min-w-0 whitespace-pre-wrap break-words">
                         {message.text}
                       </span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
-          </>
+                      {!!message.attachmentCount && (
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0"
+                          aria-label={`${message.attachmentCount} ${message.attachmentCount === 1 ? "attachment" : "attachments"}`}
+                        >
+                          <PaperclipIcon data-icon="inline-start" aria-hidden />
+                          {message.attachmentCount}
+                        </Badge>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )
         }
         actions={
           <>

@@ -461,12 +461,6 @@ const openSession = (spec: PiSessionSpec) =>
           case "prompt":
           case "steer": {
             const exchange = yield* exchangeOf(piExchangeFor(action));
-            // Pi's clear_queue only returns text. Do not offer a lossy image queue.
-            if (action.attachments?.length && isWorking(yield* publication.state))
-              return yield* new PiSessionError({
-                reason: "rejected",
-                detail: "Wait for Pi to finish before sending images.",
-              });
             // Explicit new input starts a new operation boundary. An older abort's
             // acknowledgement must never cancel its dialogs or clear its activity.
             aborting = undefined;

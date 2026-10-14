@@ -128,10 +128,23 @@ test("nothing can steer a compaction: every send waits as a follow-up and the de
   }
 });
 
-test("images wait for Pi to finish", () => {
-  const waiting = at({ streaming: true, text: "hi", images: { items: [image], busy: false } });
-  assert.equal(waiting.imagesWaiting, true);
-  assert.equal(waiting.enabled, false);
+test("ready images queue while Pi works, with or without text", () => {
+  for (const text of ["", "hi"]) {
+    for (const mode of ["steering", "follow-up"] as const) {
+      const ready = at({ streaming: true, text, mode, images: { items: [image], busy: false } });
+      assert.equal(ready.enabled, true);
+      assert.equal(ready.primary, "queue");
+      assert.equal(ready.delivery(false), mode);
+      const compacting = at({
+        streaming: true,
+        compacting: true,
+        text,
+        mode,
+        images: { items: [image], busy: false },
+      });
+      assert.equal(compacting.delivery(false), "follow-up");
+    }
+  }
   assert.equal(
     at({ images: { items: [image], busy: false } }).enabled,
     true,

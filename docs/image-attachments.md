@@ -18,8 +18,12 @@ are required; arbitrary files and SVG are not supported. GIF acceptance does not
 provider supports animation.
 
 Use the attachment button, paste, or drop images into either composer. Previews can be removed
-before sending. Image-only messages work. Images wait until Pi is idle because its queue restoration
-returns only text. Unsent image drafts stay in browser memory per session; a full reload discards them.
+before sending. Image-only messages work. While Pi is working, images can queue with text or alone
+as steering or follow-up input. Editing queued messages or stopping restores only text, not images,
+matching Pi's queue-restoration API. Unsent image drafts stay in browser memory per session; a full
+reload discards them. Queued images show a paperclip/count badge from Pi-owned metadata and survive
+browser refresh while Pi stays alive; pending queues do not survive a backend/Pi restart. See
+[queue metadata and the pinned Pi patch](pi-queue-metadata.md) for the protocol and install policy.
 
 ## Why this combination
 

@@ -119,7 +119,7 @@ test("INV-12: a model ref that is not provider/id is refused before reaching Pi"
   });
 });
 
-test("INV-03: text input carries its streaming behaviour; input with images carries none", () => {
+test("INV-03: text and image input carry their streaming behaviour", () => {
   const png = {
     kind: "image" as const,
     name: "dot.png",
@@ -136,6 +136,7 @@ test("INV-03: text input carries its streaming behaviour; input with images carr
     command: {
       type: "prompt",
       message: "look",
+      streamingBehavior: "steer",
       images: [{ type: "image", data: png.data, mimeType: "image/png" }],
     },
   });

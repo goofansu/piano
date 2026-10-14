@@ -1,0 +1,183 @@
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.d.ts b/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.d.ts
+index 2a947fa..0fecc2f 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.d.ts
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.d.ts
+@@ -43,6 +43,12 @@ type WithParentToolCallId<E> = E extends {
+ } ? E & {
+     parentToolCallId?: string;
+ } : E;
++export interface QueuedMessageInfo {
++    id: string;
++    kind: "steering" | "follow-up";
++    text: string;
++    attachmentCount: number;
++}
+ /** Session-specific events that extend the core AgentEvent */
+ export type AgentSessionEvent = WithParentToolCallId<Exclude<AgentEvent, {
+     type: "agent_end";
+@@ -57,6 +63,7 @@ export type AgentSessionEvent = WithParentToolCallId<Exclude<AgentEvent, {
+     type: "queue_update";
+     steering: readonly string[];
+     followUp: readonly string[];
++    queuedMessages: readonly QueuedMessageInfo[];
+ } | {
+     type: "compaction_start";
+     reason: "manual" | "threshold" | "overflow";
+@@ -638,6 +645,7 @@ export declare class AgentSession {
+     /** Number of pending messages (includes both steering and follow-up) */
+     get pendingMessageCount(): number;
++    getQueuedMessages(): readonly QueuedMessageInfo[];
+     /** Get pending steering messages (read-only) */
+     getSteeringMessages(): readonly string[];
+     /** Get pending follow-up messages (read-only) */
+     getFollowUpMessages(): readonly string[];
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js b/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js
+index c16f5da..91f5aa9 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js
+@@ -93,6 +93,7 @@ export class AgentSession {
+     _resolveIdleWait;
+     /** Tracks pending steering messages for UI display. Removed when delivered. */
+     _steeringMessages = [];
++    _nextQueueId = 0;
+     /** Tracks pending follow-up messages for UI display. Removed when delivered. */
+     _followUpMessages = [];
+     /** Messages queued to be included with the next user prompt as context ("asides"). */
+@@ -655,8 +656,9 @@ export class AgentSession {
+     _emitQueueUpdate() {
+         this._emit({
+             type: "queue_update",
+-            steering: [...this._steeringMessages],
+-            followUp: [...this._followUpMessages],
++            steering: this.getSteeringMessages(),
++            followUp: this.getFollowUpMessages(),
++            queuedMessages: this.getQueuedMessages(),
+         });
+     }
+     async _emitSessionCompactFailed(event) {
+@@ -731,21 +733,12 @@ export class AgentSession {
+         // This ensures the UI sees the updated queue state
+         if (event.type === "message_start" && event.message.role === "user") {
+             this._overflowRecoveryAttempted = false;
+-            const messageText = contentText(event.message.content, "");
+-            if (messageText) {
+-                // Check steering queue first
+-                const steeringIndex = this._steeringMessages.indexOf(messageText);
+-                if (steeringIndex !== -1) {
+-                    this._steeringMessages.splice(steeringIndex, 1);
++            for (const queue of [this._steeringMessages, this._followUpMessages]) {
++                const index = queue.findIndex((entry) => entry.message === event.message);
++                if (index !== -1) {
++                    queue.splice(index, 1);
+                     this._emitQueueUpdate();
+-                }
+-                else {
+-                    // Check follow-up queue
+-                    const followUpIndex = this._followUpMessages.indexOf(messageText);
+-                    if (followUpIndex !== -1) {
+-                        this._followUpMessages.splice(followUpIndex, 1);
+-                        this._emitQueueUpdate();
+-                    }
++                    break;
+                 }
+             }
+         }
+@@ -1763,29 +1756,27 @@ export class AgentSession {
+      * Internal: Queue a steering message (already expanded, no extension command check).
+      */
+     async _queueSteer(text, images) {
+-        this._steeringMessages.push(text);
+-        this._emitQueueUpdate();
+         const content = [{ type: "text", text }];
+         if (images) {
+             content.push(...images);
+         }
+-        this.agent.steer({
+-            role: "user",
+-            content,
+-            timestamp: Date.now(),
+-        });
++        const message = { role: "user", content, timestamp: Date.now() };
++        this._steeringMessages.push({ id: String(++this._nextQueueId), message });
++        this.agent.steer(message);
++        this._emitQueueUpdate();
+     }
+     /**
+      * Internal: Queue a follow-up message (already expanded, no extension command check).
+      */
+     async _queueFollowUp(text, images) {
+-        this._followUpMessages.push(text);
+-        this._emitQueueUpdate();
+         const content = [{ type: "text", text }];
+         if (images) {
+             content.push(...images);
+         }
+-        this.agent.followUp({ role: "user", content, timestamp: Date.now() });
++        const message = { role: "user", content, timestamp: Date.now() };
++        this._followUpMessages.push({ id: String(++this._nextQueueId), message });
++        this.agent.followUp(message);
++        this._emitQueueUpdate();
+     }
+     /**
+      * Throw an error if the text is an extension command.
+@@ -1912,8 +1903,8 @@ export class AgentSession {
+      * @returns Object with steering and followUp arrays
+      */
+     clearQueue() {
+-        const steering = [...this._steeringMessages];
+-        const followUp = [...this._followUpMessages];
++        const steering = this.getSteeringMessages();
++        const followUp = this.getFollowUpMessages();
+         this._steeringMessages = [];
+         this._followUpMessages = [];
+         this.agent.clearAllQueues();
+@@ -1926,11 +1917,23 @@ export class AgentSession {
+     }
+     /** Get pending steering messages (read-only) */
+     getSteeringMessages() {
+-        return this._steeringMessages;
++        return this._steeringMessages.map(({ message }) => contentText(message.content, ""));
+     }
+     /** Get pending follow-up messages (read-only) */
+     getFollowUpMessages() {
+-        return this._followUpMessages;
++        return this._followUpMessages.map(({ message }) => contentText(message.content, ""));
++    }
++    /** Queue identity is session-local and follows the actual message object, never its text. */
++    getQueuedMessages() {
++        return [
++            ...this._steeringMessages.map((entry) => ({ ...entry, kind: "steering" })),
++            ...this._followUpMessages.map((entry) => ({ ...entry, kind: "follow-up" })),
++        ].map(({ id, kind, message }) => ({
++            id,
++            kind,
++            text: contentText(message.content, ""),
++            attachmentCount: message.content.filter((block) => block.type === "image").length,
++        }));
+     }
+     get resourceLoader() {
+         return this._resourceLoader;
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js b/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js
+index 340f4dc..1e671f4 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js
+@@ -356,6 +356,7 @@ export async function runRpcMode(runtimeHost) {
+                     autoCompactionEnabled: session.autoCompactionEnabled,
+                     messageCount: session.messages.length,
+                     pendingMessageCount: session.pendingMessageCount,
++                    queuedMessages: session.getQueuedMessages(),
+                 };
+                 return success(id, "get_state", state);
+             }
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-types.d.ts b/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-types.d.ts
+index 7868970..02cb7d4 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-types.d.ts
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-types.d.ts
+@@ -158,6 +158,7 @@ export interface RpcSessionState {
+     autoCompactionEnabled: boolean;
+     messageCount: number;
+     pendingMessageCount: number;
++    queuedMessages: readonly import("../../core/agent-session.js").QueuedMessageInfo[];
+ }
+ export type RpcResponse = {
+     id?: string;

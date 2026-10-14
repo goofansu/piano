@@ -44,9 +44,10 @@ current Piano support.
 - Pi's installed `dist/core/tools/read.js` supports text and raster images. It does
   not implement PDF extraction or MP4 decoding. Merely placing either binary on disk
   and asking the ordinary read tool to read it is not adequate support.
-- RPC `clear_queue` returns text only. [PiSessions](../../server/PiSessions.ts)
-  therefore rejects image-bearing submissions while Pi is working. Generated PDF
-  pages/video frames must preserve this rule unless queue restoration is redesigned.
+- RPC `clear_queue` returns text only. At the research baseline,
+  [PiSessions](../../server/PiSessions.ts) rejected image-bearing submissions while Pi
+  was working. Piano now allows queued images with explicitly text-only restoration
+  (see [attachment policy](../image-attachments.md)); this does not add PDF/video support.
   Text converted entirely into the message can use text queue semantics, but restoring
   a file chip would need separate, durable attachment identity. [Source][pi-commands].
 
