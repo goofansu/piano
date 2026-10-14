@@ -1,6 +1,5 @@
-node_modules
-web/node_modules
-web/dist
+node_modules/
+/web/dist/
 
 # Local verification and deployment scratch files.
 /.scratch/
