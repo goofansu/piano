@@ -292,7 +292,7 @@ export function Composer({
           role="group"
           aria-label="Session usage"
         >
-          <JumpTo messages={messages} />
+          <JumpTo messages={messages} working={streaming} />
           <Popover>
             <PopoverTrigger asChild>
               <Button

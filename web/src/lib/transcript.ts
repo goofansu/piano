@@ -101,6 +101,8 @@ export interface TranscriptOptions {
   /** The message Pi is still writing; never a Jump to destination. */
   pending?: RenderMsg | null;
   tools?: Readonly<Record<string, ToolExecution>>;
+  /** The current turn has not settled, including gaps between assistant messages. */
+  working?: boolean;
   /** False shows only Jump to destinations and errors, without changing authoritative history. */
   showTools?: boolean;
 }
@@ -280,7 +282,7 @@ const turnLabel = (m: RenderMsg) =>
  */
 export function transcriptRows(
   messages: ReadonlyArray<RenderMsg>,
-  { pending = null, tools = {}, showTools = true }: TranscriptOptions = {},
+  { pending = null, tools = {}, showTools = true, working = false }: TranscriptOptions = {},
 ): TranscriptRow[] {
   const results = new Map<string, RenderMsg>();
   const callIds = new Set<string>();
@@ -288,7 +290,9 @@ export function transcriptRows(
   // Destinations, with their labels: every labelled prompt, and every labelled reply that
   // ended a turn (the next prompt or reply is not another reply).
   const destinations = new Map<string, string>();
-  let nextTurn: RenderMsg["role"] | undefined;
+  // The tail cannot be a final reply until the agent settles.
+  // A completed message alone is not enough: another assistant message may follow.
+  let nextTurn: RenderMsg["role"] | undefined = working ? "assistant" : undefined;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]!;
     if (m.role !== "user" && m.role !== "assistant") continue;

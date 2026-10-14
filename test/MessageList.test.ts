@@ -20,6 +20,8 @@ const { MessageList } = (await vite.ssrLoadModule("/src/components/MessageList.t
     pending: RenderMsg | null;
     tools: Record<string, ToolExecution>;
     showTools?: boolean;
+    activity?: "starting" | "working";
+    working?: boolean;
   }>;
 };
 const render = (
@@ -99,6 +101,45 @@ test("messages-only renders no tool activity, and every Jump to destination has 
     );
     assert.match(shown, /id="msg-final".*?aria-label="Copy response"/s);
   }
+});
+
+test("messages-only never flashes a completed intermediate message while the agent is working", () => {
+  const user: RenderMsg = { id: "user", role: "user", text: "My question" };
+  const commentary: RenderMsg = { id: "commentary", role: "assistant", text: "Let me investigate" };
+  const final: RenderMsg = { id: "final", role: "assistant", text: "Final answer" };
+  const history = [user, commentary];
+  const working = (messages: RenderMsg[], pending: RenderMsg | null = null, showTools = false) =>
+    renderToStaticMarkup(
+      createElement(MessageList, {
+        messages,
+        pending,
+        tools: {},
+        showTools,
+        activity: "working",
+        working: true,
+      }),
+    );
+  // message_end can arrive before the next message_start, with no pending message.
+  assert.doesNotMatch(working(history), /Let me investigate/);
+  assert.deepEqual(
+    jumpEntries(transcriptRows(history, { working: true })).flatMap((entry) =>
+      "messageId" in entry ? [entry.messageId] : [],
+    ),
+    ["user"],
+    "the jump list must not leak commentary or target a hidden reply",
+  );
+  assert.doesNotMatch(working(history, call), /Let me investigate/);
+  assert.doesNotMatch(
+    working([...history, call, result, final]),
+    /Let me investigate|Final answer/,
+  );
+  assert.match(working(history, null, true), /Let me investigate/);
+  const settled = render([...history, call, result, final], {}, null, false);
+  assert.doesNotMatch(settled, /Let me investigate/);
+  assert.match(settled, /Final answer/);
+  assert.match(working([...history, failure()]), /The usage limit has been reached/);
+  // Starting a new turn must not hide a previous turn's answer.
+  assert.match(working([user, final, { ...user, id: "next" }]), /Final answer/);
 });
 
 test("error summaries render as text, never markup", () => {

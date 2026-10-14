@@ -11,16 +11,20 @@ import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
+  working?: boolean;
 }
 
 /** A table of contents for the transcript: prompts and replies, opened from the usage row. */
-export function JumpTo({ messages }: Props) {
+export function JumpTo({ messages, working = false }: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string>("bottom");
   const list = useRef<HTMLUListElement>(null);
   const viewport = useTranscriptViewport();
   // Built from the rows the transcript renders, so every entry lands on a row that is there.
-  const entries = useMemo(() => jumpEntries(transcriptRows(messages)), [messages]);
+  const entries = useMemo(
+    () => jumpEntries(transcriptRows(messages, { working })),
+    [messages, working],
+  );
   const total = entries.filter(
     (entry) => entry.kind === "user" || entry.kind === "assistant",
   ).length;

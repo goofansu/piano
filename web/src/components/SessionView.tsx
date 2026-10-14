@@ -138,6 +138,7 @@ export function SessionView({ state, send }: Props) {
             submittedInput={input}
             tools={tools}
             activity={replyActivity}
+            working={!!t && isWorking(t.state)}
             placeholder={pane.placeholder}
           />
         )}

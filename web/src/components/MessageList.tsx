@@ -43,6 +43,8 @@ interface Props {
   tools: Record<string, ToolExecution>;
   /** Startup or Pi work awaiting reply text: the keys play in the reply area. */
   activity?: "starting" | "working";
+  /** Agent lifecycle, independent of whether the working indicator is visible. */
+  working?: boolean;
   /** Shown above an empty transcript; the caller decides when (see `sessionPane`). */
   placeholder?: string;
   className?: string;
@@ -61,6 +63,7 @@ export function MessageList({
   submittedInput,
   tools,
   activity,
+  working = false,
   placeholder,
   className,
   showTools = true,
@@ -80,7 +83,7 @@ export function MessageList({
   // biome-ignore lint/correctness/useExhaustiveDependencies: these inputs change rendered transcript height; reading the DOM after each change preserves scroll pinning.
   useEffect(() => {
     viewport.rendered();
-  }, [viewport, messages, pending, submittedInput, tools, activity, showTools]);
+  }, [viewport, messages, pending, submittedInput, tools, activity, showTools, working]);
   // Content can grow without a scroll event (a prompt opens, output expands), and the container
   // can shrink (a banner appears below, the composer grows); the viewport decides who follows.
   useEffect(() => {
@@ -96,8 +99,8 @@ export function MessageList({
   }, [viewport]);
 
   const rows = useMemo(
-    () => transcriptRows(messages, { pending, tools, showTools }),
-    [messages, pending, tools, showTools],
+    () => transcriptRows(messages, { pending, tools, showTools, working }),
+    [messages, pending, tools, showTools, working],
   );
 
   return (
