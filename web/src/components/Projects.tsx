@@ -1,6 +1,8 @@
+import type { Project } from "@shared/wire";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
+  FolderIcon,
   type LucideIcon,
   PencilIcon,
   PlusIcon,
@@ -10,15 +12,19 @@ import { useRef } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/PianoDialog";
+import {
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/PianoDropdownMenu";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import type { ProjectCommandIcon, ProjectDialog } from "@/lib/projectCommands";
+import type { ProjectCommand, ProjectCommandIcon, ProjectDialog } from "@/lib/projectCommands";
 
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: PlusIcon,
@@ -32,6 +38,47 @@ const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
 export function ProjectCommandIconView({ icon }: { icon: ProjectCommandIcon }) {
   const Icon = ICONS[icon];
   return <Icon />;
+}
+
+/** Shared destination rows for the composer menu and sidebar submenu. */
+export function ProjectDestinationItems({
+  create,
+  projects,
+  disabled,
+  onCreate,
+  onPick,
+}: {
+  create: ProjectCommand;
+  projects: readonly Project[];
+  disabled: boolean;
+  onCreate: () => void;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuItem disabled={!create.enabled} onSelect={onCreate}>
+          <ProjectCommandIconView icon={create.icon} /> {create.label}…
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+      {projects.length > 0 && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            {projects.map((p) => (
+              <DropdownMenuItem key={p.id} disabled={disabled} onSelect={() => onPick(p.id)}>
+                <FolderIcon />
+                <span className="truncate">
+                  {p.name}
+                  {p.archived && " · Archived"}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </>
+      )}
+    </>
+  );
 }
 
 /**
@@ -59,6 +106,7 @@ export function ProjectDialogView({
     <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent
         className="sm:max-w-md"
+        aria-describedby={undefined}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           nameInput.current?.focus();
@@ -73,11 +121,6 @@ export function ProjectDialogView({
         >
           <DialogHeader>
             <DialogTitle>{editing ? "Edit project" : "New project"}</DialogTitle>
-            <DialogDescription>
-              {editing
-                ? "Rename the project."
-                : "A project groups sessions from any folders around one outcome."}
-            </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>

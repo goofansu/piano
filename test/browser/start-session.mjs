@@ -19,7 +19,9 @@ await run(
     await page.click("radio", "high");
     await page.click("button", "Done");
     await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
-    await page.choose("Project", "Launch");
+    await page.click("button", "Project");
+    await page.click("menuitem", "Launch");
+    await page.until("!document.querySelector('[role=\"menu\"]')");
     await page.capture("1-new-session");
 
     await page.ab("fill", '[aria-label="First message"]', "Plan the launch");

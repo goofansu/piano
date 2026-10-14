@@ -2,9 +2,9 @@ import { cn } from "cn";
 import {
   ArrowUpIcon,
   FolderIcon,
+  FolderMinusIcon,
   FolderOpenIcon,
   GitBranchPlusIcon,
-  PlusIcon,
   ShieldCheckIcon,
   ShieldOffIcon,
   TargetIcon,
@@ -14,7 +14,6 @@ import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
 import { DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { FolderPicker } from "@/components/FolderPicker";
-import { IconButton } from "@/components/IconButton";
 import {
   Command,
   CommandEmpty,
@@ -23,13 +22,21 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/PianoCommand";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/PianoDropdownMenu";
 import { PianoMark } from "@/components/PianoMark";
 import { Popover, PopoverTrigger } from "@/components/PianoPopover";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
+import { ProjectDestinationItems } from "@/components/Projects";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { newSessionCommand, newSessionReady } from "@/lib/composerControl";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
@@ -203,8 +210,8 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
 }
 
 /**
- * Which project the new session joins: the same searchable picker as the directory beside it, and the
- * place to create the first one. A project created here becomes the page's project.
+ * Which project the new session joins: the sidebar's destination menu, with a way to clear the
+ * choice. A project created here becomes the page's project.
  */
 function ProjectSelect({
   state,
@@ -222,21 +229,20 @@ function ProjectSelect({
     setOpen(false);
     run(create);
   };
-  const search = useRef<HTMLInputElement>(null);
   const current = findProject(state, value);
-  const choices = projectChoices(state, current);
+  const choices = projectChoices(state, current).sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
   const pick = (id?: string) => {
     onChange(id);
     setOpen(false);
   };
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="sm"
-          role="combobox"
-          aria-expanded={open}
           aria-label="Project"
           className={cn(
             picker,
@@ -247,61 +253,31 @@ function ProjectSelect({
           <TargetIcon className="text-ink-3" />
           <span className="truncate">{current ? current.name : "Project"}</span>
         </Button>
-      </PopoverTrigger>
-      <PickerContent align="end" aria-label="Choose a project" searchRef={search}>
-        {choices.length === 0 ? (
-          // Before the first project exists there is nothing to search; the page invites creating one instead.
-          <Empty className="p-6 md:p-6">
-            <EmptyHeader>
-              <EmptyDescription>
-                No projects yet. A project groups sessions from any folders around one outcome.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button variant="outline" size="sm" disabled={!create.enabled} onClick={onCreate}>
-                <PlusIcon /> {create.label}
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : (
-          <Command>
-            <PickerSearch ref={search} aria-label="Search projects" placeholder="Search projects">
-              <IconButton label={create.label} disabled={!create.enabled} onClick={onCreate}>
-                <PlusIcon aria-hidden />
-              </IconButton>
-            </PickerSearch>
-            <CommandList className="max-h-[min(18rem,60dvh)]">
-              <CommandEmpty>No project matches.</CommandEmpty>
-              <CommandGroup>
-                {choices.map((p) => (
-                  <CommandItem
-                    key={p.id}
-                    value={p.id}
-                    keywords={[p.name]}
-                    onSelect={() => pick(p.id)}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                    {p.archived && <span className="text-xs text-ink-3">Archived</span>}
-                    <PickerCheck selected={p.id === value} />
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-              <CommandSeparator />
-              <CommandGroup>
-                <CommandItem
-                  value="__none"
-                  keywords={["none", "no project"]}
-                  onSelect={() => pick(undefined)}
-                >
-                  <span className="min-w-0 flex-1 truncate">None</span>
-                  <PickerCheck selected={!value} />
-                </CommandItem>
-              </CommandGroup>
-            </CommandList>
-          </Command>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        aria-label="Choose a project"
+        className="max-w-[calc(100vw-2rem)]"
+      >
+        <ProjectDestinationItems
+          create={create}
+          projects={choices}
+          disabled={!state.connected}
+          onCreate={onCreate}
+          onPick={pick}
+        />
+        {current && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={() => pick(undefined)}>
+                <FolderMinusIcon /> None
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
         )}
-      </PickerContent>
-    </Popover>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

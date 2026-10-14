@@ -1,7 +1,6 @@
 import type { FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
 import {
-  FolderIcon,
   FolderInputIcon,
   FolderMinusIcon,
   MoreHorizontalIcon,
@@ -40,7 +39,7 @@ import { Keys } from "@/components/PianoMark";
 import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
-import { ProjectCommandIconView } from "@/components/Projects";
+import { ProjectCommandIconView, ProjectDestinationItems } from "@/components/Projects";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -476,27 +475,13 @@ function ProjectMenu({ state, session }: { state: AppState; session: SessionTarg
           <FolderInputIcon /> {current ? "Move to project" : "Add to project"}
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
-          <DropdownMenuGroup>
-            <DropdownMenuItem disabled={!create.enabled} onSelect={() => run(create)}>
-              <ProjectCommandIconView icon={create.icon} /> {create.label}…
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          {destinations.length > 0 && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                {destinations.map((p) => (
-                  <DropdownMenuItem
-                    key={p.id}
-                    disabled={!state.connected}
-                    onSelect={() => run(assignProjectCommand(state, session, p.id))}
-                  >
-                    <FolderIcon /> <span className="truncate">{p.name}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-            </>
-          )}
+          <ProjectDestinationItems
+            create={create}
+            projects={destinations}
+            disabled={!state.connected}
+            onCreate={() => run(create)}
+            onPick={(id) => run(assignProjectCommand(state, session, id))}
+          />
         </DropdownMenuSubContent>
       </DropdownMenuSub>
       {current && (
