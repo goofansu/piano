@@ -34,6 +34,30 @@ one. PiRecords is not split by size; `Subagents` is a split by concept (the pi-s
 the Pi RPC protocol), so the run ledger reads Pi entries without serializing a transcript. These are explicit ownership choices, not deferred mechanical
 file splitting.
 
+## Publication mutation contract (PIN-28)
+
+`SessionPublication.transaction(use)` supplies the only capability exposing `publish` and
+`mergeState`. `apply` and `patchState` acquire the lock themselves; callers must not nest them
+inside a transaction. The callback is evaluated after acquisition. The capability is internal,
+nominally typed, and must be used inline, never retained or passed to forked work. TypeScript
+has no linear lifetime types: this prevents casual unlocked calls, not deliberate capability
+escape or casts. No new transport, wire or UI behavior is intended.
+
+Lock-only call-site audit:
+
+| Caller                                          | Lock ownership and mutation                                                                                                                                                        |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PiSessions.onRecord`                           | One transaction covers projector correlation, state merge, projected events and `SessionDialogs.opened(transaction, request)`. Dialog watching/readbacks start afterward.          |
+| `SessionDialogs.resolve`                        | A transaction checks/claims the dialog and publishes resolution/state; transport runs after release. A second transaction publishes delivery status/notice.                        |
+| `SessionDialogs.resolveAll`                     | Individual claims use `resolve`; a final transaction merges pending delivery uncertainty on exit.                                                                                  |
+| `SessionReadbacks.refreshContext`               | Pi is read outside the lock; a transaction rechecks freshness, replaces projector history and publishes context. Other readbacks use synchronized `patchState`.                    |
+| `SessionPublication.apply/patchState/subscribe` | Private lock acquisition protects batch folding, state merging, or snapshot/cursor plus subscriber attachment. Private mutators never leave this module except via the capability. |
+| `PiSessions.state`                              | A read-only transaction presents the snapshot consistently.                                                                                                                        |
+
+Existing `DialogLifecycle`, `SessionDelivery` and `SessionReadbacks` tests protect INV-04/05
+claim-before-transport, atomic attachment/sequence and stale-readback contracts. The compile-only
+`test/SessionPublication.types.ts` additionally rejects direct mutation and unguarded dialog opening.
+
 ## Verification
 
 Based on `82b042c` plus this extraction, Node v24.21.0, installed dependencies unchanged:

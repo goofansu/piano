@@ -293,14 +293,18 @@ const openSession = (spec: PiSessionSpec) =>
         tools: [],
       },
     });
-    const { locked, publish, apply, mergeState, patchState, announced } = publication;
+    const { transaction, apply, patchState, announced } = publication;
     let submissionId = 0;
     let processedVersion = 0;
     // Cancellation owner: operation tokens fence late abort/readback results.
     // Work belongs to sessionScope, not the lifetime of the requesting browser.
     const promptOperations = new Set<number>();
     let aborting:
-      | { dispatched: Deferred.Deferred<void>; pendingPrompts: Set<number>; acknowledged: boolean }
+      | {
+          dispatched: Deferred.Deferred<void>;
+          pendingPrompts: Set<number>;
+          acknowledged: boolean;
+        }
       | undefined;
 
     // Dialog claims share publication's lock: claim under it, write to Pi outside it.
@@ -334,14 +338,14 @@ const openSession = (spec: PiSessionSpec) =>
       Effect.gen(function* () {
         if (announced()) return;
         // Translate under the lock too: a history readback replaces the projector's correlation facts.
-        const { refresh, dialog } = yield* locked(
+        const { refresh, dialog } = yield* transaction((tx) =>
           Effect.gen(function* () {
             const projected = projector.record(record, receivedAt);
-            if (projected.state) yield* mergeState(projected.state);
-            for (const event of projected.events) yield* publish(event);
+            if (projected.state) yield* tx.mergeState(projected.state);
+            for (const event of projected.events) yield* tx.publish(event);
             return {
               refresh: projected.refresh,
-              dialog: projected.dialog && (yield* dialogs.opened(projected.dialog)),
+              dialog: projected.dialog && (yield* dialogs.opened(tx, projected.dialog)),
             };
           }),
         );
@@ -624,7 +628,9 @@ const openSession = (spec: PiSessionSpec) =>
             );
           }),
         ).pipe(displayed),
-      state: locked(Effect.map(publication.snapshot, present)).pipe(Effect.map(projectDisplay)),
+      state: transaction(() => Effect.map(publication.snapshot, present)).pipe(
+        Effect.map(projectDisplay),
+      ),
       // The read belongs to the session, not the requester: an abandoned request leaves no
       // half-written command on Pi's input.
       commands: Effect.suspend(() =>

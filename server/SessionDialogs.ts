@@ -16,7 +16,7 @@ import {
   type PiCommand,
 } from "./PiRecords.ts";
 import { PiSessionError } from "./PiTransport.ts";
-import type { SessionPublication } from "./SessionPublication.ts";
+import type { PublicationTransaction, SessionPublication } from "./SessionPublication.ts";
 
 export interface SessionDialogsOptions {
   readonly generation: string;
@@ -52,7 +52,7 @@ export const makeSessionDialogs = ({
     reason: DialogResolution["reason"],
     answer?: PiCommand,
   ) {
-    const resolution = yield* publication.locked(
+    const resolution = yield* publication.transaction((transaction) =>
       Effect.gen(function* () {
         if (!(yield* publication.dialogs).some((open) => open.id === dialog.id)) return;
         const now = yield* Clock.currentTimeMillis;
@@ -80,8 +80,8 @@ export const makeSessionDialogs = ({
         const signal = closed.get(dialog.id);
         if (signal) yield* Deferred.succeed(signal, undefined);
         closed.delete(dialog.id);
-        yield* publication.publish({ _tag: "dialog_resolved", resolution });
-        yield* publication.publish({
+        yield* transaction.publish({ _tag: "dialog_resolved", resolution });
+        yield* transaction.publish({
           _tag: "state",
           state: { ...(yield* publication.state), dialogResolution: resolution },
         });
@@ -100,16 +100,20 @@ export const makeSessionDialogs = ({
           ? `${resolution.reason === "answered" ? "Answer" : "Cancellation"} written to Pi. Consumption is unconfirmed; Pi sends no UI acknowledgement.`
           : `Dialog response delivery is uncertain. It will not be retried or reopened. Inspect the session; restart Pi if blocked. ${result.failure.detail}`,
     };
-    yield* publication.locked(
+    yield* publication.transaction((transaction) =>
       Effect.gen(function* () {
         const state = yield* publication.state;
         if (state.dialogResolution?.id === dialog.id && !publication.announced())
-          yield* publication.publish({
+          yield* transaction.publish({
             _tag: "state",
             state: { ...state, dialogResolution: final },
           });
         if (result._tag === "Failure")
-          yield* publication.publish({ _tag: "notice", level: "error", message: final.detail });
+          yield* transaction.publish({
+            _tag: "notice",
+            level: "error",
+            message: final.detail,
+          });
       }),
     );
     if (result._tag === "Failure") return yield* result.failure;
@@ -118,9 +122,12 @@ export const makeSessionDialogs = ({
 
   /**
    * Open a dialog Pi requested: the earlier of Pi's timeout and host recovery becomes its
-   * deadline, its claim is registered and it is published. Callers hold the lock.
+   * deadline, its claim is registered and it is published in the record transaction.
    */
-  const opened = Effect.fnUntraced(function* (request: DialogRequest): Effect.fn.Return<Dialog> {
+  const opened = Effect.fnUntraced(function* (
+    transaction: PublicationTransaction,
+    request: DialogRequest,
+  ): Effect.fn.Return<Dialog> {
     const { receivedAt, timeoutMs } = request;
     const piTimeout = timeoutMs !== undefined && timeoutMs <= recoveryMs;
     const dialog: Dialog = {
@@ -129,7 +136,7 @@ export const makeSessionDialogs = ({
       deadlineKind: piTimeout ? "pi-timeout" : "host-recovery",
     };
     closed.set(dialog.id, yield* Deferred.make<void>());
-    yield* publication.publish({ _tag: "dialog", dialog });
+    yield* transaction.publish({ _tag: "dialog", dialog });
     return dialog;
   });
 
@@ -191,11 +198,11 @@ export const makeSessionDialogs = ({
     for (const dialog of dialogs ?? (yield* publication.dialogs))
       yield* resolve(dialog, reason).pipe(Effect.ignore);
     if (reason !== "exited") return;
-    yield* publication.locked(
+    yield* publication.transaction((transaction) =>
       Effect.gen(function* () {
         const resolution = (yield* publication.state).dialogResolution;
         if (resolution?.delivery === "pending")
-          yield* publication.mergeState({
+          yield* transaction.mergeState({
             dialogResolution: {
               ...resolution,
               delivery: "uncertain",

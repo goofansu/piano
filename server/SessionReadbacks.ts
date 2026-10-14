@@ -170,11 +170,11 @@ export const makeSessionReadbacks = ({
       const outputVersion = observationVersion();
       const messages = yield* read(piReadbacks.messages);
       if (version !== contextVersion || announced()) return;
-      const applied = yield* publication.locked(
+      const applied = yield* publication.transaction((transaction) =>
         Effect.gen(function* () {
           if (version !== contextVersion || outputVersion !== observationVersion() || announced())
             return false;
-          yield* publication.publish(context(messages));
+          yield* transaction.publish(context(messages));
           return true;
         }),
       );

@@ -25,20 +25,28 @@ export interface SessionPublicationOptions {
 /** A published state change: the state before it and after it. */
 export type StateChangeListener = (previous: SessionState, next: SessionState) => void;
 
-export interface SessionPublication {
-  /** Run under the publication lock: no frame is published or subscriber attached meanwhile.
-   * Never await Pi or a browser here. */
-  readonly locked: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
-  /** Fold one event into the snapshot and send it to every subscriber; callers hold the lock. */
+const transactionBrand: unique symbol = Symbol("PublicationTransaction");
+
+/** Only supplied by `transaction`. Use inline: never retain it or fork work with it. */
+export interface PublicationTransaction {
+  readonly [transactionBrand]: true;
+  /** Fold one event into the snapshot and send it to every subscriber. */
   readonly publish: (event: SessionEvent) => Effect.Effect<void>;
+  /** Merge state fields and publish the result if anything changed, telling every
+   * `onStateChange` listener first. Working or a model change makes the context figure last known. */
+  readonly mergeState: (patch: Partial<SessionState>) => Effect.Effect<void>;
+}
+
+export interface SessionPublication {
+  /** No frame is published or subscriber attached meanwhile. Never await Pi/a browser,
+   * nest transactions, or fork work here. The capability belongs to this callback only. */
+  readonly transaction: <A, E, R>(
+    use: (transaction: PublicationTransaction) => Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E, R>;
   /** Take the lock, then publish each event; a thunk is evaluated under the lock. */
   readonly apply: (
     events: ReadonlyArray<SessionEvent> | (() => ReadonlyArray<SessionEvent>),
   ) => Effect.Effect<void>;
-  /** Merge state fields and publish the result if anything changed, telling every
-   * `onStateChange` listener first; callers hold the lock. Working or a model change makes the
-   * context figure last known. */
-  readonly mergeState: (patch: Partial<SessionState>) => Effect.Effect<void>;
   /** Take the lock, then `mergeState`; a thunk is evaluated under the lock. */
   readonly patchState: (
     patch: Partial<SessionState> | (() => Partial<SessionState>),
@@ -92,9 +100,11 @@ export const makeSessionPublication = Effect.fn("SessionPublication.make")(funct
     yield* publish({ _tag: "state", state: next });
   });
 
+  const transaction: SessionPublication["transaction"] = (use) =>
+    locked(Effect.suspend(() => use({ [transactionBrand]: true, publish, mergeState })));
+
   return {
-    locked,
-    publish,
+    transaction,
     apply: (events) =>
       locked(
         Effect.gen(function* () {
@@ -102,7 +112,6 @@ export const makeSessionPublication = Effect.fn("SessionPublication.make")(funct
             yield* publish(event);
         }),
       ),
-    mergeState,
     patchState: (patch) =>
       locked(Effect.suspend(() => mergeState(typeof patch === "function" ? patch() : patch))),
     onStateChange: (listener) => {
