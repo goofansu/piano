@@ -1,11 +1,5 @@
 import { cn } from "cn";
-import {
-  CheckCircle2Icon,
-  ExternalLinkIcon,
-  GlobeIcon,
-  RefreshCwIcon,
-  WrenchIcon,
-} from "lucide-react";
+import { CheckCircle2Icon, ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
@@ -22,7 +16,6 @@ import {
   ItemContent,
   ItemDescription,
   ItemGroup,
-  ItemMedia,
   ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item";
@@ -154,9 +147,6 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
               </div>
               <ItemGroup className="border-t">
                 <Item className="rounded-none px-4 sm:px-5">
-                  <ItemMedia variant="icon">
-                    <WrenchIcon />
-                  </ItemMedia>
                   <ItemContent className="min-w-0">
                     <ItemTitle>
                       Radius MCP
@@ -167,7 +157,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                     </ItemDescription>
                     {mcp.detail && <p className="text-xs text-muted-foreground">{mcp.detail}</p>}
                   </ItemContent>
-                  <ItemActions className="max-sm:basis-full max-sm:pl-12">
+                  <ItemActions>
                     {!mcp.ready && (
                       <Button
                         size="sm"
@@ -182,7 +172,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-muted-foreground max-sm:-mx-2.5"
+                        className="text-muted-foreground"
                         disabled={!mcp.canRemove}
                         onClick={() => setup.confirm({ kind: "remove-mcp", key: mcp.removalKey! })}
                         aria-label="Remove Radius MCP"
@@ -194,9 +184,6 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                 </Item>
                 <ItemSeparator />
                 <Item className="rounded-none px-4 sm:px-5">
-                  <ItemMedia variant="icon">
-                    <GlobeIcon />
-                  </ItemMedia>
                   <ItemContent className="min-w-0">
                     <ItemTitle>
                       Web search
@@ -212,7 +199,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                       An organization owner or admin must enable Web search separately in Radius.
                     </p>
                   </ItemContent>
-                  <ItemActions className="max-sm:basis-full max-sm:pl-12">
+                  <ItemActions>
                     {webSearch.change ? (
                       <Button
                         variant={webSearch.change.action === "uninstall" ? "ghost" : "default"}
@@ -238,7 +225,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-muted-foreground max-sm:-mx-2.5"
+                            className="text-muted-foreground"
                             disabled={!webSearch.canRemove}
                             onClick={() =>
                               setup.confirm({
