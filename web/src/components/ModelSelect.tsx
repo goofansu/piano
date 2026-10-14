@@ -23,7 +23,7 @@ import { picker } from "@/lib/styles";
 interface Props {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Composers resume editing after Done or Escape; standalone pickers use their trigger. */
+  /** Composers resume editing after Enter on effort or Escape; standalone pickers use their trigger. */
   returnFocusRef?: RefObject<HTMLTextAreaElement | null>;
   /** The directory's catalog with its refresh and saved defaults (`useModelCatalog`). */
   models: ModelCatalogView;
@@ -64,7 +64,6 @@ export function ModelSelect({
   );
   const [focusModel, setFocusModel] = useState<string | null>(null);
   const effortPanel = useRef<HTMLDivElement>(null);
-  const done = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
   const finish = () => {
     restoreFocus.current = true;
@@ -108,7 +107,7 @@ export function ModelSelect({
       '[role="radio"][aria-checked="true"]:not(:disabled)',
     );
     const first = panel?.querySelector<HTMLButtonElement>('[role="radio"]:not(:disabled)');
-    (current ?? first ?? done.current)?.focus({ preventScroll: true });
+    (current ?? first ?? search.current)?.focus({ preventScroll: true });
     setFocusModel(null);
   }, [open, focusModel, want]);
 
@@ -250,27 +249,16 @@ export function ModelSelect({
             defaultLevel={catalog?.defaultThinkingLevel}
             disabled={!view.effortEnabled}
           />
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-w-0 flex-1 pointer-coarse:min-h-11"
-              disabled={!view.canSaveDefault}
-              onClick={() => void models.saveDefaults(want, effort)}
-            >
-              {saving && <Spinner data-icon="inline-start" />}
-              <span className="truncate">{view.saveLabel}</span>
-            </Button>
-            <Button
-              ref={done}
-              variant="ghost"
-              size="sm"
-              className="pointer-coarse:min-h-11"
-              onClick={finish}
-            >
-              Done
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-w-0 pointer-coarse:min-h-11"
+            disabled={!view.canSaveDefault}
+            onClick={() => void models.saveDefaults(want, effort)}
+          >
+            {saving && <Spinner data-icon="inline-start" />}
+            <span className="truncate">{view.saveLabel}</span>
+          </Button>
         </div>
       </PickerContent>
     </Popover>

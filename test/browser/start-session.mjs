@@ -17,7 +17,7 @@ await run(
     await page.ab("find", "role", "button", "click", "--name", "Model:");
     await page.click("option", "fake/gamma");
     await page.click("radio", "high");
-    await page.click("button", "Done");
+    await page.ab("press", "Escape");
     await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
     await page.click("button", "Project");
     await page.click("menuitem", "Launch");
