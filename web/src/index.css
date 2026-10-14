@@ -595,7 +595,7 @@
   background: var(--fill);
 }
 .prose-chat .markdown-code-block pre {
-  padding-top: 2.5rem;
+  padding-right: 3rem;
 }
 .prose-chat pre code {
   background: none;

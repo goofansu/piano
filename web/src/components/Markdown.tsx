@@ -1,6 +1,14 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
@@ -20,7 +28,7 @@ function CopyCode({ text }: { text: string }) {
     <IconButton
       label={copied ? "Code copied" : "Copy code"}
       size="icon-xs"
-      className="absolute top-2 right-2"
+      className="absolute top-4 right-2"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
@@ -51,22 +59,35 @@ export function Markdown({
   const ref = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const html = useMemo(() => renderMarkdown(text, images !== undefined), [text, images]);
+  // Seed server/initial rendering only; the layout effect owns subsequent DOM updates.
+  const initialHtml = useRef(html);
   const [codeBlocks, setCodeBlocks] = useState<{ host: HTMLDivElement; text: string }[]>([]);
-  useEffect(() => {
+  const hosts = useRef<HTMLDivElement[]>([]);
+  useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return;
-    // Restore source when switching themes, or after an earlier async render.
-    root.innerHTML = html;
-    setCodeBlocks(
-      Array.from(root.querySelectorAll<HTMLPreElement>("pre")).map((block) => {
+    // Build offscreen and retain portal hosts: streaming must not remount copy controls.
+    // Commit before paint so code never appears without its control.
+    const next = document.createElement("div");
+    next.innerHTML = html;
+    const focused = root.contains(document.activeElement) ? document.activeElement : null;
+    const codeBlocks = Array.from(next.querySelectorAll<HTMLPreElement>("pre")).map(
+      (block, index) => {
         // Custom code host: shadcn has no HTML-string Markdown renderer. The control is a portal.
-        const host = document.createElement("div");
+        const host = hosts.current[index] ?? document.createElement("div");
         host.className = "markdown-code-block";
         block.replaceWith(host);
-        host.append(block);
+        // Leave React's portal children intact, replacing only code/diagram content.
+        host.querySelector("pre, .mermaid-diagram")?.remove();
+        host.prepend(block);
         return { host, text: block.querySelector("code")?.textContent ?? "" };
-      }),
+      },
     );
+    hosts.current = codeBlocks.map(({ host }) => host);
+    root.replaceChildren(...next.childNodes);
+    if (focused instanceof HTMLElement && root.contains(focused))
+      focused.focus({ preventScroll: true });
+    setCodeBlocks(codeBlocks);
     for (const host of root.querySelectorAll<HTMLElement>("[data-local-image]")) {
       const url = images?.get(host.dataset.localImage!);
       if (!url) continue;
@@ -138,8 +159,8 @@ export function Markdown({
               : null;
           if (button && event.currentTarget.contains(button)) openFile(button.dataset.localFile!);
         }}
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes the source before adding markup.
-        dangerouslySetInnerHTML={{ __html: html }}
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes source before adding markup.
+        dangerouslySetInnerHTML={{ __html: initialHtml.current }}
       />
       {codeBlocks.map(({ host, text }, index) =>
         createPortal(<CopyCode text={text} />, host, String(index)),
