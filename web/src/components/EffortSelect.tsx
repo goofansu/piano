@@ -18,9 +18,12 @@ export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, 
     <FieldSet
       disabled={disabled || levels.length <= 1}
       aria-label="Effort"
-      className="min-w-0 gap-2"
+      // Keep the legend in native fieldset flow rather than a browser-dependent flex layout.
+      className="block min-w-0"
     >
-      <FieldLegend variant="label">Reasoning effort</FieldLegend>
+      <FieldLegend variant="label" className="mb-2">
+        Reasoning effort
+      </FieldLegend>
       <ToggleGroup
         type="single"
         disabled={disabled || levels.length <= 1}

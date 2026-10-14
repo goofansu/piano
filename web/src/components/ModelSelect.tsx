@@ -148,7 +148,9 @@ export function ModelSelect({
           disabled={!view.triggerEnabled}
           className={cn(
             "min-w-0 shrink font-mono",
-            variant === "outline" ? "max-w-full justify-start" : [picker, "max-w-none justify-end"],
+            variant === "outline"
+              ? "max-w-full justify-start"
+              : [picker, "max-w-none justify-end px-1.5 text-xs"],
           )}
         >
           <span className={cn("min-w-0 truncate", view.shimmer && "shimmer")}>{view.label}</span>
@@ -163,7 +165,8 @@ export function ModelSelect({
       </PopoverTrigger>
       <PickerContent
         aria-label="Model and effort"
-        className="font-mono"
+        collisionPadding={16}
+        className="w-96 font-mono"
         searchRef={search}
         onKeyDown={(event) => {
           if (
@@ -231,7 +234,7 @@ export function ModelSelect({
               </IconButton>
             )}
           </PickerSearch>
-          <CommandList className="max-h-[min(16rem,40dvh)]">
+          <CommandList className="max-h-[min(12rem,30dvh)] sm:max-h-[min(16rem,40dvh)]">
             <CommandEmpty>{view.emptyText}</CommandEmpty>
             <CommandGroup>{view.visibleModels.map(item)}</CommandGroup>
           </CommandList>
@@ -246,18 +249,27 @@ export function ModelSelect({
             defaultLevel={catalog?.defaultThinkingLevel}
             disabled={!view.effortEnabled}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!view.canSaveDefault}
-            onClick={() => void models.saveDefaults(want, effort)}
-          >
-            {saving && <Spinner data-icon="inline-start" />}
-            {view.saveLabel}
-          </Button>
-          <Button ref={done} variant="ghost" size="sm" onClick={finish}>
-            Done
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-w-0 flex-1 pointer-coarse:min-h-11"
+              disabled={!view.canSaveDefault}
+              onClick={() => void models.saveDefaults(want, effort)}
+            >
+              {saving && <Spinner data-icon="inline-start" />}
+              <span className="truncate">{view.saveLabel}</span>
+            </Button>
+            <Button
+              ref={done}
+              variant="ghost"
+              size="sm"
+              className="pointer-coarse:min-h-11"
+              onClick={finish}
+            >
+              Done
+            </Button>
+          </div>
         </div>
       </PickerContent>
     </Popover>
