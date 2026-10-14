@@ -1,5 +1,6 @@
 import type { ThinkingLevel } from "@shared/wire";
-import { FieldLegend, FieldSet } from "@/components/ui/field";
+import { useId } from "react";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 interface Props {
@@ -14,17 +15,15 @@ interface Props {
 
 /** A toggle group inside the model picker: no second popup, and only Pi-supported levels. */
 export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, disabled }: Props) {
+  const labelId = useId();
   return (
-    <FieldSet
-      disabled={disabled || levels.length <= 1}
-      aria-label="Effort"
-      // Keep the legend in native fieldset flow rather than a browser-dependent flex layout.
-      className="block min-w-0"
-    >
-      <FieldLegend variant="label" className="mb-2">
-        Reasoning effort
-      </FieldLegend>
+    // One labelled composite control: avoid native fieldset/legend intrinsic sizing in Safari.
+    <Field aria-label="Effort" className="min-w-0 gap-2">
+      <FieldLabel asChild>
+        <span id={labelId}>Reasoning effort</span>
+      </FieldLabel>
       <ToggleGroup
+        aria-labelledby={labelId}
         type="single"
         disabled={disabled || levels.length <= 1}
         variant="outline"
@@ -58,6 +57,6 @@ export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, 
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-    </FieldSet>
+    </Field>
   );
 }

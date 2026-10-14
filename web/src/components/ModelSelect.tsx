@@ -166,7 +166,7 @@ export function ModelSelect({
       <PickerContent
         aria-label="Model and effort"
         collisionPadding={16}
-        className="w-96 font-mono"
+        className="w-96 font-mono max-md:[--type-label:var(--type-caption)]"
         searchRef={search}
         onKeyDown={(event) => {
           if (
@@ -223,6 +223,7 @@ export function ModelSelect({
             onValueChange={setQuery}
             aria-label="Search models"
             placeholder="Search models"
+            className="max-md:text-base"
           >
             {refresh && (
               <IconButton
@@ -240,7 +241,7 @@ export function ModelSelect({
           </CommandList>
         </Command>
         <Separator />
-        <div ref={effortPanel} className="flex flex-col gap-3 p-3">
+        <div ref={effortPanel} className="flex flex-col gap-2 p-3">
           <EffortSelect
             value={effort}
             onChange={onEffortChange}
