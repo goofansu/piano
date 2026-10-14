@@ -459,7 +459,9 @@ function SessionRow({
 function ProjectMenu({ state, session }: { state: AppState; session: SessionTarget }) {
   const { run } = useCommands();
   const current = sessionProject(state, session);
-  const destinations = activeProjects(state).filter((p) => p.id !== current?.id);
+  const destinations = activeProjects(state)
+    .filter((p) => p.id !== current?.id)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   const create = newProjectCommand(state, session);
   return (
     <>
