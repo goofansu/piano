@@ -54,7 +54,10 @@ encodes the scratch path.
 
 After a change passes verification, commit it on the branch that is checked out (usually `main`)
 and push that branch. Stay on that branch; create or switch branches only when the user asks.
-Report the commit and push outcome; a blocked push is not completion.
+If the remote branch has advanced, fetch it, rebase onto it, resolve conflicts, verify the resulting
+revision and push without asking for permission. Preserve unrelated local changes and use a normal
+push (never force-push). Report the commit and push outcome; completion requires the remote branch
+to match HEAD.
 
 ## Design
 
@@ -156,7 +159,7 @@ GH_HOST=github.int.exe.xyz gh auth setup-git --hostname github.int.exe.xyz
 branch=$(git branch --show-current)
 url=https://github.int.exe.xyz/goofansu/piano.git
 git fetch "$url" "$branch:refs/remotes/origin/$branch"
-# Rebase onto origin/$branch when requested; verify the resulting revision before pushing.
+# Follow the Committing policy above if the remote branch has advanced.
 git push "$url" "$branch:$branch"
 git ls-remote "$url" "refs/heads/$branch"
 git rev-parse HEAD
