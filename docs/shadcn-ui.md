@@ -15,6 +15,7 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 | Concern | Owner outside `ui/` |
 | --- | --- |
 | Borderless/rail button variants | `PianoButton` |
+| Underlined file-view toggles | `PianoViewToggle`, `PianoViewToggleItem` |
 | Status badge and warning alert variants | `StatusBadge`, `PianoAlert` |
 | Overlay surfaces, stacking and motion | `PianoDialog`, `PianoSheet`, `PianoSelect`, `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/overlayStyles.ts` |
 | Pointer-close focus; keyboard/hover tooltips | `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/pointerClose.ts` |

@@ -40,7 +40,7 @@ export function RightSidebar({
   description?: ReactNode;
   /** Controls at the header's end, before Close. */
   actions?: ReactNode;
-  /** View controls move below the title and actions on mobile. */
+  /** File controls in a separate row below the title at every width. */
   toolbar?: ReactNode;
   footer?: ReactNode;
   close: () => void;
@@ -49,7 +49,7 @@ export function RightSidebar({
   const mobile = useIsMobile();
   const frame = (
     <>
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line py-3 pr-3 pl-4">
+      <header className="flex shrink-0 items-center gap-2 border-b border-line py-3 pr-3 pl-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
           <h2 className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">{title}</h2>
           {description && (
@@ -58,7 +58,6 @@ export function RightSidebar({
             </div>
           )}
         </div>
-        {toolbar && <div className="order-last w-full md:order-none md:w-auto">{toolbar}</div>}
         <div className="flex shrink-0 items-center gap-1">
           {actions}
           <IconButton label={`Close ${label.toLowerCase()}`} onClick={close}>
@@ -66,6 +65,11 @@ export function RightSidebar({
           </IconButton>
         </div>
       </header>
+      {toolbar && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line pr-3 pl-4">
+          {toolbar}
+        </div>
+      )}
       <div data-slot="panel-body" className="relative min-h-0 flex-1 overflow-auto">
         {children}
       </div>

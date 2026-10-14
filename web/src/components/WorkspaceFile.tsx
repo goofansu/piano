@@ -14,8 +14,8 @@ import { FileText } from "@/components/FileText";
 import { IconButton } from "@/components/IconButton";
 import { LocalFileContext, Markdown } from "@/components/Markdown";
 import { NativeFile } from "@/components/NativeFile";
+import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewToggle";
 import { RightSidebar } from "@/components/RightSidebar";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
 
@@ -171,25 +171,27 @@ export function WorkspaceFile({
         </>
       }
       toolbar={
-        result?.kind === "markdown" && (
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            value={mode}
-            onValueChange={(value) => value && setMode(value)}
-            aria-label="Markdown view"
-            size="sm"
-            className="mr-1"
+        <>
+          {result?.kind === "markdown" && (
+            <PianoViewToggle
+              type="single"
+              value={mode}
+              onValueChange={(value) => value && setMode(value)}
+              aria-label="Markdown view"
+            >
+              <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
+              <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
+            </PianoViewToggle>
+          )}
+          <IconButton
+            label="Download file"
+            disabled={!result || saving}
+            onClick={save}
+            className="ml-auto my-1"
           >
-            <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
-            <ToggleGroupItem value="source">Source</ToggleGroupItem>
-          </ToggleGroup>
-        )
-      }
-      actions={
-        <IconButton label="Download file" disabled={!result || saving} onClick={save}>
-          <DownloadIcon />
-        </IconButton>
+            <DownloadIcon />
+          </IconButton>
+        </>
       }
     >
       {status && <Notice>{status}</Notice>}
