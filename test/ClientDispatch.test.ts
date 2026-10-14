@@ -415,7 +415,7 @@ test("INV-06: rejected worktree operations settle the picker immediately without
         "mutations are never replayed",
       );
       for (const work of held) yield* work;
-      yield* (yield* Registry).addFolder(cwd);
+      yield* (yield* Registry).ensureFolder(cwd);
       operation.refresh();
       yield* exchange;
       assert.equal(operation.getState().refreshing, false, "accepted discovery is correlated too");
@@ -489,10 +489,6 @@ const refusals: {
   ],
   assign_project: [
     { _tag: "assign_project", cwd, sessionId: "x", projectId: null },
-    { _tag: "error", message: "REFUSED" },
-  ],
-  add_folder: [
-    { _tag: "add_folder", path: cwd },
     { _tag: "error", message: "REFUSED" },
   ],
   remove_folder: [

@@ -66,9 +66,12 @@ test("INV-11: a message Pi did not produce is redacted at socket egress", {
       }),
     );
     await once(ws, "open");
-    // The registry's error names the path it was given; the error is Piano's, not Pi's.
+    // Starting a session in a missing directory fails in the registry, before Pi runs: the error
+    // names the path it was given and is Piano's, not Pi's.
     const missing = join(root, canary);
-    ws.send(JSON.stringify({ _tag: "add_folder", path: missing }));
+    ws.send(
+      JSON.stringify({ _tag: "create_session", selectionId: "s1", cwd: missing, options: {} }),
+    );
     const error = JSON.parse(await failed);
     assert.equal(error.message, `Not a directory: ${join(root, "[REDACTED]")}`);
     assert.ok(!received.join("\n").includes(canary), "no message carries the secret");

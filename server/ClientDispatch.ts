@@ -204,11 +204,6 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       run: ({ cwd, sessionId, projectId }) => registry.assignProject(cwd, sessionId, projectId),
       unanswered: plainError,
     },
-    add_folder: {
-      admission: "ordinary",
-      run: ({ path }) => registry.addFolder(path),
-      unanswered: plainError,
-    },
     remove_folder: {
       admission: "ordinary",
       run: ({ path }) => registry.removeFolder(path),

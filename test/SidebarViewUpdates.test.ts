@@ -91,7 +91,7 @@ test("INV-06: changes during discovery coalesce into one more run; a late subscr
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.addFolder(first);
+      yield* registry.ensureFolder(first);
       yield* view.fresh;
       const before = git.calls;
       // Hold a run in Git; every change below lands while it runs.
@@ -131,7 +131,7 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.addFolder(first);
+      yield* registry.ensureFolder(first);
       yield* registry.addSession(first, "s1", "Before");
       yield* view.fresh;
       const runs = git.calls;
@@ -143,7 +143,7 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
       git.release();
 
       // A new folder needs discovery; the change starts a run and the view follows it.
-      yield* registry.addFolder(second);
+      yield* registry.ensureFolder(second);
       const grown = yield* nextView(view, (m) => m.folders.length === 2);
       assert.deepEqual(grown.folders.map((f) => f.path).sort(), [first, second]);
       assert.ok(git.calls > runs, "the change after a finished run rediscovered");
@@ -159,7 +159,7 @@ test("INV-01: a registry write made outside any browser request reaches the side
       const registry = yield* Registry,
         view = yield* SidebarView,
         hosts = yield* SessionHosts;
-      yield* registry.addFolder(first);
+      yield* registry.ensureFolder(first);
       yield* view.fresh;
       yield* registry.addSession(first, "pi-named");
       const session = yield* hosts.open({ cwd: first, sessionId: "pi-named" });
@@ -212,7 +212,7 @@ test("INV-01/INV-07: a session reference keeps its registry creation time and wo
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.addFolder(first);
+      yield* registry.ensureFolder(first);
       yield* registry.addSession(first, "kept", "Kept");
       const entry = (yield* registry.get).sessions[0]!;
       const workspaceId = (yield* registry.get).workspaces.find((w) => w.path === first)!.id;
@@ -252,7 +252,7 @@ test("INV-01: a trust decision reaches the sidebar without a registry write", as
       const registry = yield* Registry,
         view = yield* SidebarView,
         facts = yield* DirectoryFacts;
-      yield* registry.addFolder(skilled);
+      yield* registry.ensureFolder(skilled);
       const trustIn = (m: SidebarMessage) => m.folders[0]?.worktrees[0]?.trust;
       assert.deepEqual(trustIn(yield* view.fresh), { required: true, trusted: false });
       const runs = git.calls;
@@ -289,8 +289,8 @@ test("INV-01: the sidebar marks a project member unavailable when its history or
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.addFolder(kept);
-      yield* registry.addFolder(gone);
+      yield* registry.ensureFolder(kept);
+      yield* registry.ensureFolder(gone);
       yield* registry.saveProject({ id: "outcome", name: "Outcome" });
       seedHistory(kept, "written");
       seedHistory(gone, "removed");
