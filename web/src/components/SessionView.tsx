@@ -194,6 +194,7 @@ export function SessionView({ state, send }: Props) {
             key={`${workspace?.id}:${sessionKey(t)}:${panel.path}`}
             workspaceId={workspace?.id}
             file={panel}
+            open={(path) => openPanel({ kind: "file", path })}
             close={closePanel}
           />
         )}

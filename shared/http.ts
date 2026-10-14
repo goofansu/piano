@@ -8,6 +8,7 @@
  * and a GET has no body.
  */
 import { Schema } from "effect";
+import { FilePreview } from "./files.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
@@ -174,7 +175,7 @@ export const Endpoints = {
     path: "/api/workspace/file",
     query: ["workspaceId"],
     body: Schema.Struct({ path: Schema.NonEmptyString.check(Schema.isMaxLength(4096)) }),
-    response: Schema.Struct({ path: Schema.String, content: Schema.String }),
+    response: FilePreview,
     noStore: true,
     refused: 400,
     fallback: "Could not read this file. Check the path and try again.",

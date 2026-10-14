@@ -23,7 +23,8 @@
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^1.2.0",
     "@effect/platform-node": "^4.0.2",
-    "effect": "^4.0.2"
+    "effect": "^4.0.2",
+    "file-type": "^22.1.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

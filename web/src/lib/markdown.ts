@@ -34,7 +34,7 @@ function githubLabel(href: string): string | undefined {
 
 function webLink(href: string, label: string): string {
   const compact = githubLabel(href);
-  const text = inline(compact && label === href ? compact : label, false);
+  const text = renderInline(compact && label === href ? compact : label, false);
   return `<a href="${escH(href)}" target="_blank" rel="noreferrer"${compact ? ` class="github-link" title="${escH(href)}"` : ""}>${compact ? githubIcon : ""}${text}</a>`;
 }
 
@@ -60,7 +60,7 @@ function localFilePath(destination: string): string | undefined {
   }
 }
 
-function inline(s: string, links = true): string {
+function renderInline(s: string, links = true, images = false): string {
   const ph: string[] = [];
   s = s.replaceAll("\u0000", "\uFFFD");
   if (!links)
@@ -71,10 +71,11 @@ function inline(s: string, links = true): string {
   if (links) {
     // Protect whole links before formatting prose, so URL punctuation never becomes markup.
     s = s.replace(
-      /`([^`\n]+)`|(?<!!)\[([^\]\n]*)\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g,
+      /`([^`\n]+)`|(!?)\[([^\]\n]*)\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g,
       (
         match,
         code: string | undefined,
+        image: string | undefined,
         label: string | undefined,
         href: string | undefined,
         autolink: string | undefined,
@@ -82,13 +83,18 @@ function inline(s: string, links = true): string {
         let html: string;
         if (code !== undefined) html = `<code>${escH(code)}</code>`;
         else if (href !== undefined) {
-          if (/^https?:\/\//.test(href)) html = webLink(href, label ?? "");
+          if (image) {
+            const path = images ? localFilePath(href) : undefined;
+            html = path
+              ? `<span data-local-image="${escH(path)}"><button type="button" class="local-file-link" data-local-file="${escH(path)}">${escH(label || "Image")}</button></span>`
+              : escH(match);
+          } else if (/^https?:\/\//.test(href)) html = webLink(href, label ?? "");
           else {
             const path = localFilePath(href);
             // Custom inline action: shadcn has no HTML-string Markdown renderer.
             // Paths live in data, not hrefs, so even modified clicks cannot request filesystem URLs.
             html = path
-              ? `<button type="button" class="local-file-link" data-local-file="${escH(path)}">${inline(label ?? "", false)}</button>`
+              ? `<button type="button" class="local-file-link" data-local-file="${escH(path)}">${renderInline(label ?? "", false)}</button>`
               : escH(match);
           }
         } else {
@@ -110,8 +116,9 @@ function inline(s: string, links = true): string {
   return s;
 }
 
-export function renderMarkdown(src: string): string {
+export function renderMarkdown(src: string, images = false): string {
   if (!src) return "";
+  const inline = (text: string) => renderInline(text, true, images);
   const lines = src.split("\n");
   let out = "";
   let para: string[] = [];
@@ -205,7 +212,7 @@ export function renderMarkdown(src: string): string {
         i++;
       } while (i < lines.length && /^>(?:\s|$)/.test(lines[i]));
       i--;
-      out += `<blockquote>${renderMarkdown(quote.join("\n"))}</blockquote>`;
+      out += `<blockquote>${renderMarkdown(quote.join("\n"), images)}</blockquote>`;
       continue;
     }
     const um = ln.match(/^[-*] (.*)/);

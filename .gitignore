@@ -1,6 +1,8 @@
 node_modules
 web/node_modules
 web/dist
+# Generated from the locked PDF.js package by Vite.
+web/public/pdfjs/
 
 # Claude Code worktrees carry their own biome.json
 .claude/worktrees/

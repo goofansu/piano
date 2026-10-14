@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import {
@@ -8,6 +9,7 @@ import {
   slashCommands,
   workspaceChangedFile,
   workspaceChanges,
+  workspaceFile,
 } from "../web/src/lib/api.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
@@ -79,6 +81,23 @@ test("slash commands decode from a directory probe", async () => {
       (c) => typeof c.name === "string" && ["extension", "prompt", "skill"].includes(c.source),
     ),
   );
+});
+
+test("file previews preserve binary bytes over scoped POST and still redact text", async () => {
+  await writeFile(join(repo, "secret.txt"), "token=example-secret");
+  const text = await workspaceFile(workspaceId, "secret.txt");
+  assert.ok("content" in text);
+  assert.equal(text.content, "token=[REDACTED]");
+  const pdf = Buffer.from("%PDF-1.7\ntoken=example-secret");
+  await writeFile(join(repo, "sample.pdf"), pdf);
+  const binary = await workspaceFile(workspaceId, "sample.pdf");
+  assert.equal(binary.workspaceId, workspaceId);
+  assert.equal(binary.path, "sample.pdf");
+  assert.equal(binary.kind, "pdf");
+  assert.ok("bytes" in binary);
+  assert.deepEqual(binary.bytes, new Uint8Array(pdf));
+  await assert.rejects(workspaceFile("unknown", "sample.pdf"), /Workspace is not registered/);
+  await assert.rejects(workspaceFile(workspaceId, "../outside.pdf"), /inside this workspace/);
 });
 
 test("a response outside the contract is rejected with the endpoint's message, not trusted", async () => {

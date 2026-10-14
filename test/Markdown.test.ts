@@ -101,6 +101,23 @@ test("local file links escape markup and do not turn schemes or remote hosts int
   );
 });
 
+test("document images are scoped placeholders, never active or external resource URLs", () => {
+  const html = renderMarkdown(
+    "![Local](../a%20b.png) ![Remote](https://example.test/x.png) ![Data](data:image/png;base64,abc) <img src=x onerror=bad>",
+    true,
+  );
+  assert.ok(html.includes('data-local-image="../a b.png"'));
+  assert.ok(!html.includes("<img"));
+  assert.ok(!html.includes("src=" + '"'));
+  assert.equal((html.match(/data-local-image=/g) ?? []).length, 1);
+  for (const source of ["`![code](a.png)`", "```\n![code](a.png)\n```"])
+    assert.ok(!renderMarkdown(source, true).includes("data-local-image"));
+  assert.ok(
+    !renderMarkdown("![Local](a.png)").includes("data-local-image"),
+    "transcripts do not acquire embedded files",
+  );
+});
+
 test("ordered lists continue across blank lines and retain their starting number", () => {
   assert.equal(
     renderMarkdown(

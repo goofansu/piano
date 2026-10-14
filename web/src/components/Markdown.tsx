@@ -36,11 +36,21 @@ function CopyCode({ text }: { text: string }) {
 }
 
 /** HTML-safe prose, enhanced with diagrams only after their closing fence arrives. */
-export function Markdown({ text, className }: { text: string; className?: string }) {
+export function Markdown({
+  text,
+  className,
+  images,
+  diagrams = true,
+}: {
+  text: string;
+  className?: string;
+  images?: ReadonlyMap<string, string>;
+  diagrams?: boolean;
+}) {
   const openFile = useContext(LocalFileContext);
   const ref = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
-  const html = useMemo(() => renderMarkdown(text), [text]);
+  const html = useMemo(() => renderMarkdown(text, images !== undefined), [text, images]);
   const [codeBlocks, setCodeBlocks] = useState<{ host: HTMLDivElement; text: string }[]>([]);
   useEffect(() => {
     const root = ref.current;
@@ -57,7 +67,19 @@ export function Markdown({ text, className }: { text: string; className?: string
         return { host, text: block.querySelector("code")?.textContent ?? "" };
       }),
     );
-    const blocks = Array.from(root.querySelectorAll<HTMLPreElement>("pre[data-mermaid]"));
+    for (const host of root.querySelectorAll<HTMLElement>("[data-local-image]")) {
+      const url = images?.get(host.dataset.localImage!);
+      if (!url) continue;
+      const img = document.createElement("img");
+      img.alt = host.textContent ?? "Image";
+      img.src = url;
+      img.style.maxWidth = "100%";
+      img.onerror = () => img.remove();
+      host.prepend(img);
+    }
+    const blocks = diagrams
+      ? Array.from(root.querySelectorAll<HTMLPreElement>("pre[data-mermaid]"))
+      : [];
     if (!blocks.length) return;
     let cancelled = false;
     void (async () => {
@@ -100,7 +122,7 @@ export function Markdown({ text, className }: { text: string; className?: string
     return () => {
       cancelled = true;
     };
-  }, [html, resolvedTheme]);
+  }, [html, resolvedTheme, images, diagrams]);
   // Custom prose host: shadcn has no Markdown/Mermaid renderer. HTML is escaped by renderMarkdown.
   return (
     <>

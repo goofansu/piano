@@ -105,6 +105,7 @@ const route =
       ApiFailure | ([F] extends [RefusedStatus] ? Refusal : never),
       Req
     >,
+    respondWith?: (result: R["Type"]) => HttpServerResponse.HttpServerResponse,
   ) =>
     router.add(
       endpoint.method,
@@ -150,6 +151,7 @@ const route =
             "The server answered outside its contract. Inspect the server log.",
           );
         }
+        if (respondWith) return respondWith(result);
         return respond(encoded.value, 200, { noStore: endpoint.noStore, redact: endpoint.redact });
       }).pipe(
         Effect.catchCause((cause) =>
@@ -209,8 +211,19 @@ export const AppRouter = HttpRouter.use((router) =>
       ),
     );
 
-    yield* serve(Endpoints.workspaceFile, ({ workspace, body }) =>
-      readWorkspaceFile(workspace, body.path),
+    yield* serve(
+      Endpoints.workspaceFile,
+      ({ workspace, body }) => readWorkspaceFile(workspace, body.path),
+      (result) => {
+        if (!("bytes" in result)) return respond(result, 200, { noStore: true });
+        const { bytes, ...metadata } = result;
+        const form = new FormData();
+        form.set("metadata", JSON.stringify(projectDisplay(metadata)));
+        form.set("file", new Blob([new Uint8Array(bytes)], { type: result.mime }), "file");
+        return HttpServerResponse.formData(form, {
+          headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+        });
+      },
     );
     yield* serve(Endpoints.workspaceChanges, ({ workspace }) =>
       Effect.flatMap(WorkspaceChanges, (changes) => changes.preview(workspace)),

@@ -48,6 +48,7 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
   endpoint: Endpoint<Q, B, R>,
   input: Input<Q, B>,
   { signal }: RequestOptions = {},
+  readSuccess?: (response: Response) => Promise<unknown>,
 ): Promise<R["Type"]> {
   const { method, path, noStore, fallback } = endpoint;
   const { query, body } = input as { query?: Record<string, string>; body?: unknown };
@@ -67,7 +68,10 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
     throw new ApiError(failure(0), 0);
   }
   // A proxy or crashed server may answer with something other than JSON.
-  const json: unknown = await response.json().catch((error) => {
+  const json: unknown = await (response.ok && readSuccess
+    ? readSuccess(response)
+    : response.json()
+  ).catch((error) => {
     if (signal?.aborted) throw error;
     return undefined;
   });
@@ -96,7 +100,21 @@ export const makeDirectory = async (path: string, options?: RequestOptions) =>
   (await call(Endpoints.makeDirectory, { body: { path } }, options)).path;
 
 export const workspaceFile = (workspaceId: string, path: string, options?: RequestOptions) =>
-  call(Endpoints.workspaceFile, { query: { workspaceId }, body: { path } }, options);
+  call(
+    Endpoints.workspaceFile,
+    { query: { workspaceId }, body: { path } },
+    options,
+    async (response) => {
+      if (!response.headers.get("content-type")?.startsWith("multipart/form-data"))
+        return response.json();
+      const form = await response.formData();
+      const metadata = form.get("metadata"),
+        file = form.get("file");
+      if (typeof metadata !== "string" || !(file instanceof Blob))
+        throw new Error("Invalid file reply.");
+      return { ...JSON.parse(metadata), bytes: new Uint8Array(await file.arrayBuffer()) };
+    },
+  );
 
 // Live workspace changes
 

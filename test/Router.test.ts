@@ -64,7 +64,13 @@ test("workspace files use a body path and return uncached text for the registere
   );
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.deepEqual(await response.json(), { path: "README.md", content: "one\ntwo\n" });
+  assert.deepEqual(await response.json(), {
+    workspaceId: server.workspaceId,
+    path: "README.md",
+    kind: "markdown",
+    language: "markdown",
+    content: "one\ntwo\n",
+  });
 });
 
 test("INV-07: IDs resolve through the registry; a missing ID is malformed and an unknown one is not found", async () => {
