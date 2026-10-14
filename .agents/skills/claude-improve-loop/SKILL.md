@@ -6,15 +6,15 @@ disable-model-invocation: true
 
 # Claude improvement loop
 
-Control Claude Code through Herdr. Send the prompts below and wait for Claude to finish. Do not review code, inspect PRs, run tests, collect evidence, delegate work, or send repair prompts. Claude owns the work.
+Control Claude Code through Herdr. Send the prompts below and wait for Claude to finish. Do not review code, run tests, collect evidence, delegate work, or send repair prompts. Claude owns the work.
 
 ## 1. Start Claude
 
 Read the installed `herdr` skill in full. Follow its instructions for CLI discovery, pane creation, agent identity, waits, and errors. If `HERDR_ENV` is not `1`, stop.
 
-Run five rounds unless the user gives a different finite round count. Ask for a finite count if the request is unbounded. Merge each pull request stack when Claude reports that the stack is ready to merge. Do not ask for separate merge permission.
+Run five rounds unless the user gives a different finite round count. Ask for a finite count if the request is unbounded.
 
-Tell the user that Claude can create worktrees, branches, and stacked PRs. Do not ask again for choices the user already supplied.
+Tell the user that Claude organizes improvements as a dependency-ordered stack of branches and worktrees, integrates the stack into local `main`, and pushes `main` without pull requests. Do not ask again for choices the user already supplied.
 
 Create a sibling pane in the caller's current tab. Preserve the working directory and use `--no-focus`. Start a uniquely named Claude agent in the returned pane with permission prompts disabled:
 
@@ -41,7 +41,7 @@ Confirm that the reset completed. A reset can change the session identity withou
 Then send exactly this single-line prompt:
 
 ```text
-/mattpocock-skills:improve-codebase-architecture find strong points and fanout worktrees to implement in parallel, and create stack pull requests
+/mattpocock-skills:improve-codebase-architecture find strong points, organize improvements as a dependency-ordered stack of branches and worktrees, parallelize only independent non-overlapping changes, base dependent changes on their prerequisite branches, verify according to repository instructions, integrate the stack into local main in dependency order, verify the combined result, and push main without creating pull requests
 ```
 
 Use `herdr agent prompt <target> <text> --wait --timeout <milliseconds>` with a finite timeout. Do not append instructions or round metadata.
@@ -50,19 +50,11 @@ Invoke the architecture command only once per cleared session. If a wait times o
 
 Wait until Claude reports completion, no useful candidates, or a blocker. A settled Herdr state does not mean background agents have finished. Do not send follow-up work. If Claude cannot proceed, report the blocker and stop.
 
-## 3. Merge when the pull request stack is ready
+## 3. Reset and repeat
 
-When Claude reports that the pull request stack is ready to merge, send exactly:
+A round is complete when Claude reports that the changes are integrated into local `main`, verification passed, and the remote `main` matches HEAD with no outstanding work. If Claude reports partial integration, a failed push, or another blocker, stop and preserve the session. Leave verification of those results to Claude.
 
-```text
-merge all
-```
-
-Wait for Claude's result. Do not inspect GitHub or verify the merge yourself. If Claude reports a partial merge or a blocker, stop and preserve the session.
-
-## 4. Reset and repeat
-
-After Claude reports a successful merge with no outstanding work, send this prompt separately:
+After a completed round, send this prompt separately:
 
 ```text
 /clear
@@ -72,4 +64,4 @@ Confirm the reset and record the current session identity. If rounds remain, sen
 
 Stop when the round count is exhausted, Claude reports no useful candidates, a blocker remains, or the user intervenes. Do not deploy or send `/sync-piano`.
 
-Report the completed rounds, the PRs and merge results Claude reported, and any blocker. Label results as Claude-reported. Do not claim independent review or verification.
+Report the completed rounds, the commits and `main` push results Claude reported, and any blocker. Label results as Claude-reported. Do not claim independent review or verification.
