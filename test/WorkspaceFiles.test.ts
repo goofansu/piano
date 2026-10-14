@@ -91,3 +91,57 @@ test("workspace file reads are bounded and never fall back to a neighboring work
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("formats the previews promise are accepted under the detector's MIME variants", async () => {
+  const a = await mkdtemp(join(tmpdir(), "piano-formats-"));
+  try {
+    const workspace = { id: "a", folder: a, path: a };
+    const read = (path: string) =>
+      Effect.runPromise(
+        readWorkspaceFile(workspace, path).pipe(
+          Effect.mapError((error) => new Error(error.detail)),
+        ),
+      );
+    // An ISO media file whose major brand is `M4A `, as iTunes and ffmpeg write it.
+    const m4a = Buffer.concat([
+      Buffer.from([0, 0, 0, 0x18]),
+      Buffer.from("ftypM4A \0\0\0\0M4A isom", "latin1"),
+      Buffer.alloc(32),
+    ]);
+    // An Ogg page whose first packet is an Opus identification header.
+    const opus = Buffer.concat([
+      Buffer.from("OggS", "latin1"),
+      Buffer.alloc(22),
+      Buffer.from([1, 19]),
+      Buffer.from("OpusHead", "latin1"),
+      Buffer.alloc(32),
+    ]);
+    await writeFile(join(a, "voice.m4a"), m4a);
+    await writeFile(join(a, "voice.opus"), opus);
+    for (const [name, mime] of [
+      ["voice.m4a", "audio/mp4"],
+      ["voice.opus", "audio/ogg"],
+    ]) {
+      const audio = await read(name);
+      assert.equal(audio.kind, "audio", name);
+      assert.ok("mime" in audio);
+      assert.equal(audio.mime, mime, name);
+    }
+    // Detected text formats are UTF-8 text, not unsupported binaries.
+    for (const [name, content] of [
+      ["captions.vtt", "WEBVTT\n\n00:00.000 --> 00:01.000\nHello\n"],
+      ["meeting.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n"],
+    ]) {
+      await writeFile(join(a, name), content);
+      assert.deepEqual(await read(name), {
+        workspaceId: "a",
+        path: name,
+        kind: "text",
+        language: "",
+        content,
+      });
+    }
+  } finally {
+    await rm(a, { recursive: true, force: true });
+  }
+});
