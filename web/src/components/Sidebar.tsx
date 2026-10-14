@@ -1,13 +1,14 @@
 import type { FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
 import {
-  MinusIcon,
+  FolderIcon,
+  FolderInputIcon,
+  FolderMinusIcon,
   MoreHorizontalIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
-  TargetIcon,
   XIcon,
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
@@ -27,6 +28,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuSeparator,
   DropdownMenuSub,
@@ -49,9 +51,9 @@ import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
 import {
+  activeProjects,
   assignProjectCommand,
   newProjectCommand,
-  projectChoices,
   projectCommands,
 } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
@@ -451,62 +453,59 @@ function SessionRow({
 }
 
 /**
- * Membership lives in the session's own menu, like Rename or Archive. Choosing a project is a radio
- * pick; "New project…" creates one and files the session in it. The command palette carries no
- * project commands yet: which ones are wanted is left to daily use.
+ * The parent names the current membership and offers removal; the submenu only offers destinations.
+ * "New project…" creates a destination and files this session in it without changing execution.
  */
 function ProjectMenu({ state, session }: { state: AppState; session: SessionTarget }) {
   const { run } = useCommands();
   const current = sessionProject(state, session);
-  const choices = projectChoices(state, current);
+  const destinations = activeProjects(state).filter((p) => p.id !== current?.id);
   const create = newProjectCommand(state, session);
   return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger disabled={!create.enabled}>
-        <TargetIcon /> Project
-        {current && (
-          <span className="ml-1 min-w-0 max-w-32 truncate text-muted-foreground">
-            {current.name}
-          </span>
-        )}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
-        <DropdownMenuGroup>
-          <DropdownMenuItem disabled={!create.enabled} onSelect={() => run(create)}>
-            <ProjectCommandIconView icon={create.icon} /> {create.label}…
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        {choices.length > 0 && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuRadioGroup
-              value={current?.id ?? ""}
-              onValueChange={(id) => run(assignProjectCommand(state, session, id))}
-            >
-              {choices.map((p) => (
-                <DropdownMenuRadioItem key={p.id} value={p.id}>
-                  <span className="truncate">{p.name}</span>
-                  {p.archived && <span className="ml-1 text-muted-foreground">· Archived</span>}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </>
-        )}
-        {current && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                disabled={!state.connected}
-                onSelect={() => run(assignProjectCommand(state, session, null))}
-              >
-                <MinusIcon /> Remove from project
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        )}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
+    <>
+      {current && (
+        <DropdownMenuLabel className="max-w-64 truncate font-normal text-muted-foreground">
+          {current.name}
+          {current.archived && " · Archived"}
+        </DropdownMenuLabel>
+      )}
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger disabled={!create.enabled}>
+          <FolderInputIcon /> {current ? "Move to project" : "Add to project"}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
+          <DropdownMenuGroup>
+            <DropdownMenuItem disabled={!create.enabled} onSelect={() => run(create)}>
+              <ProjectCommandIconView icon={create.icon} /> {create.label}…
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          {destinations.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                {destinations.map((p) => (
+                  <DropdownMenuItem
+                    key={p.id}
+                    disabled={!state.connected}
+                    onSelect={() => run(assignProjectCommand(state, session, p.id))}
+                  >
+                    <FolderIcon /> <span className="truncate">{p.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </>
+          )}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      {current && (
+        <DropdownMenuItem
+          disabled={!state.connected}
+          onSelect={() => run(assignProjectCommand(state, session, null))}
+        >
+          <FolderMinusIcon /> Remove from project
+        </DropdownMenuItem>
+      )}
+    </>
   );
 }
 
