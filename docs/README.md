@@ -34,6 +34,9 @@ responsibilities behind the public PiSessions interface, with the [failure polic
 The [2026-10-02 research note](research/2026-10-02-harness-direction.md) retains the original
 Pi 1.0.0 findings and citations. Its implementation audit is dated, and its phase ordering and
 registry-based evidence proposal and broad Worktrunk ownership wording are superseded by the documents above.
+The [remote task execution research](research/2026-10-14-remote-task-execution.md) compares Pi over
+SSH with Codex, Claude Code, Amp and HumanLayer, and recommends a persistent remote Piano worker.
+It is a proposal, not an implemented remote capability or an accepted security ADR.
 The [MCP management research](research/2026-10-09-mcp-management.md) documents setup through Pi,
 current RPC/browser limitations and a proposed management surface; it does not claim that surface exists.
 [Radius setup](radius-setup.md) describes the implemented, narrower Radius section of the
