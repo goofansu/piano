@@ -34,9 +34,9 @@ interface Props {
 export function SessionView({ state, send }: Props) {
   // The selected session's PR popover; hidden while Settings covers the view. Its Changes and
   // open file live in the right sidebar (SessionPanel).
-  const { settings, panel, openPanel, closePanel } = useNavigation();
-  const pullRequestOpen = !settings && panel === "pr";
-  const onPullRequestOpenChange = (open: boolean) => (open ? openPanel("pr") : closePanel());
+  const { settings, pullRequest: pullRequestOpened, openPanel, closePullRequest } = useNavigation();
+  const pullRequestOpen = !settings && pullRequestOpened;
+  const onPullRequestOpenChange = (open: boolean) => (open ? openPanel("pr") : closePullRequest());
   const [display] = useSessionDisplay();
   const t = state.session;
   // The transcript looks executions up by tool call ID.
