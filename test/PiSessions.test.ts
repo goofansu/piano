@@ -317,10 +317,19 @@ test("image-only prompts reach Pi and survive authoritative refresh and late sna
         .pipe(Effect.flip);
       assert.equal(invalid.reason, "rejected");
       yield* t.act({ _tag: "prompt", text: "ask me" });
-      const busy = yield* t
-        .act({ _tag: "steer", text: "image", attachments: [image] })
-        .pipe(Effect.flip);
-      assert.match(busy.detail, /Wait for Pi/);
+      yield* t.act({ _tag: "steer", text: "image", attachments: [image] });
+      yield* t.act({ _tag: "prompt", text: "", attachments: [image] });
+      assert.deepEqual(
+        yield* t.act({ _tag: "restore_queue" }),
+        {
+          _tag: "queue_restored",
+          messages: [
+            { kind: "steering", text: "image" },
+            { kind: "follow-up", text: "" },
+          ],
+        },
+        "editing queued images restores only text, including an image-only message",
+      );
     }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
   );
 });
@@ -763,8 +772,8 @@ for (const mode of ["success", "abort-failure", "abort-exit", "clear-failure", "
           sessionId: `stop-${mode}`,
         });
         yield* session.act({ _tag: "prompt", text: "ask queue" });
-        yield* session.act({ _tag: "steer", text: "duplicate" });
-        yield* session.act({ _tag: "prompt", text: "duplicate" });
+        yield* session.act({ _tag: "steer", text: "duplicate", attachments: [image] });
+        yield* session.act({ _tag: "prompt", text: "duplicate", attachments: [image] });
         const expected = [
           { kind: "steering", text: "duplicate" },
           { kind: "follow-up", text: "duplicate" },

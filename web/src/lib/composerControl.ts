@@ -70,8 +70,6 @@ export interface ComposerControl {
   hint: ControlHint;
   /** The delivery picker is offered: Pi works and is not compacting. */
   showDelivery: boolean;
-  /** Images are attached while Pi works; they can only be sent once it finishes. */
-  imagesWaiting: boolean;
   /** What Esc sends, nearest thing first: the queue returns to the draft, then Pi stops. */
   escape: ClientCommand | null;
   /** Queued messages can be moved back to the draft. */
@@ -82,7 +80,6 @@ export interface ComposerControl {
 
 export function composerControl(s: ComposerSituation): ComposerControl {
   const draft = { text: s.text, images: s.images };
-  const imagesWaiting = s.streaming && s.images.items.length > 0;
   const showDelivery = s.streaming && !s.compacting;
   const idle = !s.disabled && !s.stopping;
   if (s.streaming && !hasContent(draft)) {
@@ -99,13 +96,12 @@ export function composerControl(s: ComposerSituation): ComposerControl {
             }
           : { lead: "Stop", key: "Esc" },
       showDelivery,
-      imagesWaiting,
       escape: escapeAction(s, idle),
       canRestoreQueue: idle,
       delivery: () => null,
     };
   }
-  const enabled = idle && !imagesWaiting && sendable(draft);
+  const enabled = idle && sendable(draft);
   return {
     primary: s.streaming ? "queue" : "send",
     enabled,
@@ -119,7 +115,6 @@ export function composerControl(s: ComposerSituation): ComposerControl {
       key: "Enter",
     },
     showDelivery,
-    imagesWaiting,
     escape: escapeAction(s, idle),
     canRestoreQueue: idle,
     // Nothing can steer a compaction; whatever is sent then waits for it to finish.

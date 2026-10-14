@@ -123,8 +123,16 @@ await import(${JSON.stringify(cli)});`,
           true,
           "handled input must not settle independent work",
         );
-        yield* session.act({ _tag: "prompt", text: "queued one" });
-        yield* session.act({ _tag: "steer", text: "change direction" });
+        const attachments = [
+          {
+            kind: "image" as const,
+            name: "pixel.png",
+            mimeType: "image/png" as const,
+            data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGZkAAAAASUVORK5CYII=",
+          },
+        ];
+        yield* session.act({ _tag: "prompt", text: "queued one", attachments });
+        yield* session.act({ _tag: "steer", text: "change direction", attachments });
         assert.equal((yield* session.state).submission?.outcome, "queued");
         yield* Fiber.join(queued);
         const expected = [

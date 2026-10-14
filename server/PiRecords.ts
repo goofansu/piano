@@ -605,10 +605,7 @@ export function piExchangeFor(
           ...(attachments && {
             images: attachments.map((a) => ({ type: "image", data: a.data, mimeType: a.mimeType })),
           }),
-          // Images go only to an idle Pi (its clear_queue returns text alone), so they never queue.
-          ...(!attachments?.length && {
-            streamingBehavior: action._tag === "steer" ? "steer" : "followUp",
-          }),
+          streamingBehavior: action._tag === "steer" ? "steer" : "followUp",
         },
         decode: (data) => {
           const disposition = fieldOf(data, "disposition");
