@@ -1,6 +1,7 @@
 import type { FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
 import {
+  MinusIcon,
   MoreHorizontalIcon,
   PlusIcon,
   SearchIcon,
@@ -470,11 +471,17 @@ function ProjectMenu({ state, session }: { state: AppState; session: SessionTarg
         )}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
+        <DropdownMenuGroup>
+          <DropdownMenuItem disabled={!create.enabled} onSelect={() => run(create)}>
+            <ProjectCommandIconView icon={create.icon} /> {create.label}…
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
         {choices.length > 0 && (
           <>
+            <DropdownMenuSeparator />
             <DropdownMenuRadioGroup
               value={current?.id ?? ""}
-              onValueChange={(id) => run(assignProjectCommand(state, session, id || null))}
+              onValueChange={(id) => run(assignProjectCommand(state, session, id))}
             >
               {choices.map((p) => (
                 <DropdownMenuRadioItem key={p.id} value={p.id}>
@@ -482,14 +489,22 @@ function ProjectMenu({ state, session }: { state: AppState; session: SessionTarg
                   {p.archived && <span className="ml-1 text-muted-foreground">· Archived</span>}
                 </DropdownMenuRadioItem>
               ))}
-              <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem disabled={!create.enabled} onSelect={() => run(create)}>
-          <ProjectCommandIconView icon={create.icon} /> {create.label}…
-        </DropdownMenuItem>
+        {current && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                disabled={!state.connected}
+                onSelect={() => run(assignProjectCommand(state, session, null))}
+              >
+                <MinusIcon /> Remove from project
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
+        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
