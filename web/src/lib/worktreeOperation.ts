@@ -4,8 +4,8 @@
  * An operation is sent once and never retried automatically; it ends with its own receipt
  * (matched by request ID), a timeout or a lost connection, and the last two tell the user to
  * rediscover before retrying because the checkout may already have changed. Discovery is
- * refreshing until each request this picker sent for the folder has been answered, so an older
- * answer never stands in for a newer request. Nothing here depends on React or render timing.
+ * serialized per folder: overlapping refresh intents coalesce into one trailing request, and
+ * refreshing stays true until that answers. Nothing here depends on React or render timing.
  */
 import type { ClientCommand, WorktreeDiscovery, WorktreeFacts } from "@shared/wire";
 import type { Client } from "./client.ts";
@@ -83,8 +83,11 @@ export function createWorktreeOperation({
     refreshing: false,
     request: IDLE,
   };
-  /** Discovery requests sent per folder that have not been answered. */
-  const awaiting = new Map<string, number>();
+  /** Active discovery per folder; true means a trailing observation is also owed.
+   * Replies have no request ID: this assumes this picker is the socket's sole discovery producer.
+   * Other producers would need protocol correlation, not another local counter.
+   */
+  const awaiting = new Map<string, boolean>();
   const discoveries = new Map<string, WorktreeDiscovery>();
   let timer: unknown;
   const listeners = new Set<() => void>();
@@ -94,7 +97,7 @@ export function createWorktreeOperation({
     const next: WorktreeOperationState = {
       folder,
       discovery: folder === undefined ? undefined : discoveries.get(folder),
-      refreshing: folder !== undefined && (awaiting.get(folder) ?? 0) > 0,
+      refreshing: folder !== undefined && awaiting.has(folder),
       request: patch.request ?? state.request,
     };
     if (
@@ -120,7 +123,11 @@ export function createWorktreeOperation({
   const discover = () => {
     const { folder } = state;
     if (folder === undefined || !client.getState().connected) return;
-    awaiting.set(folder, (awaiting.get(folder) ?? 0) + 1);
+    if (awaiting.has(folder)) {
+      awaiting.set(folder, true);
+      return;
+    }
+    awaiting.set(folder, false);
     publish();
     client.send({ _tag: "worktrees", folder });
   };
@@ -160,11 +167,13 @@ export function createWorktreeOperation({
       });
       const stopMessages = client.listen((m) => {
         if (m._tag === "worktrees") {
+          if (!awaiting.has(m.folder)) return;
           discoveries.set(m.folder, m.discovery);
-          const left = (awaiting.get(m.folder) ?? 0) - 1;
-          if (left > 0) awaiting.set(m.folder, left);
+          const trailing = awaiting.get(m.folder);
+          if (trailing) awaiting.set(m.folder, false);
           else awaiting.delete(m.folder);
           publish();
+          if (trailing) client.send({ _tag: "worktrees", folder: m.folder });
         } else if (m._tag === "worktree_result" && m.requestId === pendingId()) {
           if (m.result.status === "error")
             settle({

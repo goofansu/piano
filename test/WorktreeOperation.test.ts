@@ -228,14 +228,58 @@ test("reopen keeps refreshing until the new discovery answers", () => {
   assert.equal(p.state().discovery?.observedAt, "second");
 });
 
-test("overlapping discoveries refresh until the last one answers", () => {
+test("overlapping refreshes coalesce behind the active discovery", () => {
   const p = picker();
   p.operation.open("/repo");
   p.operation.refresh();
+  p.operation.refresh();
+  assert.equal(p.commands().length, 1, "B cannot overtake A: only A is sent");
+  const refreshing: boolean[] = [];
+  p.operation.subscribe(() => refreshing.push(p.state().refreshing));
   p.answer("/repo", discovered("first"));
+  assert.equal(p.commands().length, 2, "one trailing B is sent after A settles");
   assert.equal(p.state().refreshing, true);
+  assert.ok(refreshing.every(Boolean), "A never falsely completes the queued refresh");
   p.answer("/repo", discovered("second"));
   assert.equal(p.state().refreshing, false);
+  assert.equal(p.state().discovery?.observedAt, "second");
+  assert.equal(p.commands().length, 2);
+});
+
+test("queued discoveries survive folder switches and reopen, including error answers", () => {
+  const p = picker();
+  p.operation.open("/repo");
+  p.operation.open("/other");
+  p.operation.open("/repo");
+  assert.equal(p.commands().length, 2);
+  p.answer("/repo", { status: "error", observedAt: "failed", detail: "busy" });
+  assert.equal(p.commands().length, 3);
+  assert.deepEqual(p.last(), { _tag: "worktrees", folder: "/repo" });
+  assert.equal(p.state().refreshing, true);
+  p.answer("/other", discovered("other"));
+  assert.equal(p.state().discovery?.observedAt, "failed");
+  assert.equal(p.state().refreshing, true);
+  p.answer("/repo", discovered("fresh"));
+  assert.equal(p.state().discovery?.observedAt, "fresh");
+  assert.equal(p.state().refreshing, false);
+});
+
+test("disconnect drops active and queued discoveries; reopening requests afresh", () => {
+  const p = picker();
+  p.operation.open("/repo");
+  p.operation.refresh();
+  p.operation.create("feature", false);
+  p.connection(false);
+  assert.equal(p.state().refreshing, false);
+  assert.equal(p.timers.size, 0);
+  const before = p.commands().length;
+  p.connection(true);
+  assert.equal(p.commands().length, before, "neither discovery nor mutation is replayed");
+  p.operation.open("/repo");
+  assert.equal(p.commands().length, before + 1);
+  p.answer("/repo", discovered("reconnected"));
+  assert.equal(p.state().refreshing, false);
+  assert.equal(p.commands().length, before + 1, "old trailing intent was discarded");
 });
 
 test("stopping drops the pending timeout", () => {
