@@ -256,6 +256,16 @@ test("Share is Radius-sign-in only and targets the row, independent of selected 
   assert.equal(share({ ...base, workspaces: [] }).enabled, false);
   assert.equal(share({ ...base, sessionReferences: [] }).enabled, false);
   assert.equal(share({ ...base, hosts: [{ ...other, streaming: true }] }).enabled, false);
+  // The selected session is busy while its prompt is submitting, before its host streams.
+  const selected = { cwd: "/work/repo.feature", sessionId: "s1", title: "Selected" };
+  const selectedHost = [{ ...selected, streaming: false }];
+  assert.equal(share({ ...base, hosts: selectedHost }, selected).enabled, true);
+  const submitting = {
+    ...base,
+    hosts: selectedHost,
+    session: session(selected.cwd, { submission: { id: 1, outcome: "submitting" } }),
+  };
+  assert.equal(share(submitting, selected).enabled, false);
   // An unavailable checkout does not prevent sharing its saved history.
   const withAvailability = (unavailable: "history" | "checkout") => ({
     ...base,
