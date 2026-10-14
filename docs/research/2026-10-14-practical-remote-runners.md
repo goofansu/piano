@@ -9,7 +9,11 @@ functionality or an accepted replacement for ADR 0001.
 
 **Federate Piano's existing backend: one independently supervised Piano runtime per machine,
 one browser entry point, and an SSH tunnel from the gateway to each remote runtime. Keep Pi RPC
-inside the runtime that owns the checkout. Use Herdr optionally, not as the Pi data transport.**
+inside the runtime that owns the checkout. No Herdr dependency or integration.**
+
+**User constraint, confirmed 2026-10-14:** minimize additional dependencies. Use the system OpenSSH
+client and the existing Piano/Pi stack; no Herdr adapter, separate runner framework, or new SSH
+library. This supersedes the earlier optional-Herdr suggestion, not the remote security/adoption gate.
 
 Do not begin by adopting a third-party runner, replacing RPC with terminal automation, introducing
 Pi SDK/Durable, building a scheduler, or contributing a generic process broker to Herdr.
@@ -32,9 +36,6 @@ Browser (one Piano origin)
                          ├─ remote folders, Git and Worktrunk
                          ├─ remote Pi configuration, credentials and history
                          └─ that runtime's own Piano database
-
-Optional: Herdr suggests SSH hosts and provides human terminal access.
-          It does not carry Pi RPC by typing JSON into panes.
 ```
 
 “Worker” is a deployment role here, not a requirement for a new executable, runtime library, or
@@ -48,15 +49,14 @@ UI, and it must not simply publish today's unguarded router.
 | --- | --- |
 | SSH directly launches `pi --mode rpc` | Useful transport experiment, not the durable session owner. SSH loss can close Pi stdin; remote filesystem/history operations remain missing. [R1] |
 | Persistent remote Piano worker | **Keep**, but initially reuse the existing backend rather than inventing a minimal daemon and gradually rebuilding the backend around it. [L1, G1–G3] |
-| Herdr hosts the worker in a persistent pane | Technically viable, especially for an operator experiment, but not the default deployment. It still needs a separate structured connection and adds Herdr-server lifetime to the failure model. [R2] |
-| Piano dispatches native Herdr agents | Good for a terminal-agent task dashboard, including multiple agent products. Not a transparent implementation of today's structured Pi sessions. Treat it as a separate capability. [R2] |
+| Herdr hosts the worker in a persistent pane | Not selected: adds a dependency and another lifecycle without supplying the structured worker connection. [R2] |
+| Piano dispatches native Herdr agents | Not selected: terminal-agent control differs from Piano's structured Pi sessions and violates the no-Herdr scope. [R2] |
 | Outbound worker/relay, as documented by HumanLayer | Defer until a target cannot accept controller-initiated SSH. It solves reachability, but adds enrollment, connection routing and revocation work. [R1] |
 | Managed sandbox or CI runner per task | Useful for isolated batch work, not the first interactive own-server experience. [G7] |
 
-This refines the Herdr note's preference for hosting a worker under Herdr: **its machine-management
-reuse is attractive, but it does not justify requiring two connection/lifecycle systems for the
-first Pi-only remote implementation.** Keep an optional adapter small and add it when it removes
-real operator work. A host picker is not a reason to replace Pi's execution semantics.
+This supersedes the Herdr note's deployment preference: **use the existing Piano runtime and
+standard OS facilities, without a Herdr adapter.** The comparison remains research evidence,
+not an integration backlog. A host picker is not a reason to replace Pi's execution semantics.
 
 ## GitHub projects inspected
 
@@ -172,10 +172,9 @@ Piano database, intended working environment and Pi configuration. Keep reposito
 there. Pi must be configured as the service user; do not copy the gateway's entire environment,
 provider credentials or SSH agent. [proposal preserving L1–L2]
 
-The runtime must start independently of the controller connection. Prefer systemd for normal
-Linux operation. Herdr can host the process for an explicitly scoped experiment, but killing or
-restarting that Herdr server then ends the experiment's runtime. Service restart likewise restores
-a service, not an interrupted agent command.
+The runtime must start independently of the controller connection. Use the host's existing service
+manager, initially systemd on Linux, rather than adding a terminal multiplexer or process-management
+package. Service restart restores a service, not an interrupted agent command.
 
 For a first transport, manually configure an SSH tunnel rather than build automatic provisioning.
 SSH keys/config must be on the gateway, not merely the browser's laptop. Bind endpoints to
@@ -211,25 +210,26 @@ Each runtime owns its machine-local registration/history references; the gateway
 metadata. Do not synchronize SQLite databases or create a second authoritative transcript. If
 cross-machine project grouping is later added, store only memberships/references centrally.
 
-### Step 3 — add Herdr integration only where it reduces work
+### Step 3 — keep the dependency surface small
 
-An optional adapter can offer saved Herdr profiles as candidate hosts and preserve operator labels.
-Enrollment still verifies the **Piano runtime** separately: a Herdr profile selects a Herdr session,
-not a unique Piano installation. Never infer worker identity solely from a hostname/profile label.
+- Invoke the system `ssh` executable and reuse an explicitly selected OpenSSH config alias;
+  do not add an SSH library or read Herdr profiles.
+- Keep host enrollment manual initially. Verify the remote **Piano runtime** identity independently
+  of the host label, SSH alias, or tunnel endpoint.
+- Reuse Piano's existing HTTP/WebSocket stack, Pi RPC adapter and database implementation.
+  No separate runner package, message broker, scheduler or required container runtime.
+- Use ordinary SSH and service logs for operator access; no integrated terminal-agent control.
+- Keep the single-writer rule: never open a second Pi TUI process against an active RPC session.
 
-Herdr remains useful for logs, shells, human takeover of separately managed terminal agents, or a
-later explicitly named “dispatch to terminal agent” capability. Do not open a native Pi TUI as a
-second writer to an active Piano RPC session. Do not use `agent.read` as transcript storage.
-
-**Do not require Herdr** to operate a remote Piano host in v1, and do not extend Herdr's protocol
-before the one-machine session journey has established a real need. [R2]
+The existing Pi, Git and Worktrunk responsibilities remain unchanged. This is a constraint on new
+remote-execution dependencies, not a request to replace existing project tooling. [L1–L2]
 
 ### Step 4 — only then solve harder reachability and durability
 
 If target hosts cannot be reached from the gateway, add an authenticated outbound worker
 connection, reusing the same machine interface. If provisioning/isolation becomes important,
 consider disposable runners or CI workflows separately. If process-crash recovery becomes a real
-need, revisit the [Pi Durable assessment](2026-10-11-pi-durable-adoption.md); SSH, systemd and Herdr
+need, revisit the [Pi Durable assessment](2026-10-11-pi-durable-adoption.md); SSH and systemd
 are not substitutes for checkpointed execution and external-effect reconciliation.
 
 Here “dispatch” initially means **start or continue a session on a selected reachable machine**.

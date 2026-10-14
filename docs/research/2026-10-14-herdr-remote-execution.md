@@ -3,7 +3,8 @@
 Research date: **2026-10-14**. This is an architectural assessment, not an implementation or an
 accepted change to [ADR 0001](../adr/0001-pi-rpc-workspace-workbench.md).
 The later [practical runner synthesis](2026-10-14-practical-remote-runners.md) adds GitHub source
-evidence and refines the deployment recommendation: service-managed Piano backends first, Herdr optional.
+evidence and supersedes this deployment recommendation: service-managed Piano backends through system
+OpenSSH, with no Herdr dependency or integration, following the user's minimal-dependency constraint.
 
 ## Conclusion
 

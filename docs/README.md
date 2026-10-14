@@ -40,7 +40,8 @@ It is a proposal, not an implemented remote capability or an accepted security A
 The [Herdr follow-up](research/2026-10-14-herdr-remote-execution.md) assesses reusing its saved SSH
 machines and persistent terminals, and identifies the missing interface for structured Pi RPC.
 The [practical runner synthesis](research/2026-10-14-practical-remote-runners.md) checks five GitHub
-implementations and recommends federating existing Piano backends over SSH, with Herdr optional.
+implementations and recommends federating existing Piano backends through system OpenSSH, with no
+Herdr integration or separate runner framework, following the user's minimal-dependency constraint.
 The [MCP management research](research/2026-10-09-mcp-management.md) documents setup through Pi,
 current RPC/browser limitations and a proposed management surface; it does not claim that surface exists.
 [Radius setup](radius-setup.md) describes the implemented, narrower Radius section of the
