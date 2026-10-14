@@ -1,54 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PiProjector, piReadbacks } from "../server/PiRecords.ts";
+import { PiProjector } from "../server/PiRecords.ts";
 
 const projector = () => new PiProjector({ generation: "g1" });
-
-test("INV-03/05: queue metadata is authoritative in events and initial readbacks; legacy counts stay unknown", () => {
-  const pi = projector();
-  const messages = [
-    { id: "one", kind: "steering" as const, text: "duplicate", attachmentCount: 1 },
-    { id: "two", kind: "follow-up" as const, text: "duplicate", attachmentCount: 2 },
-  ];
-  const legacy = { steering: ["duplicate"], followUp: ["duplicate"] };
-  assert.deepEqual(
-    pi.record({ type: "queue_update", ...legacy, queuedMessages: messages }, 0).events,
-    [{ _tag: "queue_update", messages }],
-  );
-  const state = piReadbacks.state.decode({
-    sessionId: "session",
-    isStreaming: true,
-    queuedMessages: messages,
-  });
-  assert.ok(state);
-  assert.deepEqual(
-    pi.snapshot({ source: "live", state, messages: [] }).state.queuedMessages,
-    messages,
-  );
-  assert.deepEqual(pi.record({ type: "queue_update", ...legacy }, 0).events, [
-    {
-      _tag: "queue_update",
-      messages: messages.map(({ kind, text }) => ({ kind, text })),
-    },
-  ]);
-  for (const queuedMessages of [
-    [{ ...messages[0], attachmentCount: -1 }],
-    [{ ...messages[0], attachmentCount: 1.5 }],
-    [{ ...messages[0], attachmentCount: undefined }],
-    [{ ...messages[0], id: "" }],
-    [messages[0], messages[0]],
-  ]) {
-    assert.equal(
-      pi.record({ type: "queue_update", ...legacy, queuedMessages }, 0).events[0]._tag,
-      "notice",
-      "invalid metadata must not publish invented counts",
-    );
-    assert.equal(
-      piReadbacks.state.decode({ sessionId: "session", isStreaming: true, queuedMessages }),
-      undefined,
-    );
-  }
-});
 
 test("INV-03: overlapping turn and summary retries stay retrying until both finish", () => {
   const pi = projector();

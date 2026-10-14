@@ -14,7 +14,7 @@ import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 const TestLayer = PiSessionsLive.pipe(Layer.provide(NodeServices.layer));
 
 for (const finish of ["restore", "consume"] as const) {
-  test(`real Pi queue identity and attachment counts survive ${finish} and reattach`, async () => {
+  test(`real Pi image queues support ${finish} and text-only reattach`, async () => {
     const scratch = mkdtempSync(join(tmpdir(), "piano-real-queue-"));
     const agentDir = join(scratch, "agent");
     mkdirSync(agentDir);
@@ -148,28 +148,26 @@ await import(${JSON.stringify(cli)});`,
             attachments: [...attachments, ...attachments],
           });
           yield* session.act({ _tag: "steer", text: "duplicate", attachments });
-          yield* session.act({ _tag: "prompt", text: "", attachments });
+          // Unpatched Pi 1.2.0 leaves an empty-text display entry after image-only delivery.
+          // Verify image-only restoration, but use text for the queue-consumption contract.
+          const lastText = finish === "restore" ? "" : "image message";
+          yield* session.act({ _tag: "prompt", text: lastText, attachments });
           assert.equal((yield* session.state).submission?.outcome, "queued");
           yield* Fiber.join(queued);
           const expectedText = [
             { kind: "steering", text: "duplicate" },
             { kind: "follow-up", text: "duplicate" },
-            { kind: "follow-up", text: "" },
+            { kind: "follow-up", text: lastText },
           ];
           const expected = (yield* session.state).queuedMessages!;
-          assert.deepEqual(
-            expected.map(({ id: _id, ...message }) => message),
-            expectedText.map((message, i) => ({ ...message, attachmentCount: i === 1 ? 2 : 1 })),
-          );
-          assert.equal(new Set(expected.map((message) => message.id)).size, 3);
-          assert.ok(expected.every((message) => typeof message.id === "string"));
+          assert.deepEqual(expected, expectedText);
           const attached = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
           assert.equal(attached[0]._tag, "snapshot");
           if (attached[0]._tag === "snapshot")
             assert.deepEqual(attached[0].snapshot.state.queuedMessages, expected);
           assert.ok(
             !JSON.stringify(attached).includes(attachments[0].data),
-            "queue snapshots contain metadata, never image bytes",
+            "queue snapshots contain only text, never image bytes",
           );
           if (finish === "consume") {
             const consumeReady = yield* Deferred.make<void>();
@@ -195,7 +193,7 @@ await import(${JSON.stringify(cli)});`,
                 .filter((event) => event._tag === "queue_update")
                 .map((event) => event.messages),
               [expected.slice(1), expected.slice(2), []],
-              "consumption removes exact identities, including duplicate text and image-only input",
+              "Pi removes delivered queue entries, including duplicate text",
             );
             const users = events
               .filter((event) => event._tag === "message_end")

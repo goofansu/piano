@@ -21,9 +21,15 @@ Use the attachment button, paste, or drop images into either composer. Previews 
 before sending. Image-only messages work. While Pi is working, images can queue with text or alone
 as steering or follow-up input. Editing queued messages or stopping restores only text, not images,
 matching Pi's queue-restoration API. Unsent image drafts stay in browser memory per session; a full
-reload discards them. Queued images show a paperclip/count badge from Pi-owned metadata and survive
-browser refresh while Pi stays alive; pending queues do not survive a backend/Pi restart. See
-[queue metadata and the pinned Pi patch](pi-queue-metadata.md) for the protocol and install policy.
+reload discards them. Queued images survive browser refresh while Pi stays alive; pending queues
+do not survive a backend/Pi restart. The queue displays only Pi's text, without attachment counts.
+
+Piano uses the unmodified Pi runtime. Pi 1.2.0 can leave an empty queue row after delivering an
+image-only queued message; Edit clears that row. Including text with an image avoids this upstream
+display limitation. No local queue tracking or dependency patch works around it.
+
+Checkouts previously using the queue-metadata patch should run `npm ci` after updating to replace
+their patched `node_modules`. The patch installer and its npm postinstall hook have been removed.
 
 ## Why this combination
 
