@@ -251,7 +251,8 @@ export function SessionPullRequestControl({
                     {view.title ?? "View pull request"}
                   </a>
                 </PopoverTitle>
-                <div className="flex flex-wrap items-center gap-2">
+                {/* Status, then provenance, each on its own line: the card never reflows as the time label grows. */}
+                <div className="flex flex-col items-start gap-3">
                   {view.status ? (
                     <PullRequestStatusBadge status={view.status} />
                   ) : (

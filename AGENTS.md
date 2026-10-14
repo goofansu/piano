@@ -45,10 +45,13 @@ HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172
 PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort &
 ```
 
-Drive the scratch UI on 7172. A new scratch database starts empty; register only a throwaway git
-repo in the scratchpad. Record each pid with `$!` as you start it and stop only those pids; do not
-look pids up with `pgrep -f` or `ps`, which on macOS can print other processes' environment
-variables, secrets included. When a check creates
+Drive the scratch UI on 7172. A scratch Vite started detached stops picking up edits: when the UI
+still shows old markup, compare a module with and without a cache-busting query, for example
+`curl http://127.0.0.1:7172/src/components/X.tsx` against the same URL with `?t=1`. If they
+differ, restart that Vite process; a fresh browser session does not help. A new scratch database
+starts empty; register only a throwaway git repo in the scratchpad. Record each pid with `$!` as
+you start it and stop only those pids; do not look pids up with `pgrep -f` or `ps`, which on macOS
+can print other processes' environment variables, secrets included. When a check creates
 worktrees or pi session files, remove them afterwards: `git worktree remove --force` plus
 `git branch -D` in the scratch repo, and the directory under `~/.pi/agent/sessions` whose name
 encodes the scratch path.
