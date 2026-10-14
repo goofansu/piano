@@ -121,6 +121,16 @@ test("groups come in order, with Session commands only while a session is select
   assert.ok(commands?.id === "session" && commands.rows.length > 0);
 });
 
+test("a search ranks groups by their best row; blank input keeps the declared order", () => {
+  assert.deepEqual(
+    headings(inSession, "diff"),
+    ["Session commands", "Sessions", "Global commands"],
+    "only Changes matches, so its group leads",
+  );
+  assert.equal(headings(inSession, "dark")[0], "Global commands");
+  assert.deepEqual(headings(inSession, "   "), headings(inSession), "blank input is not a search");
+});
+
 test("search uses direct command synonyms, not related topics or opposite display choices", () => {
   const state: AppState = {
     ...inSession,
