@@ -226,6 +226,14 @@ test("snapshot first, then a streamed turn", async () => {
   const reply = seen.find((e) => e._tag === "message_end" && e.message.role === "assistant");
   assert.ok(reply && reply._tag === "message_end");
   assert.equal(reply.message.text, "echo: hello");
+  // The browser keys a reply by its id: a partial that changed id on its end would remount it.
+  assert.deepEqual(
+    [...new Set(seen.flatMap((e) => (e._tag === "message_update" ? [e.message.id] : [])))],
+    [reply.message.id],
+    "a streaming reply keeps the id of the message it becomes",
+  );
+  const ids = seen.flatMap((e) => (e._tag === "message_end" ? [e.message.id] : []));
+  assert.equal(new Set(ids).size, ids.length, "final messages have distinct ids");
 });
 
 test("a skill prompt arrives as the command plus the user's own words, with the skill file folded beside them", async () => {

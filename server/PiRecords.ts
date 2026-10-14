@@ -703,6 +703,8 @@ const notice = (level: "info" | "warning" | "error", message: string): SessionEv
  * `record`, `history` and `closed` under their snapshot lock.
  */
 export class PiProjector {
+  /** The assistant message being streamed. Its id is the one its final message will carry, so
+   * the browser keeps one row from first delta to end. */
   private partial: RenderMsg | undefined;
   private blocks = new Map<number, Block>();
   private tools = new Map<string, ToolExecution>();
@@ -887,13 +889,13 @@ export class PiProjector {
                 args: argsOf(b.arguments),
               });
           });
-        this.partial = serializeMessage("pending", event.message) ?? undefined;
+        this.partial = serializeMessage(this.nextId(), event.message) ?? undefined;
         return this.update();
       }
       case "message_update": {
         const ev = event.assistantMessageEvent;
         if (!ev) return [];
-        if (!this.partial) this.partial = { id: "pending", role: "assistant", text: "" };
+        if (!this.partial) this.partial = { id: this.nextId(), role: "assistant", text: "" };
         if (event.usage) this.partial = { ...this.partial, usage: usageOf(event.usage) };
         const index = ev.contentIndex ?? 0;
         const block = this.blocks.get(index);
@@ -935,12 +937,14 @@ export class PiProjector {
         return this.update();
       }
       case "message_end": {
+        // An assistant message ends its partial and takes the id the partial was shown under.
+        const reserved = event.message?.role === "assistant" ? this.partial?.id : undefined;
         if (event.message?.role === "assistant") {
           this.partial = undefined;
           this.blocks.clear();
         }
         if (!event.message) return [];
-        const message = serializeMessage(`e${++this.seq}`, event.message, this.projection);
+        const message = serializeMessage(reserved ?? this.nextId(), event.message, this.projection);
         return message ? [{ _tag: "message_end", message }] : [];
       }
       case "tool_execution_start":
@@ -979,6 +983,10 @@ export class PiProjector {
       default:
         return [];
     }
+  }
+
+  private nextId(): string {
+    return `e${++this.seq}`;
   }
 
   /** Pi will not continue this run: drop the partial and mark unfinished tools incomplete. */

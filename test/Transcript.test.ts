@@ -127,10 +127,14 @@ test("a pending reply's unanswered call is running until an execution or result 
     reply(rows, "pending").tools.map((tool) => tool.outcome),
     ["running", "pending", "done"],
   );
-  assert.equal(
-    rows.at(-1)!.key,
-    "pending:pending",
-    "a pending row never shares a key with the message it becomes",
+  const final = { ...pending, id: "e2" };
+  const streaming = transcriptRows([], { pending: final }).at(-1)!;
+  const ended = transcriptRows([final]).at(-1)!;
+  assert.equal(streaming.key, ended.key, "a reply keeps its row key when it stops streaming");
+  assert.deepEqual(
+    transcriptRows([final], { pending: final }).map((row) => row.key),
+    ["e2"],
+    "a partial already in history is shown once",
   );
 });
 
