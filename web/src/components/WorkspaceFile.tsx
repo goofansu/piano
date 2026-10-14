@@ -157,9 +157,6 @@ export function WorkspaceFile({
     }
   };
   const path = result?.path ?? file.path;
-  const slash = path.lastIndexOf("/");
-  const name = path.slice(slash + 1);
-  const directory = slash > 0 ? path.slice(0, slash) : slash === 0 ? "/" : "";
   const Icon = result ? KIND_ICON[result.kind] : FileIcon;
   return (
     <RightSidebar
@@ -168,32 +165,31 @@ export function WorkspaceFile({
       title={
         <>
           <Icon className="size-4 shrink-0 text-ink-3" aria-hidden />
-          <span className="min-w-0 truncate" title={path}>
-            {name}
+          <span className="min-w-0 break-all font-mono text-xs font-normal" title={path}>
+            {path}
           </span>
         </>
       }
-      description={directory && <span className="truncate font-mono">{directory}</span>}
+      toolbar={
+        result?.kind === "markdown" && (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={mode}
+            onValueChange={(value) => value && setMode(value)}
+            aria-label="Markdown view"
+            size="sm"
+            className="mr-1"
+          >
+            <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
+            <ToggleGroupItem value="source">Source</ToggleGroupItem>
+          </ToggleGroup>
+        )
+      }
       actions={
-        <>
-          {result?.kind === "markdown" && (
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={mode}
-              onValueChange={(value) => value && setMode(value)}
-              aria-label="Markdown view"
-              size="sm"
-              className="mr-1"
-            >
-              <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
-              <ToggleGroupItem value="source">Source</ToggleGroupItem>
-            </ToggleGroup>
-          )}
-          <IconButton label="Download file" disabled={!result || saving} onClick={save}>
-            <DownloadIcon />
-          </IconButton>
-        </>
+        <IconButton label="Download file" disabled={!result || saving} onClick={save}>
+          <DownloadIcon />
+        </IconButton>
       }
     >
       {status && <Notice>{status}</Notice>}
