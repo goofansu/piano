@@ -20,7 +20,8 @@ export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
   { value: "name", label: "Name" },
 ];
 
-const byName = (a: string, b: string) =>
+/** The one name order: case-insensitive, with numbers by value ("Q2" before "Q10"). */
+export const byName = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
 /** ISO timestamps order as text; nothing known sorts last. */
 const latest = (times: Iterable<string | undefined>) => {
