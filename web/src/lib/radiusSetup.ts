@@ -184,9 +184,9 @@ export function createRadiusSetup({
         }),
       done:
         action === "configure-mcp"
-          ? "Radius MCP added. Start a new session to use it."
+          ? "Radius MCP installed. Start a new session to use it."
           : action === "remove-mcp"
-            ? "Radius MCP removed for new sessions."
+            ? "Radius MCP uninstalled for new sessions."
             : undefined,
       fallback: "Could not complete setup. Refresh before retrying.",
     });

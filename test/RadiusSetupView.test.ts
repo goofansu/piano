@@ -112,13 +112,13 @@ test("a change in flight locks every step and refresh; sign-out is not a setup c
 });
 
 test("the folded summary reports each tool's state", () => {
-  assert.equal(view().tools.summary, "MCP not added · Web search not installed");
+  assert.equal(view().tools.summary, "MCP not installed · Web search not installed");
   assert.equal(
     view({ state: { ...missing, mcp: { status: "ready" } } }).tools.summary,
-    "MCP added · Web search not installed",
+    "MCP installed · Web search not installed",
   );
   const both = view({ state: ready });
-  assert.equal(both.tools.summary, "MCP added · Web search installed");
+  assert.equal(both.tools.summary, "MCP installed · Web search installed");
   assert.equal(both.tools.ready, true);
   assert.equal(both.mcp.canAdd, false);
   assert.equal(both.webSearch.canInstall, false);

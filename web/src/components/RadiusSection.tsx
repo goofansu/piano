@@ -150,7 +150,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                   <ItemContent className="min-w-0">
                     <ItemTitle>
                       Radius MCP
-                      <ReadyMark ready={mcp.ready} label="Added" />
+                      <ReadyMark ready={mcp.ready} label="Installed" />
                     </ItemTitle>
                     <ItemDescription className="line-clamp-none">
                       Give Pi your Radius tools, using the same sign-in.
@@ -162,10 +162,10 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                       <Button
                         size="sm"
                         disabled={!mcp.canAdd}
-                        aria-label="Add Radius MCP"
+                        aria-label="Install Radius MCP"
                         onClick={() => void setup.act("configure-mcp")}
                       >
-                        Add
+                        Install
                       </Button>
                     )}
                     {mcp.removalKey && (
@@ -175,9 +175,9 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                         className="text-muted-foreground"
                         disabled={!mcp.canRemove}
                         onClick={() => setup.confirm({ kind: "remove-mcp", key: mcp.removalKey! })}
-                        aria-label="Remove Radius MCP"
+                        aria-label="Uninstall Radius MCP"
                       >
-                        Remove
+                        Uninstall
                       </Button>
                     )}
                   </ItemActions>

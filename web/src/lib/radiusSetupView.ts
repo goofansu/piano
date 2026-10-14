@@ -113,7 +113,7 @@ export function radiusSetupView({
         ? action === "uninstall"
           ? "Uninstalling web search…"
           : "Installing web search…"
-        : `${mcpReady ? "MCP added" : "MCP not added"} · ${
+        : `${mcpReady ? "MCP installed" : "MCP not installed"} · ${
             webSearchReady ? "Web search installed" : "Web search not installed"
           }`,
     },
@@ -155,9 +155,9 @@ export type RadiusRemoval = "remove-mcp" | "uninstall-web-search";
 export function radiusRemovalCopy(kind: RadiusRemoval | undefined) {
   return kind === "remove-mcp"
     ? {
-        title: "Remove Radius MCP?",
-        description: "Removes Radius MCP from Pi on this machine.",
-        action: "Remove",
+        title: "Uninstall Radius MCP?",
+        description: "Uninstalls Radius MCP from Pi on this machine.",
+        action: "Uninstall",
       }
     : {
         title: "Uninstall web search?",
