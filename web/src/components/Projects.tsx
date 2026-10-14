@@ -6,6 +6,7 @@ import {
   PlusIcon,
   TargetIcon,
 } from "lucide-react";
+import { useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -53,9 +54,16 @@ export function ProjectDialogView({
   close: () => void;
 }) {
   const editing = !!dialog.project;
+  const nameInput = useRef<HTMLInputElement>(null);
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          nameInput.current?.focus();
+        }}
+      >
         <form
           className="flex flex-col gap-4"
           onSubmit={(event) => {
@@ -76,10 +84,10 @@ export function ProjectDialogView({
               <FieldLabel htmlFor="project-name">Name</FieldLabel>
               <Input
                 id="project-name"
+                ref={nameInput}
                 value={name}
                 onChange={(e) => edit(e.target.value)}
                 maxLength={200}
-                autoFocus
                 required
               />
             </Field>
