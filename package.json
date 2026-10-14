@@ -22,15 +22,15 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^1.2.0",
-    "@effect/platform-node": "^4.0.2",
-    "effect": "^4.0.2",
+    "@effect/platform-node": "^4.0.4",
+    "effect": "^4.0.4",
     "file-type": "^22.1.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@shadcn/lint": "^0.2.0",
+    "@shadcn/lint": "^0.2.1",
     "@types/node": "^24.0.0",
-    "@typescript-eslint/parser": "^8.71.1",
+    "@typescript-eslint/parser": "^8.71.2",
     "concurrently": "^10.0.6",
     "eslint": "^10.12.0",
     "husky": "9.1.7",
