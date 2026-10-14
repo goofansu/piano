@@ -77,7 +77,7 @@ export function CommandDialog({
         </DialogHeader>
         <Command
           filter={filter}
-          className="[--command-row-height:3rem] pointer-coarse:[--command-row-height:3rem] [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-item]]:px-2 [&_[cmdk-item]_svg]:size-5"
+          className="[--command-row-height:3rem] pointer-coarse:[--command-row-height:3rem] [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-item]]:px-2 [&_[cmdk-item]>svg]:size-5"
         >
           {children}
         </Command>
