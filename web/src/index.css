@@ -485,6 +485,26 @@
   }
 }
 
+/* A file's source in the right sidebar: numbered lines straight on the sheet, not a boxed code
+ * block. The highlighter drops its theme background (lib/file-highlight); token colours stay. */
+.file-source pre {
+  padding: 0.75rem 1rem 1rem 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  counter-reset: line;
+  tab-size: 2;
+}
+.file-source .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 3.25rem;
+  padding-right: 1rem;
+  text-align: right;
+  color: var(--ink-3);
+  user-select: none;
+}
+
 /* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */
 .prose-chat {
   overflow-wrap: anywhere;

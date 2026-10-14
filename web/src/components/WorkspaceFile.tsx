@@ -1,9 +1,17 @@
-import { XIcon } from "lucide-react";
+import {
+  FileAudioIcon,
+  FileCodeIcon,
+  FileIcon,
+  FileTextIcon,
+  FileVideoIcon,
+  ImageIcon,
+} from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
+import { FileNotice as Notice } from "@/components/FileNotice";
 import { FileText } from "@/components/FileText";
 import { LocalFileContext, Markdown } from "@/components/Markdown";
 import { NativeFile } from "@/components/NativeFile";
-import { Button } from "@/components/ui/button";
+import { RightSidebar } from "@/components/RightSidebar";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { workspaceFile } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
@@ -13,12 +21,22 @@ const relativeTo = (document: string, path: string) =>
 
 const FilePdf = lazy(() =>
   import("@/components/FilePdf").catch(() => ({
-    default: () => <p role="status">Could not load the PDF viewer. Reload Piano and try again.</p>,
+    default: () => <Notice>Could not load the PDF viewer. Reload Piano and try again.</Notice>,
   })),
 );
 
-/** Inline complementary panel: unlike a modal Sheet it leaves the conversation usable.
- * No stock shadcn component provides a nonmodal, in-flow file viewer.
+type Preview = Awaited<ReturnType<typeof workspaceFile>>;
+
+const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
+  markdown: FileTextIcon,
+  text: FileCodeIcon,
+  image: ImageIcon,
+  audio: FileAudioIcon,
+  video: FileVideoIcon,
+  pdf: FileIcon,
+};
+
+/** A file a local link opened, read-only, in the right sidebar.
  * The owner keys it by session, workspace and path, so new destinations never flash old content. */
 export function WorkspaceFile({
   workspaceId,
@@ -31,7 +49,7 @@ export function WorkspaceFile({
   close: () => void;
   open: (path: string) => void;
 }) {
-  const [result, setResult] = useState<Awaited<ReturnType<typeof workspaceFile>>>();
+  const [result, setResult] = useState<Preview>();
   const [mode, setMode] = useState("preview");
   const [status, setStatus] = useState("Opening…");
   // A sidebar snapshot replaces workspace objects; only a new identity or link click rereads.
@@ -117,46 +135,46 @@ export function WorkspaceFile({
     };
   }, [result, workspaceId]);
   const path = result?.path ?? file.path;
+  const slash = path.lastIndexOf("/");
+  const name = path.slice(slash + 1);
+  const directory = slash > 0 ? path.slice(0, slash) : slash === 0 ? "/" : "";
+  const Icon = result ? KIND_ICON[result.kind] : FileIcon;
   return (
-    // The read-only viewer owns native button/media keys, not the composer's type-to-focus hook.
-    <aside
-      onKeyDown={(event) => {
-        if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey)
-          event.stopPropagation();
-      }}
-      aria-label="File viewer"
-      className="flex min-h-0 min-w-0 basis-1/2 flex-col gap-3 border-t border-line p-4 md:w-2/5 md:max-w-xl md:shrink-0 md:basis-auto md:border-t-0 md:border-l"
+    <RightSidebar
+      label="File viewer"
+      close={close}
+      title={
+        <>
+          <Icon className="size-4 shrink-0 text-ink-3" aria-hidden />
+          <span className="min-w-0 truncate" title={path}>
+            {name}
+          </span>
+        </>
+      }
+      description={directory && <span className="truncate font-mono">{directory}</span>}
+      actions={
+        result?.kind === "markdown" && (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={mode}
+            onValueChange={(value) => value && setMode(value)}
+            aria-label="Markdown view"
+            size="sm"
+            className="mr-1"
+          >
+            <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
+            <ToggleGroupItem value="source">Source</ToggleGroupItem>
+          </ToggleGroup>
+        )
+      }
     >
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="truncate text-sm font-medium" title={path}>
-          {path}
-        </h2>
-        <Button variant="ghost" size="icon-sm" aria-label="Close file viewer" onClick={close}>
-          <XIcon />
-        </Button>
-      </div>
-      {status && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {status}
-        </p>
-      )}
-      {result?.kind === "markdown" && (
-        <ToggleGroup
-          type="single"
-          value={mode}
-          onValueChange={(value) => value && setMode(value)}
-          aria-label="Markdown view"
-          size="sm"
-        >
-          <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
-          <ToggleGroupItem value="source">Source</ToggleGroupItem>
-        </ToggleGroup>
-      )}
+      {status && <Notice>{status}</Notice>}
       {result && (
-        <section aria-label="File contents" className="min-h-0 flex-1 overflow-auto text-xs">
+        <section aria-label="File contents" className="flex min-h-full flex-col">
           {"bytes" in result ? (
             result.kind === "pdf" ? (
-              <Suspense fallback={<p role="status">Opening PDF…</p>}>
+              <Suspense fallback={<Notice>Opening PDF…</Notice>}>
                 <FilePdf bytes={result.bytes} />
               </Suspense>
             ) : binary?.result === result ? (
@@ -166,7 +184,7 @@ export function WorkspaceFile({
             <LocalFileContext value={(path) => open(relativeTo(result.path, path))}>
               <Markdown
                 text={result.content}
-                className="prose-chat"
+                className="prose-chat p-4 text-sm md:p-5"
                 images={images}
                 diagrams={false}
               />
@@ -176,6 +194,6 @@ export function WorkspaceFile({
           )}
         </section>
       )}
-    </aside>
+    </RightSidebar>
   );
 }

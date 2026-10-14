@@ -5,6 +5,7 @@ import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
+import { SessionPanel } from "@/components/SessionPanel";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
 import { Sidebar, SidebarRail } from "@/components/Sidebar";
@@ -125,6 +126,7 @@ export default function App() {
                 )}
               </>
             }
+            aside={<SessionPanel state={state} />}
           >
             {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls.
           Above dialogs and sheets (z-50) but below menus, popovers and tooltips (z-[60]), so an open menu is never covered. */}

@@ -1,6 +1,16 @@
 import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, SparklesIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  GitBranchIcon,
+  HistoryIcon,
+  PuzzleIcon,
+  SparklesIcon,
+  TerminalIcon,
+} from "lucide-react";
 import {
   useEffect,
   useId,
@@ -24,6 +34,8 @@ import type { MessageError } from "@/lib/messageError";
 import { disclosureRow } from "@/lib/styles";
 import {
   BOTTOM_ENTRY,
+  type ContextFacts,
+  contextFacts,
   messageAnchorId,
   nestedStatus,
   type SubagentFacts,
@@ -183,13 +195,7 @@ function Row({
 function TranscriptRowView({ row }: { row: TranscriptRow }) {
   if (row.kind === "subagent")
     return <SubagentCardView {...row.subagent} markdown={row.msg.role === "context"} />;
-  if (row.kind === "context")
-    return (
-      <article>
-        <p className="text-xs text-ink-3">{row.msg.label}</p>
-        <pre className="whitespace-pre-wrap break-words text-sm">{row.msg.text}</pre>
-      </article>
-    );
+  if (row.kind === "context") return <ContextCard msg={row.msg} />;
   if (row.kind === "user")
     return (
       <UserMessage
@@ -243,6 +249,63 @@ function TranscriptRowView({ row }: { row: TranscriptRow }) {
         />
       )}
     </>
+  );
+}
+
+const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
+  compaction: HistoryIcon,
+  branch: GitBranchIcon,
+  shell: TerminalIcon,
+  extension: PuzzleIcon,
+};
+
+/**
+ * Context Pi inserted rather than said: a compaction or branch summary, shell output, or an
+ * extension's note. It opens on a card of its own, so it never reads as Pi's reply, and folds
+ * away once read.
+ */
+function ContextCard({ msg }: { msg: RenderMsg }) {
+  const [open, setOpen] = useState(true);
+  const facts = contextFacts(msg.label);
+  const Icon = CONTEXT_ICON[facts.kind];
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      role="group"
+      aria-label={facts.title}
+      data-slot="context-card"
+      data-context={facts.kind}
+      className="text-sm"
+    >
+      <Row glyph={<Icon className="size-3.5 text-ink-3" aria-hidden />}>
+        <CollapsibleTrigger asChild>
+          <button type="button" className={disclosureRow}>
+            <span className="shrink-0 font-medium text-ink">{facts.title}</span>
+            {facts.note && (
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-ink-3",
+                  facts.kind === "shell" && "font-mono",
+                )}
+              >
+                {facts.note}
+              </span>
+            )}
+            <DisclosureChevron open={open} className="ml-auto" />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="disclosure-content">
+          <div className="mt-2 rounded-xl border border-line bg-surface-2 px-4 py-3 text-ink-2 md:px-5 md:py-4">
+            {facts.markdown ? (
+              <Markdown text={msg.text} className="prose-chat" />
+            ) : (
+              <pre className="whitespace-pre-wrap break-words text-xs">{msg.text}</pre>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Row>
+    </Collapsible>
   );
 }
 

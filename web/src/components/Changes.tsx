@@ -16,14 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/PianoSheet";
+import { RightSidebar } from "@/components/RightSidebar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -42,7 +35,6 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { workspaceChangedFile, workspaceChanges } from "@/lib/api";
 import {
@@ -87,23 +79,21 @@ function useWorkspaceChanges(
   };
 }
 
-export function ChangesSheet({
-  open,
-  onOpenChange,
+export function ChangesPanel({
   workspace,
   session,
+  close,
   onAsk,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   workspace: Workspace | undefined;
   session: SessionView | null;
-  /** Receives review text for the composer draft; the caller decides how to close and confirm. */
+  close: () => void;
+  /** Receives review text for the composer draft; the caller decides how to confirm. */
   onAsk: (text: string) => void;
 }) {
   const { observation, error, busy, refresh } = useWorkspaceChanges(
     workspace,
-    open,
+    true,
     refreshKey(session),
   );
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
@@ -112,91 +102,90 @@ export function ChangesSheet({
   const ask = (loaded: LoadedFile) => onAsk(askText(loaded));
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full gap-0 p-0 sm:w-[min(56rem,92vw)] sm:max-w-none"
-        aria-describedby={undefined}
-      >
-        <SheetHeader className="border-b border-line pr-12">
-          <SheetTitle>Changes</SheetTitle>
-          <SheetDescription className="flex min-w-0 flex-wrap items-center gap-x-2">
-            <span>Working tree against HEAD</span>
+    <RightSidebar
+      label="Changes"
+      title="Changes"
+      close={close}
+      description={
+        <>
+          <span>Working tree against HEAD</span>
+          {sheet.branch && (
+            // Each separator travels with its segment, so a wrapped line never ends in one.
+            <span className="flex items-center gap-x-2">
+              <span aria-hidden>·</span>
+              <BranchLabel branch={sheet.branch} />
+            </span>
+          )}
+          <span className="flex min-w-0 items-center gap-x-2">
             <span aria-hidden>·</span>
-            {sheet.branch && <BranchLabel branch={sheet.branch} />}
-            {sheet.branch && <span aria-hidden>·</span>}
             <span role="status" className="truncate">
               {sheet.status}
             </span>
             {sheet.refreshing && <Spinner className="size-3" />}
-          </SheetDescription>
-          <div className="-ml-2 flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!workspace}
-              onClick={refresh}
-              aria-label="Refresh changes"
-            >
-              <RefreshCwIcon className={cn(busy && "animate-spin")} /> Refresh
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={body.kind !== "files"}
-              onClick={() => setDisclosure(toggleEvery(disclosure, sheet))}
-            >
-              {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
-            </Button>
-          </div>
+          </span>
           {sheet.staleNote && (
-            <p role="status" title={sheet.staleNote.detail} className="text-xs text-ink-2">
+            <span role="status" title={sheet.staleNote.detail} className="basis-full text-ink-2">
               {sheet.staleNote.text}
-            </p>
+            </span>
           )}
-        </SheetHeader>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-3 p-4">
-            <SheetBodyView
-              body={body}
-              onOpenChange={(path, next) => setDisclosure((d) => toggleFile(d, path, next))}
-              onAsk={ask}
-            />
-          </div>
-        </ScrollArea>
-        {changes && (
-          <SheetFooter className="mt-0 border-t border-line py-3">
-            <Collapsible className="text-xs text-ink-2">
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="-ml-2 h-7 text-xs">
-                  Changes details
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="disclosure-content">
-                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all font-mono">
-                  <dt>Checkout</dt>
-                  <dd>{abbrevHome(changes.workspace.path)}</dd>
-                  <dt>HEAD</dt>
-                  <dd>{changes.result.head ?? "No commits yet"}</dd>
-                  <dt>Observed</dt>
-                  <dd>{new Date(changes.observedAt).toLocaleString()}</dd>
-                </dl>
-                <p className="mt-2 font-sans">
-                  Live Git reads, not an immutable review or verification evidence. Expanding
-                  unloaded files reads them afresh; files may change between reads. Refresh reloads
-                  all patches. Ignored files are excluded. Renames appear as deletion and addition.
-                </p>
-                <p className="mt-2 font-sans">
-                  Initial patch: {CHANGES_INITIAL_PATCH_BYTES.toLocaleString("en-US")} bytes.
-                  Per-file patch: {FILE_PATCH_LIMIT}.{" "}
-                  {changes.result.truncated ? "Expand unloaded files to read their patches." : ""}
-                </p>
-              </CollapsibleContent>
-            </Collapsible>
-          </SheetFooter>
-        )}
-      </SheetContent>
-    </Sheet>
+        </>
+      }
+      actions={
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-ink-2"
+            disabled={body.kind !== "files"}
+            onClick={() => setDisclosure(toggleEvery(disclosure, sheet))}
+          >
+            {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
+          </Button>
+          <IconButton label="Refresh changes" disabled={!workspace} onClick={refresh}>
+            <RefreshCwIcon className={cn(busy && "animate-spin")} />
+          </IconButton>
+        </>
+      }
+      footer={
+        changes && (
+          <Collapsible className="text-xs text-ink-2">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="-ml-2 h-7 text-xs">
+                Changes details
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="disclosure-content">
+              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all font-mono">
+                <dt>Checkout</dt>
+                <dd>{abbrevHome(changes.workspace.path)}</dd>
+                <dt>HEAD</dt>
+                <dd>{changes.result.head ?? "No commits yet"}</dd>
+                <dt>Observed</dt>
+                <dd>{new Date(changes.observedAt).toLocaleString()}</dd>
+              </dl>
+              <p className="mt-2 font-sans">
+                Live Git reads, not an immutable review or verification evidence. Expanding unloaded
+                files reads them afresh; files may change between reads. Refresh reloads all
+                patches. Ignored files are excluded. Renames appear as deletion and addition.
+              </p>
+              <p className="mt-2 font-sans">
+                Initial patch: {CHANGES_INITIAL_PATCH_BYTES.toLocaleString("en-US")} bytes. Per-file
+                patch: {FILE_PATCH_LIMIT}.{" "}
+                {changes.result.truncated ? "Expand unloaded files to read their patches." : ""}
+              </p>
+            </CollapsibleContent>
+          </Collapsible>
+        )
+      }
+    >
+      <div className="flex flex-col gap-3 p-4">
+        <SheetBodyView
+          body={body}
+          onOpenChange={(path, next) => setDisclosure((d) => toggleFile(d, path, next))}
+          onAsk={ask}
+        />
+      </div>
+    </RightSidebar>
   );
 }
 

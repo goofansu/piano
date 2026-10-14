@@ -9,6 +9,17 @@ self.onmessage = async ({
       await codeToHtml(data.content, {
         lang: data.language as BundledLanguage,
         theme: data.dark ? "github-dark" : "github-light",
+        // The file viewer draws source on its own sheet; only the token colours are wanted.
+        transformers: [
+          {
+            pre(node) {
+              node.properties.style = String(node.properties.style ?? "").replace(
+                /background-color:[^;]*;?/,
+                "",
+              );
+            },
+          },
+        ],
       }),
     );
   } catch {

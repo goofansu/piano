@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FileNotice as Notice } from "@/components/FileNotice";
 
 /** Native media only: shadcn has no media decoder. No autoplay or executable SVG. */
 export function NativeFile({
@@ -28,27 +29,47 @@ export function NativeFile({
   }, [url]);
   if (failed)
     return (
-      <p role="status">
+      <Notice>
         Cannot decode this file. Convert it to PNG, MP3 or H.264/AAC MP4 and try again.
-      </p>
+      </Notice>
     );
   if (kind === "image")
-    return <img src={url} alt={name} className="max-w-full" onError={() => setFailed(true)} />;
+    return (
+      <div className="flex flex-1 items-center justify-center p-4">
+        <img
+          src={url}
+          alt={name}
+          className="max-h-full max-w-full rounded-lg shadow-1"
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
   // Local read-only media can have no caption track; the viewer must still expose the original.
   return kind === "audio" ? (
-    // biome-ignore lint/a11y/useMediaCaption: arbitrary local audio has no supplied caption track.
-    <audio ref={media} src={url} controls preload="metadata" onError={() => setFailed(true)} />
+    <div className="p-4">
+      {/* biome-ignore lint/a11y/useMediaCaption: arbitrary local audio has no supplied caption track. */}
+      <audio
+        ref={media}
+        src={url}
+        controls
+        preload="metadata"
+        className="w-full"
+        onError={() => setFailed(true)}
+      />
+    </div>
   ) : (
-    // biome-ignore lint/a11y/useMediaCaption: arbitrary local video has no supplied caption track.
-    <video
-      ref={(element) => {
-        media.current = element;
-      }}
-      src={url}
-      controls
-      preload="metadata"
-      className="max-w-full"
-      onError={() => setFailed(true)}
-    />
+    <div className="flex flex-1 items-center justify-center p-4">
+      {/* biome-ignore lint/a11y/useMediaCaption: arbitrary local video has no supplied caption track. */}
+      <video
+        ref={(element) => {
+          media.current = element;
+        }}
+        src={url}
+        controls
+        preload="metadata"
+        className="max-h-full max-w-full rounded-lg shadow-1"
+        onError={() => setFailed(true)}
+      />
+    </div>
   );
 }

@@ -107,6 +107,36 @@ export interface TranscriptOptions {
   showTools?: boolean;
 }
 
+/** How a context row reads: Pi's summaries are Markdown it wrote; shell output and extension
+ * context are shown as they came. The label is the server's wire vocabulary for the row. */
+export interface ContextFacts {
+  kind: "compaction" | "branch" | "shell" | "extension";
+  title: string;
+  /** A quiet qualifier beside the title: the shell command, or what a summary stands for. */
+  note?: string;
+  markdown: boolean;
+}
+
+export function contextFacts(label: string | undefined): ContextFacts {
+  if (label === "Compaction summary")
+    return {
+      kind: "compaction",
+      title: label,
+      note: "The earlier conversation, as Pi carried it forward",
+      markdown: true,
+    };
+  if (label === "Branch summary")
+    return {
+      kind: "branch",
+      title: label,
+      note: "The branch this session continued from",
+      markdown: true,
+    };
+  if (label?.startsWith("Shell: "))
+    return { kind: "shell", title: "Shell", note: label.slice("Shell: ".length), markdown: false };
+  return { kind: "extension", title: label || "Extension context", markdown: false };
+}
+
 /** One line of a message, with markdown prefixes and extra whitespace folded away. */
 export function messageLabel(text: string, max = 80): string {
   const line = text

@@ -2,9 +2,7 @@ import { isWorking } from "@shared/sessionProjection";
 import type { ClientCommand as ClientMessage, ExtensionState } from "@shared/wire";
 import { cn } from "cn";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
-import { ChangesSheet } from "@/components/Changes";
 import { Composer } from "@/components/Composer";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList } from "@/components/MessageList";
@@ -14,7 +12,6 @@ import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { WorkspaceFile } from "@/components/WorkspaceFile";
 import { drafts, sessionDraftKey } from "@/lib/messageDraft";
 import {
   completionTarget,
@@ -35,10 +32,9 @@ interface Props {
 }
 
 export function SessionView({ state, send }: Props) {
-  // The selected session's Changes sheet and PR popover; hidden while Settings covers the view.
+  // The selected session's PR popover; hidden while Settings covers the view. Its Changes and
+  // open file live in the right sidebar (SessionPanel).
   const { settings, panel, openPanel, closePanel } = useNavigation();
-  const changesOpen = !settings && panel === "changes";
-  const onChangesOpenChange = (open: boolean) => (open ? openPanel("changes") : closePanel());
   const pullRequestOpen = !settings && panel === "pr";
   const onPullRequestOpenChange = (open: boolean) => (open ? openPanel("pr") : closePanel());
   const [display] = useSessionDisplay();
@@ -49,7 +45,7 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { workspace, changesWorkspace } = sessionContext(state);
+  const { workspace } = sessionContext(state);
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
   const pullRequest = useSessionPullRequest(
     workspace?.id,
@@ -84,120 +80,94 @@ export function SessionView({ state, send }: Props) {
           )
         }
       />
-      {t && (
-        <ChangesSheet
-          open={changesOpen}
-          onOpenChange={onChangesOpenChange}
-          workspace={changesWorkspace}
-          session={t}
-          onAsk={(text) => {
-            if (!draftKey) return;
-            drafts.paragraph(draftKey, text);
-            onChangesOpenChange(false);
-            toast.success("Added to your message");
-          }}
-        />
-      )}
-
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {notices
-            .filter((n) => n.placement === "banner")
-            .map((n) => (
-              <Banner
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {notices
+          .filter((n) => n.placement === "banner")
+          .map((n) => (
+            <Banner
+              key={n.id}
+              variant={n.tone === "destructive" ? "destructive" : "warning"}
+              title={n.title}
+              action={
+                n.action && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => n.action && send(n.action.command)}
+                  >
+                    {n.action.label}
+                  </Button>
+                )
+              }
+            >
+              {n.details.length
+                ? n.details.map((detail) => (
+                    <p key={detail} className="whitespace-pre-wrap break-words">
+                      {detail}
+                    </p>
+                  ))
+                : undefined}
+            </Banner>
+          ))}
+        <AddToChat
+          draftKey={readOnly ? null : draftKey}
+          className="relative flex min-h-0 flex-1 flex-col"
+        >
+          {pane.list && (
+            <LocalFileContext value={(path) => openPanel({ kind: "file", path })}>
+              <MessageList
+                className="transcript-enter"
+                showTools={display === "everything"}
+                messages={t?.messages ?? []}
+                pending={t?.pending ?? null}
+                submittedInput={input}
+                tools={tools}
+                activity={replyActivity}
+                working={!!t && isWorking(t.state)}
+                placeholder={pane.placeholder}
+              />
+            </LocalFileContext>
+          )}
+          {pane.skeleton !== "none" && <TranscriptSkeleton hidden={pane.skeleton === "hidden"} />}
+          {!state.connected && (
+            <div
+              role="status"
+              className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
+            >
+              <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
+                <Spinner className="size-3.5" /> Reconnecting…
+              </span>
+            </div>
+          )}
+        </AddToChat>
+        {notices
+          .filter((n) => n.placement === "status")
+          .map((n) =>
+            n.extension ? (
+              <ExtensionBlock
                 key={n.id}
-                variant={n.tone === "destructive" ? "destructive" : "warning"}
-                title={n.title}
-                action={
-                  n.action && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => n.action && send(n.action.command)}
-                    >
-                      {n.action.label}
-                    </Button>
-                  )
-                }
-              >
-                {n.details.length
-                  ? n.details.map((detail) => (
-                      <p key={detail} className="whitespace-pre-wrap break-words">
-                        {detail}
-                      </p>
-                    ))
-                  : undefined}
-              </Banner>
-            ))}
-          <AddToChat
-            draftKey={readOnly ? null : draftKey}
-            className="relative flex min-h-0 flex-1 flex-col"
-          >
-            {pane.list && (
-              <LocalFileContext value={(path) => openPanel({ kind: "file", path })}>
-                <MessageList
-                  className="transcript-enter"
-                  showTools={display === "everything"}
-                  messages={t?.messages ?? []}
-                  pending={t?.pending ?? null}
-                  submittedInput={input}
-                  tools={tools}
-                  activity={replyActivity}
-                  working={!!t && isWorking(t.state)}
-                  placeholder={pane.placeholder}
-                />
-              </LocalFileContext>
-            )}
-            {pane.skeleton !== "none" && <TranscriptSkeleton hidden={pane.skeleton === "hidden"} />}
-            {!state.connected && (
-              <div
-                role="status"
-                className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
-              >
-                <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
-                  <Spinner className="size-3.5" /> Reconnecting…
-                </span>
-              </div>
-            )}
-          </AddToChat>
-          {notices
-            .filter((n) => n.placement === "status")
-            .map((n) =>
-              n.extension ? (
-                <ExtensionBlock
-                  key={n.id}
-                  extension={n.extension}
-                  used={usedEditorRequest}
-                  onAppend={(request) => {
-                    if (draftKey) {
-                      drafts.paragraph(draftKey, request.text);
-                      setUsedEditorRequest(request.id);
-                    }
-                  }}
-                />
-              ) : (
-                <StatusLine key={n.id} notice={n} />
-              ),
-            )}
-          <Composer
-            session={t}
-            draftKey={draftKey}
-            completion={completionTarget(state)}
-            disabled={!draftKey || input?.outcome === "starting"}
-            actionsDisabled={pane.composerDisabled}
-            readOnly={readOnly}
-            send={send}
-          />
-        </div>
-        {!settings && typeof panel === "object" && panel?.kind === "file" && t && (
-          <WorkspaceFile
-            key={`${workspace?.id}:${sessionKey(t)}:${panel.path}`}
-            workspaceId={workspace?.id}
-            file={panel}
-            open={(path) => openPanel({ kind: "file", path })}
-            close={closePanel}
-          />
-        )}
+                extension={n.extension}
+                used={usedEditorRequest}
+                onAppend={(request) => {
+                  if (draftKey) {
+                    drafts.paragraph(draftKey, request.text);
+                    setUsedEditorRequest(request.id);
+                  }
+                }}
+              />
+            ) : (
+              <StatusLine key={n.id} notice={n} />
+            ),
+          )}
+        <Composer
+          session={t}
+          draftKey={draftKey}
+          completion={completionTarget(state)}
+          disabled={!draftKey || input?.outcome === "starting"}
+          actionsDisabled={pane.composerDisabled}
+          readOnly={readOnly}
+          send={send}
+        />
       </div>
     </TranscriptViewportContext>
   );

@@ -6,6 +6,7 @@ import { PianoMark } from "@/components/PianoMark";
 import { PianoSidebarReveal, sidebarRevealStyle } from "@/components/PianoSidebarReveal";
 import { TooltipProvider } from "@/components/PianoTooltip";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
+import { trackPointerDrag } from "@/lib/pointerDrag";
 import { SIDEBAR_WIDTH } from "@/lib/sidebarLayout";
 import { useSidebarLayout, useSidebarLayoutState } from "@/lib/useSidebarLayout";
 import { useSidebarSwipe } from "@/lib/useSidebarSwipe";
@@ -17,11 +18,14 @@ export function AppLayout({
   navigation,
   navigationTitle,
   content,
+  aside,
   children,
 }: {
   navigation: (compact: boolean) => ReactNode;
   navigationTitle: string;
   content: ReactNode;
+  /** The right sidebar, when one is open: a second sheet beside the conversation. */
+  aside?: ReactNode;
   children?: ReactNode;
 }) {
   const layout = useSidebarLayout();
@@ -37,25 +41,15 @@ export function AppLayout({
     event.preventDefault();
     const startWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? width;
     const startX = event.clientX;
-    const pointerId = event.pointerId;
-    const move = (event: PointerEvent) => {
-      if (event.pointerId === pointerId) layout.resizeTo(startWidth + event.clientX - startX);
-    };
-    const finish = (event: PointerEvent) => {
-      if (event.pointerId === pointerId) layout.finishResize();
-    };
-    const cancel = () => layout.cancelResize();
     // The layout ends the drag on release, a collapse or a breakpoint change; listeners go with it.
-    layout.startResize(startWidth, () => {
-      removeEventListener("pointermove", move);
-      removeEventListener("pointerup", finish);
-      removeEventListener("pointercancel", cancel);
-      removeEventListener("blur", cancel);
-    });
-    addEventListener("pointermove", move);
-    addEventListener("pointerup", finish);
-    addEventListener("pointercancel", cancel);
-    addEventListener("blur", cancel);
+    layout.startResize(
+      startWidth,
+      trackPointerDrag(event.pointerId, {
+        move: (event) => layout.resizeTo(startWidth + event.clientX - startX),
+        finish: () => layout.finishResize(),
+        cancel: () => layout.cancelResize(),
+      }),
+    );
   };
   return (
     <SidebarProvider
@@ -139,6 +133,7 @@ export function AppLayout({
         >
           {content}
         </main>
+        {aside}
         {children}
       </TooltipProvider>
     </SidebarProvider>

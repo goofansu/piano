@@ -1,7 +1,9 @@
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
-/** Read-only text adapter. Tokenization runs off-thread and is killed on disposal or timeout. */
+/** Read-only text adapter. Tokenization runs off-thread and is killed on disposal or timeout.
+ * Both the highlighted and the plain rendering are one `span.line` per line, which the
+ * `file-source` style numbers. */
 export function FileText({ content, language }: { content: string; language: string }) {
   const { resolvedTheme } = useTheme();
   const [highlighted, setHighlighted] = useState<{
@@ -33,11 +35,25 @@ export function FileText({ content, language }: { content: string; language: str
     };
   }, [content, language, dark]);
   if (highlighted?.content === content && highlighted.dark === dark)
-    // biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki escapes source; only its token markup is inserted.
-    return <div dangerouslySetInnerHTML={{ __html: highlighted.html }} />;
+    return (
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki escapes source; only its token markup is inserted.
+      <div className="file-source" dangerouslySetInnerHTML={{ __html: highlighted.html }} />
+    );
+  if (!content) return <p className="p-4 text-sm text-ink-3">(Empty file)</p>;
+  const lines = content.replace(/\n$/, "").split("\n");
   return (
-    <pre>
-      <code>{content || "(Empty file)"}</code>
-    </pre>
+    <div className="file-source">
+      <pre>
+        <code>
+          {lines.map((line, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional and never reorder.
+            <Fragment key={i}>
+              {i > 0 && "\n"}
+              <span className="line">{line}</span>
+            </Fragment>
+          ))}
+        </code>
+      </pre>
+    </div>
   );
 }

@@ -1,6 +1,8 @@
+import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { Button } from "@/components/ui/button";
+import { FileNotice as Notice } from "@/components/FileNotice";
+import { IconButton } from "@/components/IconButton";
 import "react-pdf/dist/Page/TextLayer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -58,58 +60,58 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
   }, [page, error]);
   const renderedWidth = Math.min(width * zoom, 1600, 8192 / ratio, Math.sqrt(4_000_000 / ratio));
   return (
-    <div ref={host} className="flex flex-col gap-3">
+    <div ref={host} className="flex flex-1 flex-col">
       {error ? (
-        <p role="status">{error}</p>
+        <Notice>{error}</Notice>
       ) : (
         <>
           {pages > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
+            <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-line bg-conversation px-3 py-1.5 text-xs text-ink-2 tabular-nums">
+              <IconButton
+                label="Previous page"
+                size="icon-xs"
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
               >
-                Previous page
-              </Button>
-              <span aria-live="polite">
+                <ChevronLeftIcon />
+              </IconButton>
+              <span aria-live="polite" className="min-w-12 text-center">
                 {page} / {pages}
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
+              <IconButton
+                label="Next page"
+                size="icon-xs"
                 disabled={page >= pages}
                 onClick={() => setPage(page + 1)}
               >
-                Next page
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Zoom out"
+                <ChevronRightIcon />
+              </IconButton>
+              <span className="ml-auto" />
+              <IconButton
+                label="Zoom out"
+                size="icon-xs"
                 disabled={zoom <= 0.5}
                 onClick={() => setZoom(zoom - 0.25)}
               >
-                −
-              </Button>
-              <span>{Math.round(zoom * 100)}%</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Zoom in"
+                <MinusIcon />
+              </IconButton>
+              <span className="min-w-10 text-center">{Math.round(zoom * 100)}%</span>
+              <IconButton
+                label="Zoom in"
+                size="icon-xs"
                 disabled={zoom >= 2}
                 onClick={() => setZoom(zoom + 0.25)}
               >
-                +
-              </Button>
+                <PlusIcon />
+              </IconButton>
             </div>
           )}
           <Document
             file={file}
             options={options}
             suspense={false}
-            loading={<p role="status">Opening PDF…</p>}
+            className="flex justify-center p-4 [&_.react-pdf__Page]:shadow-2"
+            loading={<Notice>Opening PDF…</Notice>}
             onPassword={() =>
               setError(
                 "This PDF is password-protected. Open it locally and save an unlocked copy to preview.",
@@ -131,7 +133,7 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
                 // Measure before creating a canvas: the previous page's aspect ratio is not a bound.
                 renderMode={measured ? "canvas" : "none"}
                 renderTextLayer={measured}
-                loading={<p role="status">Opening page…</p>}
+                loading={<Notice>Opening page…</Notice>}
                 onLoadSuccess={(loaded) => {
                   loadedPage.current = loaded;
                   const viewport = loaded.getViewport({ scale: 1 });
