@@ -58,6 +58,16 @@ const binaryExtensions = new Set(binaryFormats.flatMap((format) => format.extens
 const isTextType = (mime: string) =>
   mime.startsWith("text/") ||
   ["application/xml", "image/svg+xml", "application/rtf"].includes(mime);
+/** NUL-free UTF-8, allowing a character cut off at the end of the slice. */
+const isUtf8Prefix = (bytes: Uint8Array) => {
+  if (bytes.includes(0)) return false;
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes, { stream: true });
+    return true;
+  } catch {
+    return false;
+  }
+};
 /** The detector's MIME without parameters, such as `audio/ogg; codecs=opus`. */
 const mimeBase = (detected: { mime: string } | undefined) =>
   detected?.mime.split(";")[0]?.trim().toLowerCase();
@@ -137,14 +147,19 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
     if (!stat.isFile()) refuse("Choose a regular file, not a directory or device.");
     const header = Buffer.alloc(8192);
     const initial = await file.read(header, 0, header.length, 0);
-    const detected = await fileTypeFromBuffer(header.subarray(0, initial.bytesRead)).catch(
-      () => undefined,
-    );
+    const head = header.subarray(0, initial.bytesRead);
+    const binaryName = binaryExtensions.has(extname(requested).slice(1).toLowerCase());
+    // Short signatures such as `BM`, `MZ`, `ID3` and `%PDF` also start ordinary prose, so
+    // UTF-8 text under a name that does not claim a binary format is text whatever they suggest.
+    const detected =
+      !binaryName && isUtf8Prefix(head)
+        ? undefined
+        : await fileTypeFromBuffer(head).catch(() => undefined);
     const type = mimeBase(detected);
     const binary = type ? binaryTypes.get(type) : undefined;
     if (type && !binary && !isTextType(type))
       refuse("This file type is not supported. Convert it to UTF-8 text, PNG, MP3, MP4 or PDF.");
-    if (!binary && binaryExtensions.has(extname(requested).slice(1).toLowerCase()))
+    if (!binary && binaryName)
       refuse(
         "This file is malformed or its content does not match a supported format. Check or convert the original file.",
       );

@@ -51,6 +51,8 @@ attachment. A file that cannot be previewed cannot be downloaded.
 `WorkspaceFiles` owns canonical workspace containment (including symlinks), regular-file checks,
 content-signature classification, filename language inference and bounded reads. Unknown binary
 and executable formats are refused; extensions alone never authorize binary rendering. A file
+whose first 8 KiB are NUL-free UTF-8 is text unless its extension names a binary format, so prose
+that happens to start like a signature (`BM25…`, `ID3…`, `%PDF…`) previews as text. A file
 that changes length during acquisition must be reread.
 
 `POST /api/workspace/file?workspaceId=…` carries the path in its JSON body, never its URL.

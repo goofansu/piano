@@ -145,3 +145,41 @@ test("formats the previews promise are accepted under the detector's MIME varian
     await rm(a, { recursive: true, force: true });
   }
 });
+
+test("UTF-8 text whose first bytes match a short binary signature stays text", async () => {
+  const a = await mkdtemp(join(tmpdir(), "piano-signatures-"));
+  try {
+    const workspace = { id: "a", folder: a, path: a };
+    const read = (path: string) =>
+      Effect.runPromise(
+        readWorkspaceFile(workspace, path).pipe(
+          Effect.mapError((error) => new Error(error.detail)),
+        ),
+      );
+    // BMP, DOS executable, MP3 and PDF signatures are two to five printable bytes.
+    for (const [name, kind, language, content] of [
+      ["bm25.md", "markdown", "markdown", "BM25 is a ranking function used by search engines.\n"],
+      ["dos.txt", "text", "", "MZ is the DOS header of an executable.\n"],
+      ["id3.md", "markdown", "markdown", "ID3 tags carry an MP3's title and artist.\n"],
+      ["pdf.md", "markdown", "markdown", "%PDF-1.7 notes: the version line starts every PDF.\n"],
+      // A multibyte character split by the 8 KiB header boundary is still UTF-8.
+      ["split.md", "markdown", "markdown", `BM${"a".repeat(8191 - 2)}é\n`],
+    ]) {
+      await writeFile(join(a, name), content);
+      assert.deepEqual(await read(name), { workspaceId: "a", path: name, kind, language, content });
+    }
+    // A real MP3 under a text name keeps its binary classification: its header holds NULs.
+    const mp3 = Buffer.concat([
+      Buffer.from("ID3", "latin1"),
+      Buffer.from([4, 0, 0, 0, 0, 0, 0, 0xff, 0xfb, 0x90, 0x64]),
+      Buffer.alloc(400),
+    ]);
+    await writeFile(join(a, "song.md"), mp3);
+    const audio = await read("song.md");
+    assert.equal(audio.kind, "audio");
+    assert.ok("bytes" in audio);
+    assert.deepEqual(audio.bytes, mp3);
+  } finally {
+    await rm(a, { recursive: true, force: true });
+  }
+});
