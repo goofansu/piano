@@ -7,8 +7,13 @@ export const MCP_CATALOG: readonly { id: McpCatalogId; name: string; url: string
     name: "Linear",
     url: "https://mcp.linear.app/mcp",
   },
+  {
+    id: "jira",
+    name: "Jira",
+    url: "https://mcp.atlassian.com/v2/mcp",
+  },
 ];
-export const McpCatalogId = Schema.Literals(["linear"]);
+export const McpCatalogId = Schema.Literals(["linear", "jira"]);
 export type McpCatalogId = typeof McpCatalogId.Type;
 
 /** Machine-wide observations of Pi's global configuration and credentials, not live session connectivity. */
