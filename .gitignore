@@ -1,6 +1,10 @@
 node_modules
 web/node_modules
 web/dist
+
+# Local verification and deployment scratch files.
+/.scratch/
+
 # Generated from the locked PDF.js package by Vite.
 web/public/pdfjs/
 
