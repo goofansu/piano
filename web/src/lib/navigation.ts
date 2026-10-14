@@ -5,7 +5,7 @@
  * registry once it loads, and keeps the URL and title following the screen. Sessions are
  * addressed by ID, never by directory. Nothing here depends on render timing.
  */
-import type { AppState } from "../store.ts";
+import { type AppState, sessionKey } from "../store.ts";
 import type { Client } from "./client.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { catalogEntry } from "./sessionCatalog.ts";
@@ -127,8 +127,7 @@ export function addressFor(
   return { path, mode, title: `${title} - Piano` };
 }
 
-const panelOwner = (s: AppState) =>
-  s.session ? `${s.session.cwd}\n${s.session.sessionId ?? ""}` : null;
+const panelOwner = (s: AppState) => (s.session ? sessionKey(s.session) : null);
 
 export function createNavigation({
   client,

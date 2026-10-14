@@ -28,11 +28,6 @@ export function folderFor(state: AppState, cwd: string | undefined): FolderView 
     : state.folders.find((f) => f.worktrees.some((w) => w.path === cwd));
 }
 
-/** The folder's checkout at `cwd`: its root (the `main` worktree) or one of its worktrees. */
-export function checkoutFor(state: AppState, cwd: string | undefined): WorktreeView | undefined {
-  return folderFor(state, cwd)?.worktrees.find((w) => w.path === cwd);
-}
-
 /** What the New session directory picker's trigger names. */
 export type DirectoryTrigger =
   | { kind: "none" }
