@@ -40,17 +40,20 @@ export function ProjectCommandIconView({ icon }: { icon: ProjectCommandIcon }) {
   return <Icon />;
 }
 
-/** Shared destination rows for the composer menu and sidebar submenu. */
+/**
+ * Shared destination rows for the composer menu and sidebar submenu. `disabled` is for a pick that
+ * sends a registry change; the New page's pick only chooses locally.
+ */
 export function ProjectDestinationItems({
   create,
   projects,
-  disabled,
+  disabled = false,
   onCreate,
   onPick,
 }: {
   create: ProjectCommand;
   projects: readonly Project[];
-  disabled: boolean;
+  disabled?: boolean;
   onCreate: () => void;
   onPick: (id: string) => void;
 }) {

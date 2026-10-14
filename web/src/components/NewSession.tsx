@@ -45,8 +45,8 @@ import {
   canStartSessionIn,
   findProject,
   newProjectCommand,
-  projectChoices,
   projectCommand,
+  projectDestinations,
 } from "@/lib/projectCommands";
 import { completionTarget, directoryChoices, folderFor } from "@/lib/sessionContext";
 import { composerAction, composerInput, picker } from "@/lib/styles";
@@ -230,9 +230,7 @@ function ProjectSelect({
     run(create);
   };
   const current = findProject(state, value);
-  const choices = projectChoices(state, current).sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-  );
+  const choices = projectDestinations(state, current, { keepCurrent: true });
   const pick = (id?: string) => {
     onChange(id);
     setOpen(false);
@@ -262,7 +260,6 @@ function ProjectSelect({
         <ProjectDestinationItems
           create={create}
           projects={choices}
-          disabled={!state.connected}
           onCreate={onCreate}
           onPick={pick}
         />

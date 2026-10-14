@@ -50,10 +50,10 @@ import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
 import {
-  activeProjects,
   assignProjectCommand,
   newProjectCommand,
   projectCommands,
+  projectDestinations,
 } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { type SessionTarget, sessionMenu } from "@/lib/sessionCommands";
@@ -458,9 +458,7 @@ function SessionRow({
 function ProjectMenu({ state, session }: { state: AppState; session: SessionTarget }) {
   const { run } = useCommands();
   const current = sessionProject(state, session);
-  const destinations = activeProjects(state)
-    .filter((p) => p.id !== current?.id)
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const destinations = projectDestinations(state, current, { keepCurrent: false });
   const create = newProjectCommand(state, session);
   return (
     <>

@@ -7,6 +7,7 @@
  */
 import type { ClientCommand, Project } from "@shared/wire";
 import type { AppState } from "../store.ts";
+import { byName } from "./sidebarView.ts";
 
 /** The one project lookup by ID. An unknown or missing ID has no project. */
 export function findProject(state: AppState, id: string | null | undefined): Project | undefined {
@@ -19,13 +20,18 @@ export function activeProjects(state: AppState): Project[] {
 }
 
 /**
- * What a project picker offers when `current` is chosen: the active projects, plus `current` when
- * it is archived, so the picker still names the present choice and can move away from it.
+ * What a project picker offers, by name as the sidebar lists projects. The sidebar's menu moves a
+ * session away from `current`, so it leaves `current` out; the New page names its choice, so it
+ * keeps `current`, even archived, and can move away from it.
  */
-export function projectChoices(state: AppState, current: Project | undefined): Project[] {
-  const choices = activeProjects(state);
-  if (current && !choices.some((p) => p.id === current.id)) choices.push(current);
-  return choices;
+export function projectDestinations(
+  state: AppState,
+  current: Project | undefined,
+  { keepCurrent }: { keepCurrent: boolean },
+): Project[] {
+  const choices = activeProjects(state).filter((p) => p.id !== current?.id);
+  if (current && keepCurrent) choices.push(current);
+  return choices.sort((a, b) => byName(a.name, b.name));
 }
 
 /** A session can start in no project or in an active one; an archived project takes no new sessions. */

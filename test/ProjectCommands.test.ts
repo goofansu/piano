@@ -3,8 +3,8 @@ import { test } from "node:test";
 import type { Project } from "../shared/wire.ts";
 import {
   canStartSessionIn,
-  projectChoices,
   projectCommands,
+  projectDestinations,
 } from "../web/src/lib/projectCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
 
@@ -17,14 +17,31 @@ const names = (projects: readonly Project[]) => projects.map((p) => p.name);
 const byId = (project: Project, s = state) =>
   Object.fromEntries(projectCommands(s, project).map((c) => [c.id, c]));
 
-test("a picker offers active projects, and keeps the current one when it is archived", () => {
-  assert.deepEqual(names(projectChoices(state, undefined)), ["Launch", "Billing"]);
+test("pickers offer active projects by name, numbers by value, as the sidebar lists them", () => {
+  const q10: Project = { id: "q10", name: "Q10 launch", archived: false };
+  const q2: Project = { id: "q2", name: "q2 launch", archived: false };
+  const s = { ...state, projects: [...state.projects, q10, q2] };
+  assert.deepEqual(names(projectDestinations(s, undefined, { keepCurrent: true })), [
+    "Billing",
+    "Launch",
+    "q2 launch",
+    "Q10 launch",
+  ]);
+});
+
+test("the sidebar's menu leaves out the current project; the New page keeps it, even archived", () => {
+  const sidebar = (current?: Project) =>
+    names(projectDestinations(state, current, { keepCurrent: false }));
+  const newPage = (current?: Project) =>
+    names(projectDestinations(state, current, { keepCurrent: true }));
+  assert.deepEqual(sidebar(launch), ["Billing"]);
+  assert.deepEqual(sidebar(legacy), ["Billing", "Launch"]);
   assert.deepEqual(
-    names(projectChoices(state, launch)),
-    ["Launch", "Billing"],
+    newPage(launch),
+    ["Billing", "Launch"],
     "an active current project is not repeated",
   );
-  assert.deepEqual(names(projectChoices(state, legacy)), ["Launch", "Billing", "Legacy"]);
+  assert.deepEqual(newPage(legacy), ["Billing", "Launch", "Legacy"]);
 });
 
 test("a session can start in no project or an active one, not in an archived one", () => {
