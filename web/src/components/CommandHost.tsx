@@ -3,6 +3,7 @@ import {
   ArchiveIcon,
   CopyIcon,
   FileDiffIcon,
+  FileTextIcon,
   GitPullRequestIcon,
   ListIcon,
   type LucideIcon,
@@ -61,6 +62,7 @@ async function copySessionValue(value: string, label: string) {
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon,
+  "open-file": FileTextIcon,
   changes: FileDiffIcon,
   "pull-request": GitPullRequestIcon,
   everything: ListIcon,

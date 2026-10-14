@@ -13,6 +13,7 @@ import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { WorkspaceFile } from "@/components/WorkspaceFile";
 import { drafts, sessionDraftKey } from "@/lib/messageDraft";
 import {
   completionTarget,
@@ -97,91 +98,102 @@ export function SessionView({ state, send }: Props) {
         />
       )}
 
-      {notices
-        .filter((n) => n.placement === "banner")
-        .map((n) => (
-          <Banner
-            key={n.id}
-            variant={n.tone === "destructive" ? "destructive" : "warning"}
-            title={n.title}
-            action={
-              n.action && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => n.action && send(n.action.command)}
-                >
-                  {n.action.label}
-                </Button>
-              )
-            }
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {notices
+            .filter((n) => n.placement === "banner")
+            .map((n) => (
+              <Banner
+                key={n.id}
+                variant={n.tone === "destructive" ? "destructive" : "warning"}
+                title={n.title}
+                action={
+                  n.action && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => n.action && send(n.action.command)}
+                    >
+                      {n.action.label}
+                    </Button>
+                  )
+                }
+              >
+                {n.details.length
+                  ? n.details.map((detail) => (
+                      <p key={detail} className="whitespace-pre-wrap break-words">
+                        {detail}
+                      </p>
+                    ))
+                  : undefined}
+              </Banner>
+            ))}
+          <AddToChat
+            draftKey={readOnly ? null : draftKey}
+            className="relative flex min-h-0 flex-1 flex-col"
           >
-            {n.details.length
-              ? n.details.map((detail) => (
-                  <p key={detail} className="whitespace-pre-wrap break-words">
-                    {detail}
-                  </p>
-                ))
-              : undefined}
-          </Banner>
-        ))}
-      <AddToChat
-        draftKey={readOnly ? null : draftKey}
-        className="relative flex min-h-0 flex-1 flex-col"
-      >
-        {pane.list && (
-          <MessageList
-            className="transcript-enter"
-            showTools={display === "everything"}
-            messages={t?.messages ?? []}
-            pending={t?.pending ?? null}
-            submittedInput={input}
-            tools={tools}
-            activity={replyActivity}
-            working={!!t && isWorking(t.state)}
-            placeholder={pane.placeholder}
+            {pane.list && (
+              <MessageList
+                className="transcript-enter"
+                showTools={display === "everything"}
+                messages={t?.messages ?? []}
+                pending={t?.pending ?? null}
+                submittedInput={input}
+                tools={tools}
+                activity={replyActivity}
+                working={!!t && isWorking(t.state)}
+                placeholder={pane.placeholder}
+              />
+            )}
+            {pane.skeleton !== "none" && <TranscriptSkeleton hidden={pane.skeleton === "hidden"} />}
+            {!state.connected && (
+              <div
+                role="status"
+                className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
+              >
+                <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
+                  <Spinner className="size-3.5" /> Reconnecting…
+                </span>
+              </div>
+            )}
+          </AddToChat>
+          {notices
+            .filter((n) => n.placement === "status")
+            .map((n) =>
+              n.extension ? (
+                <ExtensionBlock
+                  key={n.id}
+                  extension={n.extension}
+                  used={usedEditorRequest}
+                  onAppend={(request) => {
+                    if (draftKey) {
+                      drafts.paragraph(draftKey, request.text);
+                      setUsedEditorRequest(request.id);
+                    }
+                  }}
+                />
+              ) : (
+                <StatusLine key={n.id} notice={n} />
+              ),
+            )}
+          <Composer
+            session={t}
+            draftKey={draftKey}
+            completion={completionTarget(state)}
+            disabled={!draftKey || input?.outcome === "starting"}
+            actionsDisabled={pane.composerDisabled}
+            readOnly={readOnly}
+            send={send}
+          />
+        </div>
+        {!settings && panel === "file" && workspace && t && (
+          <WorkspaceFile
+            key={`${workspace.id}:${sessionKey(t)}`}
+            workspace={workspace}
+            close={closePanel}
           />
         )}
-        {pane.skeleton !== "none" && <TranscriptSkeleton hidden={pane.skeleton === "hidden"} />}
-        {!state.connected && (
-          <div
-            role="status"
-            className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
-          >
-            <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
-              <Spinner className="size-3.5" /> Reconnecting…
-            </span>
-          </div>
-        )}
-      </AddToChat>
-      {notices
-        .filter((n) => n.placement === "status")
-        .map((n) =>
-          n.extension ? (
-            <ExtensionBlock
-              key={n.id}
-              extension={n.extension}
-              used={usedEditorRequest}
-              onAppend={(request) => {
-                if (draftKey) {
-                  drafts.paragraph(draftKey, request.text);
-                  setUsedEditorRequest(request.id);
-                }
-              }}
-            />
-          ) : (
-            <StatusLine key={n.id} notice={n} />
-          ),
-        )}
-      <Composer
-        session={t}
-        draftKey={draftKey}
-        completion={completionTarget(state)}
-        disabled={!draftKey || input?.outcome === "starting"}
-        actionsDisabled={pane.composerDisabled}
-        readOnly={readOnly}
-        send={send}
-      />
+      </div>
     </TranscriptViewportContext>
   );
 }

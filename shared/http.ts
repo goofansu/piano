@@ -169,6 +169,16 @@ export const Endpoints = {
 
   // Workspace
 
+  workspaceFile: endpoint({
+    method: "POST",
+    path: "/api/workspace/file",
+    query: ["workspaceId"],
+    body: Schema.Struct({ path: Schema.NonEmptyString.check(Schema.isMaxLength(4096)) }),
+    response: Schema.Struct({ path: Schema.String, content: Schema.String }),
+    noStore: true,
+    refused: 400,
+    fallback: "Could not read this file. Check the path and try again.",
+  }),
   workspaceChanges: endpoint({
     method: "POST",
     path: "/api/workspace/changes",

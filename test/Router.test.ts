@@ -57,6 +57,16 @@ test("a decoded body and the resolved workspace reach the handler; the reply is 
   assert.match(body.result.diff, /\+two/);
 });
 
+test("workspace files use a body path and return uncached text for the registered workspace", async () => {
+  const response = await post(
+    `/api/workspace/file?workspaceId=${server.workspaceId}`,
+    JSON.stringify({ path: "README.md" }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), { path: "README.md", content: "one\ntwo\n" });
+});
+
 test("INV-07: IDs resolve through the registry; a missing ID is malformed and an unknown one is not found", async () => {
   assert.deepEqual(await reply(await post("/api/workspace/changes?workspaceId=nope")), {
     status: 404,

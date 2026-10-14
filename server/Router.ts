@@ -25,6 +25,7 @@ import { SessionSharing } from "./SessionSharing.ts";
 import { SidebarView } from "./SidebarView.ts";
 import type { SignInError, SignInLane, SignInState } from "./SignInAttempts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
+import { readWorkspaceFile } from "./WorkspaceFiles.ts";
 import { handleSocket } from "./WsClient.ts";
 
 /** A failed request as the browser sees it: a status and the `error` message it shows. */
@@ -208,6 +209,9 @@ export const AppRouter = HttpRouter.use((router) =>
       ),
     );
 
+    yield* serve(Endpoints.workspaceFile, ({ workspace, body }) =>
+      readWorkspaceFile(workspace, body.path),
+    );
     yield* serve(Endpoints.workspaceChanges, ({ workspace }) =>
       Effect.flatMap(WorkspaceChanges, (changes) => changes.preview(workspace)),
     );

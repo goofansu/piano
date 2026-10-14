@@ -25,6 +25,7 @@ export const SESSION_DISPLAYS = [
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
 export type SessionCommandId =
+  | "open-file"
   | "copy-working-directory"
   | "copy-branch"
   | "copy-session-id"
@@ -51,6 +52,7 @@ export type SessionCommandGroup =
   | "create";
 
 export type SessionCommandIcon =
+  | "open-file"
   | "copy"
   | "changes"
   | "pull-request"
@@ -65,6 +67,7 @@ export type SessionCommandIcon =
   | "new";
 
 export type SessionCommandIntent =
+  | { kind: "open-file" }
   | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
@@ -103,7 +106,7 @@ export interface SessionMenu {
 /** Each surface's sections, by command. The row puts archive beside delete, though only delete is destructive. */
 const MENU_SECTIONS = {
   row: [["rename", "pin"], ["share"], ["archive", "delete"]],
-  header: [["changes", "pull-request"]],
+  header: [["open-file", "changes", "pull-request"]],
 } as const satisfies Record<string, readonly (readonly SessionCommandId[])[]>;
 
 const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
@@ -217,6 +220,15 @@ export function sessionCommands(
         group: "copy",
         enabled: true,
         intent: { kind: "copy", value: all, label: "Session details" },
+      },
+      {
+        id: "open-file",
+        label: "Open file",
+        icon: "open-file",
+        group: "open",
+        enabled: !!ctx.workspace && !session.state.checkoutMissing,
+        keywords: ["file", "read", "path"],
+        intent: { kind: "open-file" },
       },
       {
         id: "changes",

@@ -98,6 +98,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "copy":
       effects.copy(intent.value, intent.label);
       break;
+    case "open-file":
+      effects.openPanel("file");
+      break;
     case "changes":
       effects.openPanel("changes");
       break;

@@ -95,6 +95,9 @@ export const listDirectory = (path: string, options?: RequestOptions) =>
 export const makeDirectory = async (path: string, options?: RequestOptions) =>
   (await call(Endpoints.makeDirectory, { body: { path } }, options)).path;
 
+export const workspaceFile = (workspaceId: string, path: string, options?: RequestOptions) =>
+  call(Endpoints.workspaceFile, { query: { workspaceId }, body: { path } }, options);
+
 // Live workspace changes
 
 export const workspaceChanges = (workspaceId: string, options?: RequestOptions) =>
