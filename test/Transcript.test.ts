@@ -768,3 +768,14 @@ test("summarization retains exact raw details and safely falls back for unknown 
   assert.equal(present(long)?.details, long);
   assert.ok(present(long)!.summary.length <= 240);
 });
+
+test("a subagent card's output is Markdown exactly when Pi inserted it as context", () => {
+  const card: SubagentCard = { kind: "result", source: "tool", status: "Done", attention: false };
+  assert.deepEqual(
+    cardFacts([
+      { ...cardRow("tool", card, "raw output"), role: "tool_result" },
+      { ...cardRow("note", card, "**Found it**"), role: "context" },
+    ]).map((facts) => facts.markdown),
+    [false, true],
+  );
+});

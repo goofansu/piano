@@ -147,3 +147,94 @@ test("error summaries render as text, never markup", () => {
   assert.match(render([failure(unsafe)]), /&lt;script&gt;/);
   assert.doesNotMatch(render([failure(unsafe)]), /<script>/);
 });
+
+/** One folding row's markup, from its group to the next folding row. */
+const fold = (html: string, label: string) => {
+  const start = html.indexOf(`role="group" aria-label="${label}"`);
+  assert.ok(start >= 0, `no folding row named ${label}`);
+  const next = html.indexOf('role="group"', start + 1);
+  const markup = html.slice(start, next < 0 ? undefined : next);
+  const header = markup.match(
+    /<button[^>]*data-slot="collapsible-trigger"[^>]*>.*?<\/button>/s,
+  )?.[0];
+  assert.ok(header, `${label} has no header`);
+  const body = markup.match(/<div[^>]*data-slot="collapsible-content"[^>]*>/)?.[0];
+  return {
+    markup,
+    header,
+    open: /aria-expanded="true"/.test(header),
+    canOpen: !/ disabled=""/.test(header),
+    chevron: /lucide-chevron-right/.test(header),
+    /** The body's element, rendered whenever the row can open; hidden while closed. */
+    body,
+    bodyHidden: body ? / hidden=""/.test(body) : undefined,
+  };
+};
+
+test("every folding row folds the same way: context starts open, a card without details cannot open, a closed tool keeps its output in its body", () => {
+  const html = render([
+    { id: "ctx", role: "context", label: "Shell: npm test", text: "shell says hi" },
+    {
+      id: "skill",
+      role: "user",
+      text: "Focus on login.",
+      skill: { name: "review", location: "/tmp/review/SKILL.md", body: "# Review" },
+    },
+    {
+      id: "call",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "t", name: "bash", args: '{"command":"npm test"}' }],
+    },
+    { id: "res", role: "tool_result", toolCallId: "t", text: "tool output text", isError: false },
+    {
+      id: "bare",
+      role: "tool_result",
+      text: "",
+      subagent: { kind: "result", source: "tool", status: "unknown Run", attention: true },
+    },
+    {
+      id: "answered",
+      role: "context",
+      text: "**Found it**",
+      subagent: {
+        kind: "result",
+        source: "notification",
+        label: "Find it",
+        status: "Done",
+        attention: false,
+      },
+    },
+  ]);
+  const context = fold(html, "Shell");
+  const skill = fold(html, "review skill");
+  const tool = fold(html, "bash tool call");
+  const bare = fold(html, "Subagent result: Subagent result");
+  const answered = fold(html, "Subagent result: Find it");
+  // One header shape for every kind: padding out of flow, a sidebar swipe passes through it.
+  for (const row of [context, skill, tool, bare, answered]) {
+    assert.match(row.header, /class="-ml-2 -my-1 flex /);
+    assert.match(row.header, /data-sidebar-swipe="true"/);
+    assert.equal(row.chevron, row.canOpen, "a chevron exactly when the row can open");
+  }
+  assert.deepEqual(
+    [context, skill, tool, answered].map((row) => [row.open, row.canOpen, row.bodyHidden]),
+    [
+      [true, true, false],
+      [false, true, true],
+      [false, true, true],
+      [false, true, true],
+    ],
+    "context starts open; a skill, a tool and a subagent card start closed",
+  );
+  assert.match(context.markup, /data-slot="collapsible-content".*shell says hi/s);
+  assert.equal(bare.canOpen, false, "a card without details cannot open");
+  assert.equal(bare.body, undefined, "a card without details has no body");
+  assert.doesNotMatch(html, /tool output text|Found it/, "a closed body renders nothing");
+  // A skill folds inside its prompt bubble: no gutter of its own.
+  assert.match(html, /<article[^>]*>(?:(?!<\/article>).)*aria-label="review skill"/s);
+  assert.doesNotMatch(
+    skill.markup.slice(0, skill.markup.indexOf(skill.header)),
+    /data-slot="gutter"/,
+  );
+});

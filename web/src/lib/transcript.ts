@@ -48,6 +48,9 @@ export interface SubagentFacts {
   /** The tool call that carried the card failed. */
   failed: boolean;
   output?: string;
+  /** `output` is Markdown a Subagent wrote (a notification Pi inserted as context), not a tool's
+   * raw output, which is shown as it came. */
+  markdown: boolean;
   details: SubagentDetail[];
   /** Anything to show when opened: `details` or output. */
   hasDetails: boolean;
@@ -247,6 +250,7 @@ function subagentFacts(
   reported: TerminalStatus | undefined,
   output: string | undefined,
   failed: boolean,
+  markdown: boolean,
 ): SubagentFacts {
   const terminal = reported ?? ("terminalStatus" in card ? card.terminalStatus : undefined);
   // The card's own text may add to the status ("Failed · Result unavailable"); keep it when it agrees.
@@ -284,6 +288,7 @@ function subagentFacts(
     dot: failed || terminal === "failed" ? "err" : terminal === "completed" ? "ok" : "idle",
     failed,
     ...(output ? { output } : {}),
+    markdown,
     details,
     hasDetails: !!output || details.length > 0,
   };
@@ -369,7 +374,7 @@ export function transcriptRows(
       verb,
       knownTool: !!verbs,
       summary: summarize(call.args),
-      ...(card ? { subagent: subagentFacts(card, cardStatus(card), output, failed) } : {}),
+      ...(card ? { subagent: subagentFacts(card, cardStatus(card), output, failed, false) } : {}),
     };
   };
   const noResults = new Map<string, RenderMsg>();
@@ -394,7 +399,13 @@ export function transcriptRows(
         kind: "subagent",
         key,
         msg: m,
-        subagent: subagentFacts(m.subagent, cardStatus(m.subagent), m.text || undefined, false),
+        subagent: subagentFacts(
+          m.subagent,
+          cardStatus(m.subagent),
+          m.text || undefined,
+          false,
+          m.role === "context",
+        ),
       });
     } else if (m.role === "context") {
       rows.push({ kind: "context", key, msg: m });
