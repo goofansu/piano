@@ -236,6 +236,38 @@ test("snapshot first, then a streamed turn", async () => {
   assert.equal(new Set(ids).size, ids.length, "final messages have distinct ids");
 });
 
+test("the readback that settles a turn keeps the ids its live messages carried", async () => {
+  const seen = await run(
+    Effect.gen(function* () {
+      const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "readback-ids" });
+      const ready = yield* Deferred.make<void>();
+      const collector = yield* collectUntil(
+        t.events.pipe(
+          Stream.tap((e) =>
+            e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+        ),
+        (e) => e._tag === "context" && e.messages.some((m) => m.text === "echo: second"),
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
+      yield* t.act({ _tag: "prompt", text: "first" });
+      yield* t.act({ _tag: "prompt", text: "second" });
+      return yield* Fiber.join(collector);
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+  // The browser keys transcript rows by id: a readback that renumbered the run's messages would
+  // remount every row it showed live, closing its folds.
+  const live = seen.flatMap((e) =>
+    e._tag === "message_end" ? [[e.message.id, e.message.text] as const] : [],
+  );
+  const context = seen.findLast((e) => e._tag === "context");
+  assert.ok(context && context._tag === "context");
+  assert.deepEqual(
+    live,
+    context.messages.map((m) => [m.id, m.text] as const),
+  );
+});
+
 test("a skill prompt arrives as the command plus the user's own words, with the skill file folded beside them", async () => {
   const seen = await run(
     Effect.gen(function* () {
