@@ -469,19 +469,19 @@ function SubagentCardView({
       data-run-id={runId}
       className="text-sm"
     >
-      <Row
-        className="items-center"
-        glyph={<span className={cn("block size-2 rounded-full", SUBAGENT_DOT[dot])} />}
-      >
+      <Row glyph={<span className={cn("block size-2 rounded-full", SUBAGENT_DOT[dot])} />}>
         <CollapsibleTrigger asChild disabled={!hasDetails}>
-          <button type="button" className={disclosureRow}>
+          <button type="button" className={cn(disclosureRow, "max-sm:flex-wrap")}>
             <span className="min-w-0 flex-1 truncate font-medium text-ink">
               {isResult && <span className="font-normal text-ink-3">Result · </span>}
               {title}
             </span>
             {profile && <span className="max-w-28 shrink truncate text-ink-3">{profile}</span>}
-            <Badge variant={badge} className="max-w-56 truncate">
-              {statusLabel}
+            <Badge
+              variant={badge}
+              className="max-w-full min-w-0 whitespace-normal max-sm:order-last max-sm:basis-full sm:max-w-56"
+            >
+              <span className="min-w-0 break-words">{statusLabel}</span>
             </Badge>
             {hasDetails && <DisclosureChevron open={open} />}
           </button>
