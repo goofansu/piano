@@ -13,7 +13,6 @@ import { imageType } from "../shared/attachments.ts";
 import type {
   Dialog,
   ModelChoice,
-  QueuedMessage,
   RenderMsg,
   SessionAction,
   SessionEvent,
@@ -23,7 +22,13 @@ import type {
   ToolExecution,
   Usage,
 } from "../shared/wire.ts";
-import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
+import {
+  Attachments,
+  ContextUsage,
+  QueuedMessage,
+  SessionStats,
+  SlashCommand,
+} from "../shared/wire.ts";
 import { compileRedaction, type DisplayRedaction } from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
 import { RunLedger, SubagentProjection } from "./Subagents.ts";
@@ -245,12 +250,25 @@ export interface PiExchange<A> {
 /** An exchange that only queries Pi, so it changes nothing. */
 export type PiReadback<A> = PiExchange<A>;
 
+/** Metadata from the pinned Pi queue protocol. Legacy queues deliberately have no counts. */
+const PiQueuedMessage = Schema.Struct({
+  ...QueuedMessage.fields,
+  id: Schema.String.check(Schema.isNonEmpty()),
+  attachmentCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+const PiQueue = Schema.Array(PiQueuedMessage).check(
+  Schema.makeFilter(
+    (messages) => new Set(messages.map((message) => message.id)).size === messages.length,
+  ),
+);
+
 /** The `get_state` facts Piano reads; Pi's other state fields stay in Pi. */
 const RawState = Schema.Struct({
   model: Schema.optional(Schema.Struct({ provider: Schema.String, id: Schema.String })),
   thinkingLevel: Schema.optional(Schema.String),
   isStreaming: Schema.Boolean,
   isCompacting: Schema.optional(Schema.Boolean),
+  queuedMessages: Schema.optional(PiQueue),
   sessionFile: Schema.optional(Schema.String),
   sessionId: Schema.String,
   sessionName: Schema.optional(Schema.String),
@@ -321,7 +339,7 @@ export type PiSessionFacts =
     };
 
 /** The one projection of a Pi session into a Snapshot. A live session adds its run's own state
- * (compacting only if Pi says so, nothing queued); a saved one adds its Runs' spend. */
+ * (including authoritative queue metadata when available); a saved one adds its Runs' spend. */
 const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Snapshot => {
   const state = stateFactsOf(facts.state);
   return {
@@ -331,7 +349,7 @@ const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Sn
             ...state,
             isCompacting: facts.state.isCompacting ?? false,
             isRetrying: false,
-            queuedMessages: [],
+            queuedMessages: facts.state.queuedMessages ?? [],
           }
         : { ...state, subagents: new RunLedger().add(facts.entries).usage },
     messages: serializeWithProjection(facts.messages, "m", projection),
@@ -346,6 +364,9 @@ export const snapshotOf = (facts: PiSessionFacts): Snapshot =>
 /** Pi's steering and follow-up queue, from `queue_update` or `clear_queue`. Undefined when malformed. */
 const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
   if (!value || typeof value !== "object") return;
+  const metadata = fieldOf(value, "queuedMessages");
+  if (metadata !== undefined)
+    return Option.getOrUndefined(Schema.decodeUnknownOption(PiQueue)(metadata));
   const { steering, followUp } = value as { steering?: unknown; followUp?: unknown };
   if (
     !Array.isArray(steering) ||

@@ -1,7 +1,7 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { ContextDetails } from "@/components/ContextDetails";
 import { DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { JumpTo } from "@/components/JumpTo";
@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoToolt
 import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
 import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
@@ -182,8 +183,7 @@ export function Composer({
               <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
                 {queuedMessages.map((message, index) => (
                   <li
-                    // biome-ignore lint/suspicious/noArrayIndexKey: queued messages carry no id and may repeat text.
-                    key={`${message.kind}-${index}`}
+                    key={message.id ?? `${message.kind}-${index}`}
                     className="flex min-w-0 animate-in flex-col gap-1 fade-in-0"
                   >
                     {queue.showKinds && (
@@ -191,7 +191,21 @@ export function Composer({
                         {message.kind === "steering" ? "Steering" : "Follow-up"}
                       </span>
                     )}
-                    <span className="min-w-0 whitespace-pre-wrap break-words">{message.text}</span>
+                    <div className="flex min-w-0 items-start gap-2">
+                      <span className="min-w-0 whitespace-pre-wrap break-words">
+                        {message.text}
+                      </span>
+                      {!!message.attachmentCount && (
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0"
+                          aria-label={`${message.attachmentCount} ${message.attachmentCount === 1 ? "attachment" : "attachments"}`}
+                        >
+                          <PaperclipIcon data-icon="inline-start" aria-hidden />
+                          {message.attachmentCount}
+                        </Badge>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ol>

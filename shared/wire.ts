@@ -267,6 +267,10 @@ export const ContextUsage = Schema.Struct({
 export type ContextUsage = typeof ContextUsage.Type;
 
 export const QueuedMessage = Schema.Struct({
+  /** Pi-owned identity within one host generation; absent with an unpatched Pi CLI. */
+  id: Schema.optional(Schema.String),
+  /** Unknown is not zero: legacy Pi queues carry no attachment metadata. */
+  attachmentCount: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   kind: Schema.Literals(["steering", "follow-up"]),
   text: Schema.String,
 });
