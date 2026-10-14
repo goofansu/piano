@@ -71,8 +71,10 @@ that every PR add tests applies.
   watch the test fail for that reason, then restore the code exactly.
 - A behavior-preserving refactor should normally retain its tests. If harmless implementation
   changes repeatedly break them, inspect whether they assert implementation details.
-- Fix or explicitly track flaky tests; retries must not manufacture confidence. Remove obsolete
-  tests when the protected contract is deliberately retired, and explain the changed contract.
+- Fix or explicitly track flaky tests; retries must not manufacture confidence. A failing or
+  flaky test may be reporting a product bug: diagnose which before changing the test. Remove
+  obsolete tests when the protected contract is deliberately retired, and explain the changed
+  contract.
 
 ## Choose the right evidence boundary
 
