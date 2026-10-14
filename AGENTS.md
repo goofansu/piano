@@ -143,6 +143,27 @@ authentication: it stays on loopback behind exe.dev private access (INV-11).
 
 ## GitHub on exe.dev
 
-When the git remote is `github.int.exe.xyz`, prefix `gh` with `GH_HOST=github.int.exe.xyz` and pass
-`--repo goofansu/piano`. The integration supplies authentication, so try it before asking for
-`gh auth login`. Setup and permission failures: [exe.dev GitHub integration](https://exe.dev/docs/integrations-github.md).
+On an exe.dev VM, use the HTTPS GitHub integration for fetch and push **even when `origin` is
+`git@github.com:goofansu/piano.git`**. An SSH host-key failure is a transport mismatch: retry through
+the integration before reporting a blocked push. Keep the configured remote unchanged:
+
+```bash
+GH_HOST=github.int.exe.xyz gh repo view goofansu/piano --json nameWithOwner
+GH_HOST=github.int.exe.xyz gh auth setup-git --hostname github.int.exe.xyz
+branch=$(git branch --show-current)
+url=https://github.int.exe.xyz/goofansu/piano.git
+git fetch "$url" "$branch:refs/remotes/origin/$branch"
+# Rebase onto origin/$branch when requested; verify the resulting revision before pushing.
+git push "$url" "$branch:$branch"
+git ls-remote "$url" "refs/heads/$branch"
+git rev-parse HEAD
+```
+
+Use the explicit URL, not a temporary `-c remote.origin.url=…` override, which can leave Git using
+an existing SSH URL. Completion requires a successful push and a remote branch hash matching HEAD;
+report an integration permission/setup failure if this path also fails. The integration supplies
+authentication; try it before asking for `gh auth login`, a token or SSH setup.
+
+Prefix GitHub CLI commands with `GH_HOST=github.int.exe.xyz`. Pass `--repo goofansu/piano` where
+supported; `gh repo view` takes `goofansu/piano` as a positional argument. Setup and permission
+failures: [exe.dev GitHub integration](https://exe.dev/docs/integrations-github.md).
