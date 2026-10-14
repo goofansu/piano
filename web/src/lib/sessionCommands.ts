@@ -133,7 +133,10 @@ export function canRenameSession(state: AppState, target: SessionTarget): boolea
   return sessionMutable(state, target) && !sessionCheckoutMissing(state, target);
 }
 
-/** A saved, registered session; capture refuses in-flight work on the server too. */
+/**
+ * A saved, registered session that is not working (`sessionWorking`, the rule Archive and Delete
+ * confirm on); capture refuses in-flight work on the server too.
+ */
 export function canShareSession(state: AppState, target: SessionTarget): boolean {
   const reference = sessionReference(state, target);
   return (
@@ -142,9 +145,7 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
     !!reference &&
     !reference.archived &&
     reference.unavailable !== "history" &&
-    !state.hosts.some(
-      (host) => host.cwd === target.cwd && host.sessionId === target.sessionId && host.streaming,
-    )
+    !sessionWorking(state, target)
   );
 }
 
@@ -156,6 +157,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - rename, archive, delete: `sessionMutable` (connected, and a settled attachment for the selected
  *   session); rename also needs the checkout, since renaming starts Pi there.
  * - pin: connected with an active registry reference; independent of Pi attachment or activity.
+ * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
+ *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`).
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - new session here: the checkout is present.
