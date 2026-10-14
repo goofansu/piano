@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { CheckIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { CommandIcon, useGlobalCommands, useSessionCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
@@ -11,8 +11,8 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/PianoCommand";
-import { RankedCommandGroups } from "@/components/RankedCommandGroups";
 import { commandPalette, paletteFilter } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod } from "@/lib/keys";
@@ -95,9 +95,10 @@ export function CommandPalette({ state }: Props) {
       />
       <CommandList ref={list} className="max-h-[min(24rem,60dvh)]">
         <CommandEmpty>No sessions or commands match.</CommandEmpty>
-        <RankedCommandGroups search={search}>
-          {groups.map((group) => (
-            <CommandGroup key={group.id} heading={group.heading}>
+        {groups.map((group, index) => (
+          <Fragment key={group.id}>
+            {index > 0 && <CommandSeparator />}
+            <CommandGroup heading={group.heading}>
               {group.id === "sessions"
                 ? group.rows.map((r) => (
                     <CommandItem
@@ -158,8 +159,8 @@ export function CommandPalette({ state }: Props) {
                       </CommandItem>
                     ))}
             </CommandGroup>
-          ))}
-        </RankedCommandGroups>
+          </Fragment>
+        ))}
       </CommandList>
     </CommandDialog>
   );

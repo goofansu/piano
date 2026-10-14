@@ -1,7 +1,7 @@
 /**
  * The command palette's contents, decided once: which groups it shows, in what order, and each row's
  * name, search text and marks. `CommandPalette` only renders them; cmdk filters rows by `value` and
- * `keywords` with `paletteFilter`, and `RankedCommandGroups` uses the same scores for group order.
+ * `keywords` with `paletteFilter`, the same scores that order rows and groups here.
  */
 
 import { defaultFilter } from "cmdk";
@@ -13,7 +13,7 @@ import type { SessionCommand } from "./sessionCommands.ts";
 /**
  * A row's own search text always outranks a match that needs a hidden alias. Keep cmdk's fuzzy
  * label search, but require word prefixes for aliases: "dark theme" works, while "path" cannot
- * stitch letters from "appearance theme". Both cmdk and group ranking use this same filter.
+ * stitch letters from "appearance theme". cmdk and `commandPalette`'s ranking use this same filter.
  */
 export function paletteFilter(value: string, search: string, keywords?: string[]): number {
   const query = search.trim().toLowerCase();
@@ -104,9 +104,10 @@ function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteComm
 }
 
 /**
- * The palette's groups in declaration order: sessions (the most recent few, titled "Recent sessions",
- * until a search reaches them all), Global commands, then Session commands only while a session is
- * selected. Every session that is not archived is reachable, including those whose folder is closed.
+ * The palette's groups: sessions (the most recent few, titled "Recent sessions", until a search
+ * reaches them all), Global commands, then Session commands only while a session is selected. Every
+ * session that is not archived is reachable, including those whose folder is closed. A search ranks
+ * rows within each group, and groups by their best row; ties keep that order.
  */
 export function commandPalette(state: AppState, input: PaletteInput): PaletteGroup[] {
   const searching = !!input.search.trim();
@@ -129,14 +130,16 @@ export function commandPalette(state: AppState, input: PaletteInput): PaletteGro
       heading: "Session commands",
       rows: input.sessionCommands.map(commandRow),
     });
-  // cmdk sorts the mounted DOM before newly matching items appear. Keep React's row order
-  // ranked too, so a row revealed by this query is already in the right place when it mounts.
-  if (searching)
-    for (const group of groups) {
-      const scores = new Map(
-        group.rows.map((row) => [row.key, paletteFilter(row.value, input.search, row.keywords)]),
-      );
-      group.rows.sort((a, b) => scores.get(b.key)! - scores.get(a.key)!);
-    }
-  return groups;
+  if (!searching) return groups;
+  // cmdk sorts the mounted DOM before newly matching items appear, and leaves groups in React's
+  // order. Rank both here, so a row revealed by this query is already in the right place.
+  const best = new Map<PaletteGroup["id"], number>();
+  for (const group of groups) {
+    const scores = new Map(
+      group.rows.map((row) => [row.key, paletteFilter(row.value, input.search, row.keywords)]),
+    );
+    group.rows.sort((a, b) => scores.get(b.key)! - scores.get(a.key)!);
+    best.set(group.id, Math.max(0, ...scores.values()));
+  }
+  return groups.sort((a, b) => best.get(b.id)! - best.get(a.id)!);
 }
