@@ -445,7 +445,10 @@ export function transcriptRows(
     if (!showTools && !jump && !m.errorMessage) return;
     add(m, m.id, jump, false, () => messages.slice(0, index));
   });
-  if (pending) add(pending, `pending:${pending.id}`, undefined, true, () => messages);
+  // The server gives a partial reply the id of the message it becomes, so its row keeps its key
+  // (and its open folds) when it ends. Once that message is in history, it is the reply.
+  if (pending && !messages.some((m) => m.id === pending.id))
+    add(pending, pending.id, undefined, true, () => messages);
   return rows;
 }
 
