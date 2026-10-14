@@ -1,13 +1,33 @@
 /**
  * The command palette's contents, decided once: which groups it shows, in what order, and each row's
  * name, search text and marks. `CommandPalette` only renders them; cmdk filters rows by `value` and
- * `keywords`, and `RankedCommandGroups` reorders the groups while searching.
+ * `keywords` with `paletteFilter`, and `RankedCommandGroups` uses the same scores for group order.
  */
 
+import { defaultFilter } from "cmdk";
 import type { AppState } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import type { SessionCommand } from "./sessionCommands.ts";
+
+/**
+ * A row's own search text always outranks a match that needs a hidden alias. Keep cmdk's fuzzy
+ * label search, but require word prefixes for aliases: "dark theme" works, while "path" cannot
+ * stitch letters from "appearance theme". Both cmdk and group ranking use this same filter.
+ */
+export function paletteFilter(value: string, search: string, keywords?: string[]): number {
+  const query = search.trim().toLowerCase();
+  const label = defaultFilter(value, query);
+  if (label > 0) return 0.5 + label / 2;
+  const parts = query.split(/\s+/);
+  const matchesWords = (text: string) => {
+    const words = text.toLowerCase().split(/\s+/);
+    return parts.every((part) => words.some((word) => word.startsWith(part)));
+  };
+  // Word order should not depend on whether a row happens to have aliases.
+  if (matchesWords(value)) return 0.75;
+  return keywords?.length && matchesWords([value, ...keywords].join(" ")) ? 0.5 : 0;
+}
 
 /** Before a search the palette offers this many recent sessions; a search reaches every one. */
 export const RECENT_SESSION_LIMIT = 8;
@@ -109,5 +129,14 @@ export function commandPalette(state: AppState, input: PaletteInput): PaletteGro
       heading: "Session commands",
       rows: input.sessionCommands.map(commandRow),
     });
+  // cmdk sorts the mounted DOM before newly matching items appear. Keep React's row order
+  // ranked too, so a row revealed by this query is already in the right place when it mounts.
+  if (searching)
+    for (const group of groups) {
+      const scores = new Map(
+        group.rows.map((row) => [row.key, paletteFilter(row.value, input.search, row.keywords)]),
+      );
+      group.rows.sort((a, b) => scores.get(b.key)! - scores.get(a.key)!);
+    }
   return groups;
 }

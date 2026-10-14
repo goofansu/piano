@@ -13,7 +13,7 @@ import {
   CommandList,
 } from "@/components/PianoCommand";
 import { RankedCommandGroups } from "@/components/RankedCommandGroups";
-import { commandPalette } from "@/lib/commandPalette";
+import { commandPalette, paletteFilter } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod } from "@/lib/keys";
 import { useNavigation } from "@/lib/useNavigation";
@@ -84,6 +84,7 @@ export function CommandPalette({ state }: Props) {
       title="Search and commands"
       description="Switch sessions, start a new one, or change the view."
       showCloseButton={false}
+      filter={paletteFilter}
       className="top-[18%] translate-y-0 sm:max-w-xl"
     >
       <CommandInput

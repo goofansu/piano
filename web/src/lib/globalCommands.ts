@@ -75,7 +75,7 @@ export interface GlobalCommand {
   checked?: boolean;
   /** A toggle that is on: the directory is trusted. Its label already names what running it does. */
   pressed?: boolean;
-  /** Extra palette search words. */
+  /** Direct synonyms of the label, for palette search; not topics or what the command touches. */
   keywords?: readonly string[];
   intent: GlobalCommandIntent;
 }
@@ -113,7 +113,6 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
     group: "trust",
     enabled: state.connected,
     pressed: trust.trusted,
-    keywords: ["trust", "pi settings", "skills"],
     intent: { kind: "send", command: { _tag: "set_trust", path: cwd, trusted: !trust.trusted } },
   };
 }
@@ -134,7 +133,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
           icon: "home",
           group: "navigate",
           enabled: true,
-          keywords: ["back", "session"],
+          keywords: ["back"],
           intent: { kind: "home" },
         }
       : {
@@ -152,7 +151,6 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
         icon: s.icon,
         group: "navigate",
         enabled: true,
-        keywords: s.keywords,
         intent: { kind: "settings", section: s.id },
       }),
     ),
@@ -182,7 +180,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
         group: "appearance",
         enabled: true,
         ...(theme ? { checked: theme === a.value } : {}),
-        keywords: ["appearance", "theme"],
+        keywords: ["theme"],
         intent: { kind: "appearance", appearance: a.value },
       }),
     ),
@@ -195,7 +193,6 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
         group: "group-by",
         enabled: true,
         checked: ctx.view.groupBy === g.value,
-        keywords: ["group", "sidebar", "view"],
         intent: { kind: "view", change: { groupBy: g.value } },
       }),
     ),
@@ -208,7 +205,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
         group: "sort-by",
         enabled: true,
         checked: ctx.view.sortBy === s.value,
-        keywords: ["sort", "order", "sidebar", "view"],
+        keywords: ["order", ...(s.value === "recent" ? ["recent"] : ["alphabetical"])],
         intent: { kind: "view", change: { sortBy: s.value } },
       }),
     ),

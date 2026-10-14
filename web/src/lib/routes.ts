@@ -11,36 +11,18 @@
  * The Settings destinations, in the order the command palette offers them. Each one addresses a
  * page; Radius is a section of the Providers page rather than a page of its own, so `/settings/radius`
  * and its palette row open Providers with the Radius section revealed. A destination is added here once:
- * Settings navigation, the route parser and the palette's rows all read this list.
+ * Settings navigation, the route parser and the palette's rows all read this list. A destination
+ * carries no search words: the palette already matches the label the user reads.
  */
 export const SETTINGS_SECTIONS = [
-  {
-    id: "providers",
-    label: "Providers",
-    icon: "plug",
-    page: "providers",
-    keywords: ["settings", "oauth", "sign in"],
-  },
-  {
-    id: "radius",
-    label: "Radius",
-    icon: "radius",
-    page: "providers",
-    keywords: ["settings", "setup", "oauth", "mcp", "web search", "providers"],
-  },
-  {
-    id: "mcp",
-    label: "MCP",
-    icon: "server",
-    page: "mcp",
-    keywords: ["settings", "servers", "tools", "linear", "install", "sign in"],
-  },
+  { id: "providers", label: "Providers", icon: "plug", page: "providers" },
+  { id: "radius", label: "Radius", icon: "radius", page: "providers" },
+  { id: "mcp", label: "MCP", icon: "server", page: "mcp" },
 ] as const satisfies readonly {
   id: string;
   label: string;
   icon: string;
   page: string;
-  keywords: readonly string[];
 }[];
 
 /** Settings navigation lists one row per page, so Radius appears only inside Providers. */

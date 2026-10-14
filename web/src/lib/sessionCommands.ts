@@ -86,7 +86,7 @@ export interface SessionCommand {
   enabled: boolean;
   /** A display choice that is current. */
   checked?: boolean;
-  /** Extra palette search words. */
+  /** Direct synonyms of the label, for palette search; not topics or what the command touches. */
   keywords?: readonly string[];
   /** Secondary text the palette shows after the label. */
   detail?: string;
@@ -191,6 +191,7 @@ export function sessionCommands(
         icon: "copy",
         group: "copy",
         enabled: true,
+        keywords: ["path", "cwd"],
         intent: { kind: "copy", value: session.cwd, label: "Working directory" },
       },
       ...(ctx.branch
@@ -215,7 +216,7 @@ export function sessionCommands(
       },
       {
         id: "copy-all",
-        label: "Copy all",
+        label: "Copy session details",
         icon: "copy",
         group: "copy",
         enabled: true,
@@ -227,7 +228,7 @@ export function sessionCommands(
         icon: "open-file",
         group: "open",
         enabled: !!ctx.workspace && !session.state.checkoutMissing,
-        keywords: ["file", "read", "path"],
+        keywords: ["read"],
         intent: { kind: "open-file" },
       },
       {
@@ -236,7 +237,7 @@ export function sessionCommands(
         icon: "changes",
         group: "open",
         enabled: ctx.canOpenChanges,
-        keywords: ["diff", "review", "working tree"],
+        keywords: ["diff"],
         intent: { kind: "changes" },
       },
       {
@@ -245,7 +246,7 @@ export function sessionCommands(
         icon: "pull-request",
         group: "open",
         enabled: !!session.sessionId,
-        keywords: ["github", "link", "pr"],
+        keywords: ["pr"],
         intent: { kind: "pull-request" },
       },
       ...SESSION_DISPLAYS.map((d) => ({
@@ -255,7 +256,6 @@ export function sessionCommands(
         group: "display" as const,
         enabled: true,
         checked: display === d.value,
-        keywords: ["display", "view", "messages", "transcript"],
         intent: { kind: "display" as const, display: d.value },
       })),
     );
@@ -273,6 +273,7 @@ export function sessionCommands(
         label: "Rename",
         icon: "rename",
         group: "manage",
+        keywords: ["title"],
         enabled: !!subject && canRenameSession(state, subject),
         intent: { kind: "rename", target: subject },
       },
@@ -304,7 +305,7 @@ export function sessionCommands(
               icon: "share" as const,
               group: "share" as const,
               enabled: !!subject && canShareSession(state, subject),
-              keywords: ["radius", "link", "publish"],
+              keywords: ["link", "publish"],
               intent: { kind: "share" as const, target: subject },
             },
           ]
@@ -338,7 +339,7 @@ export function sessionCommands(
       icon: "new",
       group: "create",
       enabled: !session.state.checkoutMissing,
-      keywords: ["new", "here", "directory"],
+      keywords: ["directory"],
       detail: session.cwd,
       intent: { kind: "new-session", cwd: session.cwd },
     });

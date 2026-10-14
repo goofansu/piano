@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SessionState, WorktreeView } from "../shared/wire.ts";
-import { commandPalette, RECENT_SESSION_LIMIT } from "../web/src/lib/commandPalette.ts";
+import {
+  commandPalette,
+  paletteFilter,
+  RECENT_SESSION_LIMIT,
+} from "../web/src/lib/commandPalette.ts";
 import { type GlobalCommandContext, globalCommands } from "../web/src/lib/globalCommands.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
@@ -115,6 +119,63 @@ test("groups come in order, with Session commands only while a session is select
   );
   const commands = palette(inSession).find((g) => g.id === "session");
   assert.ok(commands?.id === "session" && commands.rows.length > 0);
+});
+
+test("search uses direct command synonyms, not related topics or opposite display choices", () => {
+  const state: AppState = {
+    ...inSession,
+    trusts: { "/repo": { required: true, trusted: true } },
+  };
+  const commands = [
+    ...globalCommands(state, { ...ctx, settingsOpen: true }),
+    ...sessionCommands(state, undefined, { radiusSignedIn: true }),
+  ];
+  const matches = (query: string) =>
+    commands
+      .filter((c) => paletteFilter(c.label, query, c.keywords ? [...c.keywords] : undefined) > 0)
+      .map((c) => c.id);
+  assert.ok(commands.some((c) => c.label === "Untrust folder"));
+  assert.deepEqual(matches("skill"), []);
+  assert.ok(!matches("settings").includes("trust"));
+  assert.ok(!matches("session").includes("home"));
+  assert.deepEqual(matches("messages"), ["display-messages"]);
+  assert.deepEqual(matches("radius"), ["settings-radius"]);
+  assert.deepEqual(matches("web search"), []);
+  assert.deepEqual(matches("diff"), ["changes"]);
+  assert.deepEqual(matches("theme"), ["appearance-light", "appearance-dark", "appearance-system"]);
+  assert.ok(matches("pr").includes("pull-request"));
+  assert.deepEqual(matches("path"), ["copy-working-directory"]);
+});
+
+test("label matches rank ahead of aliases, without aliases changing a label match's score", () => {
+  const label = paletteFilter("Discuss theme choices", "theme");
+  const alias = paletteFilter("Dark appearance", "theme", ["theme"]);
+  assert.ok(alias > 0, "direct synonyms remain searchable");
+  assert.ok(label > alias, "an obvious title match beats a hidden keyword");
+  assert.equal(
+    paletteFilter("Dark appearance", "dark", ["theme"]),
+    paletteFilter("Dark appearance", "dark"),
+  );
+  assert.equal(paletteFilter("Changes", "no such command", ["diff"]), 0);
+  assert.ok(paletteFilter("Dark appearance", "dark theme", ["theme"]) > 0);
+  assert.ok(paletteFilter("Dark appearance", "theme dark", ["theme"]) > 0);
+  assert.equal(paletteFilter("Dark appearance", "path", ["theme"]), 0);
+  assert.ok(paletteFilter("Dark appearance", "  DARK   THEME  ", ["theme"]) > 0);
+  assert.ok(paletteFilter("Copy session details", "details copy") > alias);
+  assert.ok(paletteFilter("Copy git branch", "branch copy") > alias);
+});
+
+test("newly matching rows arrive ranked, rather than relying on cmdk to sort absent DOM items", () => {
+  const state: AppState = {
+    ...home,
+    sessionReferences: [
+      sessionReference("/repo", "skill-session", { title: "Review skill definitions" }),
+      sessionReference("/repo", "theme-session", { title: "Discuss theme choices" }),
+    ],
+  };
+  const sessions = palette(state, "theme").find((g) => g.id === "sessions");
+  assert.ok(sessions?.id === "sessions");
+  assert.equal(sessions.rows[0]?.label, "Discuss theme choices");
 });
 
 test("the current appearance is checked, as in the View menu", () => {
