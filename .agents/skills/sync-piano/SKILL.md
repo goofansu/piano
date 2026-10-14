@@ -16,39 +16,26 @@ Run `ssh exe.dev ls --json`. Select every VM whose `tags` array contains exactly
 
 ## 2. Sync and build each checkout
 
-Use the local repository root and `/home/exedev/piano` on each selected VM. Independent machines may run in parallel.
+Run [scripts/sync-checkout.sh](scripts/sync-checkout.sh) with the frozen SHA. From the local repository root:
 
-Before updating each checkout, require a clean `git status --porcelain` and branch `main`. Fetch `origin main`, then `git merge --ff-only <target-SHA>`. Require `git rev-parse HEAD` to equal the frozen target. If the checkout is dirty, on another branch, ahead, divergent, missing, or unreachable, report it as blocked and continue the other machines. Preserve local changes and history.
+```bash
+script=.agents/skills/sync-piano/scripts/sync-checkout.sh
+bash "$script" local "$target"
+ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$ssh_dest" \
+  "bash -s -- remote '$target'" < "$script"
+```
 
-Run `npm ci` and `npm run build`, retaining their output. On remote machines, prepend `/home/exedev/.local/bin:/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin` to `PATH`. A checkout is ready only when its revision matches and both commands succeed. This is deployment, not implementation: use the existing verification evidence rather than repeating the development suite.
+Retain each command's stdout/stderr in a separate local log. Independent machines may run in parallel. The script requires a clean checkout on `main`, fast-forwards to the target, checks the resulting revision, and runs `npm ci` and `npm run build`. Remote mode uses `/home/exedev/piano`, the hosted PATH and exe.dev's HTTPS GitHub integration, leaving `origin` unchanged. Local mode derives the repository root from the script location; `--help` documents an optional local root override.
+
+A failed command is blocked, not ready. Continue the other machines and preserve blocked checkouts' local changes and history. This is deployment, not implementation: use the existing verification evidence rather than repeating the development suite.
 
 ## 3. Restart ready remote services
 
-After each remote build succeeds, schedule a uniquely named transient systemd unit outside `piano.service`'s process tree. For this skill, gate the restart on RPC processes: check immediately, then wait 600 seconds and check again whenever any are present. Repeat without a timeout until none remain, then restart. An idle RPC process still counts as a running session. Each machine waits independently; keep the loop alive on the remote VM rather than relying on the SSH connection. For example, over SSH:
-
-```bash
-sudo systemd-run --collect --unit="piano-deploy-$(date +%s)-$$" /bin/bash -c '
-  exec > /tmp/piano-deploy.log 2>&1
-  while true; do
-    date -Is
-    pgrep -f -- "(^|[[:space:]])--mode(=|[[:space:]]+)rpc([[:space:]]|$)"
-    status=$?
-    case "$status" in
-      0) echo "RPC sessions present; checking again in 10 minutes"; sleep 600 ;;
-      1) echo "No RPC sessions; restarting"; break ;;
-      *) echo "RPC process check failed; restart blocked"; exit 1 ;;
-    esac
-  done
-  systemctl restart piano.service &&
-  curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/folders -o /dev/null &&
-  curl -fsS http://127.0.0.1:8000/ -o /dev/null &&
-  echo "DEPLOY OK"
-'
-```
+After a successful remote build, the script schedules a uniquely named transient systemd unit outside `piano.service`'s process tree and prints `UNIT` and `LOG`. Record both. The job checks for RPC processes immediately, then waits 600 seconds and checks again whenever any are present, without a timeout. An idle RPC process still counts as a running session. Each machine's loop survives a dropped SSH connection.
 
 Retain RPC PIDs and check timestamps in the remote log. The check covers remote processes using the RPC mode flag, including sessions outside Piano. There is a small check/restart race: a session starting after the final check can still be interrupted.
 
-While the job waits, report it as pending, not deployed. Continue monitoring until it restarts or fails; a dropped SSH connection does not authorize skipping the gate. Read `/tmp/piano-deploy.log` over SSH after the job finishes. Require this run's `DEPLOY OK` and active `piano.service`, `piano-web.socket`, and `piano-web.service`. If still pending, inspect the transient unit; if failed, retain its log and report the failure. Submission of a restart job alone is not completion.
+While the job waits, report it as pending, not deployed. Continue monitoring until it restarts or fails; a dropped SSH connection does not authorize skipping the gate. Read the emitted `LOG` path over SSH after the job finishes. Require this run's `DEPLOY OK` and active `piano.service`, `piano-web.socket`, and `piano-web.service`. If still pending, inspect the transient unit; if failed, retain its log and report the failure. Submission of a restart job alone is not completion.
 
 Keep registry data, credentials, access policy, and proxy units unchanged.
 
