@@ -31,6 +31,8 @@ export interface ModelPickerInput extends ModelPickerAvailability {
   effort: ThinkingLevel;
   /** The search box's text. */
   query: string;
+  /** Selection when the picker opened; stays fixed until it closes. */
+  openingModel?: string;
   /** No directory is chosen yet, so there is no catalog to wait for. */
   noDirectory: boolean;
   /** A model the user just chose; a hosted session reports it back asynchronously. */
@@ -47,7 +49,7 @@ export interface ModelPickerView {
   /** The label is a placeholder while the catalog loads. */
   shimmer: boolean;
   triggerEnabled: boolean;
-  /** Catalog models matching the search literally, in catalog order. */
+  /** Empty search promotes the opening selection; search matches stay in catalog order. */
   visibleModels: readonly ModelChoice[];
   /** What the list says when no model is visible. */
   emptyText: string;
@@ -71,7 +73,10 @@ export function modelPickerView(s: ModelPickerInput): ModelPickerView {
     ? models.filter((m) =>
         [m.ref, m.id, m.provider, m.name ?? ""].some((text) => text.toLowerCase().includes(needle)),
       )
-    : models;
+    : [
+        ...models.filter((m) => m.ref === s.openingModel),
+        ...models.filter((m) => m.ref !== s.openingModel),
+      ];
   const waitingForModel = s.chosen !== null && s.chosen !== shown;
   const isDefault =
     !!shown && shown === catalog?.defaultModel && s.effort === catalog.defaultThinkingLevel;

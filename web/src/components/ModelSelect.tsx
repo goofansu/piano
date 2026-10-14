@@ -71,6 +71,7 @@ export function ModelSelect({
     setOpen(false);
   };
   const [query, setQuery] = useState("");
+  const [openingModel, setOpeningModel] = useState(value || catalog?.defaultModel || "");
   useEffect(() => {
     if (!open) return;
     const dismiss = () => setOpen(false);
@@ -83,6 +84,7 @@ export function ModelSelect({
     value,
     effort,
     query,
+    openingModel,
     disabled: !!disabled,
     canRefresh: !!refresh,
     noDirectory: !!noDirectory,
@@ -90,6 +92,9 @@ export function ModelSelect({
     saving,
   });
   const want = view.shown;
+  // Snapshot while closed, including externally controlled opens. Selection must not move rows
+  // under the pointer or reset keyboard navigation during this visit to the picker.
+  if (!open && openingModel !== want) setOpeningModel(want);
   useEffect(() => {
     if (!open) {
       setFocusModel(null);
@@ -196,6 +201,7 @@ export function ModelSelect({
         }}
       >
         <Command
+          defaultValue={openingModel}
           shouldFilter={false}
           onKeyDown={(event) => {
             // cmdk already ignores IME; holding Enter must not accept a second model.

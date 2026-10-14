@@ -93,6 +93,16 @@ test("search matches provider, id or name literally and keeps catalog order", ()
   );
 });
 
+test("empty search promotes only the opening selection, without duplicates or live reordering", () => {
+  const refs = (over: Partial<ModelPickerInput> = {}) =>
+    view({ openingModel: "openai/gpt-y", ...over }).visibleModels.map((m) => m.ref);
+  assert.deepEqual(refs(), ["openai/gpt-y", "anthropic/claude-x"]);
+  assert.deepEqual(refs({ value: "anthropic/claude-x" }), ["openai/gpt-y", "anthropic/claude-x"]);
+  assert.deepEqual(refs({ query: "-" }), ["anthropic/claude-x", "openai/gpt-y"]);
+  assert.deepEqual(refs({ query: "claude" }), ["anthropic/claude-x"]);
+  assert.deepEqual(refs({ openingModel: "missing/model" }), ["anthropic/claude-x", "openai/gpt-y"]);
+});
+
 test("the shown selection is the default only when both model and effort match Pi's", () => {
   const same = view({ value: "anthropic/claude-x", effort: "medium" });
   assert.equal(same.isDefault, true);
