@@ -643,8 +643,9 @@ function FoldedOutput({
   const shown = all ? lines : lines.slice(0, PREVIEW_LINES);
   const hidden = lines.length - shown.length;
   const visible = clamp(shown.join("\n"), all ? 20000 : 2000);
+  // A block, never a fragment: inside a flex column the fold button would stretch and centre.
   return (
-    <>
+    <div>
       {markdown ? (
         <Markdown text={visible} className={cn("prose-chat", className)} />
       ) : (
@@ -678,7 +679,7 @@ function FoldedOutput({
           Show less
         </Button>
       )}
-    </>
+    </div>
   );
 }
 
