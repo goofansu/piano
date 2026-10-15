@@ -869,3 +869,35 @@ test("a wait that delivered one Run speaks for that Run: its answer, and its spe
     meta: "sub-1 · run-1 · 2.7s · $0.0076 · openai/gpt-6.1-sol",
   });
 });
+
+test("a wait over several Runs labels each block as the meta line would: id, profile, status, spend", () => {
+  const run = (n: number) => ({
+    runId: `run-${n}`,
+    profile: "general-purpose",
+    status: "completed" as const,
+    usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, cost: 0.0144 },
+    model: "claude-opus-5",
+    finalOutput: { kind: "retained" as const, text: `hi ${n}` },
+    durationMillis: 8900,
+  });
+  const [facts] = cardFacts([
+    cardRow("wait", {
+      kind: "collection",
+      scope: "named",
+      status: "Delivered 2 results",
+      runs: [run(1), run(3)],
+      stillRunning: 0,
+      unknown: 0,
+      unavailable: 0,
+      noActiveRuns: false,
+      attention: false,
+    }),
+  ]);
+  assert.deepEqual(
+    facts!.body.outputs.map((o) => o.label),
+    [
+      "run-1 · general-purpose · completed · 8.9s · $0.0144 · claude-opus-5",
+      "run-3 · general-purpose · completed · 8.9s · $0.0144 · claude-opus-5",
+    ],
+  );
+});

@@ -214,6 +214,17 @@ const formatDuration = (ms: number): string => {
     : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 };
 
+/** A Run's duration, cost and model, in the order every quiet line prints them. */
+const spendParts = (run: {
+  durationMillis?: number;
+  usage?: { cost: number };
+  model?: string;
+}): (string | undefined)[] => [
+  run.durationMillis !== undefined ? formatDuration(run.durationMillis) : undefined,
+  run.usage?.cost ? `$${run.usage.cost.toFixed(4)}` : undefined,
+  run.model,
+];
+
 /** One quiet line of a Run's identity and spend, from whichever facts the card carries. A wait
  * that delivered exactly one Run speaks for that Run, spend included. */
 function metaOf(card: SubagentCard): string | undefined {
@@ -221,11 +232,10 @@ function metaOf(card: SubagentCard): string | undefined {
   const parts = [
     "subagentId" in card ? card.subagentId : undefined,
     "runId" in card ? card.runId : undefined,
-    "durationMillis" in card && card.durationMillis !== undefined
-      ? formatDuration(card.durationMillis)
-      : undefined,
-    spend && "usage" in spend && spend.usage?.cost ? `$${spend.usage.cost.toFixed(4)}` : undefined,
-    spend && "model" in spend ? spend.model : undefined,
+    ...spendParts({
+      ...("durationMillis" in card ? { durationMillis: card.durationMillis } : {}),
+      ...(spend && "usage" in spend ? { usage: spend.usage, model: spend.model } : {}),
+    }),
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : undefined;
 }
@@ -276,14 +286,7 @@ function outputsOf(
       if (card.runs.length === 0) return [];
       if (!card.runs.some((run) => run.finalOutput)) return raw;
       return card.runs.map((run) => ({
-        label: [
-          run.runId,
-          run.profile,
-          run.status,
-          run.durationMillis !== undefined ? formatDuration(run.durationMillis) : undefined,
-        ]
-          .filter(Boolean)
-          .join(" · "),
+        label: [run.runId, run.profile, run.status, ...spendParts(run)].filter(Boolean).join(" · "),
         ...answerOf(run.finalOutput),
         markdown: !!answerOf(run.finalOutput)?.markdown,
       }));
