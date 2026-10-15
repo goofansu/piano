@@ -450,7 +450,7 @@ test("each subagent card kind has its title and accessible name, and opens exact
     cardRow("wait", {
       kind: "collection",
       scope: "named",
-      status: "Delivered 1 result",
+      status: "Delivered 1 result · 1 unavailable · 2 unknown",
       runs: [{ runId: "run-1", profile: "reviewer", status: "completed" }],
       stillRunning: 0,
       unknown: 2,
@@ -519,10 +519,7 @@ test("each subagent card kind has its title and accessible name, and opens exact
       ],
       [{ kind: "text", label: "Guidance", text: "Hurry" }],
       [
-        {
-          kind: "note",
-          text: "Delivered 1 · Unavailable 1 · Still running when checked 0 · Unknown 2",
-        },
+        { kind: "note", text: "Delivered 1 result · 1 unavailable · 2 unknown" },
         { kind: "run", text: "run-1 · reviewer · completed" },
       ],
       [{ kind: "note", text: "Duration 0.0s" }],

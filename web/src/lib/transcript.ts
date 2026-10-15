@@ -24,7 +24,7 @@ export type SubagentDetail =
   | { kind: "identity"; subagentId?: string; runId?: string }
   /** What was sent to the Subagent, under its label. */
   | { kind: "text"; label: "Prompt" | "Guidance"; text: string }
-  /** A quiet summary line: a refusal's full phrase, a duration or a collection's counts. */
+  /** A quiet summary line: a status with its clauses, or a duration. */
   | { kind: "note"; text: string }
   /** One Run's line in a collection or cancellation, led by its Run ID. */
   | { kind: "run"; text: string };
@@ -215,14 +215,9 @@ function subagentDetails(card: SubagentCard): SubagentDetail[] {
     details.push({ kind: "text", label: "Guidance", text: card.message });
   if (card.kind === "result" && card.durationMillis !== undefined)
     details.push({ kind: "note", text: `Duration ${(card.durationMillis / 1000).toFixed(1)}s` });
-  if (card.kind === "collection") {
-    details.push({
-      kind: "note",
-      text: `Delivered ${card.runs.length} · Unavailable ${card.unavailable} · Still running when checked ${card.stillRunning} · Unknown ${card.unknown}`,
-    });
+  if (card.kind === "collection")
     for (const run of card.runs)
       details.push({ kind: "run", text: `${run.runId} · ${run.profile} · ${run.status}` });
-  }
   if (card.kind === "cancellation")
     for (const outcome of card.outcomes)
       details.push({
@@ -258,13 +253,11 @@ function subagentFacts(
   // pi-subagent phrases a status as a head and clauses ("Resume refused · unknown Subagent").
   // The head is the badge; the whole phrase opens the details, but only while the clauses
   // qualify the head the card itself reported, never a settled status another card reported
-  // later. A collection's own counts line already says what its clauses say.
+  // later.
   const [head = "", ...clauses] = card.status.split(" · ");
   const statusLabel = terminal && head !== titleCase(terminal) ? titleCase(terminal) : head;
   const statusNote: SubagentDetail[] =
-    clauses.length && statusLabel === head && card.kind !== "collection"
-      ? [{ kind: "note", text: card.status }]
-      : [];
+    clauses.length && statusLabel === head ? [{ kind: "note", text: card.status }] : [];
   const badge: Badge =
     terminal === "completed"
       ? "success"
