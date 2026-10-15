@@ -53,7 +53,11 @@ content-signature classification, filename language inference and bounded reads.
 and executable formats are refused; extensions alone never authorize binary rendering. A file
 whose first 8 KiB are NUL-free UTF-8 is text unless its extension names a binary format, so prose
 that happens to start like a signature (`BM25…`, `ID3…`, `%PDF…`) previews as text. A file
-that changes length during acquisition must be reread.
+that changes length during acquisition must be reread. The initial sample only selects a candidate
+format: **all text bytes** must subsequently decode as strict UTF-8 with no NUL bytes. Empty text
+and a leading UTF-8 BOM are accepted; text extensions and syntax validity are not allowlists.
+See the [text-file checking research](research/2026-10-15-text-file-validation.md) for the proposed
+alignment with future composer text uploads (not yet implemented).
 
 `POST /api/workspace/file?workspaceId=…` carries the path in its JSON body, never its URL.
 Text responses use JSON and the existing display-redaction policy. Binary responses use a bounded

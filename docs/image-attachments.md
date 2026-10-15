@@ -98,7 +98,10 @@ parent and checks the installed Pi accepts an image.
 
 Constants live in `shared/attachments.ts`; the wire schema and browser use them. Future increases
 need concrete user examples plus large-upload checks and a memory/transport review. General file
-support needs its own type and policy, not a broader image MIME allowlist.
+support needs its own type and policy, not a broader image MIME allowlist. The
+[text-file checking research](research/2026-10-15-text-file-validation.md) proposes sharing the
+workspace preview's strict UTF-8, NUL-free, 1 MiB text rule. Composer text uploads and their
+aggregate/context budget remain unimplemented; this does not change the image policy above.
 
 Activation requires a UI build, `piano.service` restart for server validation, and browser reload.
 No build, deployment or restart was performed as part of this change; no proxy restart is needed.
