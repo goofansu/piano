@@ -236,17 +236,21 @@ test("Links lists the selected session's web links: the latest few at the root, 
     "Session commands",
     "Links",
   ]);
-  assert.deepEqual(links(linked), [
-    "https://github.com/a/b/pull/9",
-    "https://example.com/page-4",
-    "https://example.com/page-5",
-    "https://example.com/page-6",
-    "https://example.com/page-0",
-  ]);
+  assert.deepEqual(
+    links(linked),
+    [
+      "https://example.com/page-6",
+      "https://example.com/page-5",
+      "https://example.com/page-4",
+      "https://github.com/a/b/pull/9",
+      "https://example.com/page-3",
+    ],
+    "newest first, at most the recent limit",
+  );
   // A search ranks rows (cmdk hides the ones that do not match), so every link is present.
   assert.deepEqual(
     links(linked, "example"),
-    urls.slice(4).concat(urls.slice(0, 4), "https://github.com/a/b/pull/9"),
+    [...urls].reverse().concat("https://github.com/a/b/pull/9"),
   );
   assert.equal(
     links(linked, "the pr")?.[0],

@@ -1,7 +1,7 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { MessageSquareQuoteIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,17 @@ export function SessionLinks({ messages, working = false }: Props) {
     () => jumpEntries(transcriptRows(messages, { working })),
     [messages, working],
   );
+  // Conversation order, newest at the bottom like the transcript; opening shows the end, since
+  // the links wanted are nearly always recent.
+  const list = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const box = list.current;
+      if (box) box.scrollTop = box.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
   if (links.length === 0) return null;
   const reveal = (link: SessionLink) => {
     setOpen(false);
@@ -60,7 +71,10 @@ export function SessionLinks({ messages, working = false }: Props) {
           className="w-[28rem] max-w-[calc(100vw-2rem)] gap-0 p-0 font-sans"
         >
           <p className="border-b border-line px-4 py-2.5 text-sm font-medium">Links</p>
-          <ul className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1">
+          <ul
+            ref={list}
+            className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1"
+          >
             {links.map((link) => (
               <li key={link.url} className="flex items-center pr-2">
                 <a

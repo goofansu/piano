@@ -35,12 +35,14 @@ export function displayUrl(url: string): string {
 }
 
 /**
- * Every web link in the user's and Pi's messages, deduplicated by URL, the most recently mentioned
- * first, each labelled by the markdown text it was last written with, if any.
+ * Every web link in the user's and Pi's messages in conversation order, each URL once at its
+ * latest mention and labelled by the markdown text it was last written with, if any. Reverse the
+ * list for newest first.
  */
 export function sessionLinks(messages: ReadonlyArray<RenderMsg>): SessionLink[] {
   const seen = new Set<string>();
-  const links: SessionLink[] = [];
+  // Message groups, newest first, so a URL is kept where it was mentioned last.
+  const groups: SessionLink[][] = [];
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]!;
     if (message.role !== "user" && message.role !== "assistant") continue;
@@ -58,14 +60,15 @@ export function sessionLinks(messages: ReadonlyArray<RenderMsg>): SessionLink[] 
       label ??= githubLabel(url);
       found.push({ url, ...(label ? { label } : {}), messageId: message.id });
     }
-    // Within one message, keep its order; across messages, the newest message comes first.
-    for (const link of found) {
-      if (seen.has(link.url)) continue;
+    const fresh = found.filter((link) => {
+      if (seen.has(link.url)) return false;
       seen.add(link.url);
-      links.push(link);
-    }
+      return true;
+    });
+    if (fresh.length) groups.push(fresh);
   }
-  return links;
+  // Oldest message first; within a message, the order the links were written in.
+  return groups.reverse().flat();
 }
 
 /** Open a session link the way the transcript's anchors do: a new tab that cannot reach this one. */

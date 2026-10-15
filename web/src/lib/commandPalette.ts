@@ -160,7 +160,8 @@ export function commandPalette(state: AppState, input: PaletteInput): PaletteGro
       heading: "Session commands",
       rows: input.sessionCommands.map(commandRow),
     });
-    const links = sessionLinks(state.session.messages);
+    // Newest first, like Recent sessions; the popover keeps conversation order.
+    const links = sessionLinks(state.session.messages).reverse();
     if (links.length > 0)
       groups.push({
         id: "links",

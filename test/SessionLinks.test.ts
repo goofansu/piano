@@ -5,7 +5,7 @@ import { displayUrl, sessionLinks } from "../web/src/lib/sessionLinks.ts";
 
 const msg = (id: string, role: RenderMsg["role"], text: string): RenderMsg => ({ id, role, text });
 
-test("links come from what the user and Pi wrote, newest first, each URL once", () => {
+test("links come from what the user and Pi wrote, in conversation order, each URL once at its latest mention", () => {
   const links = sessionLinks([
     msg("u1", "user", "Look at https://example.com/docs and https://github.com/a/b/pull/7."),
     msg("a1", "assistant", "Opened [the PR](https://github.com/a/b/pull/7) for you."),
@@ -18,9 +18,9 @@ test("links come from what the user and Pi wrote, newest first, each URL once", 
     msg("a2", "assistant", "Preview: <http://127.0.0.1:7172/s/abc>"),
   ]);
   assert.deepEqual(links, [
-    { url: "http://127.0.0.1:7172/s/abc", messageId: "a2" },
-    { url: "https://github.com/a/b/pull/7", label: "the PR", messageId: "a1" },
     { url: "https://example.com/docs", messageId: "u1" },
+    { url: "https://github.com/a/b/pull/7", label: "the PR", messageId: "a1" },
+    { url: "http://127.0.0.1:7172/s/abc", messageId: "a2" },
   ]);
 });
 
