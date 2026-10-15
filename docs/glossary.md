@@ -11,7 +11,8 @@ SQLite, UI and documentation. Some describe the target model in
 | Directory | A filesystem path a session runs in: a repository root, one of its worktrees, or any other folder. The New page picks a directory; the sidebar groups by repository. |
 | Worktree | A Git checkout of a folder. Piano lists worktrees from Git and creates new ones through Worktrunk (`wt`), the initial backend for their lifecycle. |
 | Workspace | Piano's context around a folder root or worktree, attaching sessions, revision, processes, evidence and integration state. Each has a registry ID, which URLs carry in place of its path. |
-| Session | One Pi conversation with Pi-owned history; an active session has one supervised `pi --mode rpc` child. Never called a "thread". |
+| Session | The Pi session, with Pi-owned history and identity. Use "session" for the entity and its lifecycle, never "thread". |
+| Conversation | The user messages and final assistant replies within a session, rather than its tool activity or intermediate assistant output. Use for navigation through that exchange, such as "Top of conversation" and "End of conversation"; not a separate session identity. |
 | Task | An intended outcome that may span sessions; session completion does not establish task acceptance. |
 | Acceptance criterion | An observable requirement with an identity and captured version, against which evidence can be evaluated. |
 | Revision | A captured identity for relevant repository content, including uncommitted inputs; HEAD alone is insufficient. |
