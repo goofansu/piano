@@ -1,6 +1,5 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
-import { LinkIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
@@ -52,16 +51,11 @@ export function SessionLinks({ messages }: Props) {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setOpen(false)}
-                  className={cn(listRow, "gap-3 px-4 py-1.5", link.label && "items-start")}
+                  className={cn(listRow, "px-4 py-1.5")}
                 >
-                  <span
-                    className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-3 [&_svg]:size-3.5"
-                    aria-hidden
-                  >
-                    <LinkIcon />
-                  </span>
                   {/* Two lines: links in one session mostly share a prefix, so a URL cut short
-                      after the host says nothing. The title, then the whole URL below it. */}
+                      after the host says nothing. The title, then the whole URL below it. Every
+                      row is a link, so no glyph marks it as one. */}
                   <span className="flex min-w-0 flex-1 flex-col">
                     {link.label && <span className="truncate text-ink">{link.label}</span>}
                     <span

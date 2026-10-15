@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { CheckIcon, LinkIcon } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { CommandIcon, useGlobalCommands, useSessionCommands } from "@/components/CommandHost";
@@ -146,7 +146,6 @@ export function CommandPalette({ state }: Props) {
                           onSelect={() => run(() => openLink(r.link.url))}
                           className="gap-3"
                         >
-                          <LinkIcon />
                           {r.link.label ? (
                             <>
                               <span className="min-w-0 max-w-[45%] shrink-0 truncate">
