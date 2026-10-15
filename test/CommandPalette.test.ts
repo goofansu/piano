@@ -206,3 +206,57 @@ test("the current appearance is checked, as in the View menu", () => {
     "one current choice per kind",
   );
 });
+
+test("Links lists the selected session's web links: the latest few at the root, every one in a search", () => {
+  const message = (id: string, role: "user" | "assistant", text: string) => ({ id, role, text });
+  const urls = Array.from({ length: 7 }, (_, i) => `https://example.com/page-${i}`);
+  const linked: AppState = {
+    ...inSession,
+    session: {
+      ...selected,
+      messages: [
+        message("u1", "user", `Compare ${urls.slice(0, 4).join(" ")}`),
+        message(
+          "a1",
+          "assistant",
+          `See [the PR](https://github.com/a/b/pull/9) and ${urls.slice(4).join(" ")}`,
+        ),
+      ],
+    },
+  };
+  const links = (state: AppState, search = "") => {
+    const group = palette(state, search).find((g) => g.id === "links");
+    return group?.id === "links" ? group.rows.map((r) => r.link.url) : undefined;
+  };
+  assert.equal(links(inSession), undefined, "a session without links has no Links group");
+  assert.deepEqual(headings(linked), [
+    "Recent sessions",
+    "Global commands",
+    "Session commands",
+    "Links",
+  ]);
+  assert.deepEqual(links(linked), [
+    "https://github.com/a/b/pull/9",
+    "https://example.com/page-4",
+    "https://example.com/page-5",
+    "https://example.com/page-6",
+    "https://example.com/page-0",
+  ]);
+  // A search ranks rows (cmdk hides the ones that do not match), so every link is present.
+  assert.deepEqual(
+    links(linked, "example"),
+    urls.slice(4).concat(urls.slice(0, 4), "https://github.com/a/b/pull/9"),
+  );
+  assert.equal(
+    links(linked, "the pr")?.[0],
+    "https://github.com/a/b/pull/9",
+    "a link's label is searchable",
+  );
+  assert.equal(headings(linked, "page-2")[0], "Links", "a URL fragment ranks Links first");
+  const sessionGroup = palette(linked).find((g) => g.id === "session");
+  assert.ok(
+    sessionGroup?.id === "session" &&
+      sessionGroup.rows.some((r) => r.command.id === "links" && r.enabled),
+    "the Links command is enabled while the session has links",
+  );
+});

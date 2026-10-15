@@ -9,6 +9,7 @@ import type { AppState } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import type { SessionCommand } from "./sessionCommands.ts";
+import { type SessionLink, sessionLinks } from "./sessionLinks.ts";
 
 /**
  * A row's own search text always outranks a match that needs a hidden alias. Keep cmdk's fuzzy
@@ -31,6 +32,8 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
 
 /** Before a search the palette offers this many recent sessions; a search reaches every one. */
 export const RECENT_SESSION_LIMIT = 8;
+/** Before a search the palette offers this many of the session's latest links; a search reaches every one. */
+export const RECENT_LINK_LIMIT = 5;
 
 export interface PaletteSessionRow {
   key: string;
@@ -61,10 +64,20 @@ export interface PaletteCommandRow<C extends GlobalCommand | SessionCommand> {
   command: C;
 }
 
+export interface PaletteLinkRow {
+  key: string;
+  /** cmdk's search text: the label and the URL. */
+  value: string;
+  keywords: string[];
+  link: SessionLink;
+}
+
 export type PaletteGroup =
   | { id: "sessions"; heading: "Recent sessions" | "Sessions"; rows: PaletteSessionRow[] }
   | { id: "global"; heading: "Global commands"; rows: PaletteCommandRow<GlobalCommand>[] }
-  | { id: "session"; heading: "Session commands"; rows: PaletteCommandRow<SessionCommand>[] };
+  | { id: "session"; heading: "Session commands"; rows: PaletteCommandRow<SessionCommand>[] }
+  /** The selected session's web links, each opened in a new tab. */
+  | { id: "links"; heading: "Links"; rows: PaletteLinkRow[] };
 
 export interface PaletteInput {
   search: string;
@@ -90,6 +103,15 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
   };
 }
 
+function linkRow(link: SessionLink): PaletteLinkRow {
+  return {
+    key: link.url,
+    value: `${link.label} ${link.url}`,
+    keywords: [link.url],
+    link,
+  };
+}
+
 function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteCommandRow<C> {
   return {
     key: c.id,
@@ -105,9 +127,10 @@ function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteComm
 
 /**
  * The palette's groups: sessions (the most recent few, titled "Recent sessions", until a search
- * reaches them all), Global commands, then Session commands only while a session is selected. Every
- * session that is not archived is reachable, including those whose folder is closed. A search ranks
- * rows within each group, and groups by their best row; ties keep that order.
+ * reaches them all), Global commands, then, only while a session is selected, Session commands and
+ * Links (the latest few the conversation mentions, until a search reaches them all). Every session
+ * that is not archived is reachable, including those whose folder is closed. A search ranks rows
+ * within each group, and groups by their best row; ties keep that order.
  */
 export function commandPalette(state: AppState, input: PaletteInput): PaletteGroup[] {
   const searching = !!input.search.trim();
@@ -124,12 +147,20 @@ export function commandPalette(state: AppState, input: PaletteInput): PaletteGro
     heading: "Global commands",
     rows: input.globalCommands.map(commandRow),
   });
-  if (state.view.kind === "session" && state.session)
+  if (state.view.kind === "session" && state.session) {
     groups.push({
       id: "session",
       heading: "Session commands",
       rows: input.sessionCommands.map(commandRow),
     });
+    const links = sessionLinks(state.session.messages);
+    if (links.length > 0)
+      groups.push({
+        id: "links",
+        heading: "Links",
+        rows: (searching ? links : links.slice(0, RECENT_LINK_LIMIT)).map(linkRow),
+      });
+  }
   if (!searching) return groups;
   // cmdk sorts the mounted DOM before newly matching items appear, and leaves groups in React's
   // order. Rank both here, so a row revealed by this query is already in the right place.

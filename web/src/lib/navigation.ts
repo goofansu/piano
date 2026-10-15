@@ -16,7 +16,7 @@ export type SidebarPanel = "changes" | { kind: "file"; path: string };
  * Something that belongs to the selected session and closes when that session changes: a right
  * sidebar view, or the PR. The sidebar is nonmodal, so the PR opens over it without replacing it.
  */
-export type Panel = SidebarPanel | "pr";
+export type Panel = SidebarPanel | "pr" | "links";
 
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
@@ -28,6 +28,8 @@ export interface NavigationState {
   settingsRequest: number;
   sidebar: SidebarPanel | null;
   pullRequest: boolean;
+  /** The composer's Links popover, which the palette's "Links" command also opens. */
+  links: boolean;
   palette: boolean;
 }
 
@@ -61,6 +63,7 @@ export interface Navigation {
   openPanel: (panel: Panel) => void;
   closeSidebar: () => void;
   closePullRequest: () => void;
+  closeLinks: () => void;
   setPalette: (open: boolean) => void;
 }
 
@@ -148,6 +151,7 @@ export function createNavigation({
     settingsRequest: 0,
     sidebar: null,
     pullRequest: false,
+    links: false,
     palette: false,
   };
   let notified = state;
@@ -203,7 +207,7 @@ export function createNavigation({
       const next = panelOwner(client.getState());
       if (next !== owner) {
         owner = next;
-        set({ sidebar: null, pullRequest: false });
+        set({ sidebar: null, pullRequest: false, links: false });
       }
     } finally {
       depth--;
@@ -289,12 +293,15 @@ export function createNavigation({
         set(
           panel === "pr"
             ? { settings: null, pullRequest: true }
-            : { settings: null, sidebar: panel },
+            : panel === "links"
+              ? { settings: null, links: true }
+              : { settings: null, sidebar: panel },
         );
         moved();
       }),
     closeSidebar: () => batch(() => set({ sidebar: null })),
     closePullRequest: () => batch(() => set({ pullRequest: false })),
+    closeLinks: () => batch(() => set({ links: false })),
     setPalette: (open) => batch(() => set({ palette: open })),
   };
 }

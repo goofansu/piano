@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, LinkIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { CommandIcon, useGlobalCommands, useSessionCommands } from "@/components/CommandHost";
@@ -16,6 +16,7 @@ import {
 import { commandPalette, paletteFilter } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod } from "@/lib/keys";
+import { openLink } from "@/lib/sessionLinks";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
@@ -136,28 +137,44 @@ export function CommandPalette({ state }: Props) {
                         {r.checked && <Current />}
                       </CommandItem>
                     ))
-                  : group.rows.map((r) => (
-                      <CommandItem
-                        key={r.key}
-                        value={r.value}
-                        keywords={r.keywords}
-                        disabled={!r.enabled}
-                        onSelect={() => run(() => runCommand(r.command))}
-                      >
-                        <CommandIcon icon={r.command.icon} />{" "}
-                        {r.detail ? (
-                          <>
-                            <span className="shrink-0">{r.label}</span>{" "}
-                            <span className="min-w-0 truncate font-mono text-xs text-ink-3">
-                              {abbrevPath(r.detail)}
-                            </span>
-                          </>
-                        ) : (
-                          r.label
-                        )}
-                        {r.checked && <Current />}
-                      </CommandItem>
-                    ))}
+                  : group.id === "links"
+                    ? group.rows.map((r) => (
+                        <CommandItem
+                          key={r.key}
+                          value={r.value}
+                          keywords={r.keywords}
+                          onSelect={() => run(() => openLink(r.link.url))}
+                          className="gap-3"
+                        >
+                          <LinkIcon />
+                          <span className="min-w-0 flex-1 truncate">{r.link.label}</span>
+                          <span className="min-w-0 max-w-[45%] shrink-0 truncate font-mono text-xs text-ink-3">
+                            {r.link.url}
+                          </span>
+                        </CommandItem>
+                      ))
+                    : group.rows.map((r) => (
+                        <CommandItem
+                          key={r.key}
+                          value={r.value}
+                          keywords={r.keywords}
+                          disabled={!r.enabled}
+                          onSelect={() => run(() => runCommand(r.command))}
+                        >
+                          <CommandIcon icon={r.command.icon} />{" "}
+                          {r.detail ? (
+                            <>
+                              <span className="shrink-0">{r.label}</span>{" "}
+                              <span className="min-w-0 truncate font-mono text-xs text-ink-3">
+                                {abbrevPath(r.detail)}
+                              </span>
+                            </>
+                          ) : (
+                            r.label
+                          )}
+                          {r.checked && <Current />}
+                        </CommandItem>
+                      ))}
             </CommandGroup>
           </Fragment>
         ))}
