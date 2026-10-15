@@ -24,7 +24,7 @@ export type SubagentDetail =
   | { kind: "identity"; subagentId?: string; runId?: string }
   /** What was sent to the Subagent, under its label. */
   | { kind: "text"; label: "Prompt" | "Guidance"; text: string }
-  /** A quiet summary line, such as a duration or a collection's counts. */
+  /** A quiet summary line: a refusal's full phrase, a duration or a collection's counts. */
   | { kind: "note"; text: string }
   /** One Run's line in a collection or cancellation, led by its Run ID. */
   | { kind: "run"; text: string };
@@ -41,11 +41,9 @@ export interface SubagentFacts {
   /** The run's settled status: reported by a later card, else by this card itself. */
   terminal?: TerminalStatus;
   /** The badge text: the status's head, before its first " · "; it names `terminal` whenever
-   * there is one, so it agrees with `badge`. */
+   * there is one, so it agrees with `badge`. The status's remaining clauses, such as why a
+   * request was refused, open the first line of `details`. */
   statusLabel: string;
-  /** The status's remaining clauses, shown as quiet text beside the badge: why a request was
-   * refused ("unknown Subagent"), what a result lacks, or a collection's further counts. */
-  statusDetail?: string;
   badge: Badge;
   /** The gutter dot: a failed call or Run, a completed Run, or neither. */
   dot: "err" | "ok" | "idle";
@@ -258,11 +256,15 @@ function subagentFacts(
 ): SubagentFacts {
   const terminal = reported ?? ("terminalStatus" in card ? card.terminalStatus : undefined);
   // pi-subagent phrases a status as a head and clauses ("Resume refused · unknown Subagent").
-  // The head is the badge; the clauses stay beside it, but only while they qualify the head
-  // the card itself reported, never a settled status another card reported later.
+  // The head is the badge; the whole phrase opens the details, but only while the clauses
+  // qualify the head the card itself reported, never a settled status another card reported
+  // later. A collection's own counts line already says what its clauses say.
   const [head = "", ...clauses] = card.status.split(" · ");
   const statusLabel = terminal && head !== titleCase(terminal) ? titleCase(terminal) : head;
-  const statusDetail = statusLabel === head ? clauses.join(" · ") : "";
+  const statusNote: SubagentDetail[] =
+    clauses.length && statusLabel === head && card.kind !== "collection"
+      ? [{ kind: "note", text: card.status }]
+      : [];
   const badge: Badge =
     terminal === "completed"
       ? "success"
@@ -281,7 +283,7 @@ function subagentFacts(
   const isResult = card.kind === "result" || card.kind === "collection";
   const profile = "profile" in card ? card.profile : undefined;
   const runId = "runId" in card ? card.runId : undefined;
-  const details = subagentDetails(card);
+  const details = [...statusNote, ...subagentDetails(card)];
   return {
     card,
     title,
@@ -291,7 +293,6 @@ function subagentFacts(
     ...(runId ? { runId } : {}),
     ...(terminal ? { terminal } : {}),
     statusLabel,
-    ...(statusDetail ? { statusDetail } : {}),
     badge,
     dot: failed || terminal === "failed" ? "err" : terminal === "completed" ? "ok" : "idle",
     failed,

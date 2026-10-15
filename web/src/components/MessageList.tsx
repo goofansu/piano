@@ -572,7 +572,6 @@ function SubagentCardView({
   profile,
   runId,
   statusLabel,
-  statusDetail,
   badge,
   dot,
   failed,
@@ -586,20 +585,15 @@ function SubagentCardView({
       glyph={<span className={cn("block size-2 rounded-full", SUBAGENT_DOT[dot])} />}
       header={
         <>
-          {/* One line at every width: the title keeps a few words and the quiet texts truncate,
-              so the pill, which never wraps or shrinks, lines up with its neighbours' pills.
-              A phone has room for the title and the status, not the profile. */}
+          {/* One line at every width: the title keeps a few words and the profile truncates, so
+              the pill, which never wraps or shrinks, lines up with its neighbours' pills. A phone
+              has room for the title and the status, not the profile. */}
           <span className="min-w-20 flex-1 truncate font-medium text-ink">
             {isResult && <span className="font-normal text-ink-3">Result · </span>}
             {title}
           </span>
           {profile && (
             <span className="max-w-28 shrink truncate text-ink-3 max-sm:hidden">{profile}</span>
-          )}
-          {statusDetail && (
-            <span data-slot="status-detail" className="max-w-56 shrink truncate text-ink-3">
-              {statusDetail}
-            </span>
           )}
           <Badge variant={badge}>{statusLabel}</Badge>
         </>

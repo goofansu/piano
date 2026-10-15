@@ -6,6 +6,7 @@ import { messageError } from "../web/src/lib/messageError.ts";
 import {
   jumpEntries,
   nestedStatus,
+  type SubagentFacts,
   type TranscriptOptions,
   type TranscriptRow,
   transcriptRows,
@@ -383,7 +384,7 @@ test("a delegation card shows its run's settled status from a later card, with b
   );
 });
 
-test("a card's own settled status keeps its clauses as detail, and its label never contradicts the badge", () => {
+test("a card's own settled status keeps its clauses in the details, and its label never contradicts the badge", () => {
   const card = (status: string): RenderMsg => ({
     id: status,
     role: "tool_result",
@@ -404,16 +405,16 @@ test("a card's own settled status keeps its clauses as detail, and its label nev
     (row) =>
       row.kind === "subagent" && [
         row.subagent.statusLabel,
-        row.subagent.statusDetail,
+        row.subagent.details,
         row.subagent.badge,
         row.subagent.hasDetails,
       ],
   );
   assert.deepEqual(labels, [
-    ["Failed", "Result unavailable", "destructive", false],
-    ["Failed", undefined, "destructive", false],
+    ["Failed", [{ kind: "note", text: "Failed · Result unavailable" }], "destructive", true],
+    ["Failed", [], "destructive", false],
     // A clause that qualified the card's own head would misdescribe the settled status.
-    ["Failed", undefined, "destructive", false],
+    ["Failed", [], "destructive", false],
   ]);
 });
 
@@ -585,22 +586,19 @@ test("a subagent card's badge warns only on attention, after its Run's outcome a
       attention: false,
     }),
   ]);
+  // The status's clauses are not in the header: the whole phrase opens the details instead.
+  const note = ({ details }: SubagentFacts) =>
+    details[0]?.kind === "note" ? details[0].text : undefined;
   assert.deepEqual(
-    facts.map(({ terminal, statusLabel, statusDetail, badge, dot }) => [
-      terminal,
-      statusLabel,
-      statusDetail,
-      badge,
-      dot,
-    ]),
+    facts.map((card) => [card.terminal, card.statusLabel, note(card), card.badge, card.dot]),
     [
       ["cancelled", "Cancelled", undefined, "secondary", "idle"],
       [undefined, "Started", undefined, "secondary", "idle"],
-      [undefined, "Start refused", "unknown Agent", "destructive", "idle"],
+      [undefined, "Start refused", "Start refused · unknown Agent", "destructive", "idle"],
       [undefined, "Still running when checked", undefined, "warning", "idle"],
-      ["failed", "Failed", "Result unavailable", "destructive", "err"],
-      [undefined, "Control refused", "mailbox full", "secondary", "idle"],
-      [undefined, "Control refused", "unknown Run", "warning", "idle"],
+      ["failed", "Failed", "Failed · Result unavailable", "destructive", "err"],
+      [undefined, "Control refused", "Control refused · mailbox full", "secondary", "idle"],
+      [undefined, "Control refused", "Control refused · unknown Run", "warning", "idle"],
       [undefined, "Already finished: 1", undefined, "secondary", "idle"],
     ],
   );
