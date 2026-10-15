@@ -1,8 +1,6 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
-import { LocateFixedIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { IconButton } from "@/components/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -18,8 +16,8 @@ interface Props {
 
 /**
  * The web links the conversation mentions, opened from the usage row beside Jump to message. Each
- * opens in a new tab; nothing is previewed in Piano. Beside each, "Show in conversation" scrolls
- * the transcript to where the link was mentioned last. Absent while the session has none.
+ * opens in a new tab; nothing is previewed in Piano. Beside each, Jump scrolls the transcript to
+ * the message that mentioned the link last. Absent while the session has none.
  */
 export function SessionLinks({ messages, working = false }: Props) {
   const [open, setOpen] = useState(false);
@@ -85,14 +83,16 @@ export function SessionLinks({ messages, working = false }: Props) {
                     </span>
                   </span>
                 </a>
-                <IconButton
-                  label="Show in conversation"
-                  side="left"
+                {/* The word, as Slack and Discord jump to a message, not a glyph: none means it. */}
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  aria-label="Jump to message"
                   className="shrink-0 text-ink-3"
                   onClick={() => reveal(link)}
                 >
-                  <LocateFixedIcon />
-                </IconButton>
+                  Jump
+                </Button>
               </li>
             ))}
           </ul>
