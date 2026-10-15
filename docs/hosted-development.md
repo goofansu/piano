@@ -53,15 +53,17 @@ When the changes are already verified and dependencies installed:
 
 ```bash
 cd /home/exedev/piano
-npm run build && sudo systemd-run --collect /bin/bash -c '
-  exec > /tmp/piano-deploy.log 2>&1
+npm run build && sudo install -d -m 0700 /var/log/piano-deploy && sudo systemd-run --collect /bin/bash -c '
+  exec > /var/log/piano-deploy/manual.log 2>&1
   systemctl restart piano.service &&
   curl --retry 20 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:8001/api/folders -o /dev/null &&
   curl -fsS http://127.0.0.1:8000/ -o /dev/null && echo "DEPLOY OK"
 '
 ```
 
-Confirm `DEPLOY OK` in `/tmp/piano-deploy.log`, then reload the browser. No proxy restart needed.
+Confirm `DEPLOY OK` with `sudo cat /var/log/piano-deploy/manual.log`, then reload the browser. No proxy
+restart needed. The log lives in a root-owned directory because the job runs as root and the hosts
+set `fs.protected_regular`, which stops root from writing a file another user created in `/tmp`.
 Keep deploy-only requests to this path; no new documents or repeat verification suite required.
 The cases below cover changes that need more than this path.
 

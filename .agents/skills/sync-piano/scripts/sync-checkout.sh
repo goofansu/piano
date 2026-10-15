@@ -7,7 +7,7 @@ usage() {
     'Usage: bash sync-checkout.sh local|remote <full-target-SHA> [local-repository-root]' \
     'Local: sync/install/build only. Remote: also schedule an RPC-gated restart.' \
     'Remote mode supports bash -s over SSH and uses /home/exedev/piano.' \
-    'Retain stdout/stderr; monitor the emitted UNIT and LOG until completion.'
+    'Retain stdout/stderr; monitor the emitted UNIT and LOG (root-owned, read with sudo) until completion.'
 }
 
 if [ "${1:-}" = --help ]; then
@@ -66,9 +66,11 @@ restart_when_idle() {
     echo 'DEPLOY OK'
 }
 
-# A private, unique log prevents stale success and shared /tmp symlink collisions.
-umask 077
-log=$(mktemp /tmp/piano-deploy.XXXXXXXX)
+# A private, unique log prevents stale success and shared /tmp symlink collisions. It is root-owned
+# in a root-owned directory: the job runs as root, and fs.protected_regular stops root from writing a
+# file another user created in /tmp. Read it with sudo.
+sudo install -d -m 0700 /var/log/piano-deploy
+log=$(sudo mktemp "/var/log/piano-deploy/$(date +%Y%m%dT%H%M%S)-XXXXXX.log")
 unit="piano-deploy-$(date +%s)-$$"
 printf 'UNIT=%s.service\nLOG=%s\n' "$unit" "$log"
 # No inherited errexit: pgrep exit 1 means idle, not a failed deployment.

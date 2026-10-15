@@ -35,7 +35,7 @@ After a successful remote build, the script schedules a uniquely named transient
 
 Retain RPC PIDs and check timestamps in the remote log. The check covers remote processes using the RPC mode flag, including sessions outside Piano. There is a small check/restart race: a session starting after the final check can still be interrupted.
 
-While the job waits, report it as pending, not deployed. Continue monitoring until it restarts or fails; a dropped SSH connection does not authorize skipping the gate. Read the emitted `LOG` path over SSH after the job finishes. Require this run's `DEPLOY OK` and active `piano.service`, `piano-web.socket`, and `piano-web.service`. If still pending, inspect the transient unit; if failed, retain its log and report the failure. Submission of a restart job alone is not completion.
+While the job waits, report it as pending, not deployed. Continue monitoring until it restarts or fails; a dropped SSH connection does not authorize skipping the gate. Read the emitted `LOG` path over SSH with `sudo cat` after the job finishes; it is root-owned under `/var/log/piano-deploy/`, and `journalctl -u <UNIT>` holds the same record. Require this run's `DEPLOY OK` and active `piano.service`, `piano-web.socket`, and `piano-web.service`. If still pending, inspect the transient unit; if failed, retain its log and report the failure. Submission of a restart job alone is not completion.
 
 Keep registry data, credentials, access policy, and proxy units unchanged.
 
