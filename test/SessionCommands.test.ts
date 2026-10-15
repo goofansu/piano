@@ -64,7 +64,6 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-all": true,
     changes: true,
     "pull-request": true,
-    links: false,
     "display-everything": true,
     "display-messages": true,
     rename: true,

@@ -1,13 +1,12 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { LinkIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { sessionLinks } from "@/lib/sessionLinks";
 import { listRow } from "@/lib/styles";
-import { useNavigation } from "@/lib/useNavigation";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
@@ -15,17 +14,15 @@ interface Props {
 
 /**
  * The web links the conversation mentions, opened from the usage row beside Jump to message. Each
- * opens in a new tab; nothing is previewed in Piano. The palette's "Links" command opens the same
- * popover through navigation. Absent while the session has none.
+ * opens in a new tab; nothing is previewed in Piano. Absent while the session has none.
  */
 export function SessionLinks({ messages }: Props) {
-  const { settings, links: opened, openPanel, closeLinks } = useNavigation();
+  const [open, setOpen] = useState(false);
   const links = useMemo(() => sessionLinks(messages), [messages]);
   if (links.length === 0) return null;
-  const open = !settings && opened;
   return (
     <>
-      <Popover open={open} onOpenChange={(next) => (next ? openPanel("links") : closeLinks())}>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
@@ -54,7 +51,7 @@ export function SessionLinks({ messages }: Props) {
                   href={link.url}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={closeLinks}
+                  onClick={() => setOpen(false)}
                   className={cn(listRow, "gap-3 px-4 py-1.5")}
                 >
                   <span
@@ -73,7 +70,7 @@ export function SessionLinks({ messages }: Props) {
           </ul>
         </PopoverContent>
       </Popover>
-      <Separator orientation="vertical" className="h-3! self-center!" />
+      <Separator orientation="vertical" className="h-3!" />
     </>
   );
 }

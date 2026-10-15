@@ -14,7 +14,6 @@ import {
   sessionWorking,
   workspaceFor,
 } from "./sessionContext.ts";
-import { sessionLinks } from "./sessionLinks.ts";
 
 export type SessionDisplay = "everything" | "messages";
 export const SESSION_DISPLAYS = [
@@ -31,7 +30,6 @@ export type SessionCommandId =
   | "copy-all"
   | "changes"
   | "pull-request"
-  | "links"
   | "display-everything"
   | "display-messages"
   | "rename"
@@ -55,7 +53,6 @@ export type SessionCommandIcon =
   | "copy"
   | "changes"
   | "pull-request"
-  | "links"
   | "everything"
   | "messages"
   | "rename"
@@ -71,7 +68,6 @@ export type SessionCommandIntent =
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
   | { kind: "pull-request" }
-  | { kind: "links" }
   | { kind: "display"; display: SessionDisplay }
   /** Without a target the selected session has no Pi session ID yet; such a command is never enabled. */
   | { kind: "rename" | "share" | "delete"; target: SessionTarget | undefined }
@@ -180,9 +176,7 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`).
- * - pull request, copy session ID: the selected session has a Pi session ID.
- * - links: the conversation mentions at least one web link (`sessionLinks`).
- * - new session here: the checkout is present.
+ * - pull request, copy session ID: the selected session has a Pi session ID. * - new session here: the checkout is present.
  * - copy and display commands: always.
  */
 export function sessionCommands(
@@ -260,15 +254,6 @@ export function sessionCommands(
         enabled: !!session.sessionId,
         keywords: ["pr"],
         intent: { kind: "pull-request" },
-      },
-      {
-        id: "links",
-        label: "Links",
-        icon: "links",
-        group: "open",
-        enabled: sessionLinks(session.messages).length > 0,
-        keywords: ["urls"],
-        intent: { kind: "links" },
       },
       ...SESSION_DISPLAYS.map((d) => ({
         id: `display-${d.value}` as const,

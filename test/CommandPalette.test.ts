@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   commandPalette,
+  LINKS_QUERY,
   paletteFilter,
   RECENT_SESSION_LIMIT,
 } from "../web/src/lib/commandPalette.ts";
@@ -253,16 +254,13 @@ test("Links lists the selected session's web links: the latest few at the root, 
     "a link's label is searchable",
   );
   assert.equal(headings(linked, "page-2")[0], "Links", "a URL fragment ranks Links first");
-  const linkGroup = palette(linked, "link").find((g) => g.id === "links");
-  assert.ok(
-    linkGroup?.id === "links" &&
-      linkGroup.rows.every((r) => paletteFilter(r.value, "link", r.keywords) > 0),
-    '"link" matches every link row',
-  );
-  const sessionGroup = palette(linked).find((g) => g.id === "session");
-  assert.ok(
-    sessionGroup?.id === "session" &&
-      sessionGroup.rows.some((r) => r.command.id === "links" && r.enabled),
-    "the Links command is enabled while the session has links",
-  );
+  // The links query reaches every link and nothing else, where a plain word fuzzy-matches titles.
+  const groups = palette(linked, LINKS_QUERY);
+  for (const group of groups) {
+    const matching = group.rows.filter(
+      (r) => paletteFilter(r.value, LINKS_QUERY, r.keywords) > 0,
+    ).length;
+    assert.equal(matching, group.id === "links" ? group.rows.length : 0, group.id);
+  }
+  assert.equal(groups[0]?.id, "links");
 });

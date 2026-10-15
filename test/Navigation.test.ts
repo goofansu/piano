@@ -212,7 +212,6 @@ test("a session's panels close when another session is selected, and opening one
     settingsRequest: 1,
     sidebar: "changes",
     pullRequest: false,
-    links: false,
     palette: false,
   });
   assert.equal(p.path(), "/s/a");
@@ -230,23 +229,11 @@ test("a session's panels close when another session is selected, and opening one
   p.navigation.closePullRequest();
   assert.deepEqual(p.navigation.getState().sidebar, { kind: "file", path: "docs/guide.md" });
 
-  p.navigation.openPanel("links");
-  assert.equal(p.navigation.getState().links, true);
-  assert.deepEqual(
-    p.navigation.getState().sidebar,
-    { kind: "file", path: "docs/guide.md" },
-    "the Links popover opens over the nonmodal sidebar without replacing it",
-  );
-  p.navigation.closeLinks();
-  assert.equal(p.navigation.getState().links, false);
-
   p.navigation.openPanel("pr");
-  p.navigation.openPanel("links");
   p.navigation.select("/scratch", "b");
   p.selected("b");
   assert.equal(p.navigation.getState().sidebar, null);
   assert.equal(p.navigation.getState().pullRequest, false);
-  assert.equal(p.navigation.getState().links, false);
   p.navigation.openPanel("changes");
   p.navigation.openPanel("pr");
   p.navigation.openNew();

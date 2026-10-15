@@ -104,9 +104,6 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "pull-request":
       effects.openPanel("pr");
       break;
-    case "links":
-      effects.openPanel("links");
-      break;
     case "display":
       effects.setDisplay(intent.display);
       break;

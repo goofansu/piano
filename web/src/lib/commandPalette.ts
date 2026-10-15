@@ -34,6 +34,8 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
 export const RECENT_SESSION_LIMIT = 8;
 /** Before a search the palette offers this many of the session's latest links; a search reaches every one. */
 export const RECENT_LINK_LIMIT = 5;
+/** The query that lists every link and only links; a plain word would also fuzzy-match sessions. */
+export const LINKS_QUERY = "!link";
 
 export interface PaletteSessionRow {
   key: string;
@@ -107,8 +109,8 @@ function linkRow(link: SessionLink): PaletteLinkRow {
   return {
     key: link.url,
     value: `${link.label} ${link.url}`,
-    // "link" finds every row, so the whole list is one query away.
-    keywords: ["link", link.url],
+    // "!link" reaches every row and nothing else: no title, folder or command contains "!".
+    keywords: [LINKS_QUERY, link.url],
     link,
   };
 }
@@ -129,7 +131,8 @@ function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteComm
 /**
  * The palette's groups: sessions (the most recent few, titled "Recent sessions", until a search
  * reaches them all), Global commands, then, only while a session is selected, Session commands and
- * Links (the latest few the conversation mentions, until a search reaches them all). Every session
+ * Links (the latest few the conversation mentions, until a search reaches them all; `LINKS_QUERY`
+ * lists only them). Every session
  * that is not archived is reachable, including those whose folder is closed. A search ranks rows
  * within each group, and groups by their best row; ties keep that order.
  */
