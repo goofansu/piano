@@ -425,7 +425,7 @@ function SessionRow({
           <Button
             variant="ghost"
             size="icon-xs"
-            className={hoverSlot}
+            className={cn(hoverSlot, "max-md:hidden")}
             aria-label={`Session menu for ${t.title || t.sessionId}`}
           >
             <MoreHorizontalIcon />

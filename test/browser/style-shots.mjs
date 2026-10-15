@@ -124,6 +124,9 @@ await run(
     };
   },
   async (page) => {
+    const paletteShortcut = await page.evaluate(
+      `/Mac|iPhone|iPad/.test(navigator.platform) ? "Meta+k" : "Control+k"`,
+    );
     for (const scheme of ["light", "dark"]) {
       await page.ab("set", "media", scheme);
       await page.open("/");
@@ -161,7 +164,7 @@ await run(
       await page.ab("wait", "--fn", "!!document.querySelector('[role=menu]')");
       await page.capture(`05-session-menu-${scheme}`);
       await page.ab("press", "Escape");
-      await page.ab("press", "Meta+k");
+      await page.ab("press", paletteShortcut);
       await page.ab("wait", "--fn", "!!document.querySelector('[role=dialog]')");
       await page.capture(`06-palette-${scheme}`);
       await page.ab("press", "Escape");
@@ -178,7 +181,22 @@ await run(
     await page.open("/s/rows");
     await page.see("Done: every row kind is above.");
     await page.capture("09-mobile-session");
-    await page.ab("press", "Meta+k");
+    await page.click("button", "Session information and actions");
+    await page.see("Session options");
+    await page.capture("09b-mobile-actions");
+    await page.click("menuitem", "Add to project");
+    await page.see("New project…");
+    await page.capture("09c-mobile-projects");
+    await page.click("menuitem", "Back");
+    await page.click("menuitem", "Session options");
+    await page.capture("09d-mobile-options");
+    await page.click("menuitem", "Session details");
+    await page.capture("09e-mobile-details");
+    await page.click("menuitem", "Back");
+    await page.click("menuitem", "Back");
+    await page.ab("press", "Escape");
+    await page.until("!document.querySelector('[role=menu]')");
+    await page.ab("press", paletteShortcut);
     await page.ab("wait", "--fn", "!!document.querySelector('[role=dialog]')");
     await page.capture("10-mobile-palette");
   },

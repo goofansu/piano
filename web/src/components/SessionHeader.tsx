@@ -1,6 +1,7 @@
 import { GitBranchIcon, MoreHorizontalIcon, SplitIcon } from "lucide-react";
 import { Fragment, useRef } from "react";
 import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
+import { MobileSessionMenu } from "@/components/MobileSessionMenu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +16,7 @@ import {
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { sessionMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
@@ -30,6 +32,7 @@ export function SessionHeader({
   /** Renders the PR control, given the session menu it returns focus to while no PR is linked. */
   pullRequest: (menuTrigger: React.RefObject<HTMLButtonElement | null>) => React.ReactNode;
 }) {
+  const mobile = useIsMobile();
   const { openNew } = useNavigation();
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
@@ -118,71 +121,76 @@ export function SessionHeader({
               ref={menuTrigger}
               variant="ghost"
               size="icon-sm"
+              className="max-md:size-11"
               aria-label="Session information and actions"
               disabled={!session}
             >
               <MoreHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            collisionPadding={16}
-            className="w-96 max-w-[calc(100vw-2rem)]"
-          >
-            <DropdownMenuGroup className="flex items-start">
-              {/* Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible. */}
-              <dl className="flex min-w-0 flex-1 select-text flex-col gap-1 px-2 py-2 font-mono text-xs">
-                <div className="min-w-0">
-                  <dt className="sr-only">Working directory</dt>
-                  <dd className="break-all">{session?.cwd}</dd>
-                </div>
-                <div className="min-w-0">
-                  <dt className="sr-only">Session ID</dt>
-                  <dd className="break-all text-muted-foreground">
-                    {sessionId ?? "Not available"}
-                  </dd>
-                </div>
-              </dl>
-              {details.map((c) => (
-                <DropdownMenuItem
-                  key={c.id}
-                  className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
-                  aria-label={c.label}
-                  onSelect={() => run(c)}
-                >
-                  <CommandIcon icon={c.icon} />
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuGroup>
-            {sections.map((section) => (
-              <Fragment key={section[0]?.id}>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  {section.map((c) => (
-                    <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                  ))}
-                </DropdownMenuGroup>
-              </Fragment>
-            ))}
-            <DropdownMenuSeparator />
-            {/* Inline rather than a submenu: the menu is nearly full width on phones, leaving a submenu no room. */}
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Display</DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={display?.value ?? ""}
-                onValueChange={(id) => {
-                  const choice = display?.items.find((c) => c.id === id);
-                  if (choice) run(choice);
-                }}
-              >
-                {display?.items.map((c) => (
-                  <DropdownMenuRadioItem key={c.id} value={c.id}>
-                    <CommandIcon icon={c.icon} /> {c.label}
-                  </DropdownMenuRadioItem>
+          {mobile ? (
+            <MobileSessionMenu key={sessionId} />
+          ) : (
+            <DropdownMenuContent
+              align="end"
+              collisionPadding={16}
+              className="w-96 max-w-[calc(100vw-2rem)]"
+            >
+              <DropdownMenuGroup className="flex items-start">
+                {/* Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible. */}
+                <dl className="flex min-w-0 flex-1 select-text flex-col gap-1 px-2 py-2 font-mono text-xs">
+                  <div className="min-w-0">
+                    <dt className="sr-only">Working directory</dt>
+                    <dd className="break-all">{session?.cwd}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="sr-only">Session ID</dt>
+                    <dd className="break-all text-muted-foreground">
+                      {sessionId ?? "Not available"}
+                    </dd>
+                  </div>
+                </dl>
+                {details.map((c) => (
+                  <DropdownMenuItem
+                    key={c.id}
+                    className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
+                    aria-label={c.label}
+                    onSelect={() => run(c)}
+                  >
+                    <CommandIcon icon={c.icon} />
+                  </DropdownMenuItem>
                 ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
+              </DropdownMenuGroup>
+              {sections.map((section) => (
+                <Fragment key={section[0]?.id}>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    {section.map((c) => (
+                      <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                    ))}
+                  </DropdownMenuGroup>
+                </Fragment>
+              ))}
+              <DropdownMenuSeparator />
+              {/* Desktop keeps the display choices directly available. */}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Display</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={display?.value ?? ""}
+                  onValueChange={(id) => {
+                    const choice = display?.items.find((c) => c.id === id);
+                    if (choice) run(choice);
+                  }}
+                >
+                  {display?.items.map((c) => (
+                    <DropdownMenuRadioItem key={c.id} value={c.id}>
+                      <CommandIcon icon={c.icon} /> {c.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          )}
         </DropdownMenu>
       </header>
     </>

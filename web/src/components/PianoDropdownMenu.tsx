@@ -30,8 +30,14 @@ export function DropdownMenuContent({
 }: ComponentProps<typeof BaseContent>) {
   return (
     <BaseContent
+      collisionPadding={8}
       {...props}
-      className={cn(anchoredMotion, raisedOverlay, className)}
+      className={cn(
+        anchoredMotion,
+        raisedOverlay,
+        "w-max min-w-48 max-w-[calc(100vw-2rem)]",
+        className,
+      )}
       onCloseAutoFocus={(event) => {
         onCloseAutoFocus?.(event);
         if (!event.defaultPrevented) returnFocusForKeyboard(event);
@@ -46,8 +52,14 @@ export function DropdownMenuSubContent({
 }: ComponentProps<typeof BaseSubContent>) {
   return (
     <BaseSubContent
+      collisionPadding={8}
       {...props}
-      className={cn(anchoredMotion, raisedOverlay, "shadow-md", className)}
+      className={cn(
+        anchoredMotion,
+        raisedOverlay,
+        "w-max min-w-48 max-w-[calc(100vw-2rem)] max-h-(--radix-dropdown-menu-content-available-height) overflow-y-auto shadow-md",
+        className,
+      )}
     />
   );
 }
