@@ -170,28 +170,23 @@ export function WorkspaceFile({
           </span>
         </>
       }
+      actions={
+        <IconButton label="Download file" disabled={!result || saving} onClick={save}>
+          <DownloadIcon />
+        </IconButton>
+      }
       toolbar={
-        <>
-          {result?.kind === "markdown" && (
-            <PianoViewToggle
-              type="single"
-              value={mode}
-              onValueChange={(value) => value && setMode(value)}
-              aria-label="Markdown view"
-            >
-              <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
-              <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
-            </PianoViewToggle>
-          )}
-          <IconButton
-            label="Download file"
-            disabled={!result || saving}
-            onClick={save}
-            className="ml-auto my-1"
+        result?.kind === "markdown" && (
+          <PianoViewToggle
+            type="single"
+            value={mode}
+            onValueChange={(value) => value && setMode(value)}
+            aria-label="Markdown view"
           >
-            <DownloadIcon />
-          </IconButton>
-        </>
+            <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
+            <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
+          </PianoViewToggle>
+        )
       }
     >
       {status && <Notice>{status}</Notice>}
