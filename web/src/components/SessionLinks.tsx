@@ -73,7 +73,7 @@ export function SessionLinks({ messages }: Props) {
           </ul>
         </PopoverContent>
       </Popover>
-      <Separator orientation="vertical" className="h-3!" />
+      <Separator orientation="vertical" className="h-3! self-center!" />
     </>
   );
 }

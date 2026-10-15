@@ -119,7 +119,8 @@ export function JumpTo({ messages, working = false }: Props) {
           </ul>
         </PopoverContent>
       </Popover>
-      <Separator orientation="vertical" className="h-3!" />
+      {/* Vega's vertical Separator stretches; a short divider must centre on the row's text. */}
+      <Separator orientation="vertical" className="h-3! self-center!" />
     </>
   );
 }
