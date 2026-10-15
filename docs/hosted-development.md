@@ -44,7 +44,7 @@ HMR; its reconnect reload is a development-only behavior.
 `piano.service` promptly, even if it cuts off the deploying session and other active Pi work.
 Interruption is preapproved: do not wait for idle or request extra confirmation. Run the restart
 and health checks outside `piano.service`'s process tree so deployment survives the cutoff. Ordinary
-development or pushing a commit still does not authorize deployment. (The `sync-piano` skill
+development or pushing a commit still does not authorize deployment. (The `sync-exe-dev` skill
 deliberately overrides this with its own idle-session gate.)
 
 ### Shortest deploy path

@@ -1,10 +1,10 @@
 ---
-name: sync-piano
-description: Sync Piano to latest main locally and on exe.dev VMs tagged goofansu-piano, then restart remote services. Use when asked to update or sync all Piano machines.
+name: sync-exe-dev
+description: Sync Piano to latest main locally and on every exe.dev VM tagged goofansu-piano, then restart the remote services. exe.dev only. Use when asked to update, sync or deploy all Piano machines.
 disable-model-invocation: true
 ---
 
-# Sync Piano
+# Sync exe.dev
 
 This invocation authorizes dependency installation, builds, and remote service restarts. Local services stay running. Follow the repository's [hosted workflow](../../../docs/hosted-development.md) for deployment policy and health checks; load the available `using-exe-dev` skill for SSH guidance.
 
@@ -16,10 +16,10 @@ Run `ssh exe.dev ls --json`. Select every VM whose `tags` array contains exactly
 
 ## 2. Sync and build each checkout
 
-Run [scripts/sync-checkout.sh](scripts/sync-checkout.sh) with the frozen SHA. From the local repository root:
+Run [scripts/deploy-exe-dev.sh](scripts/deploy-exe-dev.sh) with the frozen SHA. From the local repository root:
 
 ```bash
-script=.agents/skills/sync-piano/scripts/sync-checkout.sh
+script=.agents/skills/sync-exe-dev/scripts/deploy-exe-dev.sh
 bash "$script" local "$target"
 ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$ssh_dest" \
   "bash -s -- remote '$target'" < "$script"

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Requires an explicitly authorized sync-piano invocation. Does not discover VMs or monitor jobs.
+# Requires an explicitly authorized sync-exe-dev invocation. Does not discover VMs or monitor jobs.
 set -euo pipefail
 
 usage() {
   printf '%s\n' \
-    'Usage: bash sync-checkout.sh local|remote <full-target-SHA> [local-repository-root]' \
+    'Usage: bash deploy-exe-dev.sh local|remote <full-target-SHA> [local-repository-root]' \
     'Local: sync/install/build only. Remote: also schedule an RPC-gated restart.' \
     'Remote mode supports bash -s over SSH and uses /home/exedev/piano.' \
     'Retain stdout/stderr; monitor the emitted UNIT and LOG (root-owned, read with sudo) until completion.'

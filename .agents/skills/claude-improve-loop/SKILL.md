@@ -62,6 +62,6 @@ After a completed round, send this prompt separately:
 
 Confirm the reset and record the current session identity. If rounds remain, send the architecture prompt from section 2 without another reset.
 
-Stop when the round count is exhausted, Claude reports no useful candidates, a blocker remains, or the user intervenes. Do not deploy or send `/sync-piano`.
+Stop when the round count is exhausted, Claude reports no useful candidates, a blocker remains, or the user intervenes. Do not deploy or send `/sync-exe-dev`.
 
 Report the completed rounds, the commits and `main` push results Claude reported, and any blocker. Label results as Claude-reported. Do not claim independent review or verification.

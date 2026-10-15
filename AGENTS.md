@@ -152,7 +152,7 @@ explanation in `docs/` and link to it from the guide that needs it.
 
 Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
 [the shortest deploy path](docs/hosted-development.md#shortest-deploy-path); to update every
-machine, the user runs the `sync-piano` skill (user-invoked only). On exe.dev the server has no
+machine, the user runs the `sync-exe-dev` skill (user-invoked only). On exe.dev the server has no
 authentication: it stays on loopback behind exe.dev private access (INV-11).
 
 ## GitHub on exe.dev
