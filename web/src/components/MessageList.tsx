@@ -572,6 +572,7 @@ function SubagentCardView({
   profile,
   runId,
   statusLabel,
+  statusDetail,
   badge,
   dot,
   failed,
@@ -590,12 +591,16 @@ function SubagentCardView({
             {title}
           </span>
           {profile && <span className="max-w-28 shrink truncate text-ink-3">{profile}</span>}
-          <Badge
-            variant={badge}
-            className="h-auto min-h-5 max-w-full min-w-0 whitespace-normal max-sm:order-last max-sm:basis-full sm:max-w-56"
-          >
-            <span className="min-w-0 break-words">{statusLabel}</span>
-          </Badge>
+          {/* The status reads as pi-subagent's TUI shows it: a toned head, then its clauses
+              quietly. The pill never wraps; on a phone the status takes its own line. */}
+          <span className="flex min-w-0 shrink items-center gap-1.5 max-sm:order-last max-sm:basis-full">
+            <Badge variant={badge}>{statusLabel}</Badge>
+            {statusDetail && (
+              <span data-slot="status-detail" className="min-w-0 truncate text-ink-3">
+                {statusDetail}
+              </span>
+            )}
+          </span>
         </>
       }
       label={ariaLabel}

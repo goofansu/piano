@@ -83,6 +83,18 @@ const messages = [
     },
     timestamp,
   },
+  assistant([
+    call("resume", "agent_resume", {
+      id: "subagent-gone",
+      description: "Analyze the HAR capture",
+      prompt: "Again",
+    }),
+  ]),
+  result("resume", "agent_resume", "No such subagent", {
+    kind: "resume",
+    rowPhrase: "Resume refused · unknown Subagent",
+    tone: "error",
+  }),
   user(`${skill}\n\nFocus on login.`),
   assistant([{ type: "text", text: "" }], { stopReason: "error", errorMessage: "Rate limited" }),
   assistant([{ type: "text", text: "Done: every row kind is above." }]),
@@ -97,6 +109,7 @@ const expected = [
   "Ran",
   "Find CSS regression test seam",
   "Result ·",
+  "Analyze the HAR capture",
   "/skill:",
   "Rate limited",
   "Done: every row kind is above.",

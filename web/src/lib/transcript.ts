@@ -40,8 +40,12 @@ export interface SubagentFacts {
   runId?: string;
   /** The run's settled status: reported by a later card, else by this card itself. */
   terminal?: TerminalStatus;
-  /** The badge text; it names `terminal` whenever there is one, so it agrees with `badge`. */
+  /** The badge text: the status's head, before its first " · "; it names `terminal` whenever
+   * there is one, so it agrees with `badge`. */
   statusLabel: string;
+  /** The status's remaining clauses, shown as quiet text beside the badge: why a request was
+   * refused ("unknown Subagent"), what a result lacks, or a collection's further counts. */
+  statusDetail?: string;
   badge: Badge;
   /** The gutter dot: a failed call or Run, a completed Run, or neither. */
   dot: "err" | "ok" | "idle";
@@ -253,9 +257,12 @@ function subagentFacts(
   markdown: boolean,
 ): SubagentFacts {
   const terminal = reported ?? ("terminalStatus" in card ? card.terminalStatus : undefined);
-  // The card's own text may add to the status ("Failed · Result unavailable"); keep it when it agrees.
-  const statusLabel =
-    terminal && !card.status.startsWith(titleCase(terminal)) ? titleCase(terminal) : card.status;
+  // pi-subagent phrases a status as a head and clauses ("Resume refused · unknown Subagent").
+  // The head is the badge; the clauses stay beside it, but only while they qualify the head
+  // the card itself reported, never a settled status another card reported later.
+  const [head = "", ...clauses] = card.status.split(" · ");
+  const statusLabel = terminal && head !== titleCase(terminal) ? titleCase(terminal) : head;
+  const statusDetail = statusLabel === head ? clauses.join(" · ") : "";
   const badge: Badge =
     terminal === "completed"
       ? "success"
@@ -284,6 +291,7 @@ function subagentFacts(
     ...(runId ? { runId } : {}),
     ...(terminal ? { terminal } : {}),
     statusLabel,
+    ...(statusDetail ? { statusDetail } : {}),
     badge,
     dot: failed || terminal === "failed" ? "err" : terminal === "completed" ? "ok" : "idle",
     failed,

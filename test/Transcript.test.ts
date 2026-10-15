@@ -383,7 +383,7 @@ test("a delegation card shows its run's settled status from a later card, with b
   );
 });
 
-test("a card's own settled status keeps its fuller status text, and its label never contradicts the badge", () => {
+test("a card's own settled status keeps its clauses as detail, and its label never contradicts the badge", () => {
   const card = (status: string): RenderMsg => ({
     id: status,
     role: "tool_result",
@@ -396,17 +396,24 @@ test("a card's own settled status keeps its fuller status text, and its label ne
       attention: false,
     },
   });
-  const labels = transcriptRows([card("Failed · Result unavailable"), card("Started")]).map(
+  const labels = transcriptRows([
+    card("Failed · Result unavailable"),
+    card("Started"),
+    card("Started · for a while"),
+  ]).map(
     (row) =>
       row.kind === "subagent" && [
         row.subagent.statusLabel,
+        row.subagent.statusDetail,
         row.subagent.badge,
         row.subagent.hasDetails,
       ],
   );
   assert.deepEqual(labels, [
-    ["Failed · Result unavailable", "destructive", false],
-    ["Failed", "destructive", false],
+    ["Failed", "Result unavailable", "destructive", false],
+    ["Failed", undefined, "destructive", false],
+    // A clause that qualified the card's own head would misdescribe the settled status.
+    ["Failed", undefined, "destructive", false],
   ]);
 });
 
@@ -579,16 +586,22 @@ test("a subagent card's badge warns only on attention, after its Run's outcome a
     }),
   ]);
   assert.deepEqual(
-    facts.map(({ terminal, statusLabel, badge, dot }) => [terminal, statusLabel, badge, dot]),
+    facts.map(({ terminal, statusLabel, statusDetail, badge, dot }) => [
+      terminal,
+      statusLabel,
+      statusDetail,
+      badge,
+      dot,
+    ]),
     [
-      ["cancelled", "Cancelled", "secondary", "idle"],
-      [undefined, "Started", "secondary", "idle"],
-      [undefined, "Start refused · unknown Agent", "destructive", "idle"],
-      [undefined, "Still running when checked", "warning", "idle"],
-      ["failed", "Failed · Result unavailable", "destructive", "err"],
-      [undefined, "Control refused · mailbox full", "secondary", "idle"],
-      [undefined, "Control refused · unknown Run", "warning", "idle"],
-      [undefined, "Already finished: 1", "secondary", "idle"],
+      ["cancelled", "Cancelled", undefined, "secondary", "idle"],
+      [undefined, "Started", undefined, "secondary", "idle"],
+      [undefined, "Start refused", "unknown Agent", "destructive", "idle"],
+      [undefined, "Still running when checked", undefined, "warning", "idle"],
+      ["failed", "Failed", "Result unavailable", "destructive", "err"],
+      [undefined, "Control refused", "mailbox full", "secondary", "idle"],
+      [undefined, "Control refused", "unknown Run", "warning", "idle"],
+      [undefined, "Already finished: 1", undefined, "secondary", "idle"],
     ],
   );
 });
