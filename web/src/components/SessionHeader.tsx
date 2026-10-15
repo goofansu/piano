@@ -1,7 +1,7 @@
 import { GitBranchIcon, MoreHorizontalIcon, SplitIcon } from "lucide-react";
 import { Fragment, useRef } from "react";
 import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
-import { MobileSessionMenu } from "@/components/MobileSessionMenu";
+import { MobileSessionSheet, SessionDetails } from "@/components/MobileSessionSheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
+import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,6 +49,18 @@ export function SessionHeader({
   } = sessionContext(state);
   const { commands, run } = useSessionCommands();
   const { details = [], sections, display } = sessionMenu(commands, "header");
+  const menuButton = (
+    <Button
+      ref={menuTrigger}
+      variant="ghost"
+      size="icon-sm"
+      className="max-md:size-11"
+      aria-label="Session information and actions"
+      disabled={!session}
+    >
+      <MoreHorizontalIcon />
+    </Button>
+  );
   return (
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
@@ -115,41 +128,21 @@ export function SessionHeader({
         <span role="status" className="sr-only">
           {status}
         </span>
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              ref={menuTrigger}
-              variant="ghost"
-              size="icon-sm"
-              className="max-md:size-11"
-              aria-label="Session information and actions"
-              disabled={!session}
-            >
-              <MoreHorizontalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          {mobile ? (
-            <MobileSessionMenu key={sessionId} />
-          ) : (
+        {mobile ? (
+          <Sheet>
+            <SheetTrigger asChild>{menuButton}</SheetTrigger>
+            <MobileSessionSheet key={sessionId} />
+          </Sheet>
+        ) : (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>{menuButton}</DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
               collisionPadding={16}
               className="w-96 max-w-[calc(100vw-2rem)]"
             >
               <DropdownMenuGroup className="flex items-start">
-                {/* Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible. */}
-                <dl className="flex min-w-0 flex-1 select-text flex-col gap-1 px-2 py-2 font-mono text-xs">
-                  <div className="min-w-0">
-                    <dt className="sr-only">Working directory</dt>
-                    <dd className="break-all">{session?.cwd}</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="sr-only">Session ID</dt>
-                    <dd className="break-all text-muted-foreground">
-                      {sessionId ?? "Not available"}
-                    </dd>
-                  </div>
-                </dl>
+                <SessionDetails className="px-2" cwd={session?.cwd} sessionId={sessionId} />
                 {details.map((c) => (
                   <DropdownMenuItem
                     key={c.id}
@@ -190,8 +183,8 @@ export function SessionHeader({
                 </DropdownMenuRadioGroup>
               </DropdownMenuGroup>
             </DropdownMenuContent>
-          )}
-        </DropdownMenu>
+          </DropdownMenu>
+        )}
       </header>
     </>
   );
