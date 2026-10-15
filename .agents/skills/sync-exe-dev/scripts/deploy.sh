@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   printf '%s\n' \
-    'Usage: bash deploy-exe-dev.sh local|remote <full-target-SHA> [local-repository-root]' \
+    'Usage: bash deploy.sh local|remote <full-target-SHA> [local-repository-root]' \
     'Local: sync/install/build only. Remote: also schedule an RPC-gated restart.' \
     'Remote mode supports bash -s over SSH and uses /home/exedev/piano.' \
     'Retain stdout/stderr; monitor the emitted UNIT and LOG (root-owned, read with sudo) until completion.'

@@ -16,10 +16,10 @@ Run `ssh exe.dev ls --json`. Select every VM whose `tags` array contains exactly
 
 ## 2. Sync and build each checkout
 
-Run [scripts/deploy-exe-dev.sh](scripts/deploy-exe-dev.sh) with the frozen SHA. From the local repository root:
+Run [scripts/deploy.sh](scripts/deploy.sh) with the frozen SHA. From the local repository root:
 
 ```bash
-script=.agents/skills/sync-exe-dev/scripts/deploy-exe-dev.sh
+script=.agents/skills/sync-exe-dev/scripts/deploy.sh
 bash "$script" local "$target"
 ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$ssh_dest" \
   "bash -s -- remote '$target'" < "$script"

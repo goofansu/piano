@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 
-const script = resolve(".agents/skills/sync-exe-dev/scripts/deploy-exe-dev.sh");
+const script = resolve(".agents/skills/sync-exe-dev/scripts/deploy.sh");
 
 test("sync-exe-dev freezes the target and preserves dirty and ahead checkouts", () => {
   const root = mkdtempSync(join(tmpdir(), "piano-sync-test-"));
