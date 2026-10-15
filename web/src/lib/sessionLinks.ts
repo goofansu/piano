@@ -8,8 +8,8 @@ import { githubLabel } from "./markdown.ts";
 
 export interface SessionLink {
   url: string;
-  /** The markdown link text, or a short name made from the URL. */
-  label: string;
+  /** The markdown link text, else "repo#N" for a GitHub issue or pull request; a bare URL has none. */
+  label?: string;
   /** The message that mentions it last. */
   messageId: string;
 }
@@ -23,15 +23,12 @@ const LINK =
 const WEB = /^https?:\/\//;
 const TRAILING = /[.,!?;:)'"\]]+$/;
 
-/** A short name for a URL: "repo#12" on GitHub, otherwise the host and a trimmed path. */
-export function linkLabel(url: string): string {
-  const compact = githubLabel(url);
-  if (compact) return compact;
+/** The URL as a list shows it: no scheme, no "www.", no trailing slash, so what differs is in view. */
+export function displayUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    const path = parsed.pathname.replace(/\/$/, "");
-    const query = parsed.search || parsed.hash ? "…" : "";
-    return `${parsed.host}${path}${query}`;
+    const host = parsed.host.replace(/^www\./, "");
+    return `${host}${parsed.pathname.replace(/\/$/, "")}${parsed.search}${parsed.hash}`;
   } catch {
     return url;
   }
@@ -39,7 +36,7 @@ export function linkLabel(url: string): string {
 
 /**
  * Every web link in the user's and Pi's messages, deduplicated by URL, the most recently mentioned
- * first. A URL's label is the markdown text it was last written with, if any, else `linkLabel`.
+ * first, each labelled by the markdown text it was last written with, if any.
  */
 export function sessionLinks(messages: ReadonlyArray<RenderMsg>): SessionLink[] {
   const seen = new Set<string>();
@@ -58,7 +55,8 @@ export function sessionLinks(messages: ReadonlyArray<RenderMsg>): SessionLink[] 
         url = href;
         label = text?.trim() && text.trim() !== href ? text.trim() : undefined;
       } else url = autolink ?? whole.replace(TRAILING, "");
-      found.push({ url, label: label ?? linkLabel(url), messageId: message.id });
+      label ??= githubLabel(url);
+      found.push({ url, ...(label ? { label } : {}), messageId: message.id });
     }
     // Within one message, keep its order; across messages, the newest message comes first.
     for (const link of found) {

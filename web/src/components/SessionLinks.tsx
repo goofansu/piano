@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { sessionLinks } from "@/lib/sessionLinks";
+import { displayUrl, sessionLinks } from "@/lib/sessionLinks";
 import { listRow } from "@/lib/styles";
 
 interface Props {
@@ -52,17 +52,26 @@ export function SessionLinks({ messages }: Props) {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setOpen(false)}
-                  className={cn(listRow, "gap-3 px-4 py-1.5")}
+                  className={cn(listRow, "gap-3 px-4 py-1.5", link.label && "items-start")}
                 >
                   <span
-                    className="flex w-4 shrink-0 items-center justify-center text-ink-3 [&_svg]:size-3.5"
+                    className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-3 [&_svg]:size-3.5"
                     aria-hidden
                   >
                     <LinkIcon />
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-ink">{link.label}</span>
-                  <span className="min-w-0 max-w-[45%] shrink-0 truncate font-mono text-xs text-ink-3">
-                    {link.url}
+                  {/* Two lines: links in one session mostly share a prefix, so a URL cut short
+                      after the host says nothing. The title, then the whole URL below it. */}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    {link.label && <span className="truncate text-ink">{link.label}</span>}
+                    <span
+                      className={cn(
+                        "truncate font-mono text-xs",
+                        link.label ? "text-ink-3" : "text-ink",
+                      )}
+                    >
+                      {displayUrl(link.url)}
+                    </span>
                   </span>
                 </a>
               </li>

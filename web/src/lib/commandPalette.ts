@@ -9,7 +9,7 @@ import type { AppState } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import type { SessionCommand } from "./sessionCommands.ts";
-import { type SessionLink, sessionLinks } from "./sessionLinks.ts";
+import { displayUrl, type SessionLink, sessionLinks } from "./sessionLinks.ts";
 
 /**
  * A row's own search text always outranks a match that needs a hidden alias. Keep cmdk's fuzzy
@@ -71,6 +71,8 @@ export interface PaletteLinkRow {
   /** cmdk's search text: the label and the URL. */
   value: string;
   keywords: string[];
+  /** The URL as shown, without its scheme. */
+  display: string;
   link: SessionLink;
 }
 
@@ -108,9 +110,10 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
 function linkRow(link: SessionLink): PaletteLinkRow {
   return {
     key: link.url,
-    value: `${link.label} ${link.url}`,
+    value: `${link.label ?? ""} ${link.url}`,
     // "!link" reaches every row and nothing else: no title, folder or command contains "!".
     keywords: [LINKS_QUERY, link.url],
+    display: displayUrl(link.url),
     link,
   };
 }

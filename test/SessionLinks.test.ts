@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RenderMsg } from "../shared/wire.ts";
-import { linkLabel, sessionLinks } from "../web/src/lib/sessionLinks.ts";
+import { displayUrl, sessionLinks } from "../web/src/lib/sessionLinks.ts";
 
 const msg = (id: string, role: RenderMsg["role"], text: string): RenderMsg => ({ id, role, text });
 
@@ -18,9 +18,9 @@ test("links come from what the user and Pi wrote, newest first, each URL once", 
     msg("a2", "assistant", "Preview: <http://127.0.0.1:7172/s/abc>"),
   ]);
   assert.deepEqual(links, [
-    { url: "http://127.0.0.1:7172/s/abc", label: "127.0.0.1:7172/s/abc", messageId: "a2" },
+    { url: "http://127.0.0.1:7172/s/abc", messageId: "a2" },
     { url: "https://github.com/a/b/pull/7", label: "the PR", messageId: "a1" },
-    { url: "https://example.com/docs", label: "example.com/docs", messageId: "u1" },
+    { url: "https://example.com/docs", messageId: "u1" },
   ]);
 });
 
@@ -45,24 +45,24 @@ test("a URL inside code is not a link, and a bare URL sheds trailing punctuation
   );
 });
 
-test("a markdown link whose text is its URL, or a non-web link, gets no special label", () => {
+test("a link's label is its markdown text, else GitHub's compact name; a non-web link is skipped", () => {
   const links = sessionLinks([
     msg(
       "a1",
       "assistant",
-      "[https://example.com/a?x=1](https://example.com/a?x=1) and [the file](docs/guide.md) and [repo](https://github.com/goofansu/piano)",
+      "[https://example.com/a?x=1](https://example.com/a?x=1), [the file](docs/guide.md), [repo](https://github.com/goofansu/piano) and https://github.com/goofansu/piano/issues/3",
     ),
   ]);
   assert.deepEqual(links, [
-    { url: "https://example.com/a?x=1", label: "example.com/a…", messageId: "a1" },
+    { url: "https://example.com/a?x=1", messageId: "a1" },
     { url: "https://github.com/goofansu/piano", label: "repo", messageId: "a1" },
+    { url: "https://github.com/goofansu/piano/issues/3", label: "piano#3", messageId: "a1" },
   ]);
 });
 
-test("linkLabel names GitHub issues and pull requests compactly and trims other URLs", () => {
-  assert.equal(linkLabel("https://github.com/a/b/issues/12"), "b#12");
-  assert.equal(linkLabel("https://github.com/a/b"), "a/b");
-  assert.equal(linkLabel("https://example.com/"), "example.com");
-  assert.equal(linkLabel("https://example.com/path/#frag"), "example.com/path…");
-  assert.equal(linkLabel("not a url"), "not a url");
+test("displayUrl drops the scheme, www and a trailing slash, keeping query and fragment", () => {
+  assert.equal(displayUrl("https://github.com/a/b/pull/12"), "github.com/a/b/pull/12");
+  assert.equal(displayUrl("https://www.example.com/"), "example.com");
+  assert.equal(displayUrl("http://127.0.0.1:7172/s/abc?x=1#top"), "127.0.0.1:7172/s/abc?x=1#top");
+  assert.equal(displayUrl("not a url"), "not a url");
 });

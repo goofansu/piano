@@ -147,10 +147,20 @@ export function CommandPalette({ state }: Props) {
                           className="gap-3"
                         >
                           <LinkIcon />
-                          <span className="min-w-0 flex-1 truncate">{r.link.label}</span>
-                          <span className="min-w-0 max-w-[45%] shrink-0 truncate font-mono text-xs text-ink-3">
-                            {r.link.url}
-                          </span>
+                          {r.link.label ? (
+                            <>
+                              <span className="min-w-0 max-w-[45%] shrink-0 truncate">
+                                {r.link.label}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-3">
+                                {r.display}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                              {r.display}
+                            </span>
+                          )}
                         </CommandItem>
                       ))
                     : group.rows.map((r) => (
