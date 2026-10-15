@@ -3,6 +3,8 @@ import {
   ArchiveIcon,
   ArchiveRestoreIcon,
   FolderIcon,
+  FolderInputIcon,
+  FolderMinusIcon,
   type LucideIcon,
   PencilIcon,
   PlusIcon,
@@ -19,12 +21,26 @@ import {
 import {
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import type { ProjectCommand, ProjectCommandIcon, ProjectDialog } from "@/lib/projectCommands";
+import {
+  assignProjectCommand,
+  newProjectCommand,
+  type ProjectCommand,
+  type ProjectCommandIcon,
+  type ProjectDialog,
+  projectDestinations,
+} from "@/lib/projectCommands";
+import type { SessionTarget } from "@/lib/sessionCommands";
+import { sessionProject } from "@/lib/sessionContext";
+import type { AppState } from "@/store";
 
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: PlusIcon,
@@ -79,6 +95,57 @@ export function ProjectDestinationItems({
             ))}
           </DropdownMenuGroup>
         </>
+      )}
+    </>
+  );
+}
+
+/**
+ * A session's project rows for a menu: the current membership named, the destinations in a
+ * submenu, and removal. "New project…" creates a destination and files the session in it without
+ * changing execution. `run` is the command host's runner.
+ */
+export function ProjectMenu({
+  state,
+  session,
+  run,
+}: {
+  state: AppState;
+  session: SessionTarget;
+  run: (command: ProjectCommand) => void;
+}) {
+  const current = sessionProject(state, session);
+  const destinations = projectDestinations(state, current, { keepCurrent: false });
+  const create = newProjectCommand(state, session);
+  return (
+    <>
+      {current && (
+        <DropdownMenuLabel className="max-w-64 truncate font-normal text-muted-foreground">
+          {current.name}
+          {current.archived && " · Archived"}
+        </DropdownMenuLabel>
+      )}
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger disabled={!create.enabled}>
+          <FolderInputIcon /> {current ? "Move to project" : "Add to project"}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
+          <ProjectDestinationItems
+            create={create}
+            projects={destinations}
+            disabled={!state.connected}
+            onCreate={() => run(create)}
+            onPick={(id) => run(assignProjectCommand(state, session, id))}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      {current && (
+        <DropdownMenuItem
+          disabled={!state.connected}
+          onSelect={() => run(assignProjectCommand(state, session, null))}
+        >
+          <FolderMinusIcon /> Remove from project
+        </DropdownMenuItem>
       )}
     </>
   );

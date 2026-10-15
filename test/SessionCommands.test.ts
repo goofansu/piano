@@ -3,9 +3,10 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   type SessionCommandId,
-  type SessionMenu,
+  type SessionHeaderMenu,
   sessionCommands,
-  sessionMenu,
+  sessionHeaderMenu,
+  sessionRowMenu,
 } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
@@ -186,25 +187,26 @@ test("display choices mark the current one", () => {
   assert.deepEqual(checked, ["display-messages"]);
 });
 
-const menuIds = ({ details = [], sections, display }: SessionMenu) => [
-  ...details.map((c) => c.id),
-  ...sections.flat().map((c) => c.id),
-  ...(display?.items.map((c) => c.id) ?? []),
+const headerIds = ({ details, open, manage, display, destructive }: SessionHeaderMenu) => [
+  ...[...details, ...open, ...manage, ...destructive].map((c) => c.id),
+  ...(display ? [display.messagesOnly.id, display.everything.id] : []),
 ];
 
 test("the palette offers every command the session header and the sidebar row menu offer", () => {
   const options = { radiusSignedIn: true };
   const commands = sessionCommands(base, undefined, options);
   const palette = new Set(commands.map((c) => c.id));
-  for (const id of menuIds(sessionMenu(commands, "header")))
+  for (const id of headerIds(sessionHeaderMenu(commands)))
     assert.ok(palette.has(id), `header ${id}`);
-  for (const id of menuIds(sessionMenu(commands, "row"))) assert.ok(palette.has(id), `row ${id}`);
+  for (const id of sessionRowMenu(commands)
+    .sections.flat()
+    .map((c) => c.id))
+    assert.ok(palette.has(id), `row ${id}`);
   // The selected session's own row menu resolves to the same commands, with the same enablement.
-  const row = sessionMenu(
+  const row = sessionRowMenu(
     sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }, options),
-    "row",
   ).sections.flat();
-  const fromPalette = sessionMenu(commands, "row").sections.flat();
+  const fromPalette = sessionRowMenu(commands).sections.flat();
   assert.deepEqual(
     row.map((c) => [c.id, c.label, c.enabled]),
     fromPalette.map((c) => [c.id, c.label, c.enabled]),
@@ -213,7 +215,7 @@ test("the palette offers every command the session header and the sidebar row me
 
 test("the row menu: rename and pin, share only when signed in to Radius, then archive with delete", () => {
   const sections = (radiusSignedIn: boolean) =>
-    sessionMenu(sessionCommands(base, other, { radiusSignedIn }), "row").sections.map((s) =>
+    sessionRowMenu(sessionCommands(base, other, { radiusSignedIn })).sections.map((s) =>
       s.map((c) => c.id),
     );
   assert.deepEqual(sections(true), [["rename", "pin"], ["share"], ["archive", "delete"]]);
@@ -221,26 +223,42 @@ test("the row menu: rename and pin, share only when signed in to Radius, then ar
     ["rename", "pin"],
     ["archive", "delete"],
   ]);
-  assert.equal(sessionMenu(sessionCommands(base, other), "row").display, undefined);
 });
 
-test("the header menu: copy beside the details, changes and pull request, and a display radio following the display", () => {
+test("the header menu: copy beside the details, open, manage with share only when signed in, a Messages only switch, then archive with delete", () => {
   for (const display of ["everything", "messages"] as const) {
-    const menu = sessionMenu(sessionCommands(base, undefined, { display }), "header");
+    const menu = sessionHeaderMenu(
+      sessionCommands(base, undefined, { display, radiusSignedIn: true }),
+    );
     assert.deepEqual(
-      menu.details?.map((c) => c.id),
+      menu.details.map((c) => c.id),
       ["copy-all"],
     );
     assert.deepEqual(
-      menu.sections.map((s) => s.map((c) => c.id)),
-      [["changes", "pull-request"]],
+      menu.open.map((c) => c.id),
+      ["changes", "pull-request"],
     );
-    assert.equal(menu.display?.value, `display-${display}`);
     assert.deepEqual(
-      menu.display?.items.map((c) => c.label),
-      ["Show everything", "Messages only"],
+      menu.manage.map((c) => c.id),
+      ["rename", "pin", "share"],
     );
+    assert.deepEqual(
+      menu.destructive.map((c) => c.id),
+      ["archive", "delete"],
+    );
+    assert.equal(menu.display?.messagesOnly.label, "Messages only");
+    assert.equal(menu.display?.messagesOnly.checked, display === "messages");
+    assert.equal(menu.display?.everything.checked, display === "everything");
   }
+  assert.deepEqual(
+    sessionHeaderMenu(sessionCommands(base)).manage.map((c) => c.id),
+    ["rename", "pin"],
+  );
+  // Another session's commands carry no header: nothing to open or switch, only management.
+  const other = sessionHeaderMenu(sessionCommands(base, { cwd: "/work/other", sessionId: "s9" }));
+  assert.deepEqual(other.details, []);
+  assert.deepEqual(other.open, []);
+  assert.equal(other.display, undefined);
 });
 
 test("Share is Radius-sign-in only and targets the row, independent of selected model or MCP", () => {

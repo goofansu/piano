@@ -20,7 +20,7 @@ import {
   newProjectCommand,
   projectDestinations,
 } from "@/lib/projectCommands";
-import type { SessionCommand, SessionCommandId } from "@/lib/sessionCommands";
+import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 
 type Page = "actions" | "projects";
@@ -89,7 +89,7 @@ function SessionCommandRow({
  */
 export function MobileSessionSheet() {
   const { state } = useCommands();
-  const { commands, run, display } = useSessionCommands();
+  const { commands, run } = useSessionCommands();
   const { project, sessionId } = sessionContext(state);
   const session = state.session;
   const [page, setPage] = useState<Page>("actions");
@@ -102,15 +102,10 @@ export function MobileSessionSheet() {
     pane.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
   }, [page]);
 
-  const command = (id: SessionCommandId) => commands.find((c) => c.id === id);
-  const rows = (ids: SessionCommandId[]) =>
-    ids.flatMap((id) => {
-      const c = command(id);
-      return c ? [<SessionCommandRow key={id} command={c} run={run} />] : [];
-    });
-  const copy = command("copy-all");
-  const messagesOnly = command("display-messages");
-  const everything = command("display-everything");
+  const menu = sessionHeaderMenu(commands);
+  const { display } = menu;
+  const rows = (section: SessionCommand[]) =>
+    section.map((c) => <SessionCommandRow key={c.id} command={c} run={run} />);
   const target = session?.sessionId
     ? { cwd: session.cwd, sessionId: session.sessionId }
     : undefined;
@@ -131,47 +126,48 @@ export function MobileSessionSheet() {
             <SheetTitle className="sr-only">Session</SheetTitle>
             <div className="flex items-start gap-1 pl-3">
               <SessionDetails cwd={session?.cwd} sessionId={sessionId} />
-              {copy && (
-                <SheetClose asChild>
+              {menu.details.map((c) => (
+                <SheetClose asChild key={c.id}>
                   <Button
                     variant="ghost"
                     size="icon-lg"
                     className="size-11 shrink-0"
-                    aria-label={copy.label}
-                    onClick={() => run(copy)}
+                    aria-label={c.label}
+                    onClick={() => run(c)}
                   >
-                    <CommandIcon icon={copy.icon} />
+                    <CommandIcon icon={c.icon} />
                   </Button>
                 </SheetClose>
-              )}
+              ))}
             </div>
             <Separator className="my-1" />
-            {rows(["changes", "pull-request"])}
+            {rows(menu.open)}
             <Separator className="my-1" />
-            {rows(["rename", "pin", "share"])}
-            <Button
-              variant="ghost"
-              className={row}
-              disabled={!target}
-              onClick={() => setPage("projects")}
-            >
-              <FolderInputIcon /> {projectLabel}
-              <ChevronRightIcon className="ml-auto text-muted-foreground" />
-            </Button>
-            <Separator className="my-1" />
-            {messagesOnly && everything && (
-              <Label className={cn(row, "flex justify-between rounded-md")}>
-                <span className="flex items-center gap-3">
-                  <CommandIcon icon={messagesOnly.icon} /> {messagesOnly.label}
-                </span>
-                <Switch
-                  checked={display === "messages"}
-                  onCheckedChange={(checked) => run(checked ? messagesOnly : everything)}
-                />
-              </Label>
+            {rows(menu.manage)}
+            {target && (
+              <Button variant="ghost" className={row} onClick={() => setPage("projects")}>
+                <FolderInputIcon /> {projectLabel}
+                <ChevronRightIcon className="ml-auto text-muted-foreground" />
+              </Button>
+            )}
+            {display && (
+              <>
+                <Separator className="my-1" />
+                <Label className={cn(row, "flex justify-between rounded-md")}>
+                  <span className="flex items-center gap-3">
+                    <CommandIcon icon={display.messagesOnly.icon} /> {display.messagesOnly.label}
+                  </span>
+                  <Switch
+                    checked={!!display.messagesOnly.checked}
+                    onCheckedChange={(checked) =>
+                      run(checked ? display.messagesOnly : display.everything)
+                    }
+                  />
+                </Label>
+              </>
             )}
             <Separator className="my-1" />
-            {rows(["archive", "delete"])}
+            {rows(menu.destructive)}
           </>
         )}
         {page === "projects" && target && (
@@ -191,6 +187,10 @@ export function MobileSessionSheet() {
             <Separator className="my-1" />
             {project && (
               <>
+                <p className="truncate px-3 py-1 text-xs text-muted-foreground">
+                  {project.name}
+                  {project.archived && " · Archived"}
+                </p>
                 <SheetClose asChild>
                   <Button
                     variant="ghost"
@@ -198,8 +198,7 @@ export function MobileSessionSheet() {
                     disabled={!state.connected}
                     onClick={() => run(assignProjectCommand(state, target, null))}
                   >
-                    <FolderMinusIcon />
-                    <span className="truncate">Remove from {project.name}</span>
+                    <FolderMinusIcon /> Remove from project
                   </Button>
                 </SheetClose>
                 <Separator className="my-1" />

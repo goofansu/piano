@@ -1,8 +1,6 @@
 import type { FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
 import {
-  FolderInputIcon,
-  FolderMinusIcon,
   MoreHorizontalIcon,
   PlusIcon,
   SearchIcon,
@@ -27,7 +25,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -38,7 +35,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { Keys } from "@/components/PianoMark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
-import { ProjectCommandIconView, ProjectDestinationItems } from "@/components/Projects";
+import { ProjectCommandIconView, ProjectMenu } from "@/components/Projects";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -49,15 +46,9 @@ import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import {
-  assignProjectCommand,
-  newProjectCommand,
-  projectCommands,
-  projectDestinations,
-} from "@/lib/projectCommands";
+import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
-import { type SessionTarget, sessionMenu } from "@/lib/sessionCommands";
-import { sessionProject } from "@/lib/sessionContext";
+import { sessionRowMenu } from "@/lib/sessionCommands";
 import type { SidebarSection } from "@/lib/sidebarList";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarList } from "@/lib/useSidebarList";
@@ -369,7 +360,7 @@ function SessionRow({
   const [enter] = useState(reveal);
   const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
   const { commands, run } = useSessionCommands(target);
-  const { sections } = sessionMenu(commands, "row");
+  const { sections } = sessionRowMenu(commands);
   const { selected, disabled, hint, activity } = t;
   // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
   const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
@@ -443,54 +434,11 @@ function SessionRow({
             </Fragment>
           ))}
           <DropdownMenuGroup>
-            <ProjectMenu state={state} session={target} />
+            <ProjectMenu state={state} session={target} run={run} />
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
-  );
-}
-
-/**
- * The parent names the current membership and offers removal; the submenu only offers destinations.
- * "New project…" creates a destination and files this session in it without changing execution.
- */
-function ProjectMenu({ state, session }: { state: AppState; session: SessionTarget }) {
-  const { run } = useCommands();
-  const current = sessionProject(state, session);
-  const destinations = projectDestinations(state, current, { keepCurrent: false });
-  const create = newProjectCommand(state, session);
-  return (
-    <>
-      {current && (
-        <DropdownMenuLabel className="max-w-64 truncate font-normal text-muted-foreground">
-          {current.name}
-          {current.archived && " · Archived"}
-        </DropdownMenuLabel>
-      )}
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger disabled={!create.enabled}>
-          <FolderInputIcon /> {current ? "Move to project" : "Add to project"}
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
-          <ProjectDestinationItems
-            create={create}
-            projects={destinations}
-            disabled={!state.connected}
-            onCreate={() => run(create)}
-            onPick={(id) => run(assignProjectCommand(state, session, id))}
-          />
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
-      {current && (
-        <DropdownMenuItem
-          disabled={!state.connected}
-          onSelect={() => run(assignProjectCommand(state, session, null))}
-        >
-          <FolderMinusIcon /> Remove from project
-        </DropdownMenuItem>
-      )}
-    </>
   );
 }
 

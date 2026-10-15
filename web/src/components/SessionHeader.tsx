@@ -1,24 +1,23 @@
 import { GitBranchIcon, MoreHorizontalIcon, SplitIcon } from "lucide-react";
-import { Fragment, useRef } from "react";
+import { useRef } from "react";
 import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import { MobileSessionSheet, SessionDetails } from "@/components/MobileSessionSheet";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
+import { ProjectMenu } from "@/components/Projects";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { sessionMenu } from "@/lib/sessionCommands";
+import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
@@ -48,7 +47,11 @@ export function SessionHeader({
     worktreeName: worktree,
   } = sessionContext(state);
   const { commands, run } = useSessionCommands();
-  const { details = [], sections, display } = sessionMenu(commands, "header");
+  const menu = sessionHeaderMenu(commands);
+  const { display } = menu;
+  const target = session?.sessionId
+    ? { cwd: session.cwd, sessionId: session.sessionId }
+    : undefined;
   const menuButton = (
     <Button
       ref={menuTrigger}
@@ -143,7 +146,7 @@ export function SessionHeader({
             >
               <DropdownMenuGroup className="flex items-start">
                 <SessionDetails className="px-2" cwd={session?.cwd} sessionId={sessionId} />
-                {details.map((c) => (
+                {menu.details.map((c) => (
                   <DropdownMenuItem
                     key={c.id}
                     className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
@@ -154,33 +157,39 @@ export function SessionHeader({
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuGroup>
-              {sections.map((section) => (
-                <Fragment key={section[0]?.id}>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                {menu.open.map((c) => (
+                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                {menu.manage.map((c) => (
+                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                ))}
+                {target && <ProjectMenu state={state} session={target} run={run} />}
+              </DropdownMenuGroup>
+              {display && (
+                <>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
-                    {section.map((c) => (
-                      <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                    ))}
+                    <DropdownMenuCheckboxItem
+                      checked={!!display.messagesOnly.checked}
+                      onCheckedChange={(checked) =>
+                        run(checked ? display.messagesOnly : display.everything)
+                      }
+                    >
+                      <CommandIcon icon={display.messagesOnly.icon} /> {display.messagesOnly.label}
+                    </DropdownMenuCheckboxItem>
                   </DropdownMenuGroup>
-                </Fragment>
-              ))}
+                </>
+              )}
               <DropdownMenuSeparator />
-              {/* Desktop keeps the display choices directly available. */}
               <DropdownMenuGroup>
-                <DropdownMenuLabel>Display</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={display?.value ?? ""}
-                  onValueChange={(id) => {
-                    const choice = display?.items.find((c) => c.id === id);
-                    if (choice) run(choice);
-                  }}
-                >
-                  {display?.items.map((c) => (
-                    <DropdownMenuRadioItem key={c.id} value={c.id}>
-                      <CommandIcon icon={c.icon} /> {c.label}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
+                {menu.destructive.map((c) => (
+                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                ))}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>

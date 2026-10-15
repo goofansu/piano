@@ -5,7 +5,6 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import {
   isSelectedSession,
   sessionCheckoutMissing,
@@ -90,38 +89,55 @@ export interface SessionCommand {
   intent: SessionCommandIntent;
 }
 
-/** A session menu as a surface renders it: separated sections in order, then any display choice. */
-export interface SessionMenu {
-  /** The header's icon actions beside the session's details. */
-  details?: SessionCommand[];
-  /** Each section is one menu group; an empty one is left out. */
+/** The sidebar row's menu: separated sections in order, an empty one left out. */
+export interface SessionRowMenu {
   sections: SessionCommand[][];
-  /** The header's display radio. */
-  display?: RadioChoice<SessionCommand>;
 }
 
-/** Each surface's sections, by command. The row puts archive beside delete, though only delete is destructive. */
-const MENU_SECTIONS = {
-  row: [["rename", "pin"], ["share"], ["archive", "delete"]],
-  header: [["changes", "pull-request"]],
-} as const satisfies Record<string, readonly (readonly SessionCommandId[])[]>;
+/**
+ * The session header's menu, which the desktop dropdown and the phone sheet lay out alike: the
+ * details with their copy action, then open, manage (the project picker follows it), the display
+ * switch, and the destructive commands last.
+ */
+export interface SessionHeaderMenu {
+  /** Icon actions beside the session's details. */
+  details: SessionCommand[];
+  open: SessionCommand[];
+  manage: SessionCommand[];
+  /** A switch, checked while `messagesOnly` is current; unchecking runs `everything`. */
+  display?: { messagesOnly: SessionCommand; everything: SessionCommand };
+  destructive: SessionCommand[];
+}
+
+/** The row puts archive beside delete, though only delete is destructive. */
+const ROW_SECTIONS = [["rename", "pin"], ["share"], ["archive", "delete"]] as const;
+const HEADER_SECTIONS = {
+  details: ["copy-all"],
+  open: ["changes", "pull-request"],
+  manage: ["rename", "pin", "share"],
+  destructive: ["archive", "delete"],
+} as const satisfies Record<string, readonly SessionCommandId[]>;
 
 const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
   commands.filter((c) => ids.includes(c.id));
 
-/** The sidebar row's or the session header's menu, from `sessionCommands`' descriptors. */
-export function sessionMenu(
-  commands: readonly SessionCommand[],
-  surface: "row" | "header",
-): SessionMenu {
-  const sections = MENU_SECTIONS[surface]
-    .map((ids) => pick(commands, ids))
-    .filter((section) => section.length > 0);
-  if (surface === "row") return { sections };
+/** The sidebar row's menu, from `sessionCommands`' descriptors. */
+export function sessionRowMenu(commands: readonly SessionCommand[]): SessionRowMenu {
   return {
-    details: pick(commands, ["copy-all"]),
-    sections,
-    display: radioChoiceOf(commands.filter((c) => c.group === "display")),
+    sections: ROW_SECTIONS.map((ids) => pick(commands, ids)).filter((s) => s.length > 0),
+  };
+}
+
+/** The session header's menu, from `sessionCommands`' descriptors. */
+export function sessionHeaderMenu(commands: readonly SessionCommand[]): SessionHeaderMenu {
+  const messagesOnly = commands.find((c) => c.id === "display-messages");
+  const everything = commands.find((c) => c.id === "display-everything");
+  return {
+    details: pick(commands, HEADER_SECTIONS.details),
+    open: pick(commands, HEADER_SECTIONS.open),
+    manage: pick(commands, HEADER_SECTIONS.manage),
+    display: messagesOnly && everything ? { messagesOnly, everything } : undefined,
+    destructive: pick(commands, HEADER_SECTIONS.destructive),
   };
 }
 
