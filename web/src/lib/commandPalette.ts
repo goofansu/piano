@@ -107,7 +107,8 @@ function linkRow(link: SessionLink): PaletteLinkRow {
   return {
     key: link.url,
     value: `${link.label} ${link.url}`,
-    keywords: [link.url],
+    // "link" finds every row, so the whole list is one query away.
+    keywords: ["link", link.url],
     link,
   };
 }

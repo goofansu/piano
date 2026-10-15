@@ -253,6 +253,12 @@ test("Links lists the selected session's web links: the latest few at the root, 
     "a link's label is searchable",
   );
   assert.equal(headings(linked, "page-2")[0], "Links", "a URL fragment ranks Links first");
+  const linkGroup = palette(linked, "link").find((g) => g.id === "links");
+  assert.ok(
+    linkGroup?.id === "links" &&
+      linkGroup.rows.every((r) => paletteFilter(r.value, "link", r.keywords) > 0),
+    '"link" matches every link row',
+  );
   const sessionGroup = palette(linked).find((g) => g.id === "session");
   assert.ok(
     sessionGroup?.id === "session" &&
