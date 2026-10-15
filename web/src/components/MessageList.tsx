@@ -586,26 +586,26 @@ function SubagentCardView({
       glyph={<span className={cn("block size-2 rounded-full", SUBAGENT_DOT[dot])} />}
       header={
         <>
-          <span className="min-w-0 flex-1 truncate font-medium text-ink">
+          {/* One line at every width: the title keeps a few words and the quiet texts truncate,
+              so the pill, which never wraps or shrinks, lines up with its neighbours' pills.
+              A phone has room for the title and the status, not the profile. */}
+          <span className="min-w-20 flex-1 truncate font-medium text-ink">
             {isResult && <span className="font-normal text-ink-3">Result · </span>}
             {title}
           </span>
-          {profile && <span className="max-w-28 shrink truncate text-ink-3">{profile}</span>}
-          {/* The status reads as pi-subagent's TUI shows it: a toned head, then its clauses
-              quietly. The pill never wraps; on a phone the status takes its own line. */}
-          <span className="flex min-w-0 shrink items-center gap-1.5 max-sm:order-last max-sm:basis-full">
-            <Badge variant={badge}>{statusLabel}</Badge>
-            {statusDetail && (
-              <span data-slot="status-detail" className="min-w-0 truncate text-ink-3">
-                {statusDetail}
-              </span>
-            )}
-          </span>
+          {profile && (
+            <span className="max-w-28 shrink truncate text-ink-3 max-sm:hidden">{profile}</span>
+          )}
+          {statusDetail && (
+            <span data-slot="status-detail" className="max-w-56 shrink truncate text-ink-3">
+              {statusDetail}
+            </span>
+          )}
+          <Badge variant={badge}>{statusLabel}</Badge>
         </>
       }
       label={ariaLabel}
       canOpen={hasDetails}
-      headerClassName="max-sm:flex-wrap"
       bodyClassName="flex flex-col gap-3"
       data={{
         "data-slot": card.kind === "delegation" ? "delegation-card" : "subagent-result-card",
