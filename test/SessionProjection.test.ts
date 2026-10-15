@@ -305,6 +305,11 @@ test("subagent details project through PiSessions with correlation, lifecycle li
             card.kind === "result" && card.source === "notification",
         );
         assert.equal(notice?.terminalStatus, "completed");
+        assert.deepEqual(
+          notice?.finalOutput,
+          { kind: "retained", text: "Useful answer [REDACTED]" },
+          "a notification's final output is a fact, redacted for display",
+        );
         const waited = cards.find(
           (card): card is Extract<typeof card, { kind: "collection" }> =>
             card.kind === "collection",
@@ -313,6 +318,16 @@ test("subagent details project through PiSessions with correlation, lifecycle li
         assert.deepEqual(
           waited.runs.map((run) => [run.runId, run.status, run.subagentId]),
           [["run-failed", "failed", "subagent-stable"]],
+        );
+        assert.deepEqual(
+          [waited.status, waited.failure, waited.finalOutput, waited.durationMillis],
+          [
+            "Failed · Provider overloaded",
+            "Provider overloaded",
+            { kind: "absent", hasTranscriptEvidence: false },
+            83400,
+          ],
+          "a one-Run collection carries that Run's ending, and phrases its status with the reason",
         );
         assert.equal(
           waited.stillRunning,

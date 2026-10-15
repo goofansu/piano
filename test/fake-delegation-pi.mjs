@@ -65,6 +65,7 @@ const defaultMessages = [
       label: "Same label",
       status: "completed",
       durationMillis: 1200,
+      finalOutput: { kind: "retained", text: `Useful answer ${canary}` },
     },
   },
   assistant("resume-failed", "agent_resume", {
@@ -83,7 +84,16 @@ const defaultMessages = [
   result("wait-failed", "agent_wait", "Failed answer delivered by wait", {
     kind: "collection",
     scope: "named",
-    runs: [{ runId: "run-failed", agent: "reviewer", status: "failed" }],
+    runs: [
+      {
+        runId: "run-failed",
+        agent: "reviewer",
+        status: "failed",
+        failure: "Provider overloaded",
+        finalOutput: { kind: "absent", hasTranscriptEvidence: false },
+        durationMillis: 83400,
+      },
+    ],
     stillRunning: 0,
     unknown: 0,
     unavailable: 0,

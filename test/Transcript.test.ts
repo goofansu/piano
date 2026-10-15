@@ -787,3 +787,51 @@ test("a subagent card's output is Markdown exactly when Pi inserted it as contex
     [false, true],
   );
 });
+
+test("a delivered Run's answer is its final output fact, else the raw text, with the retention noted", () => {
+  const result = (id: string, extra: Record<string, unknown>, text = "raw prose"): RenderMsg => ({
+    id,
+    role: "context",
+    text,
+    subagent: {
+      kind: "result",
+      source: "notification",
+      runId: `run-${id}`,
+      status: "Completed",
+      terminalStatus: "completed",
+      attention: false,
+      ...extra,
+    } as SubagentCard,
+  });
+  const facts = cardFacts([
+    result("legacy", {}),
+    result("whole", { finalOutput: { kind: "retained", text: "# Answer\n\nDone." } }),
+    result("preview", { finalOutput: { kind: "retained", preview: "1 2 3 4 5" } }),
+    result("cut", { finalOutput: { kind: "retained-prefix", removedBytes: 900, text: "1 2 3" } }),
+    result("gone", {
+      finalOutput: { kind: "removed", removedBytes: 70000, hasTranscriptEvidence: true },
+    }),
+    result("none", {
+      finalOutput: { kind: "absent", hasTranscriptEvidence: false },
+      status: "Failed · Provider overloaded",
+      terminalStatus: "failed",
+      failure: "Provider overloaded",
+    }),
+  ]);
+  assert.deepEqual(
+    facts.map(({ output, markdown, statusLabel, details }) => [
+      output,
+      markdown,
+      statusLabel,
+      details.flatMap((d) => ("text" in d ? [d.text] : [])),
+    ]),
+    [
+      ["raw prose", true, "Completed", []],
+      ["# Answer\n\nDone.", true, "Completed", []],
+      ["1 2 3 4 5", false, "Completed", ["Preview · the whole answer is in the Run's Result"]],
+      ["1 2 3", true, "Completed", ["Beginning only · 900 bytes cut"]],
+      [undefined, false, "Completed", ["Output removed · 70000 bytes"]],
+      [undefined, false, "Failed", ["Failed · Provider overloaded"]],
+    ],
+  );
+});

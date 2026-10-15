@@ -5,6 +5,7 @@
  * This is a split by concept (extension contract versus Pi protocol), not by file size.
  */
 import type {
+  FinalOutput,
   ProfileUsage,
   RenderMsg,
   RunUsage,
@@ -73,6 +74,75 @@ const spendOf = (facts: DetailRecord): { usage?: RunUsage; model?: string } => {
       : {}),
     ...(model ? { model } : {}),
   };
+};
+type RunDelivery = {
+  finalOutput?: FinalOutput;
+  failure?: string;
+  cancellationReason?: "requested" | "shutdown" | "timeout";
+  durationMillis?: number;
+};
+/** pi-subagent's own bounds (ADR-0040): an answer is at most 64 KiB on the tool channel and
+ * 16 KiB inlined on a notification, whose preview is at most 500 bytes; a failure reason is
+ * at most 2,048 bytes. All in UTF-8 bytes. */
+const FINAL_OUTPUT_MAX_BYTES = 65_536;
+const FAILURE_MAX_BYTES = 2_048;
+const CANCELLATION_REASONS = new Set(["requested", "shutdown", "timeout"]);
+const answerText = (value: unknown): value is string =>
+  typeof value === "string" && Buffer.byteLength(value) <= FINAL_OUTPUT_MAX_BYTES;
+const failureText = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && Buffer.byteLength(value) <= FAILURE_MAX_BYTES;
+/** A delivered Run's final output as pi-subagent states it (ADR-0040), or nothing when malformed. */
+const finalOutputOf = (value: unknown): FinalOutput | undefined => {
+  const output = recordOf(value);
+  if (!output) return undefined;
+  const evidence = typeof output.hasTranscriptEvidence === "boolean";
+  const removed = figure(output.removedBytes);
+  if (output.kind === "absent" && evidence)
+    return { kind: "absent", hasTranscriptEvidence: output.hasTranscriptEvidence as boolean };
+  if (output.kind === "removed" && evidence && removed)
+    return {
+      kind: "removed",
+      removedBytes: output.removedBytes as number,
+      hasTranscriptEvidence: output.hasTranscriptEvidence as boolean,
+    };
+  if (output.kind !== "retained" && output.kind !== "retained-prefix") return undefined;
+  if (output.kind === "retained-prefix" && !removed) return undefined;
+  const value_ = answerText(output.text)
+    ? { text: redactDisplay(output.text) }
+    : output.text === undefined && answerText(output.preview)
+      ? { preview: redactDisplay(output.preview) }
+      : undefined;
+  if (!value_) return undefined;
+  return output.kind === "retained"
+    ? { kind: "retained", ...value_ }
+    : { kind: "retained-prefix", removedBytes: output.removedBytes as number, ...value_ };
+};
+/** How a delivered Run ended and what it answered, each key dropped alone when malformed so
+ * the card survives, as `spendOf` does for usage and model. */
+const deliveryOf = (facts: DetailRecord): RunDelivery => {
+  const finalOutput = finalOutputOf(facts.finalOutput);
+  return {
+    ...(finalOutput ? { finalOutput } : {}),
+    ...(failureText(facts.failure) ? { failure: redactDisplay(facts.failure) } : {}),
+    ...(typeof facts.cancellationReason === "string" &&
+    CANCELLATION_REASONS.has(facts.cancellationReason)
+      ? { cancellationReason: facts.cancellationReason as RunDelivery["cancellationReason"] }
+      : {}),
+    ...(figure(facts.durationMillis) ? { durationMillis: facts.durationMillis } : {}),
+  };
+};
+/** The Run's status phrased as pi-subagent phrases a status: a head, then why ("Failed · …"). */
+const endingStatus = (
+  status: "completed" | "failed" | "cancelled",
+  delivery: RunDelivery,
+): string => {
+  const reason =
+    status === "failed"
+      ? delivery.failure
+      : status === "cancelled"
+        ? delivery.cancellationReason
+        : undefined;
+  return reason ? `${titleStatus(status)} · ${reason}` : titleStatus(status);
 };
 const parseArgs = (args: string | undefined): DetailRecord => {
   try {
@@ -215,6 +285,7 @@ export class SubagentProjection {
                 profile: run.agent,
                 status: run.status,
                 ...spendOf(run),
+                ...deliveryOf(run),
               },
             ]
           : [];
@@ -244,10 +315,11 @@ export class SubagentProjection {
               label: one.label,
               profile: one.profile,
               terminalStatus: one.status,
+              ...deliveryOf(one),
             }
           : {}),
         status: one
-          ? titleStatus(one.status)
+          ? endingStatus(one.status, one)
           : facts.noActiveRuns
             ? "No active runs when checked"
             : clauses.join(" · ") || "No run outcomes",
@@ -270,15 +342,17 @@ export class SubagentProjection {
         const run = recordOf(facts.run);
         if (!run || !identifier(run.runId) || !bounded(run.agent) || !terminal(run.status))
           return undefined;
+        const delivery = deliveryOf(run);
         return {
           kind: "result",
           source: "tool",
           ...this.runs.get(run.runId),
           runId: run.runId,
           profile: run.agent,
-          status: titleStatus(run.status),
+          status: endingStatus(run.status, delivery),
           terminalStatus: run.status,
           ...spendOf(run),
+          ...delivery,
           attention: false,
         };
       }
@@ -360,15 +434,17 @@ export class SubagentProjection {
     const meta = { subagentId: facts.subagentId, label: facts.label, profile: facts.agent };
     this.runs.set(facts.runId, meta);
     this.subagents.set(facts.subagentId, meta);
+    const delivery = deliveryOf(facts);
     return {
       kind: "result",
       source: "notification",
       runId: facts.runId,
       ...meta,
-      status: titleStatus(facts.status),
+      status: endingStatus(facts.status, delivery),
       terminalStatus: facts.status,
-      durationMillis: facts.durationMillis,
       ...spendOf(facts),
+      ...delivery,
+      durationMillis: facts.durationMillis,
       attention: false,
     };
   }

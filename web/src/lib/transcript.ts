@@ -213,7 +213,14 @@ function subagentDetails(card: SubagentCard): SubagentDetail[] {
     details.push({ kind: "text", label: "Prompt", text: card.prompt });
   if (card.kind === "control" && card.message)
     details.push({ kind: "text", label: "Guidance", text: card.message });
-  if (card.kind === "result" && card.durationMillis !== undefined)
+  const output = "finalOutput" in card ? card.finalOutput : undefined;
+  if (output?.kind === "removed")
+    details.push({ kind: "note", text: `Output removed · ${output.removedBytes} bytes` });
+  if (output?.kind === "retained-prefix")
+    details.push({ kind: "note", text: `Beginning only · ${output.removedBytes} bytes cut` });
+  if (output && "preview" in output)
+    details.push({ kind: "note", text: "Preview · the whole answer is in the Run's Result" });
+  if ("durationMillis" in card && card.durationMillis !== undefined)
     details.push({ kind: "note", text: `Duration ${(card.durationMillis / 1000).toFixed(1)}s` });
   if (card.kind === "collection")
     for (const run of card.runs)
@@ -241,15 +248,26 @@ export function nestedStatus(status: ToolExecution["status"]): { label: string; 
   }
 }
 
-/** A card's facts, given the settled status another card reported for its run. */
+/** A card's facts, given the settled status another card reported for its run. `text` is the
+ * message's raw text; a card that carries the Run's answer as a fact shows that instead. */
 function subagentFacts(
   card: SubagentCard,
   reported: TerminalStatus | undefined,
-  output: string | undefined,
+  text: string | undefined,
   failed: boolean,
-  markdown: boolean,
+  rawMarkdown: boolean,
 ): SubagentFacts {
   const terminal = reported ?? ("terminalStatus" in card ? card.terminalStatus : undefined);
+  // The answer is the Run's final output when the card states it (an agent's Markdown, or the
+  // one-line preview of a long one); without that fact, the text as pi-subagent wrote it.
+  const finalOutput = "finalOutput" in card ? card.finalOutput : undefined;
+  const [output, markdown] = finalOutput
+    ? "text" in finalOutput
+      ? [finalOutput.text || undefined, true]
+      : "preview" in finalOutput
+        ? [finalOutput.preview || undefined, false]
+        : [undefined, false]
+    : [text, rawMarkdown];
   // pi-subagent phrases a status as a head and clauses ("Resume refused · unknown Subagent").
   // The head is the badge; the whole phrase opens the details, but only while the clauses
   // qualify the head the card itself reported, never a settled status another card reported

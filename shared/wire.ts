@@ -97,6 +97,41 @@ const SubagentIdentity = {
   profile: Schema.optional(Schema.String),
 };
 const TerminalSubagentStatus = Schema.Literals(["completed", "failed", "cancelled"]);
+/** What became of a delivered Run's final output, in pi-subagent's four retention words. A
+ * retained value is the whole text, or only a one-line preview when a notification could not
+ * inline it (the whole value then lives in the Run's Result, read with `agent_result`). */
+export const FinalOutput = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("absent"), hasTranscriptEvidence: Schema.Boolean }),
+  Schema.Struct({
+    kind: Schema.Literal("removed"),
+    removedBytes: Schema.Number,
+    hasTranscriptEvidence: Schema.Boolean,
+  }),
+  Schema.Struct({ kind: Schema.Literal("retained"), text: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("retained"), preview: Schema.String }),
+  Schema.Struct({
+    kind: Schema.Literal("retained-prefix"),
+    removedBytes: Schema.Number,
+    text: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("retained-prefix"),
+    removedBytes: Schema.Number,
+    preview: Schema.String,
+  }),
+]);
+export type FinalOutput = typeof FinalOutput.Type;
+/** How a delivered Run ended and what it answered (pi-subagent ADR-0040), on a notification, an
+ * `agent_result` Run and each Run a wait delivered. Every key is optional: an older extension
+ * wrote none, and a reader then falls back to the raw text. */
+const RunDelivery = {
+  finalOutput: Schema.optional(FinalOutput),
+  /** A failed Run's reason, when it reported one. */
+  failure: Schema.optional(Schema.String),
+  /** Present exactly when the Run was cancelled. */
+  cancellationReason: Schema.optional(Schema.Literals(["requested", "shutdown", "timeout"])),
+  durationMillis: Schema.optional(Schema.Number),
+};
 /** The card reports something left unresolved for the reader: a Run still running or unknown, a
  * result unavailable, a cancellation not yet settled, or Control refused for an unknown or
  * cancelled Run. Subagents derives it from the card's facts so readers never parse `status`. */
@@ -136,8 +171,11 @@ export const SubagentCard = Schema.Union([
         profile: Schema.String,
         status: TerminalSubagentStatus,
         ...RunSpend,
+        ...RunDelivery,
       }),
     ),
+    /** The one delivered Run's delivery, when the collection is exactly that Run. */
+    ...RunDelivery,
     stillRunning: Schema.Number,
     unknown: Schema.Number,
     unavailable: Schema.Number,
@@ -150,8 +188,8 @@ export const SubagentCard = Schema.Union([
     ...SubagentIdentity,
     status: Schema.String,
     terminalStatus: Schema.optional(TerminalSubagentStatus),
-    durationMillis: Schema.optional(Schema.Number),
     ...RunSpend,
+    ...RunDelivery,
     attention,
   }),
   Schema.Struct({
