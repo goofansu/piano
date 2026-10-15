@@ -1,10 +1,10 @@
 ---
-name: deploy-piano
+name: deploy-exe-dev
 description: Provision a new private exe.dev VM with Piano installed and running on port 8000.
 disable-model-invocation: true
 ---
 
-# Deploy Piano
+# Deploy on exe.dev
 
 Provision a new private exe.dev VM, install Piano, and leave it running. This invocation authorizes VM creation and starting Piano on that VM; it does not authorize changes to existing machines or copying credentials.
 
