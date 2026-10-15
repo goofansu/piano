@@ -21,7 +21,7 @@ export function PickerContent({
       align="start"
       tabIndex={-1}
       className={cn(
-        "max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto p-0",
+        "max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto p-0",
         className,
       )}
       onOpenAutoFocus={(event) => {

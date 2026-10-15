@@ -29,6 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -36,15 +37,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Keys } from "@/components/PianoMark";
-import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
-import { PickerRadioItem as DropdownMenuRadioItem } from "@/components/PickerRadioItem";
 import { ProjectCommandIconView, ProjectDestinationItems } from "@/components/Projects";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";

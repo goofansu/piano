@@ -26,7 +26,7 @@ export function Command({ className, ...props }: ComponentProps<typeof BaseComma
     <BaseCommand
       {...props}
       className={cn(
-        "[--command-row-height:2.25rem] pointer-coarse:[--command-row-height:2.75rem] **:data-[slot=command-input-wrapper]:h-(--command-row-height)",
+        "[--command-row-height:2.25rem] pointer-coarse:[--command-row-height:2.75rem] **:data-[slot=input-group]:h-(--command-row-height)!",
         className,
       )}
     />

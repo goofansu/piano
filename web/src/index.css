@@ -349,7 +349,10 @@
  * exceptions here rather than copying Dialog/Sheet internals into app wrappers. */
 [data-slot="dialog-overlay"],
 [data-slot="sheet-overlay"] {
+  /* Moonstone dims with a scrim; upstream also blurs the page behind, which costs compositing on phones. */
   background-color: var(--scrim);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 [data-slot="dialog-overlay"] {
   animation-duration: var(--dur-enter);

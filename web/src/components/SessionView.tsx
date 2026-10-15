@@ -6,11 +6,11 @@ import { Banner } from "@/components/Banner";
 import { Composer } from "@/components/Composer";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList } from "@/components/MessageList";
-import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { drafts, sessionDraftKey } from "@/lib/messageDraft";
 import {

@@ -592,7 +592,7 @@ function SubagentCardView({
           {profile && <span className="max-w-28 shrink truncate text-ink-3">{profile}</span>}
           <Badge
             variant={badge}
-            className="max-w-full min-w-0 whitespace-normal max-sm:order-last max-sm:basis-full sm:max-w-56"
+            className="h-auto min-h-5 max-w-full min-w-0 whitespace-normal max-sm:order-last max-sm:basis-full sm:max-w-56"
           >
             <span className="min-w-0 break-words">{statusLabel}</span>
           </Badge>

@@ -3,7 +3,6 @@ import { CheckCircle2Icon, ExternalLinkIcon, RefreshCwIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
-import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RemovalDialog } from "@/components/RemovalDialog";
@@ -19,6 +18,7 @@ import {
   ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { type RadiusToolView, radiusUninstallCopy } from "@/lib/radiusSetupView";
 import { useRadiusSetup } from "@/lib/useRadiusSetup";

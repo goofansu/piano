@@ -1,8 +1,11 @@
 # shadcn ownership and upgrades
 
 `web/src/components/ui/` is upstream source, not Piano's design layer. The project uses the
-Radix/new-york registry. Standard controls import from `ui/`; customized controls import the
+Radix base and the Vega style (`radix-vega` in `components.json`, chosen on
+[shadcn/create](https://ui.shadcn.com/create) for keeping Lucide, `rounded-md` and 36px controls).
+Standard controls import from `ui/`; customized controls import the
 app components below. App wrappers forward props and refs and compose caller event handlers.
+The CLI also owns `web/src/hooks/use-mobile.ts`.
 
 `web/components.json` deliberately sets `rsc: true` to preserve upstream `"use client"` directives
 in generated files. Piano is still a client-side Vite app: this CLI option does not enable React
@@ -19,9 +22,7 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 | Status badge and warning alert variants | `StatusBadge`, `PianoAlert` |
 | Overlay surfaces, stacking and motion | `PianoDialog`, `PianoSheet`, `PianoSelect`, `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/overlayStyles.ts` |
 | Pointer-close focus; keyboard/hover tooltips | `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/pointerClose.ts` |
-| Trailing radio check | `PickerRadioItem`, composed from Radix because shadcn exposes no indicator slot |
 | Search/option row heights, including touch and the palette dialog | `PianoCommand` |
-| Skeleton fill | `PianoSkeleton` |
 | Settings sidebar tooltip policy | `PianoSidebarMenuButton` |
 | Mobile sidebar reveal and partial scrim | `PianoSidebarReveal`; transient finger tracking in `useSidebarSwipe`, motion in `index.css` |
 | Theme tokens and existing selected-sidebar styling | `index.css` |

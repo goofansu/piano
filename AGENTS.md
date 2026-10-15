@@ -75,7 +75,7 @@ state handling and regression checks.
 Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add with
 `npx shadcn@latest add`). Hand-written markup is for the case where no standard component exists,
 and says so in a comment. `web/src/components/ui/` stays upstream-owned: Piano's variants, overlay
-styling and focus policy live in the `Piano*` wrappers, `StatusBadge` and `PickerRadioItem` in
+styling and focus policy live in the `Piano*` wrappers and `StatusBadge` in
 `web/src/components/`, and tokens in `web/src/index.css`. Before adding a customization or
 upgrading shadcn, read [the ownership and upgrade guide](docs/shadcn-ui.md); review every
 `--diff` before writing over a file in `ui/`.

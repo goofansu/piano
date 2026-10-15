@@ -16,12 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/PianoDialog";
-import { PianoSkeleton as Skeleton } from "@/components/PianoSkeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevHome } from "@/lib/format";
 import { listRow } from "@/lib/styles";
 import { useFolderBrowser } from "@/lib/useFolderBrowser";

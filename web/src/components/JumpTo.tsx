@@ -66,7 +66,7 @@ export function JumpTo({ messages, working = false }: Props) {
           align="end"
           collisionPadding={16}
           aria-label="Jump to message"
-          className="w-[28rem] max-w-[calc(100vw-2rem)] p-0 font-sans"
+          className="w-[28rem] max-w-[calc(100vw-2rem)] gap-0 p-0 font-sans"
         >
           <p className="border-b border-line px-4 py-2.5 text-sm font-medium">Jump to…</p>
           <ul
