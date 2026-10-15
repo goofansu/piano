@@ -199,5 +199,16 @@ await run(
     await page.ab("press", paletteShortcut);
     await page.ab("wait", "--fn", "!!document.querySelector('[role=dialog]')");
     await page.capture("10-mobile-palette");
+    // The right sidebar covers the whole phone screen: the sheet's own width must not win.
+    await page.ab("type", "[cmdk-input]", "Changes");
+    await page.until(
+      `[...document.querySelectorAll('[cmdk-item]')].some((i) => i.textContent.trim() === 'Changes')`,
+    );
+    await page.click("option", "Changes");
+    await page.until("!!document.querySelector('[data-slot=\"sheet-content\"]')");
+    await page.until(
+      "!document.querySelector('[data-slot=\"sheet-content\"]').getAnimations().length",
+    );
+    await page.capture("11-mobile-changes");
   },
 );

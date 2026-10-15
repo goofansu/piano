@@ -83,7 +83,7 @@ export function RightSidebar({
           side="right"
           showCloseButton={false}
           aria-describedby={undefined}
-          className="w-full gap-0 p-0 sm:max-w-none"
+          className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-none"
           onKeyDown={ownKeys}
         >
           <SheetTitle className="sr-only">{label}</SheetTitle>
