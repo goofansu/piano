@@ -575,10 +575,8 @@ function SubagentCardView({
   badge,
   dot,
   failed,
-  output,
-  details,
+  body,
   hasDetails,
-  markdown,
 }: SubagentFacts) {
   return (
     <FoldRow
@@ -606,52 +604,83 @@ function SubagentCardView({
         "data-run-id": runId,
       }}
     >
-      {details.map((detail) =>
-        detail.kind === "identity" ? (
-          <dl
-            key="identity"
-            className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs"
-          >
-            {detail.subagentId && (
-              <>
-                <dt className="text-ink-3">Subagent</dt>
-                <dd className="break-all font-mono">{detail.subagentId}</dd>
-              </>
-            )}
-            {detail.runId && (
-              <>
-                <dt className="text-ink-3">Run</dt>
-                <dd className="break-all font-mono">{detail.runId}</dd>
-              </>
-            )}
-          </dl>
-        ) : detail.kind === "text" ? (
-          <div key={detail.label}>
-            <p className="mb-1 text-xs text-ink-3">{detail.label}</p>
-            <pre className="whitespace-pre-wrap break-words">{clamp(detail.text, 8000)}</pre>
-          </div>
-        ) : (
-          <p
-            key={`${detail.kind}:${detail.text}`}
-            className={cn("text-xs", detail.kind === "run" ? "break-all font-mono" : "text-ink-3")}
-          >
-            {detail.text}
-          </p>
-        ),
+      {body.status && <p className="text-xs text-ink-3">{body.status}</p>}
+      {body.input && (
+        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-fill px-3 py-2 text-ink-2">
+          {clamp(body.input, 8000)}
+        </pre>
       )}
-      {output &&
-        (markdown ? (
-          <Markdown text={output} className="prose-chat" />
-        ) : (
-          <pre className={cn("whitespace-pre-wrap break-words", failed && "text-err")}>
-            {clamp(output, 20000)}
-          </pre>
-        ))}
+      {body.outputs.map((output, i) => (
+        <div key={output.label ?? i} className="flex flex-col gap-1">
+          {output.label && <p className="font-mono text-xs text-ink-3">{output.label}</p>}
+          {output.text && (
+            <FoldedOutput text={output.text} markdown={output.markdown} failed={failed} />
+          )}
+        </div>
+      ))}
+      {body.meta && <p className="font-mono text-xs text-ink-3">{body.meta}</p>}
     </FoldRow>
   );
 }
 
 const PREVIEW_LINES = 5;
+
+/** Output folded to its first lines, with the rest on demand: a tool's text as it came, or a
+ * subagent's answer as Markdown. */
+function FoldedOutput({
+  text,
+  markdown,
+  failed,
+  className,
+}: {
+  text: string;
+  markdown: boolean;
+  failed: boolean;
+  className?: string;
+}) {
+  const [all, setAll] = useState(false);
+  const lines = text.split("\n");
+  const shown = all ? lines : lines.slice(0, PREVIEW_LINES);
+  const hidden = lines.length - shown.length;
+  const visible = clamp(shown.join("\n"), all ? 20000 : 2000);
+  return (
+    <>
+      {markdown ? (
+        <Markdown text={visible} className={cn("prose-chat", className)} />
+      ) : (
+        <pre
+          className={cn(
+            "whitespace-pre-wrap break-all",
+            failed ? "text-err" : "text-ink-2",
+            className,
+          )}
+        >
+          {visible}
+        </pre>
+      )}
+      {hidden > 0 && (
+        <Button
+          variant="link"
+          size="xs"
+          onClick={() => setAll(true)}
+          className="mt-0.5 h-auto px-0 text-ink-3"
+        >
+          … {hidden} more {hidden === 1 ? "line" : "lines"}
+        </Button>
+      )}
+      {all && lines.length > PREVIEW_LINES && (
+        <Button
+          variant="link"
+          size="xs"
+          onClick={() => setAll(false)}
+          className="mt-0.5 h-auto px-0 text-ink-3"
+        >
+          Show less
+        </Button>
+      )}
+    </>
+  );
+}
 
 const DOT: Record<ToolOutcome, string> = {
   running: "animate-live bg-busy",
@@ -672,12 +701,8 @@ function Tool({
   summary,
   subagent,
 }: ToolRow) {
-  const [all, setAll] = useState(false);
   if (subagent) return <SubagentCardView {...subagent} />;
   const failed = outcome === "failed";
-  const lines = (output ?? "").split("\n");
-  const shown = all ? lines : lines.slice(0, PREVIEW_LINES);
-  const hidden = lines.length - shown.length;
 
   return (
     <FoldRow
@@ -710,34 +735,12 @@ function Tool({
       )}
       {output && (
         <div data-slot="tool-output" className={cn(call.args && "mt-1")}>
-          <pre
-            className={cn(
-              "border-l-2 border-line py-1 pl-3 whitespace-pre-wrap break-all",
-              failed ? "text-err" : "text-ink-2",
-            )}
-          >
-            {clamp(shown.join("\n"), all ? 20000 : 2000)}
-          </pre>
-          {hidden > 0 && (
-            <Button
-              variant="link"
-              size="xs"
-              onClick={() => setAll(true)}
-              className="mt-0.5 h-auto px-0 text-ink-3"
-            >
-              … {hidden} more {hidden === 1 ? "line" : "lines"}
-            </Button>
-          )}
-          {all && lines.length > PREVIEW_LINES && (
-            <Button
-              variant="link"
-              size="xs"
-              onClick={() => setAll(false)}
-              className="mt-0.5 h-auto px-0 text-ink-3"
-            >
-              Show less
-            </Button>
-          )}
+          <FoldedOutput
+            text={output}
+            markdown={false}
+            failed={failed}
+            className="border-l-2 border-line py-1 pl-3"
+          />
         </div>
       )}
       {nested.map((child) => (

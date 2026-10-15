@@ -6,7 +6,6 @@ import { messageError } from "../web/src/lib/messageError.ts";
 import {
   jumpEntries,
   nestedStatus,
-  type SubagentFacts,
   type TranscriptOptions,
   type TranscriptRow,
   transcriptRows,
@@ -308,7 +307,7 @@ test("a delegation card shows its run's settled status from a later card, with b
     [
       notice.subagent.terminal,
       notice.subagent.statusLabel,
-      notice.subagent.output,
+      notice.subagent.body.outputs[0]?.text,
       notice.subagent.hasDetails,
     ],
     ["completed", "Completed", "Done", true],
@@ -405,16 +404,16 @@ test("a card's own settled status keeps its clauses in the details, and its labe
     (row) =>
       row.kind === "subagent" && [
         row.subagent.statusLabel,
-        row.subagent.details,
+        row.subagent.body.status,
         row.subagent.badge,
         row.subagent.hasDetails,
       ],
   );
   assert.deepEqual(labels, [
-    ["Failed", [{ kind: "note", text: "Failed · Result unavailable" }], "destructive", true],
-    ["Failed", [], "destructive", false],
+    ["Failed", "Failed · Result unavailable", "destructive", true],
+    ["Failed", undefined, "destructive", false],
     // A clause that qualified the card's own head would misdescribe the settled status.
-    ["Failed", [], "destructive", false],
+    ["Failed", undefined, "destructive", false],
   ]);
 });
 
@@ -507,29 +506,30 @@ test("each subagent card kind has its title and accessible name, and opens exact
       ["Subagent cancellation", "Subagent operation: Subagent cancellation", false, false],
     ],
   );
-  for (const card of facts)
-    assert.equal(card.hasDetails, !!card.output || card.details.length > 0, card.title);
+  for (const { hasDetails, body, title } of facts)
+    assert.equal(
+      hasDetails,
+      !!(body.status || body.input || body.outputs.length || body.meta),
+      title,
+    );
+  // The opened row's slots: a status line, what was sent, what came back, one quiet meta line.
   assert.deepEqual(
-    facts.map((card) => card.details),
+    facts.map((card) => card.body),
     [
-      [],
-      [
-        { kind: "identity", subagentId: "sub-1", runId: "run-1" },
-        { kind: "text", label: "Prompt", text: "Fix them" },
-      ],
-      [{ kind: "text", label: "Guidance", text: "Hurry" }],
-      [
-        { kind: "note", text: "Delivered 1 result · 1 unavailable · 2 unknown" },
-        { kind: "run", text: "run-1 · reviewer · completed" },
-      ],
-      [{ kind: "note", text: "Duration 0.0s" }],
-      [],
-      [],
-      [
-        { kind: "run", text: "run-2 · requested" },
-        { kind: "run", text: "run-1 · already terminal · completed" },
-      ],
-      [],
+      { outputs: [] },
+      { input: "Fix them", outputs: [], meta: "sub-1 · run-1" },
+      { input: "Hurry", outputs: [] },
+      { status: "Delivered 1 result · 1 unavailable · 2 unknown", outputs: [] },
+      { outputs: [], meta: "0.0s" },
+      { outputs: [] },
+      { outputs: [{ text: "Answer", markdown: false }] },
+      {
+        outputs: [
+          { label: "run-2 · requested", markdown: false },
+          { label: "run-1 · already terminal · completed", markdown: false },
+        ],
+      },
+      { outputs: [] },
     ],
   );
 });
@@ -583,11 +583,9 @@ test("a subagent card's badge warns only on attention, after its Run's outcome a
       attention: false,
     }),
   ]);
-  // The status's clauses are not in the header: the whole phrase opens the details instead.
-  const note = ({ details }: SubagentFacts) =>
-    details[0]?.kind === "note" ? details[0].text : undefined;
+  // The status's clauses are not in the header: the whole phrase is the body's status line.
   assert.deepEqual(
-    facts.map((card) => [card.terminal, card.statusLabel, note(card), card.badge, card.dot]),
+    facts.map((card) => [card.terminal, card.statusLabel, card.body.status, card.badge, card.dot]),
     [
       ["cancelled", "Cancelled", undefined, "secondary", "idle"],
       [undefined, "Started", undefined, "secondary", "idle"],
@@ -783,7 +781,7 @@ test("a subagent card's output is Markdown exactly when Pi inserted it as contex
     cardFacts([
       { ...cardRow("tool", card, "raw output"), role: "tool_result" },
       { ...cardRow("note", card, "**Found it**"), role: "context" },
-    ]).map((facts) => facts.markdown),
+    ]).map((facts) => facts.body.outputs[0]?.markdown),
     [false, true],
   );
 });
@@ -819,19 +817,55 @@ test("a delivered Run's answer is its final output fact, else the raw text, with
     }),
   ]);
   assert.deepEqual(
-    facts.map(({ output, markdown, statusLabel, details }) => [
-      output,
-      markdown,
+    facts.map(({ body, statusLabel }) => [
+      body.outputs[0]?.text,
+      body.outputs[0]?.markdown,
       statusLabel,
-      details.flatMap((d) => ("text" in d ? [d.text] : [])),
+      body.status,
     ]),
     [
-      ["raw prose", true, "Completed", []],
-      ["# Answer\n\nDone.", true, "Completed", []],
-      ["1 2 3 4 5", false, "Completed", ["Preview · the whole answer is in the Run's Result"]],
-      ["1 2 3", true, "Completed", ["Beginning only · 900 bytes cut"]],
-      [undefined, false, "Completed", ["Output removed · 70000 bytes"]],
-      [undefined, false, "Failed", ["Failed · Provider overloaded"]],
+      ["raw prose", true, "Completed", undefined],
+      ["# Answer\n\nDone.", true, "Completed", undefined],
+      ["1 2 3 4 5", false, "Completed", "Preview · the whole answer is in the Run's Result"],
+      ["1 2 3", true, "Completed", "Beginning only · 900 bytes cut"],
+      [undefined, undefined, "Completed", "Output removed · 70000 bytes"],
+      [undefined, undefined, "Failed", "Failed · Provider overloaded"],
     ],
   );
+});
+
+test("a wait that delivered one Run speaks for that Run: its answer, and its spend on the meta line", () => {
+  const [facts] = cardFacts([
+    cardRow("wait", {
+      kind: "collection",
+      scope: "named",
+      runId: "run-1",
+      subagentId: "sub-1",
+      profile: "reviewer",
+      status: "Completed",
+      terminalStatus: "completed",
+      finalOutput: { kind: "retained", text: "All green." },
+      durationMillis: 2700,
+      runs: [
+        {
+          runId: "run-1",
+          profile: "reviewer",
+          status: "completed",
+          usage: { input: 3506, output: 9, cacheRead: 0, cacheWrite: 0, cost: 0.0076 },
+          model: "openai/gpt-6.1-sol",
+          finalOutput: { kind: "retained", text: "All green." },
+          durationMillis: 2700,
+        },
+      ],
+      stillRunning: 0,
+      unknown: 0,
+      unavailable: 0,
+      noActiveRuns: false,
+      attention: false,
+    }),
+  ]);
+  assert.deepEqual(facts!.body, {
+    outputs: [{ text: "All green.", markdown: true }],
+    meta: "sub-1 · run-1 · 2.7s · $0.0076 · openai/gpt-6.1-sol",
+  });
 });

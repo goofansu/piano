@@ -1,4 +1,4 @@
-import type { RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
+import type { FinalOutput, RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
 import { abbrevHome } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
@@ -18,16 +18,26 @@ export type ToolOutcome = "running" | "failed" | "incomplete" | "done" | "pendin
 
 export type Badge = "destructive" | "secondary" | "success" | "warning";
 
-/** One part of a subagent card's on-demand details, in the order it is shown. */
-export type SubagentDetail =
-  /** Which Subagent and Run the card is about. */
-  | { kind: "identity"; subagentId?: string; runId?: string }
-  /** What was sent to the Subagent, under its label. */
-  | { kind: "text"; label: "Prompt" | "Guidance"; text: string }
-  /** A quiet summary line: a status with its clauses, or a duration. */
-  | { kind: "note"; text: string }
-  /** One Run's line in a collection or cancellation, led by its Run ID. */
-  | { kind: "run"; text: string };
+/** One block of what came back: a Run's answer, or a sentence as pi-subagent wrote it. */
+export interface SubagentOutput {
+  /** The Run the block is about, when the row covers several. */
+  label?: string;
+  text?: string;
+  /** The text is an agent's Markdown; otherwise it is shown as it came. */
+  markdown: boolean;
+}
+
+/** The opened row, in the order its slots are shown: a subagent row reads as a tool row, with
+ * what was sent and what came back, and its diagnostics on one quiet line at the end. */
+export interface SubagentBody {
+  /** Why the Run ended as it did, or what its output lacks; nothing for a plain outcome. */
+  status?: string;
+  /** What the agent sent: a prompt, or guidance. */
+  input?: string;
+  outputs: SubagentOutput[];
+  /** Ids, duration, cost and model. */
+  meta?: string;
+}
 
 /** A pi-subagent card with what it means once every card in the transcript has been read. */
 export interface SubagentFacts {
@@ -42,19 +52,15 @@ export interface SubagentFacts {
   terminal?: TerminalStatus;
   /** The badge text: the status's head, before its first " · "; it names `terminal` whenever
    * there is one, so it agrees with `badge`. The status's remaining clauses, such as why a
-   * request was refused, open the first line of `details`. */
+   * request was refused, open the body's status line. */
   statusLabel: string;
   badge: Badge;
   /** The gutter dot: a failed call or Run, a completed Run, or neither. */
   dot: "err" | "ok" | "idle";
   /** The tool call that carried the card failed. */
   failed: boolean;
-  output?: string;
-  /** `output` is Markdown a Subagent wrote (a notification Pi inserted as context), not a tool's
-   * raw output, which is shown as it came. */
-  markdown: boolean;
-  details: SubagentDetail[];
-  /** Anything to show when opened: `details` or output. */
+  body: SubagentBody;
+  /** Anything to show when opened: any slot of `body`. */
   hasDetails: boolean;
 }
 
@@ -199,39 +205,90 @@ function subagentTitle(card: SubagentCard): string {
   }
 }
 
-function subagentDetails(card: SubagentCard): SubagentDetail[] {
-  const details: SubagentDetail[] = [];
-  const subagentId = "subagentId" in card ? card.subagentId : undefined;
-  const runId = "runId" in card ? card.runId : undefined;
-  if (subagentId || runId)
-    details.push({
-      kind: "identity",
-      ...(subagentId ? { subagentId } : {}),
-      ...(runId ? { runId } : {}),
-    });
-  if (card.kind === "delegation" && card.prompt)
-    details.push({ kind: "text", label: "Prompt", text: card.prompt });
-  if (card.kind === "control" && card.message)
-    details.push({ kind: "text", label: "Guidance", text: card.message });
+const formatDuration = (ms: number): string => {
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 60
+    ? `${minutes}m ${Math.round(seconds % 60)}s`
+    : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+};
+
+/** One quiet line of a Run's identity and spend, from whichever facts the card carries. A wait
+ * that delivered exactly one Run speaks for that Run, spend included. */
+function metaOf(card: SubagentCard): string | undefined {
+  const spend = card.kind === "collection" && card.runs.length === 1 ? card.runs[0] : card;
+  const parts = [
+    "subagentId" in card ? card.subagentId : undefined,
+    "runId" in card ? card.runId : undefined,
+    "durationMillis" in card && card.durationMillis !== undefined
+      ? formatDuration(card.durationMillis)
+      : undefined,
+    spend && "usage" in spend && spend.usage?.cost ? `$${spend.usage.cost.toFixed(4)}` : undefined,
+    spend && "model" in spend ? spend.model : undefined,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : undefined;
+}
+
+/** What the Run's final output fact says the output lacks, as a status clause. */
+function retentionOf(card: SubagentCard): string | undefined {
   const output = "finalOutput" in card ? card.finalOutput : undefined;
-  if (output?.kind === "removed")
-    details.push({ kind: "note", text: `Output removed · ${output.removedBytes} bytes` });
+  if (output?.kind === "removed") return `Output removed · ${output.removedBytes} bytes`;
   if (output?.kind === "retained-prefix")
-    details.push({ kind: "note", text: `Beginning only · ${output.removedBytes} bytes cut` });
-  if (output && "preview" in output)
-    details.push({ kind: "note", text: "Preview · the whole answer is in the Run's Result" });
-  if ("durationMillis" in card && card.durationMillis !== undefined)
-    details.push({ kind: "note", text: `Duration ${(card.durationMillis / 1000).toFixed(1)}s` });
-  if (card.kind === "collection")
-    for (const run of card.runs)
-      details.push({ kind: "run", text: `${run.runId} · ${run.profile} · ${run.status}` });
-  if (card.kind === "cancellation")
-    for (const outcome of card.outcomes)
-      details.push({
-        kind: "run",
-        text: `${outcome.runId} · ${outcome.kind}${outcome.kind === "already terminal" ? ` · ${outcome.phase}` : ""}`,
-      });
-  return details;
+    return `Beginning only · ${output.removedBytes} bytes cut`;
+  if (output && "preview" in output) return "Preview · the whole answer is in the Run's Result";
+  return undefined;
+}
+
+/** A Run's answer from its final output fact: the agent's Markdown, or a long answer's preview. */
+function answerOf(output: FinalOutput | undefined): SubagentOutput | undefined {
+  if (!output) return undefined;
+  if ("text" in output) return output.text ? { text: output.text, markdown: true } : undefined;
+  if ("preview" in output)
+    return output.preview ? { text: output.preview, markdown: false } : undefined;
+  return undefined;
+}
+
+/** What came back, one block per Run. A result's answer is its final output fact when the card
+ * carries one, else the text as pi-subagent wrote it (Markdown when Pi inserted it as context).
+ * A refused call shows its refusal sentence; an admitted one has nothing to add to "Started". */
+function outputsOf(
+  card: SubagentCard,
+  text: string | undefined,
+  rawMarkdown: boolean,
+): SubagentOutput[] {
+  const raw = text ? [{ text, markdown: rawMarkdown }] : [];
+  switch (card.kind) {
+    case "delegation":
+      return card.admitted ? [] : raw;
+    case "control":
+      return card.attention ? raw : [];
+    case "cancellation":
+      return card.outcomes.map((outcome) => ({
+        label: `${outcome.runId} · ${outcome.kind}${outcome.kind === "already terminal" ? ` · ${outcome.phase}` : ""}`,
+        markdown: false,
+      }));
+    case "result":
+      return card.finalOutput ? [answerOf(card.finalOutput)].filter((o) => !!o) : raw;
+    case "collection": {
+      if (card.runs.length === 1 && card.finalOutput)
+        return [answerOf(card.finalOutput)].filter((o) => !!o);
+      if (card.runs.length === 0) return [];
+      if (!card.runs.some((run) => run.finalOutput)) return raw;
+      return card.runs.map((run) => ({
+        label: [
+          run.runId,
+          run.profile,
+          run.status,
+          run.durationMillis !== undefined ? formatDuration(run.durationMillis) : undefined,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        ...answerOf(run.finalOutput),
+        markdown: !!answerOf(run.finalOutput)?.markdown,
+      }));
+    }
+  }
 }
 
 /** A nested tool call's badge, by what became of the call. */
@@ -258,24 +315,27 @@ function subagentFacts(
   rawMarkdown: boolean,
 ): SubagentFacts {
   const terminal = reported ?? ("terminalStatus" in card ? card.terminalStatus : undefined);
-  // The answer is the Run's final output when the card states it (an agent's Markdown, or the
-  // one-line preview of a long one); without that fact, the text as pi-subagent wrote it.
-  const finalOutput = "finalOutput" in card ? card.finalOutput : undefined;
-  const [output, markdown] = finalOutput
-    ? "text" in finalOutput
-      ? [finalOutput.text || undefined, true]
-      : "preview" in finalOutput
-        ? [finalOutput.preview || undefined, false]
-        : [undefined, false]
-    : [text, rawMarkdown];
   // pi-subagent phrases a status as a head and clauses ("Resume refused · unknown Subagent").
-  // The head is the badge; the whole phrase opens the details, but only while the clauses
-  // qualify the head the card itself reported, never a settled status another card reported
-  // later.
+  // The head is the badge; the whole phrase opens the body's status line, but only while the
+  // clauses qualify the head the card itself reported, never a settled status another card
+  // reported later.
   const [head = "", ...clauses] = card.status.split(" · ");
   const statusLabel = terminal && head !== titleCase(terminal) ? titleCase(terminal) : head;
-  const statusNote: SubagentDetail[] =
-    clauses.length && statusLabel === head ? [{ kind: "note", text: card.status }] : [];
+  const status = [
+    clauses.length && statusLabel === head ? card.status : undefined,
+    retentionOf(card),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const input =
+    card.kind === "delegation" ? card.prompt : card.kind === "control" ? card.message : undefined;
+  const meta = metaOf(card);
+  const body: SubagentBody = {
+    ...(status ? { status } : {}),
+    ...(input ? { input } : {}),
+    outputs: outputsOf(card, text, rawMarkdown),
+    ...(meta ? { meta } : {}),
+  };
   const badge: Badge =
     terminal === "completed"
       ? "success"
@@ -294,7 +354,6 @@ function subagentFacts(
   const isResult = card.kind === "result" || card.kind === "collection";
   const profile = "profile" in card ? card.profile : undefined;
   const runId = "runId" in card ? card.runId : undefined;
-  const details = [...statusNote, ...subagentDetails(card)];
   return {
     card,
     title,
@@ -307,10 +366,8 @@ function subagentFacts(
     badge,
     dot: failed || terminal === "failed" ? "err" : terminal === "completed" ? "ok" : "idle",
     failed,
-    ...(output ? { output } : {}),
-    markdown,
-    details,
-    hasDetails: !!output || details.length > 0,
+    body,
+    hasDetails: !!(body.status || body.input || body.outputs.length || body.meta),
   };
 }
 
