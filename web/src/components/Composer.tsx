@@ -281,7 +281,7 @@ export function Composer({
           role="group"
           aria-label="Session usage"
         >
-          <SessionLinks messages={messages} />
+          <SessionLinks messages={messages} working={streaming} />
           <JumpTo messages={messages} working={streaming} />
           <Popover>
             <PopoverTrigger asChild>

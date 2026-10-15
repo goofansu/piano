@@ -566,3 +566,30 @@ export function jumpEntries(rows: ReadonlyArray<TranscriptRow>): JumpEntry[] {
   entries.push(BOTTOM_ENTRY);
   return entries;
 }
+
+/**
+ * Where a mention in message `messageId` is shown, as jumps to try in order: the message's own
+ * row, which the transcript renders when it shows everything, then the nearest earlier Jump to
+ * destination, the exchange the mention belongs to, for when that row is folded away. Only the
+ * viewport knows which rows exist, so it tries them.
+ */
+export function revealEntries(
+  messages: ReadonlyArray<RenderMsg>,
+  entries: ReadonlyArray<JumpEntry>,
+  messageId: string,
+): JumpEntry[] {
+  const index = messages.findIndex((m) => m.id === messageId);
+  if (index < 0) return [];
+  const message = messages[index]!;
+  const exact: JumpEntry = {
+    kind: message.role === "user" ? "user" : "assistant",
+    id: messageId,
+    label: messageLabel(message.text),
+    messageId,
+  };
+  const before = new Set(messages.slice(0, index).map((m) => m.id));
+  const fallback = entries.findLast(
+    (entry) => (entry.kind === "user" || entry.kind === "assistant") && before.has(entry.messageId),
+  );
+  return fallback ? [exact, fallback] : [exact];
+}

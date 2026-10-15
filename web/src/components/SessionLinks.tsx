@@ -1,24 +1,41 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
+import { LocateFixedIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { IconButton } from "@/components/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { displayUrl, sessionLinks } from "@/lib/sessionLinks";
+import { displayUrl, type SessionLink, sessionLinks } from "@/lib/sessionLinks";
 import { listRow } from "@/lib/styles";
+import { jumpEntries, revealEntries, transcriptRows } from "@/lib/transcript";
+import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
+  working?: boolean;
 }
 
 /**
  * The web links the conversation mentions, opened from the usage row beside Jump to message. Each
- * opens in a new tab; nothing is previewed in Piano. Absent while the session has none.
+ * opens in a new tab; nothing is previewed in Piano. Beside each, "Show in conversation" scrolls
+ * the transcript to where the link was mentioned last. Absent while the session has none.
  */
-export function SessionLinks({ messages }: Props) {
+export function SessionLinks({ messages, working = false }: Props) {
   const [open, setOpen] = useState(false);
+  const viewport = useTranscriptViewport();
   const links = useMemo(() => sessionLinks(messages), [messages]);
+  // Fallback destinations, from the rows the transcript renders, like the jump list's entries.
+  const entries = useMemo(
+    () => jumpEntries(transcriptRows(messages, { working })),
+    [messages, working],
+  );
   if (links.length === 0) return null;
+  const reveal = (link: SessionLink) => {
+    setOpen(false);
+    for (const entry of revealEntries(messages, entries, link.messageId))
+      if (viewport?.jump(entry)) return;
+  };
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
@@ -45,13 +62,13 @@ export function SessionLinks({ messages }: Props) {
           <p className="border-b border-line px-4 py-2.5 text-sm font-medium">Links</p>
           <ul className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1">
             {links.map((link) => (
-              <li key={link.url}>
+              <li key={link.url} className="flex items-center pr-2">
                 <a
                   href={link.url}
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setOpen(false)}
-                  className={cn(listRow, "px-4 py-1.5")}
+                  className={cn(listRow, "min-w-0 flex-1 py-1.5 pl-4 pr-2")}
                 >
                   {/* Two lines: links in one session mostly share a prefix, so a URL cut short
                       after the host says nothing. The title, then the whole URL below it. Every
@@ -68,6 +85,14 @@ export function SessionLinks({ messages }: Props) {
                     </span>
                   </span>
                 </a>
+                <IconButton
+                  label="Show in conversation"
+                  side="left"
+                  className="shrink-0 text-ink-3"
+                  onClick={() => reveal(link)}
+                >
+                  <LocateFixedIcon />
+                </IconButton>
               </li>
             ))}
           </ul>

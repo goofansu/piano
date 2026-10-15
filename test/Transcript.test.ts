@@ -6,6 +6,7 @@ import { messageError } from "../web/src/lib/messageError.ts";
 import {
   jumpEntries,
   nestedStatus,
+  revealEntries,
   type TranscriptOptions,
   type TranscriptRow,
   transcriptRows,
@@ -900,4 +901,42 @@ test("a wait over several Runs labels each block as the meta line would: id, pro
       "run-3 · general-purpose · completed · 8.9s · $0.0144 · claude-opus-5",
     ],
   );
+});
+
+test("revealing a mention tries the message's own row, then the exchange it belongs to", () => {
+  const messages: RenderMsg[] = [
+    { id: "u1", role: "user", text: "Deploy it" },
+    {
+      id: "a1",
+      role: "assistant",
+      text: "Reading https://example.com/docs first",
+      toolCalls: [{ id: "t1", name: "bash", args: "{}" }],
+    },
+    { id: "r1", role: "tool_result", text: "ok", toolCallId: "t1" },
+    { id: "a2", role: "assistant", text: "Done, see https://example.com/done" },
+    { id: "u2", role: "user", text: "Thanks" },
+  ];
+  const entries = jumpEntries(transcriptRows(messages));
+  assert.deepEqual(
+    entries.map((e) => e.id),
+    ["top", "u1", "a2", "u2", "bottom"],
+    "the intermediate reply is not a destination",
+  );
+  assert.deepEqual(
+    revealEntries(messages, entries, "a1").map((e) => [e.kind, e.id]),
+    [
+      ["assistant", "a1"],
+      ["user", "u1"],
+    ],
+  );
+  assert.deepEqual(
+    revealEntries(messages, entries, "a2").map((e) => e.id),
+    ["a2", "u1"],
+    "a destination's own row comes first; the fallback is the destination before it",
+  );
+  assert.deepEqual(
+    revealEntries(messages, entries, "u1").map((e) => e.id),
+    ["u1"],
+  );
+  assert.deepEqual(revealEntries(messages, entries, "missing"), []);
 });
