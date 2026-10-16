@@ -13,4 +13,10 @@
   <symbol id="jira" viewBox="0 0 24 24">
     <path fill="currentColor" d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.005-1.005zm5.723-5.756H5.736a5.215 5.215 0 0 0 5.215 5.214h2.129v2.058a5.218 5.218 0 0 0 5.215 5.214V6.758a1.001 1.001 0 0 0-1.001-1.001zM23.013 0H11.455a5.215 5.215 0 0 0 5.215 5.215h2.129v2.057A5.215 5.215 0 0 0 24 12.483V1.005A1.001 1.001 0 0 0 23.013 0Z" />
   </symbol>
+  <!-- Paper: monochrome adaptation of the overlapping-paper mark in the app icon
+       supplied by the user. Brand source: https://paper.design
+       The Paper mark belongs to its respective owner; not part of the CC0 icons above. -->
+  <symbol id="paper" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M5 2h17v12h-8V5H5ZM2 5h3v9h9v8H2Z" />
+  </symbol>
 </svg>

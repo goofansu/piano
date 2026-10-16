@@ -2,8 +2,9 @@
  * configuration format, OAuth (discovery, registration, PKCE, refresh) and credential storage;
  * this module only decides which catalog entry to add or remove and relays Pi's sign-in prompts.
  * Nothing here mutates running sessions: a new session reads the updated setup. */
+import { homedir } from "node:os";
 import { join } from "node:path";
-import type { McpServerEntry } from "@earendil-works/pi-coding-agent";
+import type { McpServerConfig, McpServerEntry } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 // Pi 1.1.0 exports neither its MCP credential store nor its sign-in flow. Keep these pinned
 // compatibility dependencies here; McpSetup tests exercise the installed helpers. Recheck on
@@ -20,11 +21,17 @@ import {
 import {
   MCP_CATALOG,
   type McpCatalogId,
+  type McpCatalogServer,
   type McpServerSetup,
   type McpSetupRequest,
   type McpSetupState,
 } from "../shared/mcp.ts";
-import { authOf, McpConfigEntries } from "./McpConfigEntries.ts";
+import {
+  authOf,
+  isCommandEntry,
+  type McpCatalogTarget,
+  McpConfigEntries,
+} from "./McpConfigEntries.ts";
 import { agentDir } from "./PiEnv.ts";
 import {
   SignInAttempts,
@@ -33,19 +40,40 @@ import {
   type SignInSource,
 } from "./SignInAttempts.ts";
 
-type CatalogServer = { id: McpCatalogId; name: string; url: string };
+type CatalogServer = McpCatalogTarget & { readonly id: McpCatalogId };
 /** Where the entry signs in, when Pi authenticates it with MCP OAuth. */
 const oauthUrl = (entry: McpServerEntry) => {
   const auth = authOf(entry.config);
   return auth._tag === "oauth" ? auth.url : undefined;
 };
+/** The catalog as this machine reaches it: a local CLI's path is resolved against the home
+ * directory of the account running Piano here, so no filesystem path is on the wire (INV-11). */
+const catalogServers = (): readonly CatalogServer[] =>
+  MCP_CATALOG.map(({ id, name, command, url }: McpCatalogServer) =>
+    command
+      ? {
+          id,
+          name,
+          command: join(
+            homedir(),
+            (process.platform === "win32" && command.windows) || command.home,
+          ),
+          args: command.args,
+        }
+      : { id, name, url },
+  );
+/** What a new entry configures. An entry the user already has is kept as they configured it. */
+const configOf = (server: CatalogServer): McpServerConfig =>
+  isCommandEntry(server)
+    ? { command: server.command, args: [...server.args] }
+    : { url: server.url };
 
 export const McpSetupEnvironment = Context.Reference<{
   directory: () => string;
-  /** The catalog's endpoints; tests point them at a local server. */
+  /** The catalog's endpoints and resolved local commands; tests point them at a fake. */
   servers: () => readonly CatalogServer[];
 }>("piano/McpSetupEnvironment", {
-  defaultValue: () => ({ directory: agentDir, servers: () => MCP_CATALOG }),
+  defaultValue: () => ({ directory: agentDir, servers: catalogServers }),
 });
 
 export class McpSetupError extends Data.TaggedError("McpSetupError")<{ readonly detail: string }> {}
@@ -79,8 +107,15 @@ export const McpSetupLive = Layer.effect(
     const setup = (server: CatalogServer): McpServerSetup => {
       const observed = entries.observe(server);
       const detail = observed.status === "blocked" ? { detail: observed.detail } : {};
+      // A local command never signs in, so a missing one is not waiting for OAuth either.
       if (!observed.entry)
-        return { id: server.id, status: observed.status, oauth: true, signedIn: false, ...detail };
+        return {
+          id: server.id,
+          status: observed.status,
+          oauth: !isCommandEntry(server),
+          signedIn: false,
+          ...detail,
+        };
       const { entry, removalKey } = observed;
       const url = oauthUrl(entry);
       try {
@@ -120,8 +155,10 @@ export const McpSetupLive = Layer.effect(
     const signedInEntry = (id: string) => {
       const server = catalog(id);
       const entry = find(server);
-      const url = entry && oauthUrl(entry);
-      if (!entry || !url) throw new Error(`Install ${server.name} MCP before signing in.`);
+      if (!entry) throw new Error(`Install ${server.name} MCP before signing in.`);
+      const url = oauthUrl(entry);
+      // A local command, a provider token or an Authorization header: Pi needs no sign-in here.
+      if (!url) throw new Error(`${server.name} MCP does not sign in.`);
       return { server, entry, url };
     };
 
@@ -218,9 +255,9 @@ export const McpSetupLive = Layer.effect(
           case "install":
             return writing(
               Effect.try(() => catalog(request.server)).pipe(
-                // Any existing entry for the endpoint is kept as the user configured it.
+                // An existing entry for the endpoint or command is kept as the user configured it.
                 Effect.flatMap((server) =>
-                  entries.save(server, (existing) => (existing ? undefined : { url: server.url })),
+                  entries.save(server, (existing) => (existing ? undefined : configOf(server))),
                 ),
               ),
               "Could not install this MCP server. Check Pi's global configuration and file permissions, then refresh.",

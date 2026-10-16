@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { Effect, Layer } from "effect";
 import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { McpSetup, McpSetupEnvironment, McpSetupLive } from "../server/McpSetup.ts";
 import { PiSessions } from "../server/PiSessions.ts";
+import { MCP_CATALOG } from "../shared/mcp.ts";
 import type { ProviderLoginState } from "../shared/wire.ts";
 
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
+/** The local CLI a stdio catalog server runs, as McpSetup resolves it for this machine. */
+const command = (directory: string) => join(directory, "bin", "paper");
 const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringify(value, null, 2));
 
 /** The network is the fake boundary: a loopback MCP server behind OAuth discovery, dynamic
@@ -106,7 +109,10 @@ async function fixture(
         Effect.scoped,
         Effect.provideService(McpSetupEnvironment, {
           directory: () => directory,
-          servers: () => [{ id: "linear", name: "Linear", url: fake.url }],
+          servers: () => [
+            { id: "linear", name: "Linear", url: fake.url },
+            { id: "paper", name: "Paper", command: command(directory), args: ["mcp"] },
+          ],
         }),
       ),
     );
@@ -124,8 +130,9 @@ const until = (setup: McpSetup["Service"], done: (state: ProviderLoginState) => 
       yield* Effect.sleep(5);
     }
   }).pipe(Effect.timeout("10 seconds"));
-const linear = (setup: McpSetup["Service"]) =>
-  Effect.map(setup.state, (state) => state.servers.find((server) => server.id === "linear")!);
+const server = (setup: McpSetup["Service"], id: string) =>
+  Effect.map(setup.state, (state) => state.servers.find((server) => server.id === id)!);
+const linear = (setup: McpSetup["Service"]) => server(setup, "linear");
 
 test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall a catalog MCP server through Pi", async () => {
   await fixture((setup, directory, url) =>
@@ -202,4 +209,86 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
       assert.equal((yield* linear(setup)).status, "missing");
     }),
   );
+});
+
+test("INV-01/12: a local command server configures its CLI, never signs in, and uninstall takes only its entry", async () => {
+  await fixture((setup, directory, url) =>
+    Effect.gen(function* () {
+      const file = join(directory, "mcp.json");
+      save(file, { custom: { untouched: true }, mcpServers: { other: { command: "do-not-run" } } });
+      // Nothing to sign in to, installed or not: Pi starts a local command without OAuth.
+      assert.deepEqual(yield* server(setup, "paper"), {
+        id: "paper",
+        status: "missing",
+        oauth: false,
+        signedIn: false,
+      });
+      assert.match((yield* Effect.flip(setup.signIn.start("paper"))).detail, /Install Paper MCP/);
+
+      // Installing configures the relay; it does not install or look for the CLI, which an
+      // isolated home (as the browser harness uses) does not have.
+      assert.equal(existsSync(command(directory)), false);
+      yield* setup.change({ action: "install", server: "paper" });
+      assert.deepEqual(json(file), {
+        custom: { untouched: true },
+        mcpServers: {
+          other: { command: "do-not-run" },
+          paper: { command: command(directory), args: ["mcp"] },
+        },
+      });
+      const installed = yield* server(setup, "paper");
+      assert.equal(installed.status, "ready");
+      assert.equal(installed.oauth, false);
+      assert.equal(installed.signedIn, false);
+      assert.match((yield* Effect.flip(setup.signIn.start("paper"))).detail, /does not sign in/);
+      assert.equal(
+        (yield* Effect.result(setup.change({ action: "sign-out", server: "paper" })))._tag,
+        "Failure",
+      );
+      assert.equal(existsSync(join(directory, "mcp-auth.json")), false, "no credential is stored");
+
+      // Installing again keeps the user's entry as configured, and leaves the other server alone.
+      yield* setup.change({ action: "install", server: "linear" });
+      const before = readFileSync(file, "utf8");
+      yield* setup.change({ action: "install", server: "paper" });
+      assert.equal(readFileSync(file, "utf8"), before);
+
+      const { removalKey } = yield* server(setup, "paper");
+      yield* setup.change({ action: "uninstall", server: "paper", removalKey: removalKey! });
+      assert.deepEqual(json(file), {
+        custom: { untouched: true },
+        mcpServers: { other: { command: "do-not-run" }, linear: { url } },
+      });
+      assert.equal((yield* server(setup, "paper")).status, "missing");
+      assert.equal((yield* server(setup, "linear")).status, "ready");
+    }),
+  );
+});
+
+test("INV-11: the catalog carries no filesystem path; the server resolves a local CLI under the home directory", () => {
+  const servers = Effect.runSync(
+    Effect.gen(function* () {
+      return (yield* McpSetupEnvironment).servers();
+    }),
+  );
+  assert.deepEqual(
+    servers.find((server) => server.id === "paper"),
+    {
+      id: "paper",
+      name: "Paper",
+      command: join(
+        homedir(),
+        ".paper",
+        "bin",
+        process.platform === "win32" ? "paper.exe" : "paper",
+      ),
+      args: ["mcp"],
+    },
+  );
+  assert.deepEqual(
+    servers.find((server) => server.id === "linear"),
+    { id: "linear", name: "Linear", url: "https://mcp.linear.app/mcp" },
+  );
+  for (const entry of MCP_CATALOG)
+    assert.equal(isAbsolute(entry.command?.home ?? ""), false, `${entry.name} sends a path`);
 });

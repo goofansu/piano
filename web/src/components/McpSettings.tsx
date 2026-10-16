@@ -31,10 +31,11 @@ import {
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
-// Locally bundled Simple Icons logos; omit media for servers without a matching logo.
+// Locally bundled brand marks; omit media for servers without a matching logo.
 const SERVER_LOGOS: Partial<Record<McpServer["id"], string>> = {
   linear: "/mcp-logos.svg#linear",
   jira: "/mcp-logos.svg#jira",
+  paper: "/mcp-logos.svg#paper",
 };
 type Confirmation =
   | { kind: "sign-out"; server: McpServer }
