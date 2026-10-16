@@ -125,8 +125,8 @@ export const NotificationsLive = Layer.effect(
     });
     const delayMs = yield* NotificationDelayMs;
     const layerScope = yield* Effect.scope;
-    const queue = yield* Queue.dropping<{ name: string; sessionId: string }>(32);
-    // One pending completion per session, in memory only: a restart forgets it like the queue.
+    const queue = yield* Queue.dropping<{ name: string; sessionId: string; key: symbol }>(32);
+    // Keep identity through the delay AND delivery waits, until claimed or invalidated.
     const pending = new Map<string, { key: symbol; fiber: Fiber.Fiber<void> }>();
     const drop = Effect.fnUntraced(function* (sessionId: string) {
       const entry = pending.get(sessionId);
@@ -135,17 +135,26 @@ export const NotificationsLive = Layer.effect(
       yield* Fiber.interrupt(entry.fiber);
     });
     yield* Effect.gen(function* () {
-      const { name, sessionId } = yield* Queue.take(queue);
-      const delay = yield* waitMs;
-      if (delay > 0) yield* Effect.sleep(delay);
-      if (problem) return;
-      const names = yield* slack();
-      // Discovery may wait on HTTP: check the preference AFTER it, immediately before sending.
-      if (!availableName(names, name) || (yield* selectedIntegration) !== name) return;
-      yield* send(
-        name,
-        message("Agent finished responding.", `/s/${encodeURIComponent(sessionId)}`),
-      );
+      const { name, sessionId, key } = yield* Queue.take(queue);
+      const current = () => pending.get(sessionId)?.key === key;
+      const forget = () => {
+        if (current()) pending.delete(sessionId);
+      };
+      yield* Effect.gen(function* () {
+        if (!current()) return;
+        const delay = yield* waitMs;
+        if (delay > 0) yield* Effect.sleep(delay);
+        if (problem || !current()) return;
+        const names = yield* slack();
+        // Discovery and preferences can wait: revalidate identity after both, then claim it.
+        const selected = yield* selectedIntegration;
+        if (!current() || !availableName(names, name) || selected !== name) return;
+        forget();
+        yield* send(
+          name,
+          message("Agent finished responding.", `/s/${encodeURIComponent(sessionId)}`),
+        );
+      }).pipe(Effect.ensuring(Effect.sync(forget)));
     }).pipe(
       Effect.catch(() => Effect.logWarning("A Slack notification could not be delivered.")),
       Effect.forever,
@@ -194,16 +203,11 @@ export const NotificationsLive = Layer.effect(
           if (problem || !name) return;
           yield* drop(sessionId);
           const key = Symbol(sessionId);
-          const fiber = yield* Effect.sleep(delayMs).pipe(
-            Effect.andThen(Queue.offer(queue, { name, sessionId })),
-            Effect.asVoid,
-            Effect.ensuring(
-              Effect.sync(() => {
-                if (pending.get(sessionId)?.key === key) pending.delete(sessionId);
-              }),
-            ),
-            Effect.forkIn(layerScope),
-          );
+          const fiber = yield* Effect.gen(function* () {
+            yield* Effect.sleep(delayMs);
+            const accepted = yield* Queue.offer(queue, { name, sessionId, key });
+            if (!accepted && pending.get(sessionId)?.key === key) pending.delete(sessionId);
+          }).pipe(Effect.forkIn(layerScope));
           pending.set(sessionId, { key, fiber });
         },
         Effect.catchCause(() => Effect.logWarning("A Slack notification could not be queued.")),
