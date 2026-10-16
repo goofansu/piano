@@ -8,6 +8,7 @@ import type { Dialog, SessionAction, SessionClosure } from "../shared/wire.ts";
 import { deriveStatus, snapshotStatus } from "./ApiStatus.ts";
 import { Notifications } from "./Notifications.ts";
 import {
+  PiRequestTimeoutMs,
   type PiSession,
   PiSessionError,
   type PiSessionSpec,
@@ -20,6 +21,8 @@ import { SessionReferences } from "./SessionReferences.ts";
 export interface SessionHost {
   /** Pi's session, with `act` admitted by this host. */
   readonly session: PiSession;
+  /** Bounded startup drain used only by API create-and-submit, before normal admission. */
+  readonly startupReady: Effect.Effect<void, PiSessionError>;
   /** API input shares act's admission and counters, but returns before Pi acknowledges/finishes. */
   readonly submit: (
     text: string,
@@ -80,6 +83,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   const notifications = yield* Notifications;
   const references = yield* SessionReferences;
   const observerScope = yield* Effect.scope;
+  const startupTimeoutMs = yield* PiRequestTimeoutMs;
   const { lock } = options;
 
   const scope = yield* Scope.make();
@@ -89,6 +93,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   );
   let lastActivity = yield* Clock.currentTimeMillis;
   let actions = 0;
+  let startupActionsDone = Deferred.makeUnsafe<void>();
   let closing = false;
   let apiOwned = options.apiOwned ?? false;
   let seq =
@@ -180,12 +185,14 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
           seq = yield* registry
             .recordTurn(raw.spec.cwd, raw.spec.sessionId, "accepted")
             .pipe(Effect.mapError((e) => rejected(e.detail)));
+        if (options.apiOwned && actions === 0) startupActionsDone = Deferred.makeUnsafe<void>();
         actions++;
         lastActivity = yield* Clock.currentTimeMillis;
         const fiber = yield* raw.act(action).pipe(
           Effect.ensuring(
             Effect.gen(function* () {
               actions--;
+              if (actions === 0) Deferred.doneUnsafe(startupActionsDone, Effect.void);
               lastActivity = yield* Clock.currentTimeMillis;
               yield* complete;
             }),
@@ -227,6 +234,18 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   const busy = Effect.map(raw.state, (state) => actions > 0 || !state.isQuiescent);
   const host: SessionHost = {
     session,
+    startupReady: Effect.gen(function* () {
+      while (true) {
+        yield* raw.startupReady;
+        if (actions === 0 || (yield* raw.state).submission) return;
+        yield* Deferred.await(startupActionsDone);
+      }
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: startupTimeoutMs,
+        orElse: () => rejected("Pi startup did not settle before the first prompt."),
+      }),
+    ),
     submit: Effect.fn("SessionHost.submit")(function* (text, mode, opened = false) {
       // Cached-stat refresh is deliberately asynchronous on browser reopen. For a host this
       // request just opened, let that initial readback drain before applying the busy gate.

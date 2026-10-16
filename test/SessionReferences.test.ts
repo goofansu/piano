@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -11,8 +12,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
+import { PiHistory } from "../server/PiHistory.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionReferences, SessionReferencesLive } from "../server/SessionReferences.ts";
@@ -69,6 +72,48 @@ const run = <A, E>(effect: Effect.Effect<A, E, SessionReferences | Registry>) =>
   );
 const refused = <A>(effect: Effect.Effect<A, { readonly detail: string }>) =>
   Effect.map(Effect.flip(effect), (error) => error.detail);
+
+test("fresh creation skips history scans but keeps reference and checkout checks; reopen still locates", async (t) => {
+  const locate = t.mock.method(PiHistory, "locate");
+  const list = t.mock.method(SessionManager, "list");
+  const { physical, alias } = checkout("fresh");
+  const id = randomUUID();
+  await run(
+    Effect.gen(function* () {
+      const references = yield* SessionReferences;
+      const registry = yield* Registry;
+      const fresh = yield* references.resolve(alias, id, { create: true });
+      assert.equal(fresh.cwd, alias);
+      assert.equal(fresh.physical, physical);
+      assert.equal(fresh.file, undefined);
+      assert.equal(fresh.checkoutMissing, false);
+      assert.equal(locate.mock.callCount(), 0);
+      assert.equal(list.mock.callCount(), 0);
+
+      const file = seed(alias, id, "fresh history");
+      yield* registry.addSession(alias, id);
+      assert.match(
+        yield* refused(references.resolve(alias, id, { create: true })),
+        /already registered/,
+      );
+      assert.equal((yield* references.resolve(alias, id)).file, file);
+      assert.equal(locate.mock.callCount(), 1);
+      assert.ok(list.mock.callCount() > 0);
+      yield* registry.archiveSession(alias, id);
+      assert.match(yield* refused(references.resolve(alias, id, { create: true })), /archived/);
+      yield* registry.addSession(physical, id);
+      assert.match(
+        yield* refused(references.resolve(alias, id, { create: true })),
+        /Conflicting session references/,
+      );
+      rmSync(physical, { recursive: true });
+      const missing = yield* references.resolve(alias, randomUUID(), { create: true });
+      assert.equal(missing.checkoutMissing, true);
+      assert.equal(missing.file, undefined);
+      assert.equal(locate.mock.callCount(), 1);
+    }),
+  );
+});
 
 test("INV-01/02: alias history resolves under its registry owner; conflicting references or files refuse", async () => {
   const { physical, alias } = checkout("legacy");

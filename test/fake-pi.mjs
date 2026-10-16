@@ -1,6 +1,6 @@
 // A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
 // exercise PiSessions through its interface. Behaviour is driven by the prompt text.
-import { closeSync, existsSync } from "node:fs";
+import { closeSync, existsSync, watch, writeFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
@@ -32,7 +32,9 @@ const environmentFixture = verifyChildEnvironment
 const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";
 const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "fake/alpha";
 let model = { provider: modelArg.split("/")[0], id: modelArg.split("/")[1] };
-let startupDialog = modelArg === "fake/startup-dialog";
+let startupDialog = modelArg === "fake/startup-dialog" || modelArg === "fake/startup-dialog-gated";
+let startupCancelled = false;
+const startupRelease = `${process.cwd()}/.startup-readback-release`;
 let thinkingLevel = "medium";
 let sessionName = environmentFixture ?? "fake";
 const state = () => ({
@@ -138,6 +140,15 @@ const respond = (cmd, data, error) =>
 function handle(cmd) {
   switch (cmd.type) {
     case "get_state":
+      if (model.id === "startup-dialog-gated" && startupCancelled && !existsSync(startupRelease)) {
+        const watcher = watch(process.cwd(), () => {
+          if (!existsSync(startupRelease)) return;
+          watcher.close();
+          respond(cmd, state());
+        });
+        writeFileSync(`${process.cwd()}/.startup-readback-waiting`, "waiting");
+        return;
+      }
       if (startupDialog) {
         startupDialog = false;
         out({
@@ -306,6 +317,7 @@ function handle(cmd) {
       return respond(cmd, { disposition: "queued" });
     }
     case "extension_ui_response": {
+      if (cmd.id === "startup" && cmd.cancelled) startupCancelled = true;
       if (cmd.id.startsWith("capacity-")) {
         releaseCapacity();
         streaming = false;
@@ -359,6 +371,8 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
+      if (model.id === "startup-dialog-gated" && !existsSync(startupRelease))
+        return respond(cmd, undefined, "Prompt arrived before startup cancellation settled");
       if (cmd.message.startsWith("notification ")) {
         respond(cmd, { disposition: "started" });
         if (cmd.message !== "notification finish") {

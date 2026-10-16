@@ -89,6 +89,14 @@ export class SessionHosts extends Context.Service<
     readonly create: (
       spec: CreateSpec,
     ) => Effect.Effect<PiSession, PiSessionError | RegistryError | RegistryLookupError>;
+    /** Create and submit to that same host, without resolving its newly registered history again. */
+    readonly createAndSubmit: (
+      spec: CreateSpec,
+      text: string,
+    ) => Effect.Effect<
+      { readonly sessionId: string; readonly seq: number },
+      PiSessionError | RegistryError | RegistryLookupError
+    >;
     /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
     readonly rename: (
       cwd: string,
@@ -263,7 +271,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         );
       const open = (spec: OpenSpec) => Effect.map(start(spec), ({ host }) => host.session);
 
-      const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
+      const createHost = Effect.fn("SessionHosts.createHost")(function* (spec: CreateSpec) {
         // Registry writes run before the ownership lock; an unavailable project registers nothing.
         if (spec.projectId !== undefined) yield* registry.requireActiveProject(spec.projectId);
         const cwd = yield* registry.ensureFolder(spec.cwd);
@@ -273,7 +281,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         return yield* start(
           { cwd, sessionId: randomUUID(), model, thinkingLevel, name },
           { projectId: spec.projectId, apiOwned: spec.apiOwned },
-        ).pipe(Effect.map(({ host }) => host.session));
+        ).pipe(Effect.map(({ host }) => host));
       });
 
       const get = (cwd: string, id: string) =>
@@ -362,7 +370,17 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             ),
           ),
         commands,
-        create,
+        create: (spec) => Effect.map(createHost(spec), (host) => host.session),
+        createAndSubmit: Effect.fn("SessionHosts.createAndSubmit")(function* (spec, text) {
+          return yield* owned(
+            Effect.gen(function* () {
+              const host = yield* createHost(spec);
+              yield* host.startupReady;
+              const seq = yield* host.submit(text, "prompt", true);
+              return { sessionId: host.session.spec.sessionId, seq };
+            }),
+          );
+        }),
         rename,
         release,
         get,

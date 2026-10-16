@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Clock, Effect, Layer } from "effect";
+import { PiHistory } from "../server/PiHistory.ts";
 import { Registry } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
@@ -143,6 +145,39 @@ test("API ownership also cancels a dialog opened during creation, before the fir
   assert.equal(snapshot.state.dialogResolution?.reason, "cancelled");
 });
 
+test("API initial creation waits for startup cancellation readback before delivering its prompt", {
+  timeout: 5000,
+}, async (t) => {
+  const waiting = join(server.repo, ".startup-readback-waiting");
+  const release = join(server.repo, ".startup-readback-release");
+  let watcher: ReturnType<typeof watch>;
+  const blocked = new Promise<"blocked">((resolve) => {
+    watcher = watch(server.repo, () => {
+      if (existsSync(waiting)) resolve("blocked");
+    });
+  });
+  t.after(() => {
+    watcher.close();
+    // Release even on assertion failure so cleanup never leaves a held Pi query.
+    writeFileSync(release, "release");
+  });
+  const created = post("/api/v1/sessions", {
+    cwd: server.repo,
+    model: "fake/startup-dialog-gated",
+    prompt: "after startup settles",
+  });
+  assert.equal(await Promise.race([blocked, created.then(() => "responded")]), "blocked");
+  writeFileSync(release, "release");
+  const response = await created;
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.equal(response.body.seq, 1);
+  const done = await until(
+    pathFor(response.body),
+    (b) => b.status === "idle" && b.completedSeq === 1,
+  );
+  assert.equal(done.lastAssistantMessage, "echo: after startup settles");
+});
+
 test("a removed registered checkout rejects API input without reopening Pi", async () => {
   const cwd = join(server.root, "removed");
   mkdirSync(cwd);
@@ -177,4 +212,28 @@ test("unregistered cwd and invalid messages refuse without creating work; succes
   const next = await post("/api/v1/sessions", input);
   assert.equal(next.status, 200);
   assert.notEqual(next.body.sessionId, first.body.sessionId);
+});
+
+test("API create delivers its first prompt through the new host without any history scans", async (t) => {
+  const locate = t.mock.method(PiHistory, "locate");
+  const list = t.mock.method(SessionManager, "list");
+  const input = { cwd: server.repo, prompt: "first prompt without scans", requestId: "no-scans" };
+  const created = await post("/api/v1/sessions", input);
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  assert.equal(created.body.workspaceId, server.workspaceId);
+  assert.equal(created.body.seq, 1);
+  assert.deepEqual(await post("/api/v1/sessions", input), created);
+  // A second resolve after registration would call locate, even with an already live host.
+  assert.equal(locate.mock.callCount(), 0);
+  assert.equal(list.mock.callCount(), 0);
+  const entry = await server.run(
+    Effect.flatMap(Registry, (r) => r.sessionIn(server.workspaceId, created.body.sessionId)),
+  );
+  assert.equal(entry.session.seq, 1);
+  // Polling is deliberately outside the zero-scan assertion: ordinary reads still resolve.
+  const done = await until(
+    pathFor(created.body),
+    (b) => b.status === "idle" && b.completedSeq === 1,
+  );
+  assert.equal(done.lastAssistantMessage, "echo: first prompt without scans");
 });

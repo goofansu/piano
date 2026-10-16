@@ -85,6 +85,8 @@ export interface PiSession {
   readonly state: Effect.Effect<SessionState>;
   /** Current display-projected snapshot, without subscribing or recording viewer activity. */
   readonly snapshot: Effect.Effect<Snapshot>;
+  /** API initial creation only: await startup cancellation/output drain, not an agent turn. */
+  readonly startupReady: Effect.Effect<void, PiSessionError>;
   /** Pi's slash commands for this session, in invocation precedence. A query: it starts no
    * operation and changes nothing in Pi. */
   readonly commands: Effect.Effect<ReadonlyArray<SlashCommand>, PiSessionError>;
@@ -298,6 +300,12 @@ const openSession = (spec: PiSessionSpec) =>
     const { transaction, apply, patchState, announced } = publication;
     let submissionId = 0;
     let processedVersion = 0;
+    let startupChanged: Deferred.Deferred<void> | undefined;
+    const notifyStartup = () => {
+      if (!startupChanged) return;
+      Deferred.doneUnsafe(startupChanged, Effect.void);
+      startupChanged = undefined;
+    };
     // Cancellation owner: operation tokens fence late abort/readback results.
     // Work belongs to sessionScope, not the lifetime of the requesting browser.
     const promptOperations = new Set<number>();
@@ -334,6 +342,7 @@ const openSession = (spec: PiSessionSpec) =>
       observationVersion: child.observationVersion,
       context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
       publication,
+      onIdle: notifyStartup,
     });
 
     const onRecord = ({ record, receivedAt }: { record: PiRecord; receivedAt: number }) =>
@@ -362,6 +371,7 @@ const openSession = (spec: PiSessionSpec) =>
           Effect.ensuring(
             Effect.sync(() => {
               processedVersion++;
+              notifyStartup();
             }),
           ),
         ),
@@ -401,6 +411,7 @@ const openSession = (spec: PiSessionSpec) =>
             ]);
           yield* dialogs.resolveAll("exited");
           yield* apply(() => [...projector.closed(), { _tag: "closed", closure: final }]);
+          notifyStartup();
         });
       });
     // Release is "during work" when Pi still held work it could continue or that awaited an
@@ -624,7 +635,28 @@ const openSession = (spec: PiSessionSpec) =>
               Effect.flatMap((fiber) => restore(Fiber.join(fiber))),
             );
           }),
-        ).pipe(displayed),
+        ).pipe(Effect.ensuring(Effect.sync(notifyStartup)), displayed),
+      startupReady: Effect.gen(function* () {
+        let synchronized: SessionState["dialogResolution"];
+        while (true) {
+          startupChanged ??= Deferred.makeUnsafe<void>();
+          const changed = startupChanged;
+          const snapshot = yield* publication.snapshot;
+          if (announced()) return yield* exited();
+          // Do not wait out another caller's input or genuine work and then send stale input.
+          if (snapshot.state.submission || isWorking(snapshot.state)) return;
+          const resolution = snapshot.state.dialogResolution;
+          if (resolution?.delivery === "written" && resolution !== synchronized) {
+            synchronized = resolution;
+            // UI answers have no acknowledgement. A read after the write fences its output;
+            // record/readback drain below includes any resulting dialogs and refreshes.
+            yield* readbacks.refresh("state");
+            continue;
+          }
+          if (present(snapshot).isQuiescent) return;
+          yield* Deferred.await(changed);
+        }
+      }),
       snapshot: transaction(() =>
         Effect.map(publication.snapshot, (snapshot) => ({
           ...snapshot,

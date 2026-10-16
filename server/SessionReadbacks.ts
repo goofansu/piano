@@ -29,6 +29,8 @@ export interface SessionReadbacksOptions {
   /** Pi's current context as the event replacing projected history; called under the lock. */
   readonly context: (messages: ReadonlyArray<RawMessage>) => SessionEvent;
   readonly publication: SessionPublication;
+  /** Wake an initial-creation waiter after workers drain, which need not publish another state. */
+  readonly onIdle?: () => void;
 }
 
 /** An operation token: a state readback owed to one is dropped once a later one starts. */
@@ -60,6 +62,7 @@ export const makeSessionReadbacks = ({
   observationVersion,
   context,
   publication,
+  onIdle,
 }: SessionReadbacksOptions): SessionReadbacks => {
   const factVersions = { model: 0, thinkingLevel: 0, sessionName: 0, sessionFile: 0 };
   let statsVersion = 0;
@@ -212,6 +215,7 @@ export const makeSessionReadbacks = ({
         Effect.ensuring(
           Effect.sync(() => {
             refreshing.delete(kind);
+            if (refreshing.size === 0) onIdle?.();
           }),
         ),
         Effect.forkIn(scope),

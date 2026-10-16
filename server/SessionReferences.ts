@@ -54,7 +54,8 @@ export class SessionReferences extends Context.Service<
     /**
      * The one registry reference owning this session under any spelling of the caller's checkout,
      * and its Pi file. Refuses an archived, unregistered or (with `create`) already registered
-     * session, and conflicting references or files, which are never merged.
+     * session, and conflicting references or files, which are never merged. With `create`, a
+     * fresh server-generated UUID cannot have a Pi file, so no history scan is performed.
      */
     readonly resolve: (
       cwd: string,
@@ -140,8 +141,10 @@ export const SessionReferencesLive = Layer.effect(
       if (entry && create) return yield* rejected("This session ID is already registered.");
       const owner = entry?.cwd ?? directoryPath(cwd);
       const at = yield* observe(owner);
-      const located = yield* history.locate(sessionId, [...at.spellings, cwd, physical]);
-      if (located._tag === "conflict")
+      const located = create
+        ? undefined
+        : yield* history.locate(sessionId, [...at.spellings, cwd, physical]);
+      if (located?._tag === "conflict")
         return yield* rejected(
           `Conflicting Pi files for checkout aliases (${owner}, ${physical}). Piano has not merged or moved history. Resolve the conflicting session ID before starting it.`,
         );
@@ -149,7 +152,7 @@ export const SessionReferencesLive = Layer.effect(
         cwd: owner,
         sessionId,
         physical,
-        file: located._tag === "file" ? located.path : undefined,
+        file: located?._tag === "file" ? located.path : undefined,
         stats: entry?.stats,
         checkoutMissing: at.missing,
       };

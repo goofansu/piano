@@ -74,13 +74,13 @@ export const ApiRouter = HttpRouter.use((router) =>
           if (!data.folders.includes(body.cwd) && !data.worktrees.some((w) => w.path === body.cwd))
             return yield* fail(400, "cwd is not a registered folder.");
           const workspace = data.workspaces.find((w) => w.path === body.cwd)!;
-          const session = yield* hosts
-            .create({ cwd: body.cwd, options: { model: body.model }, apiOwned: true })
+          const created = yield* hosts
+            .createAndSubmit(
+              { cwd: body.cwd, options: { model: body.model }, apiOwned: true },
+              body.prompt,
+            )
             .pipe(Effect.catch((e) => fail(409, e.detail)));
-          const seq = yield* hosts
-            .submit(session.spec.cwd, session.spec.sessionId, body.prompt, "prompt")
-            .pipe(Effect.catch((e) => fail(409, e.detail)));
-          return { workspaceId: workspace.id, sessionId: session.spec.sessionId, seq };
+          return { workspaceId: workspace.id, ...created };
         }),
       ),
     );
