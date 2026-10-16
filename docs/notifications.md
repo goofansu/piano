@@ -19,7 +19,11 @@ the Slack card and actionable errors: no raw webhook input or routine saved-stat
 ## Completion messages and links
 
 Piano sends one line, “Agent finished responding.” followed by the session's URL, when a live
-agent run settles with a successful final response. This does not mean a task is accepted or verified.
+agent run settles with a successful final response. The message waits **60 seconds** first: any
+action in that session (a prompt, steer or abort) or opening it in a browser during the wait drops
+it, and a newer completion restarts the wait. Piano does not watch focus or visibility, so reading a
+result for longer than a minute without acting still sends the message. Pending waits live in
+backend memory and a restart forgets them. Sending does not mean a task is accepted or verified.
 Aborted/failed runs, intermediate `agent_end` events and opening saved history do not send completion
 notifications. No prompt, response content, session title or filesystem path is included. The link
 contains only the session ID, and Slack link/media previews are disabled. Delivery is server-owned,

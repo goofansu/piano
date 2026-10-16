@@ -3,11 +3,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Deferred, Effect, Fiber, Layer, ManagedRuntime } from "effect";
+import { Deferred, Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { ExeDevFetch } from "../server/ExeDev.ts";
-import { NotificationFetch, Notifications, NotificationsLive } from "../server/Notifications.ts";
+import {
+  NotificationDelayMs,
+  NotificationFetch,
+  Notifications,
+  NotificationsLive,
+} from "../server/Notifications.ts";
 import { AllowedOrigins } from "../server/OriginPolicy.ts";
+import type { PiSession } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { startRouter } from "./fixtures/router.ts";
@@ -209,6 +215,128 @@ test("a stalled test send is cancelled after five seconds without retrying", asy
   );
 });
 
+test("a completion waits a minute and is dropped when the session is acted on or opened first", async (t) => {
+  const texts: string[] = [];
+  let next = Deferred.makeUnsafe<void>();
+  const f = fixture(async (_url, init) => {
+    texts.push(JSON.parse(String(init?.body)).text);
+    Deferred.doneUnsafe(next, Effect.void);
+    return new Response("");
+  });
+  t.after(f.dispose);
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const n = yield* Notifications;
+      yield* n.change({ action: "select", name: "slack-hook" });
+      // Untouched: posted once the minute is up, not before.
+      yield* n.completed("quiet");
+      yield* TestClock.adjust(59_000);
+      yield* Effect.yieldNow;
+      assert.deepEqual(texts, []);
+      yield* TestClock.adjust(1_000);
+      yield* Deferred.await(next);
+      assert.deepEqual(texts, ["Agent finished responding. https://piano.example.test/s/quiet"]);
+      // Acted on during the wait: never posted, even long after.
+      next = Deferred.makeUnsafe<void>();
+      yield* n.completed("busy");
+      yield* TestClock.adjust(30_000);
+      yield* n.touched("busy");
+      yield* TestClock.adjust(120_000);
+      yield* Effect.yieldNow;
+      assert.equal(texts.length, 1);
+      // A newer completion restarts the wait, and a touch on another session changes nothing.
+      yield* n.completed("again");
+      yield* TestClock.adjust(45_000);
+      yield* n.completed("again");
+      yield* n.touched("other");
+      yield* TestClock.adjust(45_000);
+      yield* Effect.yieldNow;
+      assert.equal(texts.length, 1, "the restarted wait has 15 seconds left");
+      yield* TestClock.adjust(15_000);
+      yield* Deferred.await(next);
+      assert.deepEqual(
+        texts.at(-1),
+        "Agent finished responding. https://piano.example.test/s/again",
+      );
+      assert.equal(texts.length, 2);
+    }).pipe(Effect.provide(f.layer), Effect.provide(TestClock.layer())),
+  );
+});
+
+test("through the session host, an action or an opened event stream during the wait drops the message", async (t) => {
+  const texts: string[] = [];
+  let next = Deferred.makeUnsafe<void>();
+  const f = await startRouter(
+    "piano-notifications-wait-",
+    Layer.mergeAll(
+      Layer.succeed(AllowedOrigins, new Set(["http://piano.test", "https://piano.example.test"])),
+      Layer.succeed(ExeDevFetch, async (url) =>
+        String(url).endsWith("/integrations")
+          ? Response.json({ integrations: defaultEntries })
+          : metadata(),
+      ),
+      Layer.succeed(NotificationFetch, async (_url, init) => {
+        texts.push(JSON.parse(String(init?.body)).text);
+        Deferred.doneUnsafe(next, Effect.void);
+        return new Response("");
+      }),
+      TestClock.layer(),
+    ),
+  );
+  t.after(f.dispose);
+  const selected = await f.handle("/api/settings/integrations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "select", name: "slack-hook" }),
+  });
+  assert.equal(selected.status, 200);
+  const settle = (session: PiSession) =>
+    session.events.pipe(
+      Stream.filter((event) => event._tag === "response_completed"),
+      Stream.take(1),
+      Stream.runDrain,
+    );
+  const session = await f.run(
+    Effect.gen(function* () {
+      const session = yield* (yield* SessionHosts).create({ cwd: f.repo, options: {} });
+      const settled = yield* Effect.forkChild(settle(session));
+      yield* session.act({ _tag: "prompt", text: "notification success" });
+      yield* Fiber.join(settled);
+      return session;
+    }),
+  );
+  // Opening the session (a new event subscription) half-way through the wait drops the message.
+  await f.run(TestClock.adjust(30_000));
+  await f.run(session.events.pipe(Stream.take(1), Stream.runDrain));
+  await f.run(TestClock.adjust(120_000));
+  assert.deepEqual(texts, []);
+  // An action during the wait drops it as well.
+  await f.run(
+    Effect.gen(function* () {
+      const settled = yield* Effect.forkChild(settle(session));
+      yield* session.act({ _tag: "prompt", text: "notification success" });
+      yield* Fiber.join(settled);
+    }),
+  );
+  await f.run(TestClock.adjust(30_000));
+  await f.run(session.act({ _tag: "set_thinking_level", level: "low" }));
+  await f.run(TestClock.adjust(120_000));
+  assert.deepEqual(texts, []);
+  // Left alone, the message goes out once the minute is up.
+  await f.run(
+    Effect.gen(function* () {
+      const settled = yield* Effect.forkChild(settle(session));
+      yield* session.act({ _tag: "prompt", text: "notification success" });
+      yield* Fiber.join(settled);
+    }),
+  );
+  await f.run(TestClock.adjust(60_000));
+  await f.run(Deferred.await(next));
+  assert.deepEqual(texts, [
+    `Agent finished responding. https://piano.example.test/s/${session.spec.sessionId}`,
+  ]);
+});
+
 test("server-owned completion sends one session link to the discovered selection without a browser", async (t) => {
   const sent: { url: string; body: unknown }[] = [];
   let delivered!: () => void;
@@ -232,6 +360,8 @@ test("server-owned completion sends one session link to the discovered selection
         delivered();
         return new Response("");
       }),
+      // The wait is covered by its own test; this one is about delivery without a browser.
+      Layer.succeed(NotificationDelayMs, 0),
     ),
   );
   t.after(f.dispose);

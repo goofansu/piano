@@ -1,5 +1,5 @@
 /** One discovered Slack destination and best-effort delivery, independent of browser lifetimes. */
-import { Clock, Context, Data, Effect, Layer, Queue, Semaphore } from "effect";
+import { Clock, Context, Data, Effect, Fiber, Layer, Queue, Semaphore } from "effect";
 import type { NotificationAction, NotificationSettings } from "../shared/notifications.ts";
 import { ExeDev, ExeDevLive } from "./ExeDev.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
@@ -12,6 +12,13 @@ export class NotificationError extends Data.TaggedError("NotificationError")<{
     return this.detail;
   }
 }
+/**
+ * A completion waits this long before posting, so a user who acts on or reopens the session in the
+ * meantime gets no message. Tests shorten it.
+ */
+export const NotificationDelayMs = Context.Reference<number>("piano/NotificationDelayMs", {
+  defaultValue: () => 60_000,
+});
 export const NotificationFetch = Context.Reference<typeof fetch>("piano/NotificationFetch", {
   defaultValue: () => globalThis.fetch,
 });
@@ -27,8 +34,14 @@ export class Notifications extends Context.Service<
     readonly change: (
       action: NotificationAction,
     ) => Effect.Effect<NotificationSettings, NotificationError>;
-    /** Nonblocking admission, once per live successful response. No historical replay. */
+    /**
+     * Nonblocking admission, once per live successful response. No historical replay. The message
+     * waits `NotificationDelayMs`; a later `touched` for the session drops it, a later `completed`
+     * restarts the wait.
+     */
     readonly completed: (sessionId: string) => Effect.Effect<void>;
+    /** The user acted on or opened the session: drop its pending completion message. */
+    readonly touched: (sessionId: string) => Effect.Effect<void>;
   }
 >()("piano/Notifications") {}
 
@@ -110,7 +123,17 @@ export const NotificationsLive = Layer.effect(
         ),
       );
     });
+    const delayMs = yield* NotificationDelayMs;
+    const layerScope = yield* Effect.scope;
     const queue = yield* Queue.dropping<{ name: string; sessionId: string }>(32);
+    // One pending completion per session, in memory only: a restart forgets it like the queue.
+    const pending = new Map<string, { key: symbol; fiber: Fiber.Fiber<void> }>();
+    const drop = Effect.fnUntraced(function* (sessionId: string) {
+      const entry = pending.get(sessionId);
+      if (!entry) return;
+      pending.delete(sessionId);
+      yield* Fiber.interrupt(entry.fiber);
+    });
     yield* Effect.gen(function* () {
       const { name, sessionId } = yield* Queue.take(queue);
       const delay = yield* waitMs;
@@ -169,10 +192,23 @@ export const NotificationsLive = Layer.effect(
           const name = yield* selectedIntegration;
           // Network and discovery are owned by the worker, not the session observer.
           if (problem || !name) return;
-          yield* Queue.offer(queue, { name, sessionId });
+          yield* drop(sessionId);
+          const key = Symbol(sessionId);
+          const fiber = yield* Effect.sleep(delayMs).pipe(
+            Effect.andThen(Queue.offer(queue, { name, sessionId })),
+            Effect.asVoid,
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (pending.get(sessionId)?.key === key) pending.delete(sessionId);
+              }),
+            ),
+            Effect.forkIn(layerScope),
+          );
+          pending.set(sessionId, { key, fiber });
         },
         Effect.catchCause(() => Effect.logWarning("A Slack notification could not be queued.")),
       ),
+      touched: Effect.fn("Notifications.touched")(drop),
     });
   }),
 ).pipe(Layer.provideMerge(ExeDevLive));

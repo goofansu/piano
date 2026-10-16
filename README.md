@@ -41,8 +41,8 @@ with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-i
 
 Open **Settings → Integrations**. In the **Slack** card, choose one of the Slack webhooks attached
 to your VM, named as exe.dev names them. Use **Test** to check delivery, or choose **Off** to
-disable it. Each successful completed response sends a link back to its session, even with the
-browser closed. See [notification setup and limits](docs/notifications.md).
+disable it. A minute after a response completes, Piano sends a link to its session, even with the
+browser closed, unless you act on or reopen the session first. See [notification setup and limits](docs/notifications.md).
 
 ### Preview local files
 
