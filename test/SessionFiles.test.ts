@@ -90,10 +90,24 @@ test("Git's answer hides ignored and outside paths; without one, or after a fail
       outside: ["/elsewhere/x.ts"],
     },
   };
-  assert.deepEqual(visibleFiles(files, ready), [{ path: "src/a.ts", messageId: "a1" }]);
-  assert.deepEqual(visibleFiles(files, undefined), files);
+  assert.deepEqual(visibleFiles(files, ready, workspace), [{ path: "src/a.ts", messageId: "a1" }]);
+  assert.deepEqual(visibleFiles(files, undefined, workspace), files);
   assert.deepEqual(
-    visibleFiles(files, { workspace, observedAt: "now", result: { status: "error", detail: "x" } }),
+    visibleFiles(
+      files,
+      { workspace, observedAt: "now", result: { status: "error", detail: "x" } },
+      workspace,
+    ),
     files,
   );
+  // A cached answer may span path-set refreshes, but never workspace identity (INV-07).
+  for (const current of [
+    undefined,
+    { ...workspace, id: "other" },
+    { ...workspace, path: "/work/other" },
+  ]) {
+    assert.deepEqual(visibleFiles(files, ready, current), files);
+  }
+  const added = { path: "src/new.ts", messageId: "a3" };
+  assert.deepEqual(visibleFiles([...files, added], ready, workspace), [files[0], added]);
 });
