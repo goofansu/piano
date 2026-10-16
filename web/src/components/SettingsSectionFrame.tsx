@@ -1,4 +1,12 @@
-import { type LucideIcon, PlugIcon, PuzzleIcon, RadiusIcon, ServerIcon } from "lucide-react";
+import { cn } from "cn";
+import {
+  ExternalLinkIcon,
+  type LucideIcon,
+  PlugIcon,
+  PuzzleIcon,
+  RadiusIcon,
+  ServerIcon,
+} from "lucide-react";
 import { SettingsHeader } from "@/components/SettingsHeader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { SettingsSectionIconName } from "@/lib/routes";
@@ -88,5 +96,31 @@ export function SettingsSkeleton({
       <span className="sr-only">{label}</span>
       {children}
     </div>
+  );
+}
+
+/**
+ * An outgoing link in Settings: opens in a new tab and always carries the external-link icon, so
+ * leaving Piano is visible before the click. Pass `className` for color; size and weight inherit.
+ */
+export function SettingsExternalLink({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn("inline-flex items-center gap-1 underline-offset-4 hover:underline", className)}
+    >
+      {children}
+      <ExternalLinkIcon className="size-3.5 shrink-0" aria-hidden />
+    </a>
   );
 }

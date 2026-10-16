@@ -1,5 +1,5 @@
 import type { LoginPrompt, OAuthProvider } from "@shared/wire";
-import { CheckCircleIcon, CopyIcon } from "lucide-react";
+import { CheckCircleIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -38,6 +38,7 @@ function SignInLink({ url, variant }: { url: string; variant?: "outline" }) {
     <Button asChild variant={variant}>
       <a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
         Open sign-in page
+        <ExternalLinkIcon data-icon="inline-end" aria-hidden />
       </a>
     </Button>
   );

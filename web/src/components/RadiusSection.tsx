@@ -1,12 +1,16 @@
 import { cn } from "cn";
-import { CheckCircle2Icon, ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
+import { CheckCircle2Icon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RemovalDialog } from "@/components/RemovalDialog";
-import { SettingsAlert, SettingsSkeleton } from "@/components/SettingsSectionFrame";
+import {
+  SettingsAlert,
+  SettingsExternalLink,
+  SettingsSkeleton,
+} from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -135,15 +139,12 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
             </CollapsibleTrigger>
             <CollapsibleContent className="disclosure-content">
               <div className="border-t px-4 py-3 sm:px-5">
-                <a
-                  className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline"
+                <SettingsExternalLink
                   href="https://radius.earendil.com/docs/extensions"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  className="text-sm text-muted-foreground"
                 >
                   Setup guide
-                  <ExternalLinkIcon className="size-3.5" aria-hidden />
-                </a>
+                </SettingsExternalLink>
               </div>
               <ItemGroup className="border-t">
                 <RadiusToolRow tool={mcp} setup={setup} />

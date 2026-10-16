@@ -82,6 +82,9 @@ styling and focus policy live in the `Piano*` wrappers and `StatusBadge` in
 upgrading shadcn, read [the ownership and upgrade guide](docs/shadcn-ui.md); review every
 `--diff` before writing over a file in `ui/`.
 
+An outgoing link in Settings is a `SettingsExternalLink` (text followed by the external-link icon,
+opened in a new tab); a button that leaves Piano ends with the same icon as `data-icon="inline-end"`.
+
 Branding icons use [Simple Icons](https://simpleicons.org/). Bundle SVGs locally, preserve source
 and license attribution, and use `currentColor` to match the UI; see `web/public/mcp-logos.svg`.
 

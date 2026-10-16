@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   SettingsAlert,
+  SettingsExternalLink,
   SettingsSectionFrame,
   SettingsSkeleton,
 } from "@/components/SettingsSectionFrame";
@@ -69,14 +70,9 @@ export function IntegrationsSettings() {
     <SettingsSectionFrame title="Integrations" sectionId="settings-integrations">
       <p className="text-sm text-muted-foreground">
         Piano uses the integrations attached to this VM on exe.dev.{" "}
-        <a
-          href={MANAGE_INTEGRATIONS}
-          target="_blank"
-          rel="noreferrer"
-          className="text-foreground underline underline-offset-4"
-        >
+        <SettingsExternalLink href={MANAGE_INTEGRATIONS} className="text-foreground underline">
           Manage integrations on exe.dev
-        </a>
+        </SettingsExternalLink>
       </p>
       <section aria-labelledby="settings-send-messages-title" className="flex flex-col gap-3">
         <h2
