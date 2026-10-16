@@ -48,6 +48,9 @@ current RPC/browser limitations and a proposed management surface; it does not c
 [Radius setup](radius-setup.md) describes the implemented, narrower Radius section of the
 Providers settings page, covering provider OAuth, provider-auth MCP configuration and
 web-search extension installation.
+The [wterm sidebar terminal research](research/2026-10-16-wterm-sidebar-terminal.md) finds that wterm
+publishes only a browser emulator, weighs a PTY-backed sidebar terminal against a non-PTY command runner,
+and sets gates for either; it is a recommendation, not a shipped terminal.
 [MCP setup](mcp-setup.md) describes the Settings section that installs catalog MCP servers
 (Linear first) and signs in to them through Pi's MCP OAuth.
 
