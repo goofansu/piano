@@ -56,11 +56,18 @@ by another integration automatically. A missing name is marked unavailable after
 
 ## Storage and delivery limits
 
-The canonical integration URL still lives in Piano's database (`notification_webhooks`, schema 5),
-but the browser submits a discovered name or null, never an arbitrary URL. Existing URLs match their
-discovered Slack name; unmatched preferences remain clearable. No database migration is required.
-If a database contains an older multiple-webhook list, only the first URL is used, and the next
-selection/clear replaces that list atomically. Pi's settings and history are unchanged.
+Piano stores only the selected integration name in `notification_settings.integration_name`
+(schema 6), with at most one row. No row means the preference is cleared (`null`). The browser and
+notification queue also use names; the HTTPS URL is constructed only when sending, after validating
+the name against discovered Slack integrations. Pi's settings and history are unchanged.
+
+On opening a schema-5 database, Piano atomically converts the saved exe.dev URL to its name and
+removes the old `notification_webhooks` table. An older multiple-webhook list keeps its first active
+selection; an empty list stays disabled. Migration needs no network access, and a currently unattached
+name remains saved and clearable. If the active legacy URL is malformed or is not an exe.dev integration
+URL, startup refuses the migration and leaves the old table/version intact rather than silently
+clearing or changing the destination. Repair that preference before restarting; the error does not
+print the potentially secret URL. Databases older than schema 5 start with no notification selection.
 
 Delivery is best-effort: each POST has a five-second timeout and is not automatically retried.
 The backend admits at most five sends per minute, including tests, in line with exe.dev's documented

@@ -2,12 +2,38 @@
 import { chmodSync, closeSync, lstatSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
+import { Schema } from "effect";
+import { ExeDevIntegrationName } from "../shared/exeDev.ts";
 import type { RegistryData } from "./Registry.ts";
 
 const notificationSchema = `
-  CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT;
-  PRAGMA user_version = 5;
+  CREATE TABLE notification_settings (
+    id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+    integration_name TEXT NOT NULL
+  ) STRICT;
+  PRAGMA user_version = 6;
 `;
+const integrationName = Schema.decodeUnknownSync(ExeDevIntegrationName);
+const notificationIntegration = (db: DatabaseSync): string | null => {
+  const row = db.prepare("SELECT integration_name FROM notification_settings WHERE id = 1").get();
+  return row ? integrationName(row.integration_name) : null;
+};
+
+/** Version 5 saved URLs; retain its single active (first) preference, without consulting the network. */
+function migrateNotification(db: DatabaseSync): string | null {
+  const row = db.prepare("SELECT url FROM notification_webhooks ORDER BY rowid LIMIT 1").get();
+  if (!row) return null;
+  const match =
+    typeof row.url === "string" && /^https:\/\/([^/]+)\.int\.exe\.xyz\/?$/i.exec(row.url);
+  try {
+    return integrationName(match && match[0] === row.url ? match[1] : undefined).toLowerCase();
+  } catch {
+    // Never silently disable notifications or echo a potentially secret legacy URL.
+    throw new Error(
+      "Cannot migrate the saved Slack integration: expected an exe.dev integration URL. Repair notification_webhooks before restarting.",
+    );
+  }
+}
 
 const schema = `
   CREATE TABLE registry_meta (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL);
@@ -276,11 +302,20 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         db.exec(
           "ALTER TABLE sessions ADD COLUMN radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)); PRAGMA user_version = 4;",
         );
-      } else if (version !== 4 && version !== 5)
+      } else if (version !== 4 && version !== 5 && version !== 6)
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
         );
-      if (version !== 5) db.exec(notificationSchema);
+      if (version !== 6) {
+        const selected = version === 5 ? migrateNotification(db) : null;
+        db.exec(notificationSchema);
+        if (selected !== null)
+          db.prepare("INSERT INTO notification_settings (id, integration_name) VALUES (1, ?)").run(
+            selected,
+          );
+        if (version === 5) db.exec("DROP TABLE notification_webhooks");
+      }
+      notificationIntegration(db); // Validate persisted preferences before accepting this database.
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -326,16 +361,14 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
       data,
       close: () => db.close(),
       save: (before: RegistryData, after: RegistryData) => write(() => persist(db, before, after)),
-      // Read only the first URL from the earlier multi-webhook shape. The next save replaces it.
-      notificationWebhook: () =>
-        (db.prepare("SELECT url FROM notification_webhooks ORDER BY rowid LIMIT 1").get()?.url as
-          | string
-          | undefined) ?? null,
-      setNotificationWebhook: (url: string | null) =>
+      notificationIntegration: () => notificationIntegration(db),
+      setNotificationIntegration: (name: string | null) =>
         write(() => {
-          db.exec("DELETE FROM notification_webhooks");
-          if (url !== null)
-            db.prepare("INSERT INTO notification_webhooks(url) VALUES (?)").run(url);
+          db.exec("DELETE FROM notification_settings WHERE id = 1");
+          if (name !== null)
+            db.prepare(
+              "INSERT INTO notification_settings (id, integration_name) VALUES (1, ?)",
+            ).run(integrationName(name));
         }),
     };
   } catch (error) {

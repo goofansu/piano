@@ -2,7 +2,8 @@
 
 Research date: 2026-10-16. Inspected revision: `9965d47` (clean working tree).
 Status: implemented locally following this proposal; see [the current guide](../notifications.md)
-and the implementation verification below. No deployment or push is part of this implementation.
+and the implementation verification below. The later schema-6 name migration supersedes the
+original recommendation to retain URL storage. No deployment or push is part of this implementation.
 
 ## Recommendation
 
@@ -207,6 +208,39 @@ Evidence on this VM: `/tmp/piano-exedev-focused.log`, `/tmp/piano-exedev-tests.l
 remain uncommitted, and their harness cleaned up scratch processes, databases and session directories.
 External Slack receipt, private-link click-through and physical mobile browsers were not tested.
 No production database mutation, new deployment or push was performed.
+
+## Integration-name storage migration — 2026-10-16
+
+The user subsequently chose a name-based model. On top of `ab54846`, schema 6 replaces the URL
+list with a singleton `notification_settings` row containing `integration_name`; absence means null.
+The migration reads the first active schema-5 URL, validates it as an exe.dev root integration URL,
+preserves its normalized name without network access, and drops the old table in the same transaction.
+An invalid active URL aborts opening and leaves the old table/version untouched, without printing the
+URL in diagnostics. Older schemas start with no selection. Names are validated consistently by the
+shared schema in discovery and persistence. Registry methods, queued deliveries and selection state
+now carry names; the URL is constructed only inside the send operation. INV-01 and INV-11 remain intact.
+
+Verified this implementation working tree on exe.dev Linux / Node 24.21.0:
+
+- `npm run typecheck`, `npm run lint`, `git diff --check`: passed.
+- `npm test`: 749 passed. Migration coverage includes empty/single/older-multiple preferences,
+  URL case normalization, preserved session metadata, repeat open, invalid-URL rollback and redacted
+  diagnostics, failed replacement rollback, name-only on-disk rows, and clearing across restart.
+  Existing delivery tests assert the derived URL and session link, with discovery checks unchanged.
+- Mutation sensitivity: changing migration to save `wrong-integration` made the one-URL migration
+  check fail against `slack-hook`. Restored the extraction and reran the full suite successfully.
+- Scratch `agent-browser` journey started from a schema-5 database with a saved URL. The existing
+  selection appeared after automatic upgrade; read-only SQLite checks confirmed schema 6, a name-only
+  row and no old table. Test posted to the derived URL, changing/reloading retained the new name,
+  and Clear/reload left no preference row. Both posts were mocked. No UI/style changes were made,
+  so no additional style-shot run was needed.
+
+Evidence: `/tmp/piano-integration-name-focused.log`, `/tmp/piano-integration-name-tests.log`,
+`/tmp/piano-integration-name-mutation.log`, `/tmp/piano-integration-name-browser.log` and
+`/tmp/piano-integration-name-browser/`. The temporary browser/preload scripts are uncommitted;
+the harness removed scratch processes/databases. No real Slack message, production database
+migration, deployment or push was performed. Migration applies when the new backend next opens
+its database; the currently running backend was left untouched.
 
 ## Sources
 

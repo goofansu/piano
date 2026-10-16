@@ -12,7 +12,6 @@ import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { startRouter } from "./fixtures/router.ts";
 
-const slack = "https://slack-hook.int.exe.xyz/";
 const second = "https://second-slack.int.exe.xyz/";
 const metadata = () => Response.json({ name: "scratch", paths: [{ path: "/integrations" }] });
 const defaultEntries = [
@@ -69,6 +68,11 @@ test("selection is opt-in, only Slack names are accepted, and one saved choice s
     }
     assert.equal((await select("slack-hook")).selected, "slack-hook");
     assert.equal((await select("second-slack")).selected, "second-slack");
+    assert.equal(
+      await runtime.runPromise(Effect.flatMap(Registry, (r) => r.notificationIntegration)),
+      "second-slack",
+      "persistence stores the name, not the derived URL",
+    );
     assert.equal(requests.length, 0, "selection never sends a notification");
     await sendTest();
     assert.equal(requests[0]!.url, second);
@@ -95,7 +99,7 @@ test("selection is opt-in, only Slack names are accepted, and one saved choice s
   assert.equal(reopened.selected, "second-slack");
 });
 
-test("legacy URLs match discovered names; missing, failed and empty catalogs retain a clearable preference", async (t) => {
+test("stored names match discovery case-insensitively; missing, failed and empty catalogs retain a clearable preference", async (t) => {
   let sends = 0;
   const f = fixture(async () => {
     sends++;
@@ -106,10 +110,10 @@ test("legacy URLs match discovered names; missing, failed and empty catalogs ret
     Effect.gen(function* () {
       const registry = yield* Registry;
       const n = yield* Notifications;
-      yield* registry.setNotificationWebhook(slack);
+      yield* registry.setNotificationIntegration("SLACK-HOOK");
       assert.equal((yield* n.state()).selected, "slack-hook");
       f.discovery.entries = [{ name: "slack-hook", type: "notify" }];
-      assert.deepEqual(yield* n.state(true), { integrations: [], selected: "slack-hook" });
+      assert.deepEqual(yield* n.state(true), { integrations: [], selected: "SLACK-HOOK" });
       assert.match(
         (yield* n.change({ action: "test" }).pipe(Effect.flip)).detail,
         /available Slack/,
@@ -119,9 +123,9 @@ test("legacy URLs match discovered names; missing, failed and empty catalogs ret
       yield* Effect.yieldNow;
       assert.equal(sends, 0, "type changes also suppress automatic delivery");
       f.discovery.status = 503;
-      assert.deepEqual(yield* n.state(true), { integrations: null, selected: "slack-hook" });
+      assert.deepEqual(yield* n.state(true), { integrations: null, selected: "SLACK-HOOK" });
       assert.equal((yield* n.change({ action: "select", name: null })).selected, null);
-      assert.equal(yield* registry.notificationWebhook, null);
+      assert.equal(yield* registry.notificationIntegration, null);
       assert.equal(sends, 0);
     }).pipe(Effect.provide(f.layer)),
   );
@@ -135,7 +139,7 @@ test("clearing requires neither discovery nor a public origin; choosing or testi
   t.after(f.dispose);
   await Effect.runPromise(
     Effect.gen(function* () {
-      yield* (yield* Registry).setNotificationWebhook(slack);
+      yield* (yield* Registry).setNotificationIntegration("slack-hook");
       const n = yield* Notifications;
       assert.match((yield* n.state()).problem ?? "", /PIANO_ALLOWED_ORIGINS/);
       assert.match(

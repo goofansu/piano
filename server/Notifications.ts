@@ -16,10 +16,9 @@ export const NotificationFetch = Context.Reference<typeof fetch>("piano/Notifica
   defaultValue: () => globalThis.fetch,
 });
 const refused = (detail: string) => new NotificationError({ detail });
-// Only names validated by ExeDev's inventory reach this constructor.
-const destination = (name: string) => `https://${name.toLowerCase()}.int.exe.xyz/`;
-const savedName = (url: string) =>
-  /^https:\/\/([a-z0-9-]+)\.int\.exe\.xyz\/$/.exec(url)?.[1] ?? "Saved integration";
+// DNS labels are case-insensitive, including names migrated from canonical lower-case URLs.
+const availableName = (names: ReadonlyArray<string> | null, selected: string | null) =>
+  names?.find((name) => name.toLowerCase() === selected?.toLowerCase());
 
 export class Notifications extends Context.Service<
   Notifications,
@@ -48,7 +47,7 @@ export const NotificationsLive = Layer.effect(
       `<${new URL(path, origin).href.replaceAll("&", "&amp;")}|${label}>`;
     const changes = yield* Semaphore.make(1);
     const rateLock = yield* Semaphore.make(1);
-    const savedWebhook = registry.notificationWebhook.pipe(
+    const selectedIntegration = registry.notificationIntegration.pipe(
       Effect.mapError(() => refused("Could not read notification settings.")),
     );
     const slack = Effect.fn("Notifications.slack")(function* (refresh = false) {
@@ -62,12 +61,10 @@ export const NotificationsLive = Layer.effect(
     });
     const state = Effect.fn("Notifications.state")(function* (refresh = false) {
       const integrations = yield* slack(refresh);
-      const url = yield* savedWebhook;
+      const selected = yield* selectedIntegration;
       return {
         integrations,
-        selected: url
-          ? (integrations?.find((name) => destination(name) === url) ?? savedName(url))
-          : null,
+        selected: availableName(integrations, selected) ?? selected,
         ...(problem ? { problem } : {}),
       };
     });
@@ -78,7 +75,7 @@ export const NotificationsLive = Layer.effect(
       sentAt = sentAt.filter((time) => time > now - 60_000);
       return sentAt.length < 5 ? 0 : sentAt[0]! + 60_000 - now;
     });
-    const send = Effect.fn("Notifications.send")(function* (url: string, text: string) {
+    const send = Effect.fn("Notifications.send")(function* (name: string, text: string) {
       yield* Semaphore.withPermits(
         rateLock,
         1,
@@ -91,7 +88,8 @@ export const NotificationsLive = Layer.effect(
       );
       yield* Effect.tryPromise({
         try: async (signal) => {
-          const response = await fetch(url, {
+          // Only a name validated against the current Slack inventory reaches delivery.
+          const response = await fetch(`https://${name.toLowerCase()}.int.exe.xyz/`, {
             method: "POST",
             redirect: "error",
             signal,
@@ -111,18 +109,17 @@ export const NotificationsLive = Layer.effect(
         ),
       );
     });
-    const queue = yield* Queue.dropping<{ url: string; sessionId: string }>(32);
+    const queue = yield* Queue.dropping<{ name: string; sessionId: string }>(32);
     yield* Effect.gen(function* () {
-      const { url, sessionId } = yield* Queue.take(queue);
+      const { name, sessionId } = yield* Queue.take(queue);
       const delay = yield* waitMs;
       if (delay > 0) yield* Effect.sleep(delay);
       if (problem) return;
       const names = yield* slack();
       // Discovery may wait on HTTP: check the preference AFTER it, immediately before sending.
-      if (!names?.some((name) => destination(name) === url) || (yield* savedWebhook) !== url)
-        return;
+      if (!availableName(names, name) || (yield* selectedIntegration) !== name) return;
       yield* send(
-        url,
+        name,
         `Piano: agent finished responding.\n${slackLink(`/s/${encodeURIComponent(sessionId)}`, "Open session")}`,
       );
     }).pipe(
@@ -143,7 +140,7 @@ export const NotificationsLive = Layer.effect(
             if (action.action === "select" && action.name === null) {
               // Clear is local policy, never contingent on discovery or link configuration.
               yield* registry
-                .setNotificationWebhook(null)
+                .setNotificationIntegration(null)
                 .pipe(Effect.mapError(() => refused("Could not clear notifications.")));
               return yield* state();
             }
@@ -151,15 +148,15 @@ export const NotificationsLive = Layer.effect(
             const names = yield* slack(true);
             if (names === null) return yield* refused("Couldn’t load integrations. Try again.");
             if (action.action === "test") {
-              const url = yield* savedWebhook;
-              if (!url || !names.some((name) => destination(name) === url))
+              const name = yield* selectedIntegration;
+              if (!name || !availableName(names, name))
                 return yield* refused("Select an available Slack integration.");
-              yield* send(url, `Piano: test notification.\n${slackLink("/", "Open Piano")}`);
+              yield* send(name, `Piano: test notification.\n${slackLink("/", "Open Piano")}`);
             } else {
               if (action.name === null || !names.includes(action.name))
                 return yield* refused("Select an available Slack integration.");
               yield* registry
-                .setNotificationWebhook(destination(action.name))
+                .setNotificationIntegration(action.name)
                 .pipe(Effect.mapError(() => refused("Could not save notifications.")));
             }
             return yield* state();
@@ -168,10 +165,10 @@ export const NotificationsLive = Layer.effect(
       }),
       completed: Effect.fn("Notifications.completed")(
         function* (sessionId) {
-          const url = yield* savedWebhook;
+          const name = yield* selectedIntegration;
           // Network and discovery are owned by the worker, not the session observer.
-          if (problem || !url) return;
-          yield* Queue.offer(queue, { url, sessionId });
+          if (problem || !name) return;
+          yield* Queue.offer(queue, { name, sessionId });
         },
         Effect.catchCause(() => Effect.logWarning("A Slack notification could not be queued.")),
       ),

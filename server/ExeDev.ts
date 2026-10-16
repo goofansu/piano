@@ -1,5 +1,6 @@
 /** Reflection discovery: environment identity is sticky; attached integrations are refreshable facts. */
 import { Clock, Context, Effect, Layer, Schema, Semaphore } from "effect";
+import { ExeDevIntegrationName } from "../shared/exeDev.ts";
 
 export const ExeDevFetch = Context.Reference<typeof fetch>("piano/ExeDevFetch", {
   defaultValue: () => globalThis.fetch,
@@ -9,7 +10,7 @@ const Index = Schema.Struct({
   paths: Schema.Array(Schema.Struct({ path: Schema.String })),
 });
 const Integration = Schema.Struct({
-  name: Schema.String.check(Schema.isPattern(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i)),
+  name: ExeDevIntegrationName,
   type: Schema.String,
 });
 const Inventory = Schema.Struct({ integrations: Schema.Array(Integration) });

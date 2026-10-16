@@ -67,12 +67,13 @@ environment detection lasts until backend restart; the integration catalog refre
 
 Piano stores its registry in SQLite through Node's built-in `node:sqlite` module. The tables match
 the names the code uses: `folders` holds added directories, `projects` holds named session groups,
-and `workspaces`, `worktrees` and `sessions` hold the rest. Pi owns conversation files and Git owns
-repository facts, so neither is in the registry.
+and `workspaces`, `worktrees` and `sessions` hold the rest. `notification_settings` holds the one
+selected exe.dev integration name. Pi owns conversation files and Git owns repository facts,
+so neither is in the registry.
 
 Piano refuses to start on a corrupt database, an unrecognized one, or one from a newer Piano. It
 never resets a database. It upgrades an older database in place when it opens it, and the current
-schema is version 5 (including the saved notification webhook URL). Before it upgrades a version 1 database, which still has project goals, Piano
+schema is version 6 (the saved notification integration is a name, not a URL). Before it upgrades a version 1 database, which still has project goals, Piano
 writes a private copy to `<database>.v1-backup`. An older Piano can open that copy but not the
 upgraded file.
 
