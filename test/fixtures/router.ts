@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
+import { ApiRouter } from "../../server/ApiRouter.ts";
 import { AllowedOrigins } from "../../server/OriginPolicy.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "../../server/PianoServices.ts";
 import { PiCli } from "../../server/PiCli.ts";
@@ -21,6 +22,7 @@ export interface RouterFixture {
   readonly workspaceId: string;
   /** Answer a request as the server would; a relative URL resolves against the server's origin. */
   readonly handle: (input: string, init?: RequestInit) => Promise<Response>;
+  readonly api: (input: string, init?: RequestInit) => Promise<Response>;
   /** Run against the same services the router answers from, e.g. to start a session it can see. */
   readonly run: <A, X>(
     effect: Effect.Effect<A, X, SessionHosts | Registry | ProviderLogin>,
@@ -79,6 +81,10 @@ export async function startRouter<Fakes = never>(
     AppRouter.pipe(Layer.provideMerge(Layer.succeedContext(await runtime.context()))),
     { disableLogger: true },
   );
+  const api = HttpRouter.toWebHandler(
+    ApiRouter.pipe(Layer.provideMerge(Layer.succeedContext(await runtime.context()))),
+    { disableLogger: true },
+  );
   return {
     root,
     repo,
@@ -88,9 +94,11 @@ export async function startRouter<Fakes = never>(
       if (!headers.has("origin")) headers.set("origin", "http://piano.test");
       return web.handler(new Request(new URL(input, "http://piano.test"), { ...init, headers }));
     },
+    api: (input, init) => api.handler(new Request(new URL(input, "http://piano"), init)),
     run: (effect) => runtime.runPromise(effect),
     dispose: async () => {
       await web.dispose();
+      await api.dispose();
       await runtime.dispose();
       rmSync(root, { recursive: true, force: true });
     },

@@ -5,6 +5,7 @@
  */
 import { Clock, Deferred, Effect, Exit, Fiber, Scope, Semaphore, Stream } from "effect";
 import type { SessionClosure } from "../shared/wire.ts";
+import { deriveStatus } from "./ApiStatus.ts";
 import { Notifications } from "./Notifications.ts";
 import {
   type PiSession,
@@ -82,6 +83,11 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   let lastActivity = yield* Clock.currentTimeMillis;
   let actions = 0;
   let closing = false;
+  let seq =
+    (yield* registry.get).sessions.find(
+      (s) => s.cwd === raw.spec.cwd && s.sessionId === raw.spec.sessionId,
+    )?.seq ?? 0;
+  let completedSeq = seq;
 
   const mirrorStats = Effect.gen(function* () {
     const state = yield* raw.state;
@@ -97,6 +103,30 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
               statsUpdatedAt: state.statsUpdatedAt,
             },
     });
+  });
+
+  const complete = Effect.gen(function* () {
+    const state = yield* raw.state;
+    if (!state.closure && (actions > 0 || !state.isQuiescent)) return;
+    // A started/queued disposition is the LAST acknowledgement, not outstanding work once
+    // Pi is quiescent. Preserve rejections, which remain an error until the next input.
+    const status = deriveStatus(
+      {
+        ...state,
+        submission: state.submission?.outcome === "rejected" ? state.submission : undefined,
+      },
+      [],
+      !state.closure,
+    );
+    const observedSeq = seq;
+    yield* registry
+      .recordTurn(raw.spec.cwd, raw.spec.sessionId, {
+        status: status.status === "error" ? "error" : "idle",
+        detail: status.detail,
+        completedSeq: observedSeq,
+      })
+      .pipe(Effect.orDie);
+    completedSeq = Math.max(completedSeq, observedSeq);
   });
 
   const act: PiSession["act"] = Effect.fn("SessionHost.act")(function* (action) {
@@ -121,6 +151,10 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
           return yield* rejected("Pi is closing or has stopped. Refresh before sending new input.");
         if (sessionActionPolicy[action._tag].needsCheckout)
           yield* references.requireCheckout(raw.spec.cwd);
+        if (action._tag === "prompt" || action._tag === "steer")
+          seq = yield* registry
+            .recordTurn(raw.spec.cwd, raw.spec.sessionId, "accepted")
+            .pipe(Effect.mapError((e) => rejected(e.detail)));
         actions++;
         lastActivity = yield* Clock.currentTimeMillis;
         return yield* raw.act(action).pipe(
@@ -128,6 +162,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
             Effect.gen(function* () {
               actions--;
               lastActivity = yield* Clock.currentTimeMillis;
+              yield* complete;
             }),
           ),
           Effect.forkIn(scope),
@@ -141,6 +176,12 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   const session: PiSession = {
     ...raw,
     act,
+    state: Effect.map(raw.state, (state) =>
+      actions > 0 ? { ...state, isQuiescent: false } : state,
+    ),
+    snapshot: Effect.map(raw.snapshot, (snapshot) =>
+      actions > 0 ? { ...snapshot, state: { ...snapshot.state, isQuiescent: false } } : snapshot,
+    ),
     events: Stream.unwrap(Effect.as(notifications.touched(raw.spec.sessionId), raw.events)),
   };
 
@@ -163,9 +204,20 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
       const closed = closure ??
         (yield* raw.state).closure ?? { _tag: "released", detail: "Pi was released" };
       yield* mirrorStats;
+      yield* complete;
       return closed;
     }, Effect.uninterruptible),
   };
+
+  // Quiescence includes transport/readback drain, which can change after the last published
+  // state event. Observe outstanding turns independently of events or HTTP polling; the child
+  // scope stops this observer on release. No database writes while a turn is still busy.
+  yield* Effect.gen(function* () {
+    while (!closing) {
+      if (seq > completedSeq) yield* complete;
+      yield* Effect.sleep(50);
+    }
+  }).pipe(Effect.forkIn(scope));
 
   yield* mirrorStats;
   const ready = yield* Deferred.make<void>();
@@ -180,7 +232,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
           yield* Semaphore.withPermits(
             lock,
             1,
-          )(Effect.suspend(() => (closing ? Effect.void : mirrorStats)));
+          )(Effect.suspend(() => (closing ? Effect.void : Effect.all([mirrorStats, complete]))));
         if (event._tag === "response_completed" && !closing)
           yield* notifications.completed(raw.spec.sessionId);
         lastActivity = yield* Clock.currentTimeMillis;

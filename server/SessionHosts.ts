@@ -112,6 +112,15 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
     Effect.gen(function* () {
       const registry = yield* Registry;
       const references = yield* SessionReferences;
+      // No child survives this service's lifetime. An unfinished persisted turn must not look
+      // successfully idle after a backend crash/restart, nor leave polling stuck forever.
+      for (const session of (yield* registry.get).sessions)
+        if ((session.seq ?? 0) > (session.completedSeq ?? 0))
+          yield* registry.recordTurn(session.cwd, session.sessionId, {
+            status: "error",
+            detail: "Piano stopped before this turn completed.",
+            completedSeq: session.seq ?? 0,
+          });
       const layerScope = yield* Effect.scope;
       const hostServices = yield* Effect.context<
         PiSessions | Registry | SessionReferences | Notifications

@@ -35,7 +35,7 @@ import type {
   Snapshot,
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
+import { projectDisplay, projectSnapshot } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { enabledModelPatterns } from "./PiEnv.ts";
 import { PiHistory } from "./PiHistory.ts";
@@ -83,6 +83,8 @@ export interface PiSession {
   ) => Effect.Effect<SessionActionResult | undefined, PiSessionError>;
   /** Current state without subscribing. */
   readonly state: Effect.Effect<SessionState>;
+  /** Current display-projected snapshot, without subscribing or recording viewer activity. */
+  readonly snapshot: Effect.Effect<Snapshot>;
   /** Pi's slash commands for this session, in invocation precedence. A query: it starts no
    * operation and changes nothing in Pi. */
   readonly commands: Effect.Effect<ReadonlyArray<SlashCommand>, PiSessionError>;
@@ -623,6 +625,12 @@ const openSession = (spec: PiSessionSpec) =>
             );
           }),
         ).pipe(displayed),
+      snapshot: transaction(() =>
+        Effect.map(publication.snapshot, (snapshot) => ({
+          ...snapshot,
+          state: present(snapshot),
+        })),
+      ).pipe(Effect.map(projectSnapshot)),
       state: transaction(() => Effect.map(publication.snapshot, present)).pipe(
         Effect.map(projectDisplay),
       ),

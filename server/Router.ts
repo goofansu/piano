@@ -36,7 +36,8 @@ class ApiFailure extends Data.TaggedError("ApiFailure")<{
   readonly error: string;
 }> {}
 
-const fail = (status: number, error: string) => Effect.fail(new ApiFailure({ status, error }));
+export const fail = (status: number, error: string) =>
+  Effect.fail(new ApiFailure({ status, error }));
 
 /** A service's refusal: a tagged error whose `detail` is written for people. Its endpoint
  * declares the status (`refused`). SignInAttempts keeps token responses out of sign-in details (INV-11). */
@@ -54,7 +55,7 @@ const isRefusal = (error: unknown): error is Refusal =>
 /** The failure a request ends with: a handler's own ApiFailure, a refusal at the endpoint's
  * status, or anything else (a defect included) as a logged 500 with the endpoint's fallback,
  * never its own message. */
-const failure = (endpoint: Endpoint, cause: Cause.Cause<unknown>) => {
+const failure = (endpoint: Endpoint, cause: Cause.Cause<unknown>, unexpectedStatus: number) => {
   const error = Option.getOrUndefined(Cause.findErrorOption(cause));
   if (error instanceof ApiFailure) return Effect.succeed(error);
   if (endpoint.refused && isRefusal(error))
@@ -63,8 +64,8 @@ const failure = (endpoint: Endpoint, cause: Cause.Cause<unknown>) => {
   return Effect.logError(`${endpoint.method} ${endpoint.path} failed unexpectedly`, cause).pipe(
     Effect.as(
       new ApiFailure({
-        status: 500,
-        error: typeof fallback === "string" ? fallback : fallback(500),
+        status: unexpectedStatus,
+        error: typeof fallback === "string" ? fallback : fallback(unexpectedStatus),
       }),
     ),
   );
@@ -93,8 +94,8 @@ const respond = (body: unknown, status: number, { noStore = false, redact = true
  * handler runs; its result leaves through the response Schema, so the server cannot answer
  * outside the contract the browser decodes.
  */
-const route =
-  (router: HttpRouter.HttpRouter) =>
+export const route =
+  (router: HttpRouter.HttpRouter, unexpectedStatus = 500) =>
   <
     Q extends IdParam,
     B extends Json | undefined,
@@ -153,7 +154,7 @@ const route =
             encoded.cause,
           );
           return yield* fail(
-            500,
+            unexpectedStatus,
             "The server answered outside its contract. Inspect the server log.",
           );
         }
@@ -163,7 +164,7 @@ const route =
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.failCause(cause)
-            : Effect.map(failure(endpoint, cause), ({ status, error }) =>
+            : Effect.map(failure(endpoint, cause, unexpectedStatus), ({ status, error }) =>
                 respond({ error }, status),
               ),
         ),
@@ -178,6 +179,9 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname;
+        // The local orchestration API never belongs to the browser/proxy listener.
+        if (path === "/api/v1" || path.startsWith("/api/v1/"))
+          return respond({ error: "Not found." }, 404);
         if (
           path === "/ws" ||
           request.headers.upgrade !== undefined ||

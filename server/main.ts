@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpStaticServer } from "effect/http";
+import { apiListener } from "./ApiListener.ts";
+import { ApiRouter } from "./ApiRouter.ts";
 import { inboundLimits } from "./InboundCapacity.ts";
 import { AllowedOrigins, configuredOrigins } from "./OriginPolicy.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
@@ -63,7 +65,15 @@ const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog:
   Layer.provide(Infra),
 );
 
-const main = Layer.launch(Server).pipe(Effect.tap(() => Effect.void));
+const apiInfra = apiListener(process.env.PIANO_API_SOCKET, process.env.PIANO_API_PORT);
+const ApiServer = apiInfra
+  ? HttpRouter.serve(ApiRouter, { disableLogger: true, disableListenLog: true }).pipe(
+      Layer.provide(Services),
+      Layer.provide(apiInfra),
+    )
+  : Layer.empty;
+// The SAME Services layer is memoized across both listeners: one host per session.
+const main = Layer.launch(Layer.merge(Server, ApiServer)).pipe(Effect.tap(() => Effect.void));
 
 console.log(`[piano] http://${HOST}:${PORT}`);
 console.log(

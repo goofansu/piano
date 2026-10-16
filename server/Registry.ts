@@ -62,6 +62,10 @@ const SessionEntry = Schema.Struct({
   pinned: Schema.optional(Schema.Boolean),
   /** Replaceable last-known Pi accounting, not session history. */
   stats: Schema.optional(SessionStats),
+  seq: Schema.optional(Schema.Number),
+  completedSeq: Schema.optional(Schema.Number),
+  lastStatus: Schema.optional(Schema.Literals(["idle", "error"])),
+  lastDetail: Schema.optional(Schema.String),
 });
 export type SessionEntry = typeof SessionEntry.Type;
 
@@ -231,6 +235,18 @@ export class Registry extends Context.Service<
       sessionId: string,
       text?: string,
     ) => Effect.Effect<void, RegistryError>;
+    /** Persist admission before dispatch, or the final quiescent/closed outcome. */
+    readonly recordTurn: (
+      cwd: string,
+      sessionId: string,
+      outcome:
+        | "accepted"
+        | {
+            readonly status: "idle" | "error";
+            readonly detail: string | null;
+            readonly completedSeq: number;
+          },
+    ) => Effect.Effect<number, RegistryError>;
     /**
      * Mirror Pi's facts onto a session reference in one write: Pi's session name, when it has
      * one, replaces the title; statistics replace the last-known cache. Never changes activity
@@ -507,6 +523,26 @@ export const RegistryLive = Layer.effect(
               : t,
           ),
         })),
+      recordTurn: Effect.fn("Registry.recordTurn")(function* (cwd, sessionId, outcome) {
+        let seq = 0;
+        yield* update((d) => {
+          const entry = d.sessions.find(isSession(cwd, sessionId));
+          if (!entry) throw new RegistryError({ detail: "Session is not registered." });
+          seq = (entry.seq ?? 0) + (outcome === "accepted" ? 1 : 0);
+          const next =
+            outcome === "accepted"
+              ? { ...entry, seq }
+              : {
+                  ...entry,
+                  completedSeq: Math.max(entry.completedSeq ?? 0, outcome.completedSeq),
+                  lastStatus: outcome.status,
+                  lastDetail: outcome.detail ?? undefined,
+                };
+          if (JSON.stringify(next) === JSON.stringify(entry)) return d;
+          return { ...d, sessions: d.sessions.map((s) => (s === entry ? next : s)) };
+        });
+        return seq;
+      }),
       mirrorSession: (cwd, sessionId, facts) =>
         update((d) => {
           const entry = d.sessions.find(isSession(cwd, sessionId));

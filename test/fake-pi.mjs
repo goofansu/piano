@@ -222,19 +222,24 @@ function handle(cmd) {
         return respond(cmd, undefined, `Entry not found: ${cmd.since}`);
       return respond(cmd, { entries: entries.slice(since + 1), leafId: entries.at(-1).id });
     }
-    case "get_session_stats":
+    case "get_session_stats": {
       if (sessionId === "capacity-readback" && capacityHeld.length) {
         heldReads.push(cmd);
         return capacityCount();
       }
-      return respond(cmd, {
+      const stats = {
         cost: 0.01 * messages.length,
         contextUsage: liveContext ?? {
           tokens: 1200 * messages.length,
           contextWindow: model.id === "beta" ? 400000 : 200000,
           percent: (model.id === "beta" ? 0.3 : 0.6) * messages.length,
         },
-      });
+      };
+      // Quiescence can change after the final state publication, when this readback drains.
+      if (messages.some((m) => m.role === "user" && m.content === "late stats"))
+        return setTimeout(() => respond(cmd, stats), 100);
+      return respond(cmd, stats);
+    }
     case "get_available_models":
       return respond(cmd, {
         models: [

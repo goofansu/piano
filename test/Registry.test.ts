@@ -86,7 +86,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
+      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN completed_seq; ALTER TABLE sessions DROP COLUMN seq; ALTER TABLE sessions DROP COLUMN last_status; ALTER TABLE sessions DROP COLUMN last_detail; ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
     );
   } finally {
     legacy.close();
@@ -95,7 +95,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 6);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 7);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -211,7 +211,7 @@ test("version-3 sharing migration preserves sessions; Radius destinations surviv
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN radius_share; PRAGMA user_version = 3;",
+      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN completed_seq; ALTER TABLE sessions DROP COLUMN seq; ALTER TABLE sessions DROP COLUMN last_status; ALTER TABLE sessions DROP COLUMN last_detail; ALTER TABLE sessions DROP COLUMN radius_share; PRAGMA user_version = 3;",
     );
   } finally {
     legacy.close();
@@ -349,7 +349,7 @@ for (const { label, urls, selected } of [
     const legacy = new DatabaseSync(f.dbPath);
     try {
       legacy.exec(
-        "DROP TABLE notification_settings; CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT; PRAGMA user_version = 5;",
+        "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN completed_seq; ALTER TABLE sessions DROP COLUMN seq; ALTER TABLE sessions DROP COLUMN last_status; ALTER TABLE sessions DROP COLUMN last_detail; CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT; PRAGMA user_version = 5;",
       );
       for (const url of urls)
         legacy.prepare("INSERT INTO notification_webhooks VALUES (?)").run(url);
@@ -364,7 +364,7 @@ for (const { label, urls, selected } of [
     );
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 6);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 7);
       assert.equal(
         stored.prepare("SELECT name FROM sqlite_master WHERE name = 'notification_webhooks'").get(),
         undefined,
@@ -412,7 +412,7 @@ for (const url of [
     const legacy = new DatabaseSync(f.dbPath);
     try {
       legacy.exec(
-        "DROP TABLE notification_settings; CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT; PRAGMA user_version = 5;",
+        "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN completed_seq; ALTER TABLE sessions DROP COLUMN seq; ALTER TABLE sessions DROP COLUMN last_status; ALTER TABLE sessions DROP COLUMN last_detail; CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT; PRAGMA user_version = 5;",
       );
       legacy.prepare("INSERT INTO notification_webhooks VALUES (?)").run(url);
       legacy
@@ -456,7 +456,9 @@ test("version-4 migration adds empty notification preferences without changing s
   const f = fixture(t);
   const before = await f.get();
   const legacy = new DatabaseSync(f.dbPath);
-  legacy.exec("DROP TABLE notification_settings; PRAGMA user_version = 4;");
+  legacy.exec(
+    "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN completed_seq; ALTER TABLE sessions DROP COLUMN seq; ALTER TABLE sessions DROP COLUMN last_status; ALTER TABLE sessions DROP COLUMN last_detail; PRAGMA user_version = 4;",
+  );
   legacy.close();
   await f.run(
     Effect.gen(function* () {
@@ -483,7 +485,7 @@ test("INV-01: version-2 sessions start unpinned; pins persist without changing h
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;",
+      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN completed_seq; ALTER TABLE sessions DROP COLUMN seq; ALTER TABLE sessions DROP COLUMN last_status; ALTER TABLE sessions DROP COLUMN last_detail; ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;",
     );
   } finally {
     legacy.close();
@@ -658,6 +660,31 @@ test("INV-01: a failed transaction publishes neither partial rows nor in-memory 
   } finally {
     await runtime.dispose();
   }
+});
+
+test("API turn counters and the last-known failure survive database reopen", async (t) => {
+  const f = fixture(t);
+  const cwd = join(f.root, "turns");
+  mkdirSync(cwd);
+  await f.run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.ensureFolder(cwd);
+      yield* registry.addSession(cwd, "s");
+      assert.equal(yield* registry.recordTurn(cwd, "s", "accepted"), 1);
+      assert.equal(yield* registry.recordTurn(cwd, "s", "accepted"), 2);
+      yield* registry.recordTurn(cwd, "s", {
+        status: "error",
+        detail: "Pi exited",
+        completedSeq: 2,
+      });
+    }),
+  );
+  const entry = (await f.get()).sessions[0];
+  assert.equal(entry.seq, 2);
+  assert.equal(entry.completedSeq, 2);
+  assert.equal(entry.lastStatus, "error");
+  assert.equal(entry.lastDetail, "Pi exited");
 });
 
 test("INV-01: newer or damaged databases are never reset", async (t) => {

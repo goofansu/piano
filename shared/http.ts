@@ -70,7 +70,7 @@ export interface Endpoint<
 
 type NoPathParams<P extends string> = P extends `${string}${":" | "?" | "*"}${string}` ? never : P;
 
-const endpoint = <
+export const endpoint = <
   const P extends `/api/${string}`,
   M extends Method,
   Q extends IdParam = never,

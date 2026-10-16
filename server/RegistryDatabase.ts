@@ -35,6 +35,13 @@ function migrateNotification(db: DatabaseSync): string | null {
   }
 }
 
+const turnSchema = `
+  ALTER TABLE sessions ADD COLUMN seq INTEGER NOT NULL DEFAULT 0 CHECK (seq >= 0);
+  ALTER TABLE sessions ADD COLUMN completed_seq INTEGER NOT NULL DEFAULT 0 CHECK (completed_seq >= 0 AND completed_seq <= seq);
+  ALTER TABLE sessions ADD COLUMN last_status TEXT CHECK (last_status IN ('idle', 'error'));
+  ALTER TABLE sessions ADD COLUMN last_detail TEXT;
+`;
+
 const schema = `
   CREATE TABLE registry_meta (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL);
   INSERT INTO registry_meta VALUES (1, 0);
@@ -144,6 +151,10 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       "pinned",
       "stats",
       "radius_share",
+      "seq",
+      "completed_seq",
+      "last_status",
+      "last_detail",
       "pull_request_state",
       "pull_request_url",
       "pull_request_source",
@@ -162,6 +173,10 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       Number(!!s.pinned),
       s.stats === undefined ? null : JSON.stringify(s.stats),
       s.radiusShare === undefined ? null : JSON.stringify(s.radiusShare),
+      s.seq ?? 0,
+      s.completedSeq ?? 0,
+      s.lastStatus ?? null,
+      s.lastDetail ?? null,
       pullRequestState(s.pullRequest),
       s.pullRequest?.url ?? null,
       s.pullRequest?.source ?? null,
@@ -175,6 +190,10 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       updatedAt: r.updated_at as string,
       archived: Boolean(r.archived),
       ...(r.pinned ? { pinned: true } : {}),
+      ...(r.seq ? { seq: r.seq as number } : {}),
+      ...(r.completed_seq ? { completedSeq: r.completed_seq as number } : {}),
+      ...(r.last_status === null ? {} : { lastStatus: r.last_status as "idle" | "error" }),
+      ...(r.last_detail === null ? {} : { lastDetail: r.last_detail as string }),
       ...(r.project_id === null ? {} : { projectId: r.project_id as string }),
       ...(r.title === null ? {} : { title: r.title as string }),
       ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
@@ -292,6 +311,7 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         )
           throw new Error("Unrecognized registry database; refusing to initialize it.");
         db.exec(schema);
+        db.exec(turnSchema);
         persist(db, empty, initial);
       } else if (version === 1 || version === 2 || version === 3) {
         if (version === 1) db.exec("ALTER TABLE projects DROP COLUMN goal;");
@@ -302,11 +322,11 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         db.exec(
           "ALTER TABLE sessions ADD COLUMN radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)); PRAGMA user_version = 4;",
         );
-      } else if (version !== 4 && version !== 5 && version !== 6)
+      } else if (version !== 4 && version !== 5 && version !== 6 && version !== 7)
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
         );
-      if (version !== 6) {
+      if (Number(version) < 6) {
         const selected = version === 5 ? migrateNotification(db) : null;
         db.exec(notificationSchema);
         if (selected !== null)
@@ -315,6 +335,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           );
         if (version === 5) db.exec("DROP TABLE notification_webhooks");
       }
+      if (version !== 0 && Number(version) < 7) db.exec(turnSchema);
+      db.exec("PRAGMA user_version = 7");
       notificationIntegration(db); // Validate persisted preferences before accepting this database.
       db.exec("COMMIT");
     } catch (error) {

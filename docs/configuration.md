@@ -12,6 +12,8 @@ and `web/vite.config.ts`.
 | `PORT` | `7070` | Backend port. |
 | `PIANO_ALLOWED_ORIGINS` | `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>`, `http://[::1]:<PORT>` | Comma-separated browser origins that may change state. A set value replaces the defaults. See [browser origins](#browser-origins). |
 | `PIANO_DB_PATH` | `$XDG_DATA_HOME/piano/piano.db`, or `~/.local/share/piano/piano.db` when `XDG_DATA_HOME` is unset | Registry database file. |
+| `PIANO_API_SOCKET` | unset | Enable the local `/api/v1/*` API on an absolute Unix socket path (mode `0600`); takes precedence over `PIANO_API_PORT`. Never forwarded by the HTTPS proxy. |
+| `PIANO_API_PORT` | unset | Alternatively enable the local API on a separate `127.0.0.1` port, e.g. `8002`. Never proxy this port. With neither variable set, the API is off. |
 | `PIANO_IDLE_MINUTES` | `30` | Idle minutes before Piano stops a session's Pi process. `0` keeps processes running. |
 | `PIANO_PI_CLI` | the bundled Pi CLI, `server/PiRpcCli.ts` | Path to another Pi CLI entry. It must use Pi's credential format. |
 | `PIANO_PI_ARGS` | none | Extra Pi arguments, split on whitespace, such as `-e ./ext.ts`. |
@@ -73,7 +75,7 @@ so neither is in the registry.
 
 Piano refuses to start on a corrupt database, an unrecognized one, or one from a newer Piano. It
 never resets a database. It upgrades an older database in place when it opens it, and the current
-schema is version 6 (the saved notification integration is a name, not a URL). Before it upgrades a version 1 database, which still has project goals, Piano
+schema is version 7 (session turn counters and last-known API outcomes). Before it upgrades a version 1 database, which still has project goals, Piano
 writes a private copy to `<database>.v1-backup`. An older Piano can open that copy but not the
 upgraded file.
 
