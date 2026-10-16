@@ -39,9 +39,11 @@ export interface CreateSpec {
   /** Initial project; it must be active, checked before anything is registered. */
   readonly projectId?: string;
   readonly options: StartOptions;
+  readonly apiOwned?: boolean;
 }
 /** Only `create`'s fresh server-generated ID may create a registry reference. */
 interface Creation {
+  readonly apiOwned?: boolean;
   /** Initial registry membership; never passed to Pi or applied on reopen. */
   readonly projectId?: string;
 }
@@ -67,6 +69,13 @@ export class SessionHosts extends Context.Service<
       sessionId: string,
     ) => Effect.Effect<PiSession | undefined, PiSessionError>;
     readonly open: (spec: OpenSpec) => Effect.Effect<PiSession, PiSessionError>;
+    /** API admission: reopen through open's path, gate busy input and return its persisted seq. */
+    readonly submit: (
+      cwd: string,
+      sessionId: string,
+      text: string,
+      mode: "prompt" | "steer",
+    ) => Effect.Effect<number, PiSessionError>;
     /** A running session's slash commands, from its own child. A stopped session is refused,
      * never started to answer (INV-02). */
     readonly commands: (
@@ -224,13 +233,14 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             Effect.gen(function* () {
               if (stopping) return yield* rejected("Piano is shutting down.");
               if (ref.checkoutMissing) return yield* checkoutMissing;
-              if (existing) return existing.session;
+              if (existing) return { host: existing, opened: false };
               if (creation)
                 yield* registry
                   .addSession(ref.cwd, spec.sessionId, spec.name, creation.projectId)
                   .pipe(Effect.mapError((e) => rejected(e.detail)));
               const lock = yield* lockFor(key);
               const host: SessionHost = yield* makeSessionHost({
+                apiOwned: creation?.apiOwned,
                 spec: { ...spec, cwd: ref.cwd, sessionFile: ref.file, lastKnownStats: ref.stats },
                 lock,
                 onChange: announce,
@@ -247,11 +257,11 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 return yield* rejected("Piano is shutting down.");
               }
               yield* announce;
-              return host.session;
+              return { host, opened: true };
             }),
           creation !== undefined,
         );
-      const open = (spec: OpenSpec) => start(spec);
+      const open = (spec: OpenSpec) => Effect.map(start(spec), ({ host }) => host.session);
 
       const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
         // Registry writes run before the ownership lock; an unavailable project registers nothing.
@@ -262,8 +272,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         // membership survive a disconnected requester, as acquisition is server-owned.
         return yield* start(
           { cwd, sessionId: randomUUID(), model, thinkingLevel, name },
-          { projectId: spec.projectId },
-        );
+          { projectId: spec.projectId, apiOwned: spec.apiOwned },
+        ).pipe(Effect.map(({ host }) => host.session));
       });
 
       const get = (cwd: string, id: string) =>
@@ -345,6 +355,12 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       );
       return SessionHosts.of({
         open,
+        submit: (cwd, sessionId, text, mode) =>
+          owned(
+            Effect.flatMap(start({ cwd, sessionId }), ({ host, opened }) =>
+              host.submit(text, mode, opened),
+            ),
+          ),
         commands,
         create,
         rename,

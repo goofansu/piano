@@ -4,8 +4,8 @@
  * closing itself when its child exits. SessionHosts keys hosts by checkout and owns their locks.
  */
 import { Clock, Deferred, Effect, Exit, Fiber, Scope, Semaphore, Stream } from "effect";
-import type { SessionClosure } from "../shared/wire.ts";
-import { deriveStatus } from "./ApiStatus.ts";
+import type { Dialog, SessionAction, SessionClosure } from "../shared/wire.ts";
+import { deriveStatus, snapshotStatus } from "./ApiStatus.ts";
 import { Notifications } from "./Notifications.ts";
 import {
   type PiSession,
@@ -20,6 +20,12 @@ import { SessionReferences } from "./SessionReferences.ts";
 export interface SessionHost {
   /** Pi's session, with `act` admitted by this host. */
   readonly session: PiSession;
+  /** API input shares act's admission and counters, but returns before Pi acknowledges/finishes. */
+  readonly submit: (
+    text: string,
+    mode: "prompt" | "steer",
+    opened?: boolean,
+  ) => Effect.Effect<number, PiSessionError>;
   /** Set once close begins; a closing host rejects new input and never mirrors again. */
   readonly closing: boolean;
   /** Busy as of now: an admitted action is in flight or Pi is not quiescent (INV-02/03). */
@@ -58,6 +64,7 @@ export const mirrorSession = (
  */
 export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options: {
   readonly spec: PiSessionSpec;
+  readonly apiOwned?: boolean;
   readonly lock: Semaphore.Semaphore;
   /** Running state changed; announce it. */
   readonly onChange: Effect.Effect<void>;
@@ -83,6 +90,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   let lastActivity = yield* Clock.currentTimeMillis;
   let actions = 0;
   let closing = false;
+  let apiOwned = options.apiOwned ?? false;
   let seq =
     (yield* registry.get).sessions.find(
       (s) => s.cwd === raw.spec.cwd && s.sessionId === raw.spec.sessionId,
@@ -129,7 +137,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
     completedSeq = Math.max(completedSeq, observedSeq);
   });
 
-  const act: PiSession["act"] = Effect.fn("SessionHost.act")(function* (action) {
+  const admit = Effect.fn("SessionHost.admit")(function* (action: SessionAction, api = false) {
     if (closing)
       return yield* rejected("Pi is closing. Wait for shutdown before reopening history.");
     // Any action means the user is here: a completion message waiting for this session is dropped.
@@ -142,7 +150,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
         .pipe(Effect.mapError((e) => rejected(e.detail)));
     // Admit an action atomically against retirement, but don't hold the lock while awaiting a
     // command whose dialog another action must answer.
-    const fiber = yield* Semaphore.withPermits(
+    return yield* Semaphore.withPermits(
       lock,
       1,
     )(
@@ -151,13 +159,30 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
           return yield* rejected("Pi is closing or has stopped. Refresh before sending new input.");
         if (sessionActionPolicy[action._tag].needsCheckout)
           yield* references.requireCheckout(raw.spec.cwd);
+        if (api) {
+          const snapshot = yield* raw.snapshot;
+          if (snapshot.state.isStopping || snapshot.state.checkoutMissing)
+            return yield* rejected(
+              snapshot.state.checkoutMissing
+                ? "Session checkout is missing."
+                : "Session is stopping.",
+            );
+          const { status } = snapshotStatus(snapshot, true);
+          if (
+            action._tag !== "steer" &&
+            (actions > 0 || status === "running" || status === "waiting")
+          )
+            return yield* rejected("Session is busy.");
+          apiOwned = true;
+          yield* cancelDialogs(snapshot.dialogs).pipe(Effect.forkIn(observerScope));
+        }
         if (action._tag === "prompt" || action._tag === "steer")
           seq = yield* registry
             .recordTurn(raw.spec.cwd, raw.spec.sessionId, "accepted")
             .pipe(Effect.mapError((e) => rejected(e.detail)));
         actions++;
         lastActivity = yield* Clock.currentTimeMillis;
-        return yield* raw.act(action).pipe(
+        const fiber = yield* raw.act(action).pipe(
           Effect.ensuring(
             Effect.gen(function* () {
               actions--;
@@ -165,12 +190,26 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
               yield* complete;
             }),
           ),
-          Effect.forkIn(scope),
+          Effect.forkIn(scope, { uninterruptible: false }),
         );
+        return { fiber, seq };
       }),
     );
+  }, Effect.uninterruptible);
+  const act: PiSession["act"] = Effect.fn("SessionHost.act")(function* (action) {
+    const { fiber } = yield* admit(action);
     return yield* Fiber.join(fiber);
   });
+  const cancelDialogs = (dialogs: ReadonlyArray<Dialog>) =>
+    Effect.forEach(
+      dialogs,
+      (dialog) =>
+        act({ _tag: "answer", id: dialog.id, generation: dialog.generation, cancelled: true }).pipe(
+          // A browser answer, timeout or abort can win the same claim; PiSessions owns that race.
+          Effect.ignore,
+        ),
+      { discard: true },
+    );
   // Opening the session in a browser subscribes to its events, which also counts as being here.
   // The host's own observer below subscribes once at creation, before any completion can wait.
   const session: PiSession = {
@@ -188,6 +227,37 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   const busy = Effect.map(raw.state, (state) => actions > 0 || !state.isQuiescent);
   const host: SessionHost = {
     session,
+    submit: Effect.fn("SessionHost.submit")(function* (text, mode, opened = false) {
+      // Cached-stat refresh is deliberately asynchronous on browser reopen. For a host this
+      // request just opened, let that initial readback drain before applying the busy gate.
+      // Never wait for another input, dialog or actual work to finish and then send stale input.
+      // Creation can itself open an extension dialog. Ownership is set before observation,
+      // so let its cancellation finish before the first prompt, rather than orphaning creation.
+      if (options.apiOwned) {
+        while (!closing && seq === 0) {
+          const snapshot = yield* raw.snapshot;
+          if (snapshot.state.closure || (actions === 0 && snapshot.dialogs.length === 0)) break;
+          yield* Effect.sleep(5);
+        }
+      }
+      if (opened || (options.apiOwned && seq === 0)) {
+        while (!closing && actions === 0) {
+          const snapshot = yield* raw.snapshot;
+          if (
+            snapshot.state.isQuiescent ||
+            snapshot.state.submission ||
+            snapshot.state.closure ||
+            snapshotStatus({ ...snapshot, state: { ...snapshot.state, isQuiescent: true } }, true)
+              .status !== "idle"
+          )
+            break;
+          yield* Effect.sleep(5);
+        }
+      }
+      const accepted = yield* admit({ _tag: mode, text }, true);
+      // The host scope owns the work, even if this HTTP caller goes away.
+      return accepted.seq;
+    }),
     get closing() {
       return closing;
     },
@@ -233,6 +303,10 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
             lock,
             1,
           )(Effect.suspend(() => (closing ? Effect.void : Effect.all([mirrorStats, complete]))));
+        if (apiOwned && !closing && (event._tag === "dialog" || event._tag === "snapshot"))
+          yield* cancelDialogs(
+            event._tag === "dialog" ? [event.dialog] : event.snapshot.dialogs,
+          ).pipe(Effect.forkIn(observerScope));
         if (event._tag === "response_completed" && !closing)
           yield* notifications.completed(raw.spec.sessionId);
         lastActivity = yield* Clock.currentTimeMillis;

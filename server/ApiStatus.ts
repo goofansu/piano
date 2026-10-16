@@ -1,5 +1,15 @@
 import type { ApiStatus } from "../shared/api.ts";
-import type { Dialog, SessionState } from "../shared/wire.ts";
+import type { Dialog, SessionState, Snapshot } from "../shared/wire.ts";
+
+/** Pi retains the last acknowledgement after settling; it is no longer an active submission. */
+export const snapshotStatus = ({ state, dialogs }: Snapshot, hosted: boolean) =>
+  deriveStatus(
+    state.isQuiescent && ["started", "queued"].includes(state.submission?.outcome ?? "")
+      ? { ...state, submission: undefined }
+      : state,
+    dialogs,
+    hosted,
+  );
 
 /** Execution status, not task success. Error and dialog facts take precedence over activity. */
 export function deriveStatus(

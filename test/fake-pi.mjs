@@ -32,6 +32,7 @@ const environmentFixture = verifyChildEnvironment
 const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";
 const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "fake/alpha";
 let model = { provider: modelArg.split("/")[0], id: modelArg.split("/")[1] };
+let startupDialog = modelArg === "fake/startup-dialog";
 let thinkingLevel = "medium";
 let sessionName = environmentFixture ?? "fake";
 const state = () => ({
@@ -137,6 +138,15 @@ const respond = (cmd, data, error) =>
 function handle(cmd) {
   switch (cmd.type) {
     case "get_state":
+      if (startupDialog) {
+        startupDialog = false;
+        out({
+          type: "extension_ui_request",
+          id: "startup",
+          method: "input",
+          title: "Startup dialog",
+        });
+      }
       if (sessionId === "capacity-records") {
         for (let n = 0; n < 257; n++) out({ type: "future_event", n });
         return; // No readiness response: nothing consumes records until open completes.

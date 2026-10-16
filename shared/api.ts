@@ -22,7 +22,52 @@ export const ApiSessionList = Schema.Array(
   }),
 );
 
+export const ApiAccepted = Schema.Union([
+  Schema.Struct({ workspaceId: Schema.String, sessionId: Schema.String, seq: Schema.Number }),
+  Schema.Struct({ seq: Schema.Number }),
+]);
+export type ApiAccepted = typeof ApiAccepted.Type;
+const requestId = Schema.optional(Schema.NonEmptyString.check(Schema.isMaxLength(256)));
+
 export const ApiEndpoints = {
+  create: endpoint({
+    method: "POST",
+    path: "/api/v1/sessions",
+    body: Schema.Struct({
+      cwd: Schema.NonEmptyString,
+      prompt: Schema.NonEmptyString,
+      model: Schema.optional(Schema.NonEmptyString),
+      requestId,
+    }),
+    response: ApiAccepted,
+    noStore: true,
+    refused: 409,
+    fallback: "Could not create session.",
+  }),
+  send: endpoint({
+    method: "POST",
+    path: "/api/v1/sessions/messages",
+    query: ["workspaceId", "sessionId"],
+    body: Schema.Struct({
+      prompt: Schema.NonEmptyString,
+      mode: Schema.optional(Schema.Literals(["prompt", "steer"])),
+      requestId,
+    }),
+    response: ApiAccepted,
+    noStore: true,
+    refused: 409,
+    fallback: "Could not send message.",
+  }),
+  abort: endpoint({
+    method: "POST",
+    path: "/api/v1/sessions/abort",
+    query: ["workspaceId", "sessionId"],
+    body: Schema.Struct({ stop: Schema.optional(Schema.Boolean) }),
+    response: Schema.Struct({ ok: Schema.Literal(true) }),
+    noStore: true,
+    refused: 409,
+    fallback: "Could not abort session.",
+  }),
   get: endpoint({
     method: "GET",
     path: "/api/v1/sessions",

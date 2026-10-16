@@ -1,26 +1,54 @@
-import { Effect } from "effect";
+import { Clock, Effect, Fiber, Semaphore } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { ApiEndpoints } from "../shared/api.ts";
-import type { Snapshot } from "../shared/wire.ts";
-import { deriveStatus } from "./ApiStatus.ts";
+import { type ApiAccepted, ApiEndpoints } from "../shared/api.ts";
+import { snapshotStatus } from "./ApiStatus.ts";
 import { Registry } from "./Registry.ts";
-import { route } from "./Router.ts";
+import { fail, route } from "./Router.ts";
 import { SessionHosts } from "./SessionHosts.ts";
-
-/** Pi retains the last acknowledgement after settling; it is no longer an active submission. */
-export const snapshotStatus = ({ state, dialogs }: Snapshot, hosted: boolean) =>
-  deriveStatus(
-    state.isQuiescent && ["started", "queued"].includes(state.submission?.outcome ?? "")
-      ? { ...state, submission: undefined }
-      : state,
-    dialogs,
-    hosted,
-  );
 
 export const ApiRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const registry = yield* Registry;
     const hosts = yield* SessionHosts;
+    const scope = yield* Effect.scope;
+    type Failure = Effect.Error<ReturnType<typeof fail>>;
+    const requests = new Map<
+      string,
+      { expires: number; fiber: Fiber.Fiber<ApiAccepted, Failure> }
+    >();
+    const lock = yield* Semaphore.make(1);
+    // Cache the in-flight operation too: simultaneous retries must not create two sessions.
+    // Its lifetime is the services/router scope, never the HTTP request's scope.
+    const accept = Effect.fn("ApiRouter.accept")(function* (
+      requestId: string | undefined,
+      operation: Effect.Effect<ApiAccepted, Failure>,
+    ) {
+      const fiber = yield* Semaphore.withPermits(
+        lock,
+        1,
+      )(
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis;
+          for (const [id, entry] of requests)
+            if (entry.expires <= now && entry.fiber.pollUnsafe()) requests.delete(id);
+          if (requestId !== undefined) {
+            const previous = requests.get(requestId);
+            if (previous) return previous.fiber;
+            if (requests.size >= 1000) {
+              const oldest = [...requests].find(([, entry]) => entry.fiber.pollUnsafe());
+              if (!oldest)
+                return yield* fail(409, "Request deduplication is busy. Try again later.");
+              requests.delete(oldest[0]);
+            }
+          }
+          const fiber = yield* operation.pipe(Effect.forkIn(scope));
+          if (requestId !== undefined)
+            requests.set(requestId, { expires: now + 10 * 60_000, fiber });
+          return fiber;
+        }),
+      );
+      return yield* Fiber.join(fiber);
+    });
     yield* router.addGlobalMiddleware((handler) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -38,6 +66,49 @@ export const ApiRouter = HttpRouter.use((router) =>
       }),
     );
     const serve = route(router, 400);
+    yield* serve(ApiEndpoints.create, ({ body }) =>
+      accept(
+        body.requestId,
+        Effect.gen(function* () {
+          const data = yield* registry.get;
+          if (!data.folders.includes(body.cwd) && !data.worktrees.some((w) => w.path === body.cwd))
+            return yield* fail(400, "cwd is not a registered folder.");
+          const workspace = data.workspaces.find((w) => w.path === body.cwd)!;
+          const session = yield* hosts
+            .create({ cwd: body.cwd, options: { model: body.model }, apiOwned: true })
+            .pipe(Effect.catch((e) => fail(409, e.detail)));
+          const seq = yield* hosts
+            .submit(session.spec.cwd, session.spec.sessionId, body.prompt, "prompt")
+            .pipe(Effect.catch((e) => fail(409, e.detail)));
+          return { workspaceId: workspace.id, sessionId: session.spec.sessionId, seq };
+        }),
+      ),
+    );
+    yield* serve(ApiEndpoints.send, ({ session, body }) =>
+      accept(
+        body.requestId,
+        hosts.submit(session.cwd, session.sessionId, body.prompt, body.mode ?? "prompt").pipe(
+          Effect.map((seq) => ({ seq })),
+          Effect.catch((e) => fail(409, e.detail)),
+        ),
+      ),
+    );
+    yield* serve(ApiEndpoints.abort, ({ session, body }) =>
+      Effect.gen(function* () {
+        const live = yield* hosts.get(session.cwd, session.sessionId);
+        if (live) {
+          if (body.stop) {
+            // Browser Stop returns queued input and cancels; API stop additionally kills Pi.
+            yield* live
+              .act({ _tag: "stop" })
+              .pipe(
+                Effect.ensuring(hosts.release(session.cwd, session.sessionId).pipe(Effect.orDie)),
+              );
+          } else if (!(yield* live.state).isQuiescent) yield* live.act({ _tag: "abort" });
+        }
+        return { ok: true as const };
+      }).pipe(Effect.forkIn(scope), Effect.flatMap(Fiber.join)),
+    );
     yield* serve(ApiEndpoints.get, ({ workspace, session }) =>
       Effect.gen(function* () {
         const live = yield* hosts.get(session.cwd, session.sessionId);

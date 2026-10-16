@@ -34,6 +34,7 @@ export interface RouterFixture {
 export async function startRouter<Fakes = never>(
   prefix: string,
   services?: Layer.Layer<Fakes>,
+  options: { idleMs?: number } = {},
 ): Promise<RouterFixture> {
   const root = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
   const repo = join(root, "repo");
@@ -65,7 +66,7 @@ export async function startRouter<Fakes = never>(
   );
   // Production adapters a test may replace through `services`: a later layer wins a merge.
   const Adapters = PianoAdaptersLive.pipe(Layer.provideMerge(Config));
-  const Services = PianoServicesLive({ idleMs: 0 }).pipe(
+  const Services = PianoServicesLive({ idleMs: options.idleMs ?? 0 }).pipe(
     Layer.provideMerge(services ? Layer.merge(Adapters, services) : Adapters),
   );
 

@@ -28,6 +28,9 @@ startup.
 `npm run dev:server` sets `PIANO_ALLOWED_ORIGINS` to the three loopback origins on Vite's port 5173,
 unless you set it yourself.
 
+The optional [local session API](api.md) uses a separate, never-proxied listener and rejects every
+`Origin` header. The browser-origin policy below applies only to the main listener.
+
 Piano limits incoming WebSocket messages, RPC lines and pending work, and keeps capacity for answers
 and cancellation. It rejects overload instead of queueing it for retry. See
 [runtime input limits](runtime-input-limits.md).
