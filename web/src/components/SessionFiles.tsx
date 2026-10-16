@@ -1,9 +1,10 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
+import { FileIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
+import { UsageDivider } from "@/components/UsageDivider";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { abbrevHome } from "@/lib/format";
 import { displayPath, sessionFiles, splitPath } from "@/lib/sessionFiles";
 import { listRow } from "@/lib/styles";
@@ -49,7 +50,9 @@ export function SessionFiles({ messages, cwd }: Props) {
             aria-expanded={open}
             className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink"
           >
-            {files.length} {files.length === 1 ? "file" : "files"}
+            <FileIcon aria-hidden className="size-3.5 md:hidden" />
+            {files.length}
+            <span className="hidden md:inline">{files.length === 1 ? "file" : "files"}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -90,7 +93,7 @@ export function SessionFiles({ messages, cwd }: Props) {
           </ul>
         </PopoverContent>
       </Popover>
-      <Separator orientation="vertical" className="h-3!" />
+      <UsageDivider />
     </>
   );
 }

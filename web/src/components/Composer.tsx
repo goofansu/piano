@@ -278,7 +278,7 @@ export function Composer({
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">
         {/* biome-ignore lint/a11y/useSemanticElements: a <fieldset> brings form semantics and min-content sizing to a row of status buttons. */}
         <div
-          className="ml-auto flex shrink-0 items-center gap-2"
+          className="ml-auto flex shrink-0 items-center gap-1 md:gap-2"
           role="group"
           aria-label="Session usage"
         >

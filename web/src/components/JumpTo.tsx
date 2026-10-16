@@ -1,10 +1,10 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, MessageSquareIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
+import { UsageDivider } from "@/components/UsageDivider";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { listRow } from "@/lib/styles";
 import { type JumpEntry, jumpEntries, transcriptRows } from "@/lib/transcript";
 import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
@@ -58,7 +58,9 @@ export function JumpTo({ messages, working = false }: Props) {
             aria-expanded={open}
             className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink"
           >
-            {total} {total === 1 ? "message" : "messages"}
+            <MessageSquareIcon aria-hidden className="size-3.5 md:hidden" />
+            {total}
+            <span className="hidden md:inline">{total === 1 ? "message" : "messages"}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -119,8 +121,7 @@ export function JumpTo({ messages, working = false }: Props) {
           </ul>
         </PopoverContent>
       </Popover>
-      {/* Vega's vertical Separator stretches; a short divider must centre on the row's text. */}
-      <Separator orientation="vertical" className="h-3! self-center!" />
+      <UsageDivider />
     </>
   );
 }

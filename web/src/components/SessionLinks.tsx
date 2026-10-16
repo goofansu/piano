@@ -1,11 +1,11 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
-import { MessageSquareQuoteIcon } from "lucide-react";
+import { LinkIcon, MessageSquareQuoteIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
+import { UsageDivider } from "@/components/UsageDivider";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { displayUrl, type SessionLink, sessionLinks } from "@/lib/sessionLinks";
 import { listRow } from "@/lib/styles";
 import { jumpEntries, revealEntries, transcriptRows } from "@/lib/transcript";
@@ -60,7 +60,9 @@ export function SessionLinks({ messages, working = false }: Props) {
             aria-expanded={open}
             className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink"
           >
-            {links.length} {links.length === 1 ? "link" : "links"}
+            <LinkIcon aria-hidden className="size-3.5 md:hidden" />
+            {links.length}
+            <span className="hidden md:inline">{links.length === 1 ? "link" : "links"}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -116,7 +118,7 @@ export function SessionLinks({ messages, working = false }: Props) {
           </ul>
         </PopoverContent>
       </Popover>
-      <Separator orientation="vertical" className="h-3!" />
+      <UsageDivider />
     </>
   );
 }
