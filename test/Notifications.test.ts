@@ -265,7 +265,7 @@ test("a completion waits a minute and is dropped when the session is acted on or
 
 test("through the session host, an action or an opened event stream during the wait drops the message", async (t) => {
   const texts: string[] = [];
-  let next = Deferred.makeUnsafe<void>();
+  const next = Deferred.makeUnsafe<void>();
   const f = await startRouter(
     "piano-notifications-wait-",
     Layer.mergeAll(
