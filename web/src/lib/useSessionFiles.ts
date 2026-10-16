@@ -9,7 +9,8 @@ import { useObservation } from "./useObservation.ts";
  * The files a session wrote or edited that follow the workspace's `.gitignore`: Git decides
  * (INV-01), read afresh whenever the set of paths changes and on focus. Until the next answer the
  * last one still applies, so a known ignored file never flashes back; a path the last answer did
- * not cover shows until Git says otherwise. Without a Git workspace every file shows.
+ * not cover shows until Git says otherwise. Without a Git workspace, or after a failed read,
+ * every file shows until a successful read restores filtering.
  */
 export function useSessionFiles(
   session: SessionView | null,
@@ -22,7 +23,7 @@ export function useSessionFiles(
     workspace && files.length
       ? JSON.stringify([workspace.id, workspace.path, files.map((file) => file.path)])
       : null;
-  const { value } = useObservation<WorkspaceIgnoredFiles>(
+  const { value, error } = useObservation<WorkspaceIgnoredFiles>(
     key,
     async (signal, k) => {
       const [id, path, paths] = JSON.parse(k) as [string, string, string[]];
@@ -35,7 +36,10 @@ export function useSessionFiles(
     { enabled, focus: true },
   );
   const last = useRef<WorkspaceIgnoredFiles>(undefined);
-  if (value) last.current = value;
-  const known = workspace ? (value ?? last.current) : undefined;
+  // Observation normally retains stale data on transport failure. Files instead fail open,
+  // just as for a Git error response; discard the fallback too so a new path cannot revive it.
+  if (error !== undefined) last.current = undefined;
+  else if (value) last.current = value;
+  const known = error === undefined ? (value ?? last.current) : undefined;
   return useMemo(() => visibleFiles(files, known, workspace), [files, known, workspace]);
 }
