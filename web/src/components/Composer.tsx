@@ -14,6 +14,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
+import { SessionFiles } from "@/components/SessionFiles";
 import { SessionLinks } from "@/components/SessionLinks";
 import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -281,6 +282,7 @@ export function Composer({
           role="group"
           aria-label="Session usage"
         >
+          <SessionFiles messages={messages} />
           <SessionLinks messages={messages} working={streaming} />
           <JumpTo messages={messages} working={streaming} />
           <Popover>
