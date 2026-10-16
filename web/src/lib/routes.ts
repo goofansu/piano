@@ -18,7 +18,7 @@ export const SETTINGS_SECTIONS = [
   { id: "providers", label: "Providers", icon: "plug", page: "providers" },
   { id: "radius", label: "Radius", icon: "radius", page: "providers" },
   { id: "mcp", label: "MCP", icon: "server", page: "mcp" },
-  { id: "exe-dev", label: "exe.dev", icon: "cloud", page: "exe-dev" },
+  { id: "integrations", label: "Integrations", icon: "puzzle", page: "integrations" },
 ] as const satisfies readonly {
   id: string;
   label: string;
@@ -26,8 +26,9 @@ export const SETTINGS_SECTIONS = [
   page: string;
 }[];
 
-/** Both navigation surfaces gate exe.dev on the same backend capability. */
-export const settingsAvailable = (id: string, detected: boolean) => id !== "exe-dev" || detected;
+/** Both navigation surfaces gate Integrations on the same exe.dev detection. */
+export const settingsAvailable = (id: string, detected: boolean) =>
+  id !== "integrations" || detected;
 
 /** Settings navigation lists one row per page, so Radius appears only inside Providers. */
 export const SETTINGS_PAGES = SETTINGS_SECTIONS.filter((section) => section.id === section.page);
@@ -48,9 +49,7 @@ export type Route =
 const settingsSection = (id: string | undefined): SettingsSection | undefined =>
   id === undefined
     ? SETTINGS_SECTIONS[0].id
-    : id === "notifications"
-      ? "exe-dev" // Keep old bookmarks without another navigation/palette row.
-      : SETTINGS_SECTIONS.find((section) => section.id === id)?.id;
+    : SETTINGS_SECTIONS.find((section) => section.id === id)?.id;
 
 export function parseRoute(loc: { pathname: string }): Route {
   const settings = loc.pathname.match(/^\/settings(?:\/([^/]+))?\/?$/);

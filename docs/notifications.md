@@ -1,7 +1,8 @@
-# exe.dev Settings and Slack notifications
+# Integrations and Slack notifications
 
-Open **Settings → exe.dev**. **Integrations** lists the Slack integrations attached to the current
-VM, one row per integration, named as exe.dev's dashboard names it. Click **Select** next to one.
+Open **Settings → Integrations**. The page lists the integrations attached to the current VM in
+exe.dev's own words, with a link to manage them on exe.dev: **Send messages** holds one row per
+integration, named and typed as exe.dev names it. Click **Select** next to one.
 Selection saves immediately and enables notifications; it does not send a test message. **Clear**
 disables future notifications. This preference applies to all sessions on this Piano backend, not
 just your tab.
@@ -9,14 +10,13 @@ just your tab.
 The list holds integrations with type `slack` from exe.dev Reflection, attached to the current VM. It
 excludes Slack bots, mobile notifications and other integration types. It does not list every
 integration in your exe.dev account. No row is selected automatically, even when there is only one.
-When the list is empty, **Manage integrations** opens
-[exe.dev's integration dashboard](https://exe.dev/integrations); creation, channel choice and VM
-attachment remain exe.dev's responsibility. See [exe.dev's Slack guide](https://exe.dev/docs/integrations-slack.md).
+Creation, channel choice and VM attachment remain
+[exe.dev's integration dashboard](https://exe.dev/integrations)'s responsibility. See [exe.dev's Slack guide](https://exe.dev/docs/integrations-slack.md).
 
 **Test** sends an explicit message to the saved integration. “Accepted” means the integration accepted
-the HTTP request; check Slack to confirm it appeared. The page shows the rows, one line saying what
-the selection does, and actionable errors: no raw webhook input or routine saved-state notices. Old
-`/settings/notifications` bookmarks open the exe.dev page.
+the HTTP request; check Slack to confirm it appeared. The page shows one sentence about integrations,
+the rows and actionable errors: no raw webhook input or routine saved-state notices. The page lives at
+`/settings/integrations`; its earlier addresses are not kept.
 
 ## Completion messages and links
 
@@ -46,7 +46,7 @@ Settings on an actual exe.dev VM. Detection is not authorization; Piano still ne
 
 Integration discovery is separate: the backend reads the fixed `/integrations` path when advertised
 by Reflection, with its own one-second deadline and bounded response body. Inventory is cached for
-30 seconds, independently of positive detection. Opening the exe.dev page, focusing its window or
+30 seconds, independently of positive detection. Opening the Integrations page, focusing its window or
 using Retry/Refresh bypasses the inventory cache. Discovery errors are not empty results and do not
 hide the page after detection succeeds. Integration comments/help text are never displayed or executed.
 

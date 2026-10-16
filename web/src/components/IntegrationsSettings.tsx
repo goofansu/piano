@@ -31,13 +31,14 @@ import { useObservation } from "@/lib/useObservation";
 const MANAGE_INTEGRATIONS = "https://exe.dev/integrations";
 
 /**
- * Piano's use of the exe.dev integrations attached to this VM: one row per Slack integration, named
- * as exe.dev's dashboard names it, with the selected one receiving completion notifications.
+ * Piano's use of the integrations attached to this VM on exe.dev, laid out as exe.dev's dashboard
+ * words them: a "Send messages" section with one row per integration, named and typed as exe.dev
+ * names it. The catalog holds Slack today; the selected integration receives completion notifications.
  */
-export function ExeDevSettings() {
+export function IntegrationsSettings() {
   // Page entry, focus and Retry explicitly refresh inventory, independently of sticky detection.
   const observed = useObservation(
-    "exe-dev",
+    "integrations",
     (signal) => changeExeDevSettings({ action: "refresh" }, { signal }),
     { focus: true },
   );
@@ -65,17 +66,25 @@ export function ExeDevSettings() {
     }
   };
   return (
-    <SettingsSectionFrame title="exe.dev" sectionId="settings-exe-dev">
-      <section aria-labelledby="exe-dev-integrations" className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 id="exe-dev-integrations" className="flex min-h-8 items-center text-lg font-semibold">
-            Integrations
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Slack integrations attached to this VM on exe.dev. The selected one receives a message
-            when an agent finishes responding.
-          </p>
-        </div>
+    <SettingsSectionFrame title="Integrations" sectionId="settings-integrations">
+      <p className="text-sm text-muted-foreground">
+        Piano uses the integrations attached to this VM on exe.dev.{" "}
+        <a
+          href={MANAGE_INTEGRATIONS}
+          target="_blank"
+          rel="noreferrer"
+          className="text-foreground underline underline-offset-4"
+        >
+          Manage integrations on exe.dev
+        </a>
+      </p>
+      <section aria-labelledby="settings-send-messages-title" className="flex flex-col gap-3">
+        <h2
+          id="settings-send-messages-title"
+          className="flex min-h-8 items-center text-lg font-semibold"
+        >
+          Send messages
+        </h2>
         {value?.problem && (
           <SettingsAlert title="Configure Piano’s public URL">{value.problem}</SettingsAlert>
         )}
@@ -105,14 +114,9 @@ export function ExeDevSettings() {
               <EmptyTitle>No Slack integrations</EmptyTitle>
               <EmptyDescription>Attach one to this VM on exe.dev, then refresh.</EmptyDescription>
             </EmptyHeader>
-            <EmptyContent className="flex-row justify-center">
-              <Button variant="outline" size="sm" asChild>
-                <a href={MANAGE_INTEGRATIONS} target="_blank" rel="noreferrer">
-                  Manage integrations
-                </a>
-              </Button>
+            <EmptyContent>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 disabled={busy || observed.loading}
                 onClick={() => void observed.refresh()}
@@ -177,6 +181,7 @@ function IntegrationItem({
             </>
           )}
         </ItemTitle>
+        {/* The catalog is Slack-only; the type joins the wire when another type is supported. */}
         <ItemDescription>{attached ? "Slack" : "Not attached to this VM"}</ItemDescription>
       </ItemContent>
       <ItemActions className="shrink-0">

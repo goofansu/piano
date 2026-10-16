@@ -3,8 +3,8 @@ import { AlertCircleIcon, CheckCircle2Icon, HomeIcon, PlugIcon } from "lucide-re
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
-import { ExeDevSettings } from "@/components/ExeDevSettings";
 import { IconButton } from "@/components/IconButton";
+import { IntegrationsSettings } from "@/components/IntegrationsSettings";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
@@ -132,7 +132,7 @@ export function SettingsPage({
       <ProvidersSettings revealRadius={section === "radius" ? request : undefined} />
     ),
     mcp: () => <McpSettings />,
-    "exe-dev": () => <ExeDevSettings />,
+    integrations: () => <IntegrationsSettings />,
   };
   return pages[page]();
 }

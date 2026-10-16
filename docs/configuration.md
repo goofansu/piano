@@ -59,8 +59,8 @@ the backend address. For the exe.dev setup, see
 
 ## Notifications
 
-In **Settings → exe.dev → Integrations**, [Slack notifications](notifications.md) use one selected,
-attached Slack integration when an agent finishes responding. Selection persists in Piano’s database. Positive
+In **Settings → Integrations**, [Slack notifications](notifications.md) use one selected, attached
+Slack integration when an agent finishes responding. Selection persists in Piano’s database. Positive
 environment detection lasts until backend restart; the integration catalog refreshes separately.
 
 ## Registry storage

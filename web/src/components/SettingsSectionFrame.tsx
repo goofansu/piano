@@ -1,4 +1,4 @@
-import { CloudIcon, type LucideIcon, PlugIcon, RadiusIcon, ServerIcon } from "lucide-react";
+import { type LucideIcon, PlugIcon, PuzzleIcon, RadiusIcon, ServerIcon } from "lucide-react";
 import { SettingsHeader } from "@/components/SettingsHeader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { SettingsSectionIconName } from "@/lib/routes";
@@ -7,7 +7,7 @@ const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
   plug: PlugIcon,
   radius: RadiusIcon,
   server: ServerIcon,
-  cloud: CloudIcon,
+  puzzle: PuzzleIcon,
 };
 
 /** A Settings section's icon, as navigation and the command palette show it. */
