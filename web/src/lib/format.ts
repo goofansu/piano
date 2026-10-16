@@ -17,6 +17,29 @@ export function clamp(text: string | undefined, max: number): string {
   return `${text.slice(0, max)}\n…(truncated)`;
 }
 
+/**
+ * A tool call's arguments as the reader wants them: one `name: value` line per argument, a
+ * multi-line value (a heredoc script, a file's new contents) on its own lines with real line
+ * breaks instead of JSON's `\n` escapes. Arguments still streaming in, or not a JSON object,
+ * show as they are; an empty object shows nothing.
+ */
+export function toolArgsText(args: string | undefined): string {
+  if (!args) return "";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(args);
+  } catch {
+    return args;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return args;
+  return Object.entries(parsed)
+    .map(([name, value]) => {
+      const text = typeof value === "string" ? value : JSON.stringify(value);
+      return text.includes("\n") ? `${name}:\n${text}` : `${name}: ${text}`;
+    })
+    .join("\n");
+}
+
 /** Compact token units, promoting rounded values at the million/billion boundaries. */
 export function formatTokenCount(tokens: number): string {
   if (tokens >= 999_500_000) return `${(tokens / 1e9).toFixed(1)}B`;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { abbrevPath, formatTokenCount } from "../web/src/lib/format.ts";
+import { abbrevPath, formatTokenCount, toolArgsText } from "../web/src/lib/format.ts";
 
 test("token counts use compact units without misleading thousand-unit boundaries", () => {
   for (const [tokens, label] of [
@@ -30,4 +30,16 @@ test("paths abbreviate like hydro: home as ~, parents as initials, the basename 
   ] as const) {
     assert.equal(abbrevPath(path), label);
   }
+});
+
+test("tool arguments show one per line, multi-line values with real line breaks", () => {
+  const script = "python3 - <<'PY'\nimport json\nprint(json.dumps(1))\nPY";
+  assert.equal(
+    toolArgsText(JSON.stringify({ command: script, timeout: 600 })),
+    `command:\n${script}\ntimeout: 600`,
+  );
+  assert.equal(toolArgsText('{"command":"sleep 30"}'), "command: sleep 30");
+  assert.equal(toolArgsText("{}"), "", "an empty object shows nothing");
+  assert.equal(toolArgsText('{"command":"pyth'), '{"command":"pyth', "streaming JSON shows as is");
+  assert.equal(toolArgsText(undefined), "");
 });

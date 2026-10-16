@@ -157,12 +157,17 @@ const VERBS: Record<string, [running: string, done: string]> = {
   ls: ["Listing", "Listed"],
 };
 
-/** One line that says what a tool call did: the command, the path, or the pattern. */
+/** One line that says what a tool call did: the command, the path, or the pattern. A multi-line
+ * command (a heredoc script, a `&&` chain) reads on as one line, so the header shows what it does
+ * and not only how it starts; the row's details keep the real lines. */
 function summarize(args: string): string {
   try {
     const a = JSON.parse(args) as Record<string, unknown>;
     const v = a.command ?? a.path ?? a.file_path ?? a.pattern ?? a.url ?? a.query;
-    if (typeof v === "string") return abbrevHome(v.split("\n")[0]).slice(0, 160);
+    if (typeof v === "string") {
+      const line = abbrevHome(v.replace(/\s+/g, " ").trim());
+      return line.length > 160 ? `${line.slice(0, 159)}…` : line;
+    }
   } catch {
     /* partial JSON while streaming */
   }

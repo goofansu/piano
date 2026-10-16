@@ -30,7 +30,7 @@ import { StatusBadge as Badge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { abbrevHome, clamp } from "@/lib/format";
+import { abbrevHome, clamp, toolArgsText } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
 import { disclosureRow } from "@/lib/styles";
 import {
@@ -704,6 +704,7 @@ function Tool({
 }: ToolRow) {
   if (subagent) return <SubagentCardView {...subagent} />;
   const failed = outcome === "failed";
+  const details = toolArgsText(call.args);
 
   return (
     <FoldRow
@@ -729,13 +730,13 @@ function Tool({
       label={`${call.name} tool call`}
       ruled={false}
     >
-      {call.args && (
+      {details && (
         <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-fill px-3 py-2 text-ink-2">
-          {clamp(call.args, 4000)}
+          {clamp(details, 4000)}
         </pre>
       )}
       {output && (
-        <div data-slot="tool-output" className={cn(call.args && "mt-1")}>
+        <div data-slot="tool-output" className={cn(details && "mt-1")}>
           <FoldedOutput
             text={output}
             markdown={false}
@@ -757,7 +758,9 @@ function Tool({
               {nestedStatus(child.status).label}
             </Badge>
           </p>
-          <pre className="whitespace-pre-wrap break-words">{clamp(child.args, 2000)}</pre>
+          <pre className="whitespace-pre-wrap break-words">
+            {clamp(toolArgsText(child.args), 2000)}
+          </pre>
           {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}
           {child.text && (
             <pre className="whitespace-pre-wrap break-words">{clamp(child.text, 4000)}</pre>

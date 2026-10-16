@@ -940,3 +940,30 @@ test("revealing a mention tries the message's own row, then the exchange it belo
   );
   assert.deepEqual(revealEntries(messages, entries, "missing"), []);
 });
+
+test("a multi-line command's summary reads on past its first line", () => {
+  const command = "python3 - <<'PY'\nimport json\n    print(json.dumps(1))\nPY";
+  const rows = transcriptRows([
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "t", name: "bash", args: JSON.stringify({ command }) }],
+    },
+  ]);
+  assert.equal(
+    reply(rows, "a").tools[0]!.summary,
+    "python3 - <<'PY' import json print(json.dumps(1)) PY",
+  );
+  const long = transcriptRows([
+    {
+      id: "b",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "t", name: "bash", args: JSON.stringify({ command: "x".repeat(200) }) }],
+    },
+  ]);
+  const summary = reply(long, "b").tools[0]!.summary;
+  assert.equal(summary.length, 160);
+  assert.ok(summary.endsWith("…"));
+});
