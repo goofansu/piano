@@ -39,9 +39,8 @@ with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-i
 
 ### Slack notifications on exe.dev
 
-Open **Settings → Integrations**. Under **Send messages**, click **Select** next to one of the Slack
-integrations attached to your VM, named as exe.dev names them. Use **Test** to check delivery or
-**Clear** to disable it. Each successful completed response sends a link back to its session, even with the
+Open **Settings → Integrations**. In the **Slack** row, pick one of the Slack webhooks attached to
+your VM, named as exe.dev names them. Use **Test** to check delivery, or pick **Off** to disable it. Each successful completed response sends a link back to its session, even with the
 browser closed. See [notification setup and limits](docs/notifications.md).
 
 ### Preview local files
