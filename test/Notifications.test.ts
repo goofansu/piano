@@ -188,6 +188,49 @@ test("replacement skips queued sends to the old destination", async (t) => {
   );
 });
 
+for (const action of ["touch", "complete again"] as const) {
+  test(`a completion waiting for delivery is invalidated by ${action}`, async (t) => {
+    const delivered = Deferred.makeUnsafe<void>();
+    const texts: string[] = [];
+    const f = fixture(async (_url, init) => {
+      const text = JSON.parse(String(init?.body)).text as string;
+      texts.push(text);
+      if (text.endsWith("/sentinel")) Deferred.doneUnsafe(delivered, Effect.void);
+      return new Response("");
+    });
+    t.after(f.dispose);
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const n = yield* Notifications;
+        yield* n.change({ action: "select", name: "slack-hook" });
+        // Exhaust the quota so the first completion outlives its initial delay.
+        for (let i = 0; i < 5; i++) yield* n.change({ action: "test" });
+        yield* n.completed("waiting");
+        yield* TestClock.adjust(1_000);
+        if (action === "touch") yield* n.touched("waiting");
+        else yield* n.completed("waiting");
+        yield* n.completed("sentinel");
+        yield* TestClock.adjust(60_000);
+        yield* Deferred.await(delivered);
+        assert.deepEqual(
+          texts.slice(5),
+          [
+            ...(action === "touch"
+              ? []
+              : ["Agent finished responding. https://piano.example.test/s/waiting"]),
+            "Agent finished responding. https://piano.example.test/s/sentinel",
+          ],
+          "only the current completion can be delivered after a quota wait",
+        );
+      }).pipe(
+        Effect.provide(f.layer),
+        Effect.provide(Layer.succeed(NotificationDelayMs, 1_000)),
+        Effect.provide(TestClock.layer()),
+      ),
+    );
+  });
+}
+
 test("a stalled test send is cancelled after five seconds without retrying", async (t) => {
   const started = Deferred.makeUnsafe<void>();
   let signal: AbortSignal | undefined;
