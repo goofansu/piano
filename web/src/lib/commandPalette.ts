@@ -10,7 +10,7 @@ import { abbrevHome } from "./format.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import type { SessionCommand } from "./sessionCommands.ts";
-import { displayPath, type SessionFile, sessionFiles, splitPath } from "./sessionFiles.ts";
+import { displayPath, type SessionFile, splitPath } from "./sessionFiles.ts";
 import { displayUrl, type SessionLink, sessionLinks } from "./sessionLinks.ts";
 
 /**
@@ -108,6 +108,8 @@ export interface PaletteInput {
   globalCommands: readonly GlobalCommand[];
   /** The selected session's commands. */
   sessionCommands: readonly SessionCommand[];
+  /** The files the selected session wrote, in conversation order, as `useSessionFiles` resolves them. */
+  files: readonly SessionFile[];
 }
 
 function sessionRow(t: SessionEntry): PaletteSessionRow {
@@ -207,7 +209,7 @@ export function commandPalette(state: AppState, input: PaletteInput): PaletteGro
       rows: input.sessionCommands.map(commandRow),
     });
     // Newest first, like Recent sessions; the popovers keep conversation order.
-    const files = sessionFiles(state.session.messages).reverse();
+    const files = [...input.files].reverse();
     if (files.length > 0)
       groups.push({
         id: "files",

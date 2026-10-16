@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RenderMsg } from "../shared/wire.ts";
-import { displayPath, sessionFiles, splitPath } from "../web/src/lib/sessionFiles.ts";
+import { displayPath, sessionFiles, splitPath, visibleFiles } from "../web/src/lib/sessionFiles.ts";
 
 const call = (id: string, name: string, args: Record<string, unknown>) => ({
   id,
@@ -72,4 +72,28 @@ test("a path inside the session's directory shows relative to it; one outside ke
   assert.equal(displayPath("/work/apix/a.ts", "/work/api", abbrev), "/work/apix/a.ts");
   assert.equal(displayPath("/Users/someone/notes.md", "/work/api", abbrev), "~/notes.md");
   assert.equal(displayPath("/work/api/a.ts", undefined, abbrev), "/work/api/a.ts");
+});
+
+test("Git's answer hides ignored and outside paths; without one, or after a failed read, every file shows", () => {
+  const files = [
+    { path: "src/a.ts", messageId: "a1" },
+    { path: "scratch/notes.md", messageId: "a1" },
+    { path: "/elsewhere/x.ts", messageId: "a2" },
+  ];
+  const workspace = { id: "w", folder: "/work/api", path: "/work/api" };
+  const ready = {
+    workspace,
+    observedAt: "now",
+    result: {
+      status: "ready" as const,
+      ignored: ["scratch/notes.md"],
+      outside: ["/elsewhere/x.ts"],
+    },
+  };
+  assert.deepEqual(visibleFiles(files, ready), [{ path: "src/a.ts", messageId: "a1" }]);
+  assert.deepEqual(visibleFiles(files, undefined), files);
+  assert.deepEqual(
+    visibleFiles(files, { workspace, observedAt: "now", result: { status: "error", detail: "x" } }),
+    files,
+  );
 });

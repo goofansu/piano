@@ -16,8 +16,10 @@ import {
 import { commandPalette, paletteFilter } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod } from "@/lib/keys";
+import { sessionContext } from "@/lib/sessionContext";
 import { openLink } from "@/lib/sessionLinks";
 import { useNavigation } from "@/lib/useNavigation";
+import { useSessionFiles } from "@/lib/useSessionFiles";
 import type { AppState } from "@/store";
 
 interface Props {
@@ -68,10 +70,15 @@ export function CommandPalette({ state }: Props) {
   // The View menu's and the session header's commands, by the same names; the host runs them all.
   const { commands: globalCommandList, run: runCommand } = useGlobalCommands();
   const { commands: sessionCommandList } = useSessionCommands();
+  // Read only while open: the composer's Files button keeps the same observation live otherwise.
+  const files = useSessionFiles(state.session, sessionContext(state).changesWorkspace, {
+    enabled: open,
+  });
   const groups = commandPalette(state, {
     search,
     globalCommands: globalCommandList,
     sessionCommands: sessionCommandList,
+    files,
   });
   const run = (action: () => void) => {
     onOpenChange(false);

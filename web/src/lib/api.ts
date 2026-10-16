@@ -156,6 +156,12 @@ export const workspaceChanges = (workspaceId: string, options?: RequestOptions) 
 export const workspaceChangedFile = (workspaceId: string, path: string, options?: RequestOptions) =>
   call(Endpoints.workspaceChangedFile, { query: { workspaceId }, body: { path } }, options);
 
+export const workspaceIgnoredFiles = (
+  workspaceId: string,
+  paths: readonly string[],
+  options?: RequestOptions,
+) => call(Endpoints.workspaceIgnoredFiles, { query: { workspaceId }, body: { paths } }, options);
+
 // Session pull request
 
 /** Reads always bypass the HTTP cache: GitHub facts are live. */

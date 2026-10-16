@@ -1,17 +1,17 @@
-import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { FileIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { UsageDivider } from "@/components/UsageDivider";
 import { Button } from "@/components/ui/button";
 import { abbrevHome } from "@/lib/format";
-import { displayPath, sessionFiles, splitPath } from "@/lib/sessionFiles";
+import { displayPath, type SessionFile, splitPath } from "@/lib/sessionFiles";
 import { listRow } from "@/lib/styles";
 import { useNavigation } from "@/lib/useNavigation";
 
 interface Props {
-  messages: ReadonlyArray<RenderMsg>;
+  /** In conversation order, already filtered by the workspace's `.gitignore` (`useSessionFiles`). */
+  files: readonly SessionFile[];
   /** The session's directory, which paths inside it are shown relative to. */
   cwd?: string;
 }
@@ -21,10 +21,9 @@ interface Props {
  * opens in the right sidebar's file viewer, as a local file link in the transcript does.
  * Absent while the session wrote nothing.
  */
-export function SessionFiles({ messages, cwd }: Props) {
+export function SessionFiles({ files, cwd }: Props) {
   const [open, setOpen] = useState(false);
   const { openPanel } = useNavigation();
-  const files = useMemo(() => sessionFiles(messages), [messages]);
   // Conversation order, newest at the bottom like the transcript; opening shows the end, since
   // the file wanted is nearly always the one touched last.
   const list = useRef<HTMLUListElement>(null);

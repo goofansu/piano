@@ -115,7 +115,8 @@ const specialLanguages: Record<string, string> = {
   ".bashrc": "shellscript",
   ".zshrc": "shellscript",
 };
-const within = (root: string, path: string) => {
+/** Whether `path` (absolute) lies inside `root` or is it. */
+export const within = (root: string, path: string) => {
   const name = relative(root, path);
   return name !== ".." && !name.startsWith(`..${sep}`) && !isAbsolute(name);
 };

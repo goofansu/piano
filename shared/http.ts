@@ -22,6 +22,7 @@ import {
   SessionPullRequestAction,
   SlashCommand,
   WorkspaceChanges,
+  WorkspaceIgnoredFiles,
 } from "./wire.ts";
 
 export type Method = "GET" | "POST" | "PUT" | "DELETE";
@@ -207,6 +208,20 @@ export const Endpoints = {
     invalid: "File path is required in the request body.",
     response: WorkspaceChanges,
     fallback: (status) => `File request failed (${status}).`,
+  }),
+
+  workspaceIgnoredFiles: endpoint({
+    method: "POST",
+    path: "/api/workspace/files/ignored",
+    query: ["workspaceId"],
+    body: Schema.Struct({
+      paths: Schema.Array(Schema.String.check(Schema.isMaxLength(4096))).check(
+        Schema.isMaxLength(1000),
+      ),
+    }),
+    invalid: "File paths are required in the request body.",
+    response: WorkspaceIgnoredFiles,
+    fallback: (status) => `Ignored files request failed (${status}).`,
   }),
 
   // Session pull request (GitHub facts are live)

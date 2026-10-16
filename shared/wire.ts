@@ -551,6 +551,21 @@ export const WorkspaceChanges = Schema.Struct({
 });
 export type WorkspaceChanges = typeof WorkspaceChanges.Type;
 
+/** Which of the paths a session wrote Git ignores or that lie outside the workspace, each as sent. */
+export const WorkspaceIgnoredFiles = Schema.Struct({
+  workspace: Workspace,
+  observedAt: Schema.String,
+  result: Schema.Union([
+    Schema.Struct({
+      status: Schema.Literal("ready"),
+      ignored: Schema.Array(Schema.String),
+      outside: Schema.Array(Schema.String),
+    }),
+    Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
+  ]),
+});
+export type WorkspaceIgnoredFiles = typeof WorkspaceIgnoredFiles.Type;
+
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
 export const Project = Schema.Struct({

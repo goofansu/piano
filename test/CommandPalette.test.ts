@@ -10,6 +10,7 @@ import {
 } from "../web/src/lib/commandPalette.ts";
 import { type GlobalCommandContext, globalCommands } from "../web/src/lib/globalCommands.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
+import { sessionFiles } from "../web/src/lib/sessionFiles.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
@@ -68,6 +69,7 @@ const palette = (state: AppState, search = "", c = ctx) =>
     search,
     globalCommands: globalCommands(state, c),
     sessionCommands: sessionCommands(state),
+    files: sessionFiles(state.session?.messages ?? []),
   });
 const headings = (state: AppState, search = "") => palette(state, search).map((g) => g.heading);
 const sessionIds = (state: AppState, search = "") => {

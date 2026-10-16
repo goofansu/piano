@@ -57,6 +57,68 @@ test("a decoded body and the resolved workspace reach the handler; the reply is 
   assert.match(body.result.diff, /\+two/);
 });
 
+test("ignored files are what Git ignores among the paths a session wrote, as sent; outside paths are told apart", async (t) => {
+  const { writeFileSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  writeFileSync(join(server.repo, ".gitignore"), "scratch/\n*.log\nREADME.md\n");
+  t.after(() => rmSync(join(server.repo, ".gitignore")));
+  const { status, body } = await reply(
+    await post(
+      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
+      JSON.stringify({
+        paths: [
+          "scratch/notes.md",
+          "src/app.ts",
+          `${server.repo}/build.log`,
+          "/elsewhere/x.ts",
+          "../sibling.ts",
+          "README.md",
+        ],
+      }),
+    ),
+  );
+  assert.equal(status, 200);
+  assert.equal(body.workspace.id, server.workspaceId);
+  assert.deepEqual(body.result, {
+    status: "ready",
+    // README.md matches a pattern but is tracked, so Git does not ignore it.
+    ignored: ["scratch/notes.md", `${server.repo}/build.log`],
+    outside: ["/elsewhere/x.ts", "../sibling.ts"],
+  });
+  const none = await reply(
+    await post(
+      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
+      JSON.stringify({ paths: ["src/app.ts"] }),
+    ),
+  );
+  assert.deepEqual(none.body.result, { status: "ready", ignored: [], outside: [] });
+});
+
+test("an absolute path through a symlink to the workspace is inside it, as macOS's /var/folders tmp is", async (t) => {
+  const { mkdtempSync, rmSync, symlinkSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const links = mkdtempSync(join(tmpdir(), "piano-link-"));
+  const link = join(links, "repo");
+  symlinkSync(server.repo, link);
+  writeFileSync(join(server.repo, ".gitignore"), "scratch/\n");
+  t.after(() => {
+    rmSync(join(server.repo, ".gitignore"));
+    rmSync(links, { recursive: true, force: true });
+  });
+  const { body } = await reply(
+    await post(
+      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
+      JSON.stringify({ paths: [`${link}/scratch/notes.md`, `${link}/src/app.ts`] }),
+    ),
+  );
+  assert.deepEqual(body.result, {
+    status: "ready",
+    ignored: [`${link}/scratch/notes.md`],
+    outside: [],
+  });
+});
+
 test("workspace files use a body path and return uncached text for the registered workspace", async () => {
   const response = await post(
     `/api/workspace/file?workspaceId=${server.workspaceId}`,

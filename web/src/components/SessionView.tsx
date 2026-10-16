@@ -45,7 +45,7 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { workspace } = sessionContext(state);
+  const { workspace, changesWorkspace } = sessionContext(state);
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
   const pullRequest = useSessionPullRequest(
     workspace?.id,
@@ -161,6 +161,7 @@ export function SessionView({ state, send }: Props) {
           )}
         <Composer
           session={t}
+          workspace={changesWorkspace}
           draftKey={draftKey}
           completion={completionTarget(state)}
           disabled={!draftKey || input?.outcome === "starting"}
