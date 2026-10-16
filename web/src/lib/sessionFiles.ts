@@ -3,7 +3,7 @@
  * Pi's own write and edit calls count, and only ones that succeeded: a failed edit changed
  * nothing, and a bash command's effects are unknowable from its text.
  */
-import type { RenderMsg, WorkspaceIgnoredFiles } from "../../../shared/wire.ts";
+import type { RenderMsg, Workspace, WorkspaceIgnoredFiles } from "../../../shared/wire.ts";
 
 export interface SessionFile {
   /** As the tool call named it: absolute, or relative to the session's directory. */
@@ -68,14 +68,21 @@ export function splitPath(path: string): { name: string; dir: string } {
 
 /**
  * The files worth listing: those Git does not ignore and that lie inside the workspace, as the
- * latest observation says. Without one, or after a failed read, every file shows: the facts in
- * hand beat an empty list.
+ * latest observation for this workspace says (INV-07). Without one, or after a failed read,
+ * every file shows: the facts in hand beat an empty list.
  */
 export function visibleFiles(
   files: readonly SessionFile[],
   observation: WorkspaceIgnoredFiles | undefined,
+  workspace: Workspace | undefined,
 ): SessionFile[] {
-  if (observation?.result.status !== "ready") return [...files];
+  if (
+    !workspace ||
+    observation?.workspace.id !== workspace.id ||
+    observation.workspace.path !== workspace.path ||
+    observation.result.status !== "ready"
+  )
+    return [...files];
   const hidden = new Set([...observation.result.ignored, ...observation.result.outside]);
   return files.filter((file) => !hidden.has(file.path));
 }

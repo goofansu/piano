@@ -37,5 +37,5 @@ export function useSessionFiles(
   const last = useRef<WorkspaceIgnoredFiles>(undefined);
   if (value) last.current = value;
   const known = workspace ? (value ?? last.current) : undefined;
-  return useMemo(() => visibleFiles(files, known), [files, known]);
+  return useMemo(() => visibleFiles(files, known, workspace), [files, known, workspace]);
 }
