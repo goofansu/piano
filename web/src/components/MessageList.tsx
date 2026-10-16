@@ -685,10 +685,10 @@ function FoldedOutput({
 
 const DETAILS_LIMIT = 4000;
 
-/** A call's arguments. Several lines (a script, a file's contents) are numbered, one `span.line`
- * per line as the file viewer draws them, so a wrapped long line never reads as two; one line
- * needs no number. Hand-written: shadcn has no numbered code block, and the `tool-lines` style
- * carries the gutter. */
+/** A call's arguments, as code: never wrapped, scrolled sideways when long. Several lines (a
+ * script, a file's contents) are numbered, one `span.line` per line as the file viewer draws
+ * them; one line needs no number. Hand-written: the registry's code block highlights with shiki,
+ * which this plain text does not want; the `tool-lines` style carries the gutter. */
 function ToolDetails({ text }: { text: string }) {
   const shown = text.length > DETAILS_LIMIT ? text.slice(0, DETAILS_LIMIT) : text;
   const cut = shown.length < text.length;
@@ -696,7 +696,7 @@ function ToolDetails({ text }: { text: string }) {
   return (
     <pre
       className={cn(
-        "overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-fill py-2 text-ink-2",
+        "overflow-x-auto whitespace-pre rounded-lg bg-fill py-2 text-ink-2",
         lines.length > 1 ? "tool-lines pl-1 pr-3" : "px-3",
       )}
     >

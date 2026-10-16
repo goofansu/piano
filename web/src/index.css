@@ -508,17 +508,13 @@
   user-select: none;
 }
 
-/* A tool call's multi-line arguments: numbered like file-source, but wrapping. A wrapped row
- * hangs 1rem past the text column, so it reads as the rest of its line and not as a new one;
- * only a real line gets a number. */
+/* A tool call's multi-line arguments: numbered like file-source, one block per line. */
 .tool-lines {
   counter-reset: line;
   tab-size: 2;
 }
 .tool-lines .line {
   display: block;
-  padding-left: 3.5rem;
-  text-indent: -3.5rem;
 }
 .tool-lines .line::before {
   counter-increment: line;
@@ -528,7 +524,6 @@
   padding-right: 0.75rem;
   box-sizing: border-box;
   text-align: right;
-  text-indent: 0;
   color: var(--ink-3);
   user-select: none;
 }
