@@ -25,7 +25,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { changeExeDevSettings } from "@/lib/api";
+import { changeIntegrationsSettings } from "@/lib/api";
 import { useObservation } from "@/lib/useObservation";
 
 const MANAGE_INTEGRATIONS = "https://exe.dev/integrations";
@@ -39,7 +39,7 @@ export function IntegrationsSettings() {
   // Page entry, focus and Retry explicitly refresh inventory, independently of sticky detection.
   const observed = useObservation(
     "integrations",
-    (signal) => changeExeDevSettings({ action: "refresh" }, { signal }),
+    (signal) => changeIntegrationsSettings({ action: "refresh" }, { signal }),
     { focus: true },
   );
   const [error, setError] = useState<string>();
@@ -56,7 +56,7 @@ export function IntegrationsSettings() {
     setBusy(true);
     setError(undefined);
     try {
-      await observed.mutate((signal) => changeExeDevSettings(action, { signal }));
+      await observed.mutate((signal) => changeIntegrationsSettings(action, { signal }));
       if (action.action === "test") toast.success("Test notification accepted.");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not change notifications.");

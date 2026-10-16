@@ -235,12 +235,12 @@ test("server-owned completion sends one session link to the discovered selection
     ),
   );
   t.after(f.dispose);
-  assert.deepEqual(await (await f.handle("/api/settings/exe-dev/environment")).json(), {
+  assert.deepEqual(await (await f.handle("/api/settings/integrations/environment")).json(), {
     detected: true,
   });
   assert.equal(inventoryReads, 0);
   for (const name of ["slack-hook", "second-slack"]) {
-    const result = await f.handle("/api/settings/exe-dev", {
+    const result = await f.handle("/api/settings/integrations", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

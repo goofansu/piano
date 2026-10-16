@@ -313,23 +313,23 @@ export const Endpoints = {
   }),
   exeDevEnvironment: endpoint({
     method: "GET",
-    path: "/api/settings/exe-dev/environment",
+    path: "/api/settings/integrations/environment",
     response: Schema.Struct({ detected: Schema.Boolean }),
     noStore: true,
     fallback: "Could not detect exe.dev.",
   }),
-  exeDevSettings: endpoint({
+  integrationsSettings: endpoint({
     method: "GET",
-    path: "/api/settings/exe-dev",
+    path: "/api/settings/integrations",
     response: NotificationSettings,
     noStore: true,
     refused: 409,
     redact: false,
     fallback: "Could not load notifications.",
   }),
-  changeExeDevSettings: endpoint({
+  changeIntegrationsSettings: endpoint({
     method: "POST",
-    path: "/api/settings/exe-dev",
+    path: "/api/settings/integrations",
     body: NotificationAction,
     response: NotificationSettings,
     noStore: true,

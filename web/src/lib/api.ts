@@ -204,10 +204,10 @@ export const saveDefaults = async (
 
 export const exeDevEnvironment = (options?: RequestOptions) =>
   call(Endpoints.exeDevEnvironment, {}, options);
-export const changeExeDevSettings = (
-  body: typeof Endpoints.changeExeDevSettings.body.Type,
+export const changeIntegrationsSettings = (
+  body: typeof Endpoints.changeIntegrationsSettings.body.Type,
   options?: RequestOptions,
-) => call(Endpoints.changeExeDevSettings, { body }, options);
+) => call(Endpoints.changeIntegrationsSettings, { body }, options);
 
 // Settings
 
