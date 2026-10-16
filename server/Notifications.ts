@@ -43,8 +43,9 @@ export const NotificationsLive = Layer.effect(
     const problem = origin
       ? undefined
       : "Set a public HTTPS Piano origin in PIANO_ALLOWED_ORIGINS.";
-    const slackLink = (path: string, label: string) =>
-      `<${new URL(path, origin).href.replaceAll("&", "&amp;")}|${label}>`;
+    // One short sentence, then the bare link: Slack renders a URL in `text` as a link by itself.
+    const message = (sentence: string, path: string) =>
+      `${sentence} ${new URL(path, origin).href.replaceAll("&", "&amp;")}`;
     const changes = yield* Semaphore.make(1);
     const rateLock = yield* Semaphore.make(1);
     const selectedIntegration = registry.notificationIntegration.pipe(
@@ -120,7 +121,7 @@ export const NotificationsLive = Layer.effect(
       if (!availableName(names, name) || (yield* selectedIntegration) !== name) return;
       yield* send(
         name,
-        `Piano: agent finished responding.\n${slackLink(`/s/${encodeURIComponent(sessionId)}`, "Open session")}`,
+        message("Agent finished responding.", `/s/${encodeURIComponent(sessionId)}`),
       );
     }).pipe(
       Effect.catch(() => Effect.logWarning("A Slack notification could not be delivered.")),
@@ -151,7 +152,7 @@ export const NotificationsLive = Layer.effect(
               const name = yield* selectedIntegration;
               if (!name || !availableName(names, name))
                 return yield* refused("Select an available Slack integration.");
-              yield* send(name, `Piano: test notification.\n${slackLink("/", "Open Piano")}`);
+              yield* send(name, message("Test notification from Piano.", "/"));
             } else {
               if (action.name === null || !names.includes(action.name))
                 return yield* refused("Select an available Slack integration.");

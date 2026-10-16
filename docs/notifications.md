@@ -18,7 +18,7 @@ the Slack card and actionable errors: no raw webhook input or routine saved-stat
 
 ## Completion messages and links
 
-Piano sends “Piano: agent finished responding.” plus a clickable **Open session** link when a live
+Piano sends one line, “Agent finished responding.” followed by the session's URL, when a live
 agent run settles with a successful final response. This does not mean a task is accepted or verified.
 Aborted/failed runs, intermediate `agent_end` events and opening saved history do not send completion
 notifications. No prompt, response content, session title or filesystem path is included. The link

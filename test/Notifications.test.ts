@@ -79,7 +79,7 @@ test("selection is opt-in, only Slack names are accepted, and one saved choice s
     assert.equal(requests[0]!.init?.redirect, "error");
     assert.equal(requests[0]!.init?.method, "POST");
     assert.deepEqual(JSON.parse(String(requests[0]!.init?.body)), {
-      text: "Piano: test notification.\n<https://piano.example.test/|Open Piano>",
+      text: "Test notification from Piano. https://piano.example.test/",
       unfurl_links: false,
       unfurl_media: false,
     });
@@ -172,7 +172,7 @@ test("replacement skips queued sends to the old destination", async (t) => {
       yield* Deferred.await(delivered);
       assert.deepEqual(sent.at(-1), {
         url: second,
-        text: "Piano: agent finished responding.\n<https://piano.example.test/s/new-session|Open session>",
+        text: "Agent finished responding. https://piano.example.test/s/new-session",
       });
       assert.equal(
         sent.some((r) => r.text.includes("old-session")),
@@ -269,7 +269,7 @@ test("server-owned completion sends one session link to the discovered selection
     {
       url: second,
       body: {
-        text: `Piano: agent finished responding.\n<https://piano.example.test/s/${sessionId}|Open session>`,
+        text: `Agent finished responding. https://piano.example.test/s/${sessionId}`,
         unfurl_links: false,
         unfurl_media: false,
       },
