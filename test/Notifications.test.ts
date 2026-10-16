@@ -26,7 +26,11 @@ const defaultEntries = [
   { name: "slack-bot", type: "slack-bot" },
   { name: "notify", type: "notify" },
 ];
-function fixture(send: typeof globalThis.fetch, origins = ["https://piano.example.test"]) {
+function fixture(
+  send: typeof globalThis.fetch,
+  origins = ["https://piano.example.test"],
+  readInventory?: () => Promise<Response>,
+) {
   const root = mkdtempSync(join(tmpdir(), "piano-notifications-"));
   const discovery = { entries: defaultEntries, status: 200 };
   const layer = NotificationsLive.pipe(
@@ -36,7 +40,8 @@ function fixture(send: typeof globalThis.fetch, origins = ["https://piano.exampl
     Layer.provide(
       Layer.succeed(ExeDevFetch, async (url) =>
         String(url).endsWith("/integrations")
-          ? Response.json({ integrations: discovery.entries }, { status: discovery.status })
+          ? (readInventory?.() ??
+            Response.json({ integrations: discovery.entries }, { status: discovery.status }))
           : metadata(),
       ),
     ),
@@ -230,6 +235,88 @@ for (const action of ["touch", "complete again"] as const) {
     );
   });
 }
+
+test("the pending limit includes initial delays, and replacement and cancellation reuse capacity", async (t) => {
+  const texts: string[] = [];
+  const f = fixture(async (_url, init) => {
+    texts.push(JSON.parse(String(init?.body)).text);
+    return new Response("");
+  });
+  t.after(f.dispose);
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const n = yield* Notifications;
+      yield* n.change({ action: "select", name: "slack-hook" });
+      const sessions = Array.from({ length: 32 }, (_, i) => `session-${i}`);
+      yield* Effect.forEach(sessions, n.completed, { concurrency: "unbounded" });
+      yield* n.completed("overflow");
+      yield* n.completed("session-0");
+      yield* n.touched("session-1");
+      yield* n.completed("refilled");
+      yield* n.completed("overflow-again");
+      // Enough virtual time for all admitted completions, including the five-per-minute quota.
+      yield* TestClock.adjust(600_000);
+      assert.deepEqual(
+        texts.toSorted(),
+        [...sessions.filter((id) => id !== "session-1"), "refilled"]
+          .map((id) => `Agent finished responding. https://piano.example.test/s/${id}`)
+          .sort(),
+        "only 32 completions are admitted, even before their initial delays expire",
+      );
+      yield* n.completed("after-drain");
+      yield* TestClock.adjust(60_000);
+      assert.equal(texts.length, 33, "delivery releases admission capacity");
+      assert.equal(
+        texts.at(-1),
+        "Agent finished responding. https://piano.example.test/s/after-drain",
+      );
+    }).pipe(Effect.provide(f.layer), Effect.provide(TestClock.layer())),
+  );
+});
+
+test("opening a session during discovery cancels delivery before it is claimed", async (t) => {
+  const discovering = Deferred.makeUnsafe<void>();
+  const delivered = Deferred.makeUnsafe<void>();
+  const texts: string[] = [];
+  let hold = false;
+  let release!: () => void;
+  const discovery = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const f = fixture(
+    async (_url, init) => {
+      const text = JSON.parse(String(init?.body)).text as string;
+      texts.push(text);
+      if (text.endsWith("/sentinel")) Deferred.doneUnsafe(delivered, Effect.void);
+      return new Response("");
+    },
+    undefined,
+    async () => {
+      if (hold) {
+        Deferred.doneUnsafe(discovering, Effect.void);
+        await discovery;
+      }
+      return Response.json({ integrations: defaultEntries });
+    },
+  );
+  t.after(f.dispose);
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const n = yield* Notifications;
+      yield* n.change({ action: "select", name: "slack-hook" });
+      hold = true;
+      yield* n.completed("opened-during-discovery");
+      yield* TestClock.adjust(60_000);
+      yield* Deferred.await(discovering);
+      yield* n.touched("opened-during-discovery");
+      release();
+      yield* n.completed("sentinel");
+      yield* TestClock.adjust(60_000);
+      yield* Deferred.await(delivered);
+      assert.deepEqual(texts, ["Agent finished responding. https://piano.example.test/s/sentinel"]);
+    }).pipe(Effect.provide(f.layer), Effect.provide(TestClock.layer())),
+  );
+});
 
 test("a stalled test send is cancelled after five seconds without retrying", async (t) => {
   const started = Deferred.makeUnsafe<void>();

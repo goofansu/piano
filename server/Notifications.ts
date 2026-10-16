@@ -1,5 +1,5 @@
 /** One discovered Slack destination and best-effort delivery, independent of browser lifetimes. */
-import { Clock, Context, Data, Effect, Fiber, Layer, Queue, Semaphore } from "effect";
+import { Clock, Context, Data, Effect, Layer, Queue, Semaphore } from "effect";
 import type { NotificationAction, NotificationSettings } from "../shared/notifications.ts";
 import { ExeDev, ExeDevLive } from "./ExeDev.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
@@ -37,7 +37,8 @@ export class Notifications extends Context.Service<
     /**
      * Nonblocking admission, once per live successful response. No historical replay. The message
      * waits `NotificationDelayMs`; a later `touched` for the session drops it, a later `completed`
-     * restarts the wait.
+     * restarts the wait. At most 32 sessions can be pending, including their initial delays;
+     * overflow is dropped, while replacement reuses the session's existing slot.
      */
     readonly completed: (sessionId: string) => Effect.Effect<void>;
     /** The user acted on or opened the session: drop its pending completion message. */
@@ -124,26 +125,31 @@ export const NotificationsLive = Layer.effect(
       );
     });
     const delayMs = yield* NotificationDelayMs;
-    const layerScope = yield* Effect.scope;
-    const queue = yield* Queue.dropping<{ name: string; sessionId: string; key: symbol }>(32);
-    // Keep identity through the delay AND delivery waits, until claimed or invalidated.
-    const pending = new Map<string, { key: symbol; fiber: Fiber.Fiber<void> }>();
-    const drop = Effect.fnUntraced(function* (sessionId: string) {
-      const entry = pending.get(sessionId);
-      if (!entry) return;
-      pending.delete(sessionId);
-      yield* Fiber.interrupt(entry.fiber);
-    });
+    // One bounded owner for delays, quota waits and discovery. The queue is only a coalesced
+    // wake-up signal: it never retains cancelled completions or allocates a timer per session.
+    const wake = yield* Queue.sliding<void>(1);
+    const pending = new Map<string, { name: string; readyAt: number }>();
     yield* Effect.gen(function* () {
-      const { name, sessionId, key } = yield* Queue.take(queue);
-      const current = () => pending.get(sessionId)?.key === key;
+      let next: [string, { name: string; readyAt: number }] | undefined;
+      for (const entry of pending) {
+        if (!next || entry[1].readyAt < next[1].readyAt) next = entry;
+      }
+      if (!next) {
+        yield* Queue.take(wake);
+        return;
+      }
+      const [sessionId, completion] = next;
+      const delay = Math.max(completion.readyAt - (yield* Clock.currentTimeMillis), yield* waitMs);
+      if (delay > 0) {
+        yield* Effect.raceFirst(Effect.sleep(delay), Queue.take(wake));
+        return;
+      }
+      const { name } = completion;
+      const current = () => pending.get(sessionId) === completion;
       const forget = () => {
         if (current()) pending.delete(sessionId);
       };
       yield* Effect.gen(function* () {
-        if (!current()) return;
-        const delay = yield* waitMs;
-        if (delay > 0) yield* Effect.sleep(delay);
         if (problem || !current()) return;
         const names = yield* slack();
         // Discovery and preferences can wait: revalidate identity after both, then claim it.
@@ -201,18 +207,17 @@ export const NotificationsLive = Layer.effect(
           const name = yield* selectedIntegration;
           // Network and discovery are owned by the worker, not the session observer.
           if (problem || !name) return;
-          yield* drop(sessionId);
-          const key = Symbol(sessionId);
-          const fiber = yield* Effect.gen(function* () {
-            yield* Effect.sleep(delayMs);
-            const accepted = yield* Queue.offer(queue, { name, sessionId, key });
-            if (!accepted && pending.get(sessionId)?.key === key) pending.delete(sessionId);
-          }).pipe(Effect.forkIn(layerScope));
-          pending.set(sessionId, { key, fiber });
+          const readyAt = (yield* Clock.currentTimeMillis) + delayMs;
+          // No suspension between capacity check and admission; replacement reuses its slot.
+          if (!pending.has(sessionId) && pending.size >= 32) return;
+          pending.set(sessionId, { name, readyAt });
+          yield* Queue.offer(wake, undefined);
         },
         Effect.catchCause(() => Effect.logWarning("A Slack notification could not be queued.")),
       ),
-      touched: Effect.fn("Notifications.touched")(drop),
+      touched: Effect.fn("Notifications.touched")(function* (sessionId) {
+        if (pending.delete(sessionId)) yield* Queue.offer(wake, undefined);
+      }),
     });
   }),
 ).pipe(Layer.provideMerge(ExeDevLive));

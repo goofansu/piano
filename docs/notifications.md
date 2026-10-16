@@ -79,7 +79,10 @@ print the potentially secret URL. Databases older than schema 5 start with no no
 
 Delivery is best-effort: each POST has a five-second timeout and is not automatically retried.
 The backend admits at most five sends per minute, including tests, in line with exe.dev's documented
-Slack limit. Automatic sends wait in a bounded queue (32 pending notifications); overflow is dropped.
+Slack limit. At most 32 automatic notifications can be pending across the initial delay, quota wait
+and discovery; new sessions beyond that limit are dropped. A newer completion for an already pending
+session reuses its slot and restarts the delay. Cancellation or a delivery attempt frees the slot.
+One worker schedules these waits; cancelled messages do not occupy a second delivery queue.
 Other VMs may consume the user's quota. Replacing or clearing the selection skips old queued sends,
 but cannot recall an in-flight request. Failures are logged without URLs or payloads; test failures
 appear in Settings. A restart retains the selection but loses pending deliveries. If a run finishes
