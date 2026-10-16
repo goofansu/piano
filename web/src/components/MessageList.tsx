@@ -683,40 +683,6 @@ function FoldedOutput({
   );
 }
 
-const DETAILS_LIMIT = 4000;
-
-/** A call's arguments, as code: never wrapped, scrolled sideways when long. Several lines (a
- * script, a file's contents) are numbered, one `span.line` per line as the file viewer draws
- * them; one line needs no number. Hand-written: the registry's code block highlights with shiki,
- * which this plain text does not want; the `tool-lines` style carries the gutter. */
-function ToolDetails({ text }: { text: string }) {
-  const shown = text.length > DETAILS_LIMIT ? text.slice(0, DETAILS_LIMIT) : text;
-  const cut = shown.length < text.length;
-  const lines = shown.split("\n");
-  return (
-    <pre
-      className={cn(
-        "overflow-x-auto whitespace-pre rounded-lg bg-fill py-2 text-ink-2",
-        lines.length > 1 ? "tool-lines pl-1 pr-3" : "px-3",
-      )}
-    >
-      {lines.length > 1 ? (
-        <code>
-          {lines.map((line, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional and never reorder.
-            <span key={i} className="line">
-              {line}
-            </span>
-          ))}
-        </code>
-      ) : (
-        shown
-      )}
-      {cut && <span className="block text-ink-3">…(truncated)</span>}
-    </pre>
-  );
-}
-
 const DOT: Record<ToolOutcome, string> = {
   running: "animate-live bg-busy",
   failed: "bg-err",
@@ -764,7 +730,11 @@ function Tool({
       label={`${call.name} tool call`}
       ruled={false}
     >
-      {details && <ToolDetails text={details} />}
+      {details && (
+        <pre className="overflow-x-auto whitespace-pre rounded-lg bg-fill px-3 py-2 text-ink-2">
+          {clamp(details, 4000)}
+        </pre>
+      )}
       {output && (
         <div data-slot="tool-output" className={cn(details && "mt-1")}>
           <FoldedOutput

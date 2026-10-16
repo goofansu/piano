@@ -508,26 +508,6 @@
   user-select: none;
 }
 
-/* A tool call's multi-line arguments: numbered like file-source, one block per line. */
-.tool-lines {
-  counter-reset: line;
-  tab-size: 2;
-}
-.tool-lines .line {
-  display: block;
-}
-.tool-lines .line::before {
-  counter-increment: line;
-  content: counter(line);
-  display: inline-block;
-  width: 2.5rem;
-  padding-right: 0.75rem;
-  box-sizing: border-box;
-  text-align: right;
-  color: var(--ink-3);
-  user-select: none;
-}
-
 /* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */
 .prose-chat {
   overflow-wrap: anywhere;
