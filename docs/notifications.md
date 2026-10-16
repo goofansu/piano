@@ -15,8 +15,7 @@ Creation, channel choice and VM attachment remain
 
 **Test** sends an explicit message to the saved integration. “Accepted” means the integration accepted
 the HTTP request; check Slack to confirm it appeared. The page shows one sentence about integrations,
-the rows and actionable errors: no raw webhook input or routine saved-state notices. The page lives at
-`/settings/integrations`; its earlier addresses are not kept.
+the rows and actionable errors: no raw webhook input or routine saved-state notices.
 
 ## Completion messages and links
 

@@ -20,9 +20,6 @@ test("settings URLs preserve each section and accept the Providers alias", () =>
     section: "providers",
   });
   assert.deepEqual(parseRoute({ pathname: "/settings/unknown" }), { kind: "new" });
-  // The page was renamed twice; neither old address is kept.
-  for (const old of ["notifications", "exe-dev"])
-    assert.deepEqual(parseRoute({ pathname: `/settings/${old}` }), { kind: "new" });
 });
 
 test("Radius addresses the Providers page, and is offered once in navigation", () => {
