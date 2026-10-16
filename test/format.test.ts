@@ -32,13 +32,14 @@ test("paths abbreviate like hydro: home as ~, parents as initials, the basename 
   }
 });
 
-test("tool arguments show one per line, multi-line values with real line breaks", () => {
+test("a shell command shows alone; other tool arguments one per line with real line breaks", () => {
   const script = "python3 - <<'PY'\nimport json\nprint(json.dumps(1))\nPY";
+  assert.equal(toolArgsText(JSON.stringify({ command: script, timeout: 600 })), script);
+  assert.equal(toolArgsText('{"command":"sleep 30"}'), "sleep 30");
   assert.equal(
-    toolArgsText(JSON.stringify({ command: script, timeout: 600 })),
-    `command:\n${script}\ntimeout: 600`,
+    toolArgsText(JSON.stringify({ path: "a.txt", content: "one\ntwo" })),
+    "path: a.txt\ncontent:\none\ntwo",
   );
-  assert.equal(toolArgsText('{"command":"sleep 30"}'), "command: sleep 30");
   assert.equal(toolArgsText("{}"), "", "an empty object shows nothing");
   assert.equal(toolArgsText('{"command":"pyth'), '{"command":"pyth', "streaming JSON shows as is");
   assert.equal(toolArgsText(undefined), "");

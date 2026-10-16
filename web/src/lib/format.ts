@@ -18,10 +18,11 @@ export function clamp(text: string | undefined, max: number): string {
 }
 
 /**
- * A tool call's arguments as the reader wants them: one `name: value` line per argument, a
- * multi-line value (a heredoc script, a file's new contents) on its own lines with real line
- * breaks instead of JSON's `\n` escapes. Arguments still streaming in, or not a JSON object,
- * show as they are; an empty object shows nothing.
+ * A tool call's arguments as the reader wants them. A shell command is the whole story, so it
+ * shows alone, as the lines the agent ran; its timeout is a diagnostic nobody acts on. Any other
+ * call shows one `name: value` line per argument, a multi-line value (a file's new contents) on
+ * its own lines with real line breaks instead of JSON's `\n` escapes. Arguments still streaming
+ * in, or not a JSON object, show as they are; an empty object shows nothing.
  */
 export function toolArgsText(args: string | undefined): string {
   if (!args) return "";
@@ -32,7 +33,11 @@ export function toolArgsText(args: string | undefined): string {
     return args;
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return args;
-  return Object.entries(parsed)
+  const entries = Object.entries(parsed);
+  const command = entries.find(([name, value]) => name === "command" && typeof value === "string");
+  if (command && entries.every(([name]) => name === "command" || name === "timeout"))
+    return command[1] as string;
+  return entries
     .map(([name, value]) => {
       const text = typeof value === "string" ? value : JSON.stringify(value);
       return text.includes("\n") ? `${name}:\n${text}` : `${name}: ${text}`;

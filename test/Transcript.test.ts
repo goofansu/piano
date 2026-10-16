@@ -941,7 +941,7 @@ test("revealing a mention tries the message's own row, then the exchange it belo
   assert.deepEqual(revealEntries(messages, entries, "missing"), []);
 });
 
-test("a multi-line command's summary reads on past its first line", () => {
+test("a multi-line command's summary is its first line and its length", () => {
   const command = "python3 - <<'PY'\nimport json\n    print(json.dumps(1))\nPY";
   const rows = transcriptRows([
     {
@@ -951,10 +951,7 @@ test("a multi-line command's summary reads on past its first line", () => {
       toolCalls: [{ id: "t", name: "bash", args: JSON.stringify({ command }) }],
     },
   ]);
-  assert.equal(
-    reply(rows, "a").tools[0]!.summary,
-    "python3 - <<'PY' import json print(json.dumps(1)) PY",
-  );
+  assert.equal(reply(rows, "a").tools[0]!.summary, "python3 - <<'PY' · 4 lines");
   const long = transcriptRows([
     {
       id: "b",
