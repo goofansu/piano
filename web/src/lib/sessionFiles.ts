@@ -65,3 +65,11 @@ export function splitPath(path: string): { name: string; dir: string } {
   const cut = path.lastIndexOf("/");
   return cut < 0 ? { name: path, dir: "" } : { name: path.slice(cut + 1), dir: path.slice(0, cut) };
 }
+
+/** The path as the list shows it: relative to the session's directory when inside it, else with
+ * the home directory abbreviated. Opening still uses the path as the call named it. */
+export function displayPath(path: string, cwd: string | undefined, abbrev: (p: string) => string) {
+  const root = cwd?.replace(/\/+$/, "");
+  if (root && path.startsWith(`${root}/`)) return path.slice(root.length + 1);
+  return abbrev(path);
+}

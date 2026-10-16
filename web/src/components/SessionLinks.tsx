@@ -85,10 +85,13 @@ export function SessionLinks({ messages, working = false }: Props) {
                   className={cn(listRow, "min-w-0 flex-1 py-1.5 pl-4 pr-2")}
                 >
                   {/* Two lines: links in one session mostly share a prefix, so a URL cut short
-                      after the host says nothing. The title, then the whole URL below it. Every
-                      row is a link, so no glyph marks it as one. */}
+                      after the host says nothing. The title, then the whole URL below it, both in
+                      mono like the Files rows and the file viewer. Every row is a link, so no
+                      glyph marks it as one. */}
                   <span className="flex min-w-0 flex-1 flex-col">
-                    {link.label && <span className="truncate text-ink">{link.label}</span>}
+                    {link.label && (
+                      <span className="truncate font-mono text-ink">{link.label}</span>
+                    )}
                     <span
                       className={cn(
                         "truncate font-mono text-xs",

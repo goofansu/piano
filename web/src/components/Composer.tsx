@@ -282,7 +282,7 @@ export function Composer({
           role="group"
           aria-label="Session usage"
         >
-          <SessionFiles messages={messages} />
+          <SessionFiles messages={messages} cwd={t?.cwd} />
           <SessionLinks messages={messages} working={streaming} />
           <JumpTo messages={messages} working={streaming} />
           <Popover>

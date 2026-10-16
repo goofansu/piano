@@ -5,12 +5,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopov
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { abbrevHome } from "@/lib/format";
-import { sessionFiles, splitPath } from "@/lib/sessionFiles";
+import { displayPath, sessionFiles, splitPath } from "@/lib/sessionFiles";
 import { listRow } from "@/lib/styles";
 import { useNavigation } from "@/lib/useNavigation";
 
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
+  /** The session's directory, which paths inside it are shown relative to. */
+  cwd?: string;
 }
 
 /**
@@ -18,7 +20,7 @@ interface Props {
  * opens in the right sidebar's file viewer, as a local file link in the transcript does.
  * Absent while the session wrote nothing.
  */
-export function SessionFiles({ messages }: Props) {
+export function SessionFiles({ messages, cwd }: Props) {
   const [open, setOpen] = useState(false);
   const { openPanel } = useNavigation();
   const files = useMemo(() => sessionFiles(messages), [messages]);
@@ -63,7 +65,7 @@ export function SessionFiles({ messages }: Props) {
             className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1"
           >
             {files.map((file) => {
-              const { name, dir } = splitPath(abbrevHome(file.path));
+              const { name, dir } = splitPath(displayPath(file.path, cwd, abbrevHome));
               return (
                 <li key={file.path} className="flex items-center">
                   <button
@@ -74,11 +76,11 @@ export function SessionFiles({ messages }: Props) {
                     }}
                     className={cn(listRow, "min-w-0 flex-1 px-4 py-1.5")}
                   >
-                    {/* Two lines: files in one session mostly share a directory, so the name
-                        leads and the directory sits under it. Every row opens the viewer, so no
-                        glyph marks it. */}
+                    {/* Two lines in mono, as the transcript names paths: files in one session mostly
+                        share a directory, so the name leads and the directory sits under it. Every
+                        row opens the viewer, so no glyph marks it. */}
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-ink">{name}</span>
+                      <span className="truncate font-mono text-ink">{name}</span>
                       {dir && <span className="truncate font-mono text-xs text-ink-3">{dir}</span>}
                     </span>
                   </button>

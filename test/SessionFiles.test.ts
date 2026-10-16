@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RenderMsg } from "../shared/wire.ts";
-import { sessionFiles, splitPath } from "../web/src/lib/sessionFiles.ts";
+import { displayPath, sessionFiles, splitPath } from "../web/src/lib/sessionFiles.ts";
 
 const call = (id: string, name: string, args: Record<string, unknown>) => ({
   id,
@@ -62,4 +62,14 @@ test("a failed or unfinished call touched nothing", () => {
 test("a path splits into its name and directory", () => {
   assert.deepEqual(splitPath("src/lib/a.ts"), { name: "a.ts", dir: "src/lib" });
   assert.deepEqual(splitPath("README.md"), { name: "README.md", dir: "" });
+});
+
+test("a path inside the session's directory shows relative to it; one outside keeps its own form", () => {
+  const abbrev = (p: string) => p.replace("/Users/someone", "~");
+  assert.equal(displayPath("/work/api/src/a.ts", "/work/api", abbrev), "src/a.ts");
+  assert.equal(displayPath("/work/api/src/a.ts", "/work/api/", abbrev), "src/a.ts");
+  assert.equal(displayPath("src/a.ts", "/work/api", abbrev), "src/a.ts");
+  assert.equal(displayPath("/work/apix/a.ts", "/work/api", abbrev), "/work/apix/a.ts");
+  assert.equal(displayPath("/Users/someone/notes.md", "/work/api", abbrev), "~/notes.md");
+  assert.equal(displayPath("/work/api/a.ts", undefined, abbrev), "/work/api/a.ts");
 });
