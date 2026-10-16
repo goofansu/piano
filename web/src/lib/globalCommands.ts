@@ -7,7 +7,12 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
-import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
+import {
+  SETTINGS_SECTIONS,
+  type SettingsSection,
+  type SettingsSectionIconName,
+  settingsAvailable,
+} from "./routes.ts";
 import { directoryTrust, focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
 
@@ -83,6 +88,7 @@ export interface GlobalCommand {
 export interface GlobalCommandContext {
   /** A Settings page is open, so the palette offers the way back instead of Settings. */
   settingsOpen: boolean;
+  exeDetected?: boolean;
   view: SidebarView;
   /** The chosen appearance, for a surface that marks it; without it no appearance is checked. */
   theme?: string;
@@ -144,7 +150,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
           enabled: true,
           intent: { kind: "settings" },
         },
-    ...SETTINGS_SECTIONS.map(
+    ...SETTINGS_SECTIONS.filter((s) => settingsAvailable(s.id, !!ctx.exeDetected)).map(
       (s): GlobalCommand => ({
         id: `settings-${s.id}`,
         label: s.label,

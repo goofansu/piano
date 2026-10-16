@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
 import { McpSettings } from "@/components/McpSettings";
+import { NotificationSettings } from "@/components/NotificationSettings";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
@@ -44,8 +45,10 @@ import {
   SETTINGS_PAGES,
   type SettingsPage as SettingsPageId,
   type SettingsSection,
+  settingsAvailable,
   settingsPage,
 } from "@/lib/routes";
+import { useNotifications } from "@/lib/useNotifications";
 import { providerAccounts, useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSetupActions } from "@/lib/useSetupActions";
 
@@ -64,10 +67,11 @@ export function SettingsNavigation({
 }) {
   // Radius addresses the Providers page, so its row stays the current one while Radius shows.
   const current = settingsPage(section);
+  const detected = !!useNotifications().value?.detected;
   const menu = (
     <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
       <SidebarMenu>
-        {SETTINGS_PAGES.map((item) => (
+        {SETTINGS_PAGES.filter((item) => settingsAvailable(item.id, detected)).map((item) => (
           <SidebarMenuItem key={item.id}>
             <SidebarMenuButton
               isActive={current === item.id}
@@ -128,6 +132,7 @@ export function SettingsPage({
       <ProvidersSettings revealRadius={section === "radius" ? request : undefined} />
     ),
     mcp: () => <McpSettings />,
+    notifications: () => <NotificationSettings />,
   };
   return pages[page]();
 }

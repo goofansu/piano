@@ -267,6 +267,8 @@ function handle(cmd) {
       streaming = false;
       out({ type: "agent_end", messages: [], willRetry: false });
       out({ type: "agent_settled" });
+      if (sessionId === "response-notifications")
+        out({ type: "extension_ui_request", method: "notify", message: "completion barrier" });
       return respond(cmd, undefined);
     case "clear_queue": {
       if (sessionId === "stop-clear-failure")
@@ -342,6 +344,32 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
+      if (cmd.message.startsWith("notification ")) {
+        respond(cmd, { disposition: "started" });
+        if (cmd.message !== "notification finish") {
+          streaming = true;
+          out({ type: "agent_start" });
+        }
+        const message = {
+          role: "assistant",
+          content: [{ type: "text", text: "Private reply" }],
+          stopReason: cmd.message === "notification error" ? "error" : "stop",
+        };
+        messages.push(message);
+        out({ type: "message_end", message });
+        out({
+          type: "agent_end",
+          messages: [message],
+          willRetry: cmd.message === "notification pause",
+        });
+        if (cmd.message !== "notification pause") {
+          streaming = false;
+          out({ type: "agent_settled" });
+          out({ type: "agent_settled" }); // duplicate lifecycle records must not duplicate completion
+        }
+        out({ type: "extension_ui_request", method: "notify", message: "completion barrier" });
+        return;
+      }
       if (cmd.message === "capacity hold") {
         if (capacityHeld.length === 0)
           out({

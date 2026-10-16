@@ -1,7 +1,10 @@
 # exe.dev notifications in Settings
 
 Research date: 2026-10-16. Source revision: `93ca45d80f33876493d382f99355109f03ed4dbd`.
-Status: recommendation, not implemented. No notifications were sent.
+Status: original research and alternatives. The subsequent [implemented slice](../notifications.md)
+is Slack-only, supports multiple URLs, gates Settings on positive exe.dev detection, and uses a
+one-second detection timeout. The recommendations below are retained as research, not the current
+feature specification. No real notifications were sent during research or implementation checks.
 
 ## Findings
 
@@ -185,6 +188,43 @@ run. Read-only Python `urllib.request` probes used five-second timeouts from thi
 mutation or live model call was performed. Public docs were fetched successfully; an official-source
 search found the iOS announcement but not a full mobile notification API reference. These findings
 establish feasibility and integration discovery, not end-to-end delivery.
+
+## Implementation verification — 2026-10-16
+
+Implemented on top of `4451395`; this commit's working tree was checked on the exe.dev Linux VM
+with Node 24.21.0. The delivered scope is documented in [Notifications](../notifications.md).
+It includes multiple Slack URLs, one-second detection with process-lifetime positive caching,
+and clickable session links built from the first configured HTTPS Piano origin, never request
+headers. No push or deployment was performed, as requested.
+
+- `npm run typecheck`: passed (server and web).
+- `npm test`: 735 passed, zero failures. Added boundary coverage for the exact detection deadline
+  and cancellation, retry/backoff and cache lifetime, safe URL validation, persistence and schema-4
+  migration, explicit test payloads, Slack rate limiting, five-second send cancellation, public
+  origin requirements and header-independent session links, zero-browser fan-out, and settled
+  success versus retry/error/abort/duplicate/snapshot behavior.
+- Regression sensitivity: temporarily changed detection to 999 ms; the one-second test failed
+  because the request was already aborted at 999 ms. Restored 1,000 ms and reran successfully.
+- `npm run lint`: passed. `git diff --check`: passed.
+- `npm run test:browser`: start-session, open-session and transcript-rows passed on scratch instances.
+- Uncommitted `agent-browser` journey: added two URLs, rejected duplicate/invalid URLs, reloaded
+  persisted settings, tested accepted/rejected deliveries, removed URLs, used the command palette,
+  and checked desktop/mobile layout without horizontal overflow. A second journey verified that
+  detection failure hides Notifications from Settings and the palette.
+- Style evidence: captured 22 before/after pairs and compared with ImageMagick and visual review.
+  Expected differences are the Notifications navigation/palette row, generated scratch paths, and
+  minor transient pixels; no unrelated layout regression was observed. The new mobile page was
+  also checked after fixing URL truncation beside Test/Remove.
+
+Evidence on the development VM: `/tmp/piano-notifications-final-tests.log`,
+`/tmp/piano-notifications-critical.log`, `/tmp/piano-notifications-mutation.log`,
+`/tmp/piano-notifications-browser/`, `/tmp/piano-notifications-hidden/`,
+`/tmp/piano-notifications-before/`, `/tmp/piano-notifications-after/`, and
+`/tmp/piano-notifications-style-comparison.txt`. Browser scripts/preload fixtures remain uncommitted.
+All sends used mocked HTTP, and sessions used fake Pi. No real Slack delivery, external private-link
+click-through, model call, systemd change, or real-database mutation was performed. Scratch processes
+and temporary session directories were cleaned up by the browser harness. Best-effort delivery
+across process/network failure remains a documented limitation, not an exactly-once guarantee.
 
 ## Sources
 

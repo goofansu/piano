@@ -86,7 +86,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
+      "DROP TABLE notification_webhooks; ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
     );
   } finally {
     legacy.close();
@@ -95,7 +95,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 4);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 5);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -210,7 +210,9 @@ test("version-3 sharing migration preserves sessions; Radius destinations surviv
   const before = (await f.get()).sessions[0]!;
   const legacy = new DatabaseSync(f.dbPath);
   try {
-    legacy.exec("ALTER TABLE sessions DROP COLUMN radius_share; PRAGMA user_version = 3;");
+    legacy.exec(
+      "DROP TABLE notification_webhooks; ALTER TABLE sessions DROP COLUMN radius_share; PRAGMA user_version = 3;",
+    );
   } finally {
     legacy.close();
   }
@@ -327,6 +329,25 @@ test("INV-01/07: a session link is set only on the same reference, not archived 
   );
 });
 
+test("version-4 migration adds empty notification preferences without changing session metadata", async (t) => {
+  const f = fixture(t);
+  const before = await f.get();
+  const legacy = new DatabaseSync(f.dbPath);
+  legacy.exec("DROP TABLE notification_webhooks; PRAGMA user_version = 4;");
+  legacy.close();
+  await f.run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      assert.deepEqual(yield* registry.notificationWebhooks, []);
+      yield* registry.changeNotificationWebhook("https://slack-hook.int.exe.xyz/", true);
+    }),
+  );
+  assert.deepEqual(await f.get(), before);
+  assert.deepEqual(await f.run(Effect.flatMap(Registry, (r) => r.notificationWebhooks)), [
+    "https://slack-hook.int.exe.xyz/",
+  ]);
+});
+
 test("INV-01: version-2 sessions start unpinned; pins persist without changing history metadata or activity", async (t) => {
   const f = fixture(t),
     cwd = join(f.root, "folder");
@@ -338,7 +359,7 @@ test("INV-01: version-2 sessions start unpinned; pins persist without changing h
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;",
+      "DROP TABLE notification_webhooks; ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;",
     );
   } finally {
     legacy.close();

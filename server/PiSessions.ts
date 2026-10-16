@@ -495,6 +495,7 @@ const openSession = (spec: PiSessionSpec) =>
             return;
           }
           case "abort": {
+            projector.abort();
             const exchange = yield* exchangeOf(piExchangeFor(action));
             const work = Effect.gen(function* () {
               const dispatched = yield* Deferred.make<void>();

@@ -43,6 +43,7 @@ import {
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
+import { useNotifications } from "@/lib/useNotifications";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -109,7 +110,8 @@ export function useSessionCommands(target?: SessionTarget) {
  */
 export function useGlobalCommands() {
   const { state, run, global } = useCommands();
-  return { commands: globalCommands(state, global), run };
+  const exeDetected = !!useNotifications().value?.detected;
+  return { commands: globalCommands(state, { ...global, exeDetected }), run };
 }
 
 /** A descriptor as a menu row, by its label and icon. */

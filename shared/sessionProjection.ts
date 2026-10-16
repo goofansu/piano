@@ -92,6 +92,7 @@ export function applySessionEvent(snapshot: Snapshot, event: SessionEvent): Snap
           closure: event.closure,
         },
       };
+    case "response_completed":
     case "notice":
       return snapshot;
   }

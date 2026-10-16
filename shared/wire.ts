@@ -404,6 +404,8 @@ export type Snapshot = typeof Snapshot.Type;
 export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("snapshot", { snapshot: Snapshot }),
   Schema.TaggedStruct("state", { state: SessionState }),
+  /** Live successful response completion; never reconstructed from history or a snapshot. */
+  Schema.TaggedStruct("response_completed", {}),
   Schema.TaggedStruct("queue_update", { messages: Schema.Array(QueuedMessage) }),
   Schema.TaggedStruct("submission", { submission: PromptSubmission }),
   Schema.TaggedStruct("message_update", { message: RenderMsg }),

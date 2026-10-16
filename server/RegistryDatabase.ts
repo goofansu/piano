@@ -4,6 +4,11 @@ import { dirname } from "node:path";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import type { RegistryData } from "./Registry.ts";
 
+const notificationSchema = `
+  CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT;
+  PRAGMA user_version = 5;
+`;
+
 const schema = `
   CREATE TABLE registry_meta (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL);
   INSERT INTO registry_meta VALUES (1, 0);
@@ -271,10 +276,11 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         db.exec(
           "ALTER TABLE sessions ADD COLUMN radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)); PRAGMA user_version = 4;",
         );
-      } else if (version !== 4)
+      } else if (version !== 4 && version !== 5)
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
         );
+      if (version !== 5) db.exec(notificationSchema);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -298,29 +304,41 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
       db.exec("ROLLBACK");
       throw error;
     }
+    const write = (change: () => void) => {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const updated = db
+          .prepare("UPDATE registry_meta SET revision = revision + 1 WHERE id = 1 AND revision = ?")
+          .run(revision);
+        if (updated.changes !== 1)
+          throw new Error(
+            "Registry changed by another writer. Run only one Piano backend per database and restart this backend before retrying.",
+          );
+        change();
+        db.exec("COMMIT");
+        revision++;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    };
     return {
       data,
       close: () => db.close(),
-      save: (before: RegistryData, after: RegistryData) => {
-        db.exec("BEGIN IMMEDIATE");
-        try {
-          const updated = db
-            .prepare(
-              "UPDATE registry_meta SET revision = revision + 1 WHERE id = 1 AND revision = ?",
-            )
-            .run(revision);
-          if (updated.changes !== 1)
-            throw new Error(
-              "Registry changed by another writer. Run only one Piano backend per database and restart this backend before retrying.",
-            );
-          persist(db, before, after);
-          db.exec("COMMIT");
-          revision++;
-        } catch (error) {
-          db.exec("ROLLBACK");
-          throw error;
-        }
-      },
+      save: (before: RegistryData, after: RegistryData) => write(() => persist(db, before, after)),
+      notificationWebhooks: () =>
+        db
+          .prepare("SELECT url FROM notification_webhooks ORDER BY rowid")
+          .all()
+          .map((r) => r.url as string),
+      changeNotificationWebhook: (url: string, add: boolean) =>
+        write(() => {
+          db.prepare(
+            add
+              ? "INSERT INTO notification_webhooks(url) VALUES (?)"
+              : "DELETE FROM notification_webhooks WHERE url = ?",
+          ).run(url);
+        }),
     };
   } catch (error) {
     db.close();

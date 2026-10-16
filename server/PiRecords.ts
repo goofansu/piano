@@ -717,6 +717,14 @@ export class PiProjector {
   private summaryRetry = false;
   private extension: NonNullable<SessionState["extension"]> = { statuses: [], widgets: [] };
   private seenDialogs = new Set<string>();
+  private liveRun = false;
+  private responseSucceeded = false;
+  private cancelled = false;
+
+  /** An admitted abort cannot be announced as a successful response. */
+  abort(): void {
+    this.cancelled = true;
+  }
 
   /** `generation` names this child in dialog and editor request IDs. */
   private readonly options: { readonly generation: string };
@@ -741,6 +749,9 @@ export class PiProjector {
   record(raw: PiRecord, receivedAt: number): RecordProjection {
     switch (raw.type) {
       case "agent_start":
+        this.liveRun = true;
+        this.responseSucceeded = false;
+        this.cancelled = false;
         return project([], { isStreaming: true });
       case "queue_update": {
         const messages = queuedMessagesOf(raw);
@@ -750,14 +761,17 @@ export class PiProjector {
             : notice("warning", "Pi sent an invalid queue update."),
         ]);
       }
-      case "agent_settled":
+      case "agent_settled": {
+        const completed = this.liveRun && this.responseSucceeded && !this.cancelled;
+        this.liveRun = false;
         this.turnRetry = false;
         this.summaryRetry = false;
         return project(
-          this.settle(),
+          [...this.settle(), ...(completed ? [{ _tag: "response_completed" as const }] : [])],
           { isStreaming: false, isCompacting: false, isRetrying: false },
           ["context", "state", "stats"],
         );
+      }
       case "message_start":
         return project(this.stream(raw), { contextIsLastKnown: true });
       case "message_end":
@@ -945,6 +959,7 @@ export class PiProjector {
         // An assistant message ends its partial and takes the id the partial was shown under.
         const reserved = event.message?.role === "assistant" ? this.partial?.id : undefined;
         if (event.message?.role === "assistant") {
+          this.responseSucceeded = event.message.stopReason === "stop";
           this.partial = undefined;
           this.blocks.clear();
         }

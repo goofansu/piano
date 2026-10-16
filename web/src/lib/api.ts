@@ -202,6 +202,13 @@ export const saveDefaults = async (
   options?: RequestOptions,
 ) => (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;
 
+export const notificationSettings = (options?: RequestOptions) =>
+  call(Endpoints.notifications, {}, options);
+export const changeNotifications = (
+  body: typeof Endpoints.changeNotifications.body.Type,
+  options?: RequestOptions,
+) => call(Endpoints.changeNotifications, { body }, options);
+
 // Settings
 
 export const oauthProviders = async (options?: RequestOptions) =>

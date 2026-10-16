@@ -18,12 +18,17 @@ export const SETTINGS_SECTIONS = [
   { id: "providers", label: "Providers", icon: "plug", page: "providers" },
   { id: "radius", label: "Radius", icon: "radius", page: "providers" },
   { id: "mcp", label: "MCP", icon: "server", page: "mcp" },
+  { id: "notifications", label: "Notifications", icon: "bell", page: "notifications" },
 ] as const satisfies readonly {
   id: string;
   label: string;
   icon: string;
   page: string;
 }[];
+
+/** Both navigation surfaces gate Notifications on the same backend capability. */
+export const settingsAvailable = (id: string, detected: boolean) =>
+  id !== "notifications" || detected;
 
 /** Settings navigation lists one row per page, so Radius appears only inside Providers. */
 export const SETTINGS_PAGES = SETTINGS_SECTIONS.filter((section) => section.id === section.page);

@@ -15,6 +15,7 @@ import type {
   Snapshot,
   StartOptions,
 } from "../shared/wire.ts";
+import { type Notifications, NotificationsLive } from "./Notifications.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
 import { makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
@@ -112,7 +113,9 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const registry = yield* Registry;
       const references = yield* SessionReferences;
       const layerScope = yield* Effect.scope;
-      const hostServices = yield* Effect.context<PiSessions | Registry | SessionReferences>();
+      const hostServices = yield* Effect.context<
+        PiSessions | Registry | SessionReferences | Notifications
+      >();
       const hosts = new Map<string, SessionHost>();
       const locks = new Map<string, Semaphore.Semaphore>();
       // Runtime diagnostics, not a competing history. Retained across child reopen,
@@ -365,4 +368,4 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         changes: Stream.fromPubSub(changed),
       });
     }),
-  ).pipe(Layer.provideMerge(SessionReferencesLive));
+  ).pipe(Layer.provideMerge(SessionReferencesLive), Layer.provideMerge(NotificationsLive));

@@ -37,6 +37,12 @@ Open **Settings** at the bottom of the sidebar, then click **Sign in** next to a
 **Providers**. Start a new session afterwards, because a running session keeps the models it started
 with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-in.md).
 
+### Slack notifications on exe.dev
+
+Open **Settings → Notifications**, add an attached exe.dev Slack integration URL, and use **Test**
+to check delivery. Each completed response sends a link back to its session, even with the browser
+closed. See [notification setup and limits](docs/notifications.md).
+
 ### Preview local files
 
 Click a local file link in a session to read it beside the conversation. Markdown offers

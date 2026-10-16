@@ -14,6 +14,7 @@ import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
+import { Notifications } from "./Notifications.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
@@ -288,6 +289,13 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(RadiusSetup, (setup) => setup.change(body)).pipe(
         Effect.map((state) => ({ state })),
       ),
+    );
+
+    yield* serve(Endpoints.notifications, () =>
+      Effect.flatMap(Notifications, (notifications) => notifications.state),
+    );
+    yield* serve(Endpoints.changeNotifications, ({ body }) =>
+      Effect.flatMap(Notifications, (notifications) => notifications.change(body)),
     );
 
     yield* serve(Endpoints.mcpSetup, () =>

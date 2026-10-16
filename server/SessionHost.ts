@@ -5,6 +5,7 @@
  */
 import { Clock, Deferred, Effect, Exit, Fiber, Scope, Semaphore, Stream } from "effect";
 import type { SessionClosure } from "../shared/wire.ts";
+import { Notifications } from "./Notifications.ts";
 import {
   type PiSession,
   PiSessionError,
@@ -64,10 +65,11 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
 }): Effect.fn.Return<
   SessionHost,
   PiSessionError,
-  PiSessions | Registry | SessionReferences | Scope.Scope
+  PiSessions | Registry | SessionReferences | Notifications | Scope.Scope
 > {
   const sessions = yield* PiSessions;
   const registry = yield* Registry;
+  const notifications = yield* Notifications;
   const references = yield* SessionReferences;
   const observerScope = yield* Effect.scope;
   const { lock } = options;
@@ -171,6 +173,8 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
             lock,
             1,
           )(Effect.suspend(() => (closing ? Effect.void : mirrorStats)));
+        if (event._tag === "response_completed" && !closing)
+          yield* notifications.completed(raw.spec.sessionId);
         lastActivity = yield* Clock.currentTimeMillis;
         const closure =
           event._tag === "closed"
