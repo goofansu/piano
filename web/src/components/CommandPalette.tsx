@@ -38,7 +38,7 @@ function Current() {
  * rows come from `commandPalette`; this renders them and runs what is chosen.
  */
 export function CommandPalette({ state }: Props) {
-  const { palette: open, setPalette: onOpenChange, select } = useNavigation();
+  const { palette: open, setPalette: onOpenChange, select, openPanel } = useNavigation();
   // Mod+K, the only global shortcut, toggles the palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -137,53 +137,68 @@ export function CommandPalette({ state }: Props) {
                         {r.checked && <Current />}
                       </CommandItem>
                     ))
-                  : group.id === "links"
+                  : group.id === "files"
                     ? group.rows.map((r) => (
                         <CommandItem
                           key={r.key}
                           value={r.value}
                           keywords={r.keywords}
-                          onSelect={() => run(() => openLink(r.link.url))}
-                          className="gap-3"
+                          onSelect={() => run(() => openPanel({ kind: "file", path: r.file.path }))}
+                          className="gap-3 font-mono text-xs"
                         >
-                          {r.link.label ? (
-                            <>
-                              <span className="min-w-0 max-w-[45%] shrink-0 truncate">
-                                {r.link.label}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-3">
-                                {r.display}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="min-w-0 flex-1 truncate font-mono text-xs">
-                              {r.display}
-                            </span>
+                          <span className="min-w-0 shrink-0 truncate">{r.name}</span>
+                          {r.dir && (
+                            <span className="min-w-0 flex-1 truncate text-ink-3">{r.dir}</span>
                           )}
                         </CommandItem>
                       ))
-                    : group.rows.map((r) => (
-                        <CommandItem
-                          key={r.key}
-                          value={r.value}
-                          keywords={r.keywords}
-                          disabled={!r.enabled}
-                          onSelect={() => run(() => runCommand(r.command))}
-                        >
-                          <CommandIcon icon={r.command.icon} />{" "}
-                          {r.detail ? (
-                            <>
-                              <span className="shrink-0">{r.label}</span>{" "}
-                              <span className="min-w-0 truncate font-mono text-xs text-ink-3">
-                                {abbrevPath(r.detail)}
+                    : group.id === "links"
+                      ? group.rows.map((r) => (
+                          <CommandItem
+                            key={r.key}
+                            value={r.value}
+                            keywords={r.keywords}
+                            onSelect={() => run(() => openLink(r.link.url))}
+                            className="gap-3"
+                          >
+                            {r.link.label ? (
+                              <>
+                                <span className="min-w-0 max-w-[45%] shrink-0 truncate">
+                                  {r.link.label}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-3">
+                                  {r.display}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                                {r.display}
                               </span>
-                            </>
-                          ) : (
-                            r.label
-                          )}
-                          {r.checked && <Current />}
-                        </CommandItem>
-                      ))}
+                            )}
+                          </CommandItem>
+                        ))
+                      : group.rows.map((r) => (
+                          <CommandItem
+                            key={r.key}
+                            value={r.value}
+                            keywords={r.keywords}
+                            disabled={!r.enabled}
+                            onSelect={() => run(() => runCommand(r.command))}
+                          >
+                            <CommandIcon icon={r.command.icon} />{" "}
+                            {r.detail ? (
+                              <>
+                                <span className="shrink-0">{r.label}</span>{" "}
+                                <span className="min-w-0 truncate font-mono text-xs text-ink-3">
+                                  {abbrevPath(r.detail)}
+                                </span>
+                              </>
+                            ) : (
+                              r.label
+                            )}
+                            {r.checked && <Current />}
+                          </CommandItem>
+                        ))}
             </CommandGroup>
           </Fragment>
         ))}

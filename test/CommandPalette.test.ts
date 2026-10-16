@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   commandPalette,
+  FILES_QUERY,
   LINKS_QUERY,
   paletteFilter,
   RECENT_SESSION_LIMIT,
@@ -284,4 +285,106 @@ test("Links lists the selected session's web links: the latest few at the root, 
   );
   assert.equal(matching(`${LINKS_QUERY} example.com`).length, urls.length, "dotted host");
   assert.deepEqual(matching(`${LINKS_QUERY} nowhere`), [], "no match");
+});
+
+test("Files lists what the selected session wrote or edited: the latest few at the root, every one in a search", () => {
+  const cwd = selected.cwd;
+  const call = (id: string, path: string) => ({
+    id,
+    name: "write",
+    args: JSON.stringify({ path, content: "" }),
+  });
+  const paths = Array.from({ length: 7 }, (_, i) => `src/part-${i}.ts`);
+  const written: AppState = {
+    ...inSession,
+    session: {
+      ...selected,
+      messages: [
+        {
+          id: "a1",
+          role: "assistant",
+          text: "",
+          toolCalls: paths.slice(0, 4).map((p) => call(p, p)),
+        },
+        ...paths
+          .slice(0, 4)
+          .map((p) => ({ id: `r-${p}`, role: "tool_result" as const, text: "", toolCallId: p })),
+        {
+          id: "a2",
+          role: "assistant",
+          text: "",
+          toolCalls: [
+            call("abs", `${cwd}/docs/guide.md`),
+            ...paths.slice(4).map((p) => call(p, p)),
+          ],
+        },
+        { id: "r-abs", role: "tool_result", text: "", toolCallId: "abs" },
+        ...paths
+          .slice(4)
+          .map((p) => ({ id: `r-${p}`, role: "tool_result" as const, text: "", toolCallId: p })),
+      ],
+    },
+  };
+  const files = (state: AppState, search = "") => {
+    const group = palette(state, search).find((g) => g.id === "files");
+    return group?.id === "files" ? group.rows.map((r) => r.value) : undefined;
+  };
+  assert.equal(files(inSession), undefined, "a session that wrote nothing has no Files group");
+  assert.deepEqual(headings(written), [
+    "Recent sessions",
+    "Global commands",
+    "Session commands",
+    "Files",
+  ]);
+  assert.deepEqual(
+    files(written),
+    ["src/part-6.ts", "src/part-5.ts", "src/part-4.ts", "docs/guide.md", "src/part-3.ts"],
+    "newest first, at most the recent limit, an absolute path shown relative to the session",
+  );
+  // A search ranks rows (cmdk hides the ones that do not match), so every file is present.
+  assert.equal(files(written, "part")?.length, paths.length + 1, "a search reaches every file");
+  assert.equal(headings(written, "guide")[0], "Files", "a file name ranks Files first");
+  // The files query reaches every file and nothing else; its singular is a prefix, so it works too.
+  for (const query of [FILES_QUERY, "!file"]) {
+    const groups = palette(written, query);
+    for (const group of groups) {
+      const matching = group.rows.filter(
+        (r) => paletteFilter(r.value, query, r.keywords) > 0,
+      ).length;
+      assert.equal(matching, group.id === "files" ? group.rows.length : 0, `${query} ${group.id}`);
+    }
+    assert.equal(groups[0]?.id, "files");
+  }
+  const matching = (search: string) =>
+    palette(written, search)
+      .find((g) => g.id === "files")!
+      .rows.filter((r) => paletteFilter(r.value, search, r.keywords) > 0)
+      .map((r) => r.value);
+  assert.deepEqual(matching(`${FILES_QUERY} guide`), ["docs/guide.md"], "name");
+  assert.deepEqual(matching(`${FILES_QUERY} docs`), ["docs/guide.md"], "directory");
+  assert.deepEqual(matching(`${FILES_QUERY} part-2`), ["src/part-2.ts"], "path");
+  assert.deepEqual(matching(`${FILES_QUERY} nowhere`), [], "no match");
+});
+
+test("the links query's singular still reaches every link", () => {
+  const linked: AppState = {
+    ...inSession,
+    session: {
+      ...selected,
+      messages: [
+        {
+          id: "a1",
+          role: "assistant",
+          text: "See https://example.com/a and https://example.com/b",
+        },
+      ],
+    },
+  };
+  const groups = palette(linked, "!link");
+  assert.equal(groups[0]?.id, "links");
+  const links = groups[0]!;
+  assert.equal(
+    links.rows.filter((r) => paletteFilter(r.value, "!link", r.keywords) > 0).length,
+    links.rows.length,
+  );
 });

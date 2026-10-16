@@ -6,9 +6,11 @@
 
 import { defaultFilter } from "cmdk";
 import type { AppState } from "../store.ts";
+import { abbrevHome } from "./format.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import type { SessionCommand } from "./sessionCommands.ts";
+import { displayPath, type SessionFile, sessionFiles, splitPath } from "./sessionFiles.ts";
 import { displayUrl, type SessionLink, sessionLinks } from "./sessionLinks.ts";
 
 /**
@@ -35,7 +37,11 @@ export const RECENT_SESSION_LIMIT = 8;
 /** Before a search the palette offers this many of the session's latest links; a search reaches every one. */
 export const RECENT_LINK_LIMIT = 5;
 /** The query that lists every link and only links; a plain word would also fuzzy-match sessions. */
-export const LINKS_QUERY = "!link";
+export const LINKS_QUERY = "!links";
+/** Before a search the palette offers this many of the session's latest files; a search reaches every one. */
+export const RECENT_FILE_LIMIT = 5;
+/** The query that lists every file the session wrote and only those. */
+export const FILES_QUERY = "!files";
 
 export interface PaletteSessionRow {
   key: string;
@@ -76,11 +82,24 @@ export interface PaletteLinkRow {
   link: SessionLink;
 }
 
+export interface PaletteFileRow {
+  key: string;
+  /** cmdk's search text: the path as shown. */
+  value: string;
+  keywords: string[];
+  /** The file name, and the directory as shown: relative to the session's directory when inside it. */
+  name: string;
+  dir: string;
+  file: SessionFile;
+}
+
 export type PaletteGroup =
   | { id: "sessions"; heading: "Recent sessions" | "Sessions"; rows: PaletteSessionRow[] }
   | { id: "global"; heading: "Global commands"; rows: PaletteCommandRow<GlobalCommand>[] }
   | { id: "session"; heading: "Session commands"; rows: PaletteCommandRow<SessionCommand>[] }
   /** The selected session's web links, each opened in a new tab. */
+  /** The files the selected session wrote or edited, each opened in the file viewer. */
+  | { id: "files"; heading: "Files"; rows: PaletteFileRow[] }
   | { id: "links"; heading: "Links"; rows: PaletteLinkRow[] };
 
 export interface PaletteInput {
@@ -130,6 +149,21 @@ function linkRow(link: SessionLink): PaletteLinkRow {
   };
 }
 
+/** The words a file is searched by after `FILES_QUERY`: the shown path, its segments and each run of
+ * letters or digits, so "!files app" and "!files src" each reach src/app.ts. */
+function fileRow(file: SessionFile, cwd: string | undefined): PaletteFileRow {
+  const shown = displayPath(file.path, cwd, abbrevHome);
+  const { name, dir } = splitPath(shown);
+  return {
+    key: file.path,
+    value: shown,
+    keywords: [FILES_QUERY, ...shown.split("/"), ...shown.split(/[^\p{L}\p{N}]+/u)].filter(Boolean),
+    name,
+    dir,
+    file,
+  };
+}
+
 function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteCommandRow<C> {
   return {
     key: c.id,
@@ -146,8 +180,8 @@ function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteComm
 /**
  * The palette's groups: sessions (the most recent few, titled "Recent sessions", until a search
  * reaches them all), Global commands, then, only while a session is selected, Session commands and
- * Links (the latest few the conversation mentions, until a search reaches them all; `LINKS_QUERY`
- * lists only them). Every session
+ * Files (the latest few the session wrote, until a search reaches them all; `FILES_QUERY` lists
+ * only them) and Links (likewise for the links the conversation mentions, on `LINKS_QUERY`). Every session
  * that is not archived is reachable, including those whose folder is closed. A search ranks rows
  * within each group, and groups by their best row; ties keep that order.
  */
@@ -172,7 +206,16 @@ export function commandPalette(state: AppState, input: PaletteInput): PaletteGro
       heading: "Session commands",
       rows: input.sessionCommands.map(commandRow),
     });
-    // Newest first, like Recent sessions; the popover keeps conversation order.
+    // Newest first, like Recent sessions; the popovers keep conversation order.
+    const files = sessionFiles(state.session.messages).reverse();
+    if (files.length > 0)
+      groups.push({
+        id: "files",
+        heading: "Files",
+        rows: (searching ? files : files.slice(0, RECENT_FILE_LIMIT)).map((file) =>
+          fileRow(file, state.session?.cwd),
+        ),
+      });
     const links = sessionLinks(state.session.messages).reverse();
     if (links.length > 0)
       groups.push({
