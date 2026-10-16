@@ -169,7 +169,7 @@ function summarize(args: string): string {
       const first = abbrevHome(lines[0]!.trim());
       const head = first.length > 160 ? `${first.slice(0, 159)}…` : first;
       const more = lines.length - 1;
-      return more > 0 ? `${head} +${more} ${more === 1 ? "line" : "lines"}` : head;
+      return more > 0 ? `${head} (+${more} ${more === 1 ? "line" : "lines"})` : head;
     }
   } catch {
     /* partial JSON while streaming */

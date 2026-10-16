@@ -951,7 +951,7 @@ test("a multi-line command's summary is its first line and how many lines follow
       toolCalls: [{ id: "t", name: "bash", args: JSON.stringify({ command }) }],
     },
   ]);
-  assert.equal(reply(rows, "a").tools[0]!.summary, "python3 - <<'PY' +3 lines");
+  assert.equal(reply(rows, "a").tools[0]!.summary, "python3 - <<'PY' (+3 lines)");
   const long = transcriptRows([
     {
       id: "b",
