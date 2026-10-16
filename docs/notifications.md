@@ -1,20 +1,22 @@
 # exe.dev Settings and Slack notifications
 
-Open **Settings → exe.dev**. In **Notifications**, choose a **Slack integration**. Selection saves
-immediately and enables notifications; it does not send a test message. **Clear** disables future
-notifications. This preference applies to all sessions on this Piano backend, not just your tab.
+Open **Settings → exe.dev**. **Integrations** lists the Slack integrations attached to the current
+VM, one row per integration, named as exe.dev's dashboard names it. Click **Select** next to one.
+Selection saves immediately and enables notifications; it does not send a test message. **Clear**
+disables future notifications. This preference applies to all sessions on this Piano backend, not
+just your tab.
 
-The picker lists integration names with type `slack` from exe.dev Reflection, attached to the current
-VM. It excludes Slack bots, mobile notifications and other integration types. It does not list every
-integration in your exe.dev account. No option is selected automatically, even when there is only one.
-Use **Manage integrations** in an empty/unavailable selection state to open
+The list holds integrations with type `slack` from exe.dev Reflection, attached to the current VM. It
+excludes Slack bots, mobile notifications and other integration types. It does not list every
+integration in your exe.dev account. No row is selected automatically, even when there is only one.
+When the list is empty, **Manage integrations** opens
 [exe.dev's integration dashboard](https://exe.dev/integrations); creation, channel choice and VM
 attachment remain exe.dev's responsibility. See [exe.dev's Slack guide](https://exe.dev/docs/integrations-slack.md).
 
 **Test** sends an explicit message to the saved integration. “Accepted” means the integration accepted
-the HTTP request; check Slack to confirm it appeared. The page intentionally has no introductory or
-helper descriptions, raw webhook input or routine saved-state notices. It shows only controls, values
-and actionable errors. Old `/settings/notifications` bookmarks open the exe.dev page.
+the HTTP request; check Slack to confirm it appeared. The page shows the rows, one line saying what
+the selection does, and actionable errors: no raw webhook input or routine saved-state notices. Old
+`/settings/notifications` bookmarks open the exe.dev page.
 
 ## Completion messages and links
 
@@ -52,7 +54,8 @@ Selection and Test validate against freshly discovered Slack names. Automatic de
 bounded-age catalog and rechecks the saved destination before sending. A removed or changed-type
 integration is not used. If discovery is unavailable after the cache expires, automatic delivery is
 skipped rather than guessed. The saved selection remains visible and clearable; it is never replaced
-by another integration automatically. A missing name is marked unavailable after a successful refresh.
+by another integration automatically. After a successful refresh, a missing name's row reads
+“Not attached to this VM” and offers only **Clear**.
 
 ## Storage and delivery limits
 

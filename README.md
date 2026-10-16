@@ -39,9 +39,10 @@ with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-i
 
 ### Slack notifications on exe.dev
 
-Open **Settings → exe.dev** and choose a Slack integration under **Notifications**. Use **Test**
-to check delivery or **Clear** to disable it. Each successful completed response sends a link back
-to its session, even with the browser closed. See [notification setup and limits](docs/notifications.md).
+Open **Settings → exe.dev**. **Integrations** lists the Slack integrations attached to your VM, named
+as exe.dev names them; click **Select** next to one. Use **Test** to check delivery or **Clear** to
+disable it. Each successful completed response sends a link back to its session, even with the
+browser closed. See [notification setup and limits](docs/notifications.md).
 
 ### Preview local files
 
