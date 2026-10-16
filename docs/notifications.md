@@ -1,12 +1,12 @@
 # Integrations and Slack notifications
 
 Open **Settings → Integrations**. The page links to exe.dev's integration dashboard and shows one
-**Slack** row. Its dropdown lists the Slack webhooks attached to the current VM, named as exe.dev
-names them, with **Off** first. Picking a webhook saves immediately and enables notifications; it
-does not send a test message. Picking **Off** disables future notifications. This preference applies
-to all sessions on this Piano backend, not just your tab.
+**Slack** card. Its radio buttons list the Slack webhooks attached to the current VM, named as
+exe.dev names them, with **Off** first. Choosing a webhook saves immediately and enables
+notifications; it does not send a test message. Choosing **Off** disables future notifications. This
+preference applies to all sessions on this Piano backend, not just your tab.
 
-The dropdown holds integrations with type `slack` from exe.dev Reflection, attached to the current
+The radios hold integrations with type `slack` from exe.dev Reflection, attached to the current
 VM. It excludes Slack bots, mobile notifications and other integration types. It does not list every
 integration in your exe.dev account. No webhook is chosen automatically, even when there is only one.
 Creation, channel choice and VM attachment remain
@@ -14,7 +14,7 @@ Creation, channel choice and VM attachment remain
 
 **Test** sends an explicit message to the saved integration. “Accepted” means the integration accepted
 the HTTP request; check Slack to confirm it appeared. The page shows one sentence about integrations,
-the Slack row and actionable errors: no raw webhook input or routine saved-state notices.
+the Slack card and actionable errors: no raw webhook input or routine saved-state notices.
 
 ## Completion messages and links
 
@@ -52,8 +52,9 @@ Selection and Test validate against freshly discovered Slack names. Automatic de
 bounded-age catalog and rechecks the saved destination before sending. A removed or changed-type
 integration is not used. If discovery is unavailable after the cache expires, automatic delivery is
 skipped rather than guessed. The saved selection remains visible and clearable; it is never replaced
-by another integration automatically. After a successful refresh, the dropdown shows a missing name
-as “(not attached)”; **Off** and the attached webhooks stay selectable and **Test** is hidden.
+by another integration automatically. After a successful refresh, a missing name shows as a
+checked but disabled radio marked “(not attached)”; **Off** and the attached webhooks stay
+selectable and **Test** is hidden.
 
 ## Storage and delivery limits
 

@@ -1,16 +1,7 @@
 import type { NotificationAction } from "@shared/notifications";
 import { CheckCircle2Icon } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/PianoSelect";
 import {
   SettingsAlert,
   SettingsExternalLink,
@@ -18,19 +9,20 @@ import {
   SettingsSkeleton,
 } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { changeIntegrationsSettings } from "@/lib/api";
 import { useObservation } from "@/lib/useObservation";
 
 const MANAGE_INTEGRATIONS = "https://exe.dev/integrations";
-/** Radix Select cannot hold an empty value, so "Off" is a sentinel that never leaves this file. */
+/** The radio group needs a value for "no webhook"; this sentinel never leaves this file. */
 const OFF = "\u0000off";
 
 /**
- * Piano's use of the integrations attached to this VM on exe.dev. Slack is one row: the dropdown
- * picks which attached Slack webhook receives completion notifications, or Off.
+ * Piano's use of the integrations attached to this VM on exe.dev. Slack is one card: radios pick
+ * which attached Slack webhook receives completion notifications, or Off.
  */
 export function IntegrationsSettings() {
   // Page entry, focus and Retry explicitly refresh inventory, independently of sticky detection.
@@ -48,7 +40,6 @@ export function IntegrationsSettings() {
   const selected = value?.selected ?? null;
   const missing = !!selected && names != null && !names.includes(selected);
   const problem = value?.problem;
-  // Nothing to choose and nothing to turn off: the only state is already shown.
   const nothing = names?.length === 0 && !selected;
   const change = async (action: NotificationAction) => {
     if (busy) return;
@@ -64,9 +55,6 @@ export function IntegrationsSettings() {
       setBusy(false);
     }
   };
-  const label = missing
-    ? `${selected} (not attached)`
-    : (selected ?? (nothing ? "No webhooks" : "Off"));
   return (
     <SettingsSectionFrame title="Integrations" sectionId="settings-integrations">
       <p className="text-sm text-muted-foreground">
@@ -92,12 +80,11 @@ export function IntegrationsSettings() {
       )}
       {loading ? (
         <SettingsSkeleton label="Loading integrations…">
-          <Skeleton className="h-16 w-full rounded-xl" />
+          <Skeleton className="h-28 w-full rounded-xl" />
         </SettingsSkeleton>
       ) : (
         <Item variant="outline" className="rounded-xl px-4 sm:px-5">
-          {/* Content keeps a readable width, so on a phone the controls wrap below it. */}
-          <ItemContent className="min-w-0 basis-64">
+          <ItemContent className="min-w-0">
             <ItemTitle>
               Slack
               {selected && !missing && (
@@ -110,47 +97,16 @@ export function IntegrationsSettings() {
             <ItemDescription>Sends a message when an agent finishes responding.</ItemDescription>
           </ItemContent>
           <ItemActions className="shrink-0">
-            <ButtonGroup>
-              {/* Off stays reachable through discovery failures and a missing public URL; only
-                  choosing a webhook waits for both. */}
-              <Select
-                value={selected ?? OFF}
-                disabled={busy || nothing}
-                onValueChange={(name) =>
-                  void change({ action: "select", name: name === OFF ? null : name })
-                }
+            {selected && !missing && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || !!problem}
+                onClick={() => void change({ action: "test" })}
               >
-                <SelectTrigger size="sm" className="min-w-36" aria-label="Slack webhook">
-                  <SelectValue>{label}</SelectValue>
-                </SelectTrigger>
-                <SelectContent align="end">
-                  <SelectItem value={OFF}>Off</SelectItem>
-                  {(missing || !!names?.length) && <SelectSeparator />}
-                  <SelectGroup>
-                    {missing && (
-                      <SelectItem value={selected} disabled>
-                        {selected} (not attached)
-                      </SelectItem>
-                    )}
-                    {names?.map((name) => (
-                      <SelectItem key={name} value={name} disabled={!!problem}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              {selected && !missing && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || !!problem}
-                  onClick={() => void change({ action: "test" })}
-                >
-                  Test
-                </Button>
-              )}
-            </ButtonGroup>
+                Test
+              </Button>
+            )}
             {(nothing || missing) && (
               <Button
                 variant="ghost"
@@ -163,8 +119,71 @@ export function IntegrationsSettings() {
               </Button>
             )}
           </ItemActions>
+          {/* Off stays reachable through discovery failures and a missing public URL; only
+              choosing a webhook waits for both. */}
+          <WebhookChoice
+            names={names ?? []}
+            selected={selected}
+            missing={missing}
+            disabled={busy}
+            webhooksDisabled={busy || !!problem}
+            choose={(name) => void change({ action: "select", name })}
+          />
         </Item>
       )}
     </SettingsSectionFrame>
+  );
+}
+
+function WebhookChoice({
+  names,
+  selected,
+  missing,
+  disabled,
+  webhooksDisabled,
+  choose,
+}: {
+  names: readonly string[];
+  selected: string | null;
+  /** The saved name is not in the current catalog: shown checked but unpickable. */
+  missing: boolean;
+  disabled: boolean;
+  webhooksDisabled: boolean;
+  choose: (name: string | null) => void;
+}) {
+  const id = useId();
+  const option = (value: string, label: string, off = false) => (
+    <Field key={value} orientation="horizontal">
+      <RadioGroupItem
+        id={`${id}-${value}`}
+        value={value}
+        disabled={off ? disabled : webhooksDisabled || off}
+      />
+      <FieldLabel htmlFor={`${id}-${value}`} className="font-normal">
+        {label}
+      </FieldLabel>
+    </Field>
+  );
+  return (
+    <RadioGroup
+      aria-label="Slack webhook"
+      className="basis-full gap-2"
+      value={selected ?? OFF}
+      onValueChange={(value) => choose(value === OFF ? null : value)}
+    >
+      {option(OFF, "Off", true)}
+      {missing && selected && (
+        <Field key={selected} orientation="horizontal">
+          <RadioGroupItem id={`${id}-missing`} value={selected} disabled />
+          <FieldLabel htmlFor={`${id}-missing`} className="font-normal">
+            {selected} <span className="text-muted-foreground">(not attached)</span>
+          </FieldLabel>
+        </Field>
+      )}
+      {names.map((name) => option(name, name))}
+      {names.length === 0 && !missing && (
+        <p className="text-sm text-muted-foreground">No webhooks attached to this VM.</p>
+      )}
+    </RadioGroup>
   );
 }
