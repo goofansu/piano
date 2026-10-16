@@ -43,7 +43,7 @@ const at = (state: Partial<SessionState> = {}, extra: Partial<AppState> = {}): A
   session: session(state),
   ...extra,
 });
-const notices = (s: AppState) => sessionNotices(s, "everything");
+const notices = (s: AppState) => sessionNotices(s, false);
 const ids = (s: AppState) => notices(s).map((n) => n.id);
 const find = (s: AppState, id: string) => notices(s).find((n) => n.id === id);
 

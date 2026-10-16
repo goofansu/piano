@@ -10,7 +10,7 @@ import type { Appearance, GlobalCommand } from "./globalCommands.ts";
 import type { Panel } from "./navigation.ts";
 import type { ProjectCommand, ProjectDialog } from "./projectCommands.ts";
 import type { SettingsSection } from "./routes.ts";
-import type { SessionCommand, SessionDisplay, SessionTarget } from "./sessionCommands.ts";
+import type { SessionCommand, SessionTarget } from "./sessionCommands.ts";
 import type { SidebarView } from "./sidebarView.ts";
 
 export type Command = GlobalCommand | ProjectCommand | FolderCommand | SessionCommand;
@@ -55,7 +55,7 @@ export interface CommandEffects {
   toggleSidebar: () => void;
   setAppearance: (appearance: Appearance) => void;
   setView: (change: Partial<SidebarView>) => void;
-  setDisplay: (display: SessionDisplay) => void;
+  setMessagesOnly: (on: boolean) => void;
   copy: (value: string, label: string) => void;
   openForm: (form: CommandForm) => void;
 }
@@ -104,8 +104,8 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "pull-request":
       effects.openPanel("pr");
       break;
-    case "display":
-      effects.setDisplay(intent.display);
+    case "messages-only":
+      effects.setMessagesOnly(intent.on);
       break;
     // An enabled session command always has its target; the guard only narrows the type.
     case "rename":

@@ -273,11 +273,8 @@ export interface SessionActivity {
   replyActivity: ReplyActivity | undefined;
 }
 
-/** The selected session's activity. `display` is the transcript display: Messages hides pending text. */
-export function sessionActivity(
-  state: AppState,
-  display: "everything" | "messages",
-): SessionActivity {
+/** The selected session's activity. `messagesOnly` is the transcript display, which hides pending text. */
+export function sessionActivity(state: AppState, messagesOnly: boolean): SessionActivity {
   const t = state.session;
   const receipt = submissionReceipt(state);
   const streaming = !!t && isWorking(t.state);
@@ -291,7 +288,7 @@ export function sessionActivity(
   const starting = receipt?.phase === "starting";
   let replyActivity: ReplyActivity | undefined;
   // Messages only hides pending text, so it cannot replace the working indicator.
-  if (display === "messages" || !t?.pending?.text) {
+  if (messagesOnly || !t?.pending?.text) {
     if (starting) replyActivity = "starting";
     else if (streaming) replyActivity = "working";
   }

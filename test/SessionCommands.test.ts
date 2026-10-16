@@ -64,8 +64,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-all": true,
     changes: true,
     "pull-request": true,
-    "display-everything": true,
-    "display-messages": true,
+    "messages-only": true,
     rename: true,
     pin: true,
     archive: true,
@@ -180,16 +179,24 @@ test("pin commands reflect registry state and stay available independently of Pi
   );
 });
 
-test("display choices mark the current one", () => {
-  const checked = sessionCommands(base, undefined, { display: "messages" })
-    .filter((c) => c.checked)
-    .map((c) => c.id);
-  assert.deepEqual(checked, ["display-messages"]);
+test("Messages only is off by default; running it toggles, and it is checked while on", () => {
+  const command = (messagesOnly?: boolean) =>
+    sessionCommands(base, undefined, { messagesOnly }).find((c) => c.id === "messages-only");
+  assert.deepEqual(command()?.checked, false);
+  assert.deepEqual(command()?.intent, { kind: "messages-only", on: true });
+  assert.deepEqual(command(true)?.checked, true);
+  assert.deepEqual(command(true)?.intent, { kind: "messages-only", on: false });
+  assert.deepEqual(
+    sessionCommands(base, undefined, { messagesOnly: true })
+      .filter((c) => c.checked)
+      .map((c) => c.id),
+    ["messages-only"],
+  );
 });
 
 const headerIds = ({ details, open, manage, display, destructive }: SessionHeaderMenu) => [
   ...[...details, ...open, ...manage, ...destructive].map((c) => c.id),
-  ...(display ? [display.messagesOnly.id, display.everything.id] : []),
+  ...(display ? [display.id] : []),
 ];
 
 test("the palette offers every command the session header and the sidebar row menu offer", () => {
@@ -226,9 +233,9 @@ test("the row menu: rename and pin, share only when signed in to Radius, then ar
 });
 
 test("the header menu: copy beside the details, open, manage with share only when signed in, a Messages only switch, then archive with delete", () => {
-  for (const display of ["everything", "messages"] as const) {
+  for (const messagesOnly of [false, true]) {
     const menu = sessionHeaderMenu(
-      sessionCommands(base, undefined, { display, radiusSignedIn: true }),
+      sessionCommands(base, undefined, { messagesOnly, radiusSignedIn: true }),
     );
     assert.deepEqual(
       menu.details.map((c) => c.id),
@@ -246,9 +253,8 @@ test("the header menu: copy beside the details, open, manage with share only whe
       menu.destructive.map((c) => c.id),
       ["archive", "delete"],
     );
-    assert.equal(menu.display?.messagesOnly.label, "Messages only");
-    assert.equal(menu.display?.messagesOnly.checked, display === "messages");
-    assert.equal(menu.display?.everything.checked, display === "everything");
+    assert.equal(menu.display?.label, "Messages only");
+    assert.equal(menu.display?.checked, messagesOnly);
   }
   assert.deepEqual(
     sessionHeaderMenu(sessionCommands(base)).manage.map((c) => c.id),

@@ -155,14 +155,9 @@ export function MobileSessionSheet() {
                 <Separator className="my-1" />
                 <Label className={cn(row, "flex justify-between rounded-md")}>
                   <span className="flex items-center gap-3">
-                    <CommandIcon icon={display.messagesOnly.icon} /> {display.messagesOnly.label}
+                    <CommandIcon icon={display.icon} /> {display.label}
                   </span>
-                  <Switch
-                    checked={!!display.messagesOnly.checked}
-                    onCheckedChange={(checked) =>
-                      run(checked ? display.messagesOnly : display.everything)
-                    }
-                  />
+                  <Switch checked={!!display.checked} onCheckedChange={() => run(display)} />
                 </Label>
               </>
             )}

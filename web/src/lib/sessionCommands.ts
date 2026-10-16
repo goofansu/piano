@@ -15,12 +15,6 @@ import {
   workspaceFor,
 } from "./sessionContext.ts";
 
-export type SessionDisplay = "everything" | "messages";
-export const SESSION_DISPLAYS = [
-  { value: "everything", label: "Show everything" },
-  { value: "messages", label: "Messages only" },
-] as const satisfies readonly { value: SessionDisplay; label: string }[];
-
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
 export type SessionCommandId =
@@ -30,8 +24,7 @@ export type SessionCommandId =
   | "copy-all"
   | "changes"
   | "pull-request"
-  | "display-everything"
-  | "display-messages"
+  | "messages-only"
   | "rename"
   | "pin"
   | "share"
@@ -53,7 +46,6 @@ export type SessionCommandIcon =
   | "copy"
   | "changes"
   | "pull-request"
-  | "everything"
   | "messages"
   | "rename"
   | "pin"
@@ -68,7 +60,8 @@ export type SessionCommandIntent =
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
   | { kind: "pull-request" }
-  | { kind: "display"; display: SessionDisplay }
+  /** Turn Messages only on or off. */
+  | { kind: "messages-only"; on: boolean }
   /** Without a target the selected session has no Pi session ID yet; such a command is never enabled. */
   | { kind: "rename" | "share" | "delete"; target: SessionTarget | undefined }
   | { kind: "archive"; target: SessionTarget | undefined; confirm: boolean }
@@ -80,7 +73,7 @@ export interface SessionCommand {
   icon: SessionCommandIcon;
   group: SessionCommandGroup;
   enabled: boolean;
-  /** A display choice that is current. */
+  /** A toggle that is on: Messages only. Its label already names what running it does. */
   checked?: boolean;
   /** Direct synonyms of the label, for palette search; not topics or what the command touches. */
   keywords?: readonly string[];
@@ -104,8 +97,8 @@ export interface SessionHeaderMenu {
   details: SessionCommand[];
   open: SessionCommand[];
   manage: SessionCommand[];
-  /** A switch, checked while `messagesOnly` is current; unchecking runs `everything`. */
-  display?: { messagesOnly: SessionCommand; everything: SessionCommand };
+  /** The Messages only switch: `checked` while on; running it toggles. */
+  display?: SessionCommand;
   destructive: SessionCommand[];
 }
 
@@ -130,13 +123,11 @@ export function sessionRowMenu(commands: readonly SessionCommand[]): SessionRowM
 
 /** The session header's menu, from `sessionCommands`' descriptors. */
 export function sessionHeaderMenu(commands: readonly SessionCommand[]): SessionHeaderMenu {
-  const messagesOnly = commands.find((c) => c.id === "display-messages");
-  const everything = commands.find((c) => c.id === "display-everything");
   return {
     details: pick(commands, HEADER_SECTIONS.details),
     open: pick(commands, HEADER_SECTIONS.open),
     manage: pick(commands, HEADER_SECTIONS.manage),
-    display: messagesOnly && everything ? { messagesOnly, everything } : undefined,
+    display: commands.find((c) => c.id === "messages-only"),
     destructive: pick(commands, HEADER_SECTIONS.destructive),
   };
 }
@@ -176,13 +167,14 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`).
- * - pull request, copy session ID: the selected session has a Pi session ID. * - new session here: the checkout is present.
- * - copy and display commands: always.
+ * - pull request, copy session ID: the selected session has a Pi session ID.
+ * - new session here: the checkout is present.
+ * - copy and Messages only: always.
  */
 export function sessionCommands(
   state: AppState,
   target?: SessionTarget,
-  options: { display?: SessionDisplay; radiusSignedIn?: boolean } = {},
+  options: { messagesOnly?: boolean; radiusSignedIn?: boolean } = {},
 ): SessionCommand[] {
   const session = state.session;
   const ctx = sessionContext(state);
@@ -194,7 +186,7 @@ export function sessionCommands(
       : undefined);
   const commands: SessionCommand[] = [];
   if (selected && session) {
-    const display = options.display ?? "everything";
+    const messagesOnly = options.messagesOnly ?? false;
     const all = [
       `Working directory: ${session.cwd}`,
       ...(ctx.sessionId ? [`Session ID: ${ctx.sessionId}`] : []),
@@ -255,15 +247,15 @@ export function sessionCommands(
         keywords: ["pr"],
         intent: { kind: "pull-request" },
       },
-      ...SESSION_DISPLAYS.map((d) => ({
-        id: `display-${d.value}` as const,
-        label: d.label,
-        icon: d.value,
-        group: "display" as const,
+      {
+        id: "messages-only",
+        label: "Messages only",
+        icon: "messages",
+        group: "display",
         enabled: true,
-        checked: display === d.value,
-        intent: { kind: "display" as const, display: d.value },
-      })),
+        checked: messagesOnly,
+        intent: { kind: "messages-only", on: !messagesOnly },
+      },
     );
   }
   if (selected || subject) {

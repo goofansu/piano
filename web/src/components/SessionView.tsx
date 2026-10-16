@@ -20,8 +20,8 @@ import {
   sessionPane,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
+import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
-import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { TranscriptViewportContext, useNewTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
@@ -37,7 +37,7 @@ export function SessionView({ state, send }: Props) {
   const { settings, pullRequest: pullRequestOpened, openPanel, closePullRequest } = useNavigation();
   const pullRequestOpen = !settings && pullRequestOpened;
   const onPullRequestOpenChange = (open: boolean) => (open ? openPanel("pr") : closePullRequest());
-  const [display] = useSessionDisplay();
+  const [messagesOnly] = useMessagesOnly();
   const t = state.session;
   // The transcript looks executions up by tool call ID.
   const tools = useMemo(
@@ -56,9 +56,9 @@ export function SessionView({ state, send }: Props) {
       onOpenChange: onPullRequestOpenChange,
     },
   );
-  const { status, replyActivity } = sessionActivity(state, display);
+  const { status, replyActivity } = sessionActivity(state, messagesOnly);
   const pane = sessionPane(state);
-  const notices = sessionNotices(state, display);
+  const notices = sessionNotices(state, messagesOnly);
   const readOnly = notices.find((n) => n.placement === "composer");
   const draftKey = t ? sessionDraftKey(t) : null;
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
@@ -117,7 +117,7 @@ export function SessionView({ state, send }: Props) {
             <LocalFileContext value={(path) => openPanel({ kind: "file", path })}>
               <MessageList
                 className="transcript-enter"
-                showTools={display === "everything"}
+                showTools={!messagesOnly}
                 messages={t?.messages ?? []}
                 pending={t?.pending ?? null}
                 submittedInput={input}

@@ -4,7 +4,6 @@ import {
   CopyIcon,
   FileDiffIcon,
   GitPullRequestIcon,
-  ListIcon,
   type LucideIcon,
   MessageSquareIcon,
   PinIcon,
@@ -38,14 +37,13 @@ import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
   type SessionCommandIcon,
-  type SessionDisplay,
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
 import { useCommandForms } from "@/lib/useCommandForms";
+import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
-import { useSessionDisplay } from "@/lib/useSessionDisplay";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
 import type { AppState } from "@/store";
@@ -63,7 +61,6 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon,
   changes: FileDiffIcon,
   "pull-request": GitPullRequestIcon,
-  everything: ListIcon,
   messages: MessageSquareIcon,
   rename: TextCursorInputIcon,
   pin: PinIcon,
@@ -81,7 +78,7 @@ export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
 
 interface CommandsValue {
   run: (command: Command) => void;
-  display: SessionDisplay;
+  messagesOnly: boolean;
   state: AppState;
   radiusSignedIn: boolean;
   global: GlobalCommandContext;
@@ -97,8 +94,12 @@ export function useCommands() {
 
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
-  const { state, run, display, radiusSignedIn } = useCommands();
-  return { commands: sessionCommands(state, target, { display, radiusSignedIn }), run, display };
+  const { state, run, messagesOnly, radiusSignedIn } = useCommands();
+  return {
+    commands: sessionCommands(state, target, { messagesOnly, radiusSignedIn }),
+    run,
+    messagesOnly,
+  };
 }
 
 /**
@@ -145,7 +146,7 @@ export function CommandHost({
   children: React.ReactNode;
 }) {
   const { openNew, openPanel, openSettings, closeSettings, settings } = useNavigation();
-  const [display, setDisplay] = useSessionDisplay();
+  const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();
@@ -176,7 +177,7 @@ export function CommandHost({
     openPanel,
     toggleSidebar: sidebar.toggle,
     setView,
-    setDisplay,
+    setMessagesOnly,
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
     openForm: forms.open,
@@ -189,7 +190,7 @@ export function CommandHost({
     <CommandsContext.Provider
       value={{
         run,
-        display,
+        messagesOnly,
         state,
         radiusSignedIn,
         // The one global command context; "system" is next-themes' default before it reads storage.

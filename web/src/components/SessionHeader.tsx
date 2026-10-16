@@ -175,12 +175,10 @@ export function SessionHeader({
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
                     <DropdownMenuCheckboxItem
-                      checked={!!display.messagesOnly.checked}
-                      onCheckedChange={(checked) =>
-                        run(checked ? display.messagesOnly : display.everything)
-                      }
+                      checked={!!display.checked}
+                      onCheckedChange={() => run(display)}
                     >
-                      <CommandIcon icon={display.messagesOnly.icon} /> {display.messagesOnly.label}
+                      <CommandIcon icon={display.icon} /> {display.label}
                     </DropdownMenuCheckboxItem>
                   </DropdownMenuGroup>
                 </>

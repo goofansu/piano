@@ -7,7 +7,6 @@
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, ExtensionState } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import type { SessionDisplay } from "./sessionCommands.ts";
 import { closureNeedsAttention, sessionContext } from "./sessionContext.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
@@ -57,9 +56,9 @@ const notice = (
   ...rest,
 });
 
-/** The selected session's notices, in display order. No notice depends on the transcript
- * display today; callers pass it so one that does need not change them. */
-export function sessionNotices(state: AppState, _display: SessionDisplay): SessionNotice[] {
+/** The selected session's notices, in display order. No notice depends on Messages only today;
+ * callers pass it so one that does need not change them. */
+export function sessionNotices(state: AppState, _messagesOnly: boolean): SessionNotice[] {
   const t = state.session;
   const { folder, checkoutMissing } = sessionContext(state);
   const receipt = submissionReceipt(state);
