@@ -45,6 +45,25 @@ export function toolArgsText(args: string | undefined): string {
     .join("\n");
 }
 
+const ESC = "\u001b";
+const BEL = "\u0007";
+/** Escape sequences in terminal output, built from the constants above because the lint forbids
+ * control characters inside a regex literal: OSC strings such as hyperlinks (their visible text
+ * stays), CSI colour and cursor codes, then any other two-byte escape. */
+const TERMINAL_ESCAPES = [
+  new RegExp(`${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)`, "g"),
+  new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]`, "g"),
+  new RegExp(`${ESC}[@-Z\\\\-_]`, "g"),
+];
+
+/** Terminal output as text: escape sequences go, `\r\n` becomes `\n` and a stray `\r` goes. */
+export function stripAnsi(text: string): string {
+  return TERMINAL_ESCAPES.reduce((out, pattern) => out.replace(pattern, ""), text).replace(
+    /\r\n?/g,
+    "\n",
+  );
+}
+
 /** Compact token units, promoting rounded values at the million/billion boundaries. */
 export function formatTokenCount(tokens: number): string {
   if (tokens >= 999_500_000) return `${(tokens / 1e9).toFixed(1)}B`;

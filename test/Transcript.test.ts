@@ -941,7 +941,7 @@ test("revealing a mention tries the message's own row, then the exchange it belo
   assert.deepEqual(revealEntries(messages, entries, "missing"), []);
 });
 
-test("a multi-line command's summary is its first line and its length", () => {
+test("a multi-line command's summary is its first line and how many lines follow", () => {
   const command = "python3 - <<'PY'\nimport json\n    print(json.dumps(1))\nPY";
   const rows = transcriptRows([
     {
@@ -951,7 +951,7 @@ test("a multi-line command's summary is its first line and its length", () => {
       toolCalls: [{ id: "t", name: "bash", args: JSON.stringify({ command }) }],
     },
   ]);
-  assert.equal(reply(rows, "a").tools[0]!.summary, "python3 - <<'PY' · 4 lines");
+  assert.equal(reply(rows, "a").tools[0]!.summary, "python3 - <<'PY' +3 lines");
   const long = transcriptRows([
     {
       id: "b",
@@ -963,4 +963,23 @@ test("a multi-line command's summary is its first line and its length", () => {
   const summary = reply(long, "b").tools[0]!.summary;
   assert.equal(summary.length, 160);
   assert.ok(summary.endsWith("…"));
+});
+
+test("a tool's output shows as text: terminal colours, hyperlink escapes and \\r go", () => {
+  const rows = transcriptRows([
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "t", name: "bash", args: '{"command":"gh pr view"}' }],
+    },
+    {
+      id: "r",
+      role: "tool_result",
+      toolCallId: "t",
+      text: "\x1b[0m\x1b[1mPR:\x1b[0m #149\r\n\x1b]8;;https://x.test\x1b\\\x1b[38;2;1;2;3mlink\x1b[0m\x1b]8;;\x1b\\\n",
+      isError: false,
+    },
+  ]);
+  assert.equal(reply(rows, "a").tools[0]!.output, "PR: #149\nlink\n");
 });

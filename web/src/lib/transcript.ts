@@ -1,5 +1,5 @@
 import type { FinalOutput, RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
-import { abbrevHome } from "./format.ts";
+import { abbrevHome, stripAnsi } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
 /** DOM id of a message's article, so a jump can find it without a shared ref. */
@@ -159,7 +159,7 @@ const VERBS: Record<string, [running: string, done: string]> = {
 
 /** One line that says what a tool call did: the command, the path, or the pattern. A one-line
  * command is its own description. A multi-line command (a heredoc script, a `&&` chain) shows
- * how it starts and how long it is; its lines wait in the row's details. */
+ * how it starts and how many lines follow; those wait in the row's details. */
 function summarize(args: string): string {
   try {
     const a = JSON.parse(args) as Record<string, unknown>;
@@ -168,7 +168,8 @@ function summarize(args: string): string {
       const lines = v.trim().split("\n");
       const first = abbrevHome(lines[0]!.trim());
       const head = first.length > 160 ? `${first.slice(0, 159)}…` : first;
-      return lines.length > 1 ? `${head} · ${lines.length} lines` : head;
+      const more = lines.length - 1;
+      return more > 0 ? `${head} +${more} ${more === 1 ? "line" : "lines"}` : head;
     }
   } catch {
     /* partial JSON while streaming */
@@ -437,7 +438,8 @@ export function transcriptRows(
           : result
             ? "done"
             : "pending";
-    const output = result?.text ?? execution?.text;
+    const raw = result?.text ?? execution?.text;
+    const output = raw === undefined ? undefined : stripAnsi(raw);
     const nested = new Map((result?.nestedCalls ?? []).map((c) => [c.id, c]));
     for (const child of children.get(call.id) ?? []) nested.set(child.id, child);
     const verbs = VERBS[call.name];
