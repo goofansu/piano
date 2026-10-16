@@ -253,7 +253,7 @@ its database; the currently running backend was left untouched.
 4. [shadcn Select](https://ui.shadcn.com/docs/components/radix/select), fetched for this research;
    existing [`PianoSelect`](../../web/src/components/PianoSelect.tsx).
 5. Current [`Notifications`](../../server/Notifications.ts), [wire settings](../../shared/notifications.ts),
-   [settings page](../../web/src/components/ExeDevSettings.tsx),
+   [settings page](../../web/src/components/IntegrationsSettings.tsx),
    [environment observation hook](../../web/src/lib/useExeDev.ts),
    [mutation ordering](../../web/src/lib/observation.ts) and [user guide](../notifications.md).
 6. Shared [Settings destinations](../../web/src/lib/routes.ts),
