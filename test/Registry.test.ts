@@ -338,14 +338,15 @@ test("version-4 migration adds empty notification preferences without changing s
   await f.run(
     Effect.gen(function* () {
       const registry = yield* Registry;
-      assert.deepEqual(yield* registry.notificationWebhooks, []);
-      yield* registry.changeNotificationWebhook("https://slack-hook.int.exe.xyz/", true);
+      assert.equal(yield* registry.notificationWebhook, null);
+      yield* registry.setNotificationWebhook("https://slack-hook.int.exe.xyz/");
     }),
   );
   assert.deepEqual(await f.get(), before);
-  assert.deepEqual(await f.run(Effect.flatMap(Registry, (r) => r.notificationWebhooks)), [
+  assert.equal(
+    await f.run(Effect.flatMap(Registry, (r) => r.notificationWebhook)),
     "https://slack-hook.int.exe.xyz/",
-  ]);
+  );
 });
 
 test("INV-01: version-2 sessions start unpinned; pins persist without changing history metadata or activity", async (t) => {

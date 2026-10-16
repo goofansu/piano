@@ -13,14 +13,16 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { changeNotifications } from "@/lib/api";
 import { useNotifications } from "@/lib/useNotifications";
 
 export function NotificationSettings() {
   const observed = useNotifications();
-  const [url, setUrl] = useState("");
+  const [draft, setDraft] = useState<string>();
+  const saved = observed.value?.webhook ?? "";
+  const url = draft ?? saved;
+  const changed = url.trim() !== saved;
   const [error, setError] = useState<string>();
   const [invalid, setInvalid] = useState(false);
   const [result, setResult] = useState<string>();
@@ -37,11 +39,16 @@ export function NotificationSettings() {
     setResult(undefined);
     try {
       await observed.mutate((signal) => changeNotifications(action, { signal }));
-      if (action.action === "add") setUrl("");
+      if (action.action !== "test") {
+        setDraft(undefined);
+        setResult(
+          action.action === "save" ? "Slack webhook saved." : "Slack notifications removed.",
+        );
+      }
       if (action.action === "test")
         setResult("Test notification accepted. Check your Slack channel.");
     } catch (error) {
-      setInvalid(action.action === "add");
+      setInvalid(action.action === "save");
       setError(error instanceof Error ? error.message : "Could not change notifications.");
     } finally {
       setBusy(false);
@@ -70,7 +77,7 @@ export function NotificationSettings() {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              void change({ action: "add", url });
+              void change({ action: "save", url });
             }}
           >
             <FieldGroup>
@@ -91,7 +98,8 @@ export function NotificationSettings() {
                     }
                     placeholder="https://slack-hook.int.exe.xyz/"
                     onChange={(event) => {
-                      setUrl(event.target.value);
+                      setDraft(event.target.value);
+                      setResult(undefined);
                       setError(undefined);
                       setInvalid(false);
                     }}
@@ -99,9 +107,9 @@ export function NotificationSettings() {
                   <InputGroupAddon align="inline-end">
                     <InputGroupButton
                       type="submit"
-                      disabled={busy || !url.trim() || !!observed.value.problem}
+                      disabled={busy || !url.trim() || !changed || !!observed.value.problem}
                     >
-                      Add
+                      Save
                     </InputGroupButton>
                   </InputGroupAddon>
                 </InputGroup>
@@ -116,39 +124,24 @@ export function NotificationSettings() {
           {error && !invalid && (
             <SettingsAlert title="Notification needs attention">{error}</SettingsAlert>
           )}
-          <ItemGroup className="gap-2" aria-label="Slack webhooks">
-            {observed.value.webhooks.map((saved) => (
-              <Item key={saved} variant="outline" size="sm">
-                <ItemContent className="min-w-0">
-                  <ItemTitle className="min-w-0 max-w-full">
-                    <span className="truncate" title={saved}>
-                      {saved}
-                    </span>
-                  </ItemTitle>
-                </ItemContent>
-                <ItemActions>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy || !!observed.value?.problem}
-                    aria-label={`Test ${saved}`}
-                    onClick={() => void change({ action: "test", url: saved })}
-                  >
-                    Test
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    aria-label={`Remove ${saved}`}
-                    onClick={() => void change({ action: "remove", url: saved })}
-                  >
-                    Remove
-                  </Button>
-                </ItemActions>
-              </Item>
-            ))}
-          </ItemGroup>
+          {saved && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                disabled={busy || changed || !!observed.value.problem}
+                onClick={() => void change({ action: "test" })}
+              >
+                Test
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void change({ action: "remove" })}
+              >
+                Remove
+              </Button>
+            </div>
+          )}
           {result && <p role="status">{result}</p>}
         </>
       )}

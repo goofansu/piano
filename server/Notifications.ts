@@ -108,14 +108,14 @@ export const NotificationsLive = Layer.effect(
         return detected;
       }),
     );
-    const webhooks = registry.notificationWebhooks.pipe(
+    const savedWebhook = registry.notificationWebhook.pipe(
       Effect.mapError(() => refused("Could not read notification settings.")),
     );
     const state = Effect.gen(function* () {
       const available = yield* detect;
       return {
         detected: available,
-        webhooks: available ? yield* webhooks : [],
+        webhook: available ? yield* savedWebhook : null,
         ...(available && problem ? { problem } : {}),
       };
     });
@@ -167,8 +167,8 @@ export const NotificationsLive = Layer.effect(
       const { url, sessionId } = yield* Queue.take(queue);
       const delay = yield* waitMs;
       if (delay > 0) yield* Effect.sleep(delay);
-      // Removal cancels queued deliveries; configuration is re-read just before sending.
-      if (problem || !(yield* detect) || !(yield* webhooks).includes(url)) return;
+      // Removal or replacement cancels old queued deliveries.
+      if (problem || !(yield* detect) || (yield* savedWebhook) !== url) return;
       yield* send(
         url,
         `Piano: agent finished responding.\n${slackLink(`/s/${encodeURIComponent(sessionId)}`, "Open session")}`,
@@ -189,26 +189,25 @@ export const NotificationsLive = Layer.effect(
           Effect.gen(function* () {
             if (!(yield* detect))
               return yield* refused("Notifications are available on detected exe.dev VMs only.");
-            const url = yield* Effect.try({
-              try: () => webhook(action.url),
-              catch: () =>
-                refused("Use an exe.dev Slack URL like https://slack-hook.int.exe.xyz/."),
-            });
-            const saved = yield* webhooks;
             if (problem && action.action !== "remove") return yield* refused(problem);
             if (action.action === "test") {
-              if (!saved.includes(url))
-                return yield* refused("Add this webhook before testing it.");
-              yield* send(url, `Piano: test notification.\n${slackLink("/", "Open Piano")}`);
+              const url = yield* savedWebhook;
+              if (!url) return yield* refused("Save a Slack webhook before testing it.");
+              yield* send(
+                webhook(url),
+                `Piano: test notification.\n${slackLink("/", "Open Piano")}`,
+              );
             } else {
-              if (action.action === "add") {
-                if (saved.includes(url))
-                  return yield* refused("This webhook has already been added.");
-                if (saved.length >= 10)
-                  return yield* refused("You can add up to 10 Slack webhooks.");
-              }
+              const url =
+                action.action === "remove"
+                  ? null
+                  : yield* Effect.try({
+                      try: () => webhook(action.url),
+                      catch: () =>
+                        refused("Use an exe.dev Slack URL like https://slack-hook.int.exe.xyz/."),
+                    });
               yield* registry
-                .changeNotificationWebhook(url, action.action === "add")
+                .setNotificationWebhook(url)
                 .pipe(Effect.mapError(() => refused("Could not save notification settings.")));
             }
             return yield* state;
@@ -217,10 +216,10 @@ export const NotificationsLive = Layer.effect(
       }),
       completed: Effect.fn("Notifications.completed")(
         function* (sessionId) {
-          const urls = yield* webhooks;
+          const url = yield* savedWebhook;
           // Detection and HTTP belong to the worker, never the session observer.
-          if (problem || urls.length === 0) return;
-          for (const url of urls) yield* Queue.offer(queue, { url: webhook(url), sessionId });
+          if (problem || !url) return;
+          yield* Queue.offer(queue, { url: webhook(url), sessionId });
         },
         Effect.catchCause(() => Effect.logWarning("A Slack notification could not be queued.")),
       ),

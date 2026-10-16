@@ -74,7 +74,7 @@ test("detection has a one-second deadline, aborts HTTP, retries later and rememb
   assert.equal(calls, 3, "new backend must detect again");
 });
 
-test("webhooks persist, normalize and reject unsafe/duplicate URLs; only explicit testing sends Slack text", async (t) => {
+test("one webhook persists, replaces the previous URL and rejects unsafe URLs; only explicit testing sends Slack text", async (t) => {
   const requests: { url: string; init: RequestInit | undefined }[] = [];
   let reject = false;
   const f = fixture(async (url, init) => {
@@ -84,16 +84,24 @@ test("webhooks persist, normalize and reject unsafe/duplicate URLs; only explici
   });
   t.after(f.dispose);
   const runtime = ManagedRuntime.make(f.layer);
-  const change = (action: "add" | "remove" | "test", url: string) =>
-    runtime.runPromise(Effect.flatMap(Notifications, (n) => n.change({ action, url })));
+  const change = (action: "save" | "remove" | "test", url = "") =>
+    runtime.runPromise(
+      Effect.flatMap(Notifications, (n) =>
+        n.change(action === "save" ? { action, url } : { action }),
+      ),
+    );
   try {
-    assert.deepEqual(await change("add", "  HTTPS://SLACK-HOOK.INT.EXE.XYZ  "), {
+    assert.deepEqual(await change("save", "  HTTPS://SLACK-HOOK.INT.EXE.XYZ  "), {
       detected: true,
-      webhooks: [slack],
+      webhook: slack,
     });
-    assert.deepEqual((await change("add", second)).webhooks, [slack, second]);
+    assert.equal((await change("save", second)).webhook, second);
+    assert.equal(
+      (await change("save", second)).webhook,
+      second,
+      "saving the same URL is idempotent",
+    );
     assert.equal(requests.length, 0);
-    await assert.rejects(change("add", slack), /already been added/);
     for (const url of [
       "https://localhost/",
       "http://slack-hook.int.exe.xyz/",
@@ -106,10 +114,11 @@ test("webhooks persist, normalize and reject unsafe/duplicate URLs; only explici
       "https://127.0.0.1/",
       "https://hooks.slack.com/services/secret",
     ]) {
-      await assert.rejects(change("add", url), /Use an exe.dev Slack URL/);
+      await assert.rejects(change("save", url), /Use an exe.dev Slack URL/);
     }
-    await change("test", slack);
+    await change("test");
     assert.equal(requests.length, 1);
+    assert.equal(requests[0]!.url, second, "testing uses the sole saved webhook");
     assert.equal(requests[0]!.init?.redirect, "error");
     assert.equal(requests[0]!.init?.method, "POST");
     assert.deepEqual(JSON.parse(String(requests[0]!.init?.body)), {
@@ -118,20 +127,55 @@ test("webhooks persist, normalize and reject unsafe/duplicate URLs; only explici
       unfurl_media: false,
     });
     reject = true;
-    await assert.rejects(change("test", second), /Could not confirm Slack/);
+    await assert.rejects(change("test"), /Could not confirm Slack/);
     assert.equal(requests.length, 2, "no blind retry");
     reject = false;
-    for (let i = 0; i < 3; i++) await change("test", slack);
-    await assert.rejects(change("test", slack), /limit reached/);
+    for (let i = 0; i < 3; i++) await change("test");
+    await assert.rejects(change("test"), /limit reached/);
     assert.equal(requests.length, 5, "tests share Slack's five-send-per-minute budget");
-    await change("remove", slack);
+    assert.equal((await change("remove")).webhook, null);
+    await assert.rejects(change("test"), /Save a Slack webhook/);
+    await change("save", second);
   } finally {
     await runtime.dispose();
   }
   const reopened = await Effect.runPromise(
     Effect.flatMap(Notifications, (n) => n.state).pipe(Effect.provide(f.layer)),
   );
-  assert.deepEqual(reopened.webhooks, [second]);
+  assert.equal(reopened.webhook, second);
+});
+
+test("replacing the webhook skips queued sends to the old destination", async (t) => {
+  const delivered = Deferred.makeUnsafe<void>();
+  const sent: { url: string; text: string }[] = [];
+  const f = fixture(async (url, init) => {
+    if (String(url).includes("reflection.")) return metadata();
+    sent.push({ url: String(url), text: JSON.parse(String(init?.body)).text });
+    if (sent.length === 6) Deferred.doneUnsafe(delivered, Effect.void);
+    return new Response("");
+  });
+  t.after(f.dispose);
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const n = yield* Notifications;
+      yield* n.change({ action: "save", url: slack });
+      for (let i = 0; i < 5; i++) yield* n.change({ action: "test" });
+      yield* n.completed("old-session");
+      yield* n.change({ action: "save", url: second });
+      yield* n.completed("new-session");
+      yield* TestClock.adjust(60_000);
+      yield* Deferred.await(delivered);
+      assert.equal(sent.length, 6);
+      assert.deepEqual(sent.at(-1), {
+        url: second,
+        text: "Piano: agent finished responding.\n<https://piano.example.test/s/new-session|Open session>",
+      });
+      assert.equal(
+        sent.some((request) => request.text.includes("old-session")),
+        false,
+      );
+    }).pipe(Effect.provide(f.layer), Effect.provide(TestClock.layer())),
+  );
 });
 
 test("notifications require a configured HTTPS Piano origin instead of guessing a session link", async (t) => {
@@ -142,7 +186,7 @@ test("notifications require a configured HTTPS Piano origin instead of guessing 
       const n = yield* Notifications;
       assert.match((yield* n.state).problem ?? "", /PIANO_ALLOWED_ORIGINS/);
       assert.match(
-        (yield* n.change({ action: "add", url: slack }).pipe(Effect.flip)).detail,
+        (yield* n.change({ action: "save", url: slack }).pipe(Effect.flip)).detail,
         /PIANO_ALLOWED_ORIGINS/,
       );
     }).pipe(Effect.provide(f.layer)),
@@ -166,10 +210,8 @@ test("a stalled test send is cancelled after five seconds without retrying", asy
   await Effect.runPromise(
     Effect.gen(function* () {
       const n = yield* Notifications;
-      yield* n.change({ action: "add", url: slack });
-      const pending = yield* n
-        .change({ action: "test", url: slack })
-        .pipe(Effect.flip, Effect.forkChild);
+      yield* n.change({ action: "save", url: slack });
+      const pending = yield* n.change({ action: "test" }).pipe(Effect.flip, Effect.forkChild);
       yield* Deferred.await(started);
       yield* TestClock.adjust(5_000);
       assert.match((yield* Fiber.join(pending)).detail, /Could not confirm Slack/);
@@ -187,14 +229,14 @@ test("unknown or malformed environments cannot configure or test notifications",
       const n = yield* Notifications;
       assert.equal((yield* n.state).detected, false);
       assert.match(
-        (yield* n.change({ action: "add", url: slack }).pipe(Effect.flip)).detail,
+        (yield* n.change({ action: "save", url: slack }).pipe(Effect.flip)).detail,
         /exe.dev/,
       );
     }).pipe(Effect.provide(f.layer)),
   );
 });
 
-test("server-owned completion delivers to every destination without a browser; failure does not block the next webhook", async (t) => {
+test("server-owned completion sends one session link to the latest saved webhook without a browser", async (t) => {
   const sent: { url: string; body: unknown }[] = [];
   let delivered!: () => void;
   const done = new Promise<void>((resolve) => {
@@ -207,7 +249,7 @@ test("server-owned completion delivers to every destination without a browser; f
       Layer.succeed(NotificationFetch, async (url, init) => {
         if (String(url).includes("reflection.")) return metadata();
         sent.push({ url: String(url), body: JSON.parse(String(init?.body)) });
-        if (sent.length === 2) delivered();
+        if (sent.length === 1) delivered();
         return new Response("", { status: String(url) === slack ? 404 : 200 });
       }),
     ),
@@ -221,7 +263,7 @@ test("server-owned completion delivers to every destination without a browser; f
         Host: "attacker.test",
         "X-Forwarded-Host": "attacker.test",
       },
-      body: JSON.stringify({ action: "add", url }),
+      body: JSON.stringify({ action: "save", url }),
     });
     assert.equal(result.status, 200);
   }
@@ -241,7 +283,7 @@ test("server-owned completion delivers to every destination without a browser; f
   ]);
   assert.deepEqual(
     sent,
-    [slack, second].map((url) => ({
+    [second].map((url) => ({
       url,
       body: {
         text: `Piano: agent finished responding.\n<https://piano.example.test/s/${sessionId}|Open session>`,

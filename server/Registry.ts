@@ -176,11 +176,8 @@ export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
-    readonly notificationWebhooks: Effect.Effect<ReadonlyArray<string>, RegistryError>;
-    readonly changeNotificationWebhook: (
-      url: string,
-      add: boolean,
-    ) => Effect.Effect<void, RegistryError>;
+    readonly notificationWebhook: Effect.Effect<string | null, RegistryError>;
+    readonly setNotificationWebhook: (url: string | null) => Effect.Effect<void, RegistryError>;
     /**
      * Hear about every write that changes the data, for the listener's scope. The writer
      * waits for its listeners, so whatever they publish is out before the write returns;
@@ -344,17 +341,17 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       get: Ref.get(state),
-      notificationWebhooks: Effect.try({
-        try: () => database.notificationWebhooks(),
+      notificationWebhook: Effect.try({
+        try: () => database.notificationWebhook(),
         catch: (e) => recovery(path, e),
       }),
-      changeNotificationWebhook: (url, add) =>
+      setNotificationWebhook: (url) =>
         Semaphore.withPermits(
           lock,
           1,
         )(
           Effect.try({
-            try: () => database.changeNotificationWebhook(url, add),
+            try: () => database.setNotificationWebhook(url),
             catch: (e) => recovery(path, e),
           }),
         ),

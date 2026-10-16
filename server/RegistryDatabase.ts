@@ -326,18 +326,16 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
       data,
       close: () => db.close(),
       save: (before: RegistryData, after: RegistryData) => write(() => persist(db, before, after)),
-      notificationWebhooks: () =>
-        db
-          .prepare("SELECT url FROM notification_webhooks ORDER BY rowid")
-          .all()
-          .map((r) => r.url as string),
-      changeNotificationWebhook: (url: string, add: boolean) =>
+      // Read only the first URL from the earlier multi-webhook shape. The next save replaces it.
+      notificationWebhook: () =>
+        (db.prepare("SELECT url FROM notification_webhooks ORDER BY rowid LIMIT 1").get()?.url as
+          | string
+          | undefined) ?? null,
+      setNotificationWebhook: (url: string | null) =>
         write(() => {
-          db.prepare(
-            add
-              ? "INSERT INTO notification_webhooks(url) VALUES (?)"
-              : "DELETE FROM notification_webhooks WHERE url = ?",
-          ).run(url);
+          db.exec("DELETE FROM notification_webhooks");
+          if (url !== null)
+            db.prepare("INSERT INTO notification_webhooks(url) VALUES (?)").run(url);
         }),
     };
   } catch (error) {

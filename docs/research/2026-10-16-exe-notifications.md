@@ -2,7 +2,7 @@
 
 Research date: 2026-10-16. Source revision: `93ca45d80f33876493d382f99355109f03ed4dbd`.
 Status: original research and alternatives. The subsequent [implemented slice](../notifications.md)
-is Slack-only, supports multiple URLs, gates Settings on positive exe.dev detection, and uses a
+is Slack-only, supports one saved URL, gates Settings on positive exe.dev detection, and uses a
 one-second detection timeout. The recommendations below are retained as research, not the current
 feature specification. No real notifications were sent during research or implementation checks.
 
@@ -189,7 +189,9 @@ mutation or live model call was performed. Public docs were fetched successfully
 search found the iOS announcement but not a full mobile notification API reference. These findings
 establish feasibility and integration discovery, not end-to-end delivery.
 
-## Implementation verification — 2026-10-16
+## Initial implementation verification — 2026-10-16
+
+Historical evidence for `51af3ee`, before the user requested a single-webhook simplification.
 
 Implemented on top of `4451395`; this commit's working tree was checked on the exe.dev Linux VM
 with Node 24.21.0. The delivered scope is documented in [Notifications](../notifications.md).
@@ -225,6 +227,37 @@ All sends used mocked HTTP, and sessions used fake Pi. No real Slack delivery, e
 click-through, model call, systemd change, or real-database mutation was performed. Scratch processes
 and temporary session directories were cleaned up by the browser harness. Best-effort delivery
 across process/network failure remains a documented limitation, not an exactly-once guarantee.
+
+## Single-webhook simplification — 2026-10-16
+
+The user requested one Slack webhook instead of a list. On top of `51af3ee`, Settings now has
+one saved URL with Save/Test/Remove. Saving replaces the destination atomically; testing uses the
+saved URL and is disabled while the input has unsaved edits. The public settings contract and
+registry interface are scalar, and completion enqueues one destination. Existing schema-5 storage
+is reused: an earlier list reads as its first URL, and the next save/remove replaces that list.
+Session links, detection timeout/cache and delivery limits are unchanged (INV-01/02/03/11).
+
+Checked the implementation working tree on this exe.dev Linux VM, Node 24.21.0:
+
+- `npm run typecheck`, `npm run lint`, and `git diff --check`: passed.
+- `npm test`: 736 passed. Updated contracts cover replacing rather than appending, idempotent save,
+  removing/testing the sole saved URL, persistence and one linked send without a browser. Added
+  a regression for skipping queued sends to a replaced webhook. Removing the destination check
+  temporarily made that regression fail with the old URL/session; restored it and reran green.
+- Uncommitted scratch `agent-browser` journey: save/reload, replace/reload, refuse unsafe URLs,
+  require saving edits before Test, test success/error, remove/reload and desktop/mobile layout:
+  passed. Outbound HTTP was mocked; no real Slack notification was sent.
+- All 22 standard style-shot pairs compared: 19 unchanged at 5% pixel tolerance; the three
+  changed pairs differ only in generated scratch-directory characters. Reviewed the new single
+  field at desktop and phone widths; no horizontal overflow.
+
+Evidence: `/tmp/piano-single-hook-tests.log`, `/tmp/piano-single-hook-focused.log`,
+`/tmp/piano-single-hook-mutation.log`, `/tmp/piano-single-hook-browser/`,
+`/tmp/piano-single-hook-before/`, `/tmp/piano-single-hook-after/` and
+`/tmp/piano-single-hook-style-comparison.txt`. An initial concurrent suite/browser/style run
+exceeded harness timeouts; sequential reruns passed without changing product code or weakening
+assertions. Scratch processes/directories were cleaned by the harness. No model calls, real
+integration delivery, deployment, real-database mutation or push occurred.
 
 ## Sources
 

@@ -39,7 +39,7 @@ with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-i
 
 ### Slack notifications on exe.dev
 
-Open **Settings → Notifications**, add an attached exe.dev Slack integration URL, and use **Test**
+Open **Settings → Notifications**, save an attached exe.dev Slack integration URL, and use **Test**
 to check delivery. Each completed response sends a link back to its session, even with the browser
 closed. See [notification setup and limits](docs/notifications.md).
 
