@@ -36,12 +36,18 @@ test("a URL inside code is not a link, and a bare URL sheds trailing punctuation
         "```",
         "    https://indented.example.com/x",
         "Then read https://example.com/guide), or (https://example.com/other).",
+        "Open **http://localhost:3036/vite-dev/** and *http://faria.lvh.me:3017*.",
       ].join("\n"),
     ),
   ]);
   assert.deepEqual(
     links.map((l) => l.url),
-    ["https://example.com/guide", "https://example.com/other"],
+    [
+      "https://example.com/guide",
+      "https://example.com/other",
+      "http://localhost:3036/vite-dev/",
+      "http://faria.lvh.me:3017",
+    ],
   );
 });
 

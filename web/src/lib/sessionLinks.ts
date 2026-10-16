@@ -21,7 +21,8 @@ const CODE = /^(?: {4}|\t).*$|`[^`\n]+`/gm;
 const LINK =
   /\[([^\]\n]*)\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g;
 const WEB = /^https?:\/\//;
-const TRAILING = /[.,!?;:)'"\]]+$/;
+/** Punctuation that ends the sentence, not the URL; `*` is a bold or italic marker around it. */
+const TRAILING = /[.,!?;:)'"\]*]+$/;
 
 /** The URL as a list shows it: no scheme, no "www.", no trailing slash, so what differs is in view. */
 export function displayUrl(url: string): string {

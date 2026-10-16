@@ -267,4 +267,21 @@ test("Links lists the selected session's web links: the latest few at the root, 
     assert.equal(matching, group.id === "links" ? group.rows.length : 0, group.id);
   }
   assert.equal(groups[0]?.id, "links");
+  // After the links query, a word narrows the links by label, host or any part of the URL, which
+  // cmdk's own filter cannot do since "!" is in no label.
+  const matching = (search: string) =>
+    palette(linked, search)
+      .find((g) => g.id === "links")!
+      .rows.filter((r) => paletteFilter(r.value, search, r.keywords) > 0)
+      .map((r) => r.link.url);
+  assert.deepEqual(matching(`${LINKS_QUERY} the pr`), ["https://github.com/a/b/pull/9"], "label");
+  assert.deepEqual(matching(`${LINKS_QUERY} github`), ["https://github.com/a/b/pull/9"], "host");
+  assert.deepEqual(matching(`${LINKS_QUERY} page-2`), ["https://example.com/page-2"], "path");
+  assert.deepEqual(
+    matching(`${LINKS_QUERY} pull 9`),
+    ["https://github.com/a/b/pull/9"],
+    "segments",
+  );
+  assert.equal(matching(`${LINKS_QUERY} example.com`).length, urls.length, "dotted host");
+  assert.deepEqual(matching(`${LINKS_QUERY} nowhere`), [], "no match");
 });

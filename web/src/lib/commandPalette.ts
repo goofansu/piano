@@ -107,12 +107,24 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
   };
 }
 
+/**
+ * The words a URL is searched by after `LINKS_QUERY`, where aliases match by word prefix: the shown
+ * URL ("github.com/…", "localhost:3036/…"), its host, port and path segments ("vite-dev"), and each
+ * run of letters or digits ("dev", "26674"), so "!link localhost" and "!link vite" each reach their
+ * link.
+ */
+function urlWords(url: string): string[] {
+  const shown = displayUrl(url);
+  const segments = shown.split(/[/:?#&=]+/);
+  return [shown, ...segments, ...shown.split(/[^\p{L}\p{N}]+/u)].filter(Boolean);
+}
+
 function linkRow(link: SessionLink): PaletteLinkRow {
   return {
     key: link.url,
     value: `${link.label ?? ""} ${link.url}`,
     // "!link" reaches every row and nothing else: no title, folder or command contains "!".
-    keywords: [LINKS_QUERY, link.url],
+    keywords: [LINKS_QUERY, link.url, ...urlWords(link.url)],
     display: displayUrl(link.url),
     link,
   };
