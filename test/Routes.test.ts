@@ -9,7 +9,7 @@ import {
 } from "../web/src/lib/routes.ts";
 
 test("settings URLs preserve each section and accept the Providers alias", () => {
-  for (const section of ["providers", "radius", "mcp", "notifications"] as const) {
+  for (const section of ["providers", "radius", "mcp", "exe-dev"] as const) {
     const route = { kind: "settings", section } as const;
     assert.equal(routePath(route), `/settings/${section}`);
     assert.deepEqual(parseRoute({ pathname: `/settings/${section}` }), route);
@@ -20,12 +20,16 @@ test("settings URLs preserve each section and accept the Providers alias", () =>
     section: "providers",
   });
   assert.deepEqual(parseRoute({ pathname: "/settings/unknown" }), { kind: "new" });
+  assert.deepEqual(parseRoute({ pathname: "/settings/notifications" }), {
+    kind: "settings",
+    section: "exe-dev",
+  });
 });
 
 test("Radius addresses the Providers page, and is offered once in navigation", () => {
   assert.deepEqual(
     SETTINGS_PAGES.map((page) => page.id),
-    ["providers", "mcp", "notifications"],
+    ["providers", "mcp", "exe-dev"],
     "navigation lists one row per page, so Radius is not a row of its own",
   );
   assert.ok(

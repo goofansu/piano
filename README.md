@@ -39,9 +39,9 @@ with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-i
 
 ### Slack notifications on exe.dev
 
-Open **Settings → Notifications**, save an attached exe.dev Slack integration URL, and use **Test**
-to check delivery. Each completed response sends a link back to its session, even with the browser
-closed. See [notification setup and limits](docs/notifications.md).
+Open **Settings → exe.dev** and choose a Slack integration under **Notifications**. Use **Test**
+to check delivery or **Clear** to disable it. Each successful completed response sends a link back
+to its session, even with the browser closed. See [notification setup and limits](docs/notifications.md).
 
 ### Preview local files
 

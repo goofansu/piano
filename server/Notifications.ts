@@ -1,6 +1,7 @@
-/** exe.dev-only Slack preferences and best-effort delivery. No transcript content leaves Piano. */
-import { Clock, Context, Data, Effect, Layer, Queue, Schema, Semaphore } from "effect";
+/** One discovered Slack destination and best-effort delivery, independent of browser lifetimes. */
+import { Clock, Context, Data, Effect, Layer, Queue, Semaphore } from "effect";
 import type { NotificationAction, NotificationSettings } from "../shared/notifications.ts";
+import { ExeDev, ExeDevLive } from "./ExeDev.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { Registry } from "./Registry.ts";
 
@@ -14,48 +15,20 @@ export class NotificationError extends Data.TaggedError("NotificationError")<{
 export const NotificationFetch = Context.Reference<typeof fetch>("piano/NotificationFetch", {
   defaultValue: () => globalThis.fetch,
 });
-const Reflection = Schema.Struct({
-  name: Schema.String,
-  paths: Schema.Array(Schema.Struct({ path: Schema.String })),
-});
 const refused = (detail: string) => new NotificationError({ detail });
-
-function webhook(raw: string): string {
-  const value = raw.trim();
-  // Match the entire spelling as well as parsing: URL normalization must not hide paths or credentials.
-  if (!/^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.int\.exe\.xyz\/?$/i.test(value))
-    throw refused("Use an exe.dev Slack URL like https://slack-hook.int.exe.xyz/.");
-  return new URL(value).href;
-}
-
-async function smallJson(response: Response): Promise<unknown> {
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("Empty response");
-  let text = "";
-  let bytes = 0;
-  const decoder = new TextDecoder();
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      if (bytes > 16_384) throw new Error("Response too large");
-      text += decoder.decode(value, { stream: true });
-    }
-    return JSON.parse(text + decoder.decode());
-  } finally {
-    await reader.cancel();
-  }
-}
+// Only names validated by ExeDev's inventory reach this constructor.
+const destination = (name: string) => `https://${name.toLowerCase()}.int.exe.xyz/`;
+const savedName = (url: string) =>
+  /^https:\/\/([a-z0-9-]+)\.int\.exe\.xyz\/$/.exec(url)?.[1] ?? "Saved integration";
 
 export class Notifications extends Context.Service<
   Notifications,
   {
-    readonly state: Effect.Effect<NotificationSettings, NotificationError>;
+    readonly state: (refresh?: boolean) => Effect.Effect<NotificationSettings, NotificationError>;
     readonly change: (
       action: NotificationAction,
     ) => Effect.Effect<NotificationSettings, NotificationError>;
-    /** Nonblocking admission, called once for each live successful response. No historical replay. */
+    /** Nonblocking admission, once per live successful response. No historical replay. */
     readonly completed: (sessionId: string) => Effect.Effect<void>;
   }
 >()("piano/Notifications") {}
@@ -64,62 +37,41 @@ export const NotificationsLive = Layer.effect(
   Notifications,
   Effect.gen(function* () {
     const registry = yield* Registry;
+    const exe = yield* ExeDev;
     const fetch = yield* NotificationFetch;
-    // Deployment-owned origins, never Host/Origin headers or a guessed VM hostname.
-    // The first HTTPS browser origin is the canonical notification destination.
+    // Deployment-owned origins, never request headers or a guessed VM hostname.
     const origin = [...(yield* AllowedOrigins)].find((value) => value.startsWith("https://"));
     const problem = origin
       ? undefined
-      : "Set a public HTTPS Piano origin in PIANO_ALLOWED_ORIGINS to enable clickable notifications.";
+      : "Set a public HTTPS Piano origin in PIANO_ALLOWED_ORIGINS.";
     const slackLink = (path: string, label: string) =>
       `<${new URL(path, origin).href.replaceAll("&", "&amp;")}|${label}>`;
-    const detectionLock = yield* Semaphore.make(1);
     const changes = yield* Semaphore.make(1);
     const rateLock = yield* Semaphore.make(1);
-    let detected = false;
-    let retryAt = 0;
-    const detect = Semaphore.withPermits(
-      detectionLock,
-      1,
-    )(
-      Effect.gen(function* () {
-        if (detected) return true;
-        const now = yield* Clock.currentTimeMillis;
-        if (now < retryAt) return false;
-        retryAt = now + 30_000;
-        detected = yield* Effect.tryPromise({
-          try: async (signal) => {
-            const response = await fetch("https://reflection.int.exe.xyz/", {
-              signal,
-              redirect: "error",
-            });
-            if (!response.ok) {
-              await response.body?.cancel();
-              return false;
-            }
-            const metadata = Schema.decodeUnknownSync(Reflection)(await smallJson(response));
-            return metadata.name.trim().length > 0;
-          },
-          catch: () => refused("exe.dev detection unavailable."),
-        }).pipe(
-          Effect.timeout(1_000),
-          Effect.catch(() => Effect.succeed(false)),
-        );
-        return detected;
-      }),
-    );
     const savedWebhook = registry.notificationWebhook.pipe(
       Effect.mapError(() => refused("Could not read notification settings.")),
     );
-    const state = Effect.gen(function* () {
-      const available = yield* detect;
+    const slack = Effect.fn("Notifications.slack")(function* (refresh = false) {
+      const inventory = yield* exe.integrations(refresh);
+      return (
+        inventory
+          ?.filter((i) => i.type === "slack")
+          .map((i) => i.name)
+          .sort((a, b) => a.localeCompare(b)) ?? null
+      );
+    });
+    const state = Effect.fn("Notifications.state")(function* (refresh = false) {
+      const integrations = yield* slack(refresh);
+      const url = yield* savedWebhook;
       return {
-        detected: available,
-        webhook: available ? yield* savedWebhook : null,
-        ...(available && problem ? { problem } : {}),
+        integrations,
+        selected: url
+          ? (integrations?.find((name) => destination(name) === url) ?? savedName(url))
+          : null,
+        ...(problem ? { problem } : {}),
       };
     });
-    // Slack's limit is per user, including other VMs. This process cannot reserve their quota.
+    // Slack's per-user quota includes other VMs. This process cannot reserve their capacity.
     let sentAt: number[] = [];
     const waitMs = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
@@ -149,10 +101,7 @@ export const NotificationsLive = Layer.effect(
           await response.body?.cancel();
           if (!response.ok) throw new Error("Rejected");
         },
-        catch: () =>
-          refused(
-            "Slack did not accept the notification. Check the integration is attached and try again.",
-          ),
+        catch: () => refused("Slack did not accept the notification."),
       }).pipe(
         Effect.timeout(5_000),
         Effect.mapError(() =>
@@ -167,8 +116,11 @@ export const NotificationsLive = Layer.effect(
       const { url, sessionId } = yield* Queue.take(queue);
       const delay = yield* waitMs;
       if (delay > 0) yield* Effect.sleep(delay);
-      // Removal or replacement cancels old queued deliveries.
-      if (problem || !(yield* detect) || (yield* savedWebhook) !== url) return;
+      if (problem) return;
+      const names = yield* slack();
+      // Discovery may wait on HTTP: check the preference AFTER it, immediately before sending.
+      if (!names?.some((name) => destination(name) === url) || (yield* savedWebhook) !== url)
+        return;
       yield* send(
         url,
         `Piano: agent finished responding.\n${slackLink(`/s/${encodeURIComponent(sessionId)}`, "Open session")}`,
@@ -182,47 +134,47 @@ export const NotificationsLive = Layer.effect(
     return Notifications.of({
       state,
       change: Effect.fn("Notifications.change")(function* (action) {
+        if (action.action === "refresh") return yield* state(true);
         return yield* Semaphore.withPermits(
           changes,
           1,
         )(
           Effect.gen(function* () {
-            if (!(yield* detect))
-              return yield* refused("Notifications are available on detected exe.dev VMs only.");
-            if (problem && action.action !== "remove") return yield* refused(problem);
+            if (action.action === "select" && action.name === null) {
+              // Clear is local policy, never contingent on discovery or link configuration.
+              yield* registry
+                .setNotificationWebhook(null)
+                .pipe(Effect.mapError(() => refused("Could not clear notifications.")));
+              return yield* state();
+            }
+            if (problem) return yield* refused(problem);
+            const names = yield* slack(true);
+            if (names === null) return yield* refused("Couldn’t load integrations. Try again.");
             if (action.action === "test") {
               const url = yield* savedWebhook;
-              if (!url) return yield* refused("Save a Slack webhook before testing it.");
-              yield* send(
-                webhook(url),
-                `Piano: test notification.\n${slackLink("/", "Open Piano")}`,
-              );
+              if (!url || !names.some((name) => destination(name) === url))
+                return yield* refused("Select an available Slack integration.");
+              yield* send(url, `Piano: test notification.\n${slackLink("/", "Open Piano")}`);
             } else {
-              const url =
-                action.action === "remove"
-                  ? null
-                  : yield* Effect.try({
-                      try: () => webhook(action.url),
-                      catch: () =>
-                        refused("Use an exe.dev Slack URL like https://slack-hook.int.exe.xyz/."),
-                    });
+              if (action.name === null || !names.includes(action.name))
+                return yield* refused("Select an available Slack integration.");
               yield* registry
-                .setNotificationWebhook(url)
-                .pipe(Effect.mapError(() => refused("Could not save notification settings.")));
+                .setNotificationWebhook(destination(action.name))
+                .pipe(Effect.mapError(() => refused("Could not save notifications.")));
             }
-            return yield* state;
+            return yield* state();
           }),
         );
       }),
       completed: Effect.fn("Notifications.completed")(
         function* (sessionId) {
           const url = yield* savedWebhook;
-          // Detection and HTTP belong to the worker, never the session observer.
+          // Network and discovery are owned by the worker, not the session observer.
           if (problem || !url) return;
-          yield* Queue.offer(queue, { url: webhook(url), sessionId });
+          yield* Queue.offer(queue, { url, sessionId });
         },
         Effect.catchCause(() => Effect.logWarning("A Slack notification could not be queued.")),
       ),
     });
   }),
-);
+).pipe(Layer.provideMerge(ExeDevLive));

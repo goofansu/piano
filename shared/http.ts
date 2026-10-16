@@ -311,18 +311,25 @@ export const Endpoints = {
     redact: false,
     fallback: "Could not load Radius setup.",
   }),
-  notifications: endpoint({
+  exeDevEnvironment: endpoint({
     method: "GET",
-    path: "/api/settings/notifications",
+    path: "/api/settings/exe-dev/environment",
+    response: Schema.Struct({ detected: Schema.Boolean }),
+    noStore: true,
+    fallback: "Could not detect exe.dev.",
+  }),
+  exeDevSettings: endpoint({
+    method: "GET",
+    path: "/api/settings/exe-dev",
     response: NotificationSettings,
     noStore: true,
     refused: 409,
     redact: false,
     fallback: "Could not load notifications.",
   }),
-  changeNotifications: endpoint({
+  changeExeDevSettings: endpoint({
     method: "POST",
-    path: "/api/settings/notifications",
+    path: "/api/settings/exe-dev",
     body: NotificationAction,
     response: NotificationSettings,
     noStore: true,

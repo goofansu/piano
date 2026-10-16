@@ -3,9 +3,9 @@ import { AlertCircleIcon, CheckCircle2Icon, HomeIcon, PlugIcon } from "lucide-re
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
+import { ExeDevSettings } from "@/components/ExeDevSettings";
 import { IconButton } from "@/components/IconButton";
 import { McpSettings } from "@/components/McpSettings";
-import { NotificationSettings } from "@/components/NotificationSettings";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
@@ -48,7 +48,7 @@ import {
   settingsAvailable,
   settingsPage,
 } from "@/lib/routes";
-import { useNotifications } from "@/lib/useNotifications";
+import { useExeDev } from "@/lib/useExeDev";
 import { providerAccounts, useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSetupActions } from "@/lib/useSetupActions";
 
@@ -67,7 +67,7 @@ export function SettingsNavigation({
 }) {
   // Radius addresses the Providers page, so its row stays the current one while Radius shows.
   const current = settingsPage(section);
-  const detected = !!useNotifications().value?.detected;
+  const detected = !!useExeDev().value?.detected;
   const menu = (
     <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
       <SidebarMenu>
@@ -132,7 +132,7 @@ export function SettingsPage({
       <ProvidersSettings revealRadius={section === "radius" ? request : undefined} />
     ),
     mcp: () => <McpSettings />,
-    notifications: () => <NotificationSettings />,
+    "exe-dev": () => <ExeDevSettings />,
   };
   return pages[page]();
 }

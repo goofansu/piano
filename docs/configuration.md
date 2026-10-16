@@ -59,9 +59,9 @@ the backend address. For the exe.dev setup, see
 
 ## Notifications
 
-On exe.dev, [Slack notifications](notifications.md) notify one configured webhook when an agent
-finishes responding. Configure it in Settings; the URL persists in Piano’s database, while positive
-environment detection is remembered only until the backend restarts.
+In **Settings → exe.dev**, [Slack notifications](notifications.md) use one selected, attached Slack
+integration when an agent finishes responding. Selection persists in Piano’s database. Positive
+environment detection lasts until backend restart; the integration catalog refreshes separately.
 
 ## Registry storage
 

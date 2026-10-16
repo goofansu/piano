@@ -1,7 +1,8 @@
 # exe.dev Settings and discovered Slack integrations
 
 Research date: 2026-10-16. Inspected revision: `9965d47` (clean working tree).
-Status: proposal only; this note does not implement the page or change deployed behavior.
+Status: implemented locally following this proposal; see [the current guide](../notifications.md)
+and the implementation verification below. No deployment or push is part of this implementation.
 
 ## Recommendation
 
@@ -171,7 +172,41 @@ notification; clearing stops future sends, and discovery errors never masquerade
 This research changed documentation only: reviewed sources and local links, not application suites
 or browser journeys. Deployment from the preceding request was separately confirmed by `DEPLOY OK`
 in `/var/log/piano-deploy/manual.log`; no additional deployment was initiated by this research.
-No push is authorized. The proposal remains unimplemented.
+No push is authorized. The following implementation was subsequently verified locally.
+
+## Implementation verification — 2026-10-16
+
+Implemented on top of `28381a7`; verified the resulting implementation working tree on the exe.dev
+Linux VM with Node 24.21.0. Discovery now lives in `server/ExeDev.ts`; Notifications keeps delivery
+and preference policy. The user-facing guide describes the implemented behavior. The public
+selection contract carries names/null, with no schema-5 database migration.
+
+- `npm run typecheck`, `npm run lint` and `git diff --check`: passed.
+- `npm test`: 743 passed. Coverage includes independent one-second index/body deadlines, sticky
+  detection with fresh inventory, expiry/explicit refresh, missing/changed discovery permission,
+  malformed/oversized/duplicate-name responses, Slack-only opt-in selection, legacy preferences,
+  empty versus failed catalogs, clearing during discovery/origin failure, stale queued destinations,
+  type changes, unchanged rate limiting, and linked delivery without a browser.
+- Mutation check: temporarily removed the Slack type filter. The selection test failed because
+  `notify` and `slack-bot` appeared as choices. Restored the filter and the full suite passed.
+- Scratch `agent-browser` journey passed: exe.dev navigation and palette, old Notifications URL
+  alias, actual Radix pointer selection, immediate persistence/reload, Test, Clear, missing selection,
+  a choice removed between loading and selecting, discovery error/Retry, empty list/Refresh, no
+  automatic selection, and desktop/phone layout. Only two explicit Test actions produced mocked
+  POSTs; no real notification or model call occurred. An initial script asserted the first DOM h1
+  and found the intentionally mounted hidden New page; it was corrected to scope the assertion to
+  Settings, without changing the app or weakening the expected heading.
+- Standard style-shots: 22 before/after pairs compared. Eighteen match at 5% tolerance; the remaining
+  differences are scratch directory text in three menus and 16 transient pixels on the New page.
+  The general gallery had unavailable environment detection in both runs; the separate mocked
+  journey verifies the visible exe.dev entry, selector and quiet layout at desktop and phone widths.
+
+Evidence on this VM: `/tmp/piano-exedev-focused.log`, `/tmp/piano-exedev-tests.log`,
+`/tmp/piano-exedev-mutation.log`, `/tmp/piano-exedev-browser/`, `/tmp/piano-exedev-before/`,
+`/tmp/piano-exedev-after/`, and `/tmp/piano-exedev-style-comparison.txt`. Browser/preload scripts
+remain uncommitted, and their harness cleaned up scratch processes, databases and session directories.
+External Slack receipt, private-link click-through and physical mobile browsers were not tested.
+No production database mutation, new deployment or push was performed.
 
 ## Sources
 
@@ -184,8 +219,8 @@ No push is authorized. The proposal remains unimplemented.
 4. [shadcn Select](https://ui.shadcn.com/docs/components/radix/select), fetched for this research;
    existing [`PianoSelect`](../../web/src/components/PianoSelect.tsx).
 5. Current [`Notifications`](../../server/Notifications.ts), [wire settings](../../shared/notifications.ts),
-   [settings page](../../web/src/components/NotificationSettings.tsx),
-   [observation hook](../../web/src/lib/useNotifications.ts),
+   [settings page](../../web/src/components/ExeDevSettings.tsx),
+   [environment observation hook](../../web/src/lib/useExeDev.ts),
    [mutation ordering](../../web/src/lib/observation.ts) and [user guide](../notifications.md).
 6. Shared [Settings destinations](../../web/src/lib/routes.ts),
    [page map/navigation](../../web/src/components/SettingsPage.tsx) and

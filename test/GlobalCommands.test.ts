@@ -32,9 +32,11 @@ const ctx: GlobalCommandContext = {
 const labels = (state: AppState, c = ctx) =>
   globalCommands(state, c).map((command) => command.label);
 
-test("Notifications is offered only after backend exe.dev detection", () => {
-  assert.equal(labels(onNewPage).includes("Notifications"), false);
-  assert.equal(labels(onNewPage, { ...ctx, exeDetected: true }).includes("Notifications"), true);
+test("exe.dev is offered only after detection, without a duplicate Notifications entry", () => {
+  assert.equal(labels(onNewPage).includes("exe.dev"), false);
+  const detected = labels(onNewPage, { ...ctx, exeDetected: true });
+  assert.equal(detected.includes("exe.dev"), true);
+  assert.equal(detected.includes("Notifications"), false);
 });
 
 test("trust is offered only where Pi requires it, and waits for a connection", () => {

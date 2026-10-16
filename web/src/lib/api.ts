@@ -202,12 +202,12 @@ export const saveDefaults = async (
   options?: RequestOptions,
 ) => (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;
 
-export const notificationSettings = (options?: RequestOptions) =>
-  call(Endpoints.notifications, {}, options);
-export const changeNotifications = (
-  body: typeof Endpoints.changeNotifications.body.Type,
+export const exeDevEnvironment = (options?: RequestOptions) =>
+  call(Endpoints.exeDevEnvironment, {}, options);
+export const changeExeDevSettings = (
+  body: typeof Endpoints.changeExeDevSettings.body.Type,
   options?: RequestOptions,
-) => call(Endpoints.changeNotifications, { body }, options);
+) => call(Endpoints.changeExeDevSettings, { body }, options);
 
 // Settings
 

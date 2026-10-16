@@ -12,6 +12,7 @@ import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
+import { ExeDev } from "./ExeDev.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
 import { Notifications } from "./Notifications.ts";
@@ -291,10 +292,13 @@ export const AppRouter = HttpRouter.use((router) =>
       ),
     );
 
-    yield* serve(Endpoints.notifications, () =>
-      Effect.flatMap(Notifications, (notifications) => notifications.state),
+    yield* serve(Endpoints.exeDevEnvironment, () =>
+      Effect.flatMap(ExeDev, (exe) => exe.detected).pipe(Effect.map((detected) => ({ detected }))),
     );
-    yield* serve(Endpoints.changeNotifications, ({ body }) =>
+    yield* serve(Endpoints.exeDevSettings, () =>
+      Effect.flatMap(Notifications, (notifications) => notifications.state()),
+    );
+    yield* serve(Endpoints.changeExeDevSettings, ({ body }) =>
       Effect.flatMap(Notifications, (notifications) => notifications.change(body)),
     );
 

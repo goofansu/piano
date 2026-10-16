@@ -25,9 +25,9 @@ import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { parseRoute } from "@/lib/routes";
 import { useClient } from "@/lib/useClient";
+import { ExeDevContext, useExeDevController } from "@/lib/useExeDev";
 import { modelCatalogs } from "@/lib/useModelCatalog";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
-import { NotificationContext, useNotificationController } from "@/lib/useNotifications";
 import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SidebarLayoutContext, useSidebarLayoutController } from "@/lib/useSidebarLayout";
 import { type AppState, initialState } from "@/store";
@@ -55,7 +55,7 @@ export default function App() {
   useEffect(() => checkoutRefresh.follow(client), [client]);
   useEffect(() => drafts.follow(client), [client]);
   const layout = useSidebarLayoutController();
-  const notifications = useNotificationController();
+  const exeDev = useExeDevController();
 
   const navigation = useNavigationController(client, layout.closeMobile);
   const { settings, settingsRequest } = useSyncExternalStore(
@@ -73,7 +73,7 @@ export default function App() {
   return (
     <SidebarLayoutContext.Provider value={layout}>
       <NavigationContext.Provider value={navigation}>
-        <NotificationContext.Provider value={notifications}>
+        <ExeDevContext.Provider value={exeDev}>
           <CommandHost state={state} send={send}>
             <AppLayout
               navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
@@ -147,7 +147,7 @@ export default function App() {
               <DialogHost pending={pendingDialogs(state)} send={send} />
             </AppLayout>
           </CommandHost>
-        </NotificationContext.Provider>
+        </ExeDevContext.Provider>
       </NavigationContext.Provider>
     </SidebarLayoutContext.Provider>
   );
