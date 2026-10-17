@@ -2,14 +2,15 @@ import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { cn } from "cn";
 import {
   ArrowDownIcon,
+  ArrowUpRightIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
+  CornerDownRightIcon,
   GitBranchIcon,
   HistoryIcon,
   PuzzleIcon,
   SparklesIcon,
-  SplitIcon,
   TerminalIcon,
 } from "lucide-react";
 import {
@@ -698,8 +699,8 @@ function OpenSession({ cwd, sessionId }: { cwd: string; sessionId: string }) {
   return (
     <IconButton asChild label="Open session" size="icon-xs" className="-my-1 shrink-0 text-ink-3">
       <a {...link}>
-        {/* The chevron's size, and the glyph the dispatched session's "Dispatched from" row starts with. */}
-        <SplitIcon className="size-3.5" />
+        {/* Go there, beside the chevron's expand here: its size, and no box, unlike leaving Piano. */}
+        <ArrowUpRightIcon className="size-3.5" />
       </a>
     </IconButton>
   );
@@ -709,7 +710,10 @@ function OpenSession({ cwd, sessionId }: { cwd: string; sessionId: string }) {
 function DispatchedFrom({ parent }: { parent: NonNullable<Props["dispatchedFrom"]> }) {
   return (
     // The row, not the line, takes the size: the gutter is one of the row's own lines tall.
-    <Row glyph={<SplitIcon className="size-3.5 text-ink-3" aria-hidden />} className="text-sm">
+    <Row
+      glyph={<CornerDownRightIcon className="size-3.5 text-ink-3" aria-hidden />}
+      className="text-sm"
+    >
       <p data-slot="dispatched-from" className="truncate text-ink-3">
         Dispatched from {parent === "unlisted" ? "another session" : <ParentLink {...parent} />}
       </p>
