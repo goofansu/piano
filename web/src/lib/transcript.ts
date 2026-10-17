@@ -237,11 +237,12 @@ function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, string>
 function dispatchFacts(
   call: ToolCall,
   output: string | undefined,
-  settled: boolean,
+  outcome: ToolOutcome,
   briefs: ReadonlyMap<string, string>,
 ): DispatchFacts[] | undefined {
   if (call.name !== START_TOOL && call.name !== WAIT_TOOL) return undefined;
   const args = parsed(call.args);
+  const settled = outcome === "done" || outcome === "failed";
   const result = settled ? parsed(output) : undefined;
   if (settled && !result) return undefined;
   if (call.name === START_TOOL) {
@@ -249,7 +250,9 @@ function dispatchFacts(
     const handle = recordOf(result?.handle);
     const creation = stringOf(result?.creation);
     const [status, badge]: [string, Badge] = !result
-      ? ["Starting", "secondary"]
+      ? outcome === "incomplete"
+        ? ["Incomplete", "warning"]
+        : ["Starting", "secondary"]
       : creation === "refused"
         ? ["Not started", "destructive"]
         : creation === "created"
@@ -279,8 +282,8 @@ function dispatchFacts(
     const sessions = Array.isArray(args?.sessions) ? args.sessions : [];
     return sessions.map((handle) => ({
       ...observed(recordOf(handle)),
-      status: "Waiting",
-      badge: "secondary" as const,
+      status: outcome === "incomplete" ? "Incomplete" : "Waiting",
+      badge: outcome === "incomplete" ? ("warning" as const) : ("secondary" as const),
     }));
   }
   const results = Array.isArray(result.results) ? result.results : [];
@@ -596,7 +599,7 @@ export function transcriptRows(
             ? "Incomplete"
             : verbDone;
     const card = result?.subagent ?? execution?.subagent;
-    const dispatch = dispatchFacts(call, output, !!result && outcome !== "running", briefs);
+    const dispatch = dispatchFacts(call, output, outcome, briefs);
     return {
       call,
       result,
