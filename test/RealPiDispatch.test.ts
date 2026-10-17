@@ -45,6 +45,7 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
     assert.equal(selected._tag, "selected");
     const parentSessionId = selected._tag === "selected" ? selected.sessionId : null;
     assert.ok(parentSessionId, "the parent session must be created and hosted");
+    assert.equal(selected._tag === "selected" && selected.snapshot.state.thinkingLevel, "low");
 
     const reported = await client.next(
       (message) =>
@@ -92,6 +93,23 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
 
     const handle = fixture.handle();
     assert.ok(handle, "the model read the handle out of the start tool's visible text");
+
+    const childSelectionId = randomUUID();
+    client.send({
+      _tag: "select",
+      selectionId: childSelectionId,
+      cwd: handle.cwd as string,
+      sessionId: handle.sessionId as string,
+    });
+    const childView = await client.next(
+      (message) => message._tag === "selected" && message.selectionId === childSelectionId,
+      "the child's requested thinking level",
+    );
+    assert.equal(
+      childView._tag === "selected" && childView.snapshot.state.thinkingLevel,
+      "high",
+      "the tool's explicit effort overrides normal defaults in the real Pi session",
+    );
 
     // One owner: Piano starts every Pi, and each session has exactly one process.
     const sessions = fixture.spawns().filter((spawned) => spawned.sessionId !== null);

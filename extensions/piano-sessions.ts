@@ -1,6 +1,7 @@
 /** Bundled Pi tools: dispatch through Piano, never launch or own another Pi process. */
 import { type JsonValue, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ThinkingLevel } from "../shared/wire.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import { startSession, waitSessions } from "./SessionDispatch.ts";
 
@@ -72,11 +73,19 @@ export default function pianoSessions(pi: ExtensionAPI) {
       name: "piano_start_session",
       label: "Start Piano session",
       description:
-        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout; use separate prepared worktrees for concurrent writing tasks. model is an optional provider/model; otherwise normal new-session defaults apply. Returns the initial prompt's disposition, a handle to pass unchanged to piano_wait_sessions, and an Open session link. Creation/admission is not completion. On uncertain delivery inspect Piano before trying again: never automatically repeat dispatch.",
+        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout; use separate prepared worktrees for concurrent writing tasks. model is an optional provider/model; thinkingLevel optionally sets reasoning effort supported by that model. Omitted options use normal new-session defaults, not the parent's settings. Returns the initial prompt's disposition, a handle to pass unchanged to piano_wait_sessions, and an Open session link. Creation/admission is not completion. On uncertain delivery inspect Piano before trying again: never automatically repeat dispatch.",
       parameters: Type.Object({
         prompt: Type.String({ minLength: 1, description: "Self-contained work brief" }),
         cwd: Type.Optional(Type.String({ minLength: 1 })),
         model: Type.Optional(Type.String({ minLength: 1 })),
+        thinkingLevel: Type.Optional(
+          Type.Union(
+            ThinkingLevel.literals.map((level) => Type.Literal(level)),
+            {
+              description: "Reasoning effort; choose a level supported by the selected model.",
+            },
+          ),
+        ),
       }),
       outputSchema: Type.Object({
         cwd: Type.String(),

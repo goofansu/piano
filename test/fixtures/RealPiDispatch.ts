@@ -282,7 +282,7 @@ export async function startRealPiDispatch(
       const schema = declared.find((tool) => tool.function?.name === startTool)?.function
         ?.parameters;
       if (!schema) return record(refuse(response, `${startTool} was not declared to the model`));
-      const args = { prompt: brief, model };
+      const args = { prompt: brief, model, thinkingLevel: "high" };
       respond(
         response,
         body.model,
@@ -368,7 +368,7 @@ export async function startRealPiDispatch(
           {
             id: "local",
             name: "Dispatch fixture",
-            reasoning: false,
+            reasoning: true,
             input: ["text"],
             contextWindow: 200000,
             maxTokens: 256,
@@ -382,6 +382,7 @@ export async function startRealPiDispatch(
   json(join(agentDir, "settings.json"), {
     defaultProvider: "piano-dispatch",
     defaultModel: "local",
+    defaultThinkingLevel: "low",
     cacheWarming: "off",
     defaultProjectTrust: "ask",
   });

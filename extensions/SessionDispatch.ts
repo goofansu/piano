@@ -19,6 +19,7 @@ import type {
   ServerMessage,
   SessionClosure,
   Snapshot,
+  ThinkingLevel,
 } from "../shared/wire.ts";
 import { type Connection, openConnection, type SocketEnvironment } from "../web/src/lib/ws.ts";
 
@@ -28,6 +29,7 @@ export interface StartRequest {
   readonly prompt: string;
   readonly cwd: string;
   readonly model?: string;
+  readonly thinkingLevel?: ThinkingLevel;
 }
 
 /**
@@ -236,7 +238,7 @@ export function startSession(
   environment: SocketEnvironment,
   signal?: AbortSignal,
 ): Promise<StartResult> {
-  const { cwd, prompt, model } = request;
+  const { cwd, prompt, model, thinkingLevel } = request;
   return observe<StartResult>(
     environment,
     { deadlineMs: START_DEADLINE_MS, signal },
@@ -291,7 +293,7 @@ export function startSession(
               _tag: "create_session",
               selectionId,
               cwd,
-              options: model === undefined ? {} : { model },
+              options: { model, thinkingLevel },
               text: prompt,
             });
             return;

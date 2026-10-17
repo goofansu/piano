@@ -236,7 +236,10 @@ test(
   async () => {
     const h = world();
     const baseline = [message("m1", "context", "startup")];
-    const start = startSession({ cwd: asked, prompt: "do the thing", model: "p/m" }, h.env);
+    const start = startSession(
+      { cwd: asked, prompt: "do the thing", model: "p/m", thinkingLevel: "high" },
+      h.env,
+    );
     h.last().accept();
     const socket = h.last();
     socket.frame(selected(socket.selection(), snapshotOf({}, baseline)));
@@ -251,7 +254,7 @@ test(
     assert.equal(creations.length, 1);
     assert.deepEqual(
       { cwd: creations[0]!.cwd, text: creations[0]!.text, options: creations[0]!.options },
-      { cwd: asked, text: "do the thing", options: { model: "p/m" } },
+      { cwd: asked, text: "do the thing", options: { model: "p/m", thinkingLevel: "high" } },
     );
     assert.equal(result.creation, "created");
     assert.equal(result.submission, "started");
@@ -335,6 +338,11 @@ test(
     // Give the transport every chance to reconnect and repeat the mutation.
     h.advance(10_000);
     assert.equal(h.sentOf("create_session").length, 1, "the prompt is created at most once");
+    assert.deepEqual(
+      h.sentOf("create_session")[0]!.options,
+      {},
+      "omitted options keep normal defaults",
+    );
     assert.equal(h.sockets.length, 1, "a settled start opens no further sockets");
     assert.equal(h.pendingTimers(), 0);
   },
