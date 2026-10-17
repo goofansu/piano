@@ -2,6 +2,7 @@ import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { cn } from "cn";
 import {
   ArrowDownIcon,
+  ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
@@ -25,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { DisclosureChevron } from "@/components/Disclosure";
+import { IconButton } from "@/components/IconButton";
 import { Markdown } from "@/components/Markdown";
 import { PianoButton } from "@/components/PianoButton";
 import { Keys } from "@/components/PianoMark";
@@ -695,9 +697,11 @@ function useSessionLink(cwd: string, sessionId: string) {
 function OpenSession({ cwd, sessionId }: { cwd: string; sessionId: string }) {
   const link = useSessionLink(cwd, sessionId);
   return (
-    <Button asChild variant="ghost" size="xs" className="-my-1 shrink-0 text-ink-2">
-      <a {...link}>Open</a>
-    </Button>
+    <IconButton asChild label="Open session" size="icon-xs" className="-my-1 shrink-0 text-ink-2">
+      <a {...link}>
+        <ArrowRightIcon />
+      </a>
+    </IconButton>
   );
 }
 
