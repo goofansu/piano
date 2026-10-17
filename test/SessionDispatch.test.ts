@@ -691,6 +691,30 @@ for (const change of ["generation", "submission", "prefix", "later input", "hist
     assert.equal(observation!.status, "unknown", "a session that is no longer ours ends the wait");
   });
 
+for (const closure of [
+  { _tag: "released", detail: "Pi was released" },
+  { _tag: "released_during_work", detail: "Pi was released during work" },
+  { _tag: "exited", code: 0, detail: "Pi exited with code 0" },
+  { _tag: "failed", detail: "Pi failed" },
+] as const)
+  test(`history-only ${closure._tag} cannot establish this input's outcome`, bounded, async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    h.last().accept();
+    const socket = h.last();
+    // Retired hosts attach their remembered closure to saved history, without a live cursor.
+    const history = selected(socket.selection(), idle(answered(), { closure }), { hosted: false });
+    assert.equal(history._tag, "selected");
+    socket.frame({ ...history, cursor: null });
+    const [observation] = await wait;
+    assert.equal(observation!.status, "unknown");
+    assert.equal(observation!.answer, null);
+    assert.equal(observation!.attribution, "unattributable");
+    assert.match(observation!.detail ?? "", /only its history is readable/);
+    assert.equal(observation!.ending, "observed");
+    assert.equal(h.pendingTimers(), 0);
+  });
+
 test(
   "a projection failure ends the wait instead of waiting out the deadline",
   bounded,

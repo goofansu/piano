@@ -557,13 +557,8 @@ function attribute(
   });
   if (snapshot.state.projectionError || snapshot.state.stateRefreshError)
     return mismatch(snapshot.state.projectionError ?? snapshot.state.stateRefreshError!);
-  // History has no live submission or cursor to compare; `read` names that case itself.
-  if (!hosted)
-    return {
-      answer: null,
-      attribution: "unattributable",
-      detail: "The session is not running; only its history is readable.",
-    };
+  // A remembered closure in saved history cannot speak for this handle's live input.
+  if (!hosted) return mismatch("The session is not running; only its history is readable.");
   if (generation !== handle.generation)
     return mismatch("Pi restarted; this incarnation cannot answer for that input.");
   if (handle.submissionId === null)
@@ -628,23 +623,12 @@ interface Reading {
  * The session's own facts, in the order that decides them. A closure, a mismatch or a projection
  * failure ends observation at once — even mid-run — because waiting longer cannot improve them.
  */
-function read(
-  snapshot: Snapshot,
-  hosted: boolean,
-  attributed: Attributed,
-  completed: boolean,
-): Reading {
+function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): Reading {
   const state = snapshot.state;
+  // Attribution owns view validity, including history-only and projection failures. No lifecycle
+  // fact may bypass that gate; output already captured is retained separately by observation.
   if (attributed.mismatch) return { status: "unknown", terminal: true, detail: attributed.detail };
   if (state.closure) return closureReading(state.closure, completed);
-  const projection = state.projectionError ?? state.stateRefreshError;
-  if (projection) return { status: "unknown", terminal: true, detail: projection };
-  if (!hosted)
-    return {
-      status: "unknown",
-      terminal: true,
-      detail: "The session is not running; only its history is readable.",
-    };
   const submission = state.submission;
   if (submission?.outcome === "rejected")
     return {
@@ -790,7 +774,7 @@ function observeHandle(
       // Output attribution does not depend on execution ending: message_end can arrive while
       // still streaming. Retain empty newer replies too, never falling back to older text.
       if (attributed.attribution !== "unattributable") captured = attributed;
-      const reading = read(snapshot, hosted, attributed, completed(attributed));
+      const reading = read(snapshot, attributed, completed(attributed));
       if (!reading.terminal) {
         link.cancel(recheck);
         recheck = undefined;
@@ -828,9 +812,7 @@ function observeHandle(
       const attributed = snapshot
         ? attribute(handle, snapshot, hosted, generation)
         : { answer: null, attribution: "unattributable" as const };
-      const reading = snapshot
-        ? read(snapshot, hosted, attributed, completed(attributed))
-        : undefined;
+      const reading = snapshot ? read(snapshot, attributed, completed(attributed)) : undefined;
       return observation(
         reading && !reading.terminal ? "running" : (reading?.status ?? "unknown"),
         ending,
