@@ -1,5 +1,5 @@
 import type { FinalOutput, RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
-import { abbrevHome, stripAnsi } from "./format.ts";
+import { abbrevHome, stripAnsi, toolArgsText } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
 /** DOM id of a message's article, so a jump can find it without a shared ref. */
@@ -97,8 +97,8 @@ export interface DispatchFacts {
   /** The parent's observation, never the child's current state. */
   status: string;
   badge: Badge;
-  /** The brief, as sent. Start rows only. */
-  brief?: string;
+  /** The call's arguments as `key: value` lines, as other tool calls show them. Start rows only. */
+  params?: string;
   /** The session's answer, as a wait observed it. */
   answer?: string;
   /** Why the observation is limited, in the tool's own words. */
@@ -262,7 +262,7 @@ function dispatchFacts(
         title: messageLabel(brief) || "New session",
         status,
         badge,
-        ...(brief ? { brief } : {}),
+        ...(call.args ? { params: toolArgsText(call.args) } : {}),
         ...(stringOf(result?.detail) ? { detail: stringOf(result?.detail) } : {}),
       },
     ];

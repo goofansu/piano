@@ -987,11 +987,18 @@ test("a tool's output shows as text: terminal colours, hyperlink escapes and \\r
 test("a dispatch names each session it started or waited on, with the parent's observation", () => {
   const handle = { cwd: "/repo", sessionId: "child-1" };
   const brief = "Review the current diff.\nDo not edit files.";
+  const params = `prompt:\n${brief}\nthinkingLevel: low`;
   const start: RenderMsg = {
     id: "start",
     role: "assistant",
     text: "",
-    toolCalls: [{ id: "s", name: "piano_start_session", args: JSON.stringify({ prompt: brief }) }],
+    toolCalls: [
+      {
+        id: "s",
+        name: "piano_start_session",
+        args: JSON.stringify({ prompt: brief, thinkingLevel: "low" }),
+      },
+    ],
   };
   const started: RenderMsg = {
     id: "started",
@@ -1025,7 +1032,7 @@ test("a dispatch names each session it started or waited on, with the parent's o
       title: "Review the current diff. Do not edit files.",
       status: "Starting",
       badge: "secondary",
-      brief,
+      params,
     },
   ]);
   assert.deepEqual(dispatch([start, started], "start")?.[0], {
@@ -1034,7 +1041,7 @@ test("a dispatch names each session it started or waited on, with the parent's o
     title: "Review the current diff. Do not edit files.",
     status: "Started",
     badge: "secondary",
-    brief,
+    params,
   });
   assert.deepEqual(
     dispatch([start, started, wait], "wait")?.map((s) => [s.sessionId, s.title, s.status]),

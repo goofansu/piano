@@ -644,10 +644,10 @@ function SubagentCardView({
   );
 }
 
-/** A session a dispatch tool started or waited on: its brief, what the parent observed, and a way
+/** A session a dispatch tool started or waited on: the call's arguments, what the parent observed, and a way
  * to open it beside the header, so reaching the session never needs the row unfolded. */
 function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: ToolOutcome }) {
-  const { sessionId, cwd, title, status, badge, brief, answer, detail } = session;
+  const { sessionId, cwd, title, status, badge, params, answer, detail } = session;
   return (
     <FoldRow
       glyph={
@@ -662,15 +662,15 @@ function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: To
         </>
       }
       label={`Dispatched session: ${title}`}
-      canOpen={!!(brief || answer || detail)}
+      canOpen={!!(params || answer || detail)}
       bodyClassName="flex flex-col gap-3"
       data={{ "data-slot": "dispatch-row", "data-session-id": sessionId ?? undefined }}
       action={sessionId && <OpenSession cwd={cwd} sessionId={sessionId} />}
     >
       {detail && <p className="text-xs text-ink-3">{detail}</p>}
-      {brief && (
+      {params && (
         <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-fill px-3 py-2 text-ink-2">
-          {clamp(brief, 8000)}
+          {clamp(params, 8000)}
         </pre>
       )}
       {answer && <FoldedOutput text={answer} markdown failed={false} />}
