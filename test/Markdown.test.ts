@@ -56,6 +56,27 @@ test("GitHub rendering leaves code and unrelated URLs alone and escapes untruste
   assert.ok(!renderMarkdown(`[javascript](javascript:alert(1))`).includes("<a"));
 });
 
+test("Linear links reuse the MCP logo and preserve destinations and labels", () => {
+  const url = "https://linear.app/team/issue/ENG-42/fix?x=1&y=2#comment";
+  const html = renderMarkdown(`${url}, [**Fix**](${url}) <${url}>`);
+  assert.equal((html.match(/class="linear-link"/g) ?? []).length, 3);
+  assert.equal((html.match(/href="\/mcp-logos.svg#linear"/g) ?? []).length, 3);
+  assert.ok(html.includes(`href="${url.replaceAll("&", "&amp;")}"`));
+  assert.ok(html.includes(`title="${url.replaceAll("&", "&amp;")}"`));
+  assert.ok(html.includes("</svg><strong>Fix</strong></a>"));
+  assert.ok(html.includes("#comment</a>,"));
+  assert.ok(!renderMarkdown(`\`${url}\`\n\n\`\`\`\n${url}\n\`\`\``).includes("<a"));
+  for (const other of [
+    "https://linear.app.evil.test/team/issue/ENG-42",
+    "https://linear.app@evil.test/team/issue/ENG-42",
+    "https://user@linear.app/team/issue/ENG-42",
+    "https://linear.app:8080/team/issue/ENG-42",
+  ]) {
+    assert.equal(renderMarkdown(other), `<p>${other}</p>`);
+    assert.ok(!renderMarkdown(`[link](${other})`).includes("linear-link"));
+  }
+});
+
 test("local Markdown links are preview actions, never filesystem HTTP URLs", () => {
   for (const [destination, path] of [
     ["src/main.ts", "src/main.ts"],

@@ -586,12 +586,14 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
-.prose-chat .github-link {
+.prose-chat .github-link,
+.prose-chat .linear-link {
   display: inline-block;
   max-width: 100%;
   vertical-align: bottom;
 }
-.prose-chat .github-link-icon {
+.prose-chat .github-link-icon,
+.prose-chat .linear-link-icon {
   display: inline-block;
   width: 1em;
   height: 1em;
