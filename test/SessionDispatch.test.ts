@@ -6,7 +6,11 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type SessionHandle, startSession, waitSessions } from "../extensions/SessionDispatch.ts";
+import {
+  type SessionHandle,
+  startSession,
+  waitSessions,
+} from "../extensions/piano-sessions/SessionDispatch.ts";
 import {
   type ClientMessage,
   encodeServerMessage,

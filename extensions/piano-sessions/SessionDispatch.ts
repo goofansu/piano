@@ -12,7 +12,7 @@
  * kept: later interference cannot retract what this call saw.
  */
 import { createHash } from "node:crypto";
-import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
+import { applySessionEvent, isWorking } from "../../shared/sessionProjection.ts";
 import type {
   ClientMessage,
   RenderMsg,
@@ -20,8 +20,8 @@ import type {
   SessionClosure,
   Snapshot,
   ThinkingLevel,
-} from "../shared/wire.ts";
-import { type Connection, openConnection, type SocketEnvironment } from "../web/src/lib/ws.ts";
+} from "../../shared/wire.ts";
+import { type Connection, openConnection, type SocketEnvironment } from "../../web/src/lib/ws.ts";
 
 // ── Public vocabulary ───────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 /** Bundled Pi tools: dispatch through Piano, never launch or own another Pi process. */
 import { type JsonValue, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { ThinkingLevel } from "../shared/wire.ts";
+import { ThinkingLevel } from "../../shared/wire.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import { startSession, waitSessions } from "./SessionDispatch.ts";
 

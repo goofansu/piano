@@ -20,7 +20,7 @@ test("Piano's extension is resolved from the installation, never from the sessio
   assert.ok(isAbsolute(sessionExtension));
   assert.equal(
     sessionExtension,
-    fileURLToPath(new URL("../extensions/piano-sessions.ts", import.meta.url)),
+    fileURLToPath(new URL("../extensions/piano-sessions/index.ts", import.meta.url)),
   );
   assert.deepEqual(defaultPiCli().extensions, [sessionExtension]);
   // A session runs in the user's repository, so the launch must not follow the process cwd there.

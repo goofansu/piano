@@ -1,5 +1,5 @@
 /** Node 24's WebSocket accepts Undici's options, including an explicit Origin header. */
-import type { SocketEnvironment } from "../web/src/lib/ws.ts";
+import type { SocketEnvironment } from "../../web/src/lib/ws.ts";
 
 export interface DispatchConfiguration {
   url: string;

@@ -25,7 +25,7 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
  * Piano's own extension, resolved from this installation rather than the session's cwd: a
  * session runs in a user's repository, which must not be able to shadow or supply it.
  */
-export const sessionExtension = join(ROOT, "extensions/piano-sessions.ts");
+export const sessionExtension = join(ROOT, "extensions/piano-sessions/index.ts");
 
 export const defaultPiCli = (): PiCliConfig => ({
   node: process.execPath,

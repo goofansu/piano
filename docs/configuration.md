@@ -28,10 +28,14 @@ unless you set it yourself.
 
 ## The session extension
 
-Every Pi child Piano starts loads `extensions/piano-sessions.ts` through Pi's `--extension`, as an
+Every Pi child Piano starts loads `extensions/piano-sessions/index.ts` through Pi's `--extension`, as an
 absolute path resolved from the Piano installation rather than from the session's directory, so a
 repository cannot supply or shadow it. The flag comes before the session arguments, so a `-e` in
 `PIANO_PI_ARGS` adds an extension instead of replacing Piano's.
+
+The extension follows Pi's multi-file layout: `index.ts` registers the tools, while `NodeSocket.ts`
+and `SessionDispatch.ts` sit beside it as supporting modules, not separately discovered extensions.
+It remains bundled with Piano and uses the application's existing dependencies and shared protocol.
 
 Piano sets two variables in that child's environment, from the running server instance
 (`server/SessionEndpoint.ts`). They are set for the child only; Piano never reads them.

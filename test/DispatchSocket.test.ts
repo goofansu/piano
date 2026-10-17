@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { test } from "node:test";
-import { dispatchConfiguration, nodeSocketEnvironment } from "../extensions/NodeSocket.ts";
+import {
+  dispatchConfiguration,
+  nodeSocketEnvironment,
+} from "../extensions/piano-sessions/NodeSocket.ts";
 
 // INV-11: a non-browser observer must still send the explicit allowed Origin.
 test("dispatch uses Node's native WebSocket with the configured Origin", async () => {
