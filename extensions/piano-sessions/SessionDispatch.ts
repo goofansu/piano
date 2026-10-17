@@ -919,11 +919,14 @@ export function waitSessions(
           detail:
             "Observation ended early because another session needs attention; this worker was not stopped.",
         };
+      // A deadline or caller cancellation ends observation, not the child's work. Only an
+      // observed outcome can require attention and shorten the other handles' observations.
       if (
-        result.status === "waiting_for_input" ||
-        result.status === "unknown" ||
-        result.status === "failed" ||
-        result.status === "cancelled"
+        result.ending === "observed" &&
+        (result.status === "waiting_for_input" ||
+          result.status === "unknown" ||
+          result.status === "failed" ||
+          result.status === "cancelled")
       )
         attention.abort();
       return result;
