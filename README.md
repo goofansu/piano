@@ -51,6 +51,13 @@ Click a local file link in a session to read it beside the conversation. Markdow
 saves the file as it is on disk. Click the link again to reread. See
 [supported formats, limits and privacy](docs/file-previews.md).
 
+### Dispatch work to another session
+
+Ask **“Dispatch this work in a new session.”** The agent starts a fresh, visible session with a
+self-contained brief, returns an **Open session** link, and can wait for its answer. Use separate
+prepared worktrees for concurrent writing tasks. See [session dispatch](docs/session-dispatch.md)
+for setup, checkout semantics and bounded observation.
+
 ### Configure
 
 Piano reads environment variables such as `PORT`, `HOST`, `PIANO_DB_PATH` and

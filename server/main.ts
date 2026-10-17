@@ -11,15 +11,23 @@ import { HttpRouter, HttpStaticServer } from "effect/http";
 import { inboundLimits } from "./InboundCapacity.ts";
 import { AllowedOrigins, configuredOrigins } from "./OriginPolicy.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
+import { defaultPiCli, PiCli } from "./PiCli.ts";
 import { agentDir } from "./PiEnv.ts";
 import { RegistryDatabasePath } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
+import { sessionEndpoint, sessionEnvironment } from "./SessionEndpoint.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
 const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
+// Every Pi child loads Piano's session extension and is told how to reach this instance.
+const endpoint = sessionEndpoint({ host: HOST, port: PORT }, origins);
+const Launch = Layer.succeed(PiCli, {
+  ...defaultPiCli(),
+  ...(endpoint ? { env: sessionEnvironment(endpoint) } : {}),
+});
 
 // Closing the HTTP server waits for its connections, and browsers hold WebSockets open
 // indefinitely. The platform starts that close the moment a signal arrives, before any
@@ -46,7 +54,10 @@ const Infra = NodeHttpServer.layer(() => server, {
 });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
+// provideMerge, not provide: the HTTP handlers that open sessions read PiCli from their own
+// context, so the launch configuration has to leave this layer as well as enter it.
 const Services = PianoServicesLive({ idleMs: IDLE_MS }).pipe(
+  Layer.provideMerge(Launch),
   Layer.provide(PianoAdaptersLive),
   Layer.provide(Infra),
 );

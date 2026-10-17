@@ -16,6 +16,7 @@
       "web/*.json",
       "server/**/*.ts",
       "shared/**/*.ts",
+      "extensions/**/*.ts",
       "test/**",
       "web/src/**",
       "web/vite.config.ts",

@@ -121,7 +121,8 @@ export function openConnection(
       const reason = code === undefined ? undefined : reasons[code];
       handlers.onStatus(false, reason);
       ws.close();
-      if (reason === "too-large") return;
+      // An invocation may stop observing from onStatus (for example uncertain creation).
+      if (closed || reason === "too-large") return;
       timer = env.setTimeout(connect, RECONNECT_DELAY);
     };
     const probe = () => {

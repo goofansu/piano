@@ -99,14 +99,30 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
 
   const handle = yield* ChildProcess.make(
     cli.node,
-    [cli.cli, "--mode", "rpc", ...args, ...cli.extraArgs],
+    [
+      cli.cli,
+      "--mode",
+      "rpc",
+      // Before the session arguments, so a `-e` in PIANO_PI_ARGS adds to Piano's own extension
+      // rather than being shadowed by it.
+      ...(cli.extensions ?? []).flatMap((path) => ["--extension", path]),
+      ...args,
+      ...cli.extraArgs,
+    ],
     {
       cwd,
       extendEnv: true,
       // Development only: `npm run dev` (node --watch) sets WATCH_REPORT_DEPENDENCIES=1, and Pi's
       // image-resize worker then mistakes Node's dependency-watch message for its result and
       // reports a bogus size-limit omission. `npm start` and the hosted service never set it (INV-12).
-      env: { WATCH_REPORT_DEPENDENCIES: undefined },
+      // `cli.env` carries this instance's session endpoint to Piano's extension (SessionEndpoint).
+      env: {
+        WATCH_REPORT_DEPENDENCIES: undefined,
+        // A Piano started inside another session must not inherit that parent's instance.
+        PIANO_SESSION_WS_URL: undefined,
+        PIANO_SESSION_ORIGIN: undefined,
+        ...cli.env,
+      },
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",

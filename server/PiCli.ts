@@ -13,14 +13,25 @@ export interface PiCliConfig {
   readonly cli: string;
   /** Extra arguments appended to every spawned Pi (PIANO_PI_ARGS). */
   readonly extraArgs: ReadonlyArray<string>;
+  /** Absolute `--extension` paths loaded by every spawned Pi, before the session arguments. */
+  readonly extensions?: ReadonlyArray<string>;
+  /** Variables added to the child's environment, such as this instance's session endpoint. */
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
+
+/**
+ * Piano's own extension, resolved from this installation rather than the session's cwd: a
+ * session runs in a user's repository, which must not be able to shadow or supply it.
+ */
+export const sessionExtension = join(ROOT, "extensions/piano-sessions.ts");
 
 export const defaultPiCli = (): PiCliConfig => ({
   node: process.execPath,
   cli: process.env.PIANO_PI_CLI ?? join(ROOT, "server/PiRpcCli.ts"),
   extraArgs: (process.env.PIANO_PI_ARGS ?? "").split(/\s+/).filter(Boolean),
+  extensions: [sessionExtension],
 });
 
 export const PiCli = Context.Reference<PiCliConfig>("piano/PiCli", { defaultValue: defaultPiCli });

@@ -19,7 +19,7 @@ interface FakeSocket {
 }
 
 /** A connection over fake sockets, a clock the test advances and network events it fires. */
-function harness() {
+function harness(onDisconnect?: () => void) {
   let now = 0;
   let ids = 0;
   let nonces = 0;
@@ -93,8 +93,10 @@ function harness() {
   const connection = openConnection(
     {
       onMessage: (m) => messages.push(m),
-      onStatus: (connected, reason) =>
-        statuses.push(reason === undefined ? [connected] : [connected, reason]),
+      onStatus: (connected, reason) => {
+        statuses.push(reason === undefined ? [connected] : [connected, reason]);
+        if (!connected) onDisconnect?.();
+      },
     },
     env,
   );
@@ -278,6 +280,16 @@ test("going offline drops the socket at once; coming online reconnects without w
   assert.equal(h.sockets.length, 2, "the pending retry was replaced, not added to");
   h.goOnline();
   assert.equal(h.sockets.length, 2, "online with a socket in hand opens no other");
+});
+
+test("closing from a disconnect handler leaves no reconnect timer behind", () => {
+  const h = harness(() => h.connection.close());
+  h.last().accept();
+  h.last().serverClose(1006);
+  assert.equal(h.pendingTimers(), 0);
+  assert.equal(h.listeners(), 0);
+  h.advance(60_000);
+  assert.equal(h.sockets.length, 1);
 });
 
 test("close() stops timers, network listeners and reconnects, and ignores the old socket", () => {

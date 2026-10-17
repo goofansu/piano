@@ -26,6 +26,28 @@ startup.
 `npm run dev:server` sets `PIANO_ALLOWED_ORIGINS` to the three loopback origins on Vite's port 5173,
 unless you set it yourself.
 
+## The session extension
+
+Every Pi child Piano starts loads `extensions/piano-sessions.ts` through Pi's `--extension`, as an
+absolute path resolved from the Piano installation rather than from the session's directory, so a
+repository cannot supply or shadow it. The flag comes before the session arguments, so a `-e` in
+`PIANO_PI_ARGS` adds an extension instead of replacing Piano's.
+
+Piano sets two variables in that child's environment, from the running server instance
+(`server/SessionEndpoint.ts`). They are set for the child only; Piano never reads them.
+
+| Variable | Value |
+| --- | --- |
+| `PIANO_SESSION_WS_URL` | `ws://<listener host>:<PORT>/ws`, the same socket the browser uses. The listener is addressed directly, so a child reaches Piano without going through a proxy; `0.0.0.0` and `::` become their loopback addresses. |
+| `PIANO_SESSION_ORIGIN` | An origin from `PIANO_ALLOWED_ORIGINS`: the one naming the listener when it is allowed, otherwise the first configured one. It is also the base for a `/s/<sessionId>` link into Piano's UI, so there is no separate base-URL variable. |
+
+The origin is chosen from the configured set, never added to it, so starting a child cannot widen
+the [origin policy](#browser-origins). The extension sends it as the `Origin` header on the upgrade,
+which Node's built-in `WebSocket` supports through Undici's `headers` option. Without a loopback
+endpoint and an allowed origin, dispatch is not advertised. Inherited endpoint variables are
+cleared before Piano supplies this instance's configuration. See [session dispatch](session-dispatch.md)
+for usage and observation limits.
+
 Piano limits incoming WebSocket messages, RPC lines and pending work, and keeps capacity for answers
 and cancellation. It rejects overload instead of queueing it for retry. See
 [runtime input limits](runtime-input-limits.md).
