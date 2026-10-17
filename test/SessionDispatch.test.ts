@@ -754,6 +754,50 @@ test("an answer already observed survives later input to the same session", boun
   assert.equal(observation!.status, "unknown", "interference prevented the quiescence check");
 });
 
+for (const output of ["final", "partial", "toolUse", "empty newer final"] as const)
+  test(`output observed before idle survives interference safely: ${output}`, bounded, async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    let resolved = false;
+    void wait.then(() => {
+      resolved = true;
+    });
+    h.last().accept();
+    const socket = h.last();
+    const selection = socket.selection();
+    socket.frame(
+      selected(
+        selection,
+        snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started" } }, [
+          message("m1", "user", "do the thing"),
+        ]),
+      ),
+    );
+    let sequence = 1;
+    const emit = (event: SessionEvent) =>
+      socket.frame(frameOf(selection, event, { sequence: ++sequence }));
+    emit({
+      _tag: output === "partial" ? "message_update" : "message_end",
+      message: message("m2", "assistant", "the thing is done", {
+        stopReason: output === "toolUse" ? "toolUse" : output === "partial" ? undefined : "stop",
+      }),
+    });
+    if (output === "empty newer final")
+      emit({
+        _tag: "message_end",
+        message: message("m3", "assistant", "", { stopReason: "stop" }),
+      });
+    await settleMicrotasks();
+    assert.equal(resolved, false, "finalized output does not prove execution has settled");
+    // New input arrives before response_completed or an idle state, not during a quiescence recheck.
+    emit({ _tag: "submission", submission: { id: 2, outcome: "started" } });
+    const [observation] = await wait;
+    assert.equal(observation!.status, "unknown", "interference prevents certifying settlement");
+    assert.equal(observation!.ending, "observed");
+    assert.equal(observation!.answer, output === "final" ? "the thing is done" : null);
+    if (output === "final") assert.equal(observation!.attribution, "attributed");
+  });
+
 test("a session too large to hold is reported, not held", bounded, async () => {
   const h = world();
   const wait = waitSessions([await handleOf()], undefined, h.env);

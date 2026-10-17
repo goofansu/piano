@@ -733,7 +733,7 @@ function observeHandle(
     let attempts = 0;
     let rechecks = 0;
     let recheck: unknown;
-    /** What this call already saw while the session was still its own. Never retracted. */
+    /** Latest attributable finalized output, including an empty reply; survives interference. */
     let captured: Attributed | null = null;
     /** Positive evidence that this input's turn finished, rather than merely stopped arriving. */
     const completed = (attributed: Attributed) =>
@@ -787,6 +787,9 @@ function observeHandle(
         return;
       }
       const attributed = attribute(handle, snapshot, hosted, generation);
+      // Output attribution does not depend on execution ending: message_end can arrive while
+      // still streaming. Retain empty newer replies too, never falling back to older text.
+      if (attributed.attribution !== "unattributable") captured = attributed;
       const reading = read(snapshot, hosted, attributed, completed(attributed));
       if (!reading.terminal) {
         link.cancel(recheck);
@@ -799,7 +802,6 @@ function observeHandle(
         return;
       }
       const final = verdict(snapshot, attributed, sawResponseCompleted);
-      if (attributed.attribution !== "unattributable") captured = attributed;
       // Only a snapshot this attach just produced reports the host's pending work.
       if (fresh && snapshot.state.isQuiescent === true) {
         settle(observation(final.status, "observed", final.detail));
