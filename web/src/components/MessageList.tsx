@@ -2,7 +2,6 @@ import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { cn } from "cn";
 import {
   ArrowDownIcon,
-  ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
@@ -699,7 +698,8 @@ function OpenSession({ cwd, sessionId }: { cwd: string; sessionId: string }) {
   return (
     <IconButton asChild label="Open session" size="icon-xs" className="-my-1 shrink-0 text-ink-2">
       <a {...link}>
-        <ArrowRightIcon />
+        {/* The glyph the dispatched session's "Dispatched from" row starts with. */}
+        <CornerDownRightIcon />
       </a>
     </IconButton>
   );
