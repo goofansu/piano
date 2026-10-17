@@ -110,26 +110,33 @@ function world() {
   const pong = () => {
     for (const ping of pending.splice(0)) ping.deliver({ _tag: "pong", nonce: ping.nonce });
   };
-  /** Runs due timers in order, keeping every socket's heartbeat answered as time passes. */
+  /** Runs one due timer, answering heartbeats and moving the clock toward `until`. */
+  const step = (until: number) => {
+    pong();
+    const next = [...timers].filter(([, t]) => t.at <= until).sort((a, b) => a[1].at - b[1].at)[0];
+    if (!next) {
+      now = until;
+      return false;
+    }
+    timers.delete(next[0]);
+    now = next[1].at;
+    next[1].run();
+    return true;
+  };
   const advance = (ms: number) => {
     const until = now + ms;
-    for (;;) {
-      pong();
-      const next = [...timers]
-        .filter(([, t]) => t.at <= until)
-        .sort((a, b) => a[1].at - b[1].at)[0];
-      if (!next) break;
-      timers.delete(next[0]);
-      now = next[1].at;
-      next[1].run();
-    }
-    pong();
-    now = until;
+    while (step(until)) {}
+  };
+  /** Like the event loop, let promise continuations run between timer callbacks. */
+  const advanceAsync = async (ms: number) => {
+    const until = now + ms;
+    while (step(until)) await settleMicrotasks();
   };
   return {
     env,
     sockets,
     advance,
+    advanceAsync,
     last: () => sockets.at(-1)!,
     pendingTimers: () => timers.size,
     sentOf: <K extends ClientMessage["_tag"]>(tag: K) =>
@@ -911,6 +918,36 @@ test("each waited handle keeps its own connection, deadline and result", bounded
   assert.equal(done!.answer, "the thing is done");
   assert.equal(waiting!.ending, "deadline", "the deadline is reported apart from the status");
   assert.equal(waiting!.answer, null);
+  assert.equal(h.pendingTimers(), 0);
+});
+
+test("an observation deadline is not a sibling attention event", bounded, async () => {
+  const h = world();
+  const handle = await handleOf();
+  const wait = waitSessions([handle, handle], 1_000, h.env);
+  const [silent, running] = h.sockets;
+  silent!.accept();
+  running!.accept();
+  running!.frame(
+    socketSnapshot(
+      running!,
+      snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started" } }),
+    ),
+  );
+  // The silent connection reaches its deadline first. Its promise callbacks must run before
+  // the sibling's timer, as they do in the real event loop, not in one synchronous clock step.
+  await h.advanceAsync(1_000);
+  const results = await wait;
+  assert.deepEqual(
+    results.map(({ status, ending }) => ({ status, ending })),
+    [
+      { status: "unknown", ending: "deadline" },
+      { status: "running", ending: "deadline" },
+    ],
+  );
+  assert.ok(results.every((result) => !result.detail?.includes("another session needs attention")));
+  assert.equal(h.sentOf("act").length, 0);
+  assert.ok(h.sockets.every((socket) => socket.isClosed()));
   assert.equal(h.pendingTimers(), 0);
 });
 
