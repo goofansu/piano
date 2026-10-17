@@ -5,11 +5,11 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
-  CornerDownRightIcon,
   GitBranchIcon,
   HistoryIcon,
   PuzzleIcon,
   SparklesIcon,
+  SplitIcon,
   TerminalIcon,
 } from "lucide-react";
 import {
@@ -696,10 +696,10 @@ function useSessionLink(cwd: string, sessionId: string) {
 function OpenSession({ cwd, sessionId }: { cwd: string; sessionId: string }) {
   const link = useSessionLink(cwd, sessionId);
   return (
-    <IconButton asChild label="Open session" size="icon-xs" className="-my-1 shrink-0 text-ink-2">
+    <IconButton asChild label="Open session" size="icon-xs" className="-my-1 shrink-0 text-ink-3">
       <a {...link}>
-        {/* The glyph the dispatched session's "Dispatched from" row starts with. */}
-        <CornerDownRightIcon />
+        {/* The chevron's size, and the glyph the dispatched session's "Dispatched from" row starts with. */}
+        <SplitIcon className="size-3.5" />
       </a>
     </IconButton>
   );
@@ -709,10 +709,7 @@ function OpenSession({ cwd, sessionId }: { cwd: string; sessionId: string }) {
 function DispatchedFrom({ parent }: { parent: NonNullable<Props["dispatchedFrom"]> }) {
   return (
     // The row, not the line, takes the size: the gutter is one of the row's own lines tall.
-    <Row
-      glyph={<CornerDownRightIcon className="size-3.5 text-ink-3" aria-hidden />}
-      className="text-sm"
-    >
+    <Row glyph={<SplitIcon className="size-3.5 text-ink-3" aria-hidden />} className="text-sm">
       <p data-slot="dispatched-from" className="truncate text-ink-3">
         Dispatched from {parent === "unlisted" ? "another session" : <ParentLink {...parent} />}
       </p>
