@@ -119,10 +119,12 @@ export function openConnection(
       socket.current = null;
       env.clearTimeout(heartbeat);
       const reason = code === undefined ? undefined : reasons[code];
+      // Fatal loss ends the whole connection, including online recovery, before notifying callers.
+      if (reason === "too-large") close();
       handlers.onStatus(false, reason);
       ws.close();
       // An invocation may stop observing from onStatus (for example uncertain creation).
-      if (closed || reason === "too-large") return;
+      if (closed) return;
       timer = env.setTimeout(connect, RECONNECT_DELAY);
     };
     const probe = () => {
@@ -185,6 +187,17 @@ export function openConnection(
       connect();
     }
   });
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    env.clearTimeout(timer);
+    env.clearTimeout(heartbeat);
+    stopOffline();
+    stopOnline();
+    recover.current = () => {};
+    socket.current?.close();
+    socket.current = null;
+  };
   connect();
   return {
     send: (m) => {
@@ -199,15 +212,6 @@ export function openConnection(
         recover.current();
       }
     },
-    close: () => {
-      closed = true;
-      env.clearTimeout(timer);
-      env.clearTimeout(heartbeat);
-      stopOffline();
-      stopOnline();
-      recover.current = () => {};
-      socket.current?.close();
-      socket.current = null;
-    },
+    close,
   };
 }
