@@ -302,6 +302,22 @@ export const stateFactsOf = (raw: RawState) => ({
   isStreaming: raw.isStreaming,
 });
 
+/** The session that dispatched this one: the first `piano.dispatch` entry Piano's extension
+ * recorded, on any branch, since it describes the whole session. */
+export const dispatchedFromOf = (entries: ReadonlyArray<unknown>): string | undefined => {
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const { type, customType, data } = entry as Record<string, unknown>;
+    if (type !== "custom" || customType !== "piano.dispatch") continue;
+    const parent =
+      data && typeof data === "object"
+        ? (data as Record<string, unknown>).parentSessionId
+        : undefined;
+    if (typeof parent === "string" && parent) return parent;
+  }
+  return undefined;
+};
+
 /**
  * What Pi establishes about one session, and from where: a running child's `get_state` and
  * `get_messages`, or its saved file read without Pi. Either becomes a Snapshot only through
@@ -335,7 +351,11 @@ const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Sn
             isRetrying: false,
             queuedMessages: [],
           }
-        : { ...state, subagents: new RunLedger().add(facts.entries).usage },
+        : {
+            ...state,
+            subagents: new RunLedger().add(facts.entries).usage,
+            dispatchedFrom: dispatchedFromOf(facts.entries),
+          },
     messages: serializeWithProjection(facts.messages, projection),
     dialogs: [],
   };
@@ -520,12 +540,17 @@ export const sessionArgs = (spec: {
   model?: string;
   thinkingLevel?: string;
   name?: string;
+  dispatchedFrom?: string;
 }): string[] => [
   ...(spec.sessionFile ? ["--session", spec.sessionFile] : ["--session-id", spec.sessionId]),
   ...(spec.model ? ["--model", spec.model] : []),
   ...(spec.thinkingLevel ? ["--thinking", spec.thinkingLevel] : []),
   // --name names a new session; existing history keeps the name Pi saved in it.
   ...(spec.name && !spec.sessionFile ? ["--name", spec.name] : []),
+  // Piano's extension records it once in a new session; saved history already holds it.
+  ...(spec.dispatchedFrom && !spec.sessionFile
+    ? ["--piano-dispatched-from", spec.dispatchedFrom]
+    : []),
 ];
 
 /** One RPC record for Pi's stdin; the transport adds the request id. */

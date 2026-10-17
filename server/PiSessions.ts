@@ -67,6 +67,8 @@ export interface PiSessionSpec {
   readonly thinkingLevel?: string;
   /** Passed as --name for a session without history; Pi's saved name wins once `sessionFile` exists. */
   readonly name?: string;
+  /** The dispatching session, passed to Piano's extension to record in a new session's history. */
+  readonly dispatchedFrom?: string;
   /** Seed only display statistics while Pi's authoritative readback is pending. */
   readonly lastKnownStats?: SessionStats;
 }

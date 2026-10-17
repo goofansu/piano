@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { drafts, sessionDraftKey } from "@/lib/messageDraft";
+import { catalogEntry } from "@/lib/sessionCatalog";
 import {
   completionTarget,
   sessionActivity,
@@ -57,6 +58,13 @@ export function SessionView({ state, send }: Props) {
     },
   );
   const { status, replyActivity } = sessionActivity(state, messagesOnly);
+  const parentId = t?.state.dispatchedFrom;
+  const parent = parentId ? catalogEntry(state, parentId) : undefined;
+  const dispatchedFrom = !parentId
+    ? undefined
+    : parent && !parent.disabled
+      ? { sessionId: parentId, cwd: parent.cwd, title: parent.title || "Untitled" }
+      : ("unlisted" as const);
   const pane = sessionPane(state);
   const notices = sessionNotices(state, messagesOnly);
   const readOnly = notices.find((n) => n.placement === "composer");
@@ -125,6 +133,7 @@ export function SessionView({ state, send }: Props) {
                 activity={replyActivity}
                 working={!!t && isWorking(t.state)}
                 placeholder={pane.placeholder}
+                dispatchedFrom={dispatchedFrom}
               />
             </LocalFileContext>
           )}

@@ -378,6 +378,8 @@ export const SessionState = Schema.Struct({
   /** Run usage delivered anywhere in the session file, compacted or on another branch, as Pi counts
    * its own totals; absent until a delivery carries usage. */
   subagents: Schema.optional(SubagentUsage),
+  /** The session that dispatched this one, as recorded in its Pi history; absent when not dispatched. */
+  dispatchedFrom: Schema.optional(Schema.String),
   extension: Schema.optional(ExtensionState),
   projectionError: Schema.optional(Schema.String),
   stateRefreshError: Schema.optional(Schema.String),
@@ -757,6 +759,8 @@ export const StartOptions = Schema.Struct({
   model: Schema.optional(Schema.String),
   thinkingLevel: Schema.optional(ThinkingLevel),
   name: Schema.optional(Schema.String),
+  /** The session whose dispatch tool created this one; recorded in the new session's own history. */
+  dispatchedFrom: Schema.optional(Schema.String),
 });
 export type StartOptions = typeof StartOptions.Type;
 

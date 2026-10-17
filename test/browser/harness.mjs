@@ -36,24 +36,27 @@ function repository(root, name) {
 }
 
 /** Pi history for one session, in Pi's JSONL session format. An item `{ compaction: { summary } }`
- * among the messages becomes a compaction entry that keeps the message before it. */
+ * among the messages becomes a compaction entry that keeps the message before it, and an item
+ * `{ custom: { customType, data } }` an extension's custom entry. */
 function history(sessions, { sessionId, cwd, messages }) {
   const timestamp = new Date().toISOString();
   let parentId = null;
   const entries = [
     { type: "session", version: 3, id: sessionId, cwd, timestamp },
     ...messages.map((message, i) => {
-      const entry = message.compaction
-        ? {
-            type: "compaction",
-            id: `c${i}`,
-            parentId,
-            timestamp,
-            summary: message.compaction.summary,
-            firstKeptEntryId: parentId,
-            tokensBefore: message.compaction.tokensBefore ?? 100_000,
-          }
-        : { type: "message", id: `m${i}`, parentId, timestamp, message };
+      const entry = message.custom
+        ? { type: "custom", id: `x${i}`, parentId, timestamp, ...message.custom }
+        : message.compaction
+          ? {
+              type: "compaction",
+              id: `c${i}`,
+              parentId,
+              timestamp,
+              summary: message.compaction.summary,
+              firstKeptEntryId: parentId,
+              tokensBefore: message.compaction.tokensBefore ?? 100_000,
+            }
+          : { type: "message", id: `m${i}`, parentId, timestamp, message };
       parentId = entry.id;
       return entry;
     }),

@@ -5,6 +5,19 @@ In a Piano conversation, ask: **“Dispatch this work in a new session.”** The
 The child is an ordinary session: it appears in the sidebar, has an **Open session** link, and can
 be opened and continued without taking the parent away from its conversation.
 
+## Links between sessions
+
+In the parent's transcript, each start or wait shows one row per child: the brief's first line,
+the status the parent last observed and an **Open** link. The status is that observation, not the
+child's live state; **Finished** means the child stopped, not that its task succeeded. Expand the
+row for the brief or the answer.
+
+The child's transcript starts with **Dispatched from** and the parent's title, linked back to it.
+When the parent is no longer in the sidebar, the row reads "another session" without a link. The
+link is recorded in the child's own Pi history as a `piano.dispatch` custom entry, which never
+reaches the model. Piano's extension writes it when the child's session first starts, and Pi saves
+it with the first reply, so a child whose first prompt failed before any reply may have no backlink.
+
 ## Setup and checkout choice
 
 Piano loads its bundled extension when it starts Pi, using Pi's normal `--extension` mechanism.

@@ -983,3 +983,78 @@ test("a tool's output shows as text: terminal colours, hyperlink escapes and \\r
   ]);
   assert.equal(reply(rows, "a").tools[0]!.output, "PR: #149\nlink\n");
 });
+
+test("a dispatch names each session it started or waited on, with the parent's observation", () => {
+  const handle = { cwd: "/repo", sessionId: "child-1" };
+  const brief = "Review the current diff.\nDo not edit files.";
+  const start: RenderMsg = {
+    id: "start",
+    role: "assistant",
+    text: "",
+    toolCalls: [{ id: "s", name: "piano_start_session", args: JSON.stringify({ prompt: brief }) }],
+  };
+  const started: RenderMsg = {
+    id: "started",
+    role: "tool_result",
+    toolCallId: "s",
+    text: JSON.stringify({ cwd: "/repo", creation: "created", submission: "started", handle }),
+  };
+  const wait: RenderMsg = {
+    id: "wait",
+    role: "assistant",
+    text: "",
+    toolCalls: [
+      { id: "w", name: "piano_wait_sessions", args: JSON.stringify({ sessions: [handle] }) },
+    ],
+  };
+  const waited: RenderMsg = {
+    id: "waited",
+    role: "tool_result",
+    toolCallId: "w",
+    text: JSON.stringify({
+      results: [{ handle, status: "settled", answer: "No findings.", link: "http://x/s/child-1" }],
+    }),
+  };
+  const dispatch = (messages: RenderMsg[], id: string) =>
+    reply(transcriptRows(messages), id).tools[0]?.dispatch;
+
+  assert.deepEqual(dispatch([start], "start"), [
+    {
+      sessionId: null,
+      cwd: "",
+      title: "Review the current diff. Do not edit files.",
+      status: "Starting",
+      badge: "secondary",
+      brief,
+    },
+  ]);
+  assert.deepEqual(dispatch([start, started], "start")?.[0], {
+    sessionId: "child-1",
+    cwd: "/repo",
+    title: "Review the current diff. Do not edit files.",
+    status: "Started",
+    badge: "secondary",
+    brief,
+  });
+  assert.deepEqual(
+    dispatch([start, started, wait], "wait")?.map((s) => [s.sessionId, s.title, s.status]),
+    [["child-1", "Review the current diff. Do not edit files.", "Waiting"]],
+    "a running wait names its sessions by the brief that started them",
+  );
+  const finished = dispatch([start, started, wait, waited], "wait")?.[0];
+  assert.equal(finished?.status, "Finished", "settlement is not called success");
+  assert.equal(finished?.answer, "No findings.");
+
+  const refused: RenderMsg = {
+    id: "refused",
+    role: "tool_result",
+    toolCallId: "s",
+    text: "A non-empty, self-contained work brief is required.",
+    isError: true,
+  };
+  assert.equal(
+    dispatch([start, refused], "start"),
+    undefined,
+    "a failure the tool reported as text stays an ordinary tool call",
+  );
+});

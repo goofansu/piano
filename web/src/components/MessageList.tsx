@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
+  CornerDownRightIcon,
   GitBranchIcon,
   HistoryIcon,
   PuzzleIcon,
@@ -12,6 +13,7 @@ import {
   TerminalIcon,
 } from "lucide-react";
 import {
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -32,11 +34,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { abbrevHome, clamp, stripAnsi, toolArgsText } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
+import { routePath } from "@/lib/routes";
 import { disclosureRow } from "@/lib/styles";
 import {
   BOTTOM_ENTRY,
   type ContextFacts,
   contextFacts,
+  type DispatchFacts,
   messageAnchorId,
   nestedStatus,
   type SubagentFacts,
@@ -46,6 +50,7 @@ import {
   transcriptRows,
 } from "@/lib/transcript";
 import { domViewportElement } from "@/lib/transcriptViewport";
+import { NavigationContext } from "@/lib/useNavigation";
 import { useNewTranscriptViewport, useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
@@ -63,6 +68,8 @@ interface Props {
   className?: string;
   /** Show only jump-list messages and errors without changing authoritative history. */
   showTools?: boolean;
+  /** The session that dispatched this one; without a catalog entry it cannot be opened. */
+  dispatchedFrom?: { sessionId: string; cwd: string; title: string } | "unlisted";
 }
 
 /**
@@ -80,6 +87,7 @@ export function MessageList({
   placeholder,
   className,
   showTools = true,
+  dispatchedFrom,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -134,6 +142,7 @@ export function MessageList({
           )}
           {/* Adjacent tool rows keep one gap, even when the previous message also had text. */}
           <div className="flex flex-col gap-6 [&>[data-ends-with-tools]+[data-tools-only]]:-mt-3">
+            {dispatchedFrom && <DispatchedFrom parent={dispatchedFrom} />}
             {submittedInput && (
               <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />
             )}
@@ -282,6 +291,7 @@ function FoldRow({
   bodyClassName,
   data,
   onClick,
+  action,
   children,
 }: {
   glyph?: React.ReactNode;
@@ -299,6 +309,8 @@ function FoldRow({
   /** `data-*` attributes for tests and evidence scripts. */
   data?: Record<`data-${string}`, string | undefined>;
   onClick?: React.MouseEventHandler<HTMLDivElement>;
+  /** A control beside the header, outside the button that folds the row. */
+  action?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -308,12 +320,20 @@ function FoldRow({
       <button
         type="button"
         data-sidebar-swipe="true"
-        className={cn(disclosureRow, headerClassName)}
+        className={cn(disclosureRow, action && "w-auto flex-1", headerClassName)}
       >
         {header}
         {canOpen && <DisclosureChevron open={open} className="ml-auto" />}
       </button>
     </CollapsibleTrigger>
+  );
+  const head = action ? (
+    <div className="flex min-w-0 items-center gap-1">
+      {trigger}
+      {action}
+    </div>
+  ) : (
+    trigger
   );
   const body = (
     <div className={cn(ruled && "border-l-2 border-line pl-3 text-ink-2", bodyClassName)}>
@@ -330,7 +350,7 @@ function FoldRow({
       onClick={onClick}
       {...data}
     >
-      {glyph === undefined ? trigger : <Row glyph={glyph}>{trigger}</Row>}
+      {glyph === undefined ? head : <Row glyph={glyph}>{head}</Row>}
       {canOpen && (
         <CollapsibleContent className="disclosure-content">
           {glyph === undefined ? (
@@ -623,6 +643,92 @@ function SubagentCardView({
   );
 }
 
+/** A session a dispatch tool started or waited on: its brief, what the parent observed, and a way
+ * to open it beside the header, so reaching the session never needs the row unfolded. */
+function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: ToolOutcome }) {
+  const { sessionId, cwd, title, status, badge, brief, answer, detail } = session;
+  return (
+    <FoldRow
+      glyph={
+        <span
+          className={cn("block size-2 rounded-full transition-colors duration-300", DOT[outcome])}
+        />
+      }
+      header={
+        <>
+          <span className="min-w-20 flex-1 truncate font-medium text-ink">{title}</span>
+          <Badge variant={badge}>{status}</Badge>
+        </>
+      }
+      label={`Dispatched session: ${title}`}
+      canOpen={!!(brief || answer || detail)}
+      bodyClassName="flex flex-col gap-3"
+      data={{ "data-slot": "dispatch-row", "data-session-id": sessionId ?? undefined }}
+      action={sessionId && <OpenSession cwd={cwd} sessionId={sessionId} />}
+    >
+      {detail && <p className="text-xs text-ink-3">{detail}</p>}
+      {brief && (
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-fill px-3 py-2 text-ink-2">
+          {clamp(brief, 8000)}
+        </pre>
+      )}
+      {answer && <FoldedOutput text={answer} markdown failed={false} />}
+    </FoldRow>
+  );
+}
+
+/** A link that opens a session in place; its address keeps a new tab or a copied link working. */
+function useSessionLink(cwd: string, sessionId: string) {
+  // Absent where the transcript renders outside the app, as in module tests.
+  const navigation = useContext(NavigationContext);
+  return {
+    href: routePath({ kind: "session", sessionId }),
+    onClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!navigation || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey)
+        return;
+      event.preventDefault();
+      navigation.select(cwd, sessionId);
+    },
+  };
+}
+
+function OpenSession({ cwd, sessionId }: { cwd: string; sessionId: string }) {
+  const link = useSessionLink(cwd, sessionId);
+  return (
+    <Button asChild variant="ghost" size="xs" className="-my-1 shrink-0 text-ink-2">
+      <a {...link}>Open</a>
+    </Button>
+  );
+}
+
+/** The dispatched session's way back: the session that started it, above the brief it was sent. */
+function DispatchedFrom({ parent }: { parent: NonNullable<Props["dispatchedFrom"]> }) {
+  return (
+    // The row, not the line, takes the size: the gutter is one of the row's own lines tall.
+    <Row
+      glyph={<CornerDownRightIcon className="size-3.5 text-ink-3" aria-hidden />}
+      className="text-sm"
+    >
+      <p data-slot="dispatched-from" className="truncate text-ink-3">
+        Dispatched from {parent === "unlisted" ? "another session" : <ParentLink {...parent} />}
+      </p>
+    </Row>
+  );
+}
+
+function ParentLink({ sessionId, cwd, title }: { sessionId: string; cwd: string; title: string }) {
+  const link = useSessionLink(cwd, sessionId);
+  // An inline link inside a sentence: no shadcn component reads as running text.
+  return (
+    <a
+      {...link}
+      className="font-medium text-ink-2 underline-offset-4 outline-none hover:text-ink hover:underline focus-visible:underline"
+    >
+      {title}
+    </a>
+  );
+}
+
 const PREVIEW_LINES = 5;
 
 /** Output folded to its first lines, with the rest on demand: a tool's text as it came, or a
@@ -701,8 +807,13 @@ function Tool({
   knownTool,
   summary,
   subagent,
+  dispatch,
 }: ToolRow) {
   if (subagent) return <SubagentCardView {...subagent} />;
+  if (dispatch)
+    return dispatch.map((session, i) => (
+      <DispatchRow key={session.sessionId ?? i} session={session} outcome={outcome} />
+    ));
   const failed = outcome === "failed";
   const details = toolArgsText(call.args);
 

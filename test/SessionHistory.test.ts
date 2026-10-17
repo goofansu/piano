@@ -160,3 +160,39 @@ test("INV-01: peeking uses Pi context edits, compaction and active branch withou
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("INV-01: a saved session names the session that dispatched it, from its own history", async () => {
+  const file = join(sessions, "dispatched.jsonl");
+  writeFileSync(
+    file,
+    [
+      { type: "session", version: 3, id: "dispatched", cwd, timestamp: "2026-10-05T00:00:00Z" },
+      {
+        type: "custom",
+        id: "origin",
+        parentId: null,
+        timestamp: "2026-10-05T00:00:01Z",
+        customType: "piano.dispatch",
+        data: { parentSessionId: "the-parent" },
+      },
+      {
+        type: "message",
+        id: "brief",
+        parentId: "origin",
+        timestamp: "2026-10-05T00:00:02Z",
+        message: { role: "user", content: "Review the diff", timestamp: 2 },
+      },
+    ]
+      .map((x) => JSON.stringify(x))
+      .join("\n") + "\n",
+  );
+  const dispatched = await run(history.peek("dispatched", file));
+  assert.equal(dispatched.state.dispatchedFrom, "the-parent");
+  assert.deepEqual(
+    dispatched.messages.map((m) => m.text),
+    ["Review the diff"],
+    "the record is not a transcript message",
+  );
+  const own = await run(history.peek("own", seed(cwd, "own", "own history")));
+  assert.equal(own.state.dispatchedFrom, undefined);
+});

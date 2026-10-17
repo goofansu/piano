@@ -34,7 +34,29 @@ const Observation = Type.Object({
   link: Type.String(),
 });
 
+/** Pi's custom entry naming the session that dispatched this one; never part of model context. */
+export const DISPATCH_ENTRY = "piano.dispatch";
+/** Piano passes it when it creates a dispatched session, and only then. */
+const DISPATCHED_FROM_FLAG = "piano-dispatched-from";
+
 export default function pianoSessions(pi: ExtensionAPI) {
+  // Registered before the configuration check, so Pi always knows the flag Piano may pass.
+  pi.registerFlag(DISPATCHED_FROM_FLAG, {
+    type: "string",
+    description: "Session that dispatched this one (set by Piano)",
+  });
+  pi.on("session_start", (_event, ctx) => {
+    const parent = pi.getFlag(DISPATCHED_FROM_FLAG);
+    // Recorded once, before the brief; a relaunch with the flag finds it already there.
+    if (
+      typeof parent === "string" &&
+      parent &&
+      !ctx.sessionManager
+        .getEntries()
+        .some((entry) => entry.type === "custom" && entry.customType === DISPATCH_ENTRY)
+    )
+      pi.appendEntry(DISPATCH_ENTRY, { parentSessionId: parent });
+  });
   const config = dispatchConfiguration();
   // No sockets at factory time: Pi also loads extensions for catalog probes and discovery.
   if (!config) return;
@@ -104,7 +126,11 @@ export default function pianoSessions(pi: ExtensionAPI) {
           throw new Error("A non-empty, self-contained work brief is required.");
         return invoke(signal, async (observationSignal) => {
           const result = await startSession(
-            { ...params, cwd: params.cwd ?? ctx.cwd },
+            {
+              ...params,
+              cwd: params.cwd ?? ctx.cwd,
+              dispatchedFrom: ctx.sessionManager.getSessionId(),
+            },
             environment,
             observationSignal,
           );

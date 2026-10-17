@@ -91,7 +91,11 @@ function handle(cmd) {
     case "get_messages":
       return respond(cmd, { messages });
     case "get_entries": {
-      const all = messages.map((message, i) => ({ type: "message", id: `e${i}`, message }));
+      // Extensions' custom entries come first, as Piano's dispatch record does in a real file.
+      const all = [
+        ...entries.filter((e) => e.type === "custom"),
+        ...messages.map((message, i) => ({ type: "message", id: `e${i}`, message })),
+      ];
       const since = cmd.since === undefined ? -1 : all.findIndex((e) => e.id === cmd.since);
       return respond(cmd, { entries: all.slice(since + 1), leafId: all.at(-1)?.id ?? null });
     }

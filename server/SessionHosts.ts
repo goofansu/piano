@@ -32,6 +32,7 @@ export interface OpenSpec {
   readonly model?: string;
   readonly thinkingLevel?: string;
   readonly name?: string;
+  readonly dispatchedFrom?: string;
 }
 /** A new session in a directory, which becomes a folder if it is not registered yet. */
 export interface CreateSpec {
@@ -248,11 +249,11 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         // Registry writes run before the ownership lock; an unavailable project registers nothing.
         if (spec.projectId !== undefined) yield* registry.requireActiveProject(spec.projectId);
         const cwd = yield* registry.ensureFolder(spec.cwd);
-        const { model, thinkingLevel, name } = spec.options;
+        const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
         // Only a fresh server-generated ID may create a reference. Registration and initial
         // membership survive a disconnected requester, as acquisition is server-owned.
         return yield* start(
-          { cwd, sessionId: randomUUID(), model, thinkingLevel, name },
+          { cwd, sessionId: randomUUID(), model, thinkingLevel, name, dispatchedFrom },
           { projectId: spec.projectId },
         );
       });

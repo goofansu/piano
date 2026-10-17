@@ -83,6 +83,26 @@ export interface ToolRow {
   summary: string;
   /** Set when the call delegated to, or reported on, a subagent: it renders as that card. */
   subagent?: SubagentFacts;
+  /** Set when the call started or waited on Piano sessions: it renders one row per session. */
+  dispatch?: DispatchFacts[];
+}
+
+/** One session a dispatch tool started or waited on, as the parent observed it. */
+export interface DispatchFacts {
+  /** Null until Piano names the session, and when it was never created. */
+  sessionId: string | null;
+  cwd: string;
+  /** The brief's first line: what the session was asked to do. */
+  title: string;
+  /** The parent's observation, never the child's current state. */
+  status: string;
+  badge: Badge;
+  /** The brief, as sent. Start rows only. */
+  brief?: string;
+  /** The session's answer, as a wait observed it. */
+  answer?: string;
+  /** Why the observation is limited, in the tool's own words. */
+  detail?: string;
 }
 
 /**
@@ -156,6 +176,128 @@ const VERBS: Record<string, [running: string, done: string]> = {
   glob: ["Searching", "Searched"],
   ls: ["Listing", "Listed"],
 };
+
+const START_TOOL = "piano_start_session";
+const WAIT_TOOL = "piano_wait_sessions";
+
+const recordOf = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+const parsed = (text: string | undefined) => {
+  if (!text) return undefined;
+  try {
+    return recordOf(JSON.parse(text));
+  } catch {
+    // Partial arguments while streaming, or a failure the tool reported as text.
+    return undefined;
+  }
+};
+const stringOf = (value: unknown) => (typeof value === "string" ? value : undefined);
+
+/** What became of a dispatch's first prompt, in the words the badge shows. */
+const SUBMISSION: Record<string, [status: string, badge: Badge]> = {
+  started: ["Started", "secondary"],
+  queued: ["Queued", "secondary"],
+  handled: ["Handled", "secondary"],
+  rejected: ["Rejected", "destructive"],
+  waiting_for_input: ["Needs input", "warning"],
+  not_sent: ["Not sent", "warning"],
+  uncertain: ["Uncertain", "warning"],
+};
+/** What a wait observed. Finished is settlement, which does not say the task succeeded. */
+const OBSERVED: Record<string, [status: string, badge: Badge]> = {
+  running: ["Running", "secondary"],
+  settled: ["Finished", "secondary"],
+  failed: ["Failed", "destructive"],
+  cancelled: ["Cancelled", "secondary"],
+  waiting_for_input: ["Needs input", "warning"],
+  unknown: ["Unknown", "warning"],
+};
+
+/** The briefs of every session this transcript dispatched, so a wait can name what it waits on. */
+function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, string> {
+  const briefs = new Map<string, string>();
+  const calls = new Map<string, string>();
+  for (const m of messages) {
+    for (const call of m.toolCalls ?? [])
+      if (call.name === START_TOOL) {
+        const brief = stringOf(parsed(call.args)?.prompt);
+        if (brief) calls.set(call.id, brief);
+      }
+    const brief = m.role === "tool_result" && m.toolCallId ? calls.get(m.toolCallId) : undefined;
+    const sessionId = stringOf(recordOf(parsed(m.text)?.handle)?.sessionId);
+    if (brief && sessionId) briefs.set(sessionId, brief);
+  }
+  return briefs;
+}
+
+/** The sessions a dispatch call started or waited on; undefined for any other call, or a result
+ * that is not the tool's JSON (a refused brief), which then shows as an ordinary tool call. */
+function dispatchFacts(
+  call: ToolCall,
+  output: string | undefined,
+  settled: boolean,
+  briefs: ReadonlyMap<string, string>,
+): DispatchFacts[] | undefined {
+  if (call.name !== START_TOOL && call.name !== WAIT_TOOL) return undefined;
+  const args = parsed(call.args);
+  const result = settled ? parsed(output) : undefined;
+  if (settled && !result) return undefined;
+  if (call.name === START_TOOL) {
+    const brief = stringOf(args?.prompt) ?? "";
+    const handle = recordOf(result?.handle);
+    const creation = stringOf(result?.creation);
+    const [status, badge]: [string, Badge] = !result
+      ? ["Starting", "secondary"]
+      : creation === "refused"
+        ? ["Not started", "destructive"]
+        : creation === "created"
+          ? (SUBMISSION[stringOf(result.submission) ?? ""] ?? ["Uncertain", "warning"])
+          : ["Uncertain", "warning"];
+    return [
+      {
+        sessionId: stringOf(handle?.sessionId) ?? null,
+        cwd: stringOf(handle?.cwd) ?? stringOf(result?.cwd) ?? stringOf(args?.cwd) ?? "",
+        title: messageLabel(brief) || "New session",
+        status,
+        badge,
+        ...(brief ? { brief } : {}),
+        ...(stringOf(result?.detail) ? { detail: stringOf(result?.detail) } : {}),
+      },
+    ];
+  }
+  const observed = (handle: Record<string, unknown> | undefined) => {
+    const sessionId = stringOf(handle?.sessionId) ?? null;
+    return {
+      sessionId,
+      cwd: stringOf(handle?.cwd) ?? "",
+      title: messageLabel((sessionId && briefs.get(sessionId)) || "") || "Session",
+    };
+  };
+  if (!result) {
+    const sessions = Array.isArray(args?.sessions) ? args.sessions : [];
+    return sessions.map((handle) => ({
+      ...observed(recordOf(handle)),
+      status: "Waiting",
+      badge: "secondary" as const,
+    }));
+  }
+  const results = Array.isArray(result.results) ? result.results : [];
+  return results.map((value) => {
+    const r = recordOf(value);
+    const [status, badge] = OBSERVED[stringOf(r?.status) ?? ""] ?? ["Unknown", "warning"];
+    const answer = stringOf(r?.answer);
+    const detail = stringOf(r?.detail);
+    return {
+      ...observed(recordOf(r?.handle)),
+      status,
+      badge,
+      ...(answer ? { answer } : {}),
+      ...(detail ? { detail } : {}),
+    };
+  });
+}
 
 /** One line that says what a tool call did: the command, the path, or the pattern. A one-line
  * command is its own description. A multi-line command (a heredoc script, a `&&` chain) shows
@@ -398,6 +540,7 @@ export function transcriptRows(
   const results = new Map<string, RenderMsg>();
   const callIds = new Set<string>();
   const cardStatus = reportedSubagentStatus(messages);
+  const briefs = dispatchBriefs(messages);
   // Destinations, with their labels: every labelled prompt, and every labelled reply that
   // ended a turn (the next prompt or reply is not another reply).
   const destinations = new Map<string, string>();
@@ -453,6 +596,7 @@ export function transcriptRows(
             ? "Incomplete"
             : verbDone;
     const card = result?.subagent ?? execution?.subagent;
+    const dispatch = dispatchFacts(call, output, !!result && outcome !== "running", briefs);
     return {
       call,
       result,
@@ -464,6 +608,7 @@ export function transcriptRows(
       knownTool: !!verbs,
       summary: summarize(call.args),
       ...(card ? { subagent: subagentFacts(card, cardStatus(card), output, failed, false) } : {}),
+      ...(dispatch ? { dispatch } : {}),
     };
   };
   const noResults = new Map<string, RenderMsg>();

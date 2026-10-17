@@ -10,6 +10,7 @@
 import { Clock, Effect, type Scope } from "effect";
 import type { SessionEvent } from "../shared/wire.ts";
 import {
+  dispatchedFromOf,
   type PiReadback,
   piReadbacks,
   type RawMessage,
@@ -72,22 +73,24 @@ export const makeSessionReadbacks = ({
       if (next[field] !== previous[field]) factVersions[field] += 1;
   });
 
-  /** Run usage from entries Pi appended since the last read. Only the stats worker reads. */
+  /** Run usage, and the dispatching session, from entries Pi appended since the last read. Only
+   * the stats worker reads. */
   const ledger = new RunLedger();
-  const readRuns = Effect.gen(function* () {
+  let dispatchedFrom: string | undefined;
+  const readEntries = Effect.gen(function* () {
     const entries = (since?: string) => read(piReadbacks.entries(since));
     const since = ledger.since;
     // A session that no longer holds the last entry read is counted afresh.
-    ledger.add(
-      yield* entries(since).pipe(
-        Effect.catchTag("PiSessionError", (error) =>
-          since
-            ? Effect.sync(() => ledger.reset()).pipe(Effect.andThen(entries()))
-            : Effect.fail(error),
-        ),
+    const added = yield* entries(since).pipe(
+      Effect.catchTag("PiSessionError", (error) =>
+        since
+          ? Effect.sync(() => ledger.reset()).pipe(Effect.andThen(entries()))
+          : Effect.fail(error),
       ),
     );
-    return ledger.usage;
+    ledger.add(added);
+    dispatchedFrom ??= dispatchedFromOf(added);
+    return { subagents: ledger.usage, dispatchedFrom };
   });
 
   /** Canonical projected context and billed cost from Pi, not partial response usage.
@@ -115,9 +118,9 @@ export const makeSessionReadbacks = ({
       );
       // Pi's figures above neither wait on nor fail with the Runs' entries; a failed read keeps
       // the last count, and the next refresh continues from the last entry read.
-      const subagents = yield* readRuns.pipe(Effect.option);
-      if (subagents._tag === "Some")
-        yield* patchState(() => (current() ? { subagents: subagents.value } : {}));
+      const fromEntries = yield* readEntries.pipe(Effect.option);
+      if (fromEntries._tag === "Some")
+        yield* patchState(() => (current() ? fromEntries.value : {}));
     }).pipe(
       Effect.catchTag("PiSessionError", (error) =>
         patchState(() =>

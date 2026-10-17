@@ -46,6 +46,7 @@ const skill =
 /** One of each row kind, each with a distinct first line to find it by. The compaction comes
  * first: Pi's projection shows the summary and what follows it, not what it summarized. */
 const messages = [
+  { custom: { customType: "piano.dispatch", data: { parentSessionId: "rows-parent" } } },
   user("Earlier question, summarized away."),
   assistant([{ type: "text", text: "Earlier reply, kept by the compaction." }]),
   { compaction: { summary: "## Goal\n\nFix the login bug." } },
@@ -95,6 +96,18 @@ const messages = [
     rowPhrase: "Resume refused · unknown Subagent",
     tone: "error",
   }),
+  assistant([call("dispatch", "piano_start_session", { prompt: "Review the login fix." })]),
+  result(
+    "dispatch",
+    "piano_start_session",
+    JSON.stringify({
+      cwd: "/repo",
+      creation: "created",
+      submission: "started",
+      handle: { cwd: "/repo", sessionId: "rows-parent" },
+      link: "http://127.0.0.1/s/rows-parent",
+    }),
+  ),
   user(`${skill}\n\nFocus on login.`),
   assistant([{ type: "text", text: "" }], { stopReason: "error", errorMessage: "Rate limited" }),
   assistant([{ type: "text", text: "Done: every row kind is above." }]),
@@ -102,6 +115,7 @@ const messages = [
 
 /** Every expected row, by the first text its gutter sits beside. */
 const expected = [
+  "Dispatched from",
   "Compaction summary",
   "Earlier reply, kept by the compaction.",
   "Question: why does login fail?",
@@ -110,6 +124,7 @@ const expected = [
   "Find CSS regression test seam",
   "Result ·",
   "Analyze the HAR capture",
+  "Review the login fix.",
   "/skill:",
   "Rate limited",
   "Done: every row kind is above.",
@@ -134,10 +149,12 @@ await run(
     const cwd = repository("api");
     const now = new Date().toISOString();
     history({ sessionId: "rows", cwd, messages });
+    history({ sessionId: "rows-parent", cwd, messages: [user("Dispatch a review.")] });
     return {
       folders: [cwd],
       sessions: [
         { sessionId: "rows", title: "Every row kind", cwd, createdAt: now, updatedAt: now },
+        { sessionId: "rows-parent", title: "The dispatcher", cwd, createdAt: now, updatedAt: now },
       ],
     };
   },

@@ -110,6 +110,17 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
       "high",
       "the tool's explicit effort overrides normal defaults in the real Pi session",
     );
+    // The backlink lives in the child's own Pi history, written by Piano's extension.
+    assert.equal(
+      childView._tag === "selected" && childView.snapshot.state.dispatchedFrom,
+      parentSessionId,
+      "the child names the session that dispatched it",
+    );
+    assert.equal(
+      selected._tag === "selected" && selected.snapshot.state.dispatchedFrom,
+      undefined,
+      "a session started by a person names no dispatcher",
+    );
 
     // One owner: Piano starts every Pi, and each session has exactly one process.
     const sessions = fixture.spawns().filter((spawned) => spawned.sessionId !== null);

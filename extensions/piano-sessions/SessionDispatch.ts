@@ -30,6 +30,8 @@ export interface StartRequest {
   readonly cwd: string;
   readonly model?: string;
   readonly thinkingLevel?: ThinkingLevel;
+  /** The dispatching session, recorded in the new one's history for its backlink. */
+  readonly dispatchedFrom?: string;
 }
 
 /**
@@ -238,7 +240,7 @@ export function startSession(
   environment: SocketEnvironment,
   signal?: AbortSignal,
 ): Promise<StartResult> {
-  const { cwd, prompt, model, thinkingLevel } = request;
+  const { cwd, prompt, model, thinkingLevel, dispatchedFrom } = request;
   return observe<StartResult>(
     environment,
     { deadlineMs: START_DEADLINE_MS, signal },
@@ -293,7 +295,7 @@ export function startSession(
               _tag: "create_session",
               selectionId,
               cwd,
-              options: { model, thinkingLevel },
+              options: { model, thinkingLevel, dispatchedFrom },
               text: prompt,
             });
             return;
