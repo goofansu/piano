@@ -241,8 +241,18 @@ test("close 1013 reports falling behind and reconnects; 1009 reports the size li
   tooLarge.last().serverClose(1009);
   assert.deepEqual(tooLarge.statuses, [[true], [false, "too-large"]]);
   tooLarge.advance(60_000);
-  assert.equal(tooLarge.sockets.length, 1);
+  tooLarge.goOffline();
+  tooLarge.goOnline();
+  tooLarge.connection.send({ _tag: "ping", nonce: "after-fatal-loss" });
+  assert.equal(
+    tooLarge.sockets.length,
+    1,
+    "neither timers nor network changes recover a fatal loss",
+  );
   assert.equal(tooLarge.pendingTimers(), 0);
+  assert.equal(tooLarge.listeners(), 0, "fatal loss releases the connection's network listeners");
+  tooLarge.connection.close();
+  assert.deepEqual(tooLarge.statuses, [[true], [false, "too-large"]]);
 });
 
 test("any other close is a plain loss that reconnects", () => {
