@@ -1048,6 +1048,30 @@ test("a dispatch names each session it started or waited on, with the parent's o
     [["child-1", "Review the current diff. Do not edit files.", "Waiting"]],
     "a running wait names its sessions by the brief that started them",
   );
+  for (const [message, callId] of [
+    [start, "s"],
+    [wait, "w"],
+  ] as const) {
+    const tool = reply(
+      transcriptRows(callId === "s" ? [start] : [start, started, wait], {
+        tools: {
+          [callId]: {
+            id: callId,
+            name: message.toolCalls![0]!.name,
+            args: message.toolCalls![0]!.args,
+            text: "",
+            status: "incomplete",
+            outputKind: "unavailable",
+          },
+        },
+      }),
+      message.id,
+    ).tools[0]!;
+    assert.equal(tool.outcome, "incomplete");
+    assert.equal(tool.dispatch?.[0]?.status, "Incomplete", "the parent call is no longer active");
+    assert.equal(tool.dispatch?.[0]?.badge, "warning");
+    assert.equal(tool.dispatch?.[0]?.sessionId, callId === "w" ? "child-1" : null);
+  }
   const finished = dispatch([start, started, wait, waited], "wait")?.[0];
   assert.equal(finished?.status, "Finished", "settlement is not called success");
   assert.equal(finished?.answer, "No findings.");
