@@ -94,6 +94,7 @@ export default function pianoSessions(pi: ExtensionAPI) {
     defineTool({
       name: "piano_start_session",
       label: "Start Piano session",
+      promptSnippet: "Dispatch work to a new Piano session when explicitly requested",
       promptGuidelines: [
         "Use Piano session tools only when the user explicitly asks to dispatch work through Piano. Otherwise, work in the current session. Waiting for that dispatched work is part of the authorized request.",
       ],
@@ -146,6 +147,7 @@ export default function pianoSessions(pi: ExtensionAPI) {
     defineTool({
       name: "piano_wait_sessions",
       label: "Wait for Piano sessions",
+      promptSnippet: "Wait for explicitly dispatched Piano work",
       description:
         "Observe fresh work sessions using the exact handles returned by piano_start_session. Default wait 30 seconds; timeoutMs allows 1000–60000. Returns partial results with running, settled, failed, cancelled, waiting_for_input or unknown status, answer or null, and Open session links. ending=deadline is an observation limit, not child failure. Cancelling this wait never stops children. Later input, a restarted host or missing evidence may prevent attribution; inspect that session instead. Settlement does not certify task/check success, handled input may have no answer, and child completion does not automatically wake this parent.",
       parameters: Type.Object({
