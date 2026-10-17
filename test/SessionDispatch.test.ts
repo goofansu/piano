@@ -515,6 +515,45 @@ test("an interrupted reply is cancelled, whatever error it also carries", bounde
   assert.equal(observation!.status, "cancelled");
 });
 
+for (const outcome of ["completed", "interrupted", "unproven"] as const)
+  test(`a stop request is not cancellation evidence: ${outcome}`, bounded, async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    h.last().accept();
+    const socket = h.last();
+    const selection = socket.selection();
+    const submission = { id: 1, outcome: "started" } as const;
+    const input = message("m1", "user", "do the thing");
+    socket.frame(selected(selection, snapshotOf({ isStreaming: true, submission }, [input])));
+    let sequence = 1;
+    const emit = (event: SessionEvent) =>
+      socket.frame(frameOf(selection, event, { sequence: ++sequence }));
+    // Stop announces intent before clear_queue; a failed clear leaves the run alive.
+    emit({ _tag: "state", state: { sessionId, isStreaming: true, isStopping: true, submission } });
+    emit({ _tag: "state", state: { sessionId, isStreaming: true, isStopping: false, submission } });
+    const messages =
+      outcome === "unproven"
+        ? [input]
+        : answered(outcome === "completed" ? "the thing is done" : "", {
+            stopReason: outcome === "completed" ? "stop" : "interrupted",
+          });
+    if (outcome !== "unproven") emit({ _tag: "message_end", message: messages[1]! });
+    if (outcome === "completed") emit({ _tag: "response_completed" });
+    emit({
+      _tag: "state",
+      state: { sessionId, isStreaming: false, isStopping: false, submission },
+    });
+    h.advance(250);
+    socket.frame(socketSnapshot(socket, idle(messages)));
+    const [observation] = await wait;
+    assert.equal(
+      observation!.status,
+      outcome === "completed" ? "settled" : outcome === "interrupted" ? "cancelled" : "unknown",
+    );
+    assert.equal(observation!.answer, outcome === "completed" ? "the thing is done" : null);
+    assert.equal(observation!.ending, "observed");
+  });
+
 for (const exit of [
   { code: 1, completed: false, status: "failed" },
   { code: 0, completed: false, status: "unknown" },

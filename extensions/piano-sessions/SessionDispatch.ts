@@ -681,7 +681,6 @@ function read(
 function verdict(
   snapshot: Snapshot,
   attributed: Attributed,
-  sawStopping: boolean,
   sawResponseCompleted: boolean,
 ): Reading {
   const submission = snapshot.state.submission;
@@ -692,7 +691,6 @@ function verdict(
   // An interrupted turn often also carries an error: the interruption is the better answer.
   if (stop && CANCELLED_STOPS.has(stop))
     return { status: "cancelled", terminal: true, detail: `Pi stopped: ${stop}` };
-  if (sawStopping) return { status: "cancelled", terminal: true, detail: "The run was stopped." };
   if (message?.isError || message?.errorMessage)
     return { status: "failed", terminal: true, detail: message.errorMessage };
   if (stop && FAILED_STOPS.has(stop))
@@ -731,7 +729,6 @@ function observeHandle(
     let sequence = 0;
     /** The snapshot came from a `select` and no live event has been folded into it since. */
     let fresh = false;
-    let sawStopping = false;
     let sawResponseCompleted = false;
     let attempts = 0;
     let rechecks = 0;
@@ -801,7 +798,7 @@ function observeHandle(
         settle(observation(reading.status, "observed", reading.detail));
         return;
       }
-      const final = verdict(snapshot, attributed, sawStopping, sawResponseCompleted);
+      const final = verdict(snapshot, attributed, sawResponseCompleted);
       if (attributed.attribution !== "unattributable") captured = attributed;
       // Only a snapshot this attach just produced reports the host's pending work.
       if (fresh && snapshot.state.isQuiescent === true) {
@@ -885,7 +882,6 @@ function observeHandle(
             snapshot = applySessionEvent(snapshot, event);
             fresh = false;
             if (event._tag === "response_completed") sawResponseCompleted = true;
-            if (snapshot.state.isStopping) sawStopping = true;
             evaluate();
             return;
           }
