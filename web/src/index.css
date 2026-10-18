@@ -688,10 +688,6 @@
 .disclosure-content {
   overflow: hidden;
 }
-.skeleton-layer[data-hidden="true"] {
-  opacity: 0;
-  pointer-events: none;
-}
 
 /* The keys. The three-key mark is the instrument's live signal: while Pi works the keys play a
  * scale, each dipping one pixel below the fallboard and dimming in turn on a 1.2s cycle; when Pi

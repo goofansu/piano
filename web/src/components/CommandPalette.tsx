@@ -65,7 +65,8 @@ export function CommandPalette({ state }: Props) {
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
-  // Radix mounts the expensive contents only while present, preserving its close animation.
+  // The expensive contents sit inside the dialog's content, which Radix mounts only while the
+  // palette is open, so their catalog and search work stop when it closes.
   return (
     <CommandDialog
       open={open}

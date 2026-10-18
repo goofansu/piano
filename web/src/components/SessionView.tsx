@@ -1,7 +1,7 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ClientCommand as ClientMessage, ExtensionState } from "@shared/wire";
 import { cn } from "cn";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Banner } from "@/components/Banner";
 import { Composer } from "@/components/Composer";
 import { LocalFileContext } from "@/components/Markdown";
@@ -136,7 +136,7 @@ export function SessionView({ state, send }: Props) {
               />
             </LocalFileContext>
           )}
-          {pane.skeleton !== "none" && <TranscriptSkeleton hidden={pane.skeleton === "hidden"} />}
+          {pane.skeleton && <TranscriptSkeleton />}
           {!state.connected && (
             <div
               role="status"
@@ -256,27 +256,12 @@ function ExtensionBlock({
 
 /**
  * A skeleton in the transcript's own geometry: a prompt card, a reply with three lines and a
- * tool row. `sessionPane` decides when it shows; once hidden it fades out as the real transcript
- * fades in, staying mounted just long enough to finish leaving.
+ * tool row. `sessionPane` decides when it shows; it leaves at once when the transcript or its
+ * empty state can show, since loading placeholders have no motion.
  */
-function TranscriptSkeleton({ hidden }: { hidden: boolean }) {
-  const [lingering, setLingering] = useState(false);
-  useEffect(() => {
-    if (!hidden) {
-      setLingering(false);
-      return;
-    }
-    setLingering(true);
-    const timer = setTimeout(() => setLingering(false), 200);
-    return () => clearTimeout(timer);
-  }, [hidden]);
-  if (hidden && !lingering) return null;
+function TranscriptSkeleton() {
   return (
-    <div
-      aria-hidden
-      data-hidden={hidden}
-      className="skeleton-layer absolute inset-0 overflow-hidden bg-conversation px-4 md:px-6"
-    >
+    <div aria-hidden className="absolute inset-0 overflow-hidden bg-conversation px-4 md:px-6">
       {/* The lines wait like the sidebar's, so a quick load shows the transcript without them. */}
       <div className="late-enter mx-auto flex w-full max-w-3xl flex-col gap-6 py-6 md:py-8">
         <div className="rounded-2xl border border-line bg-fill px-4 py-3.5">

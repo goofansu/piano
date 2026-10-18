@@ -316,11 +316,11 @@ export interface SessionPane {
   /** The transcript is mounted: the selected session's, or a first message shown before it. */
   list: boolean;
   /**
-   * The loading skeleton: `none` is not mounted (a first message or a failed selection shows
-   * instead), `shown` while the session is fetched or its first input is on its way, `hidden`
-   * once its transcript or its empty state can show, so the skeleton fades out.
+   * The loading skeleton shows while the session is fetched or its first input is on its way.
+   * It never shows for a first message or a failed selection, which show instead, nor once the
+   * transcript or its empty state can show.
    */
-  skeleton: "none" | "shown" | "hidden";
+  skeleton: boolean;
   /** The empty transcript's text; omitted while anything is shown or on its way. */
   placeholder: string | undefined;
   composerDisabled: boolean;
@@ -345,12 +345,7 @@ export function sessionPane(state: AppState): SessionPane {
   const hasContent = !!t && (t.messages.length > 0 || !!t.pending);
   return {
     list: !!t || !!input,
-    skeleton:
-      input || state.selectionFailure
-        ? "none"
-        : t && (hasContent || !onItsWay)
-          ? "hidden"
-          : "shown",
+    skeleton: !input && !state.selectionFailure && !(t && (hasContent || !onItsWay)),
     placeholder: t && !input && !hasContent && !onItsWay ? "No messages yet." : undefined,
     composerDisabled: !sessionReady(state) || !t || input?.outcome === "starting",
   };
