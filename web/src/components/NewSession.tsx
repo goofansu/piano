@@ -327,7 +327,6 @@ function DirectorySelect({
   const worktrees = useWorktreeOperation(client, (cwd) => {
     onChange(cwd);
     setOpen(false);
-    setWtOpen(false);
   });
   // A pending worktree operation keeps the picker open until its receipt, timeout or disconnect.
   const wtPending = worktrees.request.status === "pending";
@@ -339,7 +338,8 @@ function DirectorySelect({
       onOpenChange={(next) => {
         if (wtPending) return;
         setOpen(next);
-        if (!next) setWtOpen(false);
+        // Reset to the folder list on open, not on close: a closing overlay keeps its last open face.
+        if (next) setWtOpen(false);
       }}
     >
       <PopoverTrigger asChild>
