@@ -363,7 +363,7 @@
 }
 [data-slot="mobile-sidebar"][data-state="closed"] {
   /* Keep Radix Presence mounted while the children and live page settle closed. */
-  animation: sidebar-reveal-exit var(--sidebar-duration, 300ms) linear;
+  animation: sidebar-reveal-exit var(--sidebar-duration) linear;
 }
 @keyframes sidebar-reveal-exit {
   from {
@@ -374,12 +374,12 @@
   }
 }
 [data-slot="sidebar-reveal-navigation"] {
-  width: 75vw;
+  width: var(--sidebar-reveal-width);
   height: 100dvh;
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   background: var(--surface-0);
   clip-path: inset(0 calc((1 - var(--sidebar-progress)) * 100%) 0 0);
-  transition: clip-path var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
+  transition: clip-path var(--sidebar-duration) var(--sidebar-easing);
   will-change: clip-path;
 }
 [data-slot="sidebar-scrim"] {
@@ -389,12 +389,13 @@
   height: 100dvh;
   background: var(--scrim);
   opacity: var(--sidebar-progress);
-  transform: translateX(calc(var(--sidebar-progress) * 75vw));
-  border-radius: calc(var(--sidebar-progress) * 2rem) 0 0 calc(var(--sidebar-progress) * 2rem);
+  transform: translateX(calc(var(--sidebar-progress) * var(--sidebar-reveal-width)));
+  border-radius: calc(var(--sidebar-progress) * var(--sidebar-reveal-radius)) 0 0
+    calc(var(--sidebar-progress) * var(--sidebar-reveal-radius));
   transition:
-    transform var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
-    opacity var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
-    border-radius var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
+    transform var(--sidebar-duration) var(--sidebar-easing),
+    opacity var(--sidebar-duration) var(--sidebar-easing),
+    border-radius var(--sidebar-duration) var(--sidebar-easing);
   will-change: transform, opacity;
 }
 /* Opened by a tap, the sidebar enters from closed; a drag already painted its start. */
@@ -410,12 +411,12 @@
 }
 @media (width < 48rem) {
   [data-slot="layout-main"] {
-    transform: translateX(calc(var(--sidebar-progress, 0) * 75vw));
-    border-radius: calc(var(--sidebar-progress, 0) * 2rem) 0 0
-      calc(var(--sidebar-progress, 0) * 2rem);
+    transform: translateX(calc(var(--sidebar-progress) * var(--sidebar-reveal-width)));
+    border-radius: calc(var(--sidebar-progress) * var(--sidebar-reveal-radius)) 0 0
+      calc(var(--sidebar-progress) * var(--sidebar-reveal-radius));
     transition:
-      transform var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
-      border-radius var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
+      transform var(--sidebar-duration) var(--sidebar-easing),
+      border-radius var(--sidebar-duration) var(--sidebar-easing);
     /* Keep the live page on its own layer before the first touch, not mid-gesture. */
     will-change: transform;
   }
