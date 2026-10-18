@@ -3,6 +3,8 @@
 Date: 2026-10-18. Status: research and measured baseline, **not an implemented fix**.
 Application revision: `373a996a3d1b4a19b94b24d77898a50a278cc90b`.
 
+Follow-up: [implementation, verification and remaining latency limits](../performance/command-palette.md).
+
 ## Recommendation
 
 Separate immediate input from search. Start with a **150 ms trailing debounce**, filter/rank
