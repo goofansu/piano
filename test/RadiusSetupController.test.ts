@@ -159,12 +159,11 @@ test("a manual refresh with no change running confirms it refreshed, without imp
   assert.deepEqual(complete.messages(), []);
 });
 
-test("a removal runs only while its confirmation is open, and keeps its subject after closing", async () => {
+test("a removal runs only while its confirmation is open", async () => {
   const { setup, pi } = await section(state("ready", "missing"));
   setup.confirm({ kind: "remove-mcp", key: "key" });
   setup.cancel();
-  assert.equal(setup.getState().confirming, false);
-  assert.deepEqual(setup.getState().confirmation, { kind: "remove-mcp", key: "key" });
+  assert.equal(setup.getState().confirmation, undefined);
   setup.confirmRemoval();
   await settle();
   assert.deepEqual(pi.changes, []);

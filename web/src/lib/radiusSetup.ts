@@ -46,10 +46,7 @@ export interface RadiusSetupOptions {
 }
 
 export interface RadiusSetupSnapshot
-  extends Pick<
-    SetupActionsState<RadiusConfirmation, string>,
-    "confirmation" | "confirming" | "signIn"
-  > {
+  extends Pick<SetupActionsState<RadiusConfirmation, string>, "confirmation" | "signIn"> {
   /** Both Pi's setup and the accounts have been read once; until then the section is a skeleton. */
   loaded: boolean;
   /** A read of the setup is in flight, or the first reads have not finished. */
@@ -152,7 +149,6 @@ export function createRadiusSetup({
       refreshing,
       providers,
       confirmation: changes.confirmation,
-      confirming: changes.confirming,
       signIn: changes.signIn,
       view: radiusSetupView({
         state: observed.value,
@@ -226,8 +222,8 @@ export function createRadiusSetup({
       }),
     confirm: actions.confirm,
     confirmRemoval: () => {
-      const { confirmation, confirming } = actions.getState();
-      if (confirming && confirmation && confirmation.kind !== "sign-out")
+      const { confirmation } = actions.getState();
+      if (confirmation && confirmation.kind !== "sign-out")
         void act(confirmation.kind, confirmation.key);
     },
     cancel: actions.cancel,

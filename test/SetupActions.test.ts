@@ -61,7 +61,7 @@ test("one change runs at a time; a second request while it runs does nothing", a
   assert.equal(log.refreshes, 1, "the section reads its facts again once the change settles");
 });
 
-test("a confirmation closes once its change settles but keeps its subject for the closing dialog", async () => {
+test("a confirmation stays open while its change runs and closes once it settles or is cancelled", async () => {
   const { actions } = section();
   actions.confirm({ name: "Linear" });
   const change = deferred<void>();
@@ -72,14 +72,17 @@ test("a confirmation closes once its change settles but keeps its subject for th
     fallback: "x",
   });
   actions.cancel();
-  assert.equal(actions.getState().confirming, true, "a running change keeps its confirmation open");
+  assert.deepEqual(
+    actions.getState().confirmation,
+    { name: "Linear" },
+    "a running change keeps its confirmation open",
+  );
   change.resolve();
   await running;
-  assert.equal(actions.getState().confirming, false);
-  assert.deepEqual(actions.getState().confirmation, { name: "Linear" });
+  assert.equal(actions.getState().confirmation, undefined);
   actions.confirm({ name: "Radius" });
   actions.cancel();
-  assert.equal(actions.getState().confirming, false);
+  assert.equal(actions.getState().confirmation, undefined);
 });
 
 test("a failed change keeps its message, falls back when it has none, still refreshes, and clears when another starts", async () => {
@@ -97,7 +100,7 @@ test("a failed change keeps its message, falls back when it has none, still refr
     undefined,
   );
   assert.equal(actions.getState().error, "Pi refused.");
-  assert.equal(actions.getState().confirming, false);
+  assert.equal(actions.getState().confirmation, undefined);
   assert.deepEqual(log.announced, []);
   assert.equal(log.refreshes, 1);
   await actions.run({
