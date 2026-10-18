@@ -125,14 +125,14 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
         </div>
 
         {error && (
-          <Alert variant="destructive" className="animate-in fade-in-0 slide-in-from-top-1">
+          <Alert variant="destructive">
             <AlertDescription className="break-words">{error}</AlertDescription>
           </Alert>
         )}
 
         <ScrollArea className="h-56 shrink-0 rounded-md border border-line bg-surface-1">
           {/* Each listing fades in, so stepping through directories reads as one surface changing. */}
-          <div key={dir?.path ?? "loading"} className="animate-in fade-in-0 duration-200">
+          <div key={dir?.path ?? "loading"}>
             {loading && !dir && (
               <div className="flex flex-col gap-2 p-3" aria-busy>
                 {[0, 1, 2, 3, 4].map((i) => (
@@ -176,7 +176,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
             ))}
             {creating && dir && (
               <form
-                className="flex animate-in items-center gap-2 px-3 py-1 fade-in-0 slide-in-from-top-1"
+                className="flex items-center gap-2 px-3 py-1"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void createFolder();

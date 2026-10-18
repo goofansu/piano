@@ -3,8 +3,8 @@
  * transcript: the transcript reports its scrolls, renders and resizes, and the jump list asks
  * where the reader is and moves them. A reader who scrolled up is never moved by new output; a
  * pinned reader stays on the bottom when content grows or the container shrinks, and a jump to
- * the end pins the reader there even if content grows while the scroll is in flight. The DOM is
- * read only through `ViewportElement`, so the policy runs in Node.
+ * the end pins the reader there even if content grows afterwards. The DOM is read only through
+ * `ViewportElement`, so the policy runs in Node.
  */
 import { type JumpEntry, messageAnchorId } from "./transcript.ts";
 
@@ -16,24 +16,15 @@ const NEAR_TOP = 40;
 const READING_LINE = 80;
 /** A jump lands a message this far under the container's top edge. */
 const JUMP_MARGIN = 16;
-const HIGHLIGHT_MS = 2200;
 
 /** The transcript's scroll container, as the viewport sees it. */
 export interface ViewportElement {
   readonly scrollHeight: number;
   scrollTop: number;
   readonly clientHeight: number;
-  scrollTo: (options: { top: number; behavior: ScrollBehavior }) => void;
+  scrollTo: (options: { top: number }) => void;
   /** A message's top edge relative to the container's top edge; `undefined` when it is not rendered. */
   anchorTop: (messageId: string) => number | undefined;
-  /** Starts (restarting if running) or ends a message's highlight. */
-  highlight: (messageId: string, on: boolean) => void;
-}
-
-/** Motion preference and timers, behind a seam so the policy runs in Node. */
-export interface ViewportEnvironment {
-  reducedMotion: () => boolean;
-  setTimeout: (run: () => void, ms: number) => unknown;
 }
 
 export interface TranscriptViewport {
@@ -52,7 +43,7 @@ export interface TranscriptViewport {
   atBottom: () => boolean;
   subscribe: (listener: () => void) => () => void;
   /**
-   * Scrolls to an entry and flashes the message it lands on; `false` when there is nowhere to go.
+   * Scrolls to an entry; `false` when there is nowhere to go.
    * Only the transcript moves: `scrollIntoView` would also scroll `main` on phones and leave the
    * composer sitting high.
    */
@@ -60,11 +51,6 @@ export interface TranscriptViewport {
   /** The entry the reader is looking at: bottom when there, top near the top, else the message under the top edge. */
   current: (entries: ReadonlyArray<JumpEntry>) => string;
 }
-
-export const browserViewportEnvironment: ViewportEnvironment = {
-  reducedMotion: () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  setTimeout: (run, ms) => window.setTimeout(run, ms),
-};
 
 /** The DOM container behind the seam; messages are found by their anchor id in its document. */
 export function domViewportElement(container: HTMLElement): ViewportElement {
@@ -90,21 +76,10 @@ export function domViewportElement(container: HTMLElement): ViewportElement {
         ? el.getBoundingClientRect().top - container.getBoundingClientRect().top
         : undefined;
     },
-    highlight: (messageId, on) => {
-      const el = anchor(messageId);
-      if (!el) return;
-      el.classList.remove("message-highlight");
-      if (!on) return;
-      // Reflow between remove and add so a repeated jump replays the animation.
-      void el.offsetWidth;
-      el.classList.add("message-highlight");
-    },
   };
 }
 
-export function createTranscriptViewport(
-  env: ViewportEnvironment = browserViewportEnvironment,
-): TranscriptViewport {
+export function createTranscriptViewport(): TranscriptViewport {
   let element: ViewportElement | null = null;
   let stick = true;
   let bottom = true;
@@ -120,7 +95,6 @@ export function createTranscriptViewport(
   const follow = (el: ViewportElement) => {
     if (stick) el.scrollTop = el.scrollHeight;
   };
-  const behavior = (): ScrollBehavior => (env.reducedMotion() ? "auto" : "smooth");
 
   return {
     attach: (el) => {
@@ -152,15 +126,13 @@ export function createTranscriptViewport(
       if (!el) return false;
       if (entry.kind === "top" || entry.kind === "bottom") {
         if (entry.kind === "bottom") stick = true;
-        el.scrollTo({ top: entry.kind === "top" ? 0 : el.scrollHeight, behavior: behavior() });
+        el.scrollTo({ top: entry.kind === "top" ? 0 : el.scrollHeight });
         return true;
       }
       const id = entry.messageId;
       const top = el.anchorTop(id);
       if (top === undefined) return false;
-      el.scrollTo({ top: top + el.scrollTop - JUMP_MARGIN, behavior: behavior() });
-      el.highlight(id, true);
-      env.setTimeout(() => el.highlight(id, false), HIGHLIGHT_MS);
+      el.scrollTo({ top: top + el.scrollTop - JUMP_MARGIN });
       return true;
     },
     current: (entries) => {

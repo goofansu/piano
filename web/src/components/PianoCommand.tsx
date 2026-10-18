@@ -39,13 +39,7 @@ export function CommandInput({ className, ...props }: ComponentProps<typeof Base
 
 export function CommandItem({ className, ...props }: ComponentProps<typeof BaseItem>) {
   return (
-    <BaseItem
-      {...props}
-      className={cn(
-        "min-h-(--command-row-height) rounded-md transition-colors duration-(--dur-hover)",
-        className,
-      )}
-    />
+    <BaseItem {...props} className={cn("min-h-(--command-row-height) rounded-md", className)} />
   );
 }
 

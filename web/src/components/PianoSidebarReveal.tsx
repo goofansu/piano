@@ -3,16 +3,8 @@ import { type CSSProperties, type ReactNode, type RefObject, useEffect } from "r
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
-export function sidebarRevealStyle(
-  progress: number,
-  duration: number,
-  easing: string,
-): CSSProperties {
-  return {
-    "--sidebar-progress": progress,
-    "--sidebar-duration": `${duration}ms`,
-    "--sidebar-easing": easing,
-  } as CSSProperties;
+export function sidebarRevealStyle(progress: number): CSSProperties {
+  return { "--sidebar-progress": progress } as CSSProperties;
 }
 
 /** Sheet/Drawer move the navigation over the page. This reveal instead moves the live page.
@@ -22,8 +14,6 @@ export function PianoSidebarReveal({
   open,
   dragging,
   progress,
-  settleDuration,
-  settleEasing,
   onOpenChange,
   contentRef: content,
   title,
@@ -32,8 +22,6 @@ export function PianoSidebarReveal({
   open: boolean;
   dragging: boolean;
   progress: number;
-  settleDuration: number;
-  settleEasing: string;
   onOpenChange: (open: boolean) => void;
   contentRef: RefObject<HTMLDivElement | null>;
   title: string;
@@ -52,7 +40,7 @@ export function PianoSidebarReveal({
           ref={content}
           data-slot="mobile-sidebar"
           data-dragging={dragging}
-          style={sidebarRevealStyle(progress, settleDuration, settleEasing)}
+          style={sidebarRevealStyle(progress)}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
             event.preventDefault();

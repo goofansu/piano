@@ -142,7 +142,7 @@ export function ChangesPanel({
             {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
           </Button>
           <IconButton label="Refresh changes" disabled={!workspace} onClick={refresh}>
-            <RefreshCwIcon className={cn(busy && "animate-spin")} />
+            <RefreshCwIcon />
           </IconButton>
         </>
       }

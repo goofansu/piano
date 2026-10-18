@@ -1,4 +1,3 @@
-import { cn } from "cn";
 import { CheckCircle2Icon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DisclosureChevron } from "@/components/Disclosure";
@@ -37,7 +36,7 @@ import { useRadiusSetup } from "@/lib/useRadiusSetup";
  */
 export function RadiusSection({ reveal }: { reveal?: number }) {
   const setup = useRadiusSetup();
-  const { view, confirmation, confirming, refreshing, providers } = setup;
+  const { view, confirmation, confirming, providers } = setup;
   const { account, tools, mcp, webSearch } = view;
   const removal = confirmation && confirmation.kind !== "sign-out" ? confirmation : undefined;
   const anchor = useRef<HTMLElement>(null);
@@ -66,11 +65,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
           Radius
         </h2>
         <IconButton label="Refresh setup" disabled={!view.canRefresh} onClick={setup.refreshByHand}>
-          <RefreshCwIcon
-            className={cn(
-              refreshing && "animate-spin [animation-duration:600ms] motion-reduce:animate-none",
-            )}
-          />
+          <RefreshCwIcon />
         </IconButton>
       </div>
       {view.attention && (

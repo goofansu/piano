@@ -20,22 +20,22 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 | Borderless/rail button variants | `PianoButton` |
 | Underlined file-view toggles | `PianoViewToggle`, `PianoViewToggleItem` |
 | Status badge and warning alert variants | `StatusBadge`, `PianoAlert` |
-| Overlay surfaces, stacking and motion | `PianoDialog`, `PianoSheet`, `PianoSelect`, `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/overlayStyles.ts` |
+| Overlay surfaces and stacking | `PianoDialog`, `PianoSheet`, `PianoSelect`, `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/overlayStyles.ts` |
 | Pointer-close focus; keyboard/hover tooltips | `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/pointerClose.ts` |
 | Search/option row heights, including touch and the palette dialog | `PianoCommand` |
 | Settings sidebar tooltip policy | `PianoSidebarMenuButton` |
-| Mobile sidebar reveal and partial scrim | `PianoSidebarReveal`; transient finger tracking in `useSidebarSwipe`, motion in `index.css` |
+| Mobile sidebar reveal and partial scrim | `PianoSidebarReveal`; transient finger tracking in `useSidebarSwipe`, surface styles in `index.css` |
 | Theme tokens and existing selected-sidebar styling | `index.css` |
 
 Wrappers merge only Piano's changes, not copies of upstream class lists. Custom button/badge/alert
 variants pass `variant={null}` to avoid inheriting an unrelated upstream variant's hover/dark rules.
-Overlay wrappers neutralize upstream directional slides; they keep Piano's anchored scale motion.
+Piano has no motion; the reset at the end of `index.css` stops upstream overlay motion.
 The tooltip arrow stays inside the content's stacking context, so it needs no separate z-index patch.
 
 Two internal-slot exceptions live in `index.css`: Dialog/Sheet backdrops have no content-level
 styling prop, and Radix ScrollArea's inline `display: table` defeats truncation. Keep these rules
-narrow. The scroll rule deliberately overrides inline display; the reduced-motion reset still
-wins over all overlay motion. The sidebar's existing selected-row CSS already owns its color;
+narrow. The scroll rule deliberately overrides inline display; the motion reset still wins over
+all upstream motion. The sidebar's existing selected-row CSS already owns its color;
 no duplicate class patch is needed.
 
 ### Stock sidebar shortcut
@@ -47,9 +47,8 @@ layout controls; stock `openMobile` is not connected to that reveal. It composes
 modal primitive as Sheet, but exposes stationary navigation under a translated live page rather
 than moving a sheet over it. The sidebar occupies 75% of the mobile viewport; only a claimed
 horizontal drag anywhere on the main content overrides touch scrolling, with browser edges,
-editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; settling
-duration adapts to release speed and remaining distance, with a velocity-matched easing curve to
-avoid a speed jump on release and stop gently at the endpoint. The moving surfaces have compositor
+editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; on release
+the sheet comes to rest open or closed at once. The moving surfaces have compositor
 hints (the live page only on mobile). During a drag, `useSidebarSwipe` batches surface-only style
 writes into animation frames; React owns mounting and the settled endpoint.
 Do not update inherited motion variables per frame: that invalidates styles across the transcript
@@ -71,7 +70,7 @@ and navigation. Cancellation discards pending frames and returns the surfaces to
    gates and `npm run test:browser`, capture again into a second directory and compare the pairs.
    Then observe the rest through `agent-browser` on a scratch instance: pointer and keyboard
    focus, Mod+K and Mod+B, touch focus, the mobile sidebar reveal and finger tracking,
-   cancellation, dismissal and reduced motion. Physical Safari browser-edge navigation still
+   cancellation and dismissal. Physical Safari browser-edge navigation still
    requires a device check.
 
 Upgrades still need review: clean upstream files eliminate customization merges, not API or

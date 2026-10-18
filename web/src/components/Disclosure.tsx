@@ -6,11 +6,7 @@ export function DisclosureChevron({ open, className }: { open: boolean; classNam
   return (
     <ChevronRightIcon
       aria-hidden
-      className={cn(
-        "size-3.5 shrink-0 text-ink-3 transition-transform duration-(--dur-enter) ease-(--ease-enter) motion-reduce:transition-none",
-        open && "rotate-90",
-        className,
-      )}
+      className={cn("size-3.5 shrink-0 text-ink-3", open && "rotate-90", className)}
     />
   );
 }

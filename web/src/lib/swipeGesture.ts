@@ -3,8 +3,7 @@
  * touch lands, waits until the finger has clearly moved, then either yields (vertical scrolling,
  * the wrong direction, a second finger, an uncancelable event) or claims the drag and tracks it
  * 1:1. Release opens or closes the sheet: a deliberate flick follows its direction, otherwise the
- * nearer end wins, and the settle carries the finger's speed into a gentle stop. Text selection
- * takes over the touch outright. Which touches are eligible, scroll prevention, painting and click
+ * nearer end wins. Text selection takes over the touch outright. Which touches are eligible, scroll prevention, painting and click
  * suppression stay in the DOM; nothing here depends on React or the browser.
  */
 
@@ -18,7 +17,6 @@ const FLICK_SPEED = 0.5;
 const STALE_VELOCITY_MS = 100;
 /** Samples this far apart replace the velocity outright; closer ones are blended. */
 const SMOOTHING_MS = 50;
-const SETTLE_MS = { min: 120, max: 420 };
 
 export interface SwipeStart {
   x: number;
@@ -59,8 +57,8 @@ export type SwipeMove =
 export type SwipeEnd =
   | { kind: "cancel" }
   | { kind: "yield" }
-  /** Animate to `open` over `duration` ms with this CSS easing. */
-  | { kind: "settle"; open: boolean; duration: number; easing: string };
+  /** Come to rest `open`. */
+  | { kind: "settle"; open: boolean };
 
 export interface SwipeGesture {
   move(input: SwipeMoveInput): SwipeMove;
@@ -124,25 +122,7 @@ export function startSwipe(start: SwipeStart, open: boolean, width: number): Swi
       const moved = Math.abs(position - initial) * width;
       const next =
         moved >= FLICK_DISTANCE && Math.abs(release) > FLICK_SPEED ? release > 0 : position >= 0.5;
-      const remaining = Math.abs(Number(next) - position) * width;
-      // Keep finger tracking 1:1, then carry its velocity into a gentle stop. Duration alone
-      // cannot do that: a fixed ease-out curve accelerates slow releases into a visible lurch.
-      const speed = release * (Number(next) - position) > 0 ? Math.abs(release) : 0;
-      const duration = Math.round(
-        Math.min(
-          SETTLE_MS.max,
-          Math.max(SETTLE_MS.min, (remaining * 2) / Math.max(FLICK_SPEED, speed)),
-        ),
-      );
-      // A cubic's initial slope is y1/x1. Match px/ms at the handoff; clamp extreme flicks
-      // to keep the curve monotonic, and finish with a horizontal tangent (zero velocity).
-      const y1 = remaining > 0 ? Math.min(1, (speed * duration) / (remaining * 3)) : 0;
-      return {
-        kind: "settle",
-        open: next,
-        duration,
-        easing: `cubic-bezier(${1 / 3}, ${y1}, 0.5, 1)`,
-      };
+      return { kind: "settle", open: next };
     },
   };
 }

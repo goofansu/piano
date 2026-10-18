@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import type { ComponentProps } from "react";
 import { PopoverContent as BaseContent } from "@/components/ui/popover";
-import { anchoredMotion, raisedOverlay } from "@/lib/overlayStyles";
+import { raisedOverlay } from "@/lib/overlayStyles";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
 
 export {
@@ -21,7 +21,7 @@ export function PopoverContent({
   return (
     <BaseContent
       {...props}
-      className={cn(anchoredMotion, raisedOverlay, className)}
+      className={cn(raisedOverlay, className)}
       onCloseAutoFocus={(event) => {
         onCloseAutoFocus?.(event);
         if (!event.defaultPrevented) returnFocusForKeyboard(event);

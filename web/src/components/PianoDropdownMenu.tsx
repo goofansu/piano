@@ -5,7 +5,7 @@ import {
   DropdownMenuItem as BaseItem,
   DropdownMenuSubContent as BaseSubContent,
 } from "@/components/ui/dropdown-menu";
-import { anchoredMotion, raisedOverlay } from "@/lib/overlayStyles";
+import { raisedOverlay } from "@/lib/overlayStyles";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
 
 export {
@@ -32,12 +32,7 @@ export function DropdownMenuContent({
     <BaseContent
       collisionPadding={8}
       {...props}
-      className={cn(
-        anchoredMotion,
-        raisedOverlay,
-        "w-max min-w-48 max-w-[calc(100vw-2rem)]",
-        className,
-      )}
+      className={cn(raisedOverlay, "w-max min-w-48 max-w-[calc(100vw-2rem)]", className)}
       onCloseAutoFocus={(event) => {
         onCloseAutoFocus?.(event);
         if (!event.defaultPrevented) returnFocusForKeyboard(event);
@@ -55,7 +50,6 @@ export function DropdownMenuSubContent({
       collisionPadding={8}
       {...props}
       className={cn(
-        anchoredMotion,
         raisedOverlay,
         "w-max min-w-48 max-w-[calc(100vw-2rem)] max-h-(--radix-dropdown-menu-content-available-height) overflow-y-auto shadow-md",
         className,
@@ -65,10 +59,5 @@ export function DropdownMenuSubContent({
 }
 
 export function DropdownMenuItem({ className, ...props }: ComponentProps<typeof BaseItem>) {
-  return (
-    <BaseItem
-      {...props}
-      className={cn("rounded-md transition-colors duration-(--dur-hover)", className)}
-    />
-  );
+  return <BaseItem {...props} className={cn("rounded-md", className)} />;
 }

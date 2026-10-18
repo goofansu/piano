@@ -62,15 +62,11 @@ export function AppLayout({
           data-slot="layout-sidebar"
           data-state={collapsed ? "collapsed" : "expanded"}
           data-dragging={resizing}
-          className={cn(
-            "relative hidden shrink-0 md:flex md:flex-col",
-            !resizing &&
-              "transition-[width] duration-(--dur-layout) ease-(--ease-layout) motion-reduce:transition-none",
-          )}
+          className="relative hidden shrink-0 md:flex md:flex-col"
           style={{ width: collapsed ? SIDEBAR_WIDTH.rail : width }}
         >
           <div className="relative h-full overflow-hidden">
-            {/* Visibility (not display:none) preserves scroll and avoids replaying first-load row animations. */}
+            {/* Visibility (not display:none) preserves scroll. */}
             <div
               inert={collapsed}
               aria-hidden={collapsed}
@@ -102,7 +98,7 @@ export function AppLayout({
                 }
               }}
               className={cn(
-                "absolute inset-y-0 -right-1 z-10 w-2 touch-none cursor-col-resize select-none after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-brand after:opacity-0 after:transition-opacity hover:after:opacity-100 focus-visible:after:opacity-100",
+                "absolute inset-y-0 -right-1 z-10 w-2 touch-none cursor-col-resize select-none after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-brand after:opacity-0 hover:after:opacity-100 focus-visible:after:opacity-100",
                 resizing && "after:opacity-100",
               )}
             />
@@ -112,8 +108,6 @@ export function AppLayout({
           open={mobileOpen}
           dragging={swipe.dragging}
           progress={swipe.progress}
-          settleDuration={swipe.settleDuration}
-          settleEasing={swipe.settleEasing}
           onOpenChange={(open) => {
             swipe.cancelDrag();
             layout.setMobileOpen(open);
@@ -128,7 +122,7 @@ export function AppLayout({
           ref={swipe.mainRef}
           data-slot="layout-main"
           data-sidebar-dragging={swipe.dragging}
-          style={sidebarRevealStyle(swipe.progress, swipe.settleDuration, swipe.settleEasing)}
+          style={sidebarRevealStyle(swipe.progress)}
           className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
         >
           {content}
@@ -147,7 +141,7 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
       data-slot="layout-view"
       data-active={active}
       hidden={!active}
-      className={cn("min-h-0 flex-1 flex-col", active ? "view-enter flex" : "hidden")}
+      className={cn("min-h-0 flex-1 flex-col", active ? "flex" : "hidden")}
     >
       {children}
     </div>

@@ -141,7 +141,6 @@ export default function App() {
                 visibleToasts={4}
                 duration={4000}
                 closeButton
-                toastOptions={{ style: { "--toast-life": "4s" } as React.CSSProperties }}
               />
               <CommandPalette state={state} />
               <DialogHost pending={pendingDialogs(state)} send={send} />

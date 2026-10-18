@@ -111,7 +111,7 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
       <ShowSidebarButton className="absolute top-2 left-2" />
       <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
-          <div className="new-session-welcome welcome-enter flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
+          <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex" />
             <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">
               {project?.name ?? "What should we work on?"}
@@ -141,7 +141,6 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
               attachmentsDisabled={!state.connected}
               autoFocus={!window.matchMedia("(pointer: coarse)").matches}
               label="First message"
-              className="welcome-enter welcome-composer"
               inputClassName={cn(
                 composerInput,
                 "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5",
@@ -164,24 +163,21 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
                   disabled={!ready}
                   onClick={submit}
                 >
-                  <span className="control-enter inline-flex">
+                  <span className="inline-flex">
                     <ArrowUpIcon />
                   </span>
                 </Button>
               }
             />
             {folder?.discovery.status === "error" && (
-              <Alert
-                variant="destructive"
-                className="mt-2 animate-in fade-in-0 slide-in-from-top-1"
-              >
+              <Alert variant="destructive" className="mt-2">
                 <AlertDescription>
                   Git status unavailable. Open Worktrees to inspect and refresh.
                 </AlertDescription>
               </Alert>
             )}
             {unarchive && (
-              <Alert className="mt-2 animate-in fade-in-0 slide-in-from-top-1">
+              <Alert className="mt-2">
                 <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>This project is archived.</span>
                   <Button

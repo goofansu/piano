@@ -165,7 +165,7 @@ export function Composer({
         above={
           queue && (
             <section
-              className="control-enter flex max-h-[min(14rem,30dvh)] flex-col border-b border-line px-4 py-3 text-sm"
+              className="flex max-h-[min(14rem,30dvh)] flex-col border-b border-line px-4 py-3 text-sm"
               aria-label="Queued messages"
             >
               <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
@@ -191,7 +191,7 @@ export function Composer({
                   <li
                     // biome-ignore lint/suspicious/noArrayIndexKey: Pi queues carry only text, which may repeat.
                     key={`${message.kind}-${index}`}
-                    className="flex min-w-0 animate-in flex-col gap-1 fade-in-0"
+                    className="flex min-w-0 flex-col gap-1"
                   >
                     {queue.showKinds && (
                       <span className="text-xs text-ink-3">
@@ -213,7 +213,7 @@ export function Composer({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={cn(picker, "control-enter shrink-0 font-mono text-xs")}
+                    className={cn(picker, "shrink-0 font-mono text-xs")}
                     aria-label={`Delivery: ${DELIVERY[queueMode].label}`}
                     disabled={disabled}
                   >
@@ -255,7 +255,7 @@ export function Composer({
                   <span
                     aria-hidden
                     className={cn(
-                      "absolute inset-0 grid place-items-center transition-[opacity,transform] duration-(--dur-enter) ease-(--ease-enter)",
+                      "absolute inset-0 grid place-items-center",
                       showStop ? "scale-75 opacity-0" : "scale-100 opacity-100",
                     )}
                   >
@@ -264,7 +264,7 @@ export function Composer({
                   <span
                     aria-hidden
                     className={cn(
-                      "absolute inset-0 grid place-items-center transition-[opacity,transform] duration-(--dur-enter) ease-(--ease-enter)",
+                      "absolute inset-0 grid place-items-center",
                       showStop ? "scale-100 opacity-100" : "scale-75 opacity-0",
                     )}
                   >
