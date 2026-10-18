@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { type SwipeEnd, type SwipeGesture, startSwipe } from "./swipeGesture.ts";
 
 // Do not animate an inherited CSS variable: that invalidates styles throughout the transcript
@@ -196,14 +204,18 @@ export function useSidebarSwipe({
     };
   }, []);
 
+  const settling = settle?.target === open;
   return {
-    progress: progress ?? (open ? 1 : 0),
     dragging: progress !== null,
     mainRef,
     revealRef,
-    settleDuration: settle?.target === open ? settle.duration : 300,
-    // A tap opens or closes it along the drawer curve; a release continues the finger's own speed.
-    settleEasing: settle?.target === open ? settle.easing : "var(--ease-drawer)",
+    /** The page and the reveal settle together, so both take this one style. */
+    style: {
+      "--sidebar-progress": progress ?? (open ? 1 : 0),
+      "--sidebar-duration": `${settling ? settle.duration : 300}ms`,
+      // A tap opens or closes it along the drawer curve; a release continues the finger's own speed.
+      "--sidebar-easing": settling ? settle.easing : "var(--ease-drawer)",
+    } as CSSProperties,
     cancelDrag,
   };
 }
