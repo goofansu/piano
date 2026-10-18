@@ -3,27 +3,13 @@ import { type CSSProperties, type ReactNode, type RefObject, useEffect } from "r
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
-export function sidebarRevealStyle(
-  progress: number,
-  duration: number,
-  easing: string,
-): CSSProperties {
-  return {
-    "--sidebar-progress": progress,
-    "--sidebar-duration": `${duration}ms`,
-    "--sidebar-easing": easing,
-  } as CSSProperties;
-}
-
 /** Sheet/Drawer move the navigation over the page. This reveal instead moves the live page.
  * Compose the same Radix modal primitive to retain focus trapping, Escape and nested overlays;
  * own its surface because shadcn SheetContent cannot expose a finger-driven partial scrim. */
 export function PianoSidebarReveal({
   open,
   dragging,
-  progress,
-  settleDuration,
-  settleEasing,
+  style,
   onOpenChange,
   contentRef: content,
   title,
@@ -31,9 +17,7 @@ export function PianoSidebarReveal({
 }: {
   open: boolean;
   dragging: boolean;
-  progress: number;
-  settleDuration: number;
-  settleEasing: string;
+  style: CSSProperties;
   onOpenChange: (open: boolean) => void;
   contentRef: RefObject<HTMLDivElement | null>;
   title: string;
@@ -53,7 +37,7 @@ export function PianoSidebarReveal({
           data-slot="mobile-sidebar"
           data-motion="drawer"
           data-dragging={dragging}
-          style={sidebarRevealStyle(progress, settleDuration, settleEasing)}
+          style={style}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
             event.preventDefault();

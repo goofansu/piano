@@ -3,7 +3,7 @@ import { PanelLeftCloseIcon, PanelLeftOpenIcon, XIcon } from "lucide-react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import { IconButton } from "@/components/IconButton";
 import { PianoMark } from "@/components/PianoMark";
-import { PianoSidebarReveal, sidebarRevealStyle } from "@/components/PianoSidebarReveal";
+import { PianoSidebarReveal } from "@/components/PianoSidebarReveal";
 import { TooltipProvider } from "@/components/PianoTooltip";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { trackPointerDrag } from "@/lib/pointerDrag";
@@ -107,9 +107,7 @@ export function AppLayout({
         <PianoSidebarReveal
           open={mobileOpen}
           dragging={swipe.dragging}
-          progress={swipe.progress}
-          settleDuration={swipe.settleDuration}
-          settleEasing={swipe.settleEasing}
+          style={swipe.style}
           onOpenChange={(open) => {
             swipe.cancelDrag();
             layout.setMobileOpen(open);
@@ -125,7 +123,7 @@ export function AppLayout({
           data-slot="layout-main"
           data-motion="drawer"
           data-sidebar-dragging={swipe.dragging}
-          style={sidebarRevealStyle(swipe.progress, swipe.settleDuration, swipe.settleEasing)}
+          style={swipe.style}
           className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
         >
           {content}
