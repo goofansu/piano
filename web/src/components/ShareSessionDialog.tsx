@@ -24,12 +24,14 @@ import type { SharePhase } from "@/lib/commandForms";
 
 /** Renders the share form's phase; the command host's forms publish (once) and close it. */
 export function ShareSessionDialog({
+  open,
   phase,
   allowed,
   signedIn,
   submit,
   close,
 }: {
+  open: boolean;
   phase: SharePhase;
   allowed: boolean;
   signedIn: boolean;
@@ -41,6 +43,12 @@ export function ShareSessionDialog({
   const busy = phase.phase === "publishing";
   // The copy confirmation is the dialog's own: it never reaches the form.
   const [copied, setCopied] = useState(false);
+  // The dialog stays mounted between shares, so a new share starts uncopied.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setCopied(false);
+  }
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 2000);
@@ -57,7 +65,7 @@ export function ShareSessionDialog({
     }
   };
   return (
-    <Dialog open onOpenChange={(open) => !open && close()}>
+    <Dialog open={open} onOpenChange={(open) => !open && close()}>
       <DialogContent
         className="sm:max-w-md"
         showCloseButton={!!result}

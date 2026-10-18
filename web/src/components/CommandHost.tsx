@@ -162,14 +162,28 @@ export function CommandHost({
   const { form } = forms;
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renaming = form?.kind === "rename-session" ? form.target : null;
+  const close = forms.cancel;
+  const answer = forms.answer();
   // Archive, delete and close folder share one confirm dialog; `confirmation` decides its wording.
   const asking = form ? confirmation(state, form) : undefined;
   // The dialog animates closed after its form closes, so it keeps the last question meanwhile.
   const lastAsked = useRef(asking);
   if (asking) lastAsked.current = asking;
   const asked = asking ?? lastAsked.current;
-  const close = forms.cancel;
-  const answer = forms.answer();
+  // The share and project dialogs likewise keep their last face while they animate closed.
+  const sharing = form?.kind === "share-session";
+  const lastShare = useRef({
+    phase: forms.share,
+    allowed: answer.allowed,
+    signedIn: radiusSignedIn,
+  });
+  if (sharing)
+    lastShare.current = { phase: forms.share, allowed: answer.allowed, signedIn: radiusSignedIn };
+  const project = form?.kind === "project" ? form.dialog : undefined;
+  const lastProject = useRef(
+    project && { dialog: project, name: forms.text, allowed: answer.allowed },
+  );
+  if (project) lastProject.current = { dialog: project, name: forms.text, allowed: answer.allowed };
 
   const effects: CommandEffects = {
     send,
@@ -200,15 +214,12 @@ export function CommandHost({
       }}
     >
       {children}
-      {form?.kind === "share-session" && (
-        <ShareSessionDialog
-          phase={forms.share}
-          allowed={answer.allowed}
-          signedIn={radiusSignedIn}
-          submit={forms.submit}
-          close={close}
-        />
-      )}
+      <ShareSessionDialog
+        open={sharing}
+        {...lastShare.current}
+        submit={forms.submit}
+        close={close}
+      />
       <Dialog open={!!renaming} onOpenChange={(open) => !open && close()}>
         <DialogContent
           className="sm:max-w-md"
@@ -274,11 +285,10 @@ export function CommandHost({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {form?.kind === "project" && (
+      {lastProject.current && (
         <ProjectDialogView
-          dialog={form.dialog}
-          name={forms.text}
-          allowed={answer.allowed}
+          open={!!project}
+          {...lastProject.current}
           edit={forms.edit}
           submit={forms.submit}
           close={close}

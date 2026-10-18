@@ -156,6 +156,7 @@ export function ProjectMenu({
  * one instance and its form (name, whether saving is allowed, submitting); this only renders it.
  */
 export function ProjectDialogView({
+  open,
   dialog,
   name,
   allowed,
@@ -163,6 +164,7 @@ export function ProjectDialogView({
   submit,
   close,
 }: {
+  open: boolean;
   dialog: ProjectDialog;
   name: string;
   allowed: boolean;
@@ -173,7 +175,7 @@ export function ProjectDialogView({
   const editing = !!dialog.project;
   const nameInput = useRef<HTMLInputElement>(null);
   return (
-    <Dialog open onOpenChange={(open) => !open && close()}>
+    <Dialog open={open} onOpenChange={(open) => !open && close()}>
       <DialogContent
         className="sm:max-w-md"
         aria-describedby={undefined}

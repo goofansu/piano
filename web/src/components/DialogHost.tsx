@@ -1,5 +1,5 @@
 import type { ClientCommand as ClientMessage, Dialog as PiDialog } from "@shared/wire";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,11 +21,16 @@ export function DialogHost({
   pending: PendingDialogs;
   send: (m: ClientMessage) => void;
 }) {
-  return head ? (
+  // The dialog animates closed after it leaves the queue, so it keeps the last question meanwhile.
+  const last = useRef(head && { d: head, more });
+  if (head) last.current = { d: head, more };
+  const shown = last.current;
+  return shown ? (
     <DialogView
-      key={`${head.generation}/${head.id}`}
-      d={head}
-      more={more}
+      key={`${shown.d.generation}/${shown.d.id}`}
+      open={!!head}
+      d={shown.d}
+      more={shown.more}
       send={send}
       connected={connected}
     />
@@ -33,11 +38,13 @@ export function DialogHost({
 }
 
 function DialogView({
+  open,
   d,
   more,
   send,
   connected,
 }: {
+  open: boolean;
   d: PiDialog;
   more: number;
   send: (m: ClientMessage) => void;
@@ -48,9 +55,10 @@ function DialogView({
   useSyncExternalStore(dialogAnswer.subscribe, dialogAnswer.getState);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
+    if (!open) return;
     const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
-  }, []);
+  }, [open]);
   const { submitted, disabled, abortDisabled, remainingSeconds } = dialogAnswer.view(
     now,
     connected,
@@ -58,7 +66,10 @@ function DialogView({
   const answer = (reply: DialogReply) => dialogAnswer.answer(reply, Date.now(), connected);
 
   return (
-    <Dialog open onOpenChange={(open) => !open && dialogAnswer.cancel(Date.now(), connected)}>
+    <Dialog
+      open={open}
+      onOpenChange={(open) => !open && dialogAnswer.cancel(Date.now(), connected)}
+    >
       <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{d.title || "Pi needs an answer"}</DialogTitle>
