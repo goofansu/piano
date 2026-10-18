@@ -4,7 +4,6 @@ import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import { IconButton } from "@/components/IconButton";
 import { PianoMark } from "@/components/PianoMark";
 import { PianoSidebarReveal } from "@/components/PianoSidebarReveal";
-import { TooltipProvider } from "@/components/PianoTooltip";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { trackPointerDrag } from "@/lib/pointerDrag";
 import { SIDEBAR_WIDTH } from "@/lib/sidebarLayout";
@@ -57,80 +56,78 @@ export function AppLayout({
       onOpenChange={(open) => layout.setCollapsed(!open)}
       className="relative h-dvh min-h-0 overflow-hidden bg-surface-0 text-ink"
     >
-      <TooltipProvider delayDuration={300}>
-        <aside
-          data-slot="layout-sidebar"
-          data-state={collapsed ? "collapsed" : "expanded"}
-          data-dragging={resizing}
-          className="relative hidden shrink-0 md:flex md:flex-col"
-          style={{ width: collapsed ? SIDEBAR_WIDTH.rail : width }}
-        >
-          <div className="relative h-full overflow-hidden">
-            {/* Visibility (not display:none) preserves scroll. */}
-            <div
-              inert={collapsed}
-              aria-hidden={collapsed}
-              className={cn("h-full", collapsed && "invisible")}
-              style={{ width }}
-            >
-              {navigation(false)}
-            </div>
-            {collapsed && <div className="absolute inset-0">{navigation(true)}</div>}
+      <aside
+        data-slot="layout-sidebar"
+        data-state={collapsed ? "collapsed" : "expanded"}
+        data-dragging={resizing}
+        className="relative hidden shrink-0 md:flex md:flex-col"
+        style={{ width: collapsed ? SIDEBAR_WIDTH.rail : width }}
+      >
+        <div className="relative h-full overflow-hidden">
+          {/* Visibility (not display:none) preserves scroll. */}
+          <div
+            inert={collapsed}
+            aria-hidden={collapsed}
+            className={cn("h-full", collapsed && "invisible")}
+            style={{ width }}
+          >
+            {navigation(false)}
           </div>
-          {!collapsed && (
-            // No standard shadcn resize handle supports drag-to-collapse with remembered pixel width.
-            // biome-ignore lint/a11y/useSemanticElements: interactive window splitter, not a thematic break.
-            <div
-              role="separator"
-              tabIndex={0}
-              aria-orientation="vertical"
-              aria-label="Resize sidebar"
-              aria-valuenow={width}
-              aria-valuemin={SIDEBAR_WIDTH.min}
-              aria-valuemax={SIDEBAR_WIDTH.max}
-              title="Drag to resize. Double-click to reset."
-              onPointerDown={startResize}
-              onDoubleClick={layout.resetWidth}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  layout.resetWidth();
-                }
-              }}
-              className={cn(
-                "absolute inset-y-0 -right-1 z-10 w-2 touch-none cursor-col-resize select-none after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-brand after:opacity-0 hover:after:opacity-100 focus-visible:after:opacity-100",
-                resizing && "after:opacity-100",
-              )}
-            />
-          )}
-        </aside>
-        <PianoSidebarReveal
-          open={mobileOpen}
-          dragging={swipe.dragging}
-          style={swipe.style}
-          onOpenChange={(open) => {
-            swipe.cancelDrag();
-            layout.setMobileOpen(open);
-          }}
-          contentRef={swipe.revealRef}
-          title={navigationTitle}
-        >
-          {navigation(false)}
-        </PianoSidebarReveal>
-        {/* A viewport landmark, not a shadcn content Card with header/footer padding. */}
-        <main
-          ref={swipe.mainRef}
-          data-slot="layout-main"
-          data-motion="drawer"
-          data-sidebar-dragging={swipe.dragging}
-          style={swipe.style}
-          className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
-        >
-          {content}
-        </main>
-        {aside}
-        {children}
-      </TooltipProvider>
+          {collapsed && <div className="absolute inset-0">{navigation(true)}</div>}
+        </div>
+        {!collapsed && (
+          // No standard shadcn resize handle supports drag-to-collapse with remembered pixel width.
+          // biome-ignore lint/a11y/useSemanticElements: interactive window splitter, not a thematic break.
+          <div
+            role="separator"
+            tabIndex={0}
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            aria-valuenow={width}
+            aria-valuemin={SIDEBAR_WIDTH.min}
+            aria-valuemax={SIDEBAR_WIDTH.max}
+            title="Drag to resize. Double-click to reset."
+            onPointerDown={startResize}
+            onDoubleClick={layout.resetWidth}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                layout.resetWidth();
+              }
+            }}
+            className={cn(
+              "absolute inset-y-0 -right-1 z-10 w-2 touch-none cursor-col-resize select-none after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-brand after:opacity-0 hover:after:opacity-100 focus-visible:after:opacity-100",
+              resizing && "after:opacity-100",
+            )}
+          />
+        )}
+      </aside>
+      <PianoSidebarReveal
+        open={mobileOpen}
+        dragging={swipe.dragging}
+        style={swipe.style}
+        onOpenChange={(open) => {
+          swipe.cancelDrag();
+          layout.setMobileOpen(open);
+        }}
+        contentRef={swipe.revealRef}
+        title={navigationTitle}
+      >
+        {navigation(false)}
+      </PianoSidebarReveal>
+      {/* A viewport landmark, not a shadcn content Card with header/footer padding. */}
+      <main
+        ref={swipe.mainRef}
+        data-slot="layout-main"
+        data-motion="drawer"
+        data-sidebar-dragging={swipe.dragging}
+        style={swipe.style}
+        className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
+      >
+        {content}
+      </main>
+      {aside}
+      {children}
     </SidebarProvider>
   );
 }
