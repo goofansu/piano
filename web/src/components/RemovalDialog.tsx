@@ -8,12 +8,10 @@ import {
 } from "@/components/PianoDialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { useLastShown } from "@/lib/useLastShown";
 
 /**
  * Confirms removing setup from Pi on this machine: an install, or a saved sign-in. It stays
- * mounted so it can animate closed, and keeps its last open face meanwhile: a run that settles
- * and closes it in one update still exits showing its progress, with its buttons disabled.
+ * mounted so it can animate closed.
  */
 export function RemovalDialog({
   open,
@@ -39,13 +37,10 @@ export function RemovalDialog({
   cancel: () => void;
   confirm: () => void;
 }) {
-  const live = { title, description, action, progress, busy, disabled };
-  const face = useLastShown(open ? live : undefined) ?? live;
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        // Live, not kept: whether cancelling is allowed is behaviour, not face.
         if (!next && !busy) cancel();
       }}
     >
@@ -55,22 +50,22 @@ export function RemovalDialog({
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>{face.title}</DialogTitle>
-          <DialogDescription>{face.description}</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" disabled={face.busy} onClick={cancel}>
+          <Button variant="outline" disabled={busy} onClick={cancel}>
             Cancel
           </Button>
           <Button
             variant="destructive"
-            disabled={face.disabled}
+            disabled={disabled}
             onClick={() => {
               if (open) confirm();
             }}
           >
-            {face.busy && <Spinner data-icon="inline-start" />}
-            {face.busy ? face.progress : face.action}
+            {busy && <Spinner data-icon="inline-start" />}
+            {busy ? progress : action}
           </Button>
         </DialogFooter>
       </DialogContent>
