@@ -162,7 +162,9 @@ export function ModelSelect({
           {variant === "outline" && <ChevronDownIcon data-icon="inline-end" aria-hidden />}
         </Button>
       </PopoverTrigger>
+      {/* Mod+/ opens it many times a day: it appears at once. */}
       <PickerContent
+        still
         aria-label="Model and effort"
         collisionPadding={16}
         className="w-96 font-mono max-md:[--type-label:var(--type-caption)]"

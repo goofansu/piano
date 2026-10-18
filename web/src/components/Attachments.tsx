@@ -99,8 +99,8 @@ export function AttachmentDraftView({
           {draft.items.map((a, i) => (
             /* biome-ignore lint/suspicious/noArrayIndexKey: drafts may repeat a file name and only append or clear. */ <Attachment
               key={`${a.name}-${i}`}
+              data-motion="enter"
               orientation="vertical"
-              className="animate-in fade-in-0 zoom-in-95"
             >
               <AttachmentMedia variant="image">
                 <img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} />
@@ -123,12 +123,7 @@ export function AttachmentDraftView({
             </Attachment>
           ))}
           {draft.busy && (
-            <Attachment
-              role="status"
-              orientation="vertical"
-              state="uploading"
-              className="animate-in fade-in-0"
-            >
+            <Attachment role="status" data-motion="enter" orientation="vertical" state="uploading">
               <AttachmentMedia>
                 <Spinner />
               </AttachmentMedia>
@@ -140,10 +135,7 @@ export function AttachmentDraftView({
         </AttachmentGroup>
       )}
       {draft.error && (
-        <Alert
-          variant="destructive"
-          className="mx-3 mt-3 w-auto animate-in fade-in-0 slide-in-from-top-1"
-        >
+        <Alert data-motion="fade" variant="destructive" className="mx-3 mt-3 w-auto">
           <AlertDescription className="break-words">{draft.error}</AlertDescription>
         </Alert>
       )}

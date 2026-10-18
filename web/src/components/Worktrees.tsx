@@ -71,11 +71,7 @@ export function WorktreesPopover({
     operation.dismiss();
   };
   const errorBox = failure && (
-    <Alert
-      ref={errorRef}
-      variant="destructive"
-      className="animate-in fade-in-0 slide-in-from-top-1"
-    >
+    <Alert ref={errorRef} variant="destructive">
       <AlertTitle>{failure.title}</AlertTitle>
       <AlertDescription>
         {failure.lines.map((line) => (
@@ -107,7 +103,7 @@ export function WorktreesPopover({
       {creating && target ? (
         <form
           key="create"
-          className="flex animate-in flex-col gap-3 p-2 fade-in-0 slide-in-from-right-2 duration-200"
+          className="flex flex-col gap-3 p-2"
           onSubmit={(e) => {
             e.preventDefault();
             submit();
@@ -150,7 +146,7 @@ export function WorktreesPopover({
               <FieldLabel htmlFor="wt-hooks">Run approved Worktrunk hooks</FieldLabel>
             </Field>
             {hooks && (
-              <FieldDescription className="animate-in fade-in-0 slide-in-from-top-1">
+              <FieldDescription>
                 Unapproved repository hooks block creation. Review and approve them in a terminal
                 first. Background hooks may outlive creation.
               </FieldDescription>
@@ -165,10 +161,7 @@ export function WorktreesPopover({
           </div>
         </form>
       ) : (
-        <div
-          key="list"
-          className="flex animate-in flex-col fade-in-0 slide-in-from-left-2 duration-200"
-        >
+        <div key="list" className="flex flex-col">
           <Command shouldFilter={false}>
             <PickerSearch
               ref={search}

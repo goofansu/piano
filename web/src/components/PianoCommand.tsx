@@ -39,13 +39,7 @@ export function CommandInput({ className, ...props }: ComponentProps<typeof Base
 
 export function CommandItem({ className, ...props }: ComponentProps<typeof BaseItem>) {
   return (
-    <BaseItem
-      {...props}
-      className={cn(
-        "min-h-(--command-row-height) rounded-md transition-colors duration-(--dur-hover)",
-        className,
-      )}
-    />
+    <BaseItem {...props} className={cn("min-h-(--command-row-height) rounded-md", className)} />
   );
 }
 
@@ -69,7 +63,9 @@ export function CommandDialog({
 }) {
   return (
     <Dialog {...props}>
+      {/* Mod+K opens it many times a day: it appears at once. */}
       <DialogContent
+        still
         className={cn("overflow-hidden p-0", className)}
         showCloseButton={showCloseButton}
       >

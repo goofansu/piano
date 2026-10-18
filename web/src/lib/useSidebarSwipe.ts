@@ -202,7 +202,8 @@ export function useSidebarSwipe({
     mainRef,
     revealRef,
     settleDuration: settle?.target === open ? settle.duration : 300,
-    settleEasing: settle?.target === open ? settle.easing : "cubic-bezier(0.22, 1, 0.36, 1)",
+    // A tap opens or closes it along the drawer curve; a release continues the finger's own speed.
+    settleEasing: settle?.target === open ? settle.easing : "var(--ease-drawer)",
     cancelDrag,
   };
 }

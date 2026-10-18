@@ -145,7 +145,7 @@ function DesktopColumn({
           close();
         } else ownKeys(event);
       }}
-      className="relative my-2 mr-2 flex max-w-[60vw] min-w-0 shrink-0 animate-in flex-col overflow-hidden rounded-2xl border border-line bg-conversation shadow-1 duration-(--dur-enter) fade-in-0 slide-in-from-right-2 motion-reduce:animate-none"
+      className="relative my-2 mr-2 flex max-w-[60vw] min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-conversation shadow-1"
     >
       {/* No standard shadcn resize handle supports a remembered pixel width; mirrors the sidebar's. */}
       {/* biome-ignore lint/a11y/useSemanticElements: interactive window splitter, not a thematic break. */}
@@ -167,7 +167,7 @@ function DesktopColumn({
           }
         }}
         className={cn(
-          "absolute inset-y-0 -left-1 z-10 w-2 touch-none cursor-col-resize select-none after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-brand after:opacity-0 after:transition-opacity hover:after:opacity-100 focus-visible:after:opacity-100",
+          "absolute inset-y-0 -left-1 z-10 w-2 touch-none cursor-col-resize select-none after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-brand after:opacity-0 hover:after:opacity-100 focus-visible:after:opacity-100",
           resizing && "after:opacity-100",
         )}
       />

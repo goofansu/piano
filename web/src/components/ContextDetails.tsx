@@ -125,7 +125,6 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
                 {values.map((value, index) => (
                   <rect
                     key={responses[index].id}
-                    className="transition-[opacity,height,y] duration-300"
                     x={index * 12}
                     y={80 - (peak > 0 ? (value / peak) * 76 : 0)}
                     width={11}

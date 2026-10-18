@@ -156,10 +156,7 @@ export function MessageList({
                 <span className="sr-only">
                   {activity === "starting" ? "Starting" : "Pi is working"}
                 </span>
-                <span
-                  aria-hidden
-                  className="inline-block h-[1em] w-0.5 animate-caret bg-brand align-[-0.15em]"
-                />
+                <span aria-hidden className="inline-block h-[1em] w-0.5 bg-brand align-[-0.15em]" />
               </Row>
             )}
           </div>
@@ -171,8 +168,9 @@ export function MessageList({
           variant="outline-solid"
           size="icon-lg"
           aria-label="Scroll to bottom"
+          data-motion="enter"
           onClick={() => viewport.jump(BOTTOM_ENTRY)}
-          className="absolute inset-x-0 bottom-4 mx-auto rounded-full shadow-2 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none [&_svg:not([class*='size-'])]:size-5"
+          className="absolute inset-x-0 bottom-4 mx-auto rounded-full shadow-2 [&_svg:not([class*='size-'])]:size-5"
         >
           <ArrowDownIcon />
         </PianoButton>
@@ -442,7 +440,7 @@ function CopyResponse({ text }: { text: string }) {
       size="xs"
       aria-label={copied ? "Response copied" : "Copy response"}
       className={cn(
-        "mt-2 -ml-2 text-ink-3 opacity-0 transition-opacity select-none group-hover/reply:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
+        "mt-2 -ml-2 text-ink-3 opacity-0 select-none group-hover/reply:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
         copied && "text-brand opacity-100",
       )}
       onClick={async () => {
@@ -455,7 +453,7 @@ function CopyResponse({ text }: { text: string }) {
         }
       }}
     >
-      {copied ? <CheckIcon className="control-enter" /> : <CopyIcon />}
+      {copied ? <CheckIcon /> : <CopyIcon />}
       <span role="status">{copied ? "Copied" : "Copy"}</span>
     </Button>
   );
@@ -497,7 +495,7 @@ function UserMessage({
       id={id ? messageAnchorId(id) : undefined}
       data-slot={id ? undefined : "submitted-input"}
       className={cn(
-        "rounded-2xl border border-line bg-fill px-4 py-3.5 transition-colors",
+        "rounded-2xl border border-line bg-fill px-4 py-3.5",
         long && "cursor-pointer select-text hover:border-line-strong",
       )}
       onClick={(event) =>
@@ -539,10 +537,7 @@ function UserMessage({
               }}
             >
               {open ? "Show less" : "Show more"}
-              <ChevronDownIcon
-                className={cn("transition-transform duration-200", open && "rotate-180")}
-                aria-hidden
-              />
+              <ChevronDownIcon className={cn(open && "rotate-180")} aria-hidden />
             </Button>
           </div>
         )}
@@ -651,11 +646,7 @@ function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: To
   const { sessionId, cwd, title, status, badge, params, answer, detail } = session;
   return (
     <FoldRow
-      glyph={
-        <span
-          className={cn("block size-2 rounded-full transition-colors duration-300", DOT[outcome])}
-        />
-      }
+      glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
       header={
         <>
           <span className="min-w-20 flex-1 truncate font-medium text-ink">{title}</span>
@@ -795,7 +786,7 @@ function FoldedOutput({
 }
 
 const DOT: Record<ToolOutcome, string> = {
-  running: "animate-live bg-busy",
+  running: "bg-busy",
   failed: "bg-err",
   done: "bg-ok",
   incomplete: "bg-ink-3",
@@ -824,11 +815,7 @@ function Tool({
 
   return (
     <FoldRow
-      glyph={
-        <span
-          className={cn("block size-2 rounded-full transition-colors duration-300", DOT[outcome])}
-        />
-      }
+      glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
       header={
         <>
           <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>

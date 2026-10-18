@@ -36,10 +36,7 @@ export function Banner({
   children?: React.ReactNode;
 }) {
   return (
-    <Alert
-      variant={variant}
-      className="mx-4 mt-3 w-auto animate-in fade-in-0 slide-in-from-top-1 md:mx-6"
-    >
+    <Alert variant={variant} className="mx-4 mt-3 w-auto md:mx-6">
       <AlertTitle className="flex items-center gap-2">
         {title}
         {action}

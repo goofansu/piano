@@ -301,9 +301,6 @@
   --shadow-md: var(--shadow-2);
   --shadow-lg: var(--shadow-3);
   --shadow-xl: var(--shadow-3);
-
-  --animate-caret: caret 1s steps(2) infinite;
-  --animate-live: live 1.8s ease-in-out infinite;
 }
 
 @layer base {
@@ -354,28 +351,6 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-[data-slot="dialog-overlay"] {
-  animation-duration: var(--dur-enter);
-  transition-duration: var(--dur-enter);
-}
-[data-slot="dialog-overlay"][data-state="closed"] {
-  animation-duration: var(--dur-exit);
-  transition-duration: var(--dur-exit);
-}
-[data-slot="sheet-overlay"] {
-  animation-timing-function: var(--ease-enter);
-  transition-timing-function: var(--ease-enter);
-}
-[data-slot="sheet-overlay"][data-state="open"] {
-  animation-duration: 300ms;
-  transition-duration: 300ms;
-}
-[data-slot="sheet-overlay"][data-state="closed"] {
-  animation-duration: 200ms;
-  transition-duration: 200ms;
-  animation-timing-function: var(--ease-exit);
-  transition-timing-function: var(--ease-exit);
-}
 
 /* PianoSidebarReveal owns these surfaces, not upstream Sheet internals. The page remains
  * mounted at full width; only its position changes, so composer and scroll state survive. */
@@ -388,7 +363,7 @@
 }
 [data-slot="mobile-sidebar"][data-state="closed"] {
   /* Keep Radix Presence mounted while the children and live page settle closed. */
-  animation: sidebar-reveal-exit var(--sidebar-duration, var(--dur-layout)) linear;
+  animation: sidebar-reveal-exit var(--sidebar-duration, 300ms) linear;
 }
 @keyframes sidebar-reveal-exit {
   from {
@@ -404,8 +379,7 @@
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   background: var(--surface-0);
   clip-path: inset(0 calc((1 - var(--sidebar-progress)) * 100%) 0 0);
-  transition: clip-path var(--sidebar-duration, var(--dur-layout))
-    var(--sidebar-easing, var(--ease-layout));
+  transition: clip-path var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
   will-change: clip-path;
 }
 [data-slot="sidebar-scrim"] {
@@ -418,12 +392,12 @@
   transform: translateX(calc(var(--sidebar-progress) * 75vw));
   border-radius: calc(var(--sidebar-progress) * 2rem) 0 0 calc(var(--sidebar-progress) * 2rem);
   transition:
-    transform var(--sidebar-duration, var(--dur-layout)) var(--sidebar-easing, var(--ease-layout)),
-    opacity var(--sidebar-duration, var(--dur-layout)) var(--sidebar-easing, var(--ease-layout)),
-    border-radius var(--sidebar-duration, var(--dur-layout))
-    var(--sidebar-easing, var(--ease-layout));
+    transform var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
+    opacity var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
+    border-radius var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
   will-change: transform, opacity;
 }
+/* Opened by a tap, the sidebar enters from closed; a drag already painted its start. */
 @starting-style {
   [data-slot="mobile-sidebar"][data-dragging="false"] [data-slot="sidebar-reveal-navigation"] {
     clip-path: inset(0 100% 0 0);
@@ -440,9 +414,8 @@
     border-radius: calc(var(--sidebar-progress, 0) * 2rem) 0 0
       calc(var(--sidebar-progress, 0) * 2rem);
     transition:
-      transform var(--sidebar-duration, var(--dur-layout)) var(--sidebar-easing, var(--ease-layout)),
-      border-radius var(--sidebar-duration, var(--dur-layout))
-      var(--sidebar-easing, var(--ease-layout));
+      transform var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
+      border-radius var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
     /* Keep the live page on its own layer before the first touch, not mid-gesture. */
     will-change: transform;
   }
@@ -452,6 +425,7 @@
     display: none;
   }
 }
+/* The finger moves the surfaces 1:1; they settle only once it lets go. */
 [data-slot="layout-main"][data-sidebar-dragging="true"],
 [data-slot="mobile-sidebar"][data-dragging="true"] [data-slot="sidebar-reveal-navigation"],
 [data-slot="mobile-sidebar"][data-dragging="true"] [data-slot="sidebar-scrim"] {
@@ -683,30 +657,11 @@
   }
 }
 
-/* Motion. Every state change is answered by motion that explains what changed, at a tempo
- * that never makes you wait. Hover 120ms, enter 200ms, exit 150ms, layout 300ms; one easing for
- * entrances and a plain ease-out for exits. CSS transitions and animate-in/out only, so a change
- * of mind interrupts cleanly. Never animate transcript updates or remount the conversation to
- * get a transition. */
-:root {
-  --dur-hover: 120ms;
-  --dur-enter: 200ms;
-  --dur-exit: 150ms;
-  /* Preserve the session sidebar's established tempo, now shared by every page. */
-  --dur-layout: 300ms;
-  --ease-layout: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-exit: ease-out;
-  --ease-out: var(--ease-enter);
-}
 .composer-card {
   border-radius: 1.25rem;
   border: 1px solid var(--line-strong);
   background: var(--surface-1);
   box-shadow: var(--shadow-1);
-  transition:
-    border-color 180ms ease,
-    box-shadow 180ms ease;
 }
 .composer-card[data-dragging="true"] {
   border-color: var(--brand);
@@ -720,212 +675,33 @@
     0 0 0 3px color-mix(in oklab, var(--brand) 7%, transparent),
     var(--shadow-1);
 }
-.welcome-enter {
-  animation: welcome-enter 420ms var(--ease-enter) both;
+/* A reconnecting notice or loading placeholder waits a moment before showing, so a quick load
+ * never flashes it. It appears at once, without a fade. */
+.late-enter {
+  animation: late-enter 600ms step-end;
 }
-.welcome-composer {
-  animation-delay: 65ms;
-}
-/* A reload shows the page as it is: no entrance replay while it starts. Zero duration rather than
- * none, so clearing data-loading later does not start the animation afresh. */
-[data-loading] :is(.welcome-enter, .view-enter) {
-  animation-duration: 0s;
-  animation-delay: 0s;
-}
-.control-enter {
-  animation: control-enter 180ms var(--ease-enter);
-}
-/* A jumped-to message announces itself, then settles. */
-.message-highlight {
-  animation: message-highlight 2.2s var(--ease-enter) both;
+@keyframes late-enter {
+  from {
+    visibility: hidden;
+  }
 }
 .disclosure-content {
   overflow: hidden;
-}
-.disclosure-content[data-state="open"] {
-  animation: disclosure-open 220ms var(--ease-enter);
-}
-.disclosure-content[data-state="closed"] {
-  animation: disclosure-close 160ms var(--ease-exit);
-}
-
-/* The main sheet's content fades and rises when the view changes (New ↔ Session). */
-.view-enter {
-  animation: view-enter var(--dur-enter) var(--ease-enter) both;
-}
-/* A sidebar row added after the list loaded; rows present at load appear at once. */
-.reveal-row {
-  animation: row-enter var(--dur-enter) var(--ease-enter) both;
-}
-/* A reconnecting notice or loading placeholder waits a moment before showing, so a quick load never flashes it. */
-.late-enter {
-  animation: fade-enter var(--dur-enter) var(--ease-enter) 600ms both;
-}
-/* A transcript fades in over its skeleton as the skeleton fades out. */
-.transcript-enter {
-  animation: fade-enter var(--dur-enter) var(--ease-enter) both;
-}
-.skeleton-layer {
-  transition: opacity var(--dur-exit) var(--ease-exit);
 }
 .skeleton-layer[data-hidden="true"] {
   opacity: 0;
   pointer-events: none;
 }
 
-@keyframes welcome-enter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes view-enter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes row-enter {
-  from {
-    opacity: 0;
-    transform: translateX(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-@keyframes fade-enter {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes message-highlight {
-  0%,
-  30% {
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 35%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 3px transparent;
-  }
-}
-@keyframes control-enter {
-  from {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-@keyframes disclosure-open {
-  from {
-    height: 0;
-    opacity: 0;
-  }
-  to {
-    height: var(--radix-collapsible-content-height);
-    opacity: 1;
-  }
-}
-@keyframes disclosure-close {
-  from {
-    height: var(--radix-collapsible-content-height);
-    opacity: 1;
-  }
-  to {
-    height: 0;
-    opacity: 0;
-  }
-}
-
-/* The keys. The three-key mark is the instrument's live signal: while Pi works the three keys
- * play a scale, each easing one pixel below the fallboard and dimming in turn, on a 1.2s cycle.
- * The press eases in and out rather than stepping, so the keys pulse instead of blinking. When Pi
- * finishes the animation stops and the keys rest under the fallboard. In reduced motion the global
- * reset below stops the scale, so the keys hold a still pressed state instead: dropped and dimmed. */
+/* The keys. The three-key mark is the instrument's live signal: while Pi works the keys hold a
+ * pressed state, dropped one pixel below the fallboard and dimmed; when Pi finishes they rest. */
 .keys[data-playing="true"] [data-key] {
-  animation: key-press 1.2s ease-in-out infinite;
-}
-.keys[data-playing="true"] [data-key="1"] {
-  animation-delay: 0.4s;
-}
-.keys[data-playing="true"] [data-key="2"] {
-  animation-delay: 0.8s;
-}
-@keyframes key-press {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  25% {
-    transform: translateY(1px);
-    opacity: 0.55;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .keys[data-playing="true"] [data-key] {
-    transform: translateY(1px);
-    opacity: 0.6;
-  }
+  transform: translateY(1px);
+  opacity: 0.6;
 }
 
-/* Toasts carry a thin line that drains while they wait to leave; hovering the stack pauses it.
- * It hangs off the content element, positioned against the toast, because sonner owns both of the
- * toast's own pseudo-elements: ::before is the swipe and removal hit area (widened while text is
- * dragged), ::after the hover bridge between stacked toasts. */
-[data-sonner-toast] > [data-content]::after {
-  content: "";
-  position: absolute;
-  left: 0.75rem;
-  right: 0.75rem;
-  bottom: 0;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--toast-line, color-mix(in oklab, var(--ink) 18%, transparent));
-  transform-origin: left;
-  animation: toast-drain var(--toast-life, 4s) linear both;
-}
-[data-sonner-toast][data-expanded="true"] > [data-content]::after {
-  animation-play-state: paused;
-}
-[data-sonner-toaster]:hover [data-sonner-toast] > [data-content]::after {
-  animation-play-state: paused;
-}
-[data-sonner-toast][data-type="error"] {
-  --toast-line: color-mix(in oklab, var(--err) 55%, transparent);
-}
-[data-sonner-toast][data-type="success"] {
-  --toast-line: color-mix(in oklab, var(--brand) 55%, transparent);
-}
-[data-sonner-toast][data-type="warning"] {
-  --toast-line: color-mix(in oklab, var(--warn) 65%, transparent);
-}
-@keyframes toast-drain {
-  from {
-    transform: scaleX(1);
-  }
-  to {
-    transform: scaleX(0);
-  }
-}
-
-/* Live signals: a streaming caret and a gently breathing activity dot. The caret sits at the end
- * of the last block of a streaming reply, where the next word will land. */
+/* The streaming caret sits at the end of the last block of a streaming reply, where the next word
+ * will land. */
 .streaming-caret > :last-child::after,
 .streaming-caret:empty::after {
   content: "";
@@ -935,35 +711,128 @@
   margin-left: 2px;
   vertical-align: -0.15em;
   background: var(--brand);
-  animation: caret 1s steps(2) infinite;
 }
 .streaming-caret > pre:last-child::after {
   display: none;
 }
-@keyframes caret {
-  50% {
+/* Motion is opt-in. An element moves only when it carries `data-motion`, or is one of the few
+ * upstream pieces whose own motion Piano keeps: spinners, Sonner's toasts and the overlay behind a
+ * moving dialog. `.late-enter` is exempt too: its delay decides when, not how, something shows.
+ * Everything else, including upstream hover and enter motion, stays still. One strong ease-out for
+ * every entrance; exits are shorter than entrances. */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* iOS-like drawer curve (Ionic), for the phone sidebar. */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+/* Menus, popovers, selects and tooltips scale from their trigger (Radix's transform origin) with
+ * no slide; dialogs scale from the centre. */
+[data-motion="anchored"],
+[data-motion="tooltip"],
+[data-motion="dialog"] {
+  --tw-ease: var(--ease-out);
+  --tw-enter-scale: 0.96;
+  --tw-exit-scale: 0.96;
+  --tw-enter-translate-x: 0;
+  --tw-enter-translate-y: 0;
+}
+[data-motion="anchored"] {
+  --tw-animation-duration: 150ms;
+}
+[data-motion="tooltip"] {
+  --tw-animation-duration: 125ms;
+}
+[data-motion="dialog"],
+[data-slot="dialog-overlay"]:has(+ [data-motion="dialog"]) {
+  --tw-animation-duration: 200ms;
+  --tw-ease: var(--ease-out);
+}
+:is([data-motion], [data-slot="dialog-overlay"])[data-state="closed"] {
+  --tw-animation-duration: 120ms;
+  --tw-ease: ease-out;
+}
+/* A key that answers a press: it gives a little under the finger and springs back. */
+[data-motion="press"] {
+  transition: transform 150ms var(--ease-out);
+}
+[data-motion="press"]:active:not(:disabled) {
+  translate: none;
+  transform: scale(0.96);
+}
+/* Two faces of one control (Send and Stop) cross-fade in place; the blur hides the overlap. */
+[data-motion="swap"] {
+  transition:
+    opacity 150ms var(--ease-out),
+    scale 150ms var(--ease-out),
+    filter 150ms var(--ease-out);
+}
+/* A fold's chevron turns with it. */
+[data-motion="turn"] {
+  transition: rotate 150ms var(--ease-out);
+}
+/* The composer's focus and drop ring is a change of colour, so it eases. */
+[data-motion="ring"] {
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+/* Something added to the page (an attachment) grows in where it lands; a notice only fades. */
+[data-motion="enter"] {
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+[data-motion="fade"] {
+  transition: opacity 150ms var(--ease-out);
+  @starting-style {
     opacity: 0;
   }
 }
-@keyframes live {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: scale(0.8);
-  }
+/* biome-ignore-start lint/complexity/noImportantStyles: the reset must beat every component's own motion. */
+:not(
+  [data-motion],
+  [data-slot="dialog-overlay"]:has(+ [data-motion]),
+  .animate-spin,
+  .late-enter,
+  [data-sonner-toast]
+),
+::before,
+::after {
+  animation: none !important;
+  transition: none !important;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: it sets only motion properties, which no earlier rule shares. */
+* {
+  scroll-behavior: auto !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  /* biome-ignore-start lint/complexity/noImportantStyles: the reduced-motion reset must beat every component's own motion. */
-  *,
-  ::before,
-  ::after {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
+  /* Fades stay; nothing scales or moves. */
+  [data-motion] {
+    --tw-enter-scale: 1 !important;
+    --tw-exit-scale: 1 !important;
   }
-  /* biome-ignore-end lint/complexity/noImportantStyles: range closes */
+  [data-motion="press"]:active:not(:disabled) {
+    transform: none;
+  }
+  [data-motion="enter"] {
+    @starting-style {
+      transform: none;
+    }
+  }
+  [data-motion="swap"] {
+    scale: none;
+  }
+  [data-motion="turn"] {
+    transition: none;
+  }
+  /* The phone sidebar comes to rest at once; finger tracking stays. */
+  [data-motion="drawer"] {
+    transition: none !important;
+    animation: none !important;
+  }
 }
+/* biome-ignore-end lint/complexity/noImportantStyles: range closes */

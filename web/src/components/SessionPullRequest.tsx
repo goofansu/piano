@@ -177,7 +177,13 @@ export function SessionPullRequestControl({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const link = pr.value?.link;
   const view = pullRequestView(pr.value);
-  const showingDetails = !!view && pr.surface === "details";
+  const popoverOpen = pr.surface === "details" || pr.surface === "editing";
+  // The popover animates closed after its surface closes, so it keeps the last face meanwhile.
+  const lastFace = useRef({ surface: pr.surface, value: pr.value });
+  if (popoverOpen) lastFace.current = { surface: pr.surface, value: pr.value };
+  const faceView = pullRequestView(lastFace.current.value);
+  const faceSurface = lastFace.current.surface;
+  const showingDetails = !!faceView && faceSurface === "details";
   // Opening, cancel and successful discovery replace the focused form controls.
   useEffect(() => {
     if (showingDetails) closeRef.current?.focus();
@@ -202,10 +208,7 @@ export function SessionPullRequestControl({
           <PullRequestForm pr={pr} editing={false} />
         </DialogContent>
       </Dialog>
-      <Popover
-        open={pr.surface === "details" || pr.surface === "editing"}
-        onOpenChange={onOpenChange}
-      >
+      <Popover open={popoverOpen} onOpenChange={onOpenChange}>
         {view && <SessionPullRequestTrigger view={view} ref={triggerRef} />}
         <PopoverContent
           onCloseAutoFocus={restoreFocus}
@@ -216,12 +219,14 @@ export function SessionPullRequestControl({
           className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto"
         >
           <PopoverHeader className="flex-row items-center justify-between gap-2">
-            {view && showingDetails ? (
+            {faceView && showingDetails ? (
               <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
                 <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
                 <span className="min-w-0 break-all">
-                  {view.repo}{" "}
-                  {view.number && <span className="whitespace-nowrap">· #{view.number}</span>}
+                  {faceView.repo}{" "}
+                  {faceView.number && (
+                    <span className="whitespace-nowrap">· #{faceView.number}</span>
+                  )}
                 </span>
               </p>
             ) : (
@@ -237,47 +242,49 @@ export function SessionPullRequestControl({
               <XIcon />
             </Button>
           </PopoverHeader>
-          {view && showingDetails ? (
+          {faceView && showingDetails ? (
             <>
               {/* Plain PR facts, not a second card inside the popover. */}
               <div className="flex min-w-0 flex-col gap-2">
                 <PopoverTitle id={titleId}>
                   <a
-                    href={view.url}
+                    href={faceView.url}
                     target="_blank"
                     rel="noreferrer"
                     className="break-words hover:underline"
                   >
-                    {view.title ?? "View pull request"}
+                    {faceView.title ?? "View pull request"}
                   </a>
                 </PopoverTitle>
                 {/* Status, then provenance, each on its own line: the card never reflows as the time label grows. */}
                 <div className="flex flex-col items-start gap-3">
-                  {view.status ? (
-                    <PullRequestStatusBadge status={view.status} />
+                  {faceView.status ? (
+                    <PullRequestStatusBadge status={faceView.status} />
                   ) : (
                     <Badge variant="secondary">{STATUS_UNAVAILABLE}</Badge>
                   )}
-                  {(view.author || view.timeLabel) && (
+                  {(faceView.author || faceView.timeLabel) && (
                     <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                      {view.author && (
+                      {faceView.author && (
                         <>
                           <Avatar size="sm" className="size-4" aria-hidden>
                             <AvatarImage
-                              src={`https://github.com/${view.author}.png?size=40`}
+                              src={`https://github.com/${faceView.author}.png?size=40`}
                               alt=""
                             />
-                            <AvatarFallback>{view.author.charAt(0).toUpperCase()}</AvatarFallback>
+                            <AvatarFallback>
+                              {faceView.author.charAt(0).toUpperCase()}
+                            </AvatarFallback>
                           </Avatar>
-                          <span className="truncate text-foreground">{view.author}</span>
+                          <span className="truncate text-foreground">{faceView.author}</span>
                         </>
                       )}
-                      {view.timeLabel && <span className="shrink-0">{view.timeLabel}</span>}
+                      {faceView.timeLabel && <span className="shrink-0">{faceView.timeLabel}</span>}
                     </span>
                   )}
                 </div>
               </div>
-              <PullRequestFacts view={view} />
+              <PullRequestFacts view={faceView} />
               <Separator className="opacity-50" />
               {/* Pull the ghost buttons' padding out so their labels meet the content edge. */}
               <div className="-mr-2 -mb-1 flex justify-end gap-1">
@@ -297,7 +304,7 @@ export function SessionPullRequestControl({
               </div>
             </>
           ) : (
-            <PullRequestForm pr={pr} editing={pr.surface === "editing"} />
+            <PullRequestForm pr={pr} editing={faceSurface === "editing"} />
           )}
         </PopoverContent>
       </Popover>

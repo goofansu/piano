@@ -8,7 +8,7 @@ import {
   SlidersHorizontalIcon,
   XIcon,
 } from "lucide-react";
-import { Fragment, memo, useEffect, useState } from "react";
+import { Fragment, memo } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import {
   SessionCommandMenuItem,
@@ -63,11 +63,8 @@ interface Props {
 const row = "h-9 pointer-coarse:h-11 max-md:h-12";
 /** Row actions live in a fixed slot on the right and appear on hover, so nothing shifts. */
 const hoverSlot =
-  "opacity-0 transition-opacity duration-(--dur-hover) group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
-const groupRow = cn(
-  row,
-  "group flex items-center gap-1 rounded-lg pr-1 transition-colors duration-(--dur-hover) hover:bg-fill-hover",
-);
+  "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
+const groupRow = cn(row, "group flex items-center gap-1 rounded-lg pr-1 hover:bg-fill-hover");
 const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
@@ -79,15 +76,7 @@ export function Sidebar({ state }: Props) {
     toggle,
   } = useSidebarList(state, view);
 
-  // Rows already there when the list first loads appear at once, so a reload does not flash;
-  // a row added later enters. Each row decides when it mounts (`useState(reveal)`).
-  const [settled, setSettled] = useState(false);
-  useEffect(() => {
-    if (state.registryLoaded) setSettled(true);
-  }, [state.registryLoaded]);
-  const reveal = () => (settled ? "reveal-row" : undefined);
-
-  const groupProps = { state, select, reveal };
+  const groupProps = { state, select };
   const section = (s: SidebarSection) => {
     const onOpenChange = (open: boolean) => toggle(s.key, open);
     switch (s.kind) {
@@ -133,7 +122,7 @@ export function Sidebar({ state }: Props) {
         return <SidebarSkeleton />;
       case "empty":
         return (
-          <Empty className="view-enter py-8">
+          <Empty className="py-8">
             <EmptyHeader>
               <EmptyDescription>{body.text}</EmptyDescription>
             </EmptyHeader>
@@ -189,7 +178,6 @@ export function Sidebar({ state }: Props) {
                   className="flex flex-col gap-1 py-1"
                   sessions={pinned.sessions}
                   select={select}
-                  reveal={reveal}
                 />
               </CollapsibleContent>
             </Collapsible>
@@ -346,7 +334,6 @@ export function SidebarRail({ working }: { working: boolean }) {
 interface GroupProps extends Pick<Props, "state">, Pick<Navigation, "select"> {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  reveal: () => string | undefined;
 }
 
 /** One line per session: the title alone. Location and project live in the session header and the groupings. */
@@ -354,11 +341,9 @@ const SessionRow = memo(
   function SessionRow({
     t,
     select,
-    reveal,
   }: {
     t: SessionEntry;
-  } & Pick<GroupProps, "select" | "reveal">) {
-    const [enter] = useState(reveal);
+  } & Pick<GroupProps, "select">) {
     const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
     const { selected, disabled, hint, activity } = t;
     // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
@@ -367,8 +352,7 @@ const SessionRow = memo(
       <li
         className={cn(
           row,
-          enter,
-          "group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover",
+          "group flex items-center rounded-lg pr-1 hover:bg-fill-hover",
           selected && "bg-(--selected) hover:bg-(--selected)",
         )}
       >
@@ -384,14 +368,7 @@ const SessionRow = memo(
             {activity === "working" ? (
               <Keys playing className="text-brand" />
             ) : (
-              dot && (
-                <span
-                  className={cn(
-                    "size-2 rounded-full transition-[background-color,border-color] duration-300",
-                    dot,
-                  )}
-                />
-              )
+              dot && <span className={cn("size-2 rounded-full", dot)} />
             )}
           </span>
           <span
@@ -430,7 +407,7 @@ const SessionRow = memo(
   },
   (previous, next) =>
     previous.select === next.select &&
-    // reveal is a mount-only initializer. Compare every catalog field, not the changing AppState.
+    // Compare every catalog field, not the changing AppState.
     Object.keys(previous.t).every(
       (key) => previous.t[key as keyof SessionEntry] === next.t[key as keyof SessionEntry],
     ),
@@ -473,7 +450,7 @@ function SessionRows({
   sessions,
   className,
   ...row
-}: Pick<GroupProps, "select" | "reveal"> & {
+}: Pick<GroupProps, "select"> & {
   sessions: readonly SessionEntry[];
   className: string;
 }) {
@@ -490,16 +467,8 @@ function SessionRows({
 function SessionList({
   sessions,
   select,
-  reveal,
 }: Omit<GroupProps, "open" | "onOpenChange"> & { sessions: readonly SessionEntry[] }) {
-  return (
-    <SessionRows
-      className="flex flex-col gap-1"
-      sessions={sessions}
-      select={select}
-      reveal={reveal}
-    />
-  );
+  return <SessionRows className="flex flex-col gap-1" sessions={sessions} select={select} />;
 }
 
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
@@ -510,9 +479,7 @@ function ProjectGroup({
   onOpenChange,
   state,
   select,
-  reveal,
 }: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
-  const [enter] = useState(reveal);
   const { run } = useCommands();
   const members = sessions;
   const commands = project ? projectCommands(state, project) : [];
@@ -520,7 +487,7 @@ function ProjectGroup({
   const menu = commands.filter((c) => c.id !== "new-session");
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className={cn(groupRow, enter)}>
+      <div className={groupRow}>
         <CollapsibleTrigger asChild>
           <button type="button" className={groupTrigger}>
             <Chevron open={open} />
@@ -573,12 +540,7 @@ function ProjectGroup({
         {members.length === 0 ? (
           <ListEmpty>No sessions yet</ListEmpty>
         ) : (
-          <SessionRows
-            className="flex flex-col gap-1 py-1"
-            sessions={members}
-            select={select}
-            reveal={reveal}
-          />
+          <SessionRows className="flex flex-col gap-1 py-1" sessions={members} select={select} />
         )}
       </CollapsibleContent>
     </Collapsible>
@@ -592,15 +554,13 @@ function FolderGroup({
   onOpenChange,
   state,
   select,
-  reveal,
 }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
-  const [enter] = useState(reveal);
   const { run } = useCommands();
   const { create, close } = folderCommands(state, folder);
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className={cn(groupRow, enter)}>
+      <div className={groupRow}>
         <CollapsibleTrigger asChild>
           <button type="button" className={groupTrigger} title={folder.path}>
             <Chevron open={open} />
@@ -639,11 +599,7 @@ function FolderGroup({
         </DropdownMenu>
       </div>
       {folder.discovery.status === "error" && (
-        <Badge
-          variant="destructive"
-          className="ml-7 animate-in fade-in-0"
-          title={folder.discovery.detail}
-        >
+        <Badge variant="destructive" className="ml-7" title={folder.discovery.detail}>
           Git status unavailable
         </Badge>
       )}
@@ -651,12 +607,7 @@ function FolderGroup({
         {sessions.length === 0 ? (
           <ListEmpty>No sessions yet</ListEmpty>
         ) : (
-          <SessionRows
-            className="flex flex-col gap-1 py-1"
-            sessions={sessions}
-            select={select}
-            reveal={reveal}
-          />
+          <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} select={select} />
         )}
       </CollapsibleContent>
     </Collapsible>

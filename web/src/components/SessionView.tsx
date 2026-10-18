@@ -124,7 +124,6 @@ export function SessionView({ state, send }: Props) {
           {pane.list && (
             <LocalFileContext value={(path) => openPanel({ kind: "file", path })}>
               <MessageList
-                className="transcript-enter"
                 showTools={!messagesOnly}
                 messages={t?.messages ?? []}
                 pending={t?.pending ?? null}
@@ -190,7 +189,7 @@ function StatusLine({ notice }: { notice: SessionNotice }) {
       aria-label={notice.id === "dialog-resolution" ? "Last dialog" : "Last input"}
       role="status"
       className={cn(
-        "animate-in px-4 pt-2 text-sm fade-in-0 slide-in-from-bottom-1 md:px-6",
+        "px-4 pt-2 text-sm md:px-6",
         notice.tone === "warning" ? "text-warning" : "text-ink-2",
       )}
     >

@@ -51,6 +51,7 @@ export function PianoSidebarReveal({
         <Dialog.Content
           ref={content}
           data-slot="mobile-sidebar"
+          data-motion="drawer"
           data-dragging={dragging}
           style={sidebarRevealStyle(progress, settleDuration, settleEasing)}
           aria-describedby={undefined}
@@ -66,9 +67,16 @@ export function PianoSidebarReveal({
         >
           <SheetTitle className="sr-only">{title}</SheetTitle>
           {/* No standard surface reveals a stationary sidebar beneath a translated live page. */}
-          <div data-slot="sidebar-reveal-navigation">{children}</div>
+          <div data-slot="sidebar-reveal-navigation" data-motion="drawer">
+            {children}
+          </div>
           <Dialog.Close asChild>
-            <button type="button" data-slot="sidebar-scrim" aria-label="Dismiss sidebar" />
+            <button
+              type="button"
+              data-slot="sidebar-scrim"
+              data-motion="drawer"
+              aria-label="Dismiss sidebar"
+            />
           </Dialog.Close>
         </Dialog.Content>
       </Dialog.Portal>

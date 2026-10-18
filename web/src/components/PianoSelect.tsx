@@ -26,6 +26,7 @@ export function SelectContent({
 }: ComponentProps<typeof BaseContent>) {
   return (
     <BaseContent
+      data-motion="anchored"
       {...props}
       position={position}
       sideOffset={sideOffset}

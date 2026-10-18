@@ -2,7 +2,7 @@
 
 Moonstone makes Piano warm, cozy and friendly in the manner of Earendil's products (earendil.com,
 lefos.com, pi.dev) while keeping the quiet UI. It replaces the earlier "Felt" palette (ivory, warm
-charcoal and a felt-green accent) and keeps Felt's motion, hierarchy and keyboard flow, described
+charcoal and a felt-green accent) and keeps Felt's hierarchy and keyboard flow, described
 below. Colours derive from the Lefos palette; `web/src/index.css` is authoritative.
 
 ## Palette
@@ -83,24 +83,7 @@ ratio over any layer with `--fill-active` beneath the glyph, as in a selected ro
 Limitation: light-mode status colours drop below 4.5:1 as text over a selected (`--fill-active`) row;
 they stay above 3:1 there, which is what their glyph use needs.
 
-Motion tokens, also in `index.css`:
-
-| Token | Value | Use |
-| --- | --- | --- |
-| `--dur-hover` | 120ms | hover, press, colour |
-| `--dur-enter` | 200ms | things appearing |
-| `--dur-exit` | 150ms | things leaving |
-| `--dur-layout` | 300ms | shared desktop sidebar width |
-| `--ease-layout` | `cubic-bezier(0.32, 0.72, 0, 1)` | shared desktop sidebar width |
-| `--ease-enter` | `cubic-bezier(0.22, 1, 0.36, 1)` | every entrance |
-| `--ease-exit` | `ease-out` | every exit |
-
-The shared layout refactor promotes the session sidebar's actual 300ms easing to layout tokens.
-The previous 320ms token/documentation did not drive either sidebar: Settings used 200ms linear.
-Both pages now use one width-bearing surface, one persisted width/collapse preference, and one
-persistent inset main card. Content activation uses the same 200ms entrance without remounting
-session content; the card's 360ms first-load entrance runs only when the shell mounts. Mobile
-navigation retains the shared Sheet's 300ms entrance / 200ms exit and focus policy.
+Motion has one token, `--ease-out` (see Motion).
 
 ## Type
 
@@ -198,54 +181,62 @@ favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it i
   16 of 28 units, as in the app, in fixed earth tones: a terracotta `#b86b52` fallboard, sunkissed
   `#e1b06e` white keys and a sage `#a3a473` black key. The apple-touch and maskable icons are
   full-bleed squares; the 192 and 512 icons have a 6/28 corner radius.
-- **Animation.** See the next section. The press eases in and out rather than stepping.
+- **Animation.** None; see the next section.
 
 ## The one memorable element: the keys play
 
-The three-key mark is the instrument's live signal. Wherever Pi is working the keys play a scale:
-each key in turn eases 1px below the fallboard, dimming to 55%, and back up, 0.4s apart on a 1.2s
-cycle, so the keys pulse rather than blink, and they rest under the fallboard when Pi finishes.
-(A stepped press was tried and dropped: the hard jumps read as flashing.)
+The three-key mark is the instrument's live signal. Wherever Pi is working the keys hold a
+pressed state, dropped 1px below the fallboard and dimmed to 60%, and they rest under the
+fallboard when Pi finishes. (They played a scale until motion was removed; see Motion.)
 
 - In the sidebar row, the keys replace the yellow dot while that session streams.
-- In the transcript, the keys are the glyph of the pending reply, with a caret blinking beside
-  them before the first token arrives, and stay the glyph while the reply streams.
-- In the collapsed rail, where no rows are visible, the mark plays when any session is working.
+- In the transcript, the keys are the glyph of the pending reply, with a caret beside them before
+  the first token arrives, and stay the glyph while the reply streams.
+- In the collapsed rail, where no rows are visible, the mark is pressed when any session is working.
 - The browser tab icon switches to a pressed-keys variant while the session on screen works.
 
-In reduced motion the keys hold a static pressed state: dropped 1px and dimmed to 60%. This is the only ornament; everything
-else is structure.
+This is the only ornament; everything else is structure.
 
 Considered and rejected: playing the header mark whenever any session works while the sidebar is
 expanded. The row already says so; two instruments playing at once is noise.
 
-## Motion principles
+## Motion
 
-- **Answer the action.** Motion exists to show what changed. Nothing animates on its own except
-  the keys while Pi works and the caret while text streams.
-- **Never wait.** Enter 200ms, exit 150ms, hover 120ms, layout 300ms. Interruptible CSS
-  transitions and `animate-in/out`, no JS timelines.
-- **One orchestrated first load.** Sidebar skeleton rows (glyph + line, the real row geometry)
-  appear at once; when projects arrive the real rows fade in with a 20ms stagger capped at eight
-  rows and the main sheet rises 10px. There is never a spinner in the middle of an empty screen.
-- **Switching sessions.** A transcript skeleton that mirrors the row layout (a prompt card, a
-  reply with three lines, a tool row) is on screen within one frame; the real transcript fades in
-  over it as it fades out. The composer stays mounted and never flashes; its draft follows the
-  session.
-- **New ↔ Session.** The sheet content fades and rises 8px. The sidebar selection bar slides to
-  the new row; the rows themselves do not move.
-- **Send.** The arrow scales down on press; the prompt lands pinned at the bottom with the keys
-  and caret already in the pending row. Stop and Send are one control whose face cross-fades.
-- **Overlays.** Popovers and menus scale from their anchor (96 → 100) in 160ms; the phone sidebar
-  sheet slides with its overlay fading in step.
-- **Toasts.** Top-right on desktop, top-centre on phones, with a thin progress line showing the
-  time left. The brief asked for bottom-right on desktop; the composer's Send/Stop key lives at
-  the bottom right of the column, and the existing browser check asserts a notification must not
-  cover Stop, so toasts stay above the work. Recorded as a deliberate deviation.
-- **Transcript updates never animate.** Streaming text, tool rows and results append without
-  motion so scroll pinning keeps working.
-- **Reduced motion** disables every animation and transition and holds the keys pressed; the
-  existing browser check asserts zero running animations.
+Motion is being redesigned from nothing, a page at a time, each piece added back only with a
+reason. It is opt-in: `index.css` ends with a reset that stops all animation and transition except
+on an element marked `data-motion` (and spinners, Sonner's toasts and the overlay behind a moving
+dialog). The upstream shadcn components in `components/ui/` keep their own motion classes; the
+`Piano*` wrappers opt in and the `data-motion` rules retune them.
+
+One curve, `--ease-out` `cubic-bezier(0.23, 1, 0.32, 1)`, for every entrance; exits are 120ms
+`ease-out`. Reduced motion keeps the fades and drops the scale.
+
+| Surface | Motion | Why |
+| --- | --- | --- |
+| Menus, popovers, selects (`anchored`) | 150ms fade and scale 0.96 → 1 from the trigger, no slide | they open from a control; scaling from it says where they came from |
+| Tooltips (`tooltip`) | 125ms, same shape; none when moving between tooltips (Radix `instant-open`) | after the first, the delay and the motion are both skipped |
+| Dialogs (`dialog`) | 200ms fade and scale 0.96 → 1 from the centre, overlay fading with it | not anchored to a trigger |
+| Command palette, model picker | none (`still`) | opened by Mod+K and Mod+/ many times a day |
+| Send key (`press`) | scale 0.96 while held, 150ms back | press feedback, mostly for taps |
+| Composer ring (`ring`) | border and shadow ease over 150ms on focus and file drag | a colour change of state |
+| Attachment added (`enter`) | 150ms fade and scale 0.96 → 1 via `@starting-style` | shows where the image went |
+| Composer and New session notices (`fade`) | 150ms fade in | a notice should not pop; scaling a full-width box looks wrong |
+| Send ↔ Stop (`swap`) | the two faces cross-fade over 150ms, scale 0.75 ↔ 1 with a 2px blur | one control changing state in place; the blur hides two icons overlapping |
+| Fold chevron (`turn`) | rotates over 150ms | confirms which way the fold went; the fold's content opens at once |
+| Scroll to bottom (`enter`) | 150ms fade and scale in | otherwise it pops in while reading |
+| Delivery picker and queued messages (`fade`) | 150ms fade in | they appear beside and above the composer as you send |
+| Transcript, streaming output, fold content, loading placeholder, jumps | none | the transcript never moves under the reader; a jump always lands the message 16px under the top |
+| Phone sidebar (`drawer`) | follows the finger 1:1; on release it settles at the finger's speed into a stop (120–420ms); a tap opens or closes it over 300ms on `--ease-drawer` `cubic-bezier(0.32, 0.72, 0, 1)` | a gesture should finish the way it was moving; a tap gets the iOS drawer feel |
+| Desktop sidebar collapse (Mod+B or its button), sidebar rows, right sidebar | none | a keyboard shortcut and frequent navigation should answer at once |
+| Settings: section switches, loading placeholders giving way to content, notices that replace them, the sign-in dialog's steps | none | navigation and content arriving answer at once, as in the transcript; Settings' folds share the turning chevron and its dialogs the overlay motion |
+| New session page entrance | none | seen many times a day, often from the keyboard, with the composer focused to type at once |
+
+One timing behaviour is not motion, because it decides when something shows, not how:
+
+- **Grace period.** The reconnecting pill and loading placeholders (`.late-enter`) wait 600ms
+  before appearing, so a quick load never flashes them; they then appear at once.
+
+What the removed motion was is recorded under "What Felt changed and why" below.
 
 ## Keyboard flow
 

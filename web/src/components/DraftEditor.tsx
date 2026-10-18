@@ -123,6 +123,7 @@ export function DraftEditor({
   });
   return (
     <div
+      data-motion="ring"
       className={cn(composerCard, className)}
       {...attachmentEvents(attachments, attachmentsDisabled)}
     >

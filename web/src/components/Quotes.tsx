@@ -22,7 +22,7 @@ export function QuoteChips({ draft, disabled }: { draft: QuoteDraft; disabled: b
       {draft.items.map((quote, i) => (
         <li
           key={quote}
-          className="group/quote flex min-w-0 animate-in items-center rounded-md transition-colors duration-(--dur-hover) fade-in-0 zoom-in-95 hover:bg-fill-hover focus-within:bg-fill-hover"
+          className="group/quote flex min-w-0 items-center rounded-md hover:bg-fill-hover focus-within:bg-fill-hover"
         >
           <Tooltip>
             <TooltipTrigger asChild>
