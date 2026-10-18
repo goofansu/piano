@@ -1,9 +1,9 @@
 /**
  * What a Settings section does when the user changes setup: one change at a time, a confirmation
  * before a destructive one, a sign-in dialog, and a re-read of the section's facts once a change
- * settles either way. The confirmation keeps its subject after closing, so its dialog keeps its
- * wording while it animates closed. Each sign-in gets a fresh key, so reopening the dialog starts
- * it afresh. Nothing here depends on React.
+ * settles either way. A confirmation exists only while its dialog is on screen; the dialog keeps
+ * its own face while it animates closed. Each sign-in gets a fresh key, so reopening the dialog
+ * starts it afresh. Nothing here depends on React.
  */
 
 export interface SetupActionsState<C, S> {
@@ -11,10 +11,8 @@ export interface SetupActionsState<C, S> {
   running: string | undefined;
   /** The last change's failure, cleared when another starts. */
   error: string;
-  /** The confirmation last asked for, kept after it closes. */
+  /** The confirmation on screen, until it is cancelled or a change settles. */
   confirmation: C | undefined;
-  /** Whether that confirmation is on screen. */
-  confirming: boolean;
   /** The sign-in dialog's subject, with the key that names this opening of it. */
   signIn: { subject: S; key: string } | undefined;
 }
@@ -64,7 +62,6 @@ export function createSetupActions<C = never, S = never>(
     running: undefined,
     error: "",
     confirmation: undefined,
-    confirming: false,
     signIn: undefined,
   };
   const listeners = new Set<() => void>();
@@ -96,12 +93,13 @@ export function createSetupActions<C = never, S = never>(
       } finally {
         // The re-read starts first, so no moment shows the change settled on facts it may have changed.
         options.refresh();
-        set({ running: undefined, confirming: false });
+        set({ running: undefined, confirmation: undefined });
       }
     },
-    confirm: (confirmation) => set({ confirmation, confirming: true }),
+    confirm: (confirmation) => set({ confirmation }),
     cancel: () => {
-      if (state.running === undefined && state.confirming) set({ confirming: false });
+      if (state.running === undefined && state.confirmation !== undefined)
+        set({ confirmation: undefined });
     },
     openSignIn: (subject) => set({ signIn: { subject, key: newKey() } }),
     closeSignIn: () => {

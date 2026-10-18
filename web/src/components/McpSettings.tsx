@@ -47,7 +47,7 @@ export function McpSettings() {
     refresh: () => void setup.refresh(),
     success: (text) => toast.success(text),
   });
-  const { confirmation, confirming, signIn } = actions;
+  const { confirmation, signIn } = actions;
   const busy = actions.running !== undefined;
   const view = mcpSetupView({
     state: setup.value,
@@ -69,9 +69,8 @@ export function McpSettings() {
       title="MCP"
       dialogs={
         <>
-          {/* Keeps the last confirmation's wording while it animates closed. */}
           <RemovalDialog
-            open={confirming && !!confirmation}
+            open={!!confirmation}
             busy={busy}
             cancel={actions.cancel}
             {...(confirmation?.kind === "sign-out"

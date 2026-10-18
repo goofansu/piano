@@ -35,7 +35,7 @@ import { useRadiusSetup } from "@/lib/useRadiusSetup";
  */
 export function RadiusSection({ reveal }: { reveal?: number }) {
   const setup = useRadiusSetup();
-  const { view, confirmation, confirming, providers } = setup;
+  const { view, confirmation, providers } = setup;
   const { account, tools, mcp, webSearch } = view;
   const removal = confirmation && confirmation.kind !== "sign-out" ? confirmation : undefined;
   const anchor = useRef<HTMLElement>(null);
@@ -154,9 +154,8 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
           {view.installationError.detail}
         </SettingsAlert>
       )}
-      {/* Keeps the last confirmation's wording while it animates closed. */}
       <RemovalDialog
-        open={confirming && !!confirmation}
+        open={!!confirmation}
         cancel={setup.cancel}
         {...(removal
           ? {

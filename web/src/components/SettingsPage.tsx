@@ -152,7 +152,7 @@ function ProvidersSettings({
     success: (text) => toast.success(text),
     failure: (text) => toast.error(text),
   });
-  const { confirmation: signOutTarget, confirming, signIn } = actions;
+  const { confirmation: signOutTarget, signIn } = actions;
   const signingOut = actions.running;
   const { body, providers } = providersSettingsView({
     value: observed.value,
@@ -173,9 +173,8 @@ function ProvidersSettings({
       sectionId="settings-providers"
       dialogs={
         <>
-          {/* Keeps the last provider's wording while it animates closed. */}
           <RemovalDialog
-            open={confirming && !!signOutTarget}
+            open={!!signOutTarget}
             busy={!!signingOut}
             cancel={actions.cancel}
             {...signOutCopy(signOutTarget?.name)}
