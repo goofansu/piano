@@ -7,7 +7,7 @@ test("GitHub issue, PR and repository links are compact without changing destina
   const html = renderMarkdown(
     `Follow ${url}, then [#3799](https://github.com/example/herdr/pull/3799). [**Review**](https://github.com/example/herdr/pull/4) <https://github.com/example/herdr>`,
   );
-  assert.equal((html.match(/class="github-link"/g) ?? []).length, 4);
+  assert.equal((html.match(/class="brand-link"/g) ?? []).length, 4);
   assert.ok(
     html.includes(
       'href="https://github.com/goofansu/herdr-hunk/issues/2?x=1&amp;y=2#issuecomment-3"',
@@ -45,7 +45,7 @@ test("GitHub rendering leaves code and unrelated URLs alone and escapes untruste
     "https://user@github.com/a/b/issues/1",
   ]) {
     assert.equal(renderMarkdown(other), `<p>${other}</p>`);
-    assert.ok(!renderMarkdown(`[link](${other})`).includes("github-link"));
+    assert.ok(!renderMarkdown(`[link](${other})`).includes("brand-link"));
   }
   const html = renderMarkdown(
     '[<img src=x onerror=alert>](https://github.com/a/b/issues/1?x="onclick="bad)',
@@ -59,7 +59,7 @@ test("GitHub rendering leaves code and unrelated URLs alone and escapes untruste
 test("Linear links reuse the MCP logo and preserve destinations and labels", () => {
   const url = "https://linear.app/team/issue/ENG-42/fix?x=1&y=2#comment";
   const html = renderMarkdown(`${url}, [**Fix**](${url}) <${url}>`);
-  assert.equal((html.match(/class="linear-link"/g) ?? []).length, 3);
+  assert.equal((html.match(/class="brand-link"/g) ?? []).length, 3);
   assert.equal((html.match(/href="\/mcp-logos.svg#linear"/g) ?? []).length, 3);
   assert.ok(html.includes(`href="${url.replaceAll("&", "&amp;")}"`));
   assert.ok(html.includes(`title="${url.replaceAll("&", "&amp;")}"`));
@@ -73,7 +73,7 @@ test("Linear links reuse the MCP logo and preserve destinations and labels", () 
     "https://linear.app:8080/team/issue/ENG-42",
   ]) {
     assert.equal(renderMarkdown(other), `<p>${other}</p>`);
-    assert.ok(!renderMarkdown(`[link](${other})`).includes("linear-link"));
+    assert.ok(!renderMarkdown(`[link](${other})`).includes("brand-link"));
   }
 });
 
