@@ -9,6 +9,11 @@ import {
 } from "react";
 import { type SwipeEnd, type SwipeGesture, startSwipe } from "./swipeGesture.ts";
 
+/** The open sidebar's share of the viewport width: the page moves this far and the swipe spans it. */
+export const SIDEBAR_REVEAL_WIDTH = 0.75;
+/** The moved page's leading corner radius when fully open, in rem. */
+export const SIDEBAR_REVEAL_RADIUS = 2;
+
 // Do not animate an inherited CSS variable: that invalidates styles throughout the transcript
 // and sidebar on every frame. Update only the three moving/painted surfaces instead.
 function paintPosition(
@@ -16,8 +21,10 @@ function paintPosition(
   reveal: HTMLElement | null,
   progress: number | null,
 ) {
-  const transform = progress === null ? "" : `translate3d(${progress * 75}vw, 0, 0)`;
-  const radius = progress === null ? "" : `${progress * 2}rem 0 0 ${progress * 2}rem`;
+  const transform =
+    progress === null ? "" : `translate3d(${progress * SIDEBAR_REVEAL_WIDTH * 100}vw, 0, 0)`;
+  const corner = progress === null ? "" : `${progress * SIDEBAR_REVEAL_RADIUS}rem`;
+  const radius = progress === null ? "" : `${corner} 0 0 ${corner}`;
   if (main) {
     main.style.transform = transform;
     main.style.borderRadius = radius;
@@ -129,7 +136,7 @@ export function useSidebarSwipe({
         swipe: startSwipe(
           { x: touch.clientX, y: touch.clientY, time: event.timeStamp },
           open,
-          innerWidth * 0.75,
+          innerWidth * SIDEBAR_REVEAL_WIDTH,
         ),
         position: null,
       };
@@ -212,6 +219,9 @@ export function useSidebarSwipe({
     /** The page and the reveal settle together, so both take this one style. */
     style: {
       "--sidebar-progress": progress ?? (open ? 1 : 0),
+      // Constant during a drag, so the CSS settle reads the same geometry the drag paints.
+      "--sidebar-reveal-width": `${SIDEBAR_REVEAL_WIDTH * 100}vw`,
+      "--sidebar-reveal-radius": `${SIDEBAR_REVEAL_RADIUS}rem`,
       "--sidebar-duration": `${settling ? settle.duration : 300}ms`,
       // A tap opens or closes it along the drawer curve; a release continues the finger's own speed.
       "--sidebar-easing": settling ? settle.easing : "var(--ease-drawer)",
