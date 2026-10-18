@@ -39,6 +39,7 @@ import {
   type SignalOutcome,
   STATUS_UNAVAILABLE,
 } from "@/lib/pullRequestView";
+import { useLastShown } from "@/lib/useLastShown";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
 const states = {
@@ -179,10 +180,9 @@ export function SessionPullRequestControl({
   const view = pullRequestView(pr.value);
   const popoverOpen = pr.surface === "details" || pr.surface === "editing";
   // The popover animates closed after its surface closes, so it keeps the last face meanwhile.
-  const lastFace = useRef({ surface: pr.surface, value: pr.value });
-  if (popoverOpen) lastFace.current = { surface: pr.surface, value: pr.value };
-  const faceView = pullRequestView(lastFace.current.value);
-  const faceSurface = lastFace.current.surface;
+  const face = useLastShown(popoverOpen ? { surface: pr.surface, value: pr.value } : undefined);
+  const faceView = pullRequestView(face?.value);
+  const faceSurface = face?.surface;
   const showingDetails = !!faceView && faceSurface === "details";
   // Opening, cancel and successful discovery replace the focused form controls.
   useEffect(() => {

@@ -1,5 +1,5 @@
 import type { ClientCommand as ClientMessage, Dialog as PiDialog } from "@shared/wire";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createDialogAnswer, type DialogReply, type PendingDialogs } from "@/lib/piDialogs";
+import { useLastShown } from "@/lib/useLastShown";
 
 /** Extension dialogs (select / confirm / input / editor) raised by Pi; answered one at a time. */
 export function DialogHost({
@@ -22,9 +23,7 @@ export function DialogHost({
   send: (m: ClientMessage) => void;
 }) {
   // The dialog animates closed after it leaves the queue, so it keeps the last question meanwhile.
-  const last = useRef(head && { d: head, more });
-  if (head) last.current = { d: head, more };
-  const shown = last.current;
+  const shown = useLastShown(head && { d: head, more });
   return shown ? (
     <DialogView
       key={`${shown.d.generation}/${shown.d.id}`}
