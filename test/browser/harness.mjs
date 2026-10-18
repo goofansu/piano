@@ -159,6 +159,7 @@ export async function run(name, setup, journey) {
     );
     return result.stdout.trim();
   };
+  let mod;
   const page = {
     ab,
     open: (path) => ab("open", `${web}${path}`),
@@ -170,6 +171,16 @@ export async function run(name, setup, journey) {
       await ab("find", "role", "combobox", "click", "--name", picker, "--exact");
       await ab("find", "role", "option", "click", "--name", option, "--exact");
       await ab("wait", "--fn", "!document.querySelector('[data-radix-popper-content-wrapper]')");
+    },
+    /** Press a key; a leading `Mod+` is the platform's primary modifier, as `web/src/lib/keys.ts` reads it. */
+    press: async (key) => {
+      if (key.startsWith("Mod+")) {
+        mod ??= JSON.parse(
+          await ab("eval", `/Mac|iPhone|iPad/.test(navigator.platform) ? "Meta" : "Control"`),
+        );
+        key = `${mod}${key.slice(3)}`;
+      }
+      return ab("press", key);
     },
     see: (text) => ab("wait", "--text", text),
     until: (js) => ab("wait", "--fn", js),

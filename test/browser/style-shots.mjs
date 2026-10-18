@@ -124,9 +124,6 @@ await run(
     };
   },
   async (page) => {
-    const paletteShortcut = await page.evaluate(
-      `/Mac|iPhone|iPad/.test(navigator.platform) ? "Meta+k" : "Control+k"`,
-    );
     for (const scheme of ["light", "dark"]) {
       await page.ab("set", "media", scheme);
       await page.open("/");
@@ -164,7 +161,7 @@ await run(
       await page.ab("wait", "--fn", "!!document.querySelector('[role=menu]')");
       await page.capture(`05-session-menu-${scheme}`);
       await page.ab("press", "Escape");
-      await page.ab("press", paletteShortcut);
+      await page.press("Mod+k");
       await page.ab("wait", "--fn", "!!document.querySelector('[role=dialog]')");
       await page.capture(`06-palette-${scheme}`);
       await page.ab("press", "Escape");
@@ -191,7 +188,7 @@ await run(
     await page.see("Messages only");
     await page.ab("press", "Escape");
     await page.until("!document.querySelector('[data-slot=\"sheet-content\"]')");
-    await page.ab("press", paletteShortcut);
+    await page.press("Mod+k");
     await page.ab("wait", "--fn", "!!document.querySelector('[role=dialog]')");
     await page.capture("10-mobile-palette");
     // The right sidebar covers the whole phone screen: the sheet's own width must not win.
