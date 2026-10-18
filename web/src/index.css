@@ -720,6 +720,17 @@
   translate: none;
   transform: scale(0.96);
 }
+/* Two faces of one control (Send and Stop) cross-fade in place; the blur hides the overlap. */
+[data-motion="swap"] {
+  transition:
+    opacity 150ms var(--ease-out),
+    scale 150ms var(--ease-out),
+    filter 150ms var(--ease-out);
+}
+/* A fold's chevron turns with it. */
+[data-motion="turn"] {
+  transition: rotate 150ms var(--ease-out);
+}
 /* The composer's focus and drop ring is a change of colour, so it eases. */
 [data-motion="ring"] {
   transition:
@@ -772,6 +783,12 @@
     @starting-style {
       transform: none;
     }
+  }
+  [data-motion="swap"] {
+    scale: none;
+  }
+  [data-motion="turn"] {
+    transition: none;
   }
 }
 /* biome-ignore-end lint/complexity/noImportantStyles: range closes */

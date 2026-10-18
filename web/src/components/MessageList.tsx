@@ -168,6 +168,7 @@ export function MessageList({
           variant="outline-solid"
           size="icon-lg"
           aria-label="Scroll to bottom"
+          data-motion="enter"
           onClick={() => viewport.jump(BOTTOM_ENTRY)}
           className="absolute inset-x-0 bottom-4 mx-auto rounded-full shadow-2 [&_svg:not([class*='size-'])]:size-5"
         >

@@ -165,6 +165,7 @@ export function Composer({
         above={
           queue && (
             <section
+              data-motion="fade"
               className="flex max-h-[min(14rem,30dvh)] flex-col border-b border-line px-4 py-3 text-sm"
               aria-label="Queued messages"
             >
@@ -211,6 +212,7 @@ export function Composer({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
+                    data-motion="fade"
                     variant="ghost"
                     size="sm"
                     className={cn(picker, "shrink-0 font-mono text-xs")}
@@ -246,6 +248,7 @@ export function Composer({
               <TooltipTrigger asChild>
                 <Button
                   size="icon"
+                  data-motion="press"
                   variant={showStop ? "outline" : "default"}
                   className={cn(composerAction, "relative")}
                   aria-label={control.label}
@@ -254,18 +257,20 @@ export function Composer({
                 >
                   <span
                     aria-hidden
+                    data-motion="swap"
                     className={cn(
                       "absolute inset-0 grid place-items-center",
-                      showStop ? "scale-75 opacity-0" : "scale-100 opacity-100",
+                      showStop ? "scale-75 opacity-0 blur-[2px]" : "scale-100 opacity-100",
                     )}
                   >
                     <ArrowUpIcon />
                   </span>
                   <span
                     aria-hidden
+                    data-motion="swap"
                     className={cn(
                       "absolute inset-0 grid place-items-center",
-                      showStop ? "scale-100 opacity-100" : "scale-75 opacity-0",
+                      showStop ? "scale-100 opacity-100" : "scale-75 opacity-0 blur-[2px]",
                     )}
                   >
                     <SquareIcon className="fill-current" />

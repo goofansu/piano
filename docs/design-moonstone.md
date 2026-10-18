@@ -221,6 +221,11 @@ One curve, `--ease-out` `cubic-bezier(0.23, 1, 0.32, 1)`, for every entrance; ex
 | Composer ring (`ring`) | border and shadow ease over 150ms on focus and file drag | a colour change of state |
 | Attachment added (`enter`) | 150ms fade and scale 0.96 → 1 via `@starting-style` | shows where the image went |
 | Composer and New session notices (`fade`) | 150ms fade in | a notice should not pop; scaling a full-width box looks wrong |
+| Send ↔ Stop (`swap`) | the two faces cross-fade over 150ms, scale 0.75 ↔ 1 with a 2px blur | one control changing state in place; the blur hides two icons overlapping |
+| Fold chevron (`turn`) | rotates over 150ms | confirms which way the fold went; the fold's content opens at once |
+| Scroll to bottom (`enter`) | 150ms fade and scale in | otherwise it pops in while reading |
+| Delivery picker and queued messages (`fade`) | 150ms fade in | they appear beside and above the composer as you send |
+| Transcript, streaming output, fold content, loading placeholder, jumps | none | the transcript never moves under the reader; a jump always lands the message 16px under the top |
 | New session page entrance | none | seen many times a day, often from the keyboard, with the composer focused to type at once |
 
 Two timing behaviours stay because they decide when something shows, not how:
