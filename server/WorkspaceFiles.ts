@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
-import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Data, Effect } from "effect";
 import { fileTypeFromBuffer } from "file-type";
 import type { FileDownload, FilePreview } from "../shared/files.ts";
@@ -116,10 +116,42 @@ const specialLanguages: Record<string, string> = {
   ".zshrc": "shellscript",
 };
 /** Whether `path` (absolute) lies inside `root` or is it. */
-export const within = (root: string, path: string) => {
+const within = (root: string, path: string) => {
   const name = relative(root, path);
   return name !== ".." && !name.startsWith(`..${sep}`) && !isAbsolute(name);
 };
+
+/** The physical path: the nearest existing ancestor resolved, the rest (a file not written yet,
+ * or already removed) reattached. */
+async function physical(target: string): Promise<string> {
+  let head = target;
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return join(await realpath(head), ...tail);
+    } catch {
+      const parent = dirname(head);
+      if (parent === head) return target;
+      tail.unshift(basename(head));
+      head = parent;
+    }
+  }
+}
+
+/**
+ * Where `path` (as a session's tool calls named it: relative to the workspace, or absolute) sits
+ * in the workspace: its name relative to the workspace's real root, or `undefined` outside it.
+ * It is placed by the workspace's own (possibly symlinked) path first, then by the real root, so a
+ * file Pi wrote through either path is inside. The one rule for the Files list and for reading.
+ */
+export async function place(workspace: Workspace, path: string): Promise<string | undefined> {
+  const logical = resolve(workspace.path);
+  const target = resolve(logical, path);
+  if (within(logical, target)) return relative(logical, target);
+  const root = await realpath(logical);
+  const real = await physical(target);
+  return within(root, real) ? relative(root, real) : undefined;
+}
 
 /** One accepted file: what the preview shows, and the bytes it was read from. */
 interface Acquired {
@@ -134,10 +166,11 @@ interface Acquired {
  * Preview and download share this, so a file downloads exactly when it previews.
  */
 async function acquire(workspace: Workspace, path: string, signal: AbortSignal): Promise<Acquired> {
+  if (!path.trim() || path.includes("\0")) refuse("Choose a file inside this workspace.");
+  const name = await place(workspace, path);
+  if (name === undefined) return refuse("Choose a file inside this workspace.");
   const root = await realpath(workspace.path);
   const requested = resolve(workspace.path, path);
-  if (!path.trim() || path.includes("\0") || !within(resolve(workspace.path), requested))
-    refuse("Choose a file inside this workspace.");
   const target = await realpath(requested);
   if (!within(root, target))
     refuse("Choose a file inside this workspace; this link points outside it.");
@@ -185,10 +218,7 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
     if (length > limit) tooLarge();
     if (length !== stat.size) refuse("This file changed while reading. Try the link again.");
     const data = bytes.subarray(0, length);
-    const identity = {
-      workspaceId: workspace.id,
-      path: relative(resolve(workspace.path), requested),
-    };
+    const identity = { workspaceId: workspace.id, path: name };
     if (binary) {
       const actual = mimeBase(await fileTypeFromBuffer(data).catch(() => undefined));
       if (!actual || binaryTypes.get(actual) !== binary)
