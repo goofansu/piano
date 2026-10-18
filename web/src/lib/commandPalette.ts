@@ -285,7 +285,7 @@ export function createPaletteCatalog() {
       const old = previous.find((g) => g.id === group.id);
       // Streaming often changes the source objects of commands, files and links without
       // changing any searchable value, action, or availability.
-      return old && old.heading === group.heading && sameRows(old.rows, group.rows) ? old : group;
+      return old && sameData(old, group) ? old : group;
     });
     if (groups.length === previous.length && groups.every((g, i) => g === previous[i]))
       return previous;
