@@ -7,18 +7,20 @@ import {
 } from "./signInAttempt.ts";
 
 /**
- * One sign-in attempt for a dialog, opened and polled while mounted. `api` and `provider` are
- * fixed for the dialog's lifetime (callers key it per attempt); `signedIn` and `close` may change
- * between renders.
+ * One sign-in attempt for a dialog, opened when it mounts and polled while `open`; closing stops
+ * polling and keeps the attempt. `api` and `provider` are fixed for the dialog's lifetime
+ * (`ProviderLoginDialog` keys it per opening); `signedIn` and `close` may change between renders.
  */
 export function useSignInAttempt({
   api,
   provider,
+  open,
   signedIn,
   close,
 }: {
   api: SignInApi;
   provider: string;
+  open: boolean;
   signedIn: () => void;
   close: () => void;
 }): SignInAttempt & SignInAttemptState {
@@ -32,7 +34,7 @@ export function useSignInAttempt({
       close: () => latest.current.close(),
     }),
   );
-  useEffect(() => attempt.start(), [attempt]);
+  useEffect(() => (open ? attempt.start() : undefined), [attempt, open]);
   const state = useSyncExternalStore(attempt.subscribe, attempt.getState);
   return { ...attempt, ...state };
 }

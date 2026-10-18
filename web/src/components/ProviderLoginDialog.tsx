@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/input-group";
 import { providerLogin } from "@/lib/api";
 import { canSubmitAnswer, type SignInApi, signInDialogView } from "@/lib/signInAttempt";
+import { useLastShown } from "@/lib/useLastShown";
 import { useSignInAttempt } from "@/lib/useSignInAttempt";
 
 /** `url` is already checked safe by `signInDialogView`. */
@@ -44,38 +45,79 @@ function SignInLink({ url, variant }: { url: string; variant?: "outline" }) {
   );
 }
 
-/** Explicit dismissal cancels pending sign-in; browser disconnect still preserves it.
- * `api` runs another sign-in of the same shape, such as an MCP server's. */
+/** The sign-in a Settings section has open: `key` names this opening, so each one is a fresh
+ * attempt. */
+interface OpenSignIn {
+  key: string;
+  provider: string;
+}
+
+/** The sign-in dialog for `signIn`, or closed while it is undefined. Closing keeps the last
+ * sign-in's face (and the `providers` that named it) while the dialog animates closed; reopening
+ * mounts a new attempt by its new key. Explicit dismissal cancels pending sign-in; browser
+ * disconnect still preserves it. `api` runs another sign-in of the same shape, such as an MCP
+ * server's. */
 export function ProviderLoginDialog({
-  initialProvider,
+  signIn,
   providers,
   close,
   signedIn,
   api = providerLogin,
 }: {
-  initialProvider: string;
+  signIn: OpenSignIn | undefined;
   providers: readonly OAuthProvider[];
   close: () => void;
   signedIn: () => void;
   api?: SignInApi;
 }) {
+  const shown = useLastShown(signIn && { ...signIn, providers });
+  return shown ? (
+    <SignInDialog
+      key={shown.key}
+      open={!!signIn}
+      provider={shown.provider}
+      providers={shown.providers}
+      close={close}
+      signedIn={signedIn}
+      api={api}
+    />
+  ) : null;
+}
+
+/** One opening's attempt; it polls only while `open`, so the closing face stays quiet. */
+function SignInDialog({
+  open,
+  provider,
+  providers,
+  close,
+  signedIn,
+  api,
+}: {
+  open: boolean;
+  provider: string;
+  providers: readonly OAuthProvider[];
+  close: () => void;
+  signedIn: () => void;
+  api: SignInApi;
+}) {
   const { attempt, busy, error, connectionError, answer, retry, dismiss } = useSignInAttempt({
     api,
-    provider: initialProvider,
+    provider,
+    open,
     signedIn,
     close,
   });
   const view = signInDialogView({
     state: { attempt, busy, error, connectionError },
-    provider: initialProvider,
+    provider,
     providers,
   });
   const { prompt, url, deviceCode, footer } = view;
   return (
     <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) dismiss();
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && open) dismiss();
       }}
     >
       <DialogContent
