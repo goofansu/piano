@@ -212,6 +212,12 @@ dialog). The upstream shadcn components in `components/ui/` keep their own motio
 One curve, `--ease-out` `cubic-bezier(0.23, 1, 0.32, 1)`, for every entrance; exits are 120ms
 `ease-out`. Reduced motion keeps the fades and drops the scale.
 
+A dialog or popover exits showing what it showed while open. Closing usually changes the state its
+content reads (a receipt settles, a listing stops, a session switches), so `useExitFace` in the
+`DialogContent` and `PopoverContent` wrappers plays the exit on an inert copy of the last open face
+while the live content hides. Callers keep their overlay mounted and drive `open` from state; they
+need not hold their content for the exit. Menus and selects exit live, showing the choice just made.
+
 | Surface | Motion | Why |
 | --- | --- | --- |
 | Menus, popovers, selects (`anchored`) | 150ms fade and scale 0.96 → 1 from the trigger, no slide | they open from a control; scaling from it says where they came from |

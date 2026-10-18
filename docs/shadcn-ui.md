@@ -31,7 +31,8 @@ Wrappers merge only Piano's changes, not copies of upstream class lists. Custom 
 variants pass `variant={null}` to avoid inheriting an unrelated upstream variant's hover/dark rules.
 Motion is opt-in: the reset at the end of `index.css` stops upstream motion except on elements a
 `Piano*` wrapper marks `data-motion`, whose rules retune the upstream classes (see
-[Motion](design-moonstone.md#motion)).
+[Motion](design-moonstone.md#motion)). The dialog and popover content wrappers also own the closing
+face: they exit on a copy of the last open face (`useExitFace`).
 The tooltip arrow stays inside the content's stacking context, so it needs no separate z-index patch.
 
 Two internal-slot exceptions live in `index.css`: Dialog/Sheet backdrops have no content-level

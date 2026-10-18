@@ -3,6 +3,7 @@ import type { ComponentProps } from "react";
 import { PopoverContent as BaseContent } from "@/components/ui/popover";
 import { raisedOverlay } from "@/lib/overlayStyles";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
+import { useExitFace } from "@/lib/useExitFace";
 
 export {
   Popover,
@@ -13,16 +14,20 @@ export {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-/** A popover scales in from its trigger; `still` drops that for one opened by a shortcut. */
+/** A popover scales in from its trigger and exits on its last open face; `still` drops that for
+ * one opened by a shortcut. */
 export function PopoverContent({
   className,
   onCloseAutoFocus,
   still = false,
+  ref,
   ...props
 }: ComponentProps<typeof BaseContent> & { still?: boolean }) {
+  const exitFace = useExitFace(ref);
   return (
     <BaseContent
       data-motion={still ? undefined : "anchored"}
+      ref={still ? ref : exitFace}
       {...props}
       className={cn(raisedOverlay, className)}
       onCloseAutoFocus={(event) => {
