@@ -1,35 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PaletteGroup } from "./commandPalette.ts";
 import {
-  type PaletteDocuments,
   type PalettePage,
   type PalettePages,
-  type PaletteSearchReply,
-  type PaletteSearchRequest,
   pagePalette,
   searchPalette,
 } from "./paletteSearch.ts";
+import { createPaletteSearchClient } from "./paletteSearchClient.ts";
 
 const FIRST_PAGES: PalettePages = {};
 const NO_RESULTS: PalettePage[] = [];
 
 /** One in-flight scan, one replaceable next query. Typing never queues a scan per character. */
 export function usePaletteSearch(groups: PaletteGroup[], query: string, paused: boolean) {
-  const prepared = useMemo(
-    () => ({
-      documents: groups.map(({ id, heading, rows }) => ({
-        id,
-        heading,
-        rows: rows.map(({ key, value, keywords }) => ({ key, value, keywords })),
-      })),
-      rows: new Map(
-        groups.flatMap((group) =>
-          group.rows.map((row) => [`${group.id}:${row.key}`, row] as const),
-        ),
-      ),
-    }),
-    [groups],
-  );
   const [pages, setPages] = useState<PalettePages>(FIRST_PAGES);
   const [answer, setAnswer] = useState<{
     groups: PaletteGroup[];
@@ -39,71 +22,16 @@ export function usePaletteSearch(groups: PaletteGroup[], query: string, paused: 
     result: PalettePage[];
   }>();
   const [error, setError] = useState(false);
-  const transport = useRef<{
-    submit: (
-      request: Omit<PaletteSearchRequest, "id">,
-      accept: (pages: PalettePage<PaletteDocuments>[]) => void,
-    ) => void;
-    cancel: () => void;
-  }>(null);
+  const transport = useRef<ReturnType<typeof createPaletteSearchClient>>(null);
   useEffect(() => {
-    let worker: Worker;
-    try {
-      worker = new Worker(new URL("./paletteSearch.worker.ts", import.meta.url), {
-        type: "module",
-      });
-    } catch {
-      setError(true);
-      return;
-    }
-    let id = 0;
-    let busy = false;
-    let sent: PaletteDocuments[] | undefined;
-    let queued: (() => void) | undefined;
-    let accept: ((pages: PalettePage<PaletteDocuments>[]) => void) | undefined;
-    worker.onmessage = ({ data }: MessageEvent<PaletteSearchReply>) => {
-      busy = false;
-      if (data.id === id) accept?.(data.pages);
-      const next = queued;
-      queued = undefined;
-      next?.();
-    };
-    const failed = () => {
-      setError(true);
-      queued = undefined;
-      worker.terminate();
-    };
-    worker.onerror = failed;
-    worker.onmessageerror = failed;
-    transport.current = {
-      submit(request, receive) {
-        const job = ++id;
-        accept = receive;
-        const send = () => {
-          busy = true;
-          try {
-            worker.postMessage({
-              ...request,
-              id: job,
-              groups: request.groups === sent ? undefined : request.groups,
-            });
-            sent = request.groups;
-          } catch {
-            failed();
-          }
-        };
-        if (busy) queued = send;
-        else send();
-      },
-      cancel() {
-        id++;
-        queued = undefined;
-        accept = undefined;
-      },
-    };
+    const client = createPaletteSearchClient(
+      () => new Worker(new URL("./paletteSearch.worker.ts", import.meta.url), { type: "module" }),
+      () => setError(true),
+    );
+    transport.current = client;
     return () => {
       transport.current = null;
-      worker.terminate();
+      client.dispose();
     };
   }, []);
 
@@ -127,21 +55,11 @@ export function usePaletteSearch(groups: PaletteGroup[], query: string, paused: 
     answer.pages === currentPages;
   useEffect(() => {
     if (!query.trim() || paused || error || current) return;
-    transport.current?.submit(
-      { groups: prepared.documents, query, pages: currentPages },
-      (matches) => {
-        const result = matches.map(({ group, ...page }) => ({
-          ...page,
-          group: {
-            ...group,
-            rows: group.rows.map((row) => prepared.rows.get(`${group.id}:${row.key}`)!),
-          } as PaletteGroup,
-        }));
-        setAnswer({ groups, query, pages: currentPages, generation, result });
-      },
-    );
+    transport.current?.search(groups, query, currentPages, (result) => {
+      setAnswer({ groups, query, pages: currentPages, generation, result });
+    });
     return () => transport.current?.cancel();
-  }, [groups, prepared, query, currentPages, generation, paused, error, current]);
+  }, [groups, query, currentPages, generation, paused, error, current]);
 
   const recents = useMemo(() => pagePalette(searchPalette(groups, "")), [groups]);
   const changePage = useCallback(
