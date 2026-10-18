@@ -3,8 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
-import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
-import { RemovalDialog } from "@/components/RemovalDialog";
+import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
 import {
   SettingsAlert,
   SettingsExternalLink,
@@ -155,23 +154,23 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
           {view.installationError.detail}
         </SettingsAlert>
       )}
-      {/* Keeps the last removal's wording while it animates closed. */}
+      {/* Keeps the last confirmation's wording while it animates closed. */}
       <RemovalDialog
-        open={confirming && !!removal}
-        busy={view.changing}
-        disabled={view.locked}
+        open={confirming && !!confirmation}
         cancel={setup.cancel}
-        {...radiusUninstallCopy(removal?.kind)}
-        confirm={setup.confirmRemoval}
+        {...(removal
+          ? {
+              ...radiusUninstallCopy(removal.kind),
+              busy: view.changing,
+              disabled: view.locked,
+              confirm: setup.confirmRemoval,
+            }
+          : {
+              ...signOutCopy("Radius"),
+              busy: account.signingOut,
+              confirm: () => void setup.signOut(),
+            })}
       />
-      {confirming && confirmation?.kind === "sign-out" && (
-        <ProviderSignOutDialog
-          name="Radius"
-          busy={account.signingOut}
-          cancel={setup.cancel}
-          confirm={() => void setup.signOut()}
-        />
-      )}
       {setup.signIn && (
         <ProviderLoginDialog
           key={setup.signIn.key}
