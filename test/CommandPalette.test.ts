@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { isDeepStrictEqual } from "node:util";
 import type { SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   commandPalette,
   createPaletteCatalog,
   FILES_QUERY,
   LINKS_QUERY,
+  type PaletteGroup,
+  type PaletteSessionRow,
   paletteFilter,
   RECENT_SESSION_LIMIT,
 } from "../web/src/lib/commandPalette.ts";
@@ -487,6 +490,71 @@ test("catalog cache survives activity updates but invalidates searchable metadat
     catalog(home, { ...input, globalCommands: globalCommands(home, { ...ctx, theme: "light" }) }),
     first,
   );
+});
+
+test("a refresh that changes any one session row field reaches the palette; an equal one keeps it", () => {
+  const s9 = (state: AppState, change: Partial<AppState["sessionReferences"][number]>) => ({
+    ...state,
+    sessionReferences: state.sessionReferences.map((r) =>
+      r.sessionId === "s9" ? { ...r, ...change } : r,
+    ),
+  });
+  // One source change per row field; several fields share a source, so some change together.
+  const variants: Record<keyof PaletteSessionRow, (state: AppState) => AppState> = {
+    key: (state) => s9(state, { sessionId: "s9b" }),
+    value: (state) => ({
+      ...state,
+      projects: [{ id: "launch", name: "Liftoff", archived: false }],
+    }),
+    keywords: (state) => s9(state, { branch: "release" }),
+    label: (state) => s9(state, { title: "Session nine" }),
+    untitled: (state) => ({
+      ...state,
+      sessionReferences: state.sessionReferences.map((r) =>
+        r.sessionId === "s3" ? { ...r, title: "Untitled" } : r,
+      ),
+    }),
+    enabled: (state) => s9(state, { unavailable: "history" }),
+    hint: (state) => s9(state, { unavailable: "checkout" }),
+    selected: (state) => ({ ...state, selecting: { cwd: "/work/repo.feature", sessionId: "s9" } }),
+    folder: (state) => ({
+      ...state,
+      folders: state.folders.map((f) => ({ ...f, name: "renamed" })),
+    }),
+    branch: (state) => ({
+      ...state,
+      folders: state.folders.map((f) => ({
+        ...f,
+        worktrees: f.worktrees.map((w) => ({ ...w, root: true })),
+      })),
+    }),
+    session: (state) => s9(state, { cwd: "/repo" }),
+  };
+  const input = { globalCommands: [], sessionCommands: [], files: [] };
+  const rowsOf = (groups: PaletteGroup[]) => {
+    const group = groups.find((g) => g.id === "sessions");
+    assert.ok(group?.id === "sessions");
+    return group.rows;
+  };
+  const before = rowsOf(createPaletteCatalog()(home, input));
+  assert.deepEqual(Object.keys(variants).sort(), Object.keys(before[0]).sort());
+  for (const [field, change] of Object.entries(variants) as [
+    keyof PaletteSessionRow,
+    typeof variants.key,
+  ][]) {
+    const catalog = createPaletteCatalog();
+    const first = catalog(home, input);
+    // A fresh copy of the same data, as a registry refresh delivers it.
+    assert.equal(catalog(structuredClone(home), input), first, `${field}: equal data`);
+    const changed = catalog(change(home), input);
+    const rows = rowsOf(changed);
+    assert.ok(
+      rows.some((row, i) => !isDeepStrictEqual(row[field], before[i][field])),
+      `${field}: the palette shows the changed field`,
+    );
+    assert.notEqual(rows, rowsOf(first), `${field}: the change reaches the palette`);
+    assert.equal(catalog(structuredClone(change(home)), input), changed, `${field}: equal again`);
+  }
 });
 
 test("cached palette rows retain session availability for rendering and keyboard selection", () => {

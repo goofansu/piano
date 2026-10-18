@@ -230,6 +230,27 @@ export function commandPalette(
   return groups;
 }
 
+/**
+ * Whether two values hold the same data: primitives by identity, arrays element by element, plain
+ * objects key by key. Rows are plain data, so every field a row type gains takes part without
+ * listing it here.
+ */
+function sameData(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every(
+    (k) => Object.hasOwn(b, k) && sameData(a[k as keyof typeof a], b[k as keyof typeof b]),
+  );
+}
+
+/** Whether a refresh changed nothing a row shows, searches by or acts on. */
+function sameRows(a: readonly object[], b: readonly object[]): boolean {
+  return a === b || (a.length === b.length && a.every((row, i) => sameData(row, b[i])));
+}
+
 /** Cache catalog preparation across input and streaming updates, without retaining another history. */
 export function createPaletteCatalog() {
   let dependencies: unknown[] = [];
@@ -252,25 +273,7 @@ export function createPaletteCatalog() {
       const updated = recentSessions(state).map(sessionRow);
       // Registry refreshes replace arrays even when nothing searchable changed. Do not restart
       // the worker or reset pagination/selection on those refreshes (or stats-only changes).
-      if (
-        updated.length !== sessions.length ||
-        updated.some((row, i) => {
-          const old = sessions[i];
-          return (
-            row.key !== old.key ||
-            row.value !== old.value ||
-            row.label !== old.label ||
-            row.folder !== old.folder ||
-            row.branch !== old.branch ||
-            row.selected !== old.selected ||
-            row.untitled !== old.untitled ||
-            row.enabled !== old.enabled ||
-            row.hint !== old.hint ||
-            row.keywords.some((word, j) => word !== old.keywords[j])
-          );
-        })
-      )
-        sessions = updated;
+      if (!sameRows(updated, sessions)) sessions = updated;
     }
     if (messages !== state.session?.messages) {
       messages = state.session?.messages;
@@ -280,13 +283,9 @@ export function createPaletteCatalog() {
     }
     const groups = commandPalette(state, input, sessions, links).map((group) => {
       const old = previous.find((g) => g.id === group.id);
-      // Commands/files/links are serializable descriptors. Streaming often changes their source
-      // objects without changing any searchable value, action, or availability.
-      return old &&
-        (old.rows === group.rows ||
-          (group.id !== "sessions" && JSON.stringify(old) === JSON.stringify(group)))
-        ? old
-        : group;
+      // Streaming often changes the source objects of commands, files and links without
+      // changing any searchable value, action, or availability.
+      return old && old.heading === group.heading && sameRows(old.rows, group.rows) ? old : group;
     });
     if (groups.length === previous.length && groups.every((g, i) => g === previous[i]))
       return previous;
