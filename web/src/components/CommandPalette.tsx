@@ -285,6 +285,8 @@ const PaletteResults = memo(function PaletteResults({
                   <CommandItem
                     key={r.key}
                     value={`${group.id}:${r.key}`}
+                    disabled={!r.enabled}
+                    title={r.hint}
                     onSelect={() => run(() => select(r.session.cwd, r.session.sessionId))}
                     className="gap-3"
                   >
@@ -301,6 +303,7 @@ const PaletteResults = memo(function PaletteResults({
                       <span className="truncate">{r.folder}</span>
                       {r.branch && <BranchLabel branch={r.branch} />}
                     </span>
+                    {r.hint && <span className="sr-only">{r.hint}</span>}
                   </CommandItem>
                 ))
               : group.id === "global"
