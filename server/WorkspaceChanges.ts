@@ -1,9 +1,9 @@
 /** Bounded live browsing (INV-01/07/09), deliberately independent of exact capture.
  * Only a disposable index is written. No hooks, clean filters, textconv or external diff.
  */
-import { copyFile, mkdtemp, realpath, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { join } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
 import {
   CHANGES_FILE_PATCH_BYTES,
@@ -14,7 +14,7 @@ import {
   type Workspace,
 } from "../shared/wire.ts";
 import { type Checkout, observeCheckout } from "./GitCheckout.ts";
-import { within } from "./WorkspaceFiles.ts";
+import { place } from "./WorkspaceFiles.ts";
 
 export class WorkspaceChanges extends Context.Service<
   WorkspaceChanges,
@@ -105,42 +105,19 @@ async function preview(
   }
 }
 
-/** The physical path: the nearest existing ancestor resolved, the rest (a file not written yet,
- * or already removed) reattached. */
-async function physical(target: string): Promise<string> {
-  let head = target;
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return join(await realpath(head), ...tail);
-    } catch {
-      const parent = dirname(head);
-      if (parent === head) return target;
-      tail.unshift(basename(head));
-      head = parent;
-    }
-  }
-}
-
-/** `git check-ignore` over the paths inside the checkout; it exits 1 when none is ignored. A path
- * is placed by the workspace's own (possibly symlinked) path first, then by the physical root. */
+/** `git check-ignore` over the paths inside the workspace, placed as the Files list places them;
+ * it exits 1 when none is ignored. */
 async function ignored(
   checkout: Checkout,
-  workspacePath: string,
+  workspace: Workspace,
   paths: readonly string[],
 ): Promise<IgnoredObservation["result"]> {
-  const logical = resolve(workspacePath);
   const inside = new Map<string, string>();
   const outside: string[] = [];
   for (const path of paths) {
-    const target = resolve(logical, path);
-    if (within(logical, target)) {
-      inside.set(path, relative(logical, target));
-      continue;
-    }
-    const real = await physical(target);
-    if (within(checkout.cwd, real)) inside.set(path, relative(checkout.cwd, real));
-    else outside.push(path);
+    const name = await place(workspace, path);
+    if (name === undefined) outside.push(path);
+    else inside.set(path, name);
   }
   if (inside.size === 0) return { status: "ready", ignored: [], outside };
   const result = await checkout.run(["check-ignore", "-z", "--stdin"], {
@@ -184,7 +161,7 @@ export const WorkspaceChangesLive = Layer.effect(
             limit: 1024 * 1024,
             messages: { root: "Files requires the Git checkout root." },
           },
-          (checkout) => ignored(checkout, workspace.path, paths),
+          (checkout) => ignored(checkout, workspace, paths),
         ),
     });
   }),

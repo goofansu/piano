@@ -119,6 +119,25 @@ test("an absolute path through a symlink to the workspace is inside it, as macOS
   });
 });
 
+test("a file the Files list places inside the workspace through a symlink opens", async (t) => {
+  const { mkdtempSync, rmSync, symlinkSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const links = mkdtempSync(join(tmpdir(), "piano-link-"));
+  const link = join(links, "repo");
+  symlinkSync(server.repo, link);
+  t.after(() => rmSync(links, { recursive: true, force: true }));
+  const { status, body } = await reply(
+    await post(
+      `/api/workspace/file?workspaceId=${server.workspaceId}`,
+      JSON.stringify({ path: `${link}/README.md` }),
+    ),
+  );
+  assert.equal(status, 200);
+  assert.equal(body.path, "README.md");
+  assert.equal(body.content, "one\ntwo\n");
+});
+
 test("workspace files use a body path and return uncached text for the registered workspace", async () => {
   const response = await post(
     `/api/workspace/file?workspaceId=${server.workspaceId}`,
