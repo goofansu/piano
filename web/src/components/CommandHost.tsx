@@ -165,13 +165,10 @@ export function CommandHost({
   const renaming = form?.kind === "rename-session" ? form.target : null;
   const close = forms.cancel;
   const answer = forms.answer();
-  // Each dialog animates closed after its form closes, so it keeps its last open face meanwhile.
   // Archive, delete and close folder share one confirm dialog; `confirmation` decides its wording.
   const asking = form ? confirmation(state, form) : undefined;
-  const asked = useLastShown(asking && { ...asking, allowed: answer.allowed });
-  const renamed = useLastShown(
-    renaming ? { name: forms.text, allowed: answer.allowed } : undefined,
-  );
+  // The share and project dialogs mount once shown and keep their last props, so they can
+  // animate closed after their form closes.
   const sharing = form?.kind === "share-session";
   const shared = useLastShown(
     sharing ? { phase: forms.share, allowed: answer.allowed, signedIn: radiusSignedIn } : undefined,
@@ -240,7 +237,7 @@ export function CommandHost({
                 <Input
                   ref={renameInputRef}
                   aria-label="Session name"
-                  value={renamed?.name ?? ""}
+                  value={renaming ? forms.text : ""}
                   onChange={(event) => forms.edit(event.target.value)}
                   onFocus={(event) => event.target.select()}
                   maxLength={200}
@@ -251,7 +248,7 @@ export function CommandHost({
               <Button type="button" variant="outline" onClick={close}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!renamed?.allowed}>
+              <Button type="submit" disabled={!answer.allowed}>
                 Rename
               </Button>
             </DialogFooter>
@@ -261,19 +258,19 @@ export function CommandHost({
       <Dialog open={!!asking} onOpenChange={(open) => !open && close()}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>{asked?.title}</DialogTitle>
-            <DialogDescription>{asked?.description}</DialogDescription>
+            <DialogTitle>{asking?.title}</DialogTitle>
+            <DialogDescription>{asking?.description}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={close}>
               Cancel
             </Button>
             <Button
-              variant={asked?.destructive ? "destructive" : "default"}
-              disabled={!asked?.allowed}
+              variant={asking?.destructive ? "destructive" : "default"}
+              disabled={!answer.allowed}
               onClick={forms.submit}
             >
-              {asked?.confirmLabel}
+              {asking?.confirmLabel}
             </Button>
           </DialogFooter>
         </DialogContent>

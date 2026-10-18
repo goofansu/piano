@@ -24,7 +24,6 @@ import {
   slashOpen,
   slashUpdate,
 } from "@/lib/slashCompletion";
-import { useLastShown } from "@/lib/useLastShown";
 import { useObservation } from "@/lib/useObservation";
 
 export interface CompletionContext {
@@ -135,9 +134,6 @@ export function SlashTextarea({
       : undefined;
   const commands = rankSkills(current?.commands ?? [], range?.query ?? "");
   const active = slashActive(state, view, commands.length);
-  // The popover animates closed after `open` turns false, when the catalog key is already idle,
-  // so the list renders its last open face; keys and accept() still act on live state.
-  const face = useLastShown(open ? { current, commands, active } : undefined);
   useLayoutEffect(() => {
     if (open) list.current?.children[active]?.scrollIntoView({ block: "nearest" });
   }, [open, active]);
@@ -268,78 +264,76 @@ export function SlashTextarea({
           </div>
         </div>
       </PopoverAnchor>
-      {face && (
-        <PopoverContent
-          side="top"
-          align="start"
-          role="presentation"
-          className="w-[min(32rem,var(--radix-popover-trigger-width))] max-w-[calc(100vw-2rem)] p-1"
-          onOpenAutoFocus={(event) => event.preventDefault()}
-          onCloseAutoFocus={(event) => event.preventDefault()}
-          onEscapeKeyDown={(event) => {
-            event.preventDefault(); /* The textarea owns Escape, including IME. */
-          }}
-          onInteractOutside={(event) => {
-            if (event.target === ref.current) event.preventDefault();
-          }}
-          onPointerDown={(event) => {
-            if (event.pointerType !== "touch") event.preventDefault();
-          }}
-        >
-          {/* cmdk assumes a separate single-line search input. This listbox keeps
+      <PopoverContent
+        side="top"
+        align="start"
+        role="presentation"
+        className="w-[min(32rem,var(--radix-popover-trigger-width))] max-w-[calc(100vw-2rem)] p-1"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          event.preventDefault(); /* The textarea owns Escape, including IME. */
+        }}
+        onInteractOutside={(event) => {
+          if (event.target === ref.current) event.preventDefault();
+        }}
+        onPointerDown={(event) => {
+          if (event.pointerType !== "touch") event.preventDefault();
+        }}
+      >
+        {/* cmdk assumes a separate single-line search input. This listbox keeps
             textarea focus and its caret, including on touch suggestion selection. */}
-          <ul
-            ref={list}
-            id={id}
-            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the textarea drives this listbox through aria-activedescendant.
-            role="listbox"
-            aria-label="Slash commands"
-            className="max-h-[min(18rem,var(--radix-popover-content-available-height))] overflow-y-auto"
-          >
-            {face.commands.map((command, index) => (
-              // biome-ignore lint/a11y/useFocusableInteractive: as above.
-              // biome-ignore lint/a11y/useKeyWithClickEvents: as above.
-              <li
-                key={command.name}
-                id={`${id}-${index}`}
-                // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: options stay unfocusable; the textarea keeps focus and handles keys.
-                role="option"
-                aria-selected={index === face.active}
-                className={cn(
-                  "flex min-h-11 cursor-default flex-col gap-0.5 rounded-md px-3 py-2 text-sm",
-                  index === face.active && "bg-accent text-accent-foreground",
-                )}
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => accept(command)}
-                onPointerMove={(event) => {
-                  if (event.pointerType === "mouse") update({ type: "highlight", index });
-                }}
-              >
-                <span className="flex items-center gap-3">
-                  <span className="min-w-0 flex-1 truncate">/{command.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {command.source === "prompt" ? "template" : command.source}
-                  </span>
+        <ul
+          ref={list}
+          id={id}
+          // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the textarea drives this listbox through aria-activedescendant.
+          role="listbox"
+          aria-label="Slash commands"
+          className="max-h-[min(18rem,var(--radix-popover-content-available-height))] overflow-y-auto"
+        >
+          {commands.map((command, index) => (
+            // biome-ignore lint/a11y/useFocusableInteractive: as above.
+            // biome-ignore lint/a11y/useKeyWithClickEvents: as above.
+            <li
+              key={command.name}
+              id={`${id}-${index}`}
+              // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: options stay unfocusable; the textarea keeps focus and handles keys.
+              role="option"
+              aria-selected={index === active}
+              className={cn(
+                "flex min-h-11 cursor-default flex-col gap-0.5 rounded-md px-3 py-2 text-sm",
+                index === active && "bg-accent text-accent-foreground",
+              )}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => accept(command)}
+              onPointerMove={(event) => {
+                if (event.pointerType === "mouse") update({ type: "highlight", index });
+              }}
+            >
+              <span className="flex items-center gap-3">
+                <span className="min-w-0 flex-1 truncate">/{command.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {command.source === "prompt" ? "template" : command.source}
                 </span>
-                {command.description && (
-                  <span className="line-clamp-2 text-xs text-muted-foreground">
-                    {command.description}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-          {!face.commands.length && (
-            <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
-              {!face.current
-                ? "Loading commands…"
-                : face.current.error
-                  ? "Could not load commands. Close and reopen to retry."
-                  : "No matching commands."}
-            </p>
-          )}
-        </PopoverContent>
-      )}
+              </span>
+              {command.description && (
+                <span className="line-clamp-2 text-xs text-muted-foreground">
+                  {command.description}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+        {!commands.length && (
+          <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
+            {!current
+              ? "Loading commands…"
+              : current.error
+                ? "Could not load commands. Close and reopen to retry."
+                : "No matching commands."}
+          </p>
+        )}
+      </PopoverContent>
     </Popover>
   );
 }
