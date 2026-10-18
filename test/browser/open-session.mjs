@@ -133,5 +133,35 @@ await run(
       "each message is sent once",
     );
     await page.capture("6-stopped");
+
+    // Switching through the palette must not execute a stale row while a new query is pending.
+    await page.ab("press", "Control+k");
+    await page.ab("fill", "[cmdk-input]", "release notes");
+    await page.until(
+      "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
+    );
+    // One task deliberately races input with Enter; separate browser commands would hide the race.
+    await page.evaluate(`(() => {
+      const input = document.querySelector('[cmdk-input]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'zzzzzzz');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      return true;
+    })()`);
+    await page.see("No sessions or commands match.");
+    assert.ok(
+      await page.evaluate("location.pathname.endsWith('/login-bug')"),
+      "pending Enter did not switch sessions",
+    );
+    await page.ab("fill", "[cmdk-input]", "release notes");
+    await page.until(
+      "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
+    );
+    await page.ab("press", "Enter");
+    await page.until(
+      "location.pathname.endsWith('/release-notes') && !document.querySelector('[cmdk-input]')",
+    );
+    await page.see("Answer 1.");
+    await page.capture("7-palette-switch");
   },
 );

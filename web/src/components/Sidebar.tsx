@@ -8,7 +8,7 @@ import {
   SlidersHorizontalIcon,
   XIcon,
 } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, memo, useEffect, useState } from "react";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import {
   SessionCommandMenuItem,
@@ -188,7 +188,8 @@ export function Sidebar({ state }: Props) {
                 <SessionRows
                   className="flex flex-col gap-1 py-1"
                   sessions={pinned.sessions}
-                  {...groupProps}
+                  select={select}
+                  reveal={reveal}
                 />
               </CollapsibleContent>
             </Collapsible>
@@ -349,96 +350,117 @@ interface GroupProps extends Pick<Props, "state">, Pick<Navigation, "select"> {
 }
 
 /** One line per session: the title alone. Location and project live in the session header and the groupings. */
-function SessionRow({
-  t,
-  state,
-  select,
-  reveal,
+const SessionRow = memo(
+  function SessionRow({
+    t,
+    select,
+    reveal,
+  }: {
+    t: SessionEntry;
+  } & Pick<GroupProps, "select" | "reveal">) {
+    const [enter] = useState(reveal);
+    const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
+    const { selected, disabled, hint, activity } = t;
+    // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
+    const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
+    return (
+      <li
+        className={cn(
+          row,
+          enter,
+          "group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover",
+          selected && "bg-(--selected) hover:bg-(--selected)",
+        )}
+      >
+        <button
+          type="button"
+          title={hint}
+          aria-current={selected ? "page" : undefined}
+          disabled={disabled}
+          onClick={() => select(t.cwd, t.sessionId)}
+          className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
+        >
+          <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
+            {activity === "working" ? (
+              <Keys playing className="text-brand" />
+            ) : (
+              dot && (
+                <span
+                  className={cn(
+                    "size-2 rounded-full transition-[background-color,border-color] duration-300",
+                    dot,
+                  )}
+                />
+              )
+            )}
+          </span>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate",
+              selected && "font-medium",
+              !t.title && "text-ink-3",
+            )}
+          >
+            {t.title || "Untitled"}
+          </span>
+          {activity === "working" ? (
+            <span className="sr-only">working</span>
+          ) : activity === "done" ? (
+            <span className="sr-only">done</span>
+          ) : null}
+          {hint && <span className="sr-only">{hint}</span>}
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className={cn(hoverSlot, "max-md:hidden")}
+              aria-label={`Session menu for ${t.title || t.sessionId}`}
+            >
+              <MoreHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <SessionMenu target={target} />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </li>
+    );
+  },
+  (previous, next) =>
+    previous.select === next.select &&
+    // reveal is a mount-only initializer. Compare every catalog field, not the changing AppState.
+    Object.keys(previous.t).every(
+      (key) => previous.t[key as keyof SessionEntry] === next.t[key as keyof SessionEntry],
+    ),
+);
+
+/** Closed row menus must not subscribe to every streamed token or compute commands. */
+function SessionMenu({
+  target,
 }: {
-  t: SessionEntry;
-} & Pick<GroupProps, "state" | "select" | "reveal">) {
-  const [enter] = useState(reveal);
-  const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
+  target: { cwd: string; sessionId: string; title: string | undefined };
+}) {
+  const { state } = useCommands();
   const { commands, run } = useSessionCommands(target);
   const { sections } = sessionRowMenu(commands);
-  const { selected, disabled, hint, activity } = t;
-  // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
-  const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
   return (
-    <li
-      className={cn(
-        row,
-        enter,
-        "group flex items-center rounded-lg pr-1 transition-[background-color,box-shadow] duration-(--dur-hover) hover:bg-fill-hover",
-        selected && "bg-(--selected) hover:bg-(--selected)",
-      )}
-    >
-      <button
-        type="button"
-        title={hint}
-        aria-current={selected ? "page" : undefined}
-        disabled={disabled}
-        onClick={() => select(t.cwd, t.sessionId)}
-        className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
-      >
-        <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-          {activity === "working" ? (
-            <Keys playing className="text-brand" />
-          ) : (
-            dot && (
-              <span
-                className={cn(
-                  "size-2 rounded-full transition-[background-color,border-color] duration-300",
-                  dot,
-                )}
-              />
-            )
-          )}
-        </span>
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate",
-            selected && "font-medium",
-            !t.title && "text-ink-3",
-          )}
-        >
-          {t.title || "Untitled"}
-        </span>
-        {activity === "working" ? (
-          <span className="sr-only">working</span>
-        ) : activity === "done" ? (
-          <span className="sr-only">done</span>
-        ) : null}
-        {hint && <span className="sr-only">{hint}</span>}
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className={cn(hoverSlot, "max-md:hidden")}
-            aria-label={`Session menu for ${t.title || t.sessionId}`}
-          >
-            <MoreHorizontalIcon />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {sections.map((section) => (
-            <Fragment key={section[0]?.id}>
-              <DropdownMenuGroup>
-                {section.map((c) => (
-                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                ))}
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-            </Fragment>
-          ))}
+    <>
+      {sections.map((section) => (
+        <Fragment key={section[0]?.id}>
           <DropdownMenuGroup>
-            <ProjectMenu state={state} session={target} run={run} />
+            {section.map((c) => (
+              <SessionCommandMenuItem key={c.id} command={c} run={run} />
+            ))}
           </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </li>
+          <DropdownMenuSeparator />
+        </Fragment>
+      ))}
+      <DropdownMenuGroup>
+        <ProjectMenu state={state} session={target} run={run} />
+      </DropdownMenuGroup>
+    </>
   );
 }
 
@@ -451,7 +473,7 @@ function SessionRows({
   sessions,
   className,
   ...row
-}: Pick<GroupProps, "state" | "select" | "reveal"> & {
+}: Pick<GroupProps, "select" | "reveal"> & {
   sessions: readonly SessionEntry[];
   className: string;
 }) {
@@ -467,7 +489,6 @@ function SessionRows({
 /** Every listed session in one list. */
 function SessionList({
   sessions,
-  state,
   select,
   reveal,
 }: Omit<GroupProps, "open" | "onOpenChange"> & { sessions: readonly SessionEntry[] }) {
@@ -475,7 +496,6 @@ function SessionList({
     <SessionRows
       className="flex flex-col gap-1"
       sessions={sessions}
-      state={state}
       select={select}
       reveal={reveal}
     />
@@ -556,7 +576,6 @@ function ProjectGroup({
           <SessionRows
             className="flex flex-col gap-1 py-1"
             sessions={members}
-            state={state}
             select={select}
             reveal={reveal}
           />
@@ -635,7 +654,6 @@ function FolderGroup({
           <SessionRows
             className="flex flex-col gap-1 py-1"
             sessions={sessions}
-            state={state}
             select={select}
             reveal={reveal}
           />

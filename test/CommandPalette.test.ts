@@ -3,12 +3,19 @@ import { test } from "node:test";
 import type { SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   commandPalette,
+  createPaletteCatalog,
   FILES_QUERY,
   LINKS_QUERY,
   paletteFilter,
   RECENT_SESSION_LIMIT,
 } from "../web/src/lib/commandPalette.ts";
 import { type GlobalCommandContext, globalCommands } from "../web/src/lib/globalCommands.ts";
+import {
+  createPaletteSearch,
+  pagePalette,
+  paletteSelection,
+  searchPalette,
+} from "../web/src/lib/paletteSearch.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { sessionFiles } from "../web/src/lib/sessionFiles.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
@@ -65,12 +72,14 @@ const ctx: GlobalCommandContext = {
 };
 /** The palette as the host feeds it: global commands from the shared context, the selected session's commands. */
 const palette = (state: AppState, search = "", c = ctx) =>
-  commandPalette(state, {
+  searchPalette(
+    commandPalette(state, {
+      globalCommands: globalCommands(state, c),
+      sessionCommands: sessionCommands(state),
+      files: sessionFiles(state.session?.messages ?? []),
+    }),
     search,
-    globalCommands: globalCommands(state, c),
-    sessionCommands: sessionCommands(state),
-    files: sessionFiles(state.session?.messages ?? []),
-  });
+  );
 const headings = (state: AppState, search = "") => palette(state, search).map((g) => g.heading);
 const sessionIds = (state: AppState, search = "") => {
   const group = palette(state, search).find((g) => g.id === "sessions");
@@ -86,8 +95,8 @@ test("before a search the palette offers the most recent sessions; a search reac
   assert.equal(RECENT_SESSION_LIMIT, 8);
   assert.equal(
     sessionIds(home, "session").length,
-    10,
-    "searching lists them all for cmdk to filter",
+    9,
+    "searching reaches every matching session; Untitled does not match",
   );
   assert.equal(sessionIds(home, "   ").length, 8, "blank input is not a search");
   assert.deepEqual(headings(home).slice(0, 1), ["Recent sessions"]);
@@ -128,7 +137,7 @@ test("groups come in order, with Session commands only while a session is select
 test("a search ranks groups by their best row; blank input keeps the declared order", () => {
   assert.deepEqual(
     headings(inSession, "diff"),
-    ["Session commands", "Sessions", "Global commands"],
+    ["Session commands"],
     "only Changes matches, so its group leads",
   );
   assert.equal(headings(inSession, "dark")[0], "Global commands");
@@ -250,11 +259,8 @@ test("Links lists the selected session's web links: the latest few at the root, 
     ],
     "newest first, at most the recent limit",
   );
-  // A search ranks rows (cmdk hides the ones that do not match), so every link is present.
-  assert.deepEqual(
-    links(linked, "example"),
-    [...urls].reverse().concat("https://github.com/a/b/pull/9"),
-  );
+  // Nonmatches never become cmdk components; all matching links remain reachable.
+  assert.deepEqual(links(linked, "example"), [...urls].reverse());
   assert.equal(
     links(linked, "the pr")?.[0],
     "https://github.com/a/b/pull/9",
@@ -274,9 +280,8 @@ test("Links lists the selected session's web links: the latest few at the root, 
   // cmdk's own filter cannot do since "!" is in no label.
   const matching = (search: string) =>
     palette(linked, search)
-      .find((g) => g.id === "links")!
-      .rows.filter((r) => paletteFilter(r.value, search, r.keywords) > 0)
-      .map((r) => r.link.url);
+      .find((g) => g.id === "links")
+      ?.rows.map((r) => r.link.url) ?? [];
   assert.deepEqual(matching(`${LINKS_QUERY} the pr`), ["https://github.com/a/b/pull/9"], "label");
   assert.deepEqual(matching(`${LINKS_QUERY} github`), ["https://github.com/a/b/pull/9"], "host");
   assert.deepEqual(matching(`${LINKS_QUERY} page-2`), ["https://example.com/page-2"], "path");
@@ -343,8 +348,11 @@ test("Files lists what the selected session wrote or edited: the latest few at t
     ["src/part-6.ts", "src/part-5.ts", "src/part-4.ts", "docs/guide.md", "src/part-3.ts"],
     "newest first, at most the recent limit, an absolute path shown relative to the session",
   );
-  // A search ranks rows (cmdk hides the ones that do not match), so every file is present.
-  assert.equal(files(written, "part")?.length, paths.length + 1, "a search reaches every file");
+  assert.equal(
+    files(written, "part")?.length,
+    paths.length,
+    "a search reaches every matching file",
+  );
   assert.equal(headings(written, "guide")[0], "Files", "a file name ranks Files first");
   // The files query reaches every file and nothing else; its singular is a prefix, so it works too.
   for (const query of [FILES_QUERY, "!file"]) {
@@ -359,9 +367,8 @@ test("Files lists what the selected session wrote or edited: the latest few at t
   }
   const matching = (search: string) =>
     palette(written, search)
-      .find((g) => g.id === "files")!
-      .rows.filter((r) => paletteFilter(r.value, search, r.keywords) > 0)
-      .map((r) => r.value);
+      .find((g) => g.id === "files")
+      ?.rows.map((r) => r.value) ?? [];
   assert.deepEqual(matching(`${FILES_QUERY} guide`), ["docs/guide.md"], "name");
   assert.deepEqual(matching(`${FILES_QUERY} docs`), ["docs/guide.md"], "directory");
   assert.deepEqual(matching(`${FILES_QUERY} part-2`), ["src/part-2.ts"], "path");
@@ -389,4 +396,135 @@ test("the links query's singular still reaches every link", () => {
     links.rows.filter((r) => paletteFilter(r.value, "!link", r.keywords) > 0).length,
     links.rows.length,
   );
+});
+
+test("search pages replace rows, preserve stable ties and reach the oldest match", () => {
+  const state = {
+    ...home,
+    sessionReferences: Array.from({ length: 123 }, (_, i) =>
+      sessionReference("/closed", `id-${i}`, {
+        title: "Repeated title",
+        createdAt: new Date(1700000000000 + i * 1000).toISOString(),
+      }),
+    ),
+  };
+  const groups = commandPalette(state, { globalCommands: [], sessionCommands: [], files: [] });
+  const search = createPaletteSearch();
+  const first = search({ id: 1, groups, query: "Repeated", pages: {} });
+  assert.equal(first.pages[0].total, 123);
+  assert.equal(first.pages[0].group.rows.length, 50);
+  const ranked = searchPalette(groups, "Repeated");
+  assert.equal(
+    paletteSelection(pagePalette(ranked), "sessions:next", false),
+    "sessions:next",
+    "a background refresh must not replace the Next choice with a session",
+  );
+  assert.equal(
+    paletteSelection(pagePalette(ranked), "sessions:next", true),
+    "sessions:/closed\nid-122",
+    "an edited query resets to its best match",
+  );
+  assert.equal(
+    paletteSelection(pagePalette(ranked, { sessions: 1 }), "sessions:/closed\nid-122", false),
+    "sessions:/closed\nid-72",
+    "a choice no longer on the page is replaced",
+  );
+  assert.equal(paletteSelection([], "sessions:next", false), "");
+  const second = search({ id: 2, query: "Repeated", pages: { sessions: 1 } });
+  const last = search({ id: 3, query: "Repeated", pages: { sessions: 2 } });
+  const keys = [first, second, last].flatMap((reply) =>
+    reply.pages[0].group.rows.map((r) => r.key),
+  );
+  assert.deepEqual(
+    keys,
+    Array.from({ length: 123 }, (_, i) => `/closed\nid-${122 - i}`),
+  );
+  assert.equal(last.pages[0].group.rows.length, 23);
+  assert.equal(search({ id: 4, query: "missing", pages: {} }).pages.length, 0);
+  assert.equal(
+    search({ id: 5, query: "id-0", pages: {} }).pages[0].group.rows[0].key,
+    "/closed\nid-0",
+  );
+  assert.equal(pagePalette(searchPalette(groups, "Repeated"), { sessions: 999 })[0].page, 2);
+});
+
+test("catalog cache survives activity updates but invalidates searchable metadata and actions", () => {
+  const catalog = createPaletteCatalog();
+  const input = { globalCommands: globalCommands(home, ctx), sessionCommands: [], files: [] };
+  const first = catalog(home, input);
+  assert.equal(
+    catalog(
+      { ...home, done: ["changed activity"] },
+      { ...input, globalCommands: globalCommands(home, ctx) },
+    ),
+    first,
+  );
+  assert.equal(
+    catalog({ ...home, sessionReferences: home.sessionReferences.map((r) => ({ ...r })) }, input),
+    first,
+    "a refreshed snapshot with identical search data must not reset the current page or selection",
+  );
+  const renamed = {
+    ...home,
+    sessionReferences: home.sessionReferences.map((r, i) =>
+      i === 0 ? { ...r, title: "Unique renamed" } : r,
+    ),
+  };
+  const next = catalog(renamed, input);
+  assert.notEqual(next, first);
+  assert.equal(searchPalette(next, "Unique renamed")[0]?.rows[0].key, "/repo\ns0");
+  const archived = catalog(
+    {
+      ...renamed,
+      sessionReferences: renamed.sessionReferences.map((r, i) =>
+        i === 0 ? { ...r, archived: true } : r,
+      ),
+    },
+    input,
+  );
+  assert.equal(searchPalette(archived, "Unique renamed").length, 0);
+  assert.notEqual(
+    catalog(home, { ...input, globalCommands: globalCommands(home, { ...ctx, theme: "light" }) }),
+    first,
+  );
+});
+
+test("history replay IDs do not invalidate unchanged file/link search documents", () => {
+  const catalog = createPaletteCatalog();
+  const session: SessionView = {
+    ...selected,
+    messages: [{ id: "saved", role: "user", text: "See https://example.com/guide" }],
+  };
+  const input = {
+    globalCommands: [],
+    sessionCommands: [],
+    files: [{ path: "src/app.ts", messageId: "saved" }],
+  };
+  const first = catalog({ ...inSession, session }, input);
+  const replayed: SessionView = {
+    ...session,
+    messages: session.messages.map((m) => ({ ...m, id: "hosted" })),
+  };
+  assert.equal(
+    catalog(
+      { ...inSession, session: replayed },
+      { ...input, files: [{ path: "src/app.ts", messageId: "hosted" }] },
+    ),
+    first,
+  );
+});
+
+test("worker search replaces its catalog even when the query is unchanged", () => {
+  const search = createPaletteSearch();
+  const input = { globalCommands: [], sessionCommands: [], files: [] };
+  const groups = commandPalette(home, input);
+  assert.equal(search({ id: 1, query: "Session", pages: {}, groups }).pages[0].total, 9);
+  const archived = commandPalette(
+    { ...home, sessionReferences: home.sessionReferences.map((r) => ({ ...r, archived: true })) },
+    input,
+  );
+  assert.deepEqual(search({ id: 2, query: "Session", pages: {}, groups: archived }), {
+    id: 2,
+    pages: [],
+  });
 });

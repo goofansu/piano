@@ -57,6 +57,7 @@ export function CommandDialog({
   className,
   showCloseButton = true,
   filter,
+  commandProps,
   ...props
 }: ComponentProps<typeof Dialog> & {
   title?: string;
@@ -64,6 +65,7 @@ export function CommandDialog({
   className?: string;
   showCloseButton?: boolean;
   filter?: ComponentProps<typeof Command>["filter"];
+  commandProps?: Pick<ComponentProps<typeof Command>, "shouldFilter" | "value" | "onValueChange">;
 }) {
   return (
     <Dialog {...props}>
@@ -76,6 +78,7 @@ export function CommandDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <Command
+          {...commandProps}
           filter={filter}
           className="[--command-row-height:3rem] pointer-coarse:[--command-row-height:3rem] [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-item]]:px-2 [&_[cmdk-item]>svg]:size-5"
         >

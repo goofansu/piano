@@ -1,7 +1,6 @@
 /**
  * The command palette's contents, decided once: which groups it shows, in what order, and each row's
- * name, search text and marks. `CommandPalette` only renders them; cmdk filters rows by `value` and
- * `keywords` with `paletteFilter`, the same scores that order rows and groups here.
+ * name, search text and marks. Search runs outside cmdk, so only a bounded page becomes components.
  */
 
 import { defaultFilter } from "cmdk";
@@ -16,7 +15,7 @@ import { displayUrl, type SessionLink, sessionLinks } from "./sessionLinks.ts";
 /**
  * A row's own search text always outranks a match that needs a hidden alias. Keep cmdk's fuzzy
  * label search, but require word prefixes for aliases: "dark theme" works, while "path" cannot
- * stitch letters from "appearance theme". cmdk and `commandPalette`'s ranking use this same filter.
+ * stitch letters from "appearance theme". The search worker uses this policy once per row.
  */
 export function paletteFilter(value: string, search: string, keywords?: string[]): number {
   const query = search.trim().toLowerCase();
@@ -45,7 +44,7 @@ export const FILES_QUERY = "!files";
 
 export interface PaletteSessionRow {
   key: string;
-  /** cmdk's search text: the title, folder, branch, project and session ID. */
+  /** Search text: the title, folder, branch, project and session ID. */
   value: string;
   keywords: string[];
   /** The title, or "Untitled". */
@@ -56,7 +55,7 @@ export interface PaletteSessionRow {
   folder: string;
   /** The branch, shown only for a session in one of its folder's worktrees. */
   branch: string | undefined;
-  session: SessionEntry;
+  session: Pick<SessionEntry, "cwd" | "sessionId">;
 }
 
 export interface PaletteCommandRow<C extends GlobalCommand | SessionCommand> {
@@ -74,12 +73,12 @@ export interface PaletteCommandRow<C extends GlobalCommand | SessionCommand> {
 
 export interface PaletteLinkRow {
   key: string;
-  /** cmdk's search text: the label and the URL. */
+  /** Search text: the label and the URL. */
   value: string;
   keywords: string[];
   /** The URL as shown, without its scheme. */
   display: string;
-  link: SessionLink;
+  link: Pick<SessionLink, "url" | "label">;
 }
 
 export interface PaletteFileRow {
@@ -90,7 +89,7 @@ export interface PaletteFileRow {
   /** The file name, and the directory as shown: relative to the session's directory when inside it. */
   name: string;
   dir: string;
-  file: SessionFile;
+  file: Pick<SessionFile, "path">;
 }
 
 export type PaletteGroup =
@@ -103,7 +102,6 @@ export type PaletteGroup =
   | { id: "links"; heading: "Links"; rows: PaletteLinkRow[] };
 
 export interface PaletteInput {
-  search: string;
   /** Global commands as the host provides them, with the same context as the sidebar's View menu. */
   globalCommands: readonly GlobalCommand[];
   /** The selected session's commands. */
@@ -124,7 +122,7 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
     selected: t.selected,
     folder: t.folder,
     branch: t.branch && t.inWorktree ? t.branch : undefined,
-    session: t,
+    session: { cwd: t.cwd, sessionId: t.sessionId },
   };
 }
 
@@ -147,7 +145,7 @@ function linkRow(link: SessionLink): PaletteLinkRow {
     // "!link" reaches every row and nothing else: no title, folder or command contains "!".
     keywords: [LINKS_QUERY, link.url, ...urlWords(link.url)],
     display: displayUrl(link.url),
-    link,
+    link: { url: link.url, label: link.label },
   };
 }
 
@@ -162,7 +160,7 @@ function fileRow(file: SessionFile, cwd: string | undefined): PaletteFileRow {
     keywords: [FILES_QUERY, ...shown.split("/"), ...shown.split(/[^\p{L}\p{N}]+/u)].filter(Boolean),
     name,
     dir,
-    file,
+    file: { path: file.path },
   };
 }
 
@@ -180,22 +178,23 @@ function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteComm
 }
 
 /**
- * The palette's groups: sessions (the most recent few, titled "Recent sessions", until a search
- * reaches them all), Global commands, then, only while a session is selected, Session commands and
- * Files (the latest few the session wrote, until a search reaches them all; `FILES_QUERY` lists
- * only them) and Links (likewise for the links the conversation mentions, on `LINKS_QUERY`). Every session
- * that is not archived is reachable, including those whose folder is closed. A search ranks rows
- * within each group, and groups by their best row; ties keep that order.
+ * Full searchable catalog, with sessions newest first. Search/paging chooses the visible rows;
+ * this preparation does not depend on a query. Closed-folder sessions remain reachable.
  */
-export function commandPalette(state: AppState, input: PaletteInput): PaletteGroup[] {
-  const searching = !!input.search.trim();
-  const sessions = recentSessions(state);
+export function commandPalette(
+  state: AppState,
+  input: PaletteInput,
+  sessions = recentSessions(state).map(sessionRow),
+  links = sessionLinks(state.session?.messages ?? [])
+    .reverse()
+    .map(linkRow),
+): PaletteGroup[] {
   const groups: PaletteGroup[] = [];
   if (sessions.length > 0)
     groups.push({
       id: "sessions",
-      heading: searching ? "Sessions" : "Recent sessions",
-      rows: (searching ? sessions : sessions.slice(0, RECENT_SESSION_LIMIT)).map(sessionRow),
+      heading: "Sessions",
+      rows: sessions,
     });
   groups.push({
     id: "global",
@@ -214,28 +213,77 @@ export function commandPalette(state: AppState, input: PaletteInput): PaletteGro
       groups.push({
         id: "files",
         heading: "Files",
-        rows: (searching ? files : files.slice(0, RECENT_FILE_LIMIT)).map((file) =>
-          fileRow(file, state.session?.cwd),
-        ),
+        rows: files.map((file) => fileRow(file, state.session?.cwd)),
       });
-    const links = sessionLinks(state.session.messages).reverse();
     if (links.length > 0)
       groups.push({
         id: "links",
         heading: "Links",
-        rows: (searching ? links : links.slice(0, RECENT_LINK_LIMIT)).map(linkRow),
+        rows: links,
       });
   }
-  if (!searching) return groups;
-  // cmdk sorts the mounted DOM before newly matching items appear, and leaves groups in React's
-  // order. Rank both here, so a row revealed by this query is already in the right place.
-  const best = new Map<PaletteGroup["id"], number>();
-  for (const group of groups) {
-    const scores = new Map(
-      group.rows.map((row) => [row.key, paletteFilter(row.value, input.search, row.keywords)]),
-    );
-    group.rows.sort((a, b) => scores.get(b.key)! - scores.get(a.key)!);
-    best.set(group.id, Math.max(0, ...scores.values()));
-  }
-  return groups.sort((a, b) => best.get(b.id)! - best.get(a.id)!);
+  return groups;
+}
+
+/** Cache catalog preparation across input and streaming updates, without retaining another history. */
+export function createPaletteCatalog() {
+  let dependencies: unknown[] = [];
+  let sessions: PaletteSessionRow[] = [];
+  let messages: unknown;
+  let links: PaletteLinkRow[] = [];
+  let previous: PaletteGroup[] = [];
+  return (state: AppState, input: PaletteInput): PaletteGroup[] => {
+    const current = state.session ?? state.selecting;
+    // Host activity/done markers are not shown in the palette. Metadata and selection are.
+    const next = [
+      state.sessionReferences,
+      state.folders,
+      state.projects,
+      current?.cwd,
+      current?.sessionId,
+    ];
+    if (next.some((value, i) => value !== dependencies[i])) {
+      dependencies = next;
+      const updated = recentSessions(state).map(sessionRow);
+      // Registry refreshes replace arrays even when nothing searchable changed. Do not restart
+      // the worker or reset pagination/selection on those refreshes (or stats-only changes).
+      if (
+        updated.length !== sessions.length ||
+        updated.some((row, i) => {
+          const old = sessions[i];
+          return (
+            row.key !== old.key ||
+            row.value !== old.value ||
+            row.label !== old.label ||
+            row.folder !== old.folder ||
+            row.branch !== old.branch ||
+            row.selected !== old.selected ||
+            row.untitled !== old.untitled ||
+            row.keywords.some((word, j) => word !== old.keywords[j])
+          );
+        })
+      )
+        sessions = updated;
+    }
+    if (messages !== state.session?.messages) {
+      messages = state.session?.messages;
+      links = sessionLinks(state.session?.messages ?? [])
+        .reverse()
+        .map(linkRow);
+    }
+    const groups = commandPalette(state, input, sessions, links).map((group) => {
+      const old = previous.find((g) => g.id === group.id);
+      // Commands/files/links are serializable descriptors. Streaming often changes their source
+      // objects without changing any searchable value, action, or availability.
+      return old &&
+        (old.rows === group.rows ||
+          (group.id !== "sessions" && JSON.stringify(old) === JSON.stringify(group)))
+        ? old
+        : group;
+    });
+    if (groups.length === previous.length && groups.every((g, i) => g === previous[i]))
+      return previous;
+    previous = groups;
+    return groups;
+  };
 }
