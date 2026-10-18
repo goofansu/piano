@@ -4,6 +4,11 @@
 export const picker =
   "inline-flex h-11 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 hover:bg-fill-hover hover:text-ink data-[state=open]:bg-fill-hover data-[state=open]:text-ink md:h-8";
 
+/** The composer footer's machine-value pickers (model, delivery): mono captions on the trigger, and menus whose
+ * rows drop to the caption scale on phones, where the label scale would outsize the footer they open from. */
+export const footerPicker = `${picker} font-mono text-xs`;
+export const footerPickerMenu = "font-mono max-md:[--type-label:var(--type-caption)]";
+
 /** Shared surface and focus treatment for the first-message and session composers. */
 export const composerCard = "composer-card font-sans";
 

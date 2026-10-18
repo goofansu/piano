@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import type { ModelCatalogView } from "@/lib/modelCatalogs";
 import { modelPickerView } from "@/lib/modelPicker";
-import { picker } from "@/lib/styles";
+import { footerPicker, footerPickerMenu } from "@/lib/styles";
 
 interface Props {
   open?: boolean;
@@ -146,10 +146,10 @@ export function ModelSelect({
           title={want}
           disabled={!view.triggerEnabled}
           className={cn(
-            "min-w-0 shrink font-mono",
+            "min-w-0 shrink",
             variant === "outline"
-              ? "max-w-full justify-start"
-              : [picker, "max-w-none justify-end px-1.5 text-xs"],
+              ? "max-w-full justify-start font-mono"
+              : [footerPicker, "max-w-none justify-end px-1.5"],
           )}
         >
           <span className={cn("min-w-0 truncate", view.shimmer && "shimmer")}>{view.label}</span>
@@ -167,7 +167,7 @@ export function ModelSelect({
         still
         aria-label="Model and effort"
         collisionPadding={16}
-        className="w-96 font-mono max-md:[--type-label:var(--type-caption)]"
+        className={cn("w-96", footerPickerMenu)}
         searchRef={search}
         onKeyDown={(event) => {
           if (
