@@ -135,7 +135,10 @@ await run(
     await page.capture("6-stopped");
 
     // Switching through the palette must not execute a stale row while a new query is pending.
-    await page.ab("press", "Control+k");
+    await page.ab(
+      "press",
+      await page.evaluate(`/Mac|iPhone|iPad/.test(navigator.platform) ? "Meta+k" : "Control+k"`),
+    );
     await page.ab("fill", "[cmdk-input]", "release notes");
     await page.until(
       "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
