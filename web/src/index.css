@@ -361,12 +361,25 @@
   overflow: hidden;
   outline: none;
 }
+[data-slot="mobile-sidebar"][data-state="closed"] {
+  /* Keep Radix Presence mounted while the children and live page settle closed. */
+  animation: sidebar-reveal-exit var(--sidebar-duration, 300ms) linear;
+}
+@keyframes sidebar-reveal-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
 [data-slot="sidebar-reveal-navigation"] {
   width: 75vw;
   height: 100dvh;
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   background: var(--surface-0);
   clip-path: inset(0 calc((1 - var(--sidebar-progress)) * 100%) 0 0);
+  transition: clip-path var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
   will-change: clip-path;
 }
 [data-slot="sidebar-scrim"] {
@@ -378,13 +391,31 @@
   opacity: var(--sidebar-progress);
   transform: translateX(calc(var(--sidebar-progress) * 75vw));
   border-radius: calc(var(--sidebar-progress) * 2rem) 0 0 calc(var(--sidebar-progress) * 2rem);
+  transition:
+    transform var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
+    opacity var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
+    border-radius var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
   will-change: transform, opacity;
+}
+/* Opened by a tap, the sidebar enters from closed; a drag already painted its start. */
+@starting-style {
+  [data-slot="mobile-sidebar"][data-dragging="false"] [data-slot="sidebar-reveal-navigation"] {
+    clip-path: inset(0 100% 0 0);
+  }
+  [data-slot="mobile-sidebar"][data-dragging="false"] [data-slot="sidebar-scrim"] {
+    transform: translateX(0);
+    opacity: 0;
+    border-radius: 0;
+  }
 }
 @media (width < 48rem) {
   [data-slot="layout-main"] {
     transform: translateX(calc(var(--sidebar-progress, 0) * 75vw));
     border-radius: calc(var(--sidebar-progress, 0) * 2rem) 0 0
       calc(var(--sidebar-progress, 0) * 2rem);
+    transition:
+      transform var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer)),
+      border-radius var(--sidebar-duration, 300ms) var(--sidebar-easing, var(--ease-drawer));
     /* Keep the live page on its own layer before the first touch, not mid-gesture. */
     will-change: transform;
   }
@@ -393,6 +424,12 @@
   [data-slot="mobile-sidebar"] {
     display: none;
   }
+}
+/* The finger moves the surfaces 1:1; they settle only once it lets go. */
+[data-slot="layout-main"][data-sidebar-dragging="true"],
+[data-slot="mobile-sidebar"][data-dragging="true"] [data-slot="sidebar-reveal-navigation"],
+[data-slot="mobile-sidebar"][data-dragging="true"] [data-slot="sidebar-scrim"] {
+  transition: none;
 }
 
 /* Radix's inline display: table widens this internal wrapper to the longest line, defeating
@@ -685,6 +722,8 @@
  * every entrance; exits are shorter than entrances. */
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* iOS-like drawer curve (Ionic), for the phone sidebar. */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 /* Menus, popovers, selects and tooltips scale from their trigger (Radix's transform origin) with
  * no slide; dialogs scale from the centre. */
@@ -789,6 +828,11 @@
   }
   [data-motion="turn"] {
     transition: none;
+  }
+  /* The phone sidebar comes to rest at once; finger tracking stays. */
+  [data-motion="drawer"] {
+    transition: none !important;
+    animation: none !important;
   }
 }
 /* biome-ignore-end lint/complexity/noImportantStyles: range closes */

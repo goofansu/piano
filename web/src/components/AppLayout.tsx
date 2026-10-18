@@ -108,6 +108,8 @@ export function AppLayout({
           open={mobileOpen}
           dragging={swipe.dragging}
           progress={swipe.progress}
+          settleDuration={swipe.settleDuration}
+          settleEasing={swipe.settleEasing}
           onOpenChange={(open) => {
             swipe.cancelDrag();
             layout.setMobileOpen(open);
@@ -121,8 +123,9 @@ export function AppLayout({
         <main
           ref={swipe.mainRef}
           data-slot="layout-main"
+          data-motion="drawer"
           data-sidebar-dragging={swipe.dragging}
-          style={sidebarRevealStyle(swipe.progress)}
+          style={sidebarRevealStyle(swipe.progress, swipe.settleDuration, swipe.settleEasing)}
           className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
         >
           {content}

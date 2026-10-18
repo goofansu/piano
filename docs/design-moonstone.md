@@ -226,14 +226,14 @@ One curve, `--ease-out` `cubic-bezier(0.23, 1, 0.32, 1)`, for every entrance; ex
 | Scroll to bottom (`enter`) | 150ms fade and scale in | otherwise it pops in while reading |
 | Delivery picker and queued messages (`fade`) | 150ms fade in | they appear beside and above the composer as you send |
 | Transcript, streaming output, fold content, loading placeholder, jumps | none | the transcript never moves under the reader; a jump always lands the message 16px under the top |
+| Phone sidebar (`drawer`) | follows the finger 1:1; on release it settles at the finger's speed into a stop (120–420ms); a tap opens or closes it over 300ms on `--ease-drawer` `cubic-bezier(0.32, 0.72, 0, 1)` | a gesture should finish the way it was moving; a tap gets the iOS drawer feel |
+| Desktop sidebar collapse (Mod+B or its button), sidebar rows, right sidebar | none | a keyboard shortcut and frequent navigation should answer at once |
 | New session page entrance | none | seen many times a day, often from the keyboard, with the composer focused to type at once |
 
-Two timing behaviours stay because they decide when something shows, not how:
+One timing behaviour is not motion, because it decides when something shows, not how:
 
 - **Grace period.** The reconnecting pill and loading placeholders (`.late-enter`) wait 600ms
   before appearing, so a quick load never flashes them; they then appear at once.
-- **Finger tracking.** The phone sidebar follows a horizontal drag 1:1; on release it comes to
-  rest open or closed at once.
 
 What the removed motion was is recorded under "What Felt changed and why" below.
 

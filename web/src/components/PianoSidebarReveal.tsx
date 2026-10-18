@@ -3,8 +3,16 @@ import { type CSSProperties, type ReactNode, type RefObject, useEffect } from "r
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
-export function sidebarRevealStyle(progress: number): CSSProperties {
-  return { "--sidebar-progress": progress } as CSSProperties;
+export function sidebarRevealStyle(
+  progress: number,
+  duration: number,
+  easing: string,
+): CSSProperties {
+  return {
+    "--sidebar-progress": progress,
+    "--sidebar-duration": `${duration}ms`,
+    "--sidebar-easing": easing,
+  } as CSSProperties;
 }
 
 /** Sheet/Drawer move the navigation over the page. This reveal instead moves the live page.
@@ -14,6 +22,8 @@ export function PianoSidebarReveal({
   open,
   dragging,
   progress,
+  settleDuration,
+  settleEasing,
   onOpenChange,
   contentRef: content,
   title,
@@ -22,6 +32,8 @@ export function PianoSidebarReveal({
   open: boolean;
   dragging: boolean;
   progress: number;
+  settleDuration: number;
+  settleEasing: string;
   onOpenChange: (open: boolean) => void;
   contentRef: RefObject<HTMLDivElement | null>;
   title: string;
@@ -39,8 +51,9 @@ export function PianoSidebarReveal({
         <Dialog.Content
           ref={content}
           data-slot="mobile-sidebar"
+          data-motion="drawer"
           data-dragging={dragging}
-          style={sidebarRevealStyle(progress)}
+          style={sidebarRevealStyle(progress, settleDuration, settleEasing)}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
@@ -54,9 +67,16 @@ export function PianoSidebarReveal({
         >
           <SheetTitle className="sr-only">{title}</SheetTitle>
           {/* No standard surface reveals a stationary sidebar beneath a translated live page. */}
-          <div data-slot="sidebar-reveal-navigation">{children}</div>
+          <div data-slot="sidebar-reveal-navigation" data-motion="drawer">
+            {children}
+          </div>
           <Dialog.Close asChild>
-            <button type="button" data-slot="sidebar-scrim" aria-label="Dismiss sidebar" />
+            <button
+              type="button"
+              data-slot="sidebar-scrim"
+              data-motion="drawer"
+              aria-label="Dismiss sidebar"
+            />
           </Dialog.Close>
         </Dialog.Content>
       </Dialog.Portal>

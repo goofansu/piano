@@ -42,11 +42,16 @@ export function useSidebarSwipe({
   const [progress, setProgress] = useState<number | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
   const revealRef = useRef<HTMLDivElement | null>(null);
+  const [settle, setSettle] = useState<{
+    target: boolean;
+    duration: number;
+    easing: string;
+  } | null>(null);
   const current = useEffectEvent(() => ({ open, onOpenChange, onPreview, mobile }));
   const cancelGesture = useRef<() => void>(() => {});
   const cancelDrag = useCallback(() => cancelGesture.current(), []);
   useLayoutEffect(() => {
-    // Hand the surfaces back to CSS only after React commits the endpoint.
+    // Hand the surfaces back to CSS settling only after React commits the endpoint.
     if (progress === null) paintPosition(mainRef.current, revealRef.current, null);
   }, [progress]);
   // A command or navigation can change the committed state while a finger is still down.
@@ -84,6 +89,7 @@ export function useSidebarSwipe({
     cancelGesture.current = cancel;
     const start = (event: TouchEvent) => {
       cancel();
+      setSettle(null);
       suppressClickUntil = 0; // A new deliberate tap is not the preceding drag's compatibility click.
       if (!current().mobile() || event.touches.length !== 1) return;
       const touch = event.touches[0];
@@ -157,7 +163,8 @@ export function useSidebarSwipe({
       if (outcome.kind === "cancel") return cancel();
       suppressClickUntil = performance.now() + 500;
       cancel();
-      const next = outcome.open;
+      const { open: next, duration, easing } = outcome;
+      setSettle({ target: next, duration, easing });
       const state = current();
       if (next !== state.open) state.onOpenChange(next);
     };
@@ -194,6 +201,9 @@ export function useSidebarSwipe({
     dragging: progress !== null,
     mainRef,
     revealRef,
+    settleDuration: settle?.target === open ? settle.duration : 300,
+    // A tap opens or closes it along the drawer curve; a release continues the finger's own speed.
+    settleEasing: settle?.target === open ? settle.easing : "var(--ease-drawer)",
     cancelDrag,
   };
 }

@@ -29,7 +29,8 @@ function swipe({ open = false, x = 30 } = {}) {
 const settled = (outcome: SwipeEnd) => {
   assert.equal(outcome.kind, "settle");
   if (outcome.kind !== "settle") throw new Error("unreachable");
-  return outcome;
+  const [x1, y1, x2, y2] = outcome.easing.match(/[\d.]+/g)?.map(Number) ?? [];
+  return { ...outcome, x1, y1, x2, y2 };
 };
 
 test("a touch decides nothing until it clearly moves, then claims horizontal drags only", () => {
@@ -223,6 +224,52 @@ test("release follows a deliberate flick, otherwise the nearer end", () => {
     g.drag(steps);
     assert.equal(settled(g.end(release)).open, opens, name);
   }
+});
+
+test("the settle carries the finger's speed into a stop, within 120-420ms", () => {
+  // 1.5px/ms released 45px in: 255px remain, crossed at the finger's speed then easing out.
+  const steady = swipe();
+  steady.drag([
+    [45, 10],
+    [60, 20],
+    [75, 30],
+  ]);
+  const s = settled(steady.end(40));
+  assert.equal(s.open, true);
+  assert.ok(s.duration > 120 && s.duration < 420, `duration ${s.duration}`);
+  const handoff = ((s.y1 / s.x1) * 255) / s.duration; // px/ms at the first frame
+  assert.ok(Math.abs(handoff - 1.5) < 0.01, `handoff ${handoff}px/ms`);
+  assert.deepEqual([s.x2, s.y2], [0.5, 1], "ends with zero velocity");
+
+  // A very fast flick is capped at the shortest settle and the steepest monotonic curve.
+  const flick = swipe();
+  flick.drag([
+    [40, 1],
+    [100, 7],
+  ]);
+  const fast = settled(flick.end(8));
+  assert.equal(fast.duration, 120);
+  assert.equal(fast.y1, 1);
+
+  // A release from rest just past halfway glides the remaining 135px over the longest settle.
+  const rest = swipe();
+  rest.drag([
+    [90, 300],
+    [195, 900],
+  ]);
+  const slow = settled(rest.end(1200));
+  assert.equal(slow.open, true);
+  assert.equal(slow.duration, 420);
+  assert.equal(slow.y1, 0, "starts from rest");
+
+  // Nothing left to travel: the shortest settle, from rest.
+  const full = swipe();
+  full.drag([
+    [100, 300],
+    [400, 900],
+  ]);
+  const done = settled(full.end(1200));
+  assert.deepEqual([done.open, done.duration, done.y1], [true, 120, 0]);
 });
 
 test("text selection takes over the touch and the swipe never resumes", () => {
