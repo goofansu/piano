@@ -42,6 +42,7 @@ import {
 } from "@/lib/sessionCommands";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useExeDev } from "@/lib/useExeDev";
+import { useLastShown } from "@/lib/useLastShown";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
@@ -164,26 +165,21 @@ export function CommandHost({
   const renaming = form?.kind === "rename-session" ? form.target : null;
   const close = forms.cancel;
   const answer = forms.answer();
+  // Each dialog animates closed after its form closes, so it keeps its last open face meanwhile.
   // Archive, delete and close folder share one confirm dialog; `confirmation` decides its wording.
   const asking = form ? confirmation(state, form) : undefined;
-  // The dialog animates closed after its form closes, so it keeps the last question meanwhile.
-  const lastAsked = useRef(asking);
-  if (asking) lastAsked.current = asking;
-  const asked = asking ?? lastAsked.current;
-  // The share and project dialogs likewise keep their last face while they animate closed.
+  const asked = useLastShown(asking && { ...asking, allowed: answer.allowed });
+  const renamed = useLastShown(
+    renaming ? { name: forms.text, allowed: answer.allowed } : undefined,
+  );
   const sharing = form?.kind === "share-session";
-  const lastShare = useRef({
-    phase: forms.share,
-    allowed: answer.allowed,
-    signedIn: radiusSignedIn,
-  });
-  if (sharing)
-    lastShare.current = { phase: forms.share, allowed: answer.allowed, signedIn: radiusSignedIn };
+  const shared = useLastShown(
+    sharing ? { phase: forms.share, allowed: answer.allowed, signedIn: radiusSignedIn } : undefined,
+  );
   const project = form?.kind === "project" ? form.dialog : undefined;
-  const lastProject = useRef(
+  const projected = useLastShown(
     project && { dialog: project, name: forms.text, allowed: answer.allowed },
   );
-  if (project) lastProject.current = { dialog: project, name: forms.text, allowed: answer.allowed };
 
   const effects: CommandEffects = {
     send,
@@ -214,12 +210,9 @@ export function CommandHost({
       }}
     >
       {children}
-      <ShareSessionDialog
-        open={sharing}
-        {...lastShare.current}
-        submit={forms.submit}
-        close={close}
-      />
+      {shared && (
+        <ShareSessionDialog open={sharing} {...shared} submit={forms.submit} close={close} />
+      )}
       <Dialog open={!!renaming} onOpenChange={(open) => !open && close()}>
         <DialogContent
           className="sm:max-w-md"
@@ -247,7 +240,7 @@ export function CommandHost({
                 <Input
                   ref={renameInputRef}
                   aria-label="Session name"
-                  value={forms.text}
+                  value={renamed?.name ?? ""}
                   onChange={(event) => forms.edit(event.target.value)}
                   onFocus={(event) => event.target.select()}
                   maxLength={200}
@@ -258,7 +251,7 @@ export function CommandHost({
               <Button type="button" variant="outline" onClick={close}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!answer.allowed}>
+              <Button type="submit" disabled={!renamed?.allowed}>
                 Rename
               </Button>
             </DialogFooter>
@@ -277,7 +270,7 @@ export function CommandHost({
             </Button>
             <Button
               variant={asked?.destructive ? "destructive" : "default"}
-              disabled={!answer.allowed}
+              disabled={!asked?.allowed}
               onClick={forms.submit}
             >
               {asked?.confirmLabel}
@@ -285,10 +278,10 @@ export function CommandHost({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {lastProject.current && (
+      {projected && (
         <ProjectDialogView
           open={!!project}
-          {...lastProject.current}
+          {...projected}
           edit={forms.edit}
           submit={forms.submit}
           close={close}
