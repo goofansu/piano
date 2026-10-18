@@ -183,15 +183,12 @@ function ProvidersSettings({
               if (signOutTarget) void signOut(signOutTarget);
             }}
           />
-          {signIn && (
-            <ProviderLoginDialog
-              key={signIn.key}
-              initialProvider={signIn.subject}
-              providers={providers}
-              close={actions.closeSignIn}
-              signedIn={() => void providerAccounts.signedIn()}
-            />
-          )}
+          <ProviderLoginDialog
+            signIn={signIn && { key: signIn.key, provider: signIn.subject }}
+            providers={providers}
+            close={actions.closeSignIn}
+            signedIn={() => void providerAccounts.signedIn()}
+          />
         </>
       }
     >

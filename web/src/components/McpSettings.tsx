@@ -94,19 +94,18 @@ export function McpSettings() {
                 );
             }}
           />
-          {signIn && (
-            <ProviderLoginDialog
-              key={signIn.key}
-              api={mcpLogin}
-              initialProvider={signIn.subject.id}
-              providers={[{ id: signIn.subject.id, name: signIn.subject.name, signedIn: false }]}
-              close={() => {
-                actions.closeSignIn();
-                void setup.refresh();
-              }}
-              signedIn={() => void setup.refresh()}
-            />
-          )}
+          <ProviderLoginDialog
+            api={mcpLogin}
+            signIn={signIn && { key: signIn.key, provider: signIn.subject.id }}
+            providers={
+              signIn ? [{ id: signIn.subject.id, name: signIn.subject.name, signedIn: false }] : []
+            }
+            close={() => {
+              actions.closeSignIn();
+              void setup.refresh();
+            }}
+            signedIn={() => void setup.refresh()}
+          />
         </>
       }
     >

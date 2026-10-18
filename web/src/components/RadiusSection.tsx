@@ -171,15 +171,12 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
               confirm: () => void setup.signOut(),
             })}
       />
-      {setup.signIn && (
-        <ProviderLoginDialog
-          key={setup.signIn.key}
-          initialProvider="radius"
-          providers={providers}
-          close={setup.closeSignIn}
-          signedIn={setup.signedIn}
-        />
-      )}
+      <ProviderLoginDialog
+        signIn={setup.signIn && { key: setup.signIn.key, provider: "radius" }}
+        providers={providers}
+        close={setup.closeSignIn}
+        signedIn={setup.signedIn}
+      />
     </section>
   );
 }
