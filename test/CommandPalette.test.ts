@@ -489,6 +489,50 @@ test("catalog cache survives activity updates but invalidates searchable metadat
   );
 });
 
+test("cached palette rows retain session availability for rendering and keyboard selection", () => {
+  const catalog = createPaletteCatalog();
+  const input = { globalCommands: [], sessionCommands: [], files: [] };
+  const first = catalog(home, input);
+  const unavailable: AppState = {
+    ...home,
+    sessionReferences: home.sessionReferences.map((r) => ({
+      ...r,
+      unavailable: r.sessionId === "s9" ? "history" : r.sessionId === "s8" ? "checkout" : undefined,
+    })),
+  };
+  const changed = catalog(unavailable, input);
+  assert.notEqual(changed, first, "availability alone must invalidate the cached catalog");
+  const sessions = changed.find((g) => g.id === "sessions");
+  assert.ok(sessions?.id === "sessions");
+  assert.equal(sessions.rows[0].enabled, false, "missing history cannot be opened");
+  assert.equal(
+    sessions.rows[0].hint,
+    "History unavailable. Restore the Pi session file to open it.",
+  );
+  assert.equal(sessions.rows[1].enabled, true, "a missing checkout still permits reading history");
+  assert.equal(
+    sessions.rows[1].hint,
+    "Folder missing. History can be read; restore the folder to continue.",
+  );
+  for (const query of ["", "Session"]) {
+    assert.equal(
+      paletteSelection(
+        pagePalette(searchPalette(changed, query)),
+        "sessions:/work/repo.feature\ns9",
+        false,
+      ),
+      "sessions:/repo\ns8",
+      "selection must leave an unavailable session, for recents and search results",
+    );
+  }
+  const restored = catalog(home, input);
+  assert.notEqual(restored, changed);
+  assert.equal(
+    paletteSelection(pagePalette(searchPalette(restored, "")), "", true),
+    "sessions:/work/repo.feature\ns9",
+  );
+});
+
 test("history replay IDs do not invalidate unchanged file/link search documents", () => {
   const catalog = createPaletteCatalog();
   const session: SessionView = {

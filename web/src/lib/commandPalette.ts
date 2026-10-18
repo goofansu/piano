@@ -50,6 +50,9 @@ export interface PaletteSessionRow {
   /** The title, or "Untitled". */
   label: string;
   untitled: boolean;
+  /** Availability comes from the session catalog, just as it does for the sidebar. */
+  enabled: boolean;
+  hint: string | undefined;
   /** The session on screen, which the row names in bold. */
   selected: boolean;
   folder: string;
@@ -119,6 +122,8 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
     keywords: [t.folder, t.branch, project],
     label,
     untitled: !t.title,
+    enabled: !t.disabled,
+    hint: t.hint,
     selected: t.selected,
     folder: t.folder,
     branch: t.branch && t.inWorktree ? t.branch : undefined,
@@ -259,6 +264,8 @@ export function createPaletteCatalog() {
             row.branch !== old.branch ||
             row.selected !== old.selected ||
             row.untitled !== old.untitled ||
+            row.enabled !== old.enabled ||
+            row.hint !== old.hint ||
             row.keywords.some((word, j) => word !== old.keywords[j])
           );
         })
