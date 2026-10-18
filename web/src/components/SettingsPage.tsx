@@ -8,8 +8,8 @@ import { IntegrationsSettings } from "@/components/IntegrationsSettings";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
-import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
 import { RadiusSection } from "@/components/RadiusSection";
+import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
 import {
   SettingsAlert,
   SettingsSectionFrame,
@@ -173,14 +173,16 @@ function ProvidersSettings({
       sectionId="settings-providers"
       dialogs={
         <>
-          {confirming && signOutTarget && (
-            <ProviderSignOutDialog
-              name={signOutTarget.name}
-              busy={!!signingOut}
-              cancel={actions.cancel}
-              confirm={() => void signOut(signOutTarget)}
-            />
-          )}
+          {/* Keeps the last provider's wording while it animates closed. */}
+          <RemovalDialog
+            open={confirming && !!signOutTarget}
+            busy={!!signingOut}
+            cancel={actions.cancel}
+            {...signOutCopy(signOutTarget?.name)}
+            confirm={() => {
+              if (signOutTarget) void signOut(signOutTarget);
+            }}
+          />
           {signIn && (
             <ProviderLoginDialog
               key={signIn.key}

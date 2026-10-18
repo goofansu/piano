@@ -10,14 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
 /**
- * Confirms removing setup from Pi on this machine. It stays mounted so it can animate closed;
- * the caller keeps the last subject's wording while it does.
+ * Confirms removing setup from Pi on this machine: an install, or a saved sign-in. It stays
+ * mounted so it can animate closed; the caller keeps the last subject's wording while it does.
  */
 export function RemovalDialog({
   open,
   title,
   description,
   action,
+  progress = action,
   busy,
   disabled = busy,
   cancel,
@@ -28,6 +29,8 @@ export function RemovalDialog({
   description: string;
   /** The confirm button's label, such as "Remove" or "Uninstall". */
   action: string;
+  /** The confirm button's label while the removal runs; defaults to `action`. */
+  progress?: string;
   busy: boolean;
   /** Whether confirming is unavailable; defaults to `busy`. */
   disabled?: boolean;
@@ -62,10 +65,20 @@ export function RemovalDialog({
             }}
           >
             {busy && <Spinner data-icon="inline-start" />}
-            {action}
+            {busy ? progress : action}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The wording that confirms signing out of `name`, a provider or an MCP server. */
+export function signOutCopy(name: string | undefined) {
+  return {
+    title: `Sign out of ${name}?`,
+    description: "Removes the saved sign-in from Pi on this machine.",
+    action: "Sign out",
+    progress: "Signing out…",
+  };
 }

@@ -2,8 +2,7 @@ import type { McpSetupRequest } from "@shared/mcp";
 import { CheckCircle2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
-import { ProviderSignOutDialog } from "@/components/ProviderSignOutDialog";
-import { RemovalDialog } from "@/components/RemovalDialog";
+import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
 import {
   SettingsAlert,
   SettingsSectionFrame,
@@ -64,40 +63,37 @@ export function McpSettings() {
       done,
       fallback: "Could not change MCP setup. Refresh before retrying.",
     });
-  const removal = confirmation?.kind === "uninstall" ? confirmation : undefined;
-  const { done: removed, ...removalCopy } = mcpRemovalCopy(removal?.server.name);
+  const { done: removed, ...removalCopy } = mcpRemovalCopy(confirmation?.server.name);
   return (
     <SettingsSectionFrame
       title="MCP"
       dialogs={
         <>
-          {/* Keeps the last removal's wording while it animates closed. */}
+          {/* Keeps the last confirmation's wording while it animates closed. */}
           <RemovalDialog
-            open={confirming && !!removal}
+            open={confirming && !!confirmation}
             busy={busy}
             cancel={actions.cancel}
-            {...removalCopy}
+            {...(confirmation?.kind === "sign-out"
+              ? signOutCopy(confirmation.server.name)
+              : removalCopy)}
             confirm={() => {
-              if (removal)
+              if (confirmation?.kind === "uninstall")
                 void act(
-                  { action: "uninstall", server: removal.server.id, removalKey: removal.key },
+                  {
+                    action: "uninstall",
+                    server: confirmation.server.id,
+                    removalKey: confirmation.key,
+                  },
                   removed,
                 );
-            }}
-          />
-          {confirming && confirmation?.kind === "sign-out" && (
-            <ProviderSignOutDialog
-              name={confirmation.server.name}
-              busy={busy}
-              cancel={actions.cancel}
-              confirm={() =>
+              else if (confirmation)
                 void act(
                   { action: "sign-out", server: confirmation.server.id },
                   `Signed out of ${confirmation.server.name}.`,
-                )
-              }
-            />
-          )}
+                );
+            }}
+          />
           {signIn && (
             <ProviderLoginDialog
               key={signIn.key}
