@@ -213,7 +213,7 @@ export function Composer({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={cn(picker, "control-enter shrink-0")}
+                    className={cn(picker, "control-enter shrink-0 font-mono text-xs")}
                     aria-label={`Delivery: ${DELIVERY[queueMode].label}`}
                     disabled={disabled}
                   >
@@ -221,7 +221,7 @@ export function Composer({
                     <ChevronDownIcon className="text-ink-3" aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" className="w-56 font-mono">
                   <DropdownMenuRadioGroup
                     value={queueMode}
                     onValueChange={(mode) => setQueueMode(mode as DeliveryMode)}
