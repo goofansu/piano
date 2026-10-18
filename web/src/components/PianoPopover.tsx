@@ -13,13 +13,16 @@ export {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+/** A popover scales in from its trigger; `still` drops that for one opened by a shortcut. */
 export function PopoverContent({
   className,
   onCloseAutoFocus,
+  still = false,
   ...props
-}: ComponentProps<typeof BaseContent>) {
+}: ComponentProps<typeof BaseContent> & { still?: boolean }) {
   return (
     <BaseContent
+      data-motion={still ? undefined : "anchored"}
       {...props}
       className={cn(raisedOverlay, className)}
       onCloseAutoFocus={(event) => {

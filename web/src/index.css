@@ -678,19 +678,62 @@
 .streaming-caret > pre:last-child::after {
   display: none;
 }
-/* Piano has no motion. The shadcn components in components/ui stay upstream-owned and carry their
- * own enter, exit and hover motion; this stops all of it, and anything added later, until a motion
- * design is chosen. `.late-enter` keeps its delay because it decides when, not how, something shows. */
+/* Motion is opt-in. An element moves only when it carries `data-motion`, or is one of the few
+ * upstream pieces whose own motion Piano keeps: spinners, Sonner's toasts and the overlay behind a
+ * moving dialog. `.late-enter` is exempt too: its delay decides when, not how, something shows.
+ * Everything else, including upstream hover and enter motion, stays still. One strong ease-out for
+ * every entrance; exits are shorter than entrances. */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Menus, popovers, selects and tooltips scale from their trigger (Radix's transform origin) with
+ * no slide; dialogs scale from the centre. */
+[data-motion="anchored"],
+[data-motion="tooltip"],
+[data-motion="dialog"] {
+  --tw-ease: var(--ease-out);
+  --tw-enter-scale: 0.96;
+  --tw-exit-scale: 0.96;
+  --tw-enter-translate-x: 0;
+  --tw-enter-translate-y: 0;
+}
+[data-motion="anchored"] {
+  --tw-animation-duration: 150ms;
+}
+[data-motion="tooltip"] {
+  --tw-animation-duration: 125ms;
+}
+[data-motion="dialog"],
+[data-slot="dialog-overlay"]:has(+ [data-motion="dialog"]) {
+  --tw-animation-duration: 200ms;
+  --tw-ease: var(--ease-out);
+}
+:is([data-motion], [data-slot="dialog-overlay"])[data-state="closed"] {
+  --tw-animation-duration: 120ms;
+  --tw-ease: ease-out;
+}
 /* biome-ignore-start lint/complexity/noImportantStyles: the reset must beat every component's own motion. */
-/* biome-ignore lint/style/noDescendingSpecificity: it sets only motion properties, which no earlier rule shares. */
-*,
+:not(
+  [data-motion],
+  [data-slot="dialog-overlay"]:has(+ [data-motion]),
+  .animate-spin,
+  .late-enter,
+  [data-sonner-toast]
+),
 ::before,
 ::after {
   animation: none !important;
   transition: none !important;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: it sets only motion properties, which no earlier rule shares. */
+* {
   scroll-behavior: auto !important;
 }
-.late-enter {
-  animation: late-enter 600ms step-end !important;
+@media (prefers-reduced-motion: reduce) {
+  /* Fades stay; nothing scales or moves. */
+  [data-motion] {
+    --tw-enter-scale: 1 !important;
+    --tw-exit-scale: 1 !important;
+  }
 }
 /* biome-ignore-end lint/complexity/noImportantStyles: range closes */

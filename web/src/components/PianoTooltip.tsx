@@ -22,5 +22,5 @@ export function TooltipTrigger({ onFocus, ...props }: ComponentProps<typeof Base
 
 export function TooltipContent({ className, ...props }: ComponentProps<typeof BaseContent>) {
   // The upstream arrow lives inside this stacking context; it needs no independent z-index patch.
-  return <BaseContent {...props} className={cn("z-[60]", className)} />;
+  return <BaseContent data-motion="tooltip" {...props} className={cn("z-[60]", className)} />;
 }

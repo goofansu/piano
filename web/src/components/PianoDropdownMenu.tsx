@@ -31,6 +31,7 @@ export function DropdownMenuContent({
   return (
     <BaseContent
       collisionPadding={8}
+      data-motion="anchored"
       {...props}
       className={cn(raisedOverlay, "w-max min-w-48 max-w-[calc(100vw-2rem)]", className)}
       onCloseAutoFocus={(event) => {
@@ -48,6 +49,7 @@ export function DropdownMenuSubContent({
   return (
     <BaseSubContent
       collisionPadding={8}
+      data-motion="anchored"
       {...props}
       className={cn(
         raisedOverlay,

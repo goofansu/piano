@@ -12,6 +12,17 @@ export {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-export function DialogContent({ className, ...props }: ComponentProps<typeof BaseContent>) {
-  return <BaseContent {...props} className={cn("rounded-2xl bg-surface-3", className)} />;
+/** A dialog scales in from the centre; `still` drops that for one opened by a shortcut. */
+export function DialogContent({
+  className,
+  still = false,
+  ...props
+}: ComponentProps<typeof BaseContent> & { still?: boolean }) {
+  return (
+    <BaseContent
+      data-motion={still ? undefined : "dialog"}
+      {...props}
+      className={cn("rounded-2xl bg-surface-3", className)}
+    />
+  );
 }

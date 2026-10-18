@@ -83,7 +83,7 @@ ratio over any layer with `--fill-active` beneath the glyph, as in a selected ro
 Limitation: light-mode status colours drop below 4.5:1 as text over a selected (`--fill-active`) row;
 they stay above 3:1 there, which is what their glyph use needs.
 
-Piano has no motion tokens: all motion was removed ahead of a redesign (see Motion).
+Motion has one token, `--ease-out` (see Motion).
 
 ## Type
 
@@ -202,11 +202,23 @@ expanded. The row already says so; two instruments playing at once is noise.
 
 ## Motion
 
-Piano currently has no motion. Every animation and transition was removed so motion can be
-redesigned from nothing, each piece added back only with a reason. `index.css` ends with a reset
-that stops the motion the upstream shadcn components in `components/ui/` still carry, and anything
-added later, until that redesign lands. Two timing behaviours stay because they decide when
-something shows, not how:
+Motion is being redesigned from nothing, a page at a time, each piece added back only with a
+reason. It is opt-in: `index.css` ends with a reset that stops all animation and transition except
+on an element marked `data-motion` (and spinners, Sonner's toasts and the overlay behind a moving
+dialog). The upstream shadcn components in `components/ui/` keep their own motion classes; the
+`Piano*` wrappers opt in and the `data-motion` rules retune them.
+
+One curve, `--ease-out` `cubic-bezier(0.23, 1, 0.32, 1)`, for every entrance; exits are 120ms
+`ease-out`. Reduced motion keeps the fades and drops the scale.
+
+| Surface | Motion | Why |
+| --- | --- | --- |
+| Menus, popovers, selects (`anchored`) | 150ms fade and scale 0.96 → 1 from the trigger, no slide | they open from a control; scaling from it says where they came from |
+| Tooltips (`tooltip`) | 125ms, same shape; none when moving between tooltips (Radix `instant-open`) | after the first, the delay and the motion are both skipped |
+| Dialogs (`dialog`) | 200ms fade and scale 0.96 → 1 from the centre, overlay fading with it | not anchored to a trigger |
+| Command palette, model picker | none (`still`) | opened by Mod+K and Mod+/ many times a day |
+
+Two timing behaviours stay because they decide when something shows, not how:
 
 - **Grace period.** The reconnecting pill and loading placeholders (`.late-enter`) wait 600ms
   before appearing, so a quick load never flashes them; they then appear at once.

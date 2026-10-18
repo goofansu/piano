@@ -63,7 +63,9 @@ export function CommandDialog({
 }) {
   return (
     <Dialog {...props}>
+      {/* Mod+K opens it many times a day: it appears at once. */}
       <DialogContent
+        still
         className={cn("overflow-hidden p-0", className)}
         showCloseButton={showCloseButton}
       >
