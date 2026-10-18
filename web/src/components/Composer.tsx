@@ -34,7 +34,7 @@ import { contextFigures } from "@/lib/contextUsage";
 import type { DraftKey } from "@/lib/messageDraft";
 import { createPreference } from "@/lib/preference";
 import type { SessionNotice } from "@/lib/sessionNotices";
-import { composerAction, composerInput, picker } from "@/lib/styles";
+import { composerAction, composerInput, footerPicker, footerPickerMenu } from "@/lib/styles";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
@@ -215,7 +215,7 @@ export function Composer({
                     data-motion="fade"
                     variant="ghost"
                     size="sm"
-                    className={cn(picker, "shrink-0 font-mono text-xs")}
+                    className={cn(footerPicker, "shrink-0")}
                     aria-label={`Delivery: ${DELIVERY[queueMode].label}`}
                     disabled={disabled}
                   >
@@ -223,7 +223,7 @@ export function Composer({
                     <ChevronDownIcon className="text-ink-3" aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 font-mono">
+                <DropdownMenuContent align="end" className={cn("w-56", footerPickerMenu)}>
                   <DropdownMenuRadioGroup
                     value={queueMode}
                     onValueChange={(mode) => setQueueMode(mode as DeliveryMode)}
