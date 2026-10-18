@@ -158,6 +158,7 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
               actions={
                 <Button
                   size="icon"
+                  data-motion="press"
                   className={composerAction}
                   aria-label="Send"
                   disabled={!ready}
@@ -170,14 +171,14 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
               }
             />
             {folder?.discovery.status === "error" && (
-              <Alert variant="destructive" className="mt-2">
+              <Alert data-motion="fade" variant="destructive" className="mt-2">
                 <AlertDescription>
                   Git status unavailable. Open Worktrees to inspect and refresh.
                 </AlertDescription>
               </Alert>
             )}
             {unarchive && (
-              <Alert className="mt-2">
+              <Alert data-motion="fade" className="mt-2">
                 <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>This project is archived.</span>
                   <Button

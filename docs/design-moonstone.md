@@ -217,6 +217,11 @@ One curve, `--ease-out` `cubic-bezier(0.23, 1, 0.32, 1)`, for every entrance; ex
 | Tooltips (`tooltip`) | 125ms, same shape; none when moving between tooltips (Radix `instant-open`) | after the first, the delay and the motion are both skipped |
 | Dialogs (`dialog`) | 200ms fade and scale 0.96 → 1 from the centre, overlay fading with it | not anchored to a trigger |
 | Command palette, model picker | none (`still`) | opened by Mod+K and Mod+/ many times a day |
+| Send key (`press`) | scale 0.96 while held, 150ms back | press feedback, mostly for taps |
+| Composer ring (`ring`) | border and shadow ease over 150ms on focus and file drag | a colour change of state |
+| Attachment added (`enter`) | 150ms fade and scale 0.96 → 1 via `@starting-style` | shows where the image went |
+| Composer and New session notices (`fade`) | 150ms fade in | a notice should not pop; scaling a full-width box looks wrong |
+| New session page entrance | none | seen many times a day, often from the keyboard, with the composer focused to type at once |
 
 Two timing behaviours stay because they decide when something shows, not how:
 

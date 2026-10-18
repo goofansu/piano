@@ -712,6 +712,36 @@
   --tw-animation-duration: 120ms;
   --tw-ease: ease-out;
 }
+/* A key that answers a press: it gives a little under the finger and springs back. */
+[data-motion="press"] {
+  transition: transform 150ms var(--ease-out);
+}
+[data-motion="press"]:active:not(:disabled) {
+  translate: none;
+  transform: scale(0.96);
+}
+/* The composer's focus and drop ring is a change of colour, so it eases. */
+[data-motion="ring"] {
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+/* Something added to the page (an attachment) grows in where it lands; a notice only fades. */
+[data-motion="enter"] {
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+[data-motion="fade"] {
+  transition: opacity 150ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+  }
+}
 /* biome-ignore-start lint/complexity/noImportantStyles: the reset must beat every component's own motion. */
 :not(
   [data-motion],
@@ -734,6 +764,14 @@
   [data-motion] {
     --tw-enter-scale: 1 !important;
     --tw-exit-scale: 1 !important;
+  }
+  [data-motion="press"]:active:not(:disabled) {
+    transform: none;
+  }
+  [data-motion="enter"] {
+    @starting-style {
+      transform: none;
+    }
   }
 }
 /* biome-ignore-end lint/complexity/noImportantStyles: range closes */
