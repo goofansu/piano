@@ -693,11 +693,32 @@
   pointer-events: none;
 }
 
-/* The keys. The three-key mark is the instrument's live signal: while Pi works the keys hold a
- * pressed state, dropped one pixel below the fallboard and dimmed; when Pi finishes they rest. */
+/* The keys. The three-key mark is the instrument's live signal: while Pi works the keys play a
+ * scale, each dipping one pixel below the fallboard and dimming in turn on a 1.2s cycle; when Pi
+ * finishes they rest. A CSS animation, so it keeps time on the compositor while replies stream.
+ * The pressed state underneath is what reduced motion holds still. */
 .keys[data-playing="true"] [data-key] {
   transform: translateY(1px);
   opacity: 0.6;
+  animation: key-press 1.2s var(--ease-in-out) infinite backwards;
+}
+.keys[data-playing="true"] [data-key="1"] {
+  animation-delay: 0.4s;
+}
+.keys[data-playing="true"] [data-key="2"] {
+  animation-delay: 0.8s;
+}
+@keyframes key-press {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  25% {
+    transform: translateY(1px);
+    opacity: 0.6;
+  }
 }
 
 /* The streaming caret sits at the end of the last block of a streaming reply, where the next word
@@ -722,6 +743,8 @@
  * every entrance; exits are shorter than entrances. */
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* Strong ease-in-out for motion that stays on screen: the keys' press. */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   /* iOS-like drawer curve (Ionic), for the phone sidebar. */
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
@@ -828,6 +851,10 @@
   }
   [data-motion="turn"] {
     transition: none;
+  }
+  /* The keys hold their pressed state instead of playing. */
+  [data-motion="key"] {
+    animation: none !important;
   }
   /* The phone sidebar comes to rest at once; finger tracking stays. */
   [data-motion="drawer"] {

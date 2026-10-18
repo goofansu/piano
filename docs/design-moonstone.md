@@ -181,13 +181,14 @@ favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it i
   16 of 28 units, as in the app, in fixed earth tones: a terracotta `#b86b52` fallboard, sunkissed
   `#e1b06e` white keys and a sage `#a3a473` black key. The apple-touch and maskable icons are
   full-bleed squares; the 192 and 512 icons have a 6/28 corner radius.
-- **Animation.** None; see the next section.
+- **Animation.** None for the icons; the keys in the app play (see the next section).
 
 ## The one memorable element: the keys play
 
-The three-key mark is the instrument's live signal. Wherever Pi is working the keys hold a
-pressed state, dropped 1px below the fallboard and dimmed to 60%, and they rest under the
-fallboard when Pi finishes. (They played a scale until motion was removed; see Motion.)
+The three-key mark is the instrument's live signal. Wherever Pi is working the keys play a
+scale: each dips 1px below the fallboard and dims to 60% in turn, left to right, on a 1.2s cycle.
+They rest under the fallboard when Pi finishes. In reduced motion they hold the pressed state
+still. (See Motion.)
 
 - In the sidebar row, the keys replace the yellow dot while that session streams.
 - In the transcript, the keys are the glyph of the pending reply, with a caret beside them before
@@ -229,6 +230,7 @@ One curve, `--ease-out` `cubic-bezier(0.23, 1, 0.32, 1)`, for every entrance; ex
 | Phone sidebar (`drawer`) | follows the finger 1:1; on release it settles at the finger's speed into a stop (120–420ms); a tap opens or closes it over 300ms on `--ease-drawer` `cubic-bezier(0.32, 0.72, 0, 1)` | a gesture should finish the way it was moving; a tap gets the iOS drawer feel |
 | Desktop sidebar collapse (Mod+B or its button), sidebar rows, right sidebar | none | a keyboard shortcut and frequent navigation should answer at once |
 | Settings: section switches, loading placeholders giving way to content, notices that replace them, the sign-in dialog's steps | none | navigation and content arriving answer at once, as in the transcript; Settings' folds share the turning chevron and its dialogs the overlay motion |
+| Keys while Pi works (`key`) | each key dips 1px and dims to 60% in turn, a 1.2s loop on `--ease-in-out` `cubic-bezier(0.77, 0, 0.175, 1)`, keys 0.4s apart; a CSS animation; reduced motion holds them pressed and still | Piano's one ornament says Pi is alive; a still press could equally mean stuck. Only transform and opacity move, and a CSS animation keeps running smoothly while replies stream |
 | New session page entrance | none | seen many times a day, often from the keyboard, with the composer focused to type at once |
 
 One timing behaviour is not motion, because it decides when something shows, not how:

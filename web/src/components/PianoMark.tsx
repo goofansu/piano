@@ -51,6 +51,7 @@ function KeyBars({ keyWidth, gap, board, white, black, className, playing }: Gri
         <rect
           key={name}
           data-key={i}
+          data-motion="key"
           x={i * (keyWidth + gap)}
           y={top}
           width={keyWidth}
