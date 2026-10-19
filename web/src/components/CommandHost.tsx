@@ -42,7 +42,6 @@ import {
 } from "@/lib/sessionCommands";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useExeDev } from "@/lib/useExeDev";
-import { useLastShown } from "@/lib/useLastShown";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
@@ -167,16 +166,8 @@ export function CommandHost({
   const answer = forms.answer();
   // Archive, delete and close folder share one confirm dialog; `confirmation` decides its wording.
   const asking = form ? confirmation(state, form) : undefined;
-  // The share and project dialogs mount once shown and keep their last props, so they can
-  // animate closed after their form closes.
   const sharing = form?.kind === "share-session";
-  const shared = useLastShown(
-    sharing ? { phase: forms.share, allowed: answer.allowed, signedIn: radiusSignedIn } : undefined,
-  );
   const project = form?.kind === "project" ? form.dialog : undefined;
-  const projected = useLastShown(
-    project && { dialog: project, name: forms.text, allowed: answer.allowed },
-  );
 
   const effects: CommandEffects = {
     send,
@@ -207,9 +198,14 @@ export function CommandHost({
       }}
     >
       {children}
-      {shared && (
-        <ShareSessionDialog open={sharing} {...shared} submit={forms.submit} close={close} />
-      )}
+      <ShareSessionDialog
+        open={sharing}
+        phase={forms.share}
+        allowed={answer.allowed}
+        signedIn={radiusSignedIn}
+        submit={forms.submit}
+        close={close}
+      />
       <Dialog open={!!renaming} onOpenChange={(open) => !open && close()}>
         <DialogContent
           className="sm:max-w-md"
@@ -275,15 +271,15 @@ export function CommandHost({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {projected && (
-        <ProjectDialogView
-          open={!!project}
-          {...projected}
-          edit={forms.edit}
-          submit={forms.submit}
-          close={close}
-        />
-      )}
+      <ProjectDialogView
+        open={!!project}
+        dialog={project}
+        name={forms.text}
+        allowed={answer.allowed}
+        edit={forms.edit}
+        submit={forms.submit}
+        close={close}
+      />
     </CommandsContext.Provider>
   );
 }

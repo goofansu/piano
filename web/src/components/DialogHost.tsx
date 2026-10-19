@@ -23,13 +23,13 @@ export function DialogHost({
   send: (m: ClientMessage) => void;
 }) {
   // The dialog animates closed after it leaves the queue, so it keeps the last question meanwhile.
-  const shown = useLastShown(head && { d: head, more });
+  const shown = useLastShown(head);
   return shown ? (
     <DialogView
-      key={`${shown.d.generation}/${shown.d.id}`}
+      key={`${shown.generation}/${shown.id}`}
       open={!!head}
-      d={shown.d}
-      more={shown.more}
+      d={shown}
+      more={more}
       send={send}
       connected={connected}
     />
