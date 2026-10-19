@@ -177,11 +177,9 @@ test("INV-01/06/07: a prompt, rename or pin publishes without rediscovery; membe
         "the metadata reached browsers from the last observation",
       );
 
-      // A quiet window, not a guess at scheduling: the runs loop coalesces, so once anything else
-      // asks for a run the evidence that these writes asked for one is gone. Waiting for a window
-      // in which no run appears is the only way to observe that none was asked for. Removing this
-      // makes the assertion pass on the revision before this rule; that was measured, not assumed.
-      yield* Effect.sleep("150 millis");
+      // Let already-forked discovery work run before checking its observable counter. Asking
+      // for a fresh view here would itself request discovery and hide an erroneous request.
+      yield* Effect.yieldNow;
       assert.equal(git.calls, quiet, "no discovery run for visible metadata or a project row");
 
       // Membership is read by a run, so assigning the session asks for one of its own: hold Git
