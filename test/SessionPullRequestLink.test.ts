@@ -52,19 +52,19 @@ function setup(link: SessionPullRequestLink | null | undefined) {
     environment,
   });
   pr.start();
-  pr.observe("w1", "s1", link);
+  pr.observe("w1", "s1", link, false);
   return { pi, pr, notes, closes: () => closes };
 }
 
 test("only a session the registry links is read; its link changing or going elsewhere is followed", async () => {
   const { pi, pr } = setup(undefined);
   assert.equal(pi.requests.length, 0, "a never-searched session asks nothing when selected");
-  pr.observe("w1", "s2", null);
-  pr.activity(true);
-  pr.activity(false);
+  pr.observe("w1", "s2", null, false);
+  pr.observe("w1", "s2", null, true);
+  pr.observe("w1", "s2", null, false);
   assert.equal(pi.requests.length, 0, "a session whose link was removed asks nothing either");
 
-  pr.observe("w1", "s3", registered);
+  pr.observe("w1", "s3", registered, false);
   assert.equal(pi.requests.length, 1, "a linked session reads its facts");
   assert.equal(pi.last().action, undefined);
   pi.last().resolve(linked);
@@ -72,7 +72,7 @@ test("only a session the registry links is read; its link changing or going else
   assert.equal(pr.getState().value?.link?.url, URL);
 
   const other = "https://github.com/example/repo/pull/43";
-  pr.observe("w1", "s3", { url: other, source: "manual" });
+  pr.observe("w1", "s3", { url: other, source: "manual" }, false);
   assert.equal(pi.requests.length, 2, "a link changed elsewhere is read afresh");
   assert.equal(
     pr.getState().value,
@@ -83,7 +83,7 @@ test("only a session the registry links is read; its link changing or going else
   await settle();
   assert.equal(pr.getState().value?.link?.url, other);
 
-  pr.observe("w1", "s3", null);
+  pr.observe("w1", "s3", null, false);
   assert.equal(pi.requests.length, 2, "a link removed elsewhere stops reading");
   assert.equal(pr.getState().value, undefined, "and shows no link");
 });
@@ -94,9 +94,9 @@ test("opening while unlinked offers the link form; a link found when work stops 
   assert.equal(pr.getState().surface, "link-form");
 
   // The session's turn ends: the background search asks the server, which saves what it finds.
-  pr.activity(true);
+  pr.observe("w1", "s1", undefined, true);
   assert.equal(pi.requests.length, 0, "starting work searches nothing");
-  pr.activity(false);
+  pr.observe("w1", "s1", undefined, false);
   assert.equal(pi.requests.length, 1);
   assert.equal(pi.last().action, undefined, "the search is a read, which discovers server-side");
   pi.last().resolve(linked);
@@ -104,7 +104,7 @@ test("opening while unlinked offers the link form; a link found when work stops 
   assert.equal(pr.getState().surface, "link-form", "the search's own answer shows nothing");
 
   // The catalog reports the saved link; that starts reading, and the link closes the form.
-  pr.observe("w1", "s1", registered);
+  pr.observe("w1", "s1", registered, false);
   assert.equal(pi.requests.length, 2);
   pi.last().resolve(linked);
   await settle();
@@ -124,7 +124,8 @@ test("Find from branch with nothing found reports it exactly once", async () => 
   pi.last().resolve(unlinked);
   assert.deepEqual(await finding, { _tag: "not-found" });
   // A later background search of the same absence stays silent.
-  pr.activity(false);
+  pr.observe("w1", "s1", undefined, true);
+  pr.observe("w1", "s1", undefined, false);
   pi.last().resolve(unlinked);
   await settle();
   assert.deepEqual(notes.info, ["No open PR found for this branch."]);
@@ -161,10 +162,10 @@ test("background reads never reset an edit in progress", async () => {
   pi.last().resolve(linked);
   await settle();
   pr.edit();
-  pr.activity(true);
+  pr.observe("w1", "s1", registered, true);
   pi.last().resolve({ ...linked, discovery: false });
   await settle();
-  pr.activity(false);
+  pr.observe("w1", "s1", registered, false);
   pi.last().reject(new Error("rate limited"));
   await settle();
   assert.equal(pr.getState().surface, "editing");
@@ -194,4 +195,34 @@ test("a blank URL, or one sent while another change is in flight, sends nothing"
   assert.equal(pi.requests.length, sent + 1, "only the discovery was sent");
   pi.last().resolve(linked);
   assert.equal((await finding)._tag, "saved", "the change in flight was not superseded");
+});
+
+test("a session selected mid-turn is read once; its work stopping reads it again", async () => {
+  const { pi, pr } = setup(undefined);
+  // The hook used to tell the module "work started" on selection; that aborted the first read
+  // and sent a second. The module now knows a selection from an edge.
+  pr.observe("w1", "s2", registered, true);
+  await settle();
+  assert.equal(pi.requests.length, 1, "selecting a working, linked session reads exactly once");
+  pi.last().resolve(linked);
+  await settle();
+  pr.observe("w1", "s2", registered, true);
+  assert.equal(pi.requests.length, 1, "an unchanged snapshot reads nothing");
+  pr.observe("w1", "s2", registered, false);
+  assert.equal(pi.requests.length, 2, "the turn ending within the session reads its facts again");
+});
+
+test("only a session whose own work stopped is searched, and only once", async () => {
+  const { pi, pr } = setup(undefined);
+  pr.observe("w1", "s2", undefined, true);
+  pr.observe("w1", "s3", undefined, false);
+  assert.equal(pi.requests.length, 0, "leaving a working session for an idle one searches neither");
+  pr.observe("w1", "s3", undefined, true);
+  pr.observe("w1", "s3", undefined, false);
+  assert.equal(pi.requests.length, 1, "the idle one is searched when its own work stops");
+  pr.observe("w1", "s3", undefined, false);
+  assert.equal(pi.requests.length, 1, "repeating the snapshot does not search again");
+  pr.observe("w1", "s4", null, true);
+  pr.observe("w1", "s4", null, false);
+  assert.equal(pi.requests.length, 1, "a session whose link was removed is never searched");
 });

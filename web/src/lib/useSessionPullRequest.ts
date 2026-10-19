@@ -6,7 +6,8 @@ import { createSessionPullRequest, pullRequestKey } from "@/lib/sessionPullReque
 
 /**
  * Only the selected session is observed, and only while the registry links it (`link` is the
- * catalog's): on selection, focus, a minute's interval and when its work starts or stops.
+ * catalog's): on selection, focus, a minute's interval and when its work starts or stops. The
+ * module tells those apart from the snapshot passed here; this hook decides nothing about them.
  * Navigation owns whether the panel is open; the link decides what it shows and may close it.
  */
 export function useSessionPullRequest(
@@ -38,15 +39,9 @@ export function useSessionPullRequest(
   );
   useEffect(() => pr.start(), [pr]);
   useEffect(
-    () => pr.observe(workspaceId, sessionId, registered),
-    [pr, workspaceId, sessionId, registered],
+    () => pr.observe(workspaceId, sessionId, registered, working),
+    [pr, workspaceId, sessionId, registered, working],
   );
-  const seen = useRef(working);
-  useEffect(() => {
-    if (seen.current === working) return;
-    seen.current = working;
-    pr.activity(working);
-  }, [pr, working]);
   useEffect(() => (panel.open ? pr.open() : pr.close()), [pr, panel.open]);
   const state = useSyncExternalStore(pr.subscribe, pr.getState);
   // Only the current session's value, even in the render in which the session changes (INV-07).
