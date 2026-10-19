@@ -1,8 +1,12 @@
 /**
  * One browser client's sessions: which session it has selected, the live attachment that
- * forwards that session's frames, and the session requests it makes — create, act and retire.
- * Each request runs its SessionHosts step and delivers its results (`action_result`, toasts) to
- * this client through its output.
+ * forwards that session's frames, and the session requests it makes — create, act, rename and
+ * retire. Each request runs its SessionHosts step and delivers its results (`action_result`,
+ * toasts) to this client through its output.
+ *
+ * It alone decides a person's presence (`Notifications.touched`), which drops a session's pending
+ * completion message: showing a session to a person (not an observer), acting on, renaming,
+ * archiving or deleting it. Pi's own events and SessionHosts' internal actions are not presence.
  *
  * Selections are claimed in receive order, so a slow lookup for an older selection never shows
  * or acts on a newer one. Attaching delivers the snapshot, then contiguous frames (INV-05), and
@@ -77,6 +81,12 @@ export interface ClientSessions {
     action: SessionAction,
     start?: StartOptions,
   ) => Effect.Effect<void, ActRefused | PiSessionError>;
+  /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
+  readonly rename: (
+    cwd: string,
+    sessionId: string,
+    title: string,
+  ) => Effect.Effect<string, PiSessionError | RegistryError>;
   /** Detaches a session, stops Pi and archives or deletes it, then clears the selection if it showed that session. */
   readonly retire: (
     cwd: string,
@@ -242,6 +252,8 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     start?: StartOptions,
   ) {
     const session = yield* target(selectionId, start);
+    // Any action means the person is here.
+    yield* notifications.touched(session.spec.sessionId);
     const result = yield* session.act(action);
     if (result)
       yield* send({
@@ -266,6 +278,8 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       ),
     );
     yield* mode === "delete" ? hosts.delete(cwd, sessionId) : hosts.archive(cwd, sessionId);
+    // A retired session's link opens nothing to act on.
+    yield* notifications.touched(sessionId);
     if (selected?.cwd === cwd && selected.sessionId === sessionId) {
       const selectionId = selected.selectionId;
       selected = null;
@@ -283,7 +297,16 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
   });
 
-  // Caller has claimed the new-session selection.
+  const rename = Effect.fn("ClientSessions.rename")(function* (
+    cwd: string,
+    sessionId: string,
+    title: string,
+  ) {
+    yield* notifications.touched(sessionId);
+    return yield* hosts.rename(cwd, sessionId, title);
+  });
+
+  // Caller has claimed the new-session selection. A new session has no pending message.
   const create = Effect.fn("ClientSessions.create")(function* (
     selectionId: string,
     { text, attachments, ...spec }: CreateSessionRequest,
@@ -304,6 +327,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         Effect.as(create(selectionId, request)),
       ),
     act,
+    rename,
     retire,
   } satisfies ClientSessions as ClientSessions;
 });

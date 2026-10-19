@@ -41,8 +41,9 @@ export class Notifications extends Context.Service<
      * overflow is dropped, while replacement reuses the session's existing slot.
      */
     readonly completed: (sessionId: string) => Effect.Effect<void>;
-    /** The user acted on, opened, archived or deleted the session: drop its pending completion
-     * message. */
+    /** A person is at the session: drop its pending completion message. ClientSessions alone
+     * calls it, when a person (not an observer) opens the session, acts on it, renames, archives
+     * or deletes it. */
     readonly touched: (sessionId: string) => Effect.Effect<void>;
   }
 >()("piano/Notifications") {}
