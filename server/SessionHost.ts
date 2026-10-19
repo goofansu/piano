@@ -136,13 +136,9 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
     );
     return yield* Fiber.join(fiber);
   });
-  // Opening the session in a browser subscribes to its events, which also counts as being here.
-  // The host's own observer below subscribes once at creation, before any completion can wait.
-  const session: PiSession = {
-    ...raw,
-    act,
-    events: Stream.unwrap(Effect.as(notifications.touched(raw.spec.sessionId), raw.events)),
-  };
+  // Subscribing to events is not presence: observers subscribe too. ClientSessions decides when a
+  // person opened the session.
+  const session: PiSession = { ...raw, act };
 
   const busy = Effect.map(raw.state, (state) => actions > 0 || !state.isQuiescent);
   const host: SessionHost = {

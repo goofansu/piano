@@ -6,6 +6,7 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
 import { makeClientSessions } from "../server/ClientSessions.ts";
+import type { Notifications } from "../server/Notifications.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
@@ -22,7 +23,7 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 let databases = 0;
 const run = <A, E>(
-  effect: Effect.Effect<A, E, SessionHosts | Registry | Scope.Scope>,
+  effect: Effect.Effect<A, E, SessionHosts | Registry | Notifications | Scope.Scope>,
   path = join(root, `registry-${++databases}.db`),
 ) => {
   const layer = SessionHostsLive({ idleMs: 0 }).pipe(
