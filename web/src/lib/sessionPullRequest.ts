@@ -77,7 +77,7 @@ export interface SessionPullRequestLink {
     link: RegistryLink | null | undefined,
     working: boolean,
   ) => void;
-  /** Shows the details when linked (reading them afresh), else the link form. */
+  /** Shows the already-observed details when linked, else the link form. */
   open: () => void;
   /** Hides the surface without reporting it through `closed`. */
   close: () => void;
@@ -255,10 +255,8 @@ export function createSessionPullRequest({
     },
     open: () => {
       if (surface !== "closed") return;
-      if (state.value?.link) {
-        show("details");
-        void observation.refresh();
-      } else show("link-form");
+      // Opening is presentation only; selection, focus, polling and work edges keep facts fresh.
+      show(state.value?.link ? "details" : "link-form");
     },
     close: () => show("closed"),
     edit: () => {

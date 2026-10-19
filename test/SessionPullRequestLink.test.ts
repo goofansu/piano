@@ -114,6 +114,30 @@ test("opening while unlinked offers the link form; a link found when work stops 
   assert.equal(pr.getState().surface, "details", "reopening shows the link");
 });
 
+test("opening details reuses the loaded facts without replacing a background read", async () => {
+  const { pi, pr } = setup(registered);
+  pi.last().resolve(linked);
+  await settle();
+  pr.open();
+  assert.equal(pr.getState().surface, "details");
+  assert.deepEqual(pr.getState().value, linked);
+  assert.equal(pi.requests.length, 1, "opening uses the header's facts");
+  pr.close();
+  pr.open();
+  assert.equal(pi.requests.length, 1, "reopening does not read again either");
+
+  pr.close();
+  pr.observe("w1", "s1", registered, true);
+  assert.equal(pi.requests.length, 2, "work starting still refreshes the facts");
+  pr.open();
+  assert.equal(pi.requests.length, 2, "opening leaves an in-flight refresh alone");
+  const unavailable = { ...linked, error: "GitHub is unreachable" };
+  pi.last().resolve(unavailable);
+  await settle();
+  assert.equal(pr.getState().surface, "details");
+  assert.deepEqual(pr.getState().value, unavailable, "the refresh updates the open details");
+});
+
 test("Find from branch with nothing found reports it exactly once", async () => {
   const { pi, pr, notes } = setup(undefined);
   pr.open();
@@ -139,8 +163,6 @@ test("a failed change keeps the saved link with the reason and the edit open", a
   pi.last().resolve(linked);
   await settle();
   pr.open();
-  pi.last().resolve(linked); // opening reads the details afresh
-  await settle();
   pr.edit();
   const saving = pr.link("https://github.com/example/repo/pull/7");
   pi.last().reject(new Error("GitHub is unreachable"));
@@ -159,8 +181,6 @@ test("background reads never reset an edit in progress", async () => {
   pi.last().resolve(linked);
   await settle();
   pr.open();
-  pi.last().resolve(linked);
-  await settle();
   pr.edit();
   pr.observe("w1", "s1", registered, true);
   pi.last().resolve(linked);
