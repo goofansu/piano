@@ -178,8 +178,7 @@ export function SessionPullRequestControl({
   const link = pr.value?.link;
   const view = pullRequestView(pr.value);
   const popoverOpen = pr.surface === "details" || pr.surface === "editing";
-  const linked = pullRequestView(pr.value);
-  const showingDetails = !!linked && pr.surface === "details";
+  const showingDetails = !!view && pr.surface === "details";
   // Opening, cancel and successful discovery replace the focused form controls.
   useEffect(() => {
     if (showingDetails) closeRef.current?.focus();
@@ -215,12 +214,12 @@ export function SessionPullRequestControl({
           className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto"
         >
           <PopoverHeader className="flex-row items-center justify-between gap-2">
-            {linked && showingDetails ? (
+            {view && showingDetails ? (
               <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
                 <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
                 <span className="min-w-0 break-all">
-                  {linked.repo}{" "}
-                  {linked.number && <span className="whitespace-nowrap">· #{linked.number}</span>}
+                  {view.repo}{" "}
+                  {view.number && <span className="whitespace-nowrap">· #{view.number}</span>}
                 </span>
               </p>
             ) : (
@@ -236,47 +235,47 @@ export function SessionPullRequestControl({
               <XIcon />
             </Button>
           </PopoverHeader>
-          {linked && showingDetails ? (
+          {view && showingDetails ? (
             <>
               {/* Plain PR facts, not a second card inside the popover. */}
               <div className="flex min-w-0 flex-col gap-2">
                 <PopoverTitle id={titleId}>
                   <a
-                    href={linked.url}
+                    href={view.url}
                     target="_blank"
                     rel="noreferrer"
                     className="break-words hover:underline"
                   >
-                    {linked.title ?? "View pull request"}
+                    {view.title ?? "View pull request"}
                   </a>
                 </PopoverTitle>
                 {/* Status, then provenance, each on its own line: the card never reflows as the time label grows. */}
                 <div className="flex flex-col items-start gap-3">
-                  {linked.status ? (
-                    <PullRequestStatusBadge status={linked.status} />
+                  {view.status ? (
+                    <PullRequestStatusBadge status={view.status} />
                   ) : (
                     <Badge variant="secondary">{STATUS_UNAVAILABLE}</Badge>
                   )}
-                  {(linked.author || linked.timeLabel) && (
+                  {(view.author || view.timeLabel) && (
                     <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                      {linked.author && (
+                      {view.author && (
                         <>
                           <Avatar size="sm" className="size-4" aria-hidden>
                             <AvatarImage
-                              src={`https://github.com/${linked.author}.png?size=40`}
+                              src={`https://github.com/${view.author}.png?size=40`}
                               alt=""
                             />
-                            <AvatarFallback>{linked.author.charAt(0).toUpperCase()}</AvatarFallback>
+                            <AvatarFallback>{view.author.charAt(0).toUpperCase()}</AvatarFallback>
                           </Avatar>
-                          <span className="truncate text-foreground">{linked.author}</span>
+                          <span className="truncate text-foreground">{view.author}</span>
                         </>
                       )}
-                      {linked.timeLabel && <span className="shrink-0">{linked.timeLabel}</span>}
+                      {view.timeLabel && <span className="shrink-0">{view.timeLabel}</span>}
                     </span>
                   )}
                 </div>
               </div>
-              <PullRequestFacts view={linked} />
+              <PullRequestFacts view={view} />
               <Separator className="opacity-50" />
               {/* Pull the ghost buttons' padding out so their labels meet the content edge. */}
               <div className="-mr-2 -mb-1 flex justify-end gap-1">
