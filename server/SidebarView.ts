@@ -4,14 +4,12 @@
  * for all connections. It hears registry writes from the registry itself, so whoever writes
  * (a browser request, a Pi rename mirrored by SessionHosts) needs no publish step of its own.
  *
- * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06),
- * session availability (SessionReferences' judgement of Pi history and checkouts) and Pi project trust
- * (through DirectoryFacts) are the observations: discovery runs single-flight in the background,
- * and changes that arrive during a run cause at most one more. A registry change no observation
- * reads publishes at once from the last observation and starts no run, so a prompt, rename or pin
- * neither waits on Git nor rediscovers, and never reads Pi's trust store. DirectoryFacts
- * announces trust decisions; the view re-reads trust then and on each run, so a decision made in
- * a terminal Pi shows after the next run.
+ * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06)
+ * and session availability run independently, each single-flight and coalesced. Host acquisition
+ * and completed retirement recheck Pi history through SessionReferences without waiting for Git.
+ * Git results never install availability, so an older run cannot undo that judgement. A prompt,
+ * rename or pin publishes from the last observations without starting either reader. DirectoryFacts
+ * announces trust decisions; trust is re-read then and on each Git run.
  */
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import type {
@@ -38,7 +36,7 @@ export class SidebarView extends Context.Service<
     readonly refresh: Effect.Effect<void>;
     /** The latest view, if one exists, then every later one. Subscribes now, so nothing published after this returns is missed. */
     readonly subscribe: Effect.Effect<Stream.Stream<SidebarMessage>, never, Scope.Scope>;
-    /** A view built from a discovery that started after this call. */
+    /** A view after both Git discovery and availability reads started after this call. */
     readonly fresh: Effect.Effect<SidebarMessage>;
   }
 >()("piano/SidebarView") {}
@@ -49,8 +47,6 @@ interface Observation {
   readonly shape: string;
   readonly paths: ReadonlySet<string>;
   readonly discoveries: ReadonlyMap<string, WorktreeDiscovery>;
-  /** Why a project member cannot be opened, as SessionReferences judges it; a member not yet observed is available. */
-  readonly unavailable: (cwd: string, sessionId: string) => SessionReference["unavailable"];
   /** Pi's trust for each of `paths`, re-read whenever DirectoryFacts reports a change. */
   readonly trust: ReadonlyMap<string, ProjectTrust>;
 }
@@ -60,11 +56,12 @@ const shapeOf = (data: RegistryData) =>
 /** The sessions a run judges availability for. One decision, used both to observe and to compare,
  * so what a run reads and what starts a run cannot drift apart. */
 const projectMembersOf = (data: RegistryData) => data.sessions.filter((s) => s.projectId);
-/** Everything a discovery run reads from the registry: the folders and worktrees it observes and
- * the members whose availability it judges. A visible change outside this publishes from the last
- * observation instead of rediscovering. */
-const observedOf = (data: RegistryData) =>
-  JSON.stringify([shapeOf(data), projectMembersOf(data).map((s) => [s.cwd, s.sessionId])]);
+const memberKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
+const membersOf = (data: RegistryData) =>
+  JSON.stringify(projectMembersOf(data).map((s) => [s.cwd, s.sessionId]));
+/** Inputs to a full refresh: Git's folders/worktrees and availability's project members.
+ * A visible change outside these publishes from the last observations without starting a reader. */
+const observedOf = (data: RegistryData) => JSON.stringify([shapeOf(data), membersOf(data)]);
 /** The registry facts the view shows. Statistics and integration links are not among them. */
 const visibleOf = (data: RegistryData) =>
   JSON.stringify({
@@ -94,12 +91,21 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
 
       let latest: SidebarMessage | undefined;
       let observation: Observation | undefined;
+      // One writer, separate from Git/trust. Key individual members, not just their checkout:
+      // a new member must not inherit a sibling's previously observed missing-history verdict.
+      let unavailable = new Map<string, SessionReference["unavailable"]>();
+      let availabilityRunning = false;
+      let availabilityRequested = 0;
+      let availabilityWaiters: Array<{
+        readonly target: number;
+        readonly done: Deferred.Deferred<void>;
+      }> = [];
       let running = false;
       let dirty = false;
       let started = 0;
       let waiters: Array<{ readonly after: number; readonly done: Deferred.Deferred<void> }> = [];
 
-      /** Discovery and availability; trust is read under the publishing lock when this is installed. */
+      /** Git discovery only; trust is read under the publishing lock when this is installed. */
       const observe = Effect.fn("SidebarView.observe")(function* (data: RegistryData) {
         const discoveries = new Map(
           yield* Effect.forEach(
@@ -108,9 +114,8 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             { concurrency: 4 },
           ),
         );
-        const unavailable = yield* references.availability(projectMembersOf(data));
         const paths = new Set([...data.folders, ...data.worktrees.map((w) => w.path)]);
-        return { shape: shapeOf(data), paths, discoveries, unavailable };
+        return { shape: shapeOf(data), paths, discoveries };
       });
 
       const trustOf = Effect.fn("SidebarView.trustOf")(function* (paths: Iterable<string>) {
@@ -196,7 +201,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             unavailable:
               !s.projectId || hosted(s.cwd, s.sessionId)
                 ? undefined
-                : seen.unavailable(s.cwd, s.sessionId),
+                : unavailable.get(memberKey(s.cwd, s.sessionId)),
           }),
         );
         return {
@@ -270,7 +275,61 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
           return Effect.asVoid(Effect.forkIn(runs, layerScope));
         });
 
-      const changed = publish(true).pipe(Effect.andThen(request()));
+      // Availability has its own reader: neither slow Git nor frequent Pi state frames belong
+      // on its invalidation path. A request during I/O invalidates that result and queues one
+      // more read. Only this reader installs availability; Git and trust cannot overwrite it.
+      const availabilityRuns: Effect.Effect<void> = Effect.gen(function* () {
+        while (true) {
+          const version = availabilityRequested;
+          const installed = yield* Effect.gen(function* () {
+            const data = yield* registry.get;
+            const members = projectMembersOf(data);
+            const judged = yield* references.availability(members);
+            return yield* locked(
+              Effect.gen(function* () {
+                if (version !== availabilityRequested) return false;
+                if (membersOf(data) !== membersOf(yield* registry.get)) {
+                  // A registry write can be visible before its listener requests this reader.
+                  availabilityRequested++;
+                  return false;
+                }
+                unavailable = new Map(
+                  members.map((s) => [memberKey(s.cwd, s.sessionId), judged(s.cwd, s.sessionId)]),
+                );
+                // A newly registered folder may still be waiting on Git. Publish history
+                // against the folders already observed, just as a Git install does; shape
+                // drift must not make lifecycle correction wait for that unrelated discovery.
+                yield* send(false);
+                return true;
+              }),
+            );
+          }).pipe(
+            // As with Git failure, keep the last observation and let a later request retry.
+            Effect.catchCause((cause) =>
+              Effect.logWarning("sidebar availability failed", cause).pipe(Effect.as(true)),
+            ),
+          );
+          if (installed) {
+            const done = availabilityWaiters.filter((w) => w.target <= version);
+            availabilityWaiters = availabilityWaiters.filter((w) => w.target > version);
+            yield* Effect.forEach(done, (w) => Deferred.succeed(w.done, undefined));
+          }
+          if (version === availabilityRequested) {
+            availabilityRunning = false;
+            return;
+          }
+        }
+      });
+      const requestAvailability = (done?: Deferred.Deferred<void>) =>
+        Effect.suspend(() => {
+          const target = ++availabilityRequested;
+          if (done) availabilityWaiters.push({ target, done });
+          if (availabilityRunning) return Effect.void;
+          availabilityRunning = true;
+          return Effect.asVoid(Effect.forkIn(availabilityRuns, layerScope));
+        });
+      const refresh = request().pipe(Effect.andThen(requestAvailability()));
+      const changed = publish(true).pipe(Effect.andThen(refresh));
       // Awaited by the writer, so a session reference is on its way to browsers before its prompt reaches Pi.
       // Statistics and integration links change nothing shown and must not start a Git run. Neither
       // may a visible change no observation reads: a prompt's activity record, a rename or a pin
@@ -283,6 +342,12 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             ? publish(true)
             : changed,
       );
+      // Subscribe during construction, before callers can start a host. A bounded invalidation
+      // survives even if acquisition and retirement coalesce to the same empty host list.
+      yield* hosts.lifecycleChanges.pipe(
+        Stream.runForEach(() => requestAvailability()),
+        Effect.forkScoped({ startImmediately: true }),
+      );
       // Started now, so a trust decision made once the layer is built is not missed.
       yield* facts.changes.pipe(
         Stream.runForEach(() =>
@@ -292,10 +357,10 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         ),
         Effect.forkScoped({ startImmediately: true }),
       );
-      yield* request();
+      yield* refresh;
 
       return SidebarView.of({
-        refresh: request(),
+        refresh,
         subscribe: PubSub.subscribe(pubsub).pipe(
           Effect.map((subscription) => {
             const now = latest;
@@ -307,8 +372,11 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         ),
         fresh: Effect.gen(function* () {
           const done = yield* Deferred.make<void>();
+          const available = yield* Deferred.make<void>();
           yield* request(done);
+          yield* requestAvailability(available);
           yield* Deferred.await(done);
+          yield* Deferred.await(available);
           return latest ?? { _tag: "registry", folders: [] };
         }),
       });

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import fs, { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import fsPromises from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, test } from "node:test";
+import { after, type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { DirectoryFacts } from "../server/DirectoryFacts.ts";
@@ -49,7 +51,10 @@ const slowGit = () => {
         git.calls++;
         if (gate) entered();
         await gate;
-        return { status: "non-git", observedAt: new Date().toISOString() };
+        return {
+          status: "non-git",
+          observedAt: new Date(1_700_000_000_000 + git.calls).toISOString(),
+        };
       }),
   };
   return git;
@@ -59,6 +64,8 @@ let databases = 0;
 const run = <A, E>(
   git: ReturnType<typeof slowGit>,
   effect: Effect.Effect<A, E, SidebarView | DirectoryFacts | Registry | SessionHosts | Scope.Scope>,
+  cli = "./fake-pi.mjs",
+  extraArgs: readonly string[] = [],
 ) => {
   const layer = PianoCoreLive({ idleMs: 0, discover: git.discover }).pipe(
     Layer.provide(NodeServices.layer),
@@ -69,8 +76,8 @@ const run = <A, E>(
       Effect.provide(layer),
       Effect.provideService(PiCli, {
         node: process.execPath,
-        cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
-        extraArgs: [],
+        cli: new URL(cli, import.meta.url).pathname,
+        extraArgs,
       }),
       Effect.provideService(RegistryDatabasePath, join(root, `registry-${++databases}.db`)),
       Effect.timeout("10 seconds"),
@@ -313,6 +320,275 @@ test("INV-01: a trust decision reaches the sidebar without a registry write", as
       assert.equal(git.calls, runs, "no discovery run was needed");
       git.release();
     }),
+  );
+});
+
+test("INV-01/02/06: retirement rechecks saved history without waiting for Git or explicit refresh", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        hosts = yield* SessionHosts,
+        view = yield* SidebarView;
+      yield* registry.saveProject({ id: "lifecycle", name: "Lifecycle" });
+      // Registration is before Pi starts: force the real initial missing-history observation.
+      yield* registry.onChange((before, after) =>
+        after.sessions.length > before.sessions.length
+          ? view.fresh.pipe(
+              Effect.tap((m) =>
+                Effect.sync(() => {
+                  const id = after.sessions.at(-1)!.sessionId;
+                  assert.equal(
+                    m.sessionReferences?.find((s) => s.sessionId === id)?.unavailable,
+                    "history",
+                  );
+                }),
+              ),
+            )
+          : Effect.void,
+      );
+      const session = yield* hosts.create({ cwd: first, projectId: "lifecycle", options: {} });
+      const id = session.spec.sessionId;
+      const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === id);
+      yield* view.fresh;
+      // Leave an older full refresh waiting on Git while Pi persists and then stops.
+      const held = git.hold();
+      const full = yield* view.fresh.pipe(Effect.forkChild({ startImmediately: true }));
+      yield* held;
+      const runs = git.calls;
+      // Shape drift must not hold back history either: this folder waits for the queued Git
+      // run, while availability may still publish against the already observed folder set.
+      yield* registry.ensureFolder(second);
+      try {
+        const written = yield* session.events.pipe(
+          Stream.filter((e) => e._tag === "message_end" && e.message.text === `Final ${id}`),
+          Stream.take(1),
+          Stream.runDrain,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* session.act({ _tag: "prompt", text: "/final" });
+        yield* Fiber.join(written);
+        yield* hosts.release(first, id);
+        // Pin exposes a stale cached negative immediately on the unfixed build. Subscribe after
+        // that publication: only retirement's own availability read can correct it with Git held.
+        yield* registry.pinSession(first, id, true);
+        const available = yield* nextView(
+          view,
+          (m) => ref(m)?.unavailable === undefined && !!ref(m)?.pinned,
+        );
+        assert.equal(ref(available)?.unavailable, undefined);
+        assert.equal(git.calls, runs, "retirement did not start Git discovery");
+        const saved = yield* hosts.read(first, id);
+        assert.equal(saved._tag, "saved");
+        if (saved._tag === "saved")
+          assert.deepEqual(
+            saved.snapshot.messages.map((m) => m.text),
+            [`Final ${id}`],
+          );
+      } finally {
+        git.release();
+      }
+      // Completing the older Git observation cannot overwrite the newer availability.
+      assert.equal(ref(yield* Fiber.join(full))?.unavailable, undefined);
+    }),
+    "./fake-host-pi.mjs",
+  );
+});
+
+test("INV-01/02: failed acquisition rechecks history saved before readiness failed", async () => {
+  await run(
+    slowGit(),
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        hosts = yield* SessionHosts,
+        view = yield* SidebarView;
+      yield* registry.saveProject({ id: "failed-start", name: "Failed start" });
+      yield* registry.onChange((before, after) =>
+        after.sessions.length > before.sessions.length ? view.fresh : Effect.void,
+      );
+      const result = yield* hosts
+        .create({ cwd: second, projectId: "failed-start", options: {} })
+        .pipe(Effect.result);
+      assert.equal(result._tag, "Failure");
+      if (result._tag === "Failure")
+        assert.match(result.failure.detail, /fixture readiness failure/);
+      const id = (yield* registry.get).sessions[0]!.sessionId;
+      const available = yield* nextView(
+        view,
+        (m) => m.sessionReferences?.some((s) => s.sessionId === id && !s.unavailable) === true,
+      );
+      assert.equal(available.sessionReferences?.[0]?.unavailable, undefined);
+      assert.deepEqual(yield* hosts.list, [], "failed acquisition left no running host");
+      const saved = yield* hosts.read(second, id);
+      assert.equal(saved._tag, "saved");
+      if (saved._tag === "saved")
+        assert.deepEqual(
+          saved.snapshot.messages.map((m) => m.text),
+          ["Saved before readiness failed"],
+        );
+    }),
+    "./fake-host-pi.mjs",
+    ["--persist-before-readiness-failure"],
+  );
+});
+
+/** Withhold one real filesystem read's callback, after the bytes have been captured. Other
+ * readers (including a concurrent host open) proceed normally. No SessionReferences mock. */
+const holdHistoryRead = (t: TestContext) => {
+  let entered: () => void = () => {};
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let release: () => void = () => {};
+  let armed = true;
+  const read = fs.read;
+  t.mock.method(fs, "read", (...args: unknown[]) => {
+    const callback = args.pop() as (...result: unknown[]) => void;
+    const hold = armed;
+    armed = false;
+    return Reflect.apply(read, fs, [
+      ...args,
+      (...result: unknown[]) => {
+        if (!hold) return callback(...result);
+        release = () => {
+          release = () => {};
+          callback(...result);
+        };
+        entered();
+      },
+    ]);
+  });
+  return { entered: Effect.promise(() => waiting), release: () => release() };
+};
+
+test("INV-01/05: fresh awaits availability; a lifetime during its read invalidates the old verdict", async (t) => {
+  const git = slowGit();
+  const cwd = join(root, "racing-history");
+  mkdirSync(cwd);
+  seedHistory(cwd, "marker");
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        hosts = yield* SessionHosts,
+        view = yield* SidebarView;
+      yield* registry.ensureFolder(cwd);
+      yield* registry.saveProject({ id: "racing", name: "Racing" });
+      yield* registry.addSession(cwd, "rapid", undefined, "racing");
+      const before = yield* view.fresh;
+      const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === "rapid");
+      assert.equal(ref(before)?.unavailable, "history");
+      const oldGit = before.folders[0]!.discovery.observedAt;
+      const gitUpdated = yield* nextView(
+        view,
+        (m) => m.folders[0]?.discovery.observedAt !== oldGit,
+      ).pipe(Effect.forkChild({ startImmediately: true }));
+      const held = holdHistoryRead(t);
+      let freshDone = false;
+      const full = yield* view.fresh.pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            freshDone = true;
+          }),
+        ),
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* held.entered;
+      try {
+        yield* Fiber.join(gitUpdated);
+        yield* Effect.yieldNow;
+        assert.equal(freshDone, false, "Git completed, but fresh still owes an availability read");
+        const runs = git.calls;
+        const session = yield* hosts.open({ cwd, sessionId: "rapid" });
+        const persisted = yield* session.events.pipe(
+          Stream.filter((e) => e._tag === "message_end" && e.message.text === "Final rapid"),
+          Stream.take(1),
+          Stream.runDrain,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* session.act({ _tag: "prompt", text: "/final" });
+        yield* Fiber.join(persisted);
+        yield* hosts.release(cwd, "rapid");
+        yield* registry.pinSession(cwd, "rapid", true);
+        // Consume only subsequent publications. The read already in flight saw no rapid file;
+        // it must be discarded, not published before the corrective read queued by the lifetime.
+        const next = yield* view.subscribe.pipe(
+          Effect.flatMap((s) => s.pipe(Stream.drop(1), Stream.take(1), Stream.runCollect)),
+          Effect.forkChild({ startImmediately: true }),
+        );
+        held.release();
+        assert.equal(ref([...(yield* Fiber.join(next))][0]!)?.unavailable, undefined);
+        assert.equal(ref(yield* Fiber.join(full))?.unavailable, undefined);
+        assert.equal(git.calls, runs, "the whole host lifetime needed no additional Git run");
+      } finally {
+        held.release();
+      }
+    }),
+    "./fake-host-pi.mjs",
+  );
+});
+
+test("INV-01/06: established-host prompts do not rescan history; a never-written session stays unavailable after release", async (t) => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        hosts = yield* SessionHosts,
+        view = yield* SidebarView;
+      seedHistory(first, "performance-marker");
+      yield* registry.saveProject({ id: "no-history", name: "No history" });
+      const session = yield* hosts.create({ cwd: first, projectId: "no-history", options: {} });
+      const id = session.spec.sessionId;
+      const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === id);
+      yield* view.fresh;
+      const runs = git.calls;
+      let reads = 0,
+        scans = 0;
+      const readdir = fsPromises.readdir;
+      t.after(() => {
+        t.mock.restoreAll();
+        syncBuiltinESMExports();
+      });
+      t.mock.method(fsPromises, "readdir", (...args: unknown[]) => {
+        if (args[0] === join(root, "sessions")) scans++;
+        return Reflect.apply(readdir, fsPromises, args);
+      });
+      syncBuiltinESMExports();
+      const read = fs.read;
+      t.mock.method(fs, "read", (...args: unknown[]) => {
+        reads++;
+        return Reflect.apply(read, fs, args);
+      });
+      for (let i = 0; i < 5; i++) {
+        const barrier = yield* session.events.pipe(
+          Stream.filter((e) => e._tag === "notice" && e.message === `barrier /prompt-${i}`),
+          Stream.take(1),
+          Stream.runDrain,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* session.act({ _tag: "prompt", text: `/prompt-${i}` });
+        yield* Fiber.join(barrier);
+      }
+      yield* Effect.yieldNow;
+      assert.equal(git.calls, runs, "five prompts add no Git discovery");
+      assert.equal(scans, 0, "five prompts start no history directory scans");
+      assert.equal(reads, 0, "five prompts add no history header reads");
+      t.diagnostic(
+        `five established-host prompts: ${git.calls - runs} Git runs, ${scans} history scans, ${reads} header reads`,
+      );
+      // This fake handled the prompts without writing history. Retirement must actually check
+      // disk, not infer that having had a live host guarantees a saved conversation.
+      yield* hosts.release(first, id);
+      const missing = yield* nextView(view, (m) => ref(m)?.unavailable === "history");
+      assert.equal(ref(missing)?.unavailable, "history");
+      assert.ok(reads > 0, "retirement did inspect the real history directory");
+      t.diagnostic(
+        `retirement: ${git.calls - runs} Git runs, ${scans} history scans, ${reads} header reads`,
+      );
+    }),
+    "./fake-host-pi.mjs",
   );
 });
 

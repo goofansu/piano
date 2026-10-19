@@ -117,6 +117,9 @@ export class SessionHosts extends Context.Service<
     readonly delete: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly list: Effect.Effect<ReadonlyArray<HostInfo>>;
     readonly changes: Stream.Stream<ReadonlyArray<HostInfo>>;
+    /** Acquisition or completed retirement may have changed Pi history. Coalesced invalidations,
+     * not a lifecycle log: re-read current facts. Ordinary session state changes do not emit. */
+    readonly lifecycleChanges: Stream.Stream<void>;
   }
 >()("piano/SessionHosts") {}
 
@@ -137,6 +140,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       // not across server restart; no execution records are written into registry.
       const exits = new Map<string, SessionClosure>();
       const changed = yield* PubSub.sliding<ReadonlyArray<HostInfo>>(1);
+      const lifecycle = yield* PubSub.sliding<void>(1);
+      // Never await observers under ownership's lock. Even a whole create/retire lifetime can
+      // coalesce to one invalidation; unlike diffing host lists, that cannot lose the change.
+      const invalidateHistory = PubSub.publish(lifecycle, undefined).pipe(Effect.asVoid);
       let stopping = false;
       const lockFor = (key: string) =>
         Effect.sync(() => {
@@ -191,6 +198,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         if (hosts.get(key) !== host) return;
         exits.set(key, yield* host.close(closure));
         hosts.delete(key);
+        yield* invalidateHistory;
         yield* announce;
       }, Effect.uninterruptible);
 
@@ -246,8 +254,15 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                   owned(
                     Semaphore.withPermits(lock, 1)(Effect.suspend(() => close(key, host, closure))),
                   ),
-              }).pipe(Scope.provide(layerScope), Effect.provideContext(hostServices));
+              }).pipe(
+                Scope.provide(layerScope),
+                Effect.provideContext(hostServices),
+                // Pi may have saved history before readiness failed. makeSessionHost has
+                // closed the failed child's scope before the failure reaches here.
+                Effect.onError(() => invalidateHistory),
+              );
               hosts.set(key, host);
+              yield* invalidateHistory;
               if (stopping) {
                 yield* close(key, host);
                 return yield* rejected("Piano is shutting down.");
@@ -391,6 +406,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         delete: (cwd, id) => retire(cwd, id, true),
         list,
         changes: Stream.fromPubSub(changed),
+        lifecycleChanges: Stream.fromPubSub(lifecycle),
       });
     }),
   ).pipe(Layer.provideMerge(SessionReferencesLive), Layer.provideMerge(NotificationsLive));
