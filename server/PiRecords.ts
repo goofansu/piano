@@ -11,6 +11,7 @@
 import { Option, Schema } from "effect";
 import { imageType } from "../shared/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
+import { turnEnding } from "../shared/turnEnding.ts";
 import type {
   Dialog,
   ModelChoice,
@@ -985,7 +986,7 @@ export class PiProjector {
         // An assistant message ends its partial and takes the id the partial was shown under.
         const reserved = event.message?.role === "assistant" ? this.partial?.id : undefined;
         if (event.message?.role === "assistant") {
-          this.responseSucceeded = event.message.stopReason === "stop";
+          this.responseSucceeded = turnEnding(event.message.stopReason) === "completed";
           this.partial = undefined;
           this.blocks.clear();
         }

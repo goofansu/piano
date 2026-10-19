@@ -6,7 +6,7 @@ import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import type { SessionAction } from "../shared/wire.ts";
 
-test("completion is a live settled success, not agent_end, retry, error, abort, duplicate settle or a reopened snapshot", async () => {
+test("completion is a live settled success (a truncated reply included), not agent_end, retry, error, abort, duplicate settle or a reopened snapshot", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const session = yield* (yield* PiSessions).open({
@@ -31,6 +31,11 @@ test("completion is a live settled success, not agent_end, retry, error, abort, 
       assert.equal(yield* act({ _tag: "prompt", text: "notification pause" }), 0);
       assert.equal(yield* act({ _tag: "prompt", text: "notification finish" }), 1);
       assert.equal(yield* act({ _tag: "prompt", text: "notification error" }), 0);
+      assert.equal(
+        yield* act({ _tag: "prompt", text: "notification length" }),
+        1,
+        "a reply cut off at the token limit still ended the turn",
+      );
       assert.equal(yield* act({ _tag: "prompt", text: "notification pause" }), 0);
       assert.equal(
         yield* act({ _tag: "abort" }),

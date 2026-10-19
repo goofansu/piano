@@ -522,6 +522,21 @@ test("an interrupted reply is cancelled, whatever error it also carries", bounde
   assert.equal(observation!.status, "cancelled");
 });
 
+test(
+  "a reply cut off at the token limit ended its turn: settled, as the server announces it",
+  bounded,
+  async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    h.last().accept();
+    const socket = h.last();
+    // No text and no response_completed frame: only the stop reason proves the turn ended.
+    socket.frame(socketSnapshot(socket, idle(answered("", { stopReason: "length" }))));
+    const [observation] = await wait;
+    assert.equal(observation!.status, "settled");
+  },
+);
+
 for (const outcome of ["completed", "interrupted", "unproven"] as const)
   test(`a stop request is not cancellation evidence: ${outcome}`, bounded, async () => {
     const h = world();
@@ -542,7 +557,7 @@ for (const outcome of ["completed", "interrupted", "unproven"] as const)
       outcome === "unproven"
         ? [input]
         : answered(outcome === "completed" ? "the thing is done" : "", {
-            stopReason: outcome === "completed" ? "stop" : "interrupted",
+            stopReason: outcome === "completed" ? "stop" : "aborted",
           });
     if (outcome !== "unproven") emit({ _tag: "message_end", message: messages[1]! });
     if (outcome === "completed") emit({ _tag: "response_completed" });
