@@ -367,14 +367,11 @@ const PaletteResults = memo(function PaletteResults({
                           disabled={!r.enabled}
                           onSelect={() => run(() => runCommand(r.command))}
                         >
-                          {
-                            // Only a session command has a group; the rest are the membership rows.
-                            "group" in r.command ? (
-                              <CommandIcon icon={r.command.icon} />
-                            ) : (
-                              <ProjectCommandIconView icon={r.command.icon} />
-                            )
-                          }{" "}
+                          {r.kind === "session" ? (
+                            <CommandIcon icon={r.command.icon} />
+                          ) : (
+                            <ProjectCommandIconView icon={r.command.icon} />
+                          )}{" "}
                           {r.detail ? (
                             <>
                               <span className="shrink-0">{r.label}</span>{" "}

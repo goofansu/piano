@@ -65,10 +65,7 @@ function SessionCommandRow({
     <SheetClose asChild>
       <Button
         variant="ghost"
-        className={cn(
-          row,
-          command.group === "destructive" && "text-destructive hover:text-destructive",
-        )}
+        className={cn(row, command.destructive && "text-destructive hover:text-destructive")}
         disabled={!command.enabled}
         onClick={() => run(command)}
       >
