@@ -6,6 +6,7 @@ import { isAbsolute } from "node:path";
 import { Context, Data, Effect, Schema } from "effect";
 import type { WorktreeDiscovery, WorktreeFacts } from "../shared/wire.ts";
 import { gitText, observeGit } from "./GitCheckout.ts";
+import { gitEnvironment } from "./GitEnvironment.ts";
 import { run as runProcess } from "./Subprocess.ts";
 
 export class WorktreeError extends Data.TaggedError("WorktreeError")<{
@@ -29,7 +30,7 @@ const run = (
     args,
     timeout,
     limit: 8 * 1024 * 1024,
-    env: { ...process.env, LC_ALL: "C" },
+    env: { ...gitEnvironment(), LC_ALL: "C" },
   }).pipe(
     Effect.map((result) => result.stdout.toString()),
     Effect.mapError((e) => new WorktreeError({ detail: `${command}: ${e.message}` })),
