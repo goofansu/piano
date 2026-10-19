@@ -7,11 +7,11 @@
  * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06),
  * session availability (SessionReferences' judgement of Pi history and checkouts) and Pi project trust
  * (through DirectoryFacts) are the observations: discovery runs single-flight in the background,
- * and changes that arrive during a run cause at most one more. A change that keeps the set of
- * registered folders and worktrees publishes at once from the last observation, so a prompt or
- * rename never waits on Git or reads Pi's trust store. DirectoryFacts announces trust decisions;
- * the view re-reads trust then and on each run, so a decision made in a terminal Pi shows after
- * the next run.
+ * and changes that arrive during a run cause at most one more. A registry change no observation
+ * reads publishes at once from the last observation and starts no run, so a prompt, rename or pin
+ * neither waits on Git nor rediscovers, and never reads Pi's trust store. DirectoryFacts
+ * announces trust decisions; the view re-reads trust then and on each run, so a decision made in
+ * a terminal Pi shows after the next run.
  */
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import type {
@@ -57,6 +57,14 @@ interface Observation {
 
 const shapeOf = (data: RegistryData) =>
   JSON.stringify([data.folders, data.worktrees.map((w) => [w.folder, w.path])]);
+/** The sessions a run judges availability for. One decision, used both to observe and to compare,
+ * so what a run reads and what starts a run cannot drift apart. */
+const projectMembersOf = (data: RegistryData) => data.sessions.filter((s) => s.projectId);
+/** Everything a discovery run reads from the registry: the folders and worktrees it observes and
+ * the members whose availability it judges. A visible change outside this publishes from the last
+ * observation instead of rediscovering. */
+const observedOf = (data: RegistryData) =>
+  JSON.stringify([shapeOf(data), projectMembersOf(data).map((s) => [s.cwd, s.sessionId])]);
 /** The registry facts the view shows. Statistics and integration links are not among them. */
 const visibleOf = (data: RegistryData) =>
   JSON.stringify({
@@ -100,9 +108,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             { concurrency: 4 },
           ),
         );
-        const unavailable = yield* references.availability(
-          data.sessions.filter((s) => s.projectId),
-        );
+        const unavailable = yield* references.availability(projectMembersOf(data));
         const paths = new Set([...data.folders, ...data.worktrees.map((w) => w.path)]);
         return { shape: shapeOf(data), paths, discoveries, unavailable };
       });
@@ -266,9 +272,16 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
 
       const changed = publish(true).pipe(Effect.andThen(request()));
       // Awaited by the writer, so a session reference is on its way to browsers before its prompt reaches Pi.
-      // Statistics and integration links change nothing shown and must not start a Git run.
+      // Statistics and integration links change nothing shown and must not start a Git run. Neither
+      // may a visible change no observation reads: a prompt's activity record, a rename or a pin
+      // publishes from the last observation, while a folder, worktree or project membership change
+      // rediscovers (INV-06).
       yield* registry.onChange((before, after) =>
-        visibleOf(before) === visibleOf(after) ? Effect.void : changed,
+        visibleOf(before) === visibleOf(after)
+          ? Effect.void
+          : observedOf(before) === observedOf(after)
+            ? publish(true)
+            : changed,
       );
       // Started now, so a trust decision made once the layer is built is not missed.
       yield* facts.changes.pipe(

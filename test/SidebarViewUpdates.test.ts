@@ -151,6 +151,54 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
   );
 });
 
+test("INV-01/06/07: a prompt, rename or pin publishes without rediscovery; membership still runs", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.ensureFolder(first);
+      yield* registry.addSession(first, "s1", "Before");
+      yield* view.fresh;
+      const quiet = git.calls;
+
+      // Exactly the writes a prompt (activity), a Pi rename and the sidebar's pin control make.
+      // Each is visible, so each must publish; none is read by a discovery run.
+      for (let i = 0; i < 5; i++) yield* registry.touchSession(first, "s1", `prompt ${i}`);
+      yield* registry.mirrorSession(first, "s1", { sessionName: "After" });
+      yield* registry.pinSession(first, "s1", true);
+      // A project's own row is not an observation input either; only membership is.
+      yield* registry.saveProject({ id: "outcome", name: "Outcome" });
+      const shown = yield* nextView(view, () => true);
+      assert.deepEqual(
+        [titleOf(shown), shown.sessionReferences?.[0]?.pinned, shown.projects?.length],
+        ["After", true, 1],
+        "the metadata reached browsers from the last observation",
+      );
+
+      // A quiet window, not a guess at scheduling: the runs loop coalesces, so once anything else
+      // asks for a run the evidence that these writes asked for one is gone. Waiting for a window
+      // in which no run appears is the only way to observe that none was asked for. Removing this
+      // makes the assertion pass on the revision before this rule; that was measured, not assumed.
+      yield* Effect.sleep("150 millis");
+      assert.equal(git.calls, quiet, "no discovery run for visible metadata or a project row");
+
+      // Membership is read by a run, so assigning the session asks for one of its own: hold Git
+      // and the run arrives there, with no timer deciding when to look.
+      const held = git.hold();
+      yield* registry.assignProject(first, "s1", "outcome");
+      yield* held;
+      git.release();
+      assert.equal(
+        git.calls,
+        quiet + 1,
+        "project membership is an observation input and rediscovered",
+      );
+    }),
+  );
+});
+
 test("INV-01: a registry write made outside any browser request reaches the sidebar; cached statistics and integration links do not", async () => {
   const git = slowGit();
   await run(
