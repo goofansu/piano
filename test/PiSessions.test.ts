@@ -185,6 +185,120 @@ test("unknown Pi event types remain forward compatible", async () => {
   );
 });
 
+for (const sessionId of ["startup-overlap", "startup-overlap-identical", "startup-during-read"]) {
+  test(`startup history reconciles before the first snapshot: ${sessionId}`, async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId });
+        const frames = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
+        assert.equal(frames[0]._tag, "snapshot");
+        if (frames[0]._tag !== "snapshot") return;
+        assert.deepEqual(
+          frames[0].snapshot.messages.map((message) => [message.id, message.text]),
+          sessionId.endsWith("identical")
+            ? [
+                ["m0", "STARTUP-NOTICE"],
+                ["m1", "STARTUP-NOTICE"],
+              ]
+            : [["m0", "STARTUP-NOTICE"]],
+        );
+        assert.equal(frames[0].snapshot.state.projectionError, undefined);
+      }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+    );
+  });
+}
+
+for (const role of ["custom", "assistant"]) {
+  test(`startup ${role} history visible before delayed message_end preserves dialogs and correlation`, async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: `startup-delayed-${role}`,
+        });
+        const initial = (yield* session.events.pipe(Stream.take(1), Stream.runCollect))[0];
+        assert.equal(initial._tag, "snapshot");
+        if (initial._tag !== "snapshot") return;
+        const snapshot = initial.snapshot;
+        assert.match(snapshot.state.projectionError ?? "", /Pi context changed/);
+        assert.deepEqual(
+          snapshot.messages,
+          [],
+          "unfinished history is not installed ahead of its end event",
+        );
+        assert.deepEqual(snapshot.state.extension?.statuses, [
+          { key: "startup", text: "Waiting for startup answer" },
+        ]);
+        assert.equal(snapshot.tools?.[0].id, "startup-tool");
+        if (role === "assistant") assert.equal(snapshot.pending?.text, "STARTUP-PARTIAL");
+        assert.equal(snapshot.dialogs.length, 1);
+        const dialog = snapshot.dialogs[0];
+        const ready = yield* Deferred.make<void>();
+        const collector = yield* collectUntil(
+          session.events.pipe(
+            Stream.tap((event) =>
+              event._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+            ),
+          ),
+          (event) =>
+            event._tag === "context" &&
+            event.messages.some((message) => message.text === "STARTUP-FINAL"),
+        ).pipe(Effect.forkChild);
+        yield* Deferred.await(ready);
+        yield* session.act({
+          _tag: "answer",
+          id: dialog.id,
+          generation: dialog.generation,
+          value: "continue",
+        });
+        const seen = yield* Fiber.join(collector);
+        const ends = seen.flatMap((event) => (event._tag === "message_end" ? [event.message] : []));
+        assert.deepEqual(
+          ends.map((message) => [message.id, message.text]),
+          [["m0", "STARTUP-FINAL"]],
+        );
+        if (role === "assistant") assert.equal(ends[0].id, snapshot.pending?.id);
+        const final = (yield* session.events.pipe(Stream.take(1), Stream.runCollect))[0];
+        assert.equal(final._tag, "snapshot");
+        if (final._tag !== "snapshot") return;
+        assert.equal(final.snapshot.state.projectionError, undefined);
+        assert.deepEqual(
+          final.snapshot.messages.map((message) => [message.id, message.text]),
+          [["m0", "STARTUP-FINAL"]],
+        );
+        assert.equal(final.snapshot.dialogs.length, 0);
+        assert.equal(final.snapshot.tools?.[0].id, "startup-tool");
+        assert.equal(final.snapshot.tools?.[0].status, "success");
+      }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+    );
+  });
+}
+
+for (const sessionId of ["startup-read-failure", "startup-churn", "startup-read-exit"]) {
+  test(`startup reconciliation has a bounded explicit outcome: ${sessionId}`, async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId });
+        if (sessionId === "startup-read-exit") {
+          yield* collectUntil(
+            session.events,
+            (event) =>
+              event._tag === "closed" ||
+              (event._tag === "snapshot" && !!event.snapshot.state.closure),
+          );
+          assert.ok((yield* session.state).closure);
+          return;
+        }
+        assert.match(
+          (yield* session.state).projectionError ?? "",
+          sessionId === "startup-churn" ? /Pi context changed/ : /startup read failed/,
+        );
+        assert.ok((yield* session.commands).length, "recovery controls remain usable");
+      }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+    );
+  });
+}
+
 test("snapshot first, then a streamed turn", async () => {
   const seen = await run(
     Effect.gen(function* () {

@@ -46,6 +46,7 @@ import {
   type PiRejection,
   piExchangeFor,
   piReadbacks,
+  type RefreshKind,
   sessionArgs,
   stateFactsOf,
 } from "./PiRecords.ts";
@@ -263,7 +264,7 @@ const openSession = (spec: PiSessionSpec) =>
     // Ready check, initial transcript and entries. All race the child exiting early. Entries are
     // best effort, as usage readbacks are: a failed read opens without Runs' spend or the
     // dispatching session, and usage readbacks then count every entry.
-    const [state, messages, entries] = yield* Effect.all([
+    const [state, , entries] = yield* Effect.all([
       child.read(piReadbacks.state),
       child.read(piReadbacks.messages),
       child
@@ -281,7 +282,10 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
     const projector = new PiProjector({ generation });
-    const opened = projector.snapshot({ source: "live", state, messages, entries });
+    // The readiness read is not an event boundary: its history can overlap buffered records
+    // or contain a finalized message whose message_end is still awaiting an extension.
+    // Project records onto an empty provisional transcript, then reconcile before exposing it.
+    const opened = projector.snapshot({ source: "live", state, messages: [], entries });
     if (opened.state.sessionId !== spec.sessionId)
       return yield* new PiSessionError({
         reason: "protocol",
@@ -303,6 +307,26 @@ const openSession = (spec: PiSessionSpec) =>
     const { transaction, apply, patchState, announced } = publication;
     let submissionId = 0;
     let processedVersion = 0;
+    let processed: Deferred.Deferred<void> | undefined;
+    let unfinishedMessages = 0;
+    let initializing = true;
+    const initialRefreshes = new Set<RefreshKind>();
+    const drainRecords = Effect.gen(function* () {
+      const target = child.observationVersion();
+      while (processedVersion < target) {
+        processed ??= yield* Deferred.make<void>();
+        yield* Deferred.await(processed);
+      }
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: "1 second",
+        orElse: () =>
+          new PiSessionError({
+            reason: "timeout",
+            detail: "Pi records did not drain. Reopen history before continuing.",
+          }),
+      }),
+    );
     // Cancellation owner: operation tokens fence late abort/readback results.
     // Work belongs to sessionScope, not the lifetime of the requesting browser.
     const promptOperations = new Set<number>();
@@ -337,6 +361,9 @@ const openSession = (spec: PiSessionSpec) =>
       scope: sessionScope,
       read: child.read,
       observationVersion: child.observationVersion,
+      processedVersion: () => processedVersion,
+      drain: drainRecords,
+      contextReady: () => unfinishedMessages === 0,
       context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
       publication,
       entries,
@@ -348,6 +375,10 @@ const openSession = (spec: PiSessionSpec) =>
         // Translate under the lock too: a history readback replaces the projector's correlation facts.
         const { refresh, dialog } = yield* transaction((tx) =>
           Effect.gen(function* () {
+            if (record.type === "message_start") unfinishedMessages++;
+            if (record.type === "message_end")
+              unfinishedMessages = Math.max(0, unfinishedMessages - 1);
+            if (record.type === "agent_settled") unfinishedMessages = 0;
             const projected = projector.record(record, receivedAt);
             if (projected.state) yield* tx.mergeState(projected.state);
             for (const event of projected.events) yield* tx.publish(event);
@@ -357,7 +388,8 @@ const openSession = (spec: PiSessionSpec) =>
             };
           }),
         );
-        yield* readbacks.schedule(...refresh);
+        if (initializing) for (const kind of refresh) initialRefreshes.add(kind);
+        else yield* readbacks.schedule(...refresh);
         if (dialog) yield* dialogs.watch(dialog);
       });
 
@@ -366,8 +398,11 @@ const openSession = (spec: PiSessionSpec) =>
       Stream.runForEach((item) =>
         onRecord(item).pipe(
           Effect.ensuring(
-            Effect.sync(() => {
+            Effect.gen(function* () {
               processedVersion++;
+              const previous = processed;
+              processed = undefined;
+              if (previous) yield* Deferred.succeed(previous, undefined);
             }),
           ),
         ),
@@ -601,6 +636,12 @@ const openSession = (spec: PiSessionSpec) =>
             return;
         }
       });
+
+    // Never wait for a dialog or a running message to finish readiness. A bounded, explicit
+    // projection error leaves those controls available; a later message/settled boundary retries.
+    yield* readbacks.refresh("context");
+    initializing = false;
+    yield* readbacks.schedule(...initialRefreshes);
 
     // Cached statistics are shown without waiting for a slow or failed usage readback; open has
     // still waited for the one entries read above. Uncached sessions keep the initial statistics

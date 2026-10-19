@@ -53,6 +53,21 @@ let delayedPrompt;
 let heldState;
 let heldClear;
 let holdNextState = false;
+let startupSent = false;
+let messageReads = 0;
+let startupMessage;
+const startupNotice = () => {
+  const message = {
+    role: "custom",
+    customType: "startup",
+    content: "STARTUP-NOTICE",
+    display: true,
+    timestamp: 1,
+  };
+  messages.push(message);
+  out({ type: "message_start", message });
+  out({ type: "message_end", message });
+};
 const capacityHeld = [];
 // capacity-readback: usage readbacks Pi holds alongside the held prompts.
 const heldReads = [];
@@ -161,7 +176,61 @@ function handle(cmd) {
         });
         return;
       }
-      return respond(cmd, state());
+      respond(cmd, state());
+      if (sessionId.startsWith("startup-overlap") && !startupSent) {
+        startupSent = true;
+        startupNotice();
+        if (sessionId.endsWith("identical")) startupNotice();
+      }
+      if (sessionId.startsWith("startup-delayed") && !startupSent) {
+        startupSent = true;
+        const assistant = sessionId.endsWith("assistant");
+        startupMessage = assistant
+          ? {
+              role: "assistant",
+              content: [{ type: "text", text: "STARTUP-FINAL" }],
+              stopReason: "stop",
+              timestamp: 1,
+            }
+          : {
+              role: "custom",
+              customType: "startup",
+              content: "STARTUP-FINAL",
+              display: true,
+              timestamp: 1,
+            };
+        // Final history is visible, but message_end awaits an extension's dialog answer.
+        messages.push(startupMessage);
+        if (assistant) {
+          streaming = true;
+          out({ type: "agent_start" });
+        }
+        out({
+          type: "message_start",
+          message: assistant
+            ? { ...startupMessage, content: [{ type: "text", text: "STARTUP-PARTIAL" }] }
+            : startupMessage,
+        });
+        out({
+          type: "tool_execution_start",
+          toolCallId: "startup-tool",
+          toolName: "read",
+          args: { path: "startup.txt" },
+        });
+        out({
+          type: "extension_ui_request",
+          method: "setStatus",
+          statusKey: "startup",
+          statusText: "Waiting for startup answer",
+        });
+        out({
+          type: "extension_ui_request",
+          id: "startup-answer",
+          method: "input",
+          title: "Finish startup",
+        });
+      }
+      return;
     case "get_commands":
       if (sessionId === "silent-commands") return; // a readback Pi never answers
       if (heldClear) {
@@ -182,6 +251,17 @@ function handle(cmd) {
         ],
       });
     case "get_messages":
+      messageReads++;
+      if (messageReads > 1) {
+        if (sessionId === "startup-read-failure")
+          return respond(cmd, undefined, "startup read failed");
+        if (sessionId === "startup-read-exit") return process.exit(3);
+        if (
+          sessionId === "startup-churn" ||
+          (sessionId === "startup-during-read" && messageReads === 2)
+        )
+          startupNotice();
+      }
       return respond(cmd, { messages });
     case "get_entries": {
       // rejected-entries: Pi refuses to read its entries, as a failing extension could.
@@ -310,6 +390,19 @@ function handle(cmd) {
       return respond(cmd, { disposition: "queued" });
     }
     case "extension_ui_response": {
+      if (cmd.id === "startup-answer") {
+        out({ type: "message_end", message: startupMessage });
+        out({
+          type: "tool_execution_end",
+          toolCallId: "startup-tool",
+          toolName: "read",
+          result: { content: [{ type: "text", text: "startup result" }] },
+          isError: false,
+        });
+        streaming = false;
+        out({ type: "agent_settled" });
+        return;
+      }
       if (cmd.id.startsWith("capacity-")) {
         releaseCapacity();
         streaming = false;

@@ -35,6 +35,7 @@ let streaming = false,
   silence = false,
   heldState;
 let holdStats = args.includes("--hold-stats");
+let holdReadiness = args.includes("--hold-readiness") || arg("--hold-session") === sessionId;
 const heldStats = [];
 const stats = (cmd) => {
   const data = arg("--stats-file")
@@ -86,6 +87,7 @@ process.on("SIGUSR1", () => {
 });
 process.on("SIGUSR2", () => process.exit(0));
 process.on("SIGCONT", () => {
+  holdReadiness = false;
   if (heldState) {
     reply(heldState, state());
     heldState = undefined;
@@ -123,7 +125,7 @@ function handle(cmd) {
       return;
     }
     if (silence || args.includes("--silence-readiness")) return;
-    if (args.includes("--hold-readiness") || arg("--hold-session") === sessionId) {
+    if (holdReadiness) {
       heldState = cmd;
       return;
     }

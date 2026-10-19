@@ -8,6 +8,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import { applySessionEvent, emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Snapshot } from "../shared/wire.ts";
 import { createPiCompatibilityFixture } from "./fixtures/PiCompatibility.ts";
 
@@ -82,6 +83,74 @@ test("real Pi loads project-only virtual models and retained supported UI from t
         const snapshot = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
         if (snapshot[0]._tag === "snapshot")
           assert.deepEqual(snapshot[0].snapshot.state.extension, state.extension);
+      }).pipe(
+        Effect.timeout("20 seconds"),
+        Effect.scoped,
+        Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer))),
+        Effect.provideService(PiCli, fixture.cli()),
+      ),
+    );
+    assert.equal(fixture.observe().requests.length, 0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("INV-01/05/12: real Pi startup emits exactly 100 unique rows across history and live records", async () => {
+  const fixture = await createPiCompatibilityFixture();
+  fixture.configureSentinel("disabled");
+  const cwd = fixture.project("startup-history");
+  writeFileSync(
+    join(cwd, ".pi", "extensions", "startup-history.ts"),
+    `export default function(pi) {
+    pi.on('session_start', async (_event, ctx) => {
+      for (let i = 0; i < 100; i++) {
+        pi.sendMessage({ customType: 'startup', content: 'STARTUP-' + i, display: true });
+        await new Promise(resolve => setTimeout(resolve, 1));
+      }
+      ctx.ui.setStatus('startup', 'STARTUP-FINISHED');
+      ctx.ui.notify('STARTUP-FINISHED');
+    });
+  }`,
+  );
+  try {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const sessionId = "real-startup-history";
+        const session = yield* (yield* PiSessions).open({ cwd, sessionId });
+        const snapshots = yield* session.events.pipe(
+          Stream.scan(() => emptySnapshot(sessionId), applySessionEvent),
+          Stream.takeUntil(
+            (snapshot) =>
+              snapshot.state.extension?.statuses.some(
+                (status) => status.text === "STARTUP-FINISHED",
+              ) === true && !snapshot.state.projectionError,
+          ),
+          Stream.runCollect,
+        );
+        const final = snapshots.at(-1)!;
+        assert.equal(final.messages.length, 100);
+        assert.deepEqual(
+          final.messages.map((message) => message.text),
+          Array.from({ length: 100 }, (_, i) => `STARTUP-${i}`),
+        );
+        assert.equal(new Set(final.messages.map((message) => message.id)).size, 100);
+        // A later authoritative refresh must not shift the live IDs.
+        const ready = yield* Deferred.make<void>();
+        const refresh = yield* session.events.pipe(
+          Stream.tap((event) =>
+            event._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+          Stream.filter((event) => event._tag === "context"),
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(ready);
+        yield* session.act({ _tag: "prompt", text: "/phase0-facts" });
+        const context = (yield* Fiber.join(refresh))[0];
+        assert.equal(context._tag, "context");
+        if (context._tag === "context") assert.deepEqual(context.messages, final.messages);
       }).pipe(
         Effect.timeout("20 seconds"),
         Effect.scoped,
