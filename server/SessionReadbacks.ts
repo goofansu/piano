@@ -172,10 +172,12 @@ export const makeSessionReadbacks = ({
       ),
   );
 
-  /** Replace current context, never concatenate raw history. Retry readbacks
-   * raced by Pi output; bound churn and make an unresolved projection visible.
-   * This is not historical replay or the phase-5 transport sequencing contract. */
-  const refreshContext = Effect.gen(function* () {
+  /** Replace current context, never concatenate raw history. Active work defers to a
+   * later boundary; only snapshots raced by Pi output spend the bounded retry budget.
+   * Explicit refreshes (including startup) must still report an unresolved projection. */
+  const refreshContext = Effect.fn("SessionReadbacks.refreshContext")(function* (
+    scheduled = false,
+  ) {
     const version = ++contextVersion;
     contextPending = false;
     const failed = (detail: string) =>
@@ -184,15 +186,29 @@ export const makeSessionReadbacks = ({
         contextPending = true;
         return { projectionError: detail };
       });
+    const unresolved =
+      "Pi context changed during refresh. This view may be stale until the next command or settled boundary.";
+    const defer = Effect.gen(function* () {
+      if (version !== contextVersion || announced()) return;
+      contextPending = true;
+      // Background activity is expected, not a failed snapshot. A caller waiting for a
+      // projection (notably open) still needs a bounded, explicit incomplete outcome.
+      if (!scheduled) yield* failed(unresolved);
+    });
     yield* Effect.gen(function* () {
       for (let attempt = 0; attempt < contextAttempts; attempt++) {
         yield* drain;
         const outputVersion = observationVersion();
+        const before = yield* read(piReadbacks.state);
+        if (version !== contextVersion || announced()) return;
+        const ready = yield* publication.transaction(() => Effect.sync(contextReady));
+        if (before.isStreaming || !ready) return yield* defer;
         const messages = yield* read(piReadbacks.messages);
         // Pi installs finalized agent history before awaiting message_end extension handlers.
         // Even a drained, unchanged output watermark is not sufficient during an active run.
         const state = yield* read(piReadbacks.state);
         if (version !== contextVersion || announced()) return;
+        if (state.isStreaming) return yield* defer;
         const applied = yield* publication.transaction((transaction) =>
           Effect.gen(function* () {
             if (
@@ -212,9 +228,7 @@ export const makeSessionReadbacks = ({
         );
         if (applied) return;
       }
-      yield* failed(
-        "Pi context changed during refresh. This view may be stale until the next command or settled boundary.",
-      );
+      yield* failed(unresolved);
     }).pipe(
       Effect.catchTag("PiSessionError", (error) =>
         failed(`Current context refresh failed: ${error.detail}`),
@@ -226,7 +240,7 @@ export const makeSessionReadbacks = ({
     kind === "stats"
       ? refreshStats
       : kind === "context"
-        ? refreshContext
+        ? refreshContext()
         : Effect.suspend(() => refreshState(operation ?? operationVersion));
 
   // At most one worker per readback kind. Never await RPC inspection from the
@@ -236,12 +250,13 @@ export const makeSessionReadbacks = ({
   const schedule = Effect.fnUntraced(function* (...kinds: ReadonlyArray<RefreshKind>) {
     // Retry an unresolved context at the next persisted boundary, not in an unbounded loop.
     const retry = contextPending && kinds.includes("stats") ? ["context" as const] : [];
-    for (const kind of [...kinds, ...retry]) {
+    for (const kind of new Set([...kinds, ...retry])) {
       requested.add(kind);
       if (refreshing.has(kind)) continue;
       refreshing.add(kind);
       yield* Effect.gen(function* () {
-        while (requested.delete(kind) && !announced()) yield* refresh(kind);
+        while (requested.delete(kind) && !announced())
+          yield* kind === "context" ? refreshContext(true) : refresh(kind);
       }).pipe(
         Effect.ensuring(
           Effect.sync(() => {

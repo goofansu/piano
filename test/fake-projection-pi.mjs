@@ -20,7 +20,8 @@ let messages = [],
   thinkingLevel = "low",
   raceContext = false,
   failRefresh = false,
-  malformed = false;
+  malformed = false,
+  malformedHistory = false;
 const assistant = (content) => ({
   role: "assistant",
   provider: "physical",
@@ -57,7 +58,7 @@ function handle(c) {
       );
     case "get_messages": {
       if (failRefresh) return reply(c, undefined, "Fixture refresh failed " + canary);
-      if (malformed) return reply(c, {});
+      if (malformed || malformedHistory) return reply(c, {});
       if (raceContext) {
         raceContext = false;
         const stale = messages;
@@ -205,9 +206,12 @@ function handle(c) {
         failRefresh = true;
       } else if (c.message === "/readbacks-malformed") {
         malformed = true;
+      } else if (c.message === "/history-malformed") {
+        malformedHistory = true;
       } else if (c.message === "/refresh-recover") {
         failRefresh = false;
         malformed = false;
+        malformedHistory = false;
       } else if (c.message === "/edit-context") {
         messages = [{ role: "custom", content: "Authoritative context edit", display: true }];
       } else if (c.message === "/select-secret") {
