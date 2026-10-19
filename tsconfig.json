@@ -16,5 +16,11 @@
     },
     "lib": ["es2023"]
   },
-  "include": ["server/**/*.ts", "shared/**/*.ts", "extensions/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "server/**/*.ts",
+    "shared/**/*.ts",
+    "extensions/**/*.ts",
+    "scripts/**/*.ts",
+    "test/**/*.ts"
+  ]
 }

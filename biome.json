@@ -17,6 +17,7 @@
       "server/**/*.ts",
       "shared/**/*.ts",
       "extensions/**/*.ts",
+      "scripts/**/*.ts",
       "test/**",
       "web/src/**",
       "web/vite.config.ts",
