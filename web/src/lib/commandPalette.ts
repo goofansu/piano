@@ -173,7 +173,7 @@ function linkRow(link: SessionLink): PaletteLinkRow {
 /** The words a file is searched by after `FILES_QUERY`: the shown path, its segments and each run of
  * letters or digits, so "!files app" and "!files src" each reach src/app.ts. */
 function fileRow(file: SessionFile, cwd: string | undefined): PaletteFileRow {
-  const shown = displayPath(file.path, cwd, abbrevHome);
+  const shown = displayPath(file, cwd, abbrevHome);
   const { name, dir } = splitPath(shown);
   return {
     key: file.path,

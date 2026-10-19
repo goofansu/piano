@@ -66,12 +66,13 @@ test("a path splits into its name and directory", () => {
 
 test("a path inside the session's directory shows relative to it; one outside keeps its own form", () => {
   const abbrev = (p: string) => p.replace("/Users/someone", "~");
-  assert.equal(displayPath("/work/api/src/a.ts", "/work/api", abbrev), "src/a.ts");
-  assert.equal(displayPath("/work/api/src/a.ts", "/work/api/", abbrev), "src/a.ts");
-  assert.equal(displayPath("src/a.ts", "/work/api", abbrev), "src/a.ts");
-  assert.equal(displayPath("/work/apix/a.ts", "/work/api", abbrev), "/work/apix/a.ts");
-  assert.equal(displayPath("/Users/someone/notes.md", "/work/api", abbrev), "~/notes.md");
-  assert.equal(displayPath("/work/api/a.ts", undefined, abbrev), "/work/api/a.ts");
+  const shown = (path: string, cwd: string | undefined) => displayPath({ path }, cwd, abbrev);
+  assert.equal(shown("/work/api/src/a.ts", "/work/api"), "src/a.ts");
+  assert.equal(shown("/work/api/src/a.ts", "/work/api/"), "src/a.ts");
+  assert.equal(shown("src/a.ts", "/work/api"), "src/a.ts");
+  assert.equal(shown("/work/apix/a.ts", "/work/api"), "/work/apix/a.ts");
+  assert.equal(shown("/Users/someone/notes.md", "/work/api"), "~/notes.md");
+  assert.equal(shown("/work/api/a.ts", undefined), "/work/api/a.ts");
 });
 
 test("Git's answer hides ignored and outside paths; without one, or after a failed read, every file shows", () => {
@@ -88,9 +89,12 @@ test("Git's answer hides ignored and outside paths; without one, or after a fail
       status: "ready" as const,
       ignored: ["scratch/notes.md"],
       outside: ["/elsewhere/x.ts"],
+      inside: ["src/a.ts", "scratch/notes.md"],
+      placed: ["src/a.ts", "scratch/notes.md"],
     },
   };
-  assert.deepEqual(visibleFiles(files, ready, workspace), [{ path: "src/a.ts", messageId: "a1" }]);
+  const a = { path: "src/a.ts", messageId: "a1", placed: "src/a.ts" };
+  assert.deepEqual(visibleFiles(files, ready, workspace), [a]);
   assert.deepEqual(visibleFiles(files, undefined, workspace), files);
   assert.deepEqual(
     visibleFiles(
@@ -109,5 +113,56 @@ test("Git's answer hides ignored and outside paths; without one, or after a fail
     assert.deepEqual(visibleFiles(files, ready, current), files);
   }
   const added = { path: "src/new.ts", messageId: "a3" };
-  assert.deepEqual(visibleFiles([...files, added], ready, workspace), [files[0], added]);
+  assert.deepEqual(visibleFiles([...files, added], ready, workspace), [a, added]);
+});
+
+test("one file under several spellings is one entry at its latest touch once Git's answer places them", () => {
+  const spellings = ["src/a.ts", "/tmp/repo/src/a.ts", "./src/a.ts", "/private/tmp/repo/src/a.ts"];
+  const files = sessionFiles([
+    ...spellings.flatMap((path, i) => [
+      assistant(`a${i}`, [call(`c${i}`, "edit", { path, oldText: "x", newText: "y" })]),
+      result(`c${i}`),
+    ]),
+    assistant("a9", [call("c9", "write", { path: "src/b.ts", content: "" })]),
+    result("c9"),
+  ]);
+  const workspace = { id: "w", folder: "/tmp/repo", path: "/tmp/repo" };
+  const abbrev = (p: string) => p;
+  const shown = (list: ReturnType<typeof visibleFiles>) =>
+    list.map((file) => [file.path, displayPath(file, "/tmp/repo", abbrev)]);
+  // Before an answer, the text rule: each spelling once, inside the directory relative to it.
+  assert.deepEqual(shown(visibleFiles(files, undefined, workspace)), [
+    ["src/a.ts", "src/a.ts"],
+    ["/tmp/repo/src/a.ts", "src/a.ts"],
+    ["./src/a.ts", "./src/a.ts"],
+    ["/private/tmp/repo/src/a.ts", "/private/tmp/repo/src/a.ts"],
+    ["src/b.ts", "src/b.ts"],
+  ]);
+  const ready = {
+    workspace,
+    observedAt: "now",
+    result: {
+      status: "ready" as const,
+      ignored: [],
+      outside: [],
+      inside: [...spellings, "src/b.ts"],
+      placed: ["src/a.ts", "src/a.ts", "src/a.ts", "src/a.ts", "src/b.ts"],
+    },
+  };
+  // The latest touch's spelling is kept, so opening sends a path the call named.
+  assert.deepEqual(shown(visibleFiles(files, ready, workspace)), [
+    ["/private/tmp/repo/src/a.ts", "src/a.ts"],
+    ["src/b.ts", "src/b.ts"],
+  ]);
+  // A spelling the answer does not cover yet keeps the text rule until a fresh answer.
+  const stale = {
+    ...ready,
+    result: { ...ready.result, inside: spellings.slice(0, 2), placed: ["src/a.ts", "src/a.ts"] },
+  };
+  assert.deepEqual(shown(visibleFiles(files, stale, workspace)), [
+    ["/tmp/repo/src/a.ts", "src/a.ts"],
+    ["./src/a.ts", "./src/a.ts"],
+    ["/private/tmp/repo/src/a.ts", "/private/tmp/repo/src/a.ts"],
+    ["src/b.ts", "src/b.ts"],
+  ]);
 });

@@ -105,8 +105,8 @@ async function preview(
   }
 }
 
-/** `git check-ignore` over the paths inside the workspace, placed as the Files list places them;
- * it exits 1 when none is ignored. */
+/** `git check-ignore` over the paths inside the workspace, placed as the Files list places them,
+ * each answered with its placed name; it exits 1 when none is ignored. */
 async function ignored(
   checkout: Checkout,
   workspace: Workspace,
@@ -119,7 +119,8 @@ async function ignored(
     if (name === undefined) outside.push(path);
     else inside.set(path, name);
   }
-  if (inside.size === 0) return { status: "ready", ignored: [], outside };
+  const names = { inside: [...inside.keys()], placed: [...inside.values()] };
+  if (inside.size === 0) return { status: "ready", ignored: [], outside, ...names };
   const result = await checkout.run(["check-ignore", "-z", "--stdin"], {
     input: Buffer.from(`${[...inside.values()].join("\0")}\0`),
     okCodes: [0, 1],
@@ -129,6 +130,7 @@ async function ignored(
     status: "ready",
     ignored: [...inside].filter(([, name]) => hits.has(name)).map(([path]) => path),
     outside,
+    ...names,
   };
 }
 

@@ -45,6 +45,8 @@ const IDENTITY_FIELDS: ReadonlySet<string> = new Set([
   "sessionFile", // SessionState
   "ignored", // WorkspaceIgnoredFiles: the paths as sent
   "outside",
+  "inside",
+  "placed", // WorkspaceIgnoredFiles: the names the paths inside place to
 ]);
 
 const isIdentity = (field: unknown) =>
