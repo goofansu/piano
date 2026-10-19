@@ -2,9 +2,11 @@
  * The selected session's pull request link: one live observation of it plus the surface that
  * shows it. The registry decides whether a session is linked, and the session catalog carries its
  * link, so only a linked session is read (on selection, focus, an interval and when its work
- * starts or stops): selecting an unlinked session costs no GitHub call. When the work of a
- * session never searched for a pull request stops, it is searched once in the background; the
- * registry keeps what that finds and the catalog reports it. Reads are silent; only an explicit
+ * starts or stops): selecting an unlinked session costs no GitHub call. This module decides
+ * what counts as work starting or stopping: a change within the observed session, never the
+ * selection of one mid-turn. When the work of a session never searched for a pull request
+ * stops, it is searched once in the background; the registry keeps what that finds and the
+ * catalog reports it. Reads are silent; only an explicit
  * change blocks the controls or reports. The surface follows the link: opening while unlinked
  * offers the link form, a link that appears (found in the background or saved here) closes it so
  * the header shows it, and background reads never reset an edit in progress. Nothing here depends
@@ -62,20 +64,19 @@ export interface SessionPullRequestLink {
   /** Resumes reading; returns the stop function, which aborts all work. */
   start: () => () => void;
   /**
-   * Follows a session and the registry's link for it, as the catalog reports it: a link, null
-   * once removed, undefined when never searched. Only a linked session is read; a different
-   * session closes the surface and starts from nothing.
+   * Follows a session, the registry's link for it as the catalog reports it (a link, null once
+   * removed, undefined when never searched) and whether its work is going. Only a linked session
+   * is read; a different session closes the surface and starts from nothing, and its `working`
+   * is recorded, not acted on. When the observed session's work starts or stops, a linked
+   * session's facts are read again, and the work of a session never searched for a pull request
+   * stopping searches it once in the background.
    */
   observe: (
     workspaceId: string | undefined,
     sessionId: string | null | undefined,
     link: RegistryLink | null | undefined,
+    working: boolean,
   ) => void;
-  /**
-   * The session's work started or stopped. A linked session's facts are read again. When the
-   * work of a session never searched for a pull request stops, it is searched in the background.
-   */
-  activity: (working: boolean) => void;
   /** Shows the details when linked (reading them afresh), else the link form. */
   open: () => void;
   /** Hides the surface without reporting it through `closed`. */
@@ -129,6 +130,8 @@ export function createSessionPullRequest({
   let link: RegistryLink | null | undefined;
   /** The background search in flight; its answer reaches the registry, never this state. */
   let search: AbortController | undefined;
+  /** Whether the observed session's work is going, so the next `observe` can tell an edge. */
+  let working = false;
   let surface: PullRequestSurface = "closed",
     finding = false,
     /** One of this module's changes is in flight; it decides the surface when it settles. */
@@ -216,9 +219,13 @@ export function createSessionPullRequest({
         stop();
       };
     },
-    observe: (workspaceId, sessionId, next) => {
+    observe: (workspaceId, sessionId, next, nextWorking) => {
       const key = pullRequestKey(workspaceId, sessionId);
       const { key: previous, value } = observation.getState();
+      // Work starting or stopping is an edge only within one session: a selection arriving
+      // mid-turn is not a start, so it is read once, by the observation, not twice.
+      const edge = key !== null && key === previous && nextWorking !== working;
+      working = nextWorking;
       if (key !== previous) {
         surface = "closed";
         finding = false;
@@ -228,13 +235,14 @@ export function createSessionPullRequest({
       // A newly linked session, or a new session, reads on its own; a link that changed
       // elsewhere is read afresh so GitHub's facts match it.
       observation.observe(key, !!next);
-      if (next && value !== undefined && value.link?.url !== next.url) observation.refreshSoon(0);
+      const reread = !!next && value !== undefined && value.link?.url !== next.url;
+      if (reread) observation.refreshSoon(0);
       publish();
-    },
-    activity: (working) => {
-      const key = observation.getState().key;
-      if (key === null) return;
-      if (link) return observation.refreshSoon(0);
+      if (!edge || key === null) return;
+      if (link) {
+        if (!reread) observation.refreshSoon(0);
+        return;
+      }
       if (link !== undefined || working) return;
       endSearch();
       const controller = new AbortController();
