@@ -15,6 +15,7 @@ import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Attachment, ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
+import { Notifications } from "./Notifications.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
 import type { RegistryError, RegistryLookupError } from "./Registry.ts";
 import { type CreateSpec, SessionHosts } from "./SessionHosts.ts";
@@ -32,6 +33,8 @@ export interface Selection {
   /** `null` is a new session that is not created yet. */
   readonly sessionId: string | null;
   readonly selectionId: string;
+  /** Piano's dispatch tool watching a session, not a person opening it. */
+  readonly observer?: boolean;
 }
 
 /** Where one client's messages go. */
@@ -87,6 +90,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   output: ClientOutput,
 ) {
   const hosts = yield* SessionHosts;
+  const notifications = yield* Notifications;
   const { send } = output;
   let selected: Selection | null = null;
   let attachment: { session: PiSession; scope: Scope.Closeable; selectionId: string } | null = null;
@@ -171,6 +175,8 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
 
   const show = Effect.fn("ClientSessions.show")(function* (selection: Selection) {
     const { cwd, sessionId, selectionId } = selection;
+    // A person opening the session is here: a completion message waiting for it is dropped.
+    if (sessionId && !selection.observer) yield* notifications.touched(sessionId);
     const running = sessionId ? yield* hosts.get(cwd, sessionId) : undefined;
     const view = running
       ? undefined

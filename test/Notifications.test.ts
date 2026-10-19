@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Deferred, Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { makeClientSessions } from "../server/ClientSessions.ts";
 import { ExeDevFetch } from "../server/ExeDev.ts";
 import {
   NotificationDelayMs,
@@ -47,7 +48,11 @@ function fixture(
     ),
     Layer.provide(Layer.succeed(AllowedOrigins, new Set(origins))),
   );
-  return { layer, discovery, dispose: () => rmSync(root, { recursive: true, force: true }) };
+  return {
+    layer,
+    discovery,
+    dispose: () => rmSync(root, { recursive: true, force: true }),
+  };
 }
 
 test("selection is opt-in, only Slack names are accepted, and one saved choice survives restart", async (t) => {
@@ -65,7 +70,10 @@ test("selection is opt-in, only Slack names are accepted, and one saved choice s
     runtime.runPromise(Effect.flatMap(Notifications, (n) => n.change({ action: "test" })));
   try {
     const initial = await runtime.runPromise(Effect.flatMap(Notifications, (n) => n.state()));
-    assert.deepEqual(initial, { integrations: ["second-slack", "slack-hook"], selected: null });
+    assert.deepEqual(initial, {
+      integrations: ["second-slack", "slack-hook"],
+      selected: null,
+    });
     await assert.rejects(sendTest(), /Select an available Slack integration/);
     for (const name of [
       "notify",
@@ -124,7 +132,10 @@ test("stored names match discovery case-insensitively; missing, failed and empty
       yield* registry.setNotificationIntegration("SLACK-HOOK");
       assert.equal((yield* n.state()).selected, "slack-hook");
       f.discovery.entries = [{ name: "slack-hook", type: "notify" }];
-      assert.deepEqual(yield* n.state(true), { integrations: [], selected: "SLACK-HOOK" });
+      assert.deepEqual(yield* n.state(true), {
+        integrations: [],
+        selected: "SLACK-HOOK",
+      });
       assert.match(
         (yield* n.change({ action: "test" }).pipe(Effect.flip)).detail,
         /available Slack/,
@@ -134,7 +145,10 @@ test("stored names match discovery case-insensitively; missing, failed and empty
       yield* Effect.yieldNow;
       assert.equal(sends, 0, "type changes also suppress automatic delivery");
       f.discovery.status = 503;
-      assert.deepEqual(yield* n.state(true), { integrations: null, selected: "SLACK-HOOK" });
+      assert.deepEqual(yield* n.state(true), {
+        integrations: null,
+        selected: "SLACK-HOOK",
+      });
       assert.equal((yield* n.change({ action: "select", name: null })).selected, null);
       assert.equal(yield* registry.notificationIntegration, null);
       assert.equal(sends, 0);
@@ -248,7 +262,9 @@ test("the pending limit includes initial delays, and replacement and cancellatio
       const n = yield* Notifications;
       yield* n.change({ action: "select", name: "slack-hook" });
       const sessions = Array.from({ length: 32 }, (_, i) => `session-${i}`);
-      yield* Effect.forEach(sessions, n.completed, { concurrency: "unbounded" });
+      yield* Effect.forEach(sessions, n.completed, {
+        concurrency: "unbounded",
+      });
       yield* n.completed("overflow");
       yield* n.completed("session-0");
       yield* n.touched("session-1");
@@ -327,7 +343,9 @@ test("a stalled test send is cancelled after five seconds without retrying", asy
     signal = init?.signal ?? undefined;
     Deferred.doneUnsafe(started, Effect.void);
     return await new Promise<Response>((_resolve, reject) =>
-      signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true }),
+      signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+        once: true,
+      }),
     );
   });
   t.after(f.dispose);
@@ -393,9 +411,9 @@ test("a completion waits a minute and is dropped when the session is acted on or
   );
 });
 
-test("through the session host, an action or an opened event stream during the wait drops the message", async (t) => {
+test("through the session host, a person opening or acting on the session during the wait drops the message; an observer does not", async (t) => {
   const texts: string[] = [];
-  const next = Deferred.makeUnsafe<void>();
+  let next = Deferred.makeUnsafe<void>();
   const f = await startRouter(
     "piano-notifications-wait-",
     Layer.mergeAll(
@@ -426,45 +444,65 @@ test("through the session host, an action or an opened event stream during the w
       Stream.take(1),
       Stream.runDrain,
     );
+  const complete = (session: PiSession) =>
+    f.run(
+      Effect.gen(function* () {
+        const settled = yield* Effect.forkChild(settle(session));
+        yield* session.act({ _tag: "prompt", text: "notification success" });
+        yield* Fiber.join(settled);
+      }),
+    );
+  // A client selects the session, as a browser does or, with `observer`, Piano's dispatch wait.
+  const open = (session: PiSession, observer?: boolean) =>
+    f.run(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* makeClientSessions({
+            send: () => Effect.void,
+            overflow: () => Effect.void,
+          });
+          yield* yield* client.select({
+            cwd: session.spec.cwd,
+            sessionId: session.spec.sessionId,
+            selectionId: crypto.randomUUID(),
+            observer,
+          });
+        }),
+      ),
+    );
   const session = await f.run(
-    Effect.gen(function* () {
-      const session = yield* (yield* SessionHosts).create({ cwd: f.repo, options: {} });
-      const settled = yield* Effect.forkChild(settle(session));
-      yield* session.act({ _tag: "prompt", text: "notification success" });
-      yield* Fiber.join(settled);
-      return session;
-    }),
+    SessionHosts.use((hosts) => hosts.create({ cwd: f.repo, options: {} })),
   );
-  // Opening the session (a new event subscription) half-way through the wait drops the message.
+  // Piano's dispatch observing the session (and re-selecting it) is not a person: the message
+  // goes out once the minute is up.
+  await complete(session);
   await f.run(TestClock.adjust(30_000));
-  await f.run(session.events.pipe(Stream.take(1), Stream.runDrain));
-  await f.run(TestClock.adjust(120_000));
-  assert.deepEqual(texts, []);
-  // An action during the wait drops it as well.
-  await f.run(
-    Effect.gen(function* () {
-      const settled = yield* Effect.forkChild(settle(session));
-      yield* session.act({ _tag: "prompt", text: "notification success" });
-      yield* Fiber.join(settled);
-    }),
-  );
+  await open(session, true);
+  await open(session, true);
   await f.run(TestClock.adjust(30_000));
-  await f.run(session.act({ _tag: "set_thinking_level", level: "low" }));
-  await f.run(TestClock.adjust(120_000));
-  assert.deepEqual(texts, []);
-  // Left alone, the message goes out once the minute is up.
-  await f.run(
-    Effect.gen(function* () {
-      const settled = yield* Effect.forkChild(settle(session));
-      yield* session.act({ _tag: "prompt", text: "notification success" });
-      yield* Fiber.join(settled);
+  await Promise.race([
+    f.run(Deferred.await(next)),
+    new Promise((_, reject) => {
+      const timer = setTimeout(() => reject(new Error("an observer dropped the message")), 5000);
+      timer.unref();
     }),
-  );
-  await f.run(TestClock.adjust(60_000));
-  await f.run(Deferred.await(next));
+  ]);
   assert.deepEqual(texts, [
     `Agent finished responding. https://piano.example.test/s/${session.spec.sessionId}`,
   ]);
+  // A person opening the session half-way through the wait drops the message.
+  next = Deferred.makeUnsafe<void>();
+  await complete(session);
+  await f.run(TestClock.adjust(30_000));
+  await open(session);
+  await f.run(TestClock.adjust(120_000));
+  assert.equal(texts.length, 1);
+  // An action during the wait drops it as well.
+  await complete(session);
+  await f.run(TestClock.adjust(30_000));
+  await f.run(session.act({ _tag: "set_thinking_level", level: "low" }));
+  await f.run(TestClock.adjust(120_000));
+  assert.equal(texts.length, 1);
 });
 
 test("server-owned completion sends one session link to the discovered selection without a browser", async (t) => {
@@ -513,7 +551,10 @@ test("server-owned completion sends one session link to the discovered selection
   }
   const sessionId = await f.run(
     Effect.gen(function* () {
-      const session = yield* (yield* SessionHosts).create({ cwd: f.repo, options: {} });
+      const session = yield* (yield* SessionHosts).create({
+        cwd: f.repo,
+        options: {},
+      });
       yield* session.act({ _tag: "prompt", text: "notification success" });
       return session.spec.sessionId;
     }),
