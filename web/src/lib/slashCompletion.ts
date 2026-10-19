@@ -5,6 +5,7 @@
  * events, keeps the returned state and performs the returned effect.
  */
 import type { SlashCommand } from "@shared/wire";
+import { isImeKey } from "./keys.ts";
 
 /** At most this many suggestions are offered at once. */
 export const MAX_SUGGESTIONS = 50;
@@ -225,9 +226,7 @@ export function slashKeyDown(
   key: SlashKey,
   count: number,
 ): { state: SlashState; effect: SlashEffect } {
-  // keyCode 229 is a key the IME is processing, which some browsers report without isComposing.
-  if (state.composing || key.isComposing || key.keyCode === 229)
-    return { state, effect: { type: "ignore" } };
+  if (state.composing || isImeKey(key)) return { state, effect: { type: "ignore" } };
   const token = commandToken(view.value, state.accepted);
   if (
     token &&

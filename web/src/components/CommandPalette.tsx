@@ -24,7 +24,7 @@ import {
 } from "@/components/PianoCommand";
 import { createPaletteCatalog } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
-import { hasMod } from "@/lib/keys";
+import { hasMod, isImeKey } from "@/lib/keys";
 import { PALETTE_PAGE_SIZE, type PalettePage, paletteSelection } from "@/lib/paletteSearch";
 import { sessionContext } from "@/lib/sessionContext";
 import { openLink } from "@/lib/sessionLinks";
@@ -232,8 +232,7 @@ const PaletteInput = memo(function PaletteInput({
         if (pending && ["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key))
           event.preventDefault();
         if (event.key !== "Enter") return;
-        if (event.nativeEvent.isComposing || composing.current || event.repeat)
-          event.preventDefault();
+        if (isImeKey(event) || composing.current || event.repeat) event.preventDefault();
         else if (pending) {
           event.preventDefault();
           clearTimeout(timer.current);

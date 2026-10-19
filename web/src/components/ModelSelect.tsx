@@ -16,6 +16,7 @@ import { Popover, PopoverTrigger } from "@/components/PianoPopover";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { isImeKey } from "@/lib/keys";
 import type { ModelCatalogView } from "@/lib/modelCatalogs";
 import { modelPickerView } from "@/lib/modelPicker";
 import { footerPicker, footerPickerMenu } from "@/lib/styles";
@@ -178,8 +179,7 @@ export function ModelSelect({
             event.ctrlKey ||
             event.altKey ||
             event.shiftKey ||
-            event.nativeEvent.isComposing ||
-            event.nativeEvent.keyCode === 229
+            isImeKey(event)
           )
             return;
           const input = search.current;
@@ -190,7 +190,7 @@ export function ModelSelect({
           input.select();
         }}
         onEscapeKeyDown={(event) => {
-          if (event.isComposing || event.keyCode === 229) {
+          if (isImeKey(event)) {
             event.preventDefault();
             return;
           }
@@ -209,13 +209,7 @@ export function ModelSelect({
           shouldFilter={false}
           onKeyDown={(event) => {
             // cmdk already ignores IME; holding Enter must not accept a second model.
-            if (
-              event.key === "Enter" &&
-              event.repeat &&
-              !event.nativeEvent.isComposing &&
-              event.nativeEvent.keyCode !== 229
-            )
-              event.preventDefault();
+            if (event.key === "Enter" && event.repeat && !isImeKey(event)) event.preventDefault();
           }}
         >
           <PickerSearch
