@@ -87,7 +87,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
+      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
     );
   } finally {
     legacy.close();
@@ -96,7 +96,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 6);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 7);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -211,9 +211,7 @@ test("version-3 sharing migration preserves sessions; Radius destinations surviv
   const before = (await f.get()).sessions[0]!;
   const legacy = new DatabaseSync(f.dbPath);
   try {
-    legacy.exec(
-      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN radius_share; PRAGMA user_version = 3;",
-    );
+    legacy.exec("ALTER TABLE sessions DROP COLUMN radius_share; PRAGMA user_version = 3;");
   } finally {
     legacy.close();
   }
@@ -330,148 +328,52 @@ test("INV-01/07: a session link is set only on the same reference, not archived 
   );
 });
 
-for (const { label, urls, selected } of [
-  { label: "empty", urls: [], selected: null },
-  { label: "one URL", urls: ["https://slack-hook.int.exe.xyz/"], selected: "slack-hook" },
-  {
-    label: "first legacy URL",
-    urls: ["HTTPS://Slack-Hook.INT.EXE.XYZ", "https://second-slack.int.exe.xyz/"],
-    selected: "slack-hook",
-  },
-])
-  test(`version-5 notification migration stores only the integration name: ${label}`, async (t) => {
+for (const version of [4, 5, 6]) {
+  test(`INV-01: version-${version} migration retires notification stores and preserves unrelated data`, async (t) => {
     const f = fixture(t);
     await f.run(
-      Effect.flatMap(Registry, (r) =>
-        r.addSession(join(f.root, "folder"), "one", "Retained session"),
-      ),
+      Effect.gen(function* () {
+        const registry = yield* Registry;
+        yield* registry.addSession(join(f.root, "folder"), "one", "Retained session");
+        yield* registry.pinSession(join(f.root, "folder"), "one", true);
+      }),
     );
     const before = await f.get();
     const legacy = new DatabaseSync(f.dbPath);
     try {
-      legacy.exec(
-        "DROP TABLE notification_settings; CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT; PRAGMA user_version = 5;",
-      );
-      for (const url of urls)
-        legacy.prepare("INSERT INTO notification_webhooks VALUES (?)").run(url);
+      if (version === 5) {
+        legacy.exec("CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT;");
+        // Retired preferences must not block an upgrade, even when malformed.
+        legacy.prepare("INSERT INTO notification_webhooks VALUES (?)").run("invalid old URL");
+      }
+      if (version === 6) {
+        legacy.exec(
+          "CREATE TABLE notification_settings (id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1), integration_name TEXT NOT NULL) STRICT;",
+        );
+        legacy.prepare("INSERT INTO notification_settings VALUES (1, ?)").run("old-destination");
+      }
+      legacy.exec(`PRAGMA user_version = ${version}`);
     } finally {
       legacy.close();
     }
-    assert.equal(await f.run(Effect.flatMap(Registry, (r) => r.notificationIntegration)), selected);
-    assert.deepEqual(
-      await f.get(),
-      before,
-      "migration and repeated reopen preserve session metadata",
-    );
+    assert.deepEqual(await f.get(), before);
+    assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 6);
-      assert.equal(
-        stored.prepare("SELECT name FROM sqlite_master WHERE name = 'notification_webhooks'").get(),
-        undefined,
-      );
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 7);
       assert.deepEqual(
         stored
-          .prepare("SELECT * FROM notification_settings")
-          .all()
-          .map((row) => ({ ...row })),
-        selected ? [{ id: 1, integration_name: selected }] : [],
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE name IN ('notification_webhooks', 'notification_settings')",
+          )
+          .all(),
+        [],
       );
     } finally {
       stored.close();
     }
-    await f.run(
-      Effect.gen(function* () {
-        const registry = yield* Registry;
-        yield* registry.setNotificationIntegration("replacement");
-        yield* registry
-          .setNotificationIntegration("https://invalid.int.exe.xyz/")
-          .pipe(Effect.flip);
-        assert.equal(
-          yield* registry.notificationIntegration,
-          "replacement",
-          "failed replacement rolls back its deletion",
-        );
-      }),
-    );
-    assert.equal(
-      await f.run(Effect.flatMap(Registry, (r) => r.notificationIntegration)),
-      "replacement",
-    );
-    await f.run(Effect.flatMap(Registry, (r) => r.setNotificationIntegration(null)));
-    assert.equal(await f.run(Effect.flatMap(Registry, (r) => r.notificationIntegration)), null);
-  });
-
-for (const url of [
-  "https://slack-hook.int.exe.xyz/?token=secret",
-  "http://slack-hook.int.exe.xyz/",
-  "https://-bad.int.exe.xyz/",
-]) {
-  test(`invalid legacy notification URL refuses migration without losing preferences: ${url}`, async (t) => {
-    const f = fixture(t);
-    await f.get();
-    const legacy = new DatabaseSync(f.dbPath);
-    try {
-      legacy.exec(
-        "DROP TABLE notification_settings; CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT; PRAGMA user_version = 5;",
-      );
-      legacy.prepare("INSERT INTO notification_webhooks VALUES (?)").run(url);
-      legacy
-        .prepare("INSERT INTO notification_webhooks VALUES (?)")
-        .run("https://second.int.exe.xyz/");
-    } finally {
-      legacy.close();
-    }
-    await assert.rejects(f.get(), (error: Error) => {
-      assert.match(error.message, /Cannot migrate the saved Slack integration/);
-      assert.equal(
-        error.message.includes(url),
-        false,
-        "the legacy URL is not echoed into diagnostics",
-      );
-      return true;
-    });
-    const unchanged = new DatabaseSync(f.dbPath, { readOnly: true });
-    try {
-      assert.equal(unchanged.prepare("PRAGMA user_version").get()!.user_version, 5);
-      assert.deepEqual(
-        unchanged
-          .prepare("SELECT url FROM notification_webhooks ORDER BY rowid")
-          .all()
-          .map((row) => row.url),
-        [url, "https://second.int.exe.xyz/"],
-      );
-      assert.equal(
-        unchanged
-          .prepare("SELECT name FROM sqlite_master WHERE name = 'notification_settings'")
-          .get(),
-        undefined,
-      );
-    } finally {
-      unchanged.close();
-    }
   });
 }
-
-test("version-4 migration adds empty notification preferences without changing session metadata", async (t) => {
-  const f = fixture(t);
-  const before = await f.get();
-  const legacy = new DatabaseSync(f.dbPath);
-  legacy.exec("DROP TABLE notification_settings; PRAGMA user_version = 4;");
-  legacy.close();
-  await f.run(
-    Effect.gen(function* () {
-      const registry = yield* Registry;
-      assert.equal(yield* registry.notificationIntegration, null);
-      yield* registry.setNotificationIntegration("slack-hook");
-    }),
-  );
-  assert.deepEqual(await f.get(), before);
-  assert.equal(
-    await f.run(Effect.flatMap(Registry, (r) => r.notificationIntegration)),
-    "slack-hook",
-  );
-});
 
 test("INV-01: version-2 sessions start unpinned; pins persist without changing history metadata or activity", async (t) => {
   const f = fixture(t),
@@ -484,7 +386,7 @@ test("INV-01: version-2 sessions start unpinned; pins persist without changing h
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "DROP TABLE notification_settings; ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;",
+      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;",
     );
   } finally {
     legacy.close();

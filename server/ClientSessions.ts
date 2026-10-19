@@ -4,10 +4,6 @@
  * retire. Each request runs its SessionHosts step and delivers its results (`action_result`,
  * toasts) to this client through its output.
  *
- * It alone decides a person's presence (`Notifications.touched`), which drops a session's pending
- * completion message: showing a session to a person (not an observer), acting on, renaming,
- * archiving or deleting it. Pi's own events and SessionHosts' internal actions are not presence.
- *
  * Selections are claimed in receive order, so a slow lookup for an older selection never shows
  * or acts on a newer one. Attaching delivers the snapshot, then contiguous frames (INV-05), and
  * returns only once the snapshot is delivered, so a fast first prompt is observed. Only `create`
@@ -19,7 +15,6 @@ import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Attachment, ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
-import { Notifications } from "./Notifications.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
 import type { RegistryError, RegistryLookupError } from "./Registry.ts";
 import { type CreateSpec, SessionHosts } from "./SessionHosts.ts";
@@ -37,8 +32,6 @@ export interface Selection {
   /** `null` is a new session that is not created yet. */
   readonly sessionId: string | null;
   readonly selectionId: string;
-  /** Piano's dispatch tool watching a session, not a person opening it. */
-  readonly observer?: boolean;
 }
 
 /** Where one client's messages go. */
@@ -101,7 +94,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   output: ClientOutput,
 ) {
   const hosts = yield* SessionHosts;
-  const notifications = yield* Notifications;
   const { send } = output;
   let selected: Selection | null = null;
   let attachment: { session: PiSession; scope: Scope.Closeable; selectionId: string } | null = null;
@@ -184,8 +176,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
 
   const show = Effect.fn("ClientSessions.show")(function* (selection: Selection) {
     const { cwd, sessionId, selectionId } = selection;
-    // A person opening the session is here: a completion message waiting for it is dropped.
-    if (sessionId && !selection.observer) yield* notifications.touched(sessionId);
     const view = sessionId
       ? yield* hosts.read(cwd, sessionId)
       : { _tag: "saved" as const, cwd, snapshot: emptySnapshot("") };
@@ -254,8 +244,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     start?: StartOptions,
   ) {
     const session = yield* target(selectionId, start);
-    // Any action means the person is here.
-    yield* notifications.touched(session.spec.sessionId);
     const result = yield* session.act(action);
     if (result)
       yield* send({
@@ -280,8 +268,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       ),
     );
     yield* mode === "delete" ? hosts.delete(cwd, sessionId) : hosts.archive(cwd, sessionId);
-    // A retired session's link opens nothing to act on.
-    yield* notifications.touched(sessionId);
     if (selected?.cwd === cwd && selected.sessionId === sessionId) {
       const selectionId = selected.selectionId;
       selected = null;
@@ -299,16 +285,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
   });
 
-  const rename = Effect.fn("ClientSessions.rename")(function* (
-    cwd: string,
-    sessionId: string,
-    title: string,
-  ) {
-    yield* notifications.touched(sessionId);
-    return yield* hosts.rename(cwd, sessionId, title);
-  });
-
-  // Caller has claimed the new-session selection. A new session has no pending message.
+  // Caller has claimed the new-session selection.
   const create = Effect.fn("ClientSessions.create")(function* (
     selectionId: string,
     { text, attachments, ...spec }: CreateSessionRequest,
@@ -329,7 +306,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         Effect.as(create(selectionId, request)),
       ),
     act,
-    rename,
+    rename: hosts.rename,
     retire,
   } satisfies ClientSessions as ClientSessions;
 });

@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createObservation, type Observation } from "./observation.ts";
 
-export interface UseObservationOptions<T> {
+export interface UseObservationOptions {
   /** `false` keeps the value but stops reading; becoming `true` reads afresh. Default `true`. */
   enabled?: boolean;
   /** Read again when the window regains focus. Fixed for the component's lifetime. */
   focus?: boolean;
-  interval?: (value: T | undefined) => number | undefined;
   /** Any change reads again after `debounce` milliseconds (default 0), coalescing quick changes. */
   trigger?: unknown;
   debounce?: number;
@@ -19,14 +18,13 @@ export interface UseObservationOptions<T> {
 export function useObservation<T>(
   key: string | null,
   load: (signal: AbortSignal, key: string) => Promise<T>,
-  options: UseObservationOptions<T> = {},
+  options: UseObservationOptions = {},
 ) {
-  const latest = useRef({ load, interval: options.interval });
-  latest.current = { load, interval: options.interval };
+  const latest = useRef(load);
+  latest.current = load;
   const [observation] = useState<Observation<T>>(() =>
     createObservation<T>({
-      load: (signal, k) => latest.current.load(signal, k),
-      interval: (value) => latest.current.interval?.(value),
+      load: (signal, k) => latest.current(signal, k),
       focus: options.focus,
     }),
   );

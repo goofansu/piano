@@ -32,13 +32,6 @@ const ctx: GlobalCommandContext = {
 const labels = (state: AppState, c = ctx) =>
   globalCommands(state, c).map((command) => command.label);
 
-test("Integrations is offered only after exe.dev detection, under no other name", () => {
-  assert.equal(labels(onNewPage).includes("Integrations"), false);
-  const detected = labels(onNewPage, { ...ctx, exeDetected: true });
-  assert.equal(detected.includes("Integrations"), true);
-  for (const old of ["exe.dev", "Notifications"]) assert.equal(detected.includes(old), false);
-});
-
 test("trust is offered only where Pi requires it, and waits for a connection", () => {
   assert.equal(
     trustCommand(onNewPage, "/plain"),

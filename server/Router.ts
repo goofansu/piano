@@ -12,10 +12,8 @@ import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
-import { ExeDev } from "./ExeDev.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
-import { Notifications } from "./Notifications.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
@@ -290,13 +288,6 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(RadiusSetup, (setup) => setup.change(body)).pipe(
         Effect.map((state) => ({ state })),
       ),
-    );
-
-    yield* serve(Endpoints.exeDevEnvironment, () =>
-      Effect.flatMap(ExeDev, (exe) => exe.detected).pipe(Effect.map((detected) => ({ detected }))),
-    );
-    yield* serve(Endpoints.changeIntegrationsSettings, ({ body }) =>
-      Effect.flatMap(Notifications, (notifications) => notifications.change(body)),
     );
 
     yield* serve(Endpoints.mcpSetup, () =>

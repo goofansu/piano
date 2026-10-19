@@ -203,10 +203,6 @@ export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
-    readonly notificationIntegration: Effect.Effect<string | null, RegistryError>;
-    readonly setNotificationIntegration: (
-      name: string | null,
-    ) => Effect.Effect<void, RegistryError>;
     /**
      * Hear about every write that changes the data, for the listener's scope. The writer
      * waits for its listeners, so whatever they publish is out before the write returns;
@@ -370,20 +366,6 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       get: Ref.get(state),
-      notificationIntegration: Effect.try({
-        try: () => database.notificationIntegration(),
-        catch: (e) => recovery(path, e),
-      }),
-      setNotificationIntegration: (name) =>
-        Semaphore.withPermits(
-          lock,
-          1,
-        )(
-          Effect.try({
-            try: () => database.setNotificationIntegration(name),
-            catch: (e) => recovery(path, e),
-          }),
-        ),
       onChange: (listener) =>
         Effect.acquireRelease(
           Effect.sync(() => {
