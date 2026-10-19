@@ -59,8 +59,8 @@ const refused = {
   not_running: "Session is not running; start it first.",
   no_session: "No session is selected. Create a session before sending to it.",
 } as const;
-const refuse = (reason: ActRefused["reason"]) =>
-  Effect.fail(new ActRefused({ reason, detail: refused[reason] }));
+const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) =>
+  Effect.fail(new ActRefused({ reason, detail }));
 
 export interface ClientSessions {
   /** Claims the selection at once; the returned effect loads it and shows it if it is still current. */
@@ -74,7 +74,8 @@ export interface ClientSessions {
   ) => Effect.Effect<Effect.Effect<void, PiSessionError | RegistryError | RegistryLookupError>>;
   /**
    * Sends `action` to the selected session, starting it with `start` when it is not running,
-   * and delivers any `action_result`. Never creates a session.
+   * and delivers any `action_result`. Never creates a session. Reuse the current select or
+   * create selectionId; a new request id is refused as stale, even for the same hosted session.
    */
   readonly act: (
     selectionId: string,
@@ -223,7 +224,11 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const target = (selectionId: string, start: StartOptions | undefined) =>
     navigate(
       Effect.gen(function* () {
-        if (!selected || selected.selectionId !== selectionId) return yield* refuse("stale");
+        if (!selected || selected.selectionId !== selectionId)
+          return yield* refuse(
+            "stale",
+            `${refused.stale} selected.selectionId=${JSON.stringify(selected?.selectionId ?? null)}; act.selectionId=${JSON.stringify(selectionId)}. Reuse the selectionId from the current select or create_session; do not mint a new id for act.`,
+          );
         if (attachment?.selectionId === selectionId)
           return yield* applyChoices(attachment.session, start);
         const { cwd, sessionId } = selected;

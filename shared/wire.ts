@@ -840,7 +840,12 @@ export const ClientMessage = Schema.Union([
     text: Schema.optional(Schema.String),
     attachments: attachmentInput,
   }),
-  /** Act on the selected session. `start` starts a stopped Pi, or applies draft model/effort choices before acting on a running Pi. */
+  /**
+   * Act on the selected session. Reuse the selectionId from the current select or create_session
+   * on this connection (echoed by selected); it is a selection claim, not a per-action request id.
+   * A different id is refused as stale even when the same session is still hosted.
+   * `start: {}` restarts a stopped Pi; start options also apply draft model/effort choices to a running Pi.
+   */
   Schema.TaggedStruct("act", {
     selectionId: Schema.String,
     action: SessionAction,

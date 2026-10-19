@@ -211,6 +211,39 @@ test("acting for a selection that was replaced is refused as stale and reaches n
   );
 });
 
+test("INV-05: act reuses the selection claim, not a fresh request id", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { sessions, sent, next } = yield* client;
+      const missing = yield* Effect.flip(sessions.act("fresh-act", restoreQueue, {}));
+      assert.ok(missing._tag === "ActRefused" && missing.reason === "stale");
+
+      const session = yield* started();
+      yield* yield* sessions.select({
+        cwd,
+        sessionId: session.spec.sessionId,
+        selectionId: "selected-claim",
+      });
+      const selected = yield* next((m) => m._tag === "selected");
+      assert.ok(selected._tag === "selected" && selected.hosted);
+      const mismatch = yield* Effect.flip(sessions.act("fresh-act", restoreQueue, {}));
+      assert.ok(mismatch._tag === "ActRefused" && mismatch.reason === "stale");
+      assert.match(mismatch.detail, /selected\.selectionId="selected-claim"/);
+      assert.match(mismatch.detail, /act\.selectionId="fresh-act"/);
+      assert.match(
+        mismatch.detail,
+        /Reuse the selectionId from the current select or create_session/,
+      );
+      assert.deepEqual(resultFor(sent), [], "the mismatched action never reached Pi");
+
+      yield* sessions.act(selected.selectionId, restoreQueue);
+      assert.deepEqual(resultFor(sent), [session.spec.sessionId]);
+      assert.match(missing.detail, /selected\.selectionId=null/);
+      assert.match(missing.detail, /act\.selectionId="fresh-act"/);
+    }),
+  );
+});
+
 test("INV-01/02: acting on a new-session selection is refused; only create makes a session", async () => {
   await run(
     Effect.gen(function* () {
