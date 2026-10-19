@@ -7,6 +7,7 @@ import { defaultFilter } from "cmdk";
 import type { AppState } from "../store.ts";
 import { abbrevHome } from "./format.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
+import type { ProjectCommand, SessionProjectMenu } from "./projectCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import type { SessionCommand } from "./sessionCommands.ts";
 import { displayPath, type SessionFile, splitPath } from "./sessionFiles.ts";
@@ -61,7 +62,9 @@ export interface PaletteSessionRow {
   session: Pick<SessionEntry, "cwd" | "sessionId">;
 }
 
-export interface PaletteCommandRow<C extends GlobalCommand | SessionCommand> {
+type PaletteCommand = GlobalCommand | SessionCommand | ProjectCommand;
+
+export interface PaletteCommandRow<C extends PaletteCommand> {
   key: string;
   value: string;
   keywords: string[] | undefined;
@@ -71,6 +74,8 @@ export interface PaletteCommandRow<C extends GlobalCommand | SessionCommand> {
   /** The current choice of its kind (appearance, grouping, sort, session display). */
   checked: boolean;
   enabled: boolean;
+  /** Left out of the list before a search, as one of an unbounded set (a project destination). */
+  searchOnly?: boolean;
   command: C;
 }
 
@@ -98,7 +103,11 @@ export interface PaletteFileRow {
 export type PaletteGroup =
   | { id: "sessions"; heading: "Recent sessions" | "Sessions"; rows: PaletteSessionRow[] }
   | { id: "global"; heading: "Global commands"; rows: PaletteCommandRow<GlobalCommand>[] }
-  | { id: "session"; heading: "Session commands"; rows: PaletteCommandRow<SessionCommand>[] }
+  | {
+      id: "session";
+      heading: "Session commands";
+      rows: PaletteCommandRow<SessionCommand | ProjectCommand>[];
+    }
   /** The selected session's web links, each opened in a new tab. */
   /** The files the selected session wrote or edited, each opened in the file viewer. */
   | { id: "files"; heading: "Files"; rows: PaletteFileRow[] }
@@ -109,6 +118,8 @@ export interface PaletteInput {
   globalCommands: readonly GlobalCommand[];
   /** The selected session's commands. */
   sessionCommands: readonly SessionCommand[];
+  /** The selected session's project membership, as its header menu offers it. */
+  sessionProject?: SessionProjectMenu;
   /** The files the selected session wrote, in conversation order, as `useSessionFiles` resolves them. */
   files: readonly SessionFile[];
 }
@@ -169,17 +180,48 @@ function fileRow(file: SessionFile, cwd: string | undefined): PaletteFileRow {
   };
 }
 
-function commandRow<C extends GlobalCommand | SessionCommand>(c: C): PaletteCommandRow<C> {
+function commandRow<C extends PaletteCommand>(c: C, key: string = c.id): PaletteCommandRow<C> {
   return {
-    key: c.id,
+    key,
     value: c.label,
-    keywords: c.keywords ? [...c.keywords] : undefined,
+    keywords: "keywords" in c && c.keywords ? [...c.keywords] : undefined,
     label: c.label,
     detail: "detail" in c ? c.detail : undefined,
-    checked: !!c.checked,
+    checked: "checked" in c && !!c.checked,
     enabled: c.enabled,
     command: c,
   };
+}
+
+/**
+ * The membership rows, named as the header menu's buttons: the picker's entry and the choice
+ * ("Move to project: Billing"), and Remove from project. Projects are unbounded, so before a search
+ * New project stands for the picker and the destinations wait for a search.
+ */
+function projectRows(menu: SessionProjectMenu): PaletteCommandRow<ProjectCommand>[] {
+  const choice = (command: ProjectCommand, name: string) => ({
+    ...command,
+    label: `${menu.entry.label}: ${name}`,
+  });
+  return [
+    commandRow(choice(menu.create, menu.create.label), "project:new"),
+    ...menu.destinations.map((d) => ({
+      ...commandRow(choice(d.command, d.project.name), `project:${d.project.id}`),
+      searchOnly: true,
+    })),
+    ...(menu.remove ? [commandRow(menu.remove, "project:remove")] : []),
+  ];
+}
+
+/** Session commands with the membership rows after the manage commands, where the header menu has them. */
+function sessionRows(input: PaletteInput): PaletteCommandRow<SessionCommand | ProjectCommand>[] {
+  const rows: PaletteCommandRow<SessionCommand | ProjectCommand>[] = input.sessionCommands.map(
+    (c) => commandRow(c),
+  );
+  if (!input.sessionProject) return rows;
+  const at = rows.findIndex((r) => r.key === "archive");
+  rows.splice(at < 0 ? rows.length : at, 0, ...projectRows(input.sessionProject));
+  return rows;
 }
 
 /**
@@ -204,13 +246,13 @@ export function commandPalette(
   groups.push({
     id: "global",
     heading: "Global commands",
-    rows: input.globalCommands.map(commandRow),
+    rows: input.globalCommands.map((c) => commandRow(c)),
   });
   if (state.view.kind === "session" && state.session) {
     groups.push({
       id: "session",
       heading: "Session commands",
-      rows: input.sessionCommands.map(commandRow),
+      rows: sessionRows(input),
     });
     // Newest first, like Recent sessions; the popovers keep conversation order.
     const files = [...input.files].reverse();

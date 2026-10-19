@@ -1,12 +1,14 @@
 /**
  * Project policy for the client, described once: which projects a picker offers, what a project's
  * row offers (each command with whether it is available now and what running it means), creating a
- * project and moving a session between projects, and whether a session can start in a project. The
- * sidebar, the session's Project menu and the New session page render these and hand them to the
- * one command host instead of each deciding.
+ * project and moving a session between projects (`sessionProjectMenu`), and whether a session can
+ * start in a project. The sidebar, the session's Project menu, the phone sheet, the command palette
+ * and the New session page render these and hand them to the one command host instead of each
+ * deciding.
  */
 import type { ClientCommand, Project } from "@shared/wire";
 import type { AppState } from "../store.ts";
+import { sessionProject } from "./sessionContext.ts";
 import { byName } from "./sidebarView.ts";
 
 /** The one project lookup by ID. An unknown or missing ID has no project. */
@@ -52,7 +54,7 @@ export type ProjectCommandId =
   | "new-project"
   | "assign";
 
-export type ProjectCommandIcon = "new" | "edit" | "archive" | "unarchive" | "project";
+export type ProjectCommandIcon = "new" | "edit" | "archive" | "unarchive" | "folder" | "remove";
 
 export type ProjectCommandIntent =
   /** Open the New session page as the project's home; it sends nothing. */
@@ -144,7 +146,7 @@ export function assignProjectCommand(
   return {
     id: "assign",
     label: findProject(state, projectId)?.name ?? "None",
-    icon: "project",
+    icon: projectId ? "folder" : "remove",
     enabled: state.connected,
     intent: {
       kind: "send",
@@ -155,5 +157,45 @@ export function assignProjectCommand(
         projectId,
       },
     },
+  };
+}
+
+/** A project a session can move to, with the command that moves it there. */
+export interface ProjectDestination {
+  project: Project;
+  command: ProjectCommand;
+}
+
+/**
+ * A session's project membership as its menus offer it: the current project named, an entry that
+ * opens the picker ("Move to project" for a member, "Add to project" otherwise), New project and
+ * the destinations inside it, and Remove from project for a member. Every row changes the
+ * registry, so one rule enables them all: connected. The entry follows it, so a disconnected menu
+ * offers a disabled entry rather than a pane of disabled rows.
+ */
+export interface SessionProjectMenu {
+  current: Project | undefined;
+  entry: { label: "Move to project" | "Add to project"; enabled: boolean };
+  /** New project, which files the session in the project it creates. */
+  create: ProjectCommand;
+  /** Active projects other than the current one, by name. */
+  destinations: ProjectDestination[];
+  remove: ProjectCommand | undefined;
+}
+
+export function sessionProjectMenu(state: AppState, session: SessionRef): SessionProjectMenu {
+  const ref = { cwd: session.cwd, sessionId: session.sessionId };
+  const current = sessionProject(state, ref);
+  return {
+    current,
+    entry: { label: current ? "Move to project" : "Add to project", enabled: state.connected },
+    create: newProjectCommand(state, ref),
+    destinations: projectDestinations(state, current, { keepCurrent: false }).map((project) => ({
+      project,
+      command: assignProjectCommand(state, ref, project.id),
+    })),
+    remove: current
+      ? { ...assignProjectCommand(state, ref, null), label: "Remove from project" }
+      : undefined,
   };
 }

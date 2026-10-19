@@ -8,7 +8,6 @@ import {
   type LucideIcon,
   PencilIcon,
   PlusIcon,
-  TargetIcon,
 } from "lucide-react";
 import { useRef } from "react";
 import {
@@ -30,24 +29,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  assignProjectCommand,
-  newProjectCommand,
-  type ProjectCommand,
-  type ProjectCommandIcon,
-  type ProjectDialog,
-  projectDestinations,
+import type {
+  ProjectCommand,
+  ProjectCommandIcon,
+  ProjectDialog,
+  SessionProjectMenu,
 } from "@/lib/projectCommands";
-import type { SessionTarget } from "@/lib/sessionCommands";
-import { sessionProject } from "@/lib/sessionContext";
-import type { AppState } from "@/store";
 
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: PlusIcon,
   edit: PencilIcon,
   archive: ArchiveIcon,
   unarchive: ArchiveRestoreIcon,
-  project: TargetIcon,
+  folder: FolderIcon,
+  remove: FolderMinusIcon,
 };
 
 /** A project command's icon, wherever its command is offered. */
@@ -57,21 +52,19 @@ export function ProjectCommandIconView({ icon }: { icon: ProjectCommandIcon }) {
 }
 
 /**
- * Shared destination rows for the composer menu and sidebar submenu. `disabled` is for a pick that
- * sends a registry change; the New page's pick only chooses locally.
+ * Shared destination rows for the composer menu and sidebar submenu. A destination with a `command`
+ * sends a registry change and is enabled as that command is; the New page's pick only chooses locally.
  */
-export function ProjectDestinationItems({
+export function ProjectDestinationItems<D extends { project: Project; command?: ProjectCommand }>({
   create,
-  projects,
-  disabled = false,
+  destinations,
   onCreate,
   onPick,
 }: {
   create: ProjectCommand;
-  projects: readonly Project[];
-  disabled?: boolean;
+  destinations: readonly D[];
   onCreate: () => void;
-  onPick: (id: string) => void;
+  onPick: (destination: D) => void;
 }) {
   return (
     <>
@@ -80,16 +73,20 @@ export function ProjectDestinationItems({
           <ProjectCommandIconView icon={create.icon} /> {create.label}…
         </DropdownMenuItem>
       </DropdownMenuGroup>
-      {projects.length > 0 && (
+      {destinations.length > 0 && (
         <>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            {projects.map((p) => (
-              <DropdownMenuItem key={p.id} disabled={disabled} onSelect={() => onPick(p.id)}>
+            {destinations.map((d) => (
+              <DropdownMenuItem
+                key={d.project.id}
+                disabled={d.command ? !d.command.enabled : false}
+                onSelect={() => onPick(d)}
+              >
                 <FolderIcon />
                 <span className="truncate">
-                  {p.name}
-                  {p.archived && " · Archived"}
+                  {d.project.name}
+                  {d.project.archived && " · Archived"}
                 </span>
               </DropdownMenuItem>
             ))}
@@ -101,22 +98,18 @@ export function ProjectDestinationItems({
 }
 
 /**
- * A session's project rows for a menu: the current membership named, the destinations in a
- * submenu, and removal. "New project…" creates a destination and files the session in it without
- * changing execution. `run` is the command host's runner.
+ * A session's project rows for a menu, from `sessionProjectMenu`: the current membership named, the
+ * destinations in a submenu, and removal. "New project…" creates a destination and files the session
+ * in it without changing execution. `run` is the command host's runner.
  */
 export function ProjectMenu({
-  state,
-  session,
+  menu,
   run,
 }: {
-  state: AppState;
-  session: SessionTarget;
+  menu: SessionProjectMenu;
   run: (command: ProjectCommand) => void;
 }) {
-  const current = sessionProject(state, session);
-  const destinations = projectDestinations(state, current, { keepCurrent: false });
-  const create = newProjectCommand(state, session);
+  const { current, entry, create, remove } = menu;
   return (
     <>
       {current && (
@@ -126,25 +119,21 @@ export function ProjectMenu({
         </DropdownMenuLabel>
       )}
       <DropdownMenuSub>
-        <DropdownMenuSubTrigger disabled={!create.enabled}>
-          <FolderInputIcon /> {current ? "Move to project" : "Add to project"}
+        <DropdownMenuSubTrigger disabled={!entry.enabled}>
+          <FolderInputIcon /> {entry.label}
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
           <ProjectDestinationItems
             create={create}
-            projects={destinations}
-            disabled={!state.connected}
+            destinations={menu.destinations}
             onCreate={() => run(create)}
-            onPick={(id) => run(assignProjectCommand(state, session, id))}
+            onPick={(d) => run(d.command)}
           />
         </DropdownMenuSubContent>
       </DropdownMenuSub>
-      {current && (
-        <DropdownMenuItem
-          disabled={!state.connected}
-          onSelect={() => run(assignProjectCommand(state, session, null))}
-        >
-          <FolderMinusIcon /> Remove from project
+      {remove && (
+        <DropdownMenuItem disabled={!remove.enabled} onSelect={() => run(remove)}>
+          <ProjectCommandIconView icon={remove.icon} /> {remove.label}
         </DropdownMenuItem>
       )}
     </>

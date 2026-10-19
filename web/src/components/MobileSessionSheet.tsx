@@ -1,13 +1,12 @@
 import { cn } from "cn";
-import {
-  ArrowLeftIcon,
-  ChevronRightIcon,
-  FolderIcon,
-  FolderInputIcon,
-  FolderMinusIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, ChevronRightIcon, FolderInputIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
-import { CommandIcon, useCommands, useSessionCommands } from "@/components/CommandHost";
+import {
+  CommandIcon,
+  useCommands,
+  useSessionCommands,
+  useSessionProjectMenu,
+} from "@/components/CommandHost";
 import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
 import { Button } from "@/components/ui/button";
@@ -15,11 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
-import {
-  assignProjectCommand,
-  newProjectCommand,
-  projectDestinations,
-} from "@/lib/projectCommands";
+import type { ProjectCommand } from "@/lib/projectCommands";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 
@@ -83,6 +78,30 @@ function SessionCommandRow({
   );
 }
 
+/** A project command as a sheet row, by its icon and label unless `children` names it. */
+function ProjectCommandRow({
+  command,
+  run,
+  children,
+}: {
+  command: ProjectCommand;
+  run: (command: ProjectCommand) => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <SheetClose asChild>
+      <Button
+        variant="ghost"
+        className={row}
+        disabled={!command.enabled}
+        onClick={() => run(command)}
+      >
+        <ProjectCommandIconView icon={command.icon} /> {children ?? command.label}
+      </Button>
+    </SheetClose>
+  );
+}
+
 /**
  * The phone session menu: a bottom sheet with every action on one level, the details and their
  * copy button on top as the desktop menu has them. Only the project picker pushes a second pane.
@@ -90,7 +109,8 @@ function SessionCommandRow({
 export function MobileSessionSheet() {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
-  const { project, sessionId } = sessionContext(state);
+  const { sessionId } = sessionContext(state);
+  const projects = useSessionProjectMenu();
   const session = state.session;
   const [page, setPage] = useState<Page>("actions");
   const pane = useRef<HTMLDivElement>(null);
@@ -106,11 +126,6 @@ export function MobileSessionSheet() {
   const { display } = menu;
   const rows = (section: SessionCommand[]) =>
     section.map((c) => <SessionCommandRow key={c.id} command={c} run={run} />);
-  const target = session?.sessionId
-    ? { cwd: session.cwd, sessionId: session.sessionId }
-    : undefined;
-  const create = newProjectCommand(state, target);
-  const projectLabel = project ? "Move to project" : "Add to project";
 
   return (
     <SheetContent
@@ -144,9 +159,14 @@ export function MobileSessionSheet() {
             {rows(menu.open)}
             <Separator className="my-1" />
             {rows(menu.manage)}
-            {target && (
-              <Button variant="ghost" className={row} onClick={() => setPage("projects")}>
-                <FolderInputIcon /> {projectLabel}
+            {projects && (
+              <Button
+                variant="ghost"
+                className={row}
+                disabled={!projects.entry.enabled}
+                onClick={() => setPage("projects")}
+              >
+                <FolderInputIcon /> {projects.entry.label}
                 <ChevronRightIcon className="ml-auto text-muted-foreground" />
               </Button>
             )}
@@ -165,7 +185,7 @@ export function MobileSessionSheet() {
             {rows(menu.destructive)}
           </>
         )}
-        {page === "projects" && target && (
+        {page === "projects" && projects && (
           <>
             <div className="flex items-center gap-1">
               <Button
@@ -177,50 +197,28 @@ export function MobileSessionSheet() {
               >
                 <ArrowLeftIcon />
               </Button>
-              <SheetTitle className="min-w-0 truncate text-base">{projectLabel}</SheetTitle>
+              <SheetTitle className="min-w-0 truncate text-base">{projects.entry.label}</SheetTitle>
             </div>
             <Separator className="my-1" />
-            {project && (
+            {projects.current && (
+              <p className="truncate px-3 py-1 text-xs text-muted-foreground">
+                {projects.current.name}
+                {projects.current.archived && " · Archived"}
+              </p>
+            )}
+            {projects.remove && (
               <>
-                <p className="truncate px-3 py-1 text-xs text-muted-foreground">
-                  {project.name}
-                  {project.archived && " · Archived"}
-                </p>
-                <SheetClose asChild>
-                  <Button
-                    variant="ghost"
-                    className={row}
-                    disabled={!state.connected}
-                    onClick={() => run(assignProjectCommand(state, target, null))}
-                  >
-                    <FolderMinusIcon /> Remove from project
-                  </Button>
-                </SheetClose>
+                <ProjectCommandRow command={projects.remove} run={run} />
                 <Separator className="my-1" />
               </>
             )}
-            <SheetClose asChild>
-              <Button
-                variant="ghost"
-                className={row}
-                disabled={!create.enabled}
-                onClick={() => run(create)}
-              >
-                <ProjectCommandIconView icon={create.icon} /> {create.label}…
-              </Button>
-            </SheetClose>
-            {projectDestinations(state, project, { keepCurrent: false }).map((p) => (
-              <SheetClose asChild key={p.id}>
-                <Button
-                  variant="ghost"
-                  className={row}
-                  disabled={!state.connected}
-                  onClick={() => run(assignProjectCommand(state, target, p.id))}
-                >
-                  <FolderIcon />
-                  <span className="truncate">{p.name}</span>
-                </Button>
-              </SheetClose>
+            <ProjectCommandRow command={projects.create} run={run}>
+              {projects.create.label}…
+            </ProjectCommandRow>
+            {projects.destinations.map((d) => (
+              <ProjectCommandRow key={d.project.id} command={d.command} run={run}>
+                <span className="truncate">{d.project.name}</span>
+              </ProjectCommandRow>
             ))}
           </>
         )}

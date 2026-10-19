@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
+import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
@@ -101,6 +102,18 @@ export function useSessionCommands(target?: SessionTarget) {
     run,
     messagesOnly,
   };
+}
+
+/**
+ * The selected session's project membership (`sessionProjectMenu`), for the header's phone sheet
+ * and the palette; none until the session has a Pi session ID.
+ */
+export function useSessionProjectMenu() {
+  const { state } = useCommands();
+  const session = state.session;
+  return session?.sessionId
+    ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId })
+    : undefined;
 }
 
 /**

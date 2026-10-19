@@ -46,7 +46,7 @@ import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import { projectCommands } from "@/lib/projectCommands";
+import { projectCommands, sessionProjectMenu } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { sessionRowMenu } from "@/lib/sessionCommands";
 import type { SidebarSection } from "@/lib/sidebarList";
@@ -435,7 +435,7 @@ function SessionMenu({
         </Fragment>
       ))}
       <DropdownMenuGroup>
-        <ProjectMenu state={state} session={target} run={run} />
+        <ProjectMenu menu={sessionProjectMenu(state, target)} run={run} />
       </DropdownMenuGroup>
     </>
   );

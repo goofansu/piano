@@ -1,6 +1,11 @@
 import { GitBranchIcon, MoreHorizontalIcon, SplitIcon } from "lucide-react";
 import { useRef } from "react";
-import { CommandIcon, SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
+import {
+  CommandIcon,
+  SessionCommandMenuItem,
+  useSessionCommands,
+  useSessionProjectMenu,
+} from "@/components/CommandHost";
 import { MobileSessionSheet, SessionDetails } from "@/components/MobileSessionSheet";
 import {
   DropdownMenu,
@@ -48,10 +53,8 @@ export function SessionHeader({
   } = sessionContext(state);
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
+  const projectMenu = useSessionProjectMenu();
   const { display } = menu;
-  const target = session?.sessionId
-    ? { cwd: session.cwd, sessionId: session.sessionId }
-    : undefined;
   const menuButton = (
     <Button
       ref={menuTrigger}
@@ -168,7 +171,7 @@ export function SessionHeader({
                 {menu.manage.map((c) => (
                   <SessionCommandMenuItem key={c.id} command={c} run={run} />
                 ))}
-                {target && <ProjectMenu state={state} session={target} run={run} />}
+                {projectMenu && <ProjectMenu menu={projectMenu} run={run} />}
               </DropdownMenuGroup>
               {display && (
                 <>

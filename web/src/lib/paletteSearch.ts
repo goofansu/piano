@@ -11,7 +11,9 @@ export type PalettePages = Partial<Record<PaletteGroup["id"], number>>;
 export interface PaletteDocuments {
   id: PaletteGroup["id"];
   heading: PaletteGroup["heading"];
-  rows: Pick<PaletteGroup["rows"][number], "key" | "value" | "keywords">[];
+  rows: (Pick<PaletteGroup["rows"][number], "key" | "value" | "keywords"> & {
+    searchOnly?: boolean;
+  })[];
 }
 export interface PalettePage<G extends PaletteDocuments = PaletteGroup> {
   group: G;
@@ -38,7 +40,7 @@ export function searchPalette<G extends PaletteDocuments>(
       return {
         ...group,
         heading: group.id === "sessions" ? "Recent sessions" : group.heading,
-        rows: group.rows.slice(0, limit),
+        rows: group.rows.filter((row) => !row.searchOnly).slice(0, limit),
       } as G;
     });
   return groups
