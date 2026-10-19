@@ -48,6 +48,7 @@ export type ProjectDialog = { project?: Project; assign?: SessionRef };
 
 export type ProjectCommandId =
   | "new-session"
+  | "open-project"
   | "edit"
   | "archive"
   | "unarchive"
@@ -121,6 +122,22 @@ export function projectCommand(
 }
 
 /**
+ * Open `project`'s home, the New session page that names it: the way back from one of its sessions.
+ * Unlike New session in project, which an archived project disables because it takes no new
+ * sessions, this stays enabled: an archived project's home is where it offers Unarchive. It only
+ * navigates, so it does not wait for a connection either.
+ */
+export function openProjectCommand(project: Project): ProjectCommand {
+  return {
+    id: "open-project",
+    label: `Open project: ${project.name}`,
+    icon: "folder",
+    enabled: true,
+    intent: { kind: "new-session", projectId: project.id },
+  };
+}
+
+/**
  * New project: the project dialog, which creates a project and, with `assign`, files that session in
  * it. Saving changes the registry, so it waits for a connection.
  */
@@ -170,11 +187,13 @@ export interface ProjectDestination {
  * A session's project membership as its menus offer it: the current project named, an entry that
  * opens the picker ("Move to project" for a member, "Add to project" otherwise), New project and
  * the destinations inside it, and Remove from project for a member. Every row changes the
- * registry, so one rule enables them all: connected. The entry follows it, so a disconnected menu
+ * registry, so one rule enables them all: connected; `open` only navigates (`openProjectCommand`). The entry follows it, so a disconnected menu
  * offers a disabled entry rather than a pane of disabled rows.
  */
 export interface SessionProjectMenu {
   current: Project | undefined;
+  /** Open the current project's home, as the header's project link does. */
+  open: ProjectCommand | undefined;
   entry: { label: "Move to project" | "Add to project"; enabled: boolean };
   /** New project, which files the session in the project it creates. */
   create: ProjectCommand;
@@ -188,6 +207,7 @@ export function sessionProjectMenu(state: AppState, session: SessionRef): Sessio
   const current = sessionProject(state, ref);
   return {
     current,
+    open: current ? openProjectCommand(current) : undefined,
     entry: { label: current ? "Move to project" : "Add to project", enabled: state.connected },
     create: newProjectCommand(state, ref),
     destinations: projectDestinations(state, current, { keepCurrent: false }).map((project) => ({

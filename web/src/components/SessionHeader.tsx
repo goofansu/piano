@@ -24,7 +24,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
-import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
 export function SessionHeader({
@@ -38,7 +37,6 @@ export function SessionHeader({
   pullRequest: (menuTrigger: React.RefObject<HTMLButtonElement | null>) => React.ReactNode;
 }) {
   const mobile = useIsMobile();
-  const { openNew } = useNavigation();
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
   // `folder ⇄ worktree / ⑂ branch`; omit the redundant worktree segment for the root checkout.
@@ -46,7 +44,6 @@ export function SessionHeader({
     title,
     branch,
     sessionId,
-    project,
     cwd,
     folderName: folder,
     worktreeName: worktree,
@@ -54,6 +51,7 @@ export function SessionHeader({
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
   const projectMenu = useSessionProjectMenu();
+  const openProject = projectMenu?.open;
   const { display } = menu;
   const menuButton = (
     <Button
@@ -77,13 +75,13 @@ export function SessionHeader({
             <>
               <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-1">
                 {/* The project is the way back to where this session was opened from. */}
-                {project && (
+                {openProject && projectMenu?.current && (
                   <button
                     type="button"
                     className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => openNew(undefined, project.id)}
+                    onClick={() => run(openProject)}
                   >
-                    {project.name}
+                    {projectMenu.current.name}
                   </button>
                 )}
                 <h1 className="truncate text-sm font-medium">{session ? title : "New session"}</h1>
