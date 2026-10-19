@@ -505,6 +505,65 @@ test("through the session host, a person opening or acting on the session during
   assert.equal(texts.length, 1);
 });
 
+test("archiving or deleting a session during the wait drops its message", async (t) => {
+  const texts: string[] = [];
+  const sentinelSent = Deferred.makeUnsafe<void>();
+  const f = await startRouter(
+    "piano-notifications-retire-",
+    Layer.mergeAll(
+      Layer.succeed(AllowedOrigins, new Set(["http://piano.test", "https://piano.example.test"])),
+      Layer.succeed(ExeDevFetch, async (url) =>
+        String(url).endsWith("/integrations")
+          ? Response.json({ integrations: defaultEntries })
+          : metadata(),
+      ),
+      Layer.succeed(NotificationFetch, async (_url, init) => {
+        const text = JSON.parse(String(init?.body)).text;
+        texts.push(text);
+        if (text.endsWith("/s/sentinel")) Deferred.doneUnsafe(sentinelSent, Effect.void);
+        return new Response("");
+      }),
+      TestClock.layer(),
+    ),
+  );
+  t.after(f.dispose);
+  const selected = await f.handle("/api/settings/integrations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "select", name: "slack-hook" }),
+  });
+  assert.equal(selected.status, 200);
+  await f.run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const notifications = yield* Notifications;
+      const complete = Effect.fn(function* () {
+        const session = yield* hosts.create({ cwd: f.repo, options: {} });
+        const settled = yield* Effect.forkChild(
+          session.events.pipe(
+            Stream.filter((event) => event._tag === "response_completed"),
+            Stream.take(1),
+            Stream.runDrain,
+          ),
+        );
+        yield* session.act({ _tag: "prompt", text: "notification success" });
+        yield* Fiber.join(settled);
+        return session.spec;
+      });
+      const archived = yield* complete();
+      const deleted = yield* complete();
+      yield* TestClock.adjust(30_000);
+      yield* hosts.archive(archived.cwd, archived.sessionId);
+      yield* hosts.delete(deleted.cwd, deleted.sessionId);
+      // Due after both retired completions, so delivery order shows whether they were dropped.
+      yield* notifications.completed("sentinel");
+      yield* TestClock.adjust(60_000);
+      yield* Deferred.await(sentinelSent);
+    }),
+  );
+  assert.deepEqual(texts, ["Agent finished responding. https://piano.example.test/s/sentinel"]);
+});
+
 test("server-owned completion sends one session link to the discovered selection without a browser", async (t) => {
   const sent: { url: string; body: unknown }[] = [];
   let delivered!: () => void;
