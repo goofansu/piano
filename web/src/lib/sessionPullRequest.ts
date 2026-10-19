@@ -2,7 +2,8 @@
  * The selected session's pull request link: one live observation of it plus the surface that
  * shows it. The registry decides whether a session is linked, and the session catalog carries its
  * link, so only a linked session is read: on selection, focus, work edges and stale opens.
- * Only open/draft PR details poll while shown; selecting an unlinked session costs no GitHub call.
+ * Linked PR details poll while shown until definitively closed/merged, including recovery from
+ * unavailable status; selecting an unlinked session costs no GitHub call.
  * Work starting or stopping means a change within the observed session, never the
  * selection of one mid-turn. When the work of a session never searched for a pull request
  * stops, it is searched once in the background; the registry keeps what that finds and the
@@ -140,8 +141,10 @@ export function createSessionPullRequest({
   const observation = createObservation<SessionPullRequest>({
     load: (signal, key) => request(key, undefined, signal),
     interval: (value) => {
-      const active = value?.pullRequest?.state;
-      return surface === "details" && (active === "open" || active === "draft")
+      // Unavailable facts still need a recovery read. Only terminal facts for the current
+      // association stop polling; a superseded link's state says nothing about this one.
+      const status = sameLink(value?.link, link) ? value?.pullRequest?.state : undefined;
+      return surface === "details" && link && status !== "closed" && status !== "merged"
         ? POLL_MS
         : undefined;
     },

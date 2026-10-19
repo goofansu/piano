@@ -265,6 +265,7 @@ function clock() {
   return {
     env,
     now: () => time,
+    pending: () => timers.size,
     focus: () => focus(),
     hide: (value: boolean) => {
       hidden = value;
@@ -298,6 +299,132 @@ const facts = (state: PullRequest["state"]): SessionPullRequest => ({
     review: "none",
   },
 });
+
+const unavailable: SessionPullRequest = {
+  ...linked,
+  error: "HTTP 503: Service Unavailable (https://api.github.com/repos/example/repo/pulls/42)",
+};
+
+test("visible PR details recover from a successful error-body poll without user interaction", async () => {
+  const time = clock();
+  let calls = 0;
+  const pr = createSessionPullRequest({
+    api: async () => (++calls === 2 ? unavailable : facts("open")),
+    notify: { error: assert.fail, info: assert.fail },
+    environment: time.env,
+    now: time.now,
+  });
+  const stop = pr.start();
+  try {
+    pr.observe("w1", "s1", registered, false);
+    await settle();
+    pr.open();
+    await time.advance(60_000);
+    assert.equal(calls, 2);
+    assert.deepEqual(pr.getState().value, unavailable, "old check results are not current");
+
+    await time.advance(600_000);
+    assert.equal(calls, 12, "scheduled reads continue for ten minutes without focus or reopening");
+    assert.equal(pr.getState().value?.pullRequest?.state, "open");
+    assert.equal(time.pending(), 1, "exactly one next poll remains");
+  } finally {
+    stop();
+  }
+});
+
+for (const initial of [unavailable, linked]) {
+  test(`initial ${initial.error ? "error-body" : "unknown"} details retry once per interval despite equivalent broadcasts`, async () => {
+    const time = clock();
+    const { pi, pr, stop } = setup(registered, time.env, time.now);
+    try {
+      pi.last().resolve(initial);
+      await settle();
+      pr.open();
+      assert.equal(time.pending(), 1);
+      await time.advance(30_000);
+      pr.observe("w1", "s1", { ...registered }, false);
+      assert.equal(pi.requests.length, 1);
+      assert.equal(time.pending(), 1);
+      await time.advance(30_000);
+      assert.equal(pi.requests.length, 2, "broadcast did not postpone or duplicate the retry");
+      assert.deepEqual(pr.getState().value, initial, "unavailable facts stay visible during retry");
+      pr.observe("w1", "s1", { ...registered }, false);
+      await time.advance(120_000);
+      assert.equal(pi.requests.length, 2, "a slow retry is neither duplicated nor superseded");
+      assert.equal(pi.last().signal.aborted, false);
+      pi.last().resolve(facts("open"));
+      await settle();
+      assert.equal(pr.getState().value?.pullRequest?.state, "open");
+      assert.equal(time.pending(), 1);
+    } finally {
+      stop();
+    }
+  });
+}
+
+test("unavailable details pause recovery while hidden, editing or closed", async () => {
+  const time = clock();
+  const { pi, pr, stop } = setup(registered, time.env, time.now);
+  try {
+    pi.last().resolve(unavailable);
+    await settle();
+    pr.open();
+    time.hide(true);
+    await time.advance(120_000);
+    assert.equal(pi.requests.length, 1);
+    time.hide(false);
+    pr.edit();
+    assert.equal(time.pending(), 0);
+    await time.advance(120_000);
+    assert.equal(pi.requests.length, 1);
+    pr.cancel();
+    await time.advance(60_000);
+    assert.equal(pi.requests.length, 2);
+    pi.last().resolve(unavailable);
+    await settle();
+    pr.close();
+    assert.equal(time.pending(), 0);
+    await time.advance(120_000);
+    assert.equal(pi.requests.length, 2);
+  } finally {
+    stop();
+  }
+});
+
+for (const end of ["remove", "change", "select", "stop"] as const) {
+  test(`a late recovery response cannot revive polling after ${end}`, async () => {
+    const time = clock();
+    const { pi, pr, stop } = setup(registered, time.env, time.now);
+    try {
+      pi.last().resolve(unavailable);
+      await settle();
+      pr.open();
+      await time.advance(60_000);
+      assert.equal(pi.requests.length, 2);
+      const retry = pi.last();
+      if (end === "remove") pr.observe("w1", "s1", null, false);
+      if (end === "change") {
+        const other = { ...registered, url: "https://github.com/example/repo/pull/43" };
+        pr.observe("w1", "s1", other, false);
+        pi.last().resolve({ ...facts("closed"), link: other });
+        await settle();
+      }
+      if (end === "select") pr.observe("w1", "s2", registered, false);
+      if (end === "stop") stop();
+      assert.equal(retry.signal.aborted, true);
+      const current = pr.getState();
+      retry.resolve(unavailable);
+      await settle();
+      assert.deepEqual(pr.getState(), current, "obsolete error cannot replace current state");
+      assert.equal(time.pending(), 0);
+      const sent = pi.requests.length;
+      await time.advance(600_000);
+      assert.equal(pi.requests.length, sent);
+    } finally {
+      stop();
+    }
+  });
+}
 
 test("closed details do not poll; opening reuses a fresh or in-flight focus result and refreshes stale facts", async () => {
   const time = clock();
