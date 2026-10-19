@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { FolderView } from "../shared/wire.ts";
+import type { FolderView, SessionEvent } from "../shared/wire.ts";
 import type { PreferenceStorage } from "../web/src/lib/preference.ts";
+import type { SessionEntry } from "../web/src/lib/sessionCatalog.ts";
 import {
   createSidebarList,
   PINNED,
@@ -10,7 +11,7 @@ import {
   sidebarPreferences,
 } from "../web/src/lib/sidebarList.ts";
 import type { GroupBy, SidebarView } from "../web/src/lib/sidebarView.ts";
-import { type AppState, initialState } from "../web/src/store.ts";
+import { type AppState, initialState, reduce, sessionKey } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const folder = (path: string, worktrees: string[] = [path]): FolderView => ({
@@ -107,6 +108,232 @@ const openness = (list: SidebarList) => [
 ];
 const isOpen = (list: SidebarList, key: string) =>
   openness(list).find(([k]) => k === key)?.[1] ?? null;
+
+test("sidebar list: sequenced transcript, tool and usage updates reuse even a collapsed selected folder", () => {
+  for (const groupBy of GROUPINGS) {
+    const { model } = sidebar();
+    const chosen = view(groupBy);
+    const identity = { cwd: "/work/repo.feature", sessionId: "s1" };
+    let state = reduce(
+      { ...registry, connected: true },
+      { type: "selecting", selectionId: "selection", ...identity },
+    );
+    state = reduce(state, {
+      type: "server",
+      message: {
+        _tag: "selected",
+        selectionId: "selection",
+        ...identity,
+        hosted: true,
+        cursor: { ...identity, generation: "host", sequence: 0 },
+        snapshot: { state: { sessionId: "s1", isStreaming: true }, messages: [], dialogs: [] },
+      },
+    });
+    model.sync(state, chosen);
+    model.toggle("/repo", false);
+    const before = state;
+    const list = model.list(state, chosen);
+    const events: SessionEvent[] = [
+      { _tag: "message_update", message: { id: "reply", role: "assistant", text: "partial" } },
+      { _tag: "message_update", message: { id: "reply", role: "assistant", text: "more text" } },
+      {
+        _tag: "tool_update",
+        tool: {
+          id: "tool",
+          name: "bash",
+          args: "{}",
+          status: "running",
+          text: "output",
+          outputKind: "latest-update",
+        },
+      },
+      {
+        _tag: "state",
+        state: { sessionId: "s1", isStreaming: true, cost: 0.42, statsUpdatedAt: 1 },
+      },
+    ];
+    for (const [index, event] of events.entries()) {
+      state = reduce(state, {
+        type: "server",
+        message: {
+          _tag: "session",
+          selectionId: "selection",
+          cursor: { ...identity, generation: "host", sequence: index + 1 },
+          event,
+        },
+      });
+      assert.notEqual(state, before);
+      assert.equal(state.session?.cursor?.sequence, index + 1, "the reducer applied the event");
+      for (const key of ["sessionReferences", "folders", "projects", "hosts", "done"] as const)
+        assert.equal(state[key], before[key], key);
+      model.sync(state, chosen);
+      assert.equal(model.list(state, chosen), list, `${groupBy}: ${event._tag}`);
+    }
+    assert.equal(state.session?.pending?.text, "more text");
+    assert.equal(state.session?.tools?.[0]?.text, "output");
+    assert.equal(state.session?.state.cost, 0.42);
+    if (groupBy === "folder") assert.equal(isOpen(list, "/repo"), false);
+  }
+});
+
+test("sidebar list: cached rows still follow every catalog fact", () => {
+  const a = sessionReference("/repo", "a", { title: "Alpha" });
+  const b = sessionReference("/closed", "b", { title: "Beta", projectId: "p1" });
+  const state: AppState = {
+    ...registry,
+    sessionReferences: [a, b],
+  };
+  const rows = (list: SidebarList): SessionEntry[] =>
+    list.body?.kind === "sections" ? list.body.sections.flatMap((s) => s.sessions) : [];
+  const cases: Array<{
+    name: string;
+    patch: Partial<AppState>;
+    check: (list: SidebarList) => void;
+  }> = [
+    {
+      name: "title and order",
+      patch: { sessionReferences: [{ ...a, title: "Zulu" }, b] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Beta", "Zulu"]),
+    },
+    {
+      name: "availability",
+      patch: { sessionReferences: [{ ...a, unavailable: "history" }, b] },
+      check: (list) => assert.equal(rows(list)[0]?.disabled, true),
+    },
+    {
+      name: "pins",
+      patch: { sessionReferences: [{ ...a, pinned: true }, b] },
+      check: (list) => {
+        assert.deepEqual(titles(list.pinned?.sessions ?? []), ["Alpha"]);
+        assert.deepEqual(titles(rows(list)), ["Beta"]);
+      },
+    },
+    {
+      name: "archives",
+      patch: { sessionReferences: [{ ...a, archived: true }, b] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Beta"]),
+    },
+    {
+      name: "project membership",
+      patch: { sessionReferences: [a, { ...b, projectId: undefined }] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Alpha"]),
+    },
+    {
+      name: "project rename",
+      patch: { projects: [{ id: "p1", name: "Renamed", archived: false }] },
+      check: (list) => assert.equal(rows(list)[1]?.project?.name, "Renamed"),
+    },
+    {
+      name: "project archive",
+      patch: { projects: [{ id: "p1", name: "Launch", archived: true }] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Alpha"]),
+    },
+    {
+      name: "folder removal",
+      patch: { folders: [] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Beta"]),
+    },
+    {
+      name: "host activity",
+      patch: { hosts: [{ cwd: a.cwd, sessionId: a.sessionId, streaming: true }] },
+      check: (list) => assert.equal(rows(list)[0]?.activity, "working"),
+    },
+    {
+      name: "done markers",
+      patch: { done: [sessionKey(a)] },
+      check: (list) => assert.equal(rows(list)[0]?.activity, "done"),
+    },
+    {
+      name: "registry readiness",
+      patch: { registryLoaded: false },
+      check: (list) => assert.equal(list.body?.kind, "loading"),
+    },
+  ];
+  for (const { name, patch, check } of cases) {
+    const { model } = sidebar();
+    const chosen = view("none");
+    const before = model.list(state, chosen);
+    const after = model.list({ ...state, ...patch }, chosen);
+    assert.notEqual(after, before, name);
+    check(after);
+  }
+});
+
+test("sidebar list: selection follows cwd and session id, not the snapshot or selecting object", () => {
+  const { model } = sidebar();
+  const chosen = view("none");
+  const state = {
+    ...registry,
+    sessionReferences: [
+      sessionReference("/repo", "a"),
+      sessionReference("/other", "a"),
+      sessionReference("/other", "b"),
+    ],
+  };
+  const selectedKeys = (list: SidebarList) =>
+    list.body?.kind === "sections"
+      ? list.body.sections.flatMap((s) => s.sessions.filter((r) => r.selected).map(sessionKey))
+      : [];
+  let previous = model.list(state, chosen);
+  assert.deepEqual(selectedKeys(previous), []);
+  for (const [cwd, sessionId] of [
+    ["/repo", "a"],
+    ["/other", "a"],
+    ["/other", "b"],
+  ] as const) {
+    const pending = selecting(state, cwd, sessionId);
+    const list = model.list(pending, chosen);
+    assert.notEqual(list, previous);
+    assert.deepEqual(selectedKeys(list), [`${cwd}\n${sessionId}`]);
+    assert.equal(model.list(selecting(state, cwd, sessionId), chosen), list);
+    const selected: AppState = {
+      ...pending,
+      selecting: null,
+      session: {
+        cwd,
+        sessionId,
+        hosted: true,
+        cursor: null,
+        state: { sessionId, isStreaming: false },
+        messages: [],
+        dialogs: [],
+      },
+    };
+    assert.equal(model.list(selected, chosen), list, "the selected snapshot has the same identity");
+    previous = list;
+  }
+  assert.deepEqual(
+    selectedKeys(model.list(state, chosen)),
+    [],
+    "leaving the session clears selection",
+  );
+});
+
+test("sidebar list: view and open preferences invalidate an otherwise unchanged list", () => {
+  const { model } = sidebar();
+  const state: AppState = {
+    ...registry,
+    sessionReferences: [
+      sessionReference("/repo", "a", { title: "Alpha", updatedAt: "2026-10-01T01:00:00Z" }),
+      sessionReference("/repo", "b", { title: "Beta", updatedAt: "2026-10-01T02:00:00Z" }),
+      sessionReference("/repo", "p", { title: "Pinned", pinned: true }),
+    ],
+  };
+  const byName = view("none");
+  const names = (chosen: SidebarView) => {
+    const list = model.list(state, chosen);
+    return list.body?.kind === "sections" ? titles(list.body.sections[0]!.sessions) : [];
+  };
+  assert.deepEqual(names(byName), ["Alpha", "Beta"]);
+  assert.deepEqual(names({ ...byName, sortBy: "recent" }), ["Beta", "Alpha"]);
+  const byFolder = view("folder");
+  assert.equal(isOpen(model.list(state, byFolder), "/repo"), false);
+  model.toggle("/repo", true);
+  assert.equal(isOpen(model.list(state, byFolder), "/repo"), true);
+  assert.equal(model.list(state, byFolder).pinned?.open, true);
+  model.toggle(PINNED, false);
+  assert.equal(model.list(state, byFolder).pinned?.open, false);
+});
 
 test("sidebar list: before the registry arrives every grouping is loading, with no Pinned section", () => {
   const { model } = sidebar();
@@ -364,8 +591,9 @@ test("sidebar list: date sections roll over at local midnight and after the page
       }),
     ],
   };
+  const chosen = view("date");
   const labels = () => {
-    const list = model.list(state, view("date"));
+    const list = model.list(state, chosen);
     return list.body?.kind === "sections" ? list.body.sections.map((s) => s.key) : [];
   };
   const stop = model.start();
