@@ -19,7 +19,7 @@ const exchangeFor = <A extends Parameters<typeof piExchangeFor>[0]>(action: A) =
 
 // Expected efforts follow pi-ai getSupportedThinkingLevels: off..high unless mapped to null,
 // xhigh and max only when mapped, and off alone for a model that cannot reason.
-test("INV-12: Pi's model reply becomes model choices with the efforts Pi accepts and its enabledModels scope", () => {
+test("INV-12: Pi's model reply becomes model choices with the efforts Pi accepts", () => {
   const reply = {
     models: [
       {
@@ -48,7 +48,7 @@ test("INV-12: Pi's model reply becomes model choices with the efforts Pi accepts
       { provider: "local", id: "plain", contextWindow: 8_000 },
     ],
   };
-  assert.deepEqual(modelChoicesOf(reply, ["Anthropic/claude-*", "GPT-5"]), [
+  assert.deepEqual(modelChoicesOf(reply), [
     {
       ref: "anthropic/claude-opus",
       provider: "anthropic",
@@ -56,7 +56,6 @@ test("INV-12: Pi's model reply becomes model choices with the efforts Pi accepts
       name: "Opus",
       reasoning: true,
       contextWindow: 200_000,
-      enabled: true,
       thinkingLevels: ["off", "minimal", "low", "medium", "high"],
     },
     {
@@ -66,7 +65,6 @@ test("INV-12: Pi's model reply becomes model choices with the efforts Pi accepts
       name: undefined,
       reasoning: true,
       contextWindow: 400_000,
-      enabled: true,
       thinkingLevels: ["off", "low", "medium", "high", "xhigh", "max"],
     },
     {
@@ -76,7 +74,6 @@ test("INV-12: Pi's model reply becomes model choices with the efforts Pi accepts
       name: undefined,
       reasoning: false,
       contextWindow: 128_000,
-      enabled: false,
       thinkingLevels: ["off"],
     },
     {
@@ -86,14 +83,9 @@ test("INV-12: Pi's model reply becomes model choices with the efforts Pi accepts
       name: undefined,
       reasoning: false,
       contextWindow: 8_000,
-      enabled: false,
       thinkingLevels: ["off"],
     },
   ]);
-  assert.ok(
-    modelChoicesOf(reply, [])?.every((m) => !m.enabled),
-    "without patterns Pi scopes nothing in",
-  );
 });
 
 test("a malformed model reply is refused rather than offered as choices", () => {
@@ -103,7 +95,7 @@ test("a malformed model reply is refused rather than offered as choices", () => 
     { models: "none" },
     { models: [{ provider: "p", id: "x" }] },
   ]) {
-    assert.equal(modelChoicesOf(reply, []), undefined, JSON.stringify(reply));
+    assert.equal(modelChoicesOf(reply), undefined, JSON.stringify(reply));
   }
 });
 

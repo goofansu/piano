@@ -36,11 +36,3 @@ export function sessionDirFor(cwd: string): string | undefined {
     return undefined;
   }
 }
-
-export function enabledModelPatterns(cwd: string): string[] {
-  try {
-    return SettingsManager.create(cwd, getAgentDir()).getEnabledModels() ?? [];
-  } catch {
-    return [];
-  }
-}

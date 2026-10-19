@@ -17,7 +17,6 @@ const model = (ref: string, thinkingLevels: ThinkingLevel[]): ModelChoice => {
     id,
     reasoning: thinkingLevels.length > 1,
     contextWindow: 200000,
-    enabled: true,
     thinkingLevels,
   };
 };

@@ -16,7 +16,6 @@ const catalog = (fetchedAt: string, extra: Partial<ModelCatalog> = {}): ModelCat
       contextWindow: 200_000,
       thinkingLevels: ["off", "high"],
       reasoning: true,
-      enabled: true,
     },
   ],
   fetchedAt,
