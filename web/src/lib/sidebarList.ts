@@ -105,7 +105,7 @@ export interface SidebarListEnvironment {
 }
 
 export interface SidebarListModel {
-  /** The list for this state and view as of today and the open groups; the same object until one of them changes. */
+  /** The same list until sidebar facts, the view, today's date or open groups change; transcript updates reuse it. */
   list: (state: AppState, view: SidebarView) => SidebarList;
   /**
    * After a render: a new selection, grouping or owning group opens the group holding the selected
@@ -231,7 +231,12 @@ export function createSidebarList({
   let projects: ReadonlySet<string> | null = null;
   const listeners = new Set<() => void>();
   let cache: {
-    state: AppState;
+    facts: Pick<
+      AppState,
+      "registryLoaded" | "folders" | "sessionReferences" | "projects" | "hosts" | "done"
+    >;
+    cwd: string | undefined;
+    sessionId: string | null | undefined;
     view: SidebarView;
     open: ReadonlySet<string>;
     pinnedOpen: boolean;
@@ -265,8 +270,19 @@ export function createSidebarList({
   return {
     list: (state, view) => {
       const pinnedOpen = preferences.pinnedOpen.get();
+      // These are buildList/sessionCatalog's inputs. The reducer replaces session snapshots on
+      // every streaming event, but only the current identity contributes to sidebar rows.
+      const current = state.session ?? state.selecting;
+      const { registryLoaded, folders, sessionReferences, projects, hosts, done } = state;
       if (
-        cache?.state === state &&
+        cache?.facts.registryLoaded === registryLoaded &&
+        cache.facts.folders === folders &&
+        cache.facts.sessionReferences === sessionReferences &&
+        cache.facts.projects === projects &&
+        cache.facts.hosts === hosts &&
+        cache.facts.done === done &&
+        cache.cwd === current?.cwd &&
+        cache.sessionId === current?.sessionId &&
         cache.view === view &&
         cache.open === open &&
         cache.pinnedOpen === pinnedOpen &&
@@ -275,7 +291,16 @@ export function createSidebarList({
         return cache.list;
       const isOpen = (key: string) => (key === PINNED ? pinnedOpen : open.has(key));
       const list = buildList(state, view, today, isOpen);
-      cache = { state, view, open, pinnedOpen, today, list };
+      cache = {
+        facts: { registryLoaded, folders, sessionReferences, projects, hosts, done },
+        cwd: current?.cwd,
+        sessionId: current?.sessionId,
+        view,
+        open,
+        pinnedOpen,
+        today,
+        list,
+      };
       return list;
     },
     sync: (state, view) => {
