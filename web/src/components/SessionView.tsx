@@ -19,6 +19,7 @@ import {
   sessionActivity,
   sessionContext,
   sessionPane,
+  sessionReference,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
@@ -47,10 +48,14 @@ export function SessionView({ state, send }: Props) {
   );
   const input = state.pendingCreate;
   const { workspace, draftKey } = sessionContext(state);
-  // The registry's workspace for the directory, like Changes: it outlives a closed folder.
+  // The registry's workspace for the directory, like Changes: it outlives a closed folder. Its
+  // reference says whether the session is linked, so an unlinked one asks GitHub nothing.
   const pullRequest = useSessionPullRequest(
     workspace?.id,
     t?.sessionId,
+    t?.sessionId
+      ? sessionReference(state, { cwd: t.cwd, sessionId: t.sessionId })?.pullRequest
+      : undefined,
     !!t && isWorking(t.state),
     {
       open: pullRequestOpen,

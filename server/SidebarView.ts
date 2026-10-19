@@ -62,7 +62,8 @@ const membersOf = (data: RegistryData) =>
 /** Inputs to a full refresh: Git's folders/worktrees and availability's project members.
  * A visible change outside these publishes from the last observations without starting a reader. */
 const observedOf = (data: RegistryData) => JSON.stringify([shapeOf(data), membersOf(data)]);
-/** The registry facts the view shows. Statistics and integration links are not among them. */
+/** The registry facts the view shows. Statistics and the Radius share are not among them; a
+ * session's pull request link is, so a link write reaches browsers without a Git run. */
 const visibleOf = (data: RegistryData) =>
   JSON.stringify({
     ...data,
@@ -331,7 +332,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       const refresh = request().pipe(Effect.andThen(requestAvailability()));
       const changed = publish(true).pipe(Effect.andThen(refresh));
       // Awaited by the writer, so a session reference is on its way to browsers before its prompt reaches Pi.
-      // Statistics and integration links change nothing shown and must not start a Git run. Neither
+      // Statistics and the Radius share change nothing shown and must not start a Git run. Neither
       // may a visible change no observation reads: a prompt's activity record, a rename or a pin
       // publishes from the last observation, while a folder, worktree or project membership change
       // rediscovers (INV-06).

@@ -65,13 +65,13 @@ const SessionEntry = Schema.Struct({
 });
 export type SessionEntry = typeof SessionEntry.Type;
 
-/** What a session reference shows: cached statistics and integration links never reach the sidebar. */
+/** What a session reference shows: cached statistics and the Radius share never reach the sidebar.
+ * The pull request link does, so a browser reads GitHub facts only for a session that has one. */
 export const shownReference = ({
   stats: _stats,
-  pullRequest: _pullRequest,
   radiusShare: _radiusShare,
   ...shown
-}: SessionEntry): Omit<SessionEntry, "stats" | SessionLinkKey> => shown;
+}: SessionEntry): Omit<SessionEntry, "stats" | "radiusShare"> => shown;
 
 /**
  * `entry` is still the reference `expected` was read as: not recreated (same creation time), not

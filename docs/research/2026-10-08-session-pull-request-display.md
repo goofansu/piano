@@ -119,3 +119,34 @@ workspace linking/display. Observed browser fetch URLs all contain the correct
 workspace/session IDs and no paths. Evidence: `/tmp/piano-pr-ids-evidence/` and
 `/tmp/piano-pr-ids-{tests,typecheck,lint,browser}.log`. Scratch processes and files
 were cleaned up; no real registry or model calls. No deployment of this follow-up.
+
+## Linked-only reads follow-up
+
+Against `d45eac4` + working tree on 2026-10-19. Selecting any session sent
+`GET /api/session/pull-request`, and for a session with no saved link that request ran
+branch discovery: `git` plus `gh pr list`, 500-900 ms, on every selection, every minute
+and every window focus. `gh` is the cost (about 870 ms here; `git` answers in 10 ms).
+
+The root cause was that the session catalog stripped the saved link, so a browser could
+not tell a linked session from an unlinked one without asking. Now:
+
+- `SessionReference` carries the registry's `pullRequest` link (absent until discovered,
+  null once removed). A link write publishes the sidebar from the last observation, with
+  no Git run; statistics and the Radius share still stay off the wire.
+- The browser reads PR facts only for a session the catalog links: on selection, focus,
+  the minute's interval and when its work starts or stops. An unlinked session asks
+  nothing when selected. A link that changes elsewhere is read afresh; a link removed
+  elsewhere disappears without a read. A failed read keeps the catalog's link.
+- When the work of a never-searched session stops, the browser asks once in the
+  background (a plain read, which discovers server-side). The registry keeps what that
+  finds, the catalog reports it, and that starts reading. `Find from branch` remains the
+  explicit search. An instant turn that never renders as working is not searched.
+- Server policy is unchanged: `get` still discovers for a never-searched session, so the
+  endpoint's meaning did not move; only when the browser asks did.
+
+Verification: `npm run typecheck`, `npm test` (896 passed) and lint passed. A scratch
+browser journey (uncommitted, fake Pi and a fake logging `gh`) observed: no pull-request
+request and no `gh` run on selecting an unlinked or a removed-link session; one request
+and one `gh pr view` on selecting a linked session; none on returning to the unlinked
+session; after a held turn was stopped there, one `gh pr list` then one `gh pr view`, and
+the header showed the found PR. Scratch processes, registry and sessions only.

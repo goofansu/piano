@@ -1,11 +1,20 @@
 /**
  * The selected session's pull request link: one live observation of it plus the surface that
- * shows it. Reads are silent; only an explicit change blocks the controls or reports. The surface
- * follows the link: opening while unlinked offers the link form, a link that appears (found in the
- * background or saved here) closes it so the header shows it, and background reads never reset an
- * edit in progress. Nothing here depends on React.
+ * shows it. The registry decides whether a session is linked, and the session catalog carries its
+ * link, so only a linked session is read (on selection, focus, an interval and when its work
+ * starts or stops): selecting an unlinked session costs no GitHub call. When the work of a
+ * session never searched for a pull request stops, it is searched once in the background; the
+ * registry keeps what that finds and the catalog reports it. Reads are silent; only an explicit
+ * change blocks the controls or reports. The surface follows the link: opening while unlinked
+ * offers the link form, a link that appears (found in the background or saved here) closes it so
+ * the header shows it, and background reads never reset an edit in progress. Nothing here depends
+ * on React.
  */
-import type { SessionPullRequest, SessionPullRequestAction } from "@shared/wire";
+import type {
+  SessionPullRequestLink as RegistryLink,
+  SessionPullRequest,
+  SessionPullRequestAction,
+} from "@shared/wire";
 import { createObservation, type ObservationEnvironment } from "./observation.ts";
 
 /** Where the link is shown: nowhere, the form to link one, its details, or the form to change it. */
@@ -52,10 +61,21 @@ export interface SessionPullRequestLink {
   subscribe: (listener: () => void) => () => void;
   /** Resumes reading; returns the stop function, which aborts all work. */
   start: () => () => void;
-  /** Follows a session; a different one closes the surface and starts from nothing. */
-  observe: (workspaceId: string | undefined, sessionId: string | null | undefined) => void;
-  /** Reads soon, e.g. when the session's work starts or stops. */
-  refreshSoon: (ms: number) => void;
+  /**
+   * Follows a session and the registry's link for it, as the catalog reports it: a link, null
+   * once removed, undefined when never searched. Only a linked session is read; a different
+   * session closes the surface and starts from nothing.
+   */
+  observe: (
+    workspaceId: string | undefined,
+    sessionId: string | null | undefined,
+    link: RegistryLink | null | undefined,
+  ) => void;
+  /**
+   * The session's work started or stopped. A linked session's facts are read again. When the
+   * work of a session never searched for a pull request stops, it is searched in the background.
+   */
+  activity: (working: boolean) => void;
   /** Shows the details when linked (reading them afresh), else the link form. */
   open: () => void;
   /** Hides the surface without reporting it through `closed`. */
@@ -74,10 +94,14 @@ const NOT_FOUND = "No open PR found for this branch.";
 const failure = (error: unknown) =>
   error instanceof Error ? error.message : "Could not load the pull request.";
 /** An unreadable pull request keeps the session's saved link and discovery choice, with the reason. */
-const fallback = (previous: SessionPullRequest | undefined, error: string): SessionPullRequest => ({
-  link: previous?.link ?? null,
+const fallback = (
+  previous: SessionPullRequest | undefined,
+  link: RegistryLink | null | undefined,
+  error: string,
+): SessionPullRequest => ({
+  link: previous?.link ?? link ?? null,
   pullRequest: null,
-  discovery: previous?.discovery ?? true,
+  discovery: previous?.discovery ?? link !== null,
   error,
 });
 /** A link change needs a URL and no other change in flight; the form's submit follows this rule. */
@@ -102,6 +126,10 @@ export function createSessionPullRequest({
     focus: true,
     environment,
   });
+  /** The registry's link for the observed session, as the catalog last reported it. */
+  let link: RegistryLink | null | undefined;
+  /** The background search in flight; its answer reaches the registry, never this state. */
+  let search: AbortController | undefined;
   let surface: PullRequestSurface = "closed",
     finding = false,
     /** One of this module's changes is in flight; it decides the surface when it settles. */
@@ -109,13 +137,12 @@ export function createSessionPullRequest({
   const listeners = new Set<() => void>();
   const derive = (): SessionPullRequestState => {
     const { key, value, error, mutating } = observation.getState();
-    return {
-      key,
-      value: error ? fallback(value, error) : value,
-      busy: mutating,
-      finding,
-      surface,
-    };
+    const read = error ? fallback(value, link, error) : value;
+    // The registry says whether the session is linked; a read adds GitHub's facts to that link.
+    // A value read for another link (changed or removed elsewhere) is not shown; a change in
+    // flight keeps what it applies to until it settles.
+    const current = mutating || read?.link?.url === link?.url;
+    return { key, value: current ? read : undefined, busy: mutating, finding, surface };
   };
   let state = derive();
   const publish = () => {
@@ -130,6 +157,10 @@ export function createSessionPullRequest({
   const closeItself = () => {
     show("closed");
     closed?.();
+  };
+  const endSearch = () => {
+    search?.abort();
+    search = undefined;
   };
 
   observation.subscribe(() => {
@@ -159,7 +190,7 @@ export function createSessionPullRequest({
           if (signal.aborted) throw error;
           failed = failure(error);
           notify.error(failed);
-          return fallback(previous, failed);
+          return fallback(previous, link, failed);
         }
       });
       if (value === undefined) return { _tag: "superseded" };
@@ -179,16 +210,42 @@ export function createSessionPullRequest({
         listeners.delete(listener);
       };
     },
-    start: observation.start,
-    observe: (workspaceId, sessionId) => {
+    start: () => {
+      const stop = observation.start();
+      return () => {
+        endSearch();
+        stop();
+      };
+    },
+    observe: (workspaceId, sessionId, next) => {
       const key = pullRequestKey(workspaceId, sessionId);
-      if (key !== observation.getState().key) {
+      const { key: previous, value } = observation.getState();
+      if (key !== previous) {
         surface = "closed";
         finding = false;
+        endSearch();
       }
-      observation.observe(key);
+      link = next;
+      // A newly linked session, or a new session, reads on its own; a link that changed
+      // elsewhere is read afresh so GitHub's facts match it.
+      observation.observe(key, !!next);
+      if (next && value !== undefined && value.link?.url !== next.url) observation.refreshSoon(0);
+      publish();
     },
-    refreshSoon: observation.refreshSoon,
+    activity: (working) => {
+      const key = observation.getState().key;
+      if (key === null) return;
+      if (link) return observation.refreshSoon(0);
+      if (link !== undefined || working) return;
+      endSearch();
+      const controller = new AbortController();
+      search = controller;
+      api(...target(key), undefined, { signal: controller.signal })
+        .catch(() => undefined)
+        .finally(() => {
+          if (search === controller) search = undefined;
+        });
+    },
     open: () => {
       if (surface !== "closed") return;
       if (state.value?.link) {

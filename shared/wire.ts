@@ -597,6 +597,14 @@ export const Project = Schema.Struct({
   archived: Schema.Boolean,
 });
 export type Project = typeof Project.Type;
+/** A session's pull request as the registry saves it; GitHub owns the facts behind it. */
+export const SessionPullRequestLink = Schema.Struct({
+  url: Schema.String,
+  source: Schema.Literals(["branch", "manual"]),
+  /** Authentication route, not the browser URL. Retained when the checkout disappears. */
+  apiHost: Schema.optional(Schema.Literal("github.int.exe.xyz")),
+});
+export type SessionPullRequestLink = typeof SessionPullRequestLink.Type;
 /**
  * One registered session: the sidebar's, palette's and router's only session list. Running state
  * travels separately in `hosts`.
@@ -607,6 +615,9 @@ export const SessionReference = Schema.Struct({
   title: Schema.optional(Schema.String),
   /** Registry identity of the session's directory (INV-07). */
   workspaceId: Schema.String,
+  /** The registry's pull request link: absent until discovered, null once removed. Its live
+   * facts are read only for a linked session, so unlinked ones cost no GitHub call. */
+  pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)),
   /** Git's branch for that directory from the last discovery; null when unknown, detached, non-Git or its folder is closed. */
   branch: Schema.NullOr(Schema.String),
   projectId: Schema.optional(Schema.String),
@@ -740,14 +751,6 @@ export const PullRequest = Schema.Struct({
   at: Schema.optional(Schema.String),
 });
 export type PullRequest = typeof PullRequest.Type;
-
-export const SessionPullRequestLink = Schema.Struct({
-  url: Schema.String,
-  source: Schema.Literals(["branch", "manual"]),
-  /** Authentication route, not the browser URL. Retained when the checkout disappears. */
-  apiHost: Schema.optional(Schema.Literal("github.int.exe.xyz")),
-});
-export type SessionPullRequestLink = typeof SessionPullRequestLink.Type;
 
 export const SessionPullRequest = Schema.Struct({
   link: Schema.NullOr(SessionPullRequestLink),

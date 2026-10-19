@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { SessionPullRequest, SessionPullRequestAction } from "../shared/wire.ts";
+import type {
+  SessionPullRequest,
+  SessionPullRequestAction,
+  SessionPullRequestLink,
+} from "../shared/wire.ts";
 import type { ObservationEnvironment } from "../web/src/lib/observation.ts";
 import { createSessionPullRequest } from "../web/src/lib/sessionPullRequest.ts";
 
@@ -15,12 +19,9 @@ const environment: ObservationEnvironment = {
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const URL = "https://github.com/example/repo/pull/42";
+const registered: SessionPullRequestLink = { url: URL, source: "manual" };
 const unlinked: SessionPullRequest = { link: null, pullRequest: null, discovery: true };
-const linked: SessionPullRequest = {
-  link: { url: URL, source: "manual" },
-  pullRequest: null,
-  discovery: true,
-};
+const linked: SessionPullRequest = { link: registered, pullRequest: null, discovery: true };
 
 /** Piano's PR endpoint, answered by the test one request at a time. */
 function server() {
@@ -39,7 +40,8 @@ function server() {
   };
 }
 
-function setup() {
+/** Observes session s1 with the registry link the catalog reports for it. */
+function setup(link: SessionPullRequestLink | null | undefined) {
   const pi = server();
   const notes: { error: string[]; info: string[] } = { error: [], info: [] };
   let closes = 0;
@@ -50,18 +52,60 @@ function setup() {
     environment,
   });
   pr.start();
-  pr.observe("w1", "s1");
+  pr.observe("w1", "s1", link);
   return { pi, pr, notes, closes: () => closes };
 }
 
-test("opening while unlinked offers the link form; a link found in the background closes it", async () => {
-  const { pi, pr, closes } = setup();
-  pi.last().resolve(unlinked);
+test("only a session the registry links is read; its link changing or going elsewhere is followed", async () => {
+  const { pi, pr } = setup(undefined);
+  assert.equal(pi.requests.length, 0, "a never-searched session asks nothing when selected");
+  pr.observe("w1", "s2", null);
+  pr.activity(true);
+  pr.activity(false);
+  assert.equal(pi.requests.length, 0, "a session whose link was removed asks nothing either");
+
+  pr.observe("w1", "s3", registered);
+  assert.equal(pi.requests.length, 1, "a linked session reads its facts");
+  assert.equal(pi.last().action, undefined);
+  pi.last().resolve(linked);
   await settle();
+  assert.equal(pr.getState().value?.link?.url, URL);
+
+  const other = "https://github.com/example/repo/pull/43";
+  pr.observe("w1", "s3", { url: other, source: "manual" });
+  assert.equal(pi.requests.length, 2, "a link changed elsewhere is read afresh");
+  assert.equal(
+    pr.getState().value,
+    undefined,
+    "the old link's facts are not shown for the new one",
+  );
+  pi.last().resolve({ ...linked, link: { url: other, source: "manual" } });
+  await settle();
+  assert.equal(pr.getState().value?.link?.url, other);
+
+  pr.observe("w1", "s3", null);
+  assert.equal(pi.requests.length, 2, "a link removed elsewhere stops reading");
+  assert.equal(pr.getState().value, undefined, "and shows no link");
+});
+
+test("opening while unlinked offers the link form; a link found when work stops closes it", async () => {
+  const { pi, pr, closes } = setup(undefined);
   pr.open();
   assert.equal(pr.getState().surface, "link-form");
 
-  pr.refreshSoon(0);
+  // The session's turn ends: the background search asks the server, which saves what it finds.
+  pr.activity(true);
+  assert.equal(pi.requests.length, 0, "starting work searches nothing");
+  pr.activity(false);
+  assert.equal(pi.requests.length, 1);
+  assert.equal(pi.last().action, undefined, "the search is a read, which discovers server-side");
+  pi.last().resolve(linked);
+  await settle();
+  assert.equal(pr.getState().surface, "link-form", "the search's own answer shows nothing");
+
+  // The catalog reports the saved link; that starts reading, and the link closes the form.
+  pr.observe("w1", "s1", registered);
+  assert.equal(pi.requests.length, 2);
   pi.last().resolve(linked);
   await settle();
   assert.equal(pr.getState().surface, "closed");
@@ -71,9 +115,7 @@ test("opening while unlinked offers the link form; a link found in the backgroun
 });
 
 test("Find from branch with nothing found reports it exactly once", async () => {
-  const { pi, pr, notes } = setup();
-  pi.last().resolve(unlinked);
-  await settle();
+  const { pi, pr, notes } = setup(undefined);
   pr.open();
   const finding = pr.discover();
   assert.equal(pr.getState().finding, true);
@@ -81,8 +123,8 @@ test("Find from branch with nothing found reports it exactly once", async () => 
   assert.deepEqual(pi.last().action, { action: "discover" });
   pi.last().resolve(unlinked);
   assert.deepEqual(await finding, { _tag: "not-found" });
-  // A later background read of the same absence stays silent.
-  pr.refreshSoon(0);
+  // A later background search of the same absence stays silent.
+  pr.activity(false);
   pi.last().resolve(unlinked);
   await settle();
   assert.deepEqual(notes.info, ["No open PR found for this branch."]);
@@ -92,7 +134,7 @@ test("Find from branch with nothing found reports it exactly once", async () => 
 });
 
 test("a failed change keeps the saved link with the reason and the edit open", async () => {
-  const { pi, pr, notes, closes } = setup();
+  const { pi, pr, notes, closes } = setup(registered);
   pi.last().resolve(linked);
   await settle();
   pr.open();
@@ -112,17 +154,17 @@ test("a failed change keeps the saved link with the reason and the edit open", a
 });
 
 test("background reads never reset an edit in progress", async () => {
-  const { pi, pr } = setup();
+  const { pi, pr } = setup(registered);
   pi.last().resolve(linked);
   await settle();
   pr.open();
   pi.last().resolve(linked);
   await settle();
   pr.edit();
-  pr.refreshSoon(0);
+  pr.activity(true);
   pi.last().resolve({ ...linked, discovery: false });
   await settle();
-  pr.refreshSoon(0);
+  pr.activity(false);
   pi.last().reject(new Error("rate limited"));
   await settle();
   assert.equal(pr.getState().surface, "editing");
@@ -131,10 +173,16 @@ test("background reads never reset an edit in progress", async () => {
   assert.equal(pr.getState().surface, "details");
 });
 
-test("a blank URL, or one sent while another change is in flight, sends nothing", async () => {
-  const { pi, pr } = setup();
-  pi.last().resolve(unlinked);
+test("an unreadable first read still shows the registry's link", async () => {
+  const { pi, pr } = setup(registered);
+  pi.last().reject(new Error("offline"));
   await settle();
+  assert.equal(pr.getState().value?.link?.url, URL);
+  assert.equal(pr.getState().value?.pullRequest, null);
+});
+
+test("a blank URL, or one sent while another change is in flight, sends nothing", async () => {
+  const { pi, pr } = setup(undefined);
   pr.open();
   const sent = pi.requests.length;
   assert.deepEqual(await pr.link(""), { _tag: "refused" });
