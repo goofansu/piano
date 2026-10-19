@@ -120,8 +120,8 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
       PIANO_DB_PATH: join(root, "registry.db"),
       PI_CODING_AGENT_DIR: join(root, "agent"),
       PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
-      // The proxy origin is listed first to show the listener's own origin is preferred.
-      PIANO_ALLOWED_ORIGINS: `${proxy},${base}`,
+      // The listener's origin is listed first to show the HTTPS origin a link opens from wins.
+      PIANO_ALLOWED_ORIGINS: `${base},${proxy}`,
       PIANO_PI_CLI: shim,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -165,7 +165,7 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
       "the extension loads before the session arguments",
     );
     assert.equal(launch.wsUrl, `ws://127.0.0.1:${port}/ws`);
-    assert.equal(launch.origin, base, "the listener's own origin is preferred over the proxy's");
+    assert.equal(launch.origin, proxy, "a `/s/<id>` link must open from a remote browser");
 
     // The handed values must actually work: Node's built-in WebSocket can set Origin through
     // undici's `headers` option, which the installed types do not describe.

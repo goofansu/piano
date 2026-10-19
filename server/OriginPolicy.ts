@@ -32,3 +32,24 @@ export function configuredOrigins(port: number, configured?: string): ReadonlySe
     }),
   );
 }
+
+/**
+ * The session link origin (docs/configuration.md): the base of every `/s/<sessionId>` link Piano
+ * hands out, whether a dispatched session shows it or Slack posts it. Chosen from the configured
+ * set, never from a request (INV-11). The first HTTPS origin wins, since a link has to open from a
+ * remote browser; otherwise the origin naming `listener` (`host:port`); otherwise the first
+ * configured, which in development is the Vite origin. While an HTTPS origin is configured the
+ * answer does not depend on `listener`, so a caller that does not know it agrees with one that
+ * does.
+ */
+export function sessionLinkOrigin(
+  origins: ReadonlySet<string>,
+  listener?: string,
+): string | undefined {
+  const allowed = [...origins];
+  return (
+    allowed.find((value) => value.startsWith("https://")) ??
+    allowed.find((value) => new URL(value).host === listener) ??
+    allowed[0]
+  );
+}

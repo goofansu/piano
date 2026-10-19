@@ -11,11 +11,12 @@
  * the loopback port directly even when the only allowed origin is a public proxy origin.
  */
 import { SESSION_ORIGIN, SESSION_WS_URL } from "../shared/dispatch.ts";
+import { sessionLinkOrigin } from "./OriginPolicy.ts";
 
 export interface SessionEndpoint {
   /** The WebSocket Piano already serves, addressed on the listener. */
   readonly wsUrl: string;
-  /** An already-allowed origin: the upgrade header, and the base of a `/s/<id>` link to the UI. */
+  /** The `sessionLinkOrigin`: the upgrade header, and the base of a `/s/<id>` link to the UI. */
   readonly origin: string;
 }
 
@@ -37,10 +38,8 @@ export function sessionEndpoint(
   const host = connectableHost(listener.host);
   if (!["127.0.0.1", "localhost", "[::1]"].includes(host)) return undefined;
   const authority = `${host}:${listener.port}`;
-  const allowed = [...origins];
-  // The origin that names the listener keeps the child indistinguishable from the local UI;
-  // otherwise the first configured origin, which in development is the Vite origin a user browses.
-  const origin = allowed.find((value) => new URL(value).host === authority) ?? allowed[0];
+  // Any allowed origin passes the upgrade check, so the one links use serves as the header too.
+  const origin = sessionLinkOrigin(origins, authority);
   if (origin === undefined) return undefined;
   return { wsUrl: `ws://${authority}/ws`, origin };
 }

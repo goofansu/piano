@@ -16,6 +16,7 @@ import {
 import { AllowedOrigins } from "../server/OriginPolicy.ts";
 import type { PiSession } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
+import { sessionEndpoint } from "../server/SessionEndpoint.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { startRouter } from "./fixtures/router.ts";
 
@@ -154,6 +155,29 @@ test("stored names match discovery case-insensitively; missing, failed and empty
       assert.equal(sends, 0);
     }).pipe(Effect.provide(f.layer)),
   );
+});
+
+test("a session link in Slack and one a dispatched session shows share the public HTTPS origin", async (t) => {
+  // A VM that is also opened locally: the listener's own origin is allowed, but a link has to open
+  // from the remote browser too.
+  const origins = ["http://127.0.0.1:7070", "https://piano.example.test"];
+  const texts: string[] = [];
+  const f = fixture(async (_url, init) => {
+    texts.push(JSON.parse(String(init?.body)).text);
+    return new Response("");
+  }, origins);
+  t.after(f.dispose);
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const n = yield* Notifications;
+      assert.equal((yield* n.state()).problem, undefined);
+      yield* n.change({ action: "select", name: "slack-hook" });
+      yield* n.change({ action: "test" });
+    }).pipe(Effect.provide(f.layer)),
+  );
+  const endpoint = sessionEndpoint({ host: "127.0.0.1", port: 7070 }, new Set(origins));
+  assert.equal(endpoint?.origin, "https://piano.example.test");
+  assert.deepEqual(texts, [`Test notification from Piano. ${endpoint.origin}/`]);
 });
 
 test("clearing requires neither discovery nor a public origin; choosing or testing does require the link origin", async (t) => {
