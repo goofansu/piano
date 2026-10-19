@@ -3,7 +3,7 @@
  * the browser keeps its view with it, so a snapshot followed by its live events gives every tab
  * the state the server would hand a newly attached one (INV-05).
  */
-import type { SessionEvent, SessionState, SessionStats, Snapshot } from "./wire.ts";
+import type { SessionCursor, SessionEvent, SessionState, SessionStats, Snapshot } from "./wire.ts";
 
 /** Pi has session-level work in flight: a run, a compaction or an automatic retry. */
 export const isWorking = (
@@ -23,6 +23,20 @@ export const withLastKnownStats = (
   state: SessionState,
   stats: SessionStats | undefined,
 ): SessionState => ({ ...state, ...stats, contextIsLastKnown: true });
+
+/** Where a live frame's cursor stands against the last one folded in: the one after it, one
+ * already folded, one past frames that were missed, or one from another incarnation of the child
+ * (or with nothing folded yet). The cursor is the only ordering an attachment has, so every
+ * consumer of live frames classifies them here and decides only its reaction. */
+export type CursorStep = "next" | "duplicate" | "gap" | "other-generation";
+
+type Position = Pick<SessionCursor, "generation" | "sequence">;
+
+export function cursorStep(last: Position | null | undefined, frame: Position): CursorStep {
+  if (!last || frame.generation !== last.generation) return "other-generation";
+  if (frame.sequence <= last.sequence) return "duplicate";
+  return frame.sequence === last.sequence + 1 ? "next" : "gap";
+}
 
 /** The snapshot after `event`. Events that change nothing return the same snapshot. */
 export function applySessionEvent(snapshot: Snapshot, event: SessionEvent): Snapshot {
