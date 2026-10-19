@@ -257,13 +257,6 @@ export const saveDefaults = async (
   options?: RequestOptions,
 ) => (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;
 
-export const exeDevEnvironment = (options?: RequestOptions) =>
-  call(Endpoints.exeDevEnvironment, {}, options);
-export const changeIntegrationsSettings = (
-  body: typeof Endpoints.changeIntegrationsSettings.body.Type,
-  options?: RequestOptions,
-) => call(Endpoints.changeIntegrationsSettings, { body }, options);
-
 // Settings
 
 export const oauthProviders = async (options?: RequestOptions) =>

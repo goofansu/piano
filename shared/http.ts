@@ -10,7 +10,6 @@
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
-import { NotificationAction, NotificationSettings } from "./notifications.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
 import {
@@ -317,23 +316,6 @@ export const Endpoints = {
     refused: 409,
     redact: false,
     fallback: "Could not load Radius setup.",
-  }),
-  exeDevEnvironment: endpoint({
-    method: "GET",
-    path: "/api/settings/integrations/environment",
-    response: Schema.Struct({ detected: Schema.Boolean }),
-    noStore: true,
-    fallback: "Could not detect exe.dev.",
-  }),
-  changeIntegrationsSettings: endpoint({
-    method: "POST",
-    path: "/api/settings/integrations",
-    body: NotificationAction,
-    response: NotificationSettings,
-    noStore: true,
-    refused: 409,
-    redact: false,
-    fallback: "Could not change notifications.",
   }),
   mcpSetup: endpoint({
     method: "GET",

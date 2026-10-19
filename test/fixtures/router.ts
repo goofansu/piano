@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
-import type { Notifications } from "../../server/Notifications.ts";
 import { AllowedOrigins } from "../../server/OriginPolicy.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "../../server/PianoServices.ts";
 import { PiCli } from "../../server/PiCli.ts";
@@ -24,7 +23,7 @@ export interface RouterFixture {
   readonly handle: (input: string, init?: RequestInit) => Promise<Response>;
   /** Run against the same services the router answers from, e.g. to start a session it can see. */
   readonly run: <A, X>(
-    effect: Effect.Effect<A, X, SessionHosts | Registry | ProviderLogin | Notifications>,
+    effect: Effect.Effect<A, X, SessionHosts | Registry | ProviderLogin>,
   ) => Promise<A>;
   readonly dispose: () => Promise<void>;
 }

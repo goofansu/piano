@@ -24,7 +24,7 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
   try {
     const database = new DatabaseSync(fixture.database, { readOnly: true });
     try {
-      assert.equal(database.prepare("PRAGMA user_version").get()?.user_version, 6);
+      assert.equal(database.prepare("PRAGMA user_version").get()?.user_version, 7);
     } finally {
       database.close();
     }

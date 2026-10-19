@@ -37,13 +37,6 @@ Open **Settings** at the bottom of the sidebar, then click **Sign in** next to a
 **Providers**. Start a new session afterwards, because a running session keeps the models it started
 with. For remote sign-in and limits, see [provider sign-in](docs/provider-sign-in.md).
 
-### Slack notifications on exe.dev
-
-Open **Settings → Integrations**. In the **Slack** card, choose one of the Slack webhooks attached
-to your VM, named as exe.dev names them. Use **Test** to check delivery, or choose **Off** to
-disable it. A minute after a response completes, Piano sends a link to its session, even with the
-browser closed, unless you act on or reopen the session first. See [notification setup and limits](docs/notifications.md).
-
 ### Preview local files
 
 Click a local file link in a session to read it beside the conversation. Markdown offers

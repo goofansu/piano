@@ -280,7 +280,6 @@ export function startSession(
             selectionId,
             cwd: handle.cwd,
             sessionId: handle.sessionId,
-            observer: true,
           });
         },
         disconnected: (fatal) => {
@@ -703,13 +702,11 @@ function observeHandle(
     const select = () => {
       selectionId = link.nonce();
       sequence = 0;
-      // An observer: watching the session must not drop the completion message a person may want.
       link.send({
         _tag: "select",
         selectionId,
         cwd: handle.cwd,
         sessionId: handle.sessionId,
-        observer: true,
       });
     };
     /** Attaches again, up to the attempt bound, rather than trusting an incomplete view. */

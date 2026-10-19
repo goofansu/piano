@@ -42,7 +42,6 @@ import {
   sessionCommands,
 } from "@/lib/sessionCommands";
 import { useCommandForms } from "@/lib/useCommandForms";
-import { useExeDev } from "@/lib/useExeDev";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
@@ -123,8 +122,7 @@ export function useSessionProjectMenu() {
  */
 export function useGlobalCommands() {
   const { state, run, global } = useCommands();
-  const exeDetected = !!useExeDev().value?.detected;
-  return { commands: globalCommands(state, { ...global, exeDetected }), run };
+  return { commands: globalCommands(state, global), run };
 }
 
 /** A descriptor as a menu row, by its label and icon. */

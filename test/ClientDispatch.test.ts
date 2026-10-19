@@ -8,7 +8,6 @@ import { Effect, Fiber, Layer, Queue, type Scope } from "effect";
 import { type ClientRequest, makeClientDispatch } from "../server/ClientDispatch.ts";
 import { DirectoryFacts } from "../server/DirectoryFacts.ts";
 import { inboundLimits } from "../server/InboundCapacity.ts";
-import type { Notifications } from "../server/Notifications.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
@@ -53,13 +52,7 @@ const run = <A, E>(
   effect: Effect.Effect<
     A,
     E,
-    | WorkspaceCommands
-    | SidebarView
-    | DirectoryFacts
-    | SessionHosts
-    | Registry
-    | Notifications
-    | Scope.Scope
+    WorkspaceCommands | SidebarView | DirectoryFacts | SessionHosts | Registry | Scope.Scope
   >,
 ) => {
   sent.length = 0;

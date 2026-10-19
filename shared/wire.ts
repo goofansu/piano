@@ -823,13 +823,11 @@ export const ClientMessage = Schema.Union([
     folder: Schema.String,
     path: Schema.String,
   }),
-  /** Show a session. A person opening it drops its pending completion message; an observer's select does not. */
+  /** Show a session. */
   Schema.TaggedStruct("select", {
     selectionId: Schema.String,
     cwd: Schema.String,
     sessionId: Schema.NullOr(Schema.String),
-    /** Set by Piano's dispatch tool, which watches a session it started for a wait; absent is a person. */
-    observer: Schema.optional(Schema.Boolean),
   }),
   /** Create and start a session in a directory (registering it as a folder when needed) and send its first prompt. */
   Schema.TaggedStruct("create_session", {

@@ -85,9 +85,8 @@ the backend address. For the exe.dev setup, see
 
 ### Session link origin
 
-Piano links into its UI, `<origin>/s/<sessionId>`, from a dispatched session and from a
-[Slack notification](notifications.md). Both take the origin from `PIANO_ALLOWED_ORIGINS`, by one
-rule:
+Piano links into its UI, `<origin>/s/<sessionId>`, from a dispatched session. It takes the origin
+from `PIANO_ALLOWED_ORIGINS`, by one rule:
 
 1. the first HTTPS origin, because a link has to open from a remote browser;
 2. otherwise the origin naming the listener (`HOST:PORT`);
@@ -96,23 +95,17 @@ rule:
 Without `PIANO_ALLOWED_ORIGINS` this is the listener's loopback origin. To link through a different
 HTTPS alias, list it first. The origin is never taken from a request header.
 
-## Notifications
-
-In **Settings → Integrations**, [Slack notifications](notifications.md) use one selected, attached
-Slack integration when an agent finishes responding. Selection persists in Piano’s database. Positive
-environment detection lasts until backend restart; the integration catalog refreshes separately.
-
 ## Registry storage
 
 Piano stores its registry in SQLite through Node's built-in `node:sqlite` module. The tables match
 the names the code uses: `folders` holds added directories, `projects` holds named session groups,
-and `workspaces`, `worktrees` and `sessions` hold the rest. `notification_settings` holds the one
-selected exe.dev integration name. Pi owns conversation files and Git owns repository facts,
-so neither is in the registry.
+and `workspaces`, `worktrees` and `sessions` hold the rest. Pi owns conversation files and Git owns
+repository facts, so neither is in the registry.
 
 Piano refuses to start on a corrupt database, an unrecognized one, or one from a newer Piano. It
 never resets a database. It upgrades an older database in place when it opens it, and the current
-schema is version 6 (the saved notification integration is a name, not a URL). Before it upgrades a version 1 database, which still has project goals, Piano
+schema is version 7, which drops retired notification preference tables without changing session
+data. Before it upgrades a version 1 database, which still has project goals, Piano
 writes a private copy to `<database>.v1-backup`. An older Piano can open that copy but not the
 upgraded file.
 
