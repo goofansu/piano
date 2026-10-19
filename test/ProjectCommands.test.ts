@@ -5,8 +5,10 @@ import {
   canStartSessionIn,
   projectCommands,
   projectDestinations,
+  sessionProjectMenu,
 } from "../web/src/lib/projectCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const launch: Project = { id: "p1", name: "Launch", archived: false };
 const billing: Project = { id: "p2", name: "Billing", archived: false };
@@ -82,4 +84,48 @@ test("registry changes wait for a connection", () => {
         assert.equal(c.enabled, false, `${project.name}: ${c.label}`);
     }
   }
+});
+
+test("a session's project menu: Move for a member, Add otherwise, one connection rule for every row", () => {
+  const member = { cwd: "/repo", sessionId: "s1" };
+  const loose = { cwd: "/repo", sessionId: "s2" };
+  const s: AppState = {
+    ...state,
+    sessionReferences: [
+      sessionReference("/repo", "s1", { projectId: "p1" }),
+      sessionReference("/repo", "s2"),
+    ],
+  };
+  const moving = sessionProjectMenu(s, member);
+  assert.equal(moving.current?.name, "Launch");
+  assert.deepEqual(moving.entry, { label: "Move to project", enabled: true });
+  assert.deepEqual(names(moving.destinations.map((d) => d.project)), ["Billing"]);
+  assert.deepEqual(moving.destinations[0]?.command.intent, {
+    kind: "send",
+    command: { _tag: "assign_project", cwd: "/repo", sessionId: "s1", projectId: "p2" },
+  });
+  assert.equal(moving.remove?.label, "Remove from project");
+  assert.deepEqual(moving.remove?.intent, {
+    kind: "send",
+    command: { _tag: "assign_project", cwd: "/repo", sessionId: "s1", projectId: null },
+  });
+  assert.deepEqual(moving.create.intent, {
+    kind: "project-dialog",
+    dialog: { assign: member },
+  });
+
+  const adding = sessionProjectMenu(s, loose);
+  assert.equal(adding.current, undefined);
+  assert.deepEqual(adding.entry, { label: "Add to project", enabled: true });
+  assert.equal(adding.remove, undefined, "a session in no project has nothing to remove");
+  assert.deepEqual(names(adding.destinations.map((d) => d.project)), ["Billing", "Launch"]);
+
+  const offline = sessionProjectMenu({ ...s, connected: false }, member);
+  assert.deepEqual(
+    offline.entry,
+    { label: "Move to project", enabled: false },
+    "the entry is disabled, not a pane of disabled rows",
+  );
+  for (const c of [offline.create, offline.remove!, ...offline.destinations.map((d) => d.command)])
+    assert.equal(c.enabled, false, c.label);
 });

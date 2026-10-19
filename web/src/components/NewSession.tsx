@@ -256,9 +256,9 @@ function ProjectSelect({
       >
         <ProjectDestinationItems
           create={create}
-          projects={choices}
+          destinations={choices.map((project) => ({ project }))}
           onCreate={onCreate}
-          onPick={pick}
+          onPick={(d) => pick(d.project.id)}
         />
         {current && (
           <>

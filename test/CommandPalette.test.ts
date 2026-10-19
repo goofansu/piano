@@ -19,6 +19,7 @@ import {
   paletteSelection,
   searchPalette,
 } from "../web/src/lib/paletteSearch.ts";
+import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { sessionFiles } from "../web/src/lib/sessionFiles.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
@@ -79,6 +80,12 @@ const palette = (state: AppState, search = "", c = ctx) =>
     commandPalette(state, {
       globalCommands: globalCommands(state, c),
       sessionCommands: sessionCommands(state),
+      sessionProject: state.session?.sessionId
+        ? sessionProjectMenu(state, {
+            cwd: state.session.cwd,
+            sessionId: state.session.sessionId,
+          })
+        : undefined,
       files: sessionFiles(state.session?.messages ?? []),
     }),
     search,
@@ -145,6 +152,49 @@ test("a search ranks groups by their best row; blank input keeps the declared or
   );
   assert.equal(headings(inSession, "dark")[0], "Global commands");
   assert.deepEqual(headings(inSession, "   "), headings(inSession), "blank input is not a search");
+});
+
+test("Session commands offer the session's project membership, named as the menu's buttons", () => {
+  const billing = { id: "billing", name: "Billing", archived: false };
+  const loose: AppState = { ...inSession, projects: [...inSession.projects, billing] };
+  const member: AppState = {
+    ...loose,
+    sessionReferences: references.map((r) =>
+      r.sessionId === "s1" ? { ...r, projectId: "launch" } : r,
+    ),
+  };
+  const labels = (state: AppState, search = "") => {
+    const group = palette(state, search).find((g) => g.id === "session");
+    return group?.id === "session" ? group.rows.map((r) => r.label) : [];
+  };
+  const membership = (state: AppState, search = "") =>
+    labels(state, search).filter((l) => /project/.test(l));
+  assert.deepEqual(
+    membership(loose),
+    ["Add to project: New project"],
+    "before a search one row stands for the picker; destinations wait for a search",
+  );
+  assert.deepEqual(membership(loose, "add to"), [
+    "Add to project: New project",
+    "Add to project: Billing",
+    "Add to project: Launch",
+  ]);
+  assert.deepEqual(membership(member), ["Move to project: New project", "Remove from project"]);
+  assert.deepEqual(membership(member, "billing"), ["Move to project: Billing"]);
+  const group = palette(member, "remove").find((g) => g.id === "session");
+  assert.ok(group?.id === "session");
+  const remove = group.rows.find((r) => r.label === "Remove from project")!;
+  assert.equal(remove.enabled, true);
+  assert.deepEqual(remove.command.intent, {
+    kind: "send",
+    command: { _tag: "assign_project", cwd: "/repo", sessionId: "s1", projectId: null },
+  });
+  const offline = palette({ ...member, connected: false }, "project").find(
+    (g) => g.id === "session",
+  );
+  assert.ok(offline?.id === "session");
+  for (const r of offline.rows.filter((r) => /project/.test(r.label)))
+    assert.equal(r.enabled, false, r.label);
 });
 
 test("search uses direct command synonyms, not related topics or opposite display choices", () => {

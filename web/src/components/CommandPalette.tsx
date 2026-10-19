@@ -11,7 +11,12 @@ import {
   useState,
 } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
-import { CommandIcon, useGlobalCommands, useSessionCommands } from "@/components/CommandHost";
+import {
+  CommandIcon,
+  useGlobalCommands,
+  useSessionCommands,
+  useSessionProjectMenu,
+} from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import {
   CommandDialog,
@@ -22,6 +27,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/PianoCommand";
+import { ProjectCommandIconView } from "@/components/Projects";
 import { createPaletteCatalog } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
@@ -106,10 +112,12 @@ function PaletteContents({
     [],
   );
   const { commands: sessionCommandList } = useSessionCommands();
+  const sessionProject = useSessionProjectMenu();
   const files = useSessionFiles();
   const groups = catalog(state, {
     globalCommands: globalCommandList,
     sessionCommands: sessionCommandList,
+    sessionProject,
     files,
   });
   const results = usePaletteSearch(groups, search, editing || !open);
@@ -359,7 +367,14 @@ const PaletteResults = memo(function PaletteResults({
                           disabled={!r.enabled}
                           onSelect={() => run(() => runCommand(r.command))}
                         >
-                          <CommandIcon icon={r.command.icon} />{" "}
+                          {
+                            // Only a session command has a group; the rest are the membership rows.
+                            "group" in r.command ? (
+                              <CommandIcon icon={r.command.icon} />
+                            ) : (
+                              <ProjectCommandIconView icon={r.command.icon} />
+                            )
+                          }{" "}
                           {r.detail ? (
                             <>
                               <span className="shrink-0">{r.label}</span>{" "}

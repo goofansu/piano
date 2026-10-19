@@ -66,7 +66,12 @@ export function createPaletteSearchClient(
       documents = job.groups.map(({ id, heading, rows }) => ({
         id,
         heading,
-        rows: rows.map(({ key, value, keywords }) => ({ key, value, keywords })),
+        rows: rows.map((row) => ({
+          key: row.key,
+          value: row.value,
+          keywords: row.keywords,
+          ...("searchOnly" in row && row.searchOnly ? { searchOnly: true } : {}),
+        })),
       }));
       rows = new Map(
         job.groups.flatMap((group) =>
