@@ -187,8 +187,9 @@ export interface ProjectDestination {
  * A session's project membership as its menus offer it: the current project named, an entry that
  * opens the picker ("Move to project" for a member, "Add to project" otherwise), New project and
  * the destinations inside it, and Remove from project for a member. Every row changes the
- * registry, so one rule enables them all: connected; `open` only navigates (`openProjectCommand`). The entry follows it, so a disconnected menu
- * offers a disabled entry rather than a pane of disabled rows.
+ * registry, so one rule enables them all: connected. The entry follows it, so a disconnected menu
+ * offers a disabled entry rather than a pane of disabled rows. `open` only navigates
+ * (`openProjectCommand`).
  */
 export interface SessionProjectMenu {
   current: Project | undefined;
