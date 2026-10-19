@@ -108,7 +108,7 @@ test("INV-01/07: discovers by branch AND head repository, pins identity across b
   assert.equal(linked.link?.url, "https://github.com/example/repo/pull/43");
   assert.equal(linked.link?.source, "manual");
   await f.change({ action: "remove" });
-  assert.deepEqual(await f.get(), { link: null, pullRequest: null, discovery: false });
+  assert.deepEqual(await f.get(), { link: null, pullRequest: null });
   assert.equal((await f.get("two")).pullRequest?.number, 43);
   // Preference is durable metadata, not forge facts or history.
   const persisted = await Effect.runPromise(
@@ -123,7 +123,7 @@ test("INV-01/07: discovers by branch AND head repository, pins identity across b
   });
   const restarted = ManagedRuntime.make(f.layer);
   try {
-    assert.equal((await f.getIn(restarted, "one")).discovery, false);
+    assert.deepEqual(await f.getIn(restarted, "one"), { link: null, pullRequest: null });
     assert.equal((await f.getIn(restarted, "two")).pullRequest?.number, 43);
   } finally {
     await restarted.dispose();

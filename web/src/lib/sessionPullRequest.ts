@@ -93,7 +93,7 @@ const POLL_MS = 60_000;
 const NOT_FOUND = "No open PR found for this branch.";
 const failure = (error: unknown) =>
   error instanceof Error ? error.message : "Could not load the pull request.";
-/** An unreadable pull request keeps the session's saved link and discovery choice, with the reason. */
+/** An unreadable pull request keeps the session's saved link, with the reason. */
 const fallback = (
   previous: SessionPullRequest | undefined,
   link: RegistryLink | null | undefined,
@@ -101,7 +101,6 @@ const fallback = (
 ): SessionPullRequest => ({
   link: previous?.link ?? link ?? null,
   pullRequest: null,
-  discovery: previous?.discovery ?? link !== null,
   error,
 });
 /** A link change needs a URL and no other change in flight; the form's submit follows this rule. */

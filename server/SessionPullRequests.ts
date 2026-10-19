@@ -69,17 +69,15 @@ export const SessionPullRequestsLive = Layer.effect(
     ) => Effect.Effect<SessionPullRequest, PullRequestError | RegistryError> = Effect.fn(
       "SessionPullRequests.result",
     )(function* (s: SessionEntry, forceDiscovery = false) {
-      if (!forceDiscovery && s.pullRequest === null)
-        return { link: null, pullRequest: null, discovery: false };
+      if (!forceDiscovery && s.pullRequest === null) return { link: null, pullRequest: null };
       if (!forceDiscovery && s.pullRequest) {
         const pullRequest = yield* github.view(s.pullRequest, s.cwd).pipe(Effect.result);
         // A failed lookup retains the association, not stale success/checks.
         return pullRequest._tag === "Success"
-          ? { link: s.pullRequest, pullRequest: pullRequest.success, discovery: false }
+          ? { link: s.pullRequest, pullRequest: pullRequest.success }
           : {
               link: s.pullRequest,
               pullRequest: null,
-              discovery: false,
               error: pullRequest.failure.detail,
             };
       }
@@ -107,7 +105,6 @@ export const SessionPullRequestsLive = Layer.effect(
         return {
           link: s.pullRequest ?? null,
           pullRequest: null,
-          discovery: s.pullRequest === undefined,
           error: found.failure.detail,
         };
       if (!found.success) {
@@ -117,11 +114,11 @@ export const SessionPullRequestsLive = Layer.effect(
             error: "No matching open pull request for the current branch.",
           };
         if (forceDiscovery) yield* save(s, undefined);
-        return { link: null, pullRequest: null, discovery: true };
+        return { link: null, pullRequest: null };
       }
       const link: SessionPullRequestLink = { ...found.success.link, source: "branch" };
       yield* save(s, link);
-      return { link, pullRequest: found.success.pullRequest, discovery: false };
+      return { link, pullRequest: found.success.pullRequest };
     });
     return SessionPullRequests.of({
       get: (s) => result(s),
@@ -137,7 +134,7 @@ export const SessionPullRequestsLive = Layer.effect(
         }
         if (action.action === "discover") return yield* result(s, true);
         yield* save(s, null);
-        return { link: null, pullRequest: null, discovery: false };
+        return { link: null, pullRequest: null };
       }),
     });
   }),
