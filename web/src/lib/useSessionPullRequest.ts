@@ -6,8 +6,8 @@ import { createSessionPullRequest, pullRequestKey } from "@/lib/sessionPullReque
 
 /**
  * Only the selected session is observed, and only while the registry links it (`link` is the
- * catalog's): on selection, focus, a minute's interval and when its work starts or stops. The
- * module tells those apart from the snapshot passed here; this hook decides nothing about them.
+ * catalog's). The module owns freshness, focus/work refreshes and polling of visible active PR
+ * details; this hook passes the session snapshot and panel visibility without deciding that policy.
  * Navigation owns whether the panel is open; the link decides what it shows and may close it.
  */
 export function useSessionPullRequest(

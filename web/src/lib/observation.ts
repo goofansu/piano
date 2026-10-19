@@ -53,6 +53,8 @@ export interface Observation<T> {
   refresh: () => Promise<T | undefined>;
   /** Reads after `ms` unless called again first; `ms <= 0` reads now. */
   refreshSoon: (ms: number) => void;
+  /** Re-evaluate the polling interval after external policy changes, without starting a read. */
+  reschedule: () => void;
   /**
    * Runs a change for the current key with the value it applies to. Its result (if not
    * `undefined`) becomes the value unless the key changed or another mutation started meanwhile;
@@ -123,7 +125,7 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
   const schedule = () => {
     if (poll !== undefined) env.clearTimeout(poll);
     poll = undefined;
-    const ms = live() ? options.interval?.(state.value) : undefined;
+    const ms = live() && work === null ? options.interval?.(state.value) : undefined;
     if (ms === undefined) return;
     poll = env.setTimeout(function tick() {
       poll = undefined;
@@ -139,6 +141,9 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
   const refresh = async (): Promise<T | undefined> => {
     if (!live() || work?.mutation) return undefined;
     const key = state.key!;
+    // The next poll is due after this read settles, never while it is still in flight.
+    if (poll !== undefined) env.clearTimeout(poll);
+    poll = undefined;
     work?.controller.abort();
     const mine = { controller: new AbortController(), mutation: false };
     work = mine;
@@ -204,6 +209,7 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
       void refresh();
     },
     refresh,
+    reschedule: schedule,
     refreshSoon: (ms) => {
       if (!live()) return;
       if (soon !== undefined) env.clearTimeout(soon);

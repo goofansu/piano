@@ -1,9 +1,9 @@
 /**
  * The selected session's pull request link: one live observation of it plus the surface that
  * shows it. The registry decides whether a session is linked, and the session catalog carries its
- * link, so only a linked session is read (on selection, focus, an interval and when its work
- * starts or stops): selecting an unlinked session costs no GitHub call. This module decides
- * what counts as work starting or stopping: a change within the observed session, never the
+ * link, so only a linked session is read: on selection, focus, work edges and stale opens.
+ * Only open/draft PR details poll while shown; selecting an unlinked session costs no GitHub call.
+ * Work starting or stopping means a change within the observed session, never the
  * selection of one mid-turn. When the work of a session never searched for a pull request
  * stops, it is searched once in the background; the registry keeps what that finds and the
  * catalog reports it. Reads are silent; only an explicit
@@ -56,6 +56,8 @@ export interface SessionPullRequestOptions {
   /** Called when the surface closes itself, so whoever owns "open" can follow. */
   closed?: () => void;
   environment?: ObservationEnvironment;
+  /** Clock for the freshness of the last completed read or change. */
+  now?: () => number;
 }
 
 export interface SessionPullRequestLink {
@@ -77,7 +79,7 @@ export interface SessionPullRequestLink {
     link: RegistryLink | null | undefined,
     working: boolean,
   ) => void;
-  /** Shows the already-observed details when linked, else the link form. */
+  /** Shows linked details immediately, refreshing only if stale and no read is in flight; else the link form. */
   open: () => void;
   /** Hides the surface without reporting it through `closed`. */
   close: () => void;
@@ -118,11 +120,28 @@ export function createSessionPullRequest({
   notify,
   closed,
   environment,
+  now = Date.now,
 }: SessionPullRequestOptions): SessionPullRequestLink {
   const target = (key: string) => JSON.parse(key) as [string, string];
+  let readAt: number | undefined;
+  const request = async (
+    key: string,
+    action: SessionPullRequestAction | undefined,
+    signal: AbortSignal,
+  ) => {
+    const value = await api(...target(key), action, { signal });
+    // An aborted response belongs to superseded work and must not make current facts fresh.
+    if (!signal.aborted) readAt = now();
+    return value;
+  };
   const observation = createObservation<SessionPullRequest>({
-    load: (signal, key) => api(...target(key), undefined, { signal }),
-    interval: () => POLL_MS,
+    load: (signal, key) => request(key, undefined, signal),
+    interval: (value) => {
+      const active = value?.pullRequest?.state;
+      return surface === "details" && (active === "open" || active === "draft")
+        ? POLL_MS
+        : undefined;
+    },
     focus: true,
     environment,
   });
@@ -154,6 +173,7 @@ export function createSessionPullRequest({
   const show = (next: PullRequestSurface) => {
     if (surface === next) return;
     surface = next;
+    observation.reschedule();
     publish();
   };
   const closeItself = () => {
@@ -184,7 +204,7 @@ export function createSessionPullRequest({
     try {
       const value = await observation.mutate(async (signal, previous) => {
         try {
-          const body = await api(...target(key), action, { signal });
+          const body = await request(key, action, signal);
           // A saved association can succeed even when its live GitHub status is unavailable.
           if (body.error) notify.error(body.error);
           return body;
@@ -227,6 +247,7 @@ export function createSessionPullRequest({
       const edge = key !== null && key === previous && nextWorking !== working;
       working = nextWorking;
       if (key !== previous) {
+        readAt = undefined;
         surface = "closed";
         finding = false;
         endSearch();
@@ -255,8 +276,17 @@ export function createSessionPullRequest({
     },
     open: () => {
       if (surface !== "closed") return;
-      // Opening is presentation only; selection, focus, polling and work edges keep facts fresh.
       show(state.value?.link ? "details" : "link-form");
+      const { loading, mutating } = observation.getState();
+      // A focus read may already be running or just finished when the user clicks the PR.
+      if (
+        state.value?.link &&
+        !loading &&
+        !mutating &&
+        (readAt === undefined || now() - readAt >= POLL_MS)
+      ) {
+        void observation.refresh();
+      }
     },
     close: () => show("closed"),
     edit: () => {

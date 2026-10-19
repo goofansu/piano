@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
+  PullRequest,
   SessionPullRequest,
   SessionPullRequestAction,
   SessionPullRequestLink,
@@ -41,7 +42,7 @@ function server() {
 }
 
 /** Observes session s1 with the registry link the catalog reports for it. */
-function setup(link: SessionPullRequestLink | null | undefined) {
+function setup(link: SessionPullRequestLink | null | undefined, env = environment, now = Date.now) {
   const pi = server();
   const notes: { error: string[]; info: string[] } = { error: [], info: [] };
   let closes = 0;
@@ -49,11 +50,12 @@ function setup(link: SessionPullRequestLink | null | undefined) {
     api: pi.api,
     notify: { error: (m) => notes.error.push(m), info: (m) => notes.info.push(m) },
     closed: () => closes++,
-    environment,
+    environment: env,
+    now,
   });
-  pr.start();
+  const stop = pr.start();
   pr.observe("w1", "s1", link, false);
-  return { pi, pr, notes, closes: () => closes };
+  return { pi, pr, notes, stop, closes: () => closes };
 }
 
 test("only a session the registry links is read; its link changing or going elsewhere is followed", async () => {
@@ -138,6 +140,166 @@ test("opening details reuses the loaded facts without replacing a background rea
   assert.deepEqual(pr.getState().value, unavailable, "the refresh updates the open details");
 });
 
+/** A controllable clock: no real minute-long sleeps or browser focus needed. */
+function clock() {
+  let time = 0;
+  let hidden = false;
+  let focus = () => {};
+  const timers = new Map<object, { at: number; run: () => void }>();
+  const env: ObservationEnvironment = {
+    setTimeout: (run, ms) => {
+      const id = {};
+      timers.set(id, { at: time + ms, run });
+      return id;
+    },
+    clearTimeout: (id) => {
+      timers.delete(id as object);
+    },
+    onFocus: (listener) => {
+      focus = listener;
+      return () => {
+        focus = () => {};
+      };
+    },
+    hidden: () => hidden,
+  };
+  return {
+    env,
+    now: () => time,
+    focus: () => focus(),
+    hide: (value: boolean) => {
+      hidden = value;
+    },
+    advance: async (ms: number) => {
+      const until = time + ms;
+      for (;;) {
+        const next = [...timers]
+          .filter(([, timer]) => timer.at <= until)
+          .sort((a, b) => a[1].at - b[1].at)[0];
+        if (!next) break;
+        timers.delete(next[0]);
+        time = next[1].at;
+        next[1].run();
+        await settle();
+      }
+      time = until;
+    },
+  };
+}
+
+const facts = (state: PullRequest["state"]): SessionPullRequest => ({
+  link: registered,
+  pullRequest: {
+    url: URL,
+    repo: "example/repo",
+    number: 42,
+    title: "A pull request",
+    state,
+    checks: "pending",
+    review: "none",
+  },
+});
+
+test("closed details do not poll; opening reuses a fresh or in-flight focus result and refreshes stale facts", async () => {
+  const time = clock();
+  const { pi, pr, stop } = setup(registered, time.env, time.now);
+  pi.last().resolve(facts("open"));
+  await settle();
+  await time.advance(120_000);
+  assert.equal(pi.requests.length, 1, "no polling while the popover is closed");
+
+  time.focus();
+  assert.equal(pi.requests.length, 2);
+  pr.open();
+  assert.equal(pi.requests.length, 2, "opening joins the in-flight focus read");
+  pi.last().resolve(facts("draft"));
+  await settle();
+  assert.equal(pr.getState().value?.pullRequest?.state, "draft");
+  pr.close();
+  await time.advance(59_999);
+  pr.open();
+  assert.equal(pi.requests.length, 2, "opening uses the recent focus result");
+  pr.close();
+  await time.advance(1);
+  pr.open();
+  assert.equal(pi.requests.length, 3, "a minute-old result refreshes on open");
+  assert.equal(
+    pr.getState().value?.pullRequest?.state,
+    "draft",
+    "stale details stay visible during refresh",
+  );
+  await time.advance(120_000);
+  assert.equal(pi.requests.length, 3, "polling does not interrupt a slow refresh");
+  stop();
+});
+
+test("only visible, active PR details poll; closing, editing, terminal states and stopping cancel polling", async () => {
+  const time = clock();
+  const { pi, pr, stop } = setup(registered, time.env, time.now);
+  pi.last().resolve(facts("open"));
+  await settle();
+  pr.open();
+  await time.advance(60_000);
+  assert.equal(pi.requests.length, 2, "open PR details poll");
+  pi.last().resolve(facts("draft"));
+  await settle();
+  time.hide(true);
+  await time.advance(60_000);
+  assert.equal(pi.requests.length, 2, "hidden pages do not poll");
+  time.hide(false);
+  await time.advance(60_000);
+  assert.equal(pi.requests.length, 3, "draft details poll once visible");
+  pi.last().resolve(facts("open"));
+  await settle();
+  pr.edit();
+  await time.advance(60_000);
+  assert.equal(pi.requests.length, 3, "editing does not poll");
+  pr.cancel();
+  await time.advance(60_000);
+  assert.equal(pi.requests.length, 4, "returning to details resumes polling");
+  pi.last().resolve(facts("merged"));
+  await settle();
+  await time.advance(120_000);
+  assert.equal(pi.requests.length, 4, "merged PRs stop polling");
+  time.focus();
+  assert.equal(pi.requests.length, 5, "focus still refreshes terminal PRs");
+  pi.last().resolve(facts("closed"));
+  await settle();
+  await time.advance(120_000);
+  assert.equal(pi.requests.length, 5, "closed PRs do not poll");
+
+  time.focus();
+  pi.last().resolve(facts("open"));
+  await settle();
+  pr.close();
+  await time.advance(60_000);
+  assert.equal(pi.requests.length, 6, "closing cancels the pending poll");
+  pr.open();
+  pi.last().resolve(facts("open"));
+  await settle();
+  const sent = pi.requests.length;
+  stop();
+  time.focus();
+  await time.advance(120_000);
+  assert.equal(pi.requests.length, sent, "stopping cancels polling and focus reads");
+});
+
+test("a late response from another session cannot make current facts fresh", async () => {
+  const time = clock();
+  const { pi, pr, stop } = setup(registered, time.env, time.now);
+  const old = pi.last();
+  pr.observe("w1", "s2", registered, false);
+  pi.last().resolve(facts("draft"));
+  await settle();
+  await time.advance(60_000);
+  old.resolve(facts("merged"));
+  await settle();
+  pr.open();
+  assert.equal(pr.getState().value?.pullRequest?.state, "draft");
+  assert.equal(pi.requests.length, 3, "the other session's late response did not reset freshness");
+  stop();
+});
+
 test("Find from branch with nothing found reports it exactly once", async () => {
   const { pi, pr, notes } = setup(undefined);
   pr.open();
@@ -200,6 +362,11 @@ test("an unreadable first read still shows the registry's link", async () => {
   await settle();
   assert.equal(pr.getState().value?.link?.url, URL);
   assert.equal(pr.getState().value?.pullRequest, null);
+  pr.open();
+  assert.equal(pi.requests.length, 2, "opening retries when no read has succeeded");
+  pr.close();
+  pr.open();
+  assert.equal(pi.requests.length, 2, "reopening does not replace the retry in flight");
 });
 
 test("a blank URL, or one sent while another change is in flight, sends nothing", async () => {
