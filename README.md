@@ -49,7 +49,8 @@ saves the file as it is on disk. Click the link again to reread. See
 Ask **“Dispatch this work in a new session.”** The agent starts a fresh, visible session with a
 self-contained brief, returns an **Open session** link, and can wait for its answer. Use separate
 prepared worktrees for concurrent writing tasks. See [session dispatch](docs/session-dispatch.md)
-for setup, checkout semantics and bounded observation.
+for setup, checkout semantics and bounded observation, or use the bundled
+[terminal dispatch script](docs/session-dispatch.md#from-a-terminal-linux-and-macos).
 
 ### Configure
 

@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -841,5 +842,76 @@ test("INV-01: renaming goes through Pi, even for a stopped session, and the regi
       );
     }),
     { fakePi: "rename" },
+  );
+});
+
+test("INV-01/06: a new session in a linked worktree is listed under its main checkout's folder, never as a folder of its own", async () => {
+  const git = (dir: string, ...args: string[]) => {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  const repo = join(root, "repo"),
+    linked = join(root, "linked"),
+    repoAlias = join(root, "repo-alias"),
+    linkedAlias = join(root, "linked-alias"),
+    bare = join(root, "bare.git"),
+    bareLinked = join(root, "bare-linked");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet", "-b", "main");
+  git(
+    repo,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--quiet",
+    "--allow-empty",
+    "-m",
+    "baseline",
+  );
+  git(repo, "worktree", "add", "--quiet", "-b", "feature", linked);
+  symlinkSync(repo, repoAlias);
+  symlinkSync(linked, linkedAlias);
+  mkdirSync(join(linked, "nested"));
+  git(root, "clone", "--quiet", "--bare", repo, bare);
+  git(bare, "worktree", "add", "--quiet", bareLinked, "main");
+  // Git reports physical paths; the fixture root may be reached through a symlink (macOS /var).
+  const physical = (path: string) => realpathSync(path);
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      // Nothing registered yet: the worktree brings its main checkout in as the folder, both under Git's spelling.
+      const session = yield* hosts.create({ cwd: linkedAlias, options: {} });
+      assert.equal(session.spec.cwd, physical(linked));
+      let data = yield* registry.get;
+      assert.deepEqual(data.folders, [physical(repo)]);
+      assert.deepEqual(data.worktrees, [
+        { folder: physical(repo), path: physical(linked), branch: "feature" },
+      ]);
+      // A subdirectory of a checkout and a worktree of a bare repository are folders of their own, as on the New page.
+      for (const cwd of [join(linked, "nested"), bareLinked])
+        yield* hosts.create({ cwd, options: {} });
+      data = yield* registry.get;
+      assert.deepEqual(data.folders, [physical(repo), join(linked, "nested"), bareLinked]);
+      assert.equal(data.worktrees.length, 1);
+    }),
+    { fakePi: "place-worktree" },
+  );
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      // A folder registered under an alias of the main checkout is reused, not duplicated.
+      yield* registry.ensureFolder(repoAlias);
+      yield* hosts.create({ cwd: linked, options: {} });
+      const data = yield* registry.get;
+      assert.deepEqual(data.folders, [repoAlias]);
+      assert.deepEqual(data.worktrees, [
+        { folder: repoAlias, path: physical(linked), branch: "feature" },
+      ]);
+    }),
+    { fakePi: "place-alias" },
   );
 });

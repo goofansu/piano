@@ -2,6 +2,7 @@
  * state cannot redirect it (INV-06); creation goes through Worktrunk (0.80.0 or later) for its paths and hooks. Git and
  * CLI details stay behind this module.
  */
+import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { Context, Data, Effect, Schema } from "effect";
 import type { WorktreeDiscovery, WorktreeFacts } from "../shared/wire.ts";
@@ -171,6 +172,38 @@ export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
       }),
     ),
   );
+});
+
+/** The main checkout a linked worktree belongs to, so a session started in the worktree can be
+ * listed under that folder. Git's spelling of both paths is returned. `null` for anything that is
+ * not the root of a linked worktree: a main checkout, a subdirectory, a non-Git directory, or a
+ * worktree of a bare repository, which has no main checkout. Metadata Git cannot read fails. */
+export const worktreeOwner = Effect.fn("Worktrees.worktreeOwner")(function* (
+  path: string,
+): Effect.fn.Return<
+  { readonly root: string; readonly main: string; readonly branch: string | null } | null,
+  WorktreeError
+> {
+  const checkout = yield* checkoutOf(path);
+  if (!checkout) return null;
+  const root = checkout.toplevel;
+  const physical = yield* Effect.tryPromise({
+    try: () => realpath(path),
+    catch: (e) => new WorktreeError({ detail: String(e) }),
+  });
+  if (physical !== root) return null;
+  const out = yield* git(root, ["worktree", "list", "--porcelain", "-z"]);
+  // Git lists the main worktree first; parseWorktrees drops a bare one, so read it from the raw record.
+  const first = out.split("\0\0")[0]?.split("\0") ?? [];
+  const main = first[0]?.startsWith("worktree ") ? first[0].slice("worktree ".length) : undefined;
+  const worktrees = parseWorktrees(out);
+  const current = worktrees?.find((w) => w.path === root);
+  if (!main || !worktrees || !current)
+    return yield* new WorktreeError({
+      detail: "Invalid git worktree list output. Check the repository with git worktree list.",
+    });
+  if (main === root || first.includes("bare")) return null;
+  return { root, main, branch: current.branch };
 });
 
 /** New branches only. No prose-based retry of a possibly partially completed operation. */
