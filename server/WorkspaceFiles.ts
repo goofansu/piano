@@ -141,15 +141,16 @@ async function physical(target: string): Promise<string> {
 /**
  * Where `path` (as a session's tool calls named it: relative to the workspace, or absolute) sits
  * in the workspace: its name relative to the workspace's real root, or `undefined` outside it.
- * It is placed by the workspace's own (possibly symlinked) path first, then by the real root, so a
- * file Pi wrote through either path is inside. The one rule for the Files list and for reading.
+ * Resolve directory aliases (including the workspace root) before naming the file. Preserve the
+ * leaf: Git tracks a leaf symlink itself, not its target. Missing descendants retain their names.
+ * Placement is identity, not permission to read: acquisition checks the leaf's real target too.
  */
 export async function place(workspace: Workspace, path: string): Promise<string | undefined> {
   const logical = resolve(workspace.path);
   const target = resolve(logical, path);
-  if (within(logical, target)) return relative(logical, target);
   const root = await realpath(logical);
-  const real = await physical(target);
+  if (target === logical || target === root) return "";
+  const real = join(await physical(dirname(target)), basename(target));
   return within(root, real) ? relative(root, real) : undefined;
 }
 

@@ -78,6 +78,39 @@ test("INV-01: history recorded under another checkout spelling is found where Pi
   assert.equal(readFileSync(file, "utf8"), before, "reading never moves or rewrites history");
 });
 
+test("INV-01/12: peeking legacy v2 history reads the conversation without migrating its file", async () => {
+  const file = seed(cwd, "v2", "legacy conversation");
+  const original = readFileSync(file, "utf8").replace('"version":3', '"version":2');
+  writeFileSync(file, original);
+  const snapshot = await run(history.peek("v2", file));
+  assert.deepEqual(
+    snapshot.messages.map((m) => m.text),
+    ["legacy conversation"],
+  );
+  assert.equal(snapshot.state.sessionFile, file);
+  assert.equal(readFileSync(file, "utf8"), original, "inspection must not persist Pi's migration");
+});
+
+for (const [name, contents] of [
+  ["empty", ""],
+  ["malformed", '{"type":"session"'],
+]) {
+  test(`INV-01/12: inspecting ${name} history neither repairs it nor invents a conversation`, async () => {
+    const file = join(sessions, `${name}.jsonl`);
+    writeFileSync(file, contents);
+    const snapshot = await run(history.peek(name, file));
+    assert.equal(readFileSync(file, "utf8"), contents);
+    assert.deepEqual(snapshot.messages, []);
+    assert.equal(snapshot.state.sessionId, name);
+    assert.match(snapshot.state.projectionError ?? "", /History was not replaced or repaired/);
+    await assert.rejects(run(history.exportBranch(name, file)), {
+      reason: "rejected",
+      detail: "This session has no readable saved conversation to share.",
+    });
+    assert.equal(readFileSync(file, "utf8"), contents);
+  });
+}
+
 test("INV-01: distinct files claiming one session are a conflict, never a choice", async () => {
   const first = seed(alias, "claimed", "first claim"),
     second = seed(cwd, "claimed", "second claim");

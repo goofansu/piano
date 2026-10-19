@@ -12,7 +12,6 @@
  * kept: later interference cannot retract what this call saw.
  */
 import { createHash } from "node:crypto";
-import { compileRedaction } from "../../server/DisplayProjection.ts";
 import type {
   Attribution,
   SessionCreation,
@@ -79,27 +78,6 @@ export const waitTimeout = (timeoutMs: number | undefined): number =>
     : Math.min(WAIT_MAX_MS, Math.max(WAIT_MIN_MS, Math.trunc(timeoutMs)));
 
 const fingerprint = (text: string): string => createHash("sha256").update(text).digest("hex");
-/**
- * One spelling for "the text of this input", taken from the brief as sent and from the user
- * message as the transcript shows it, so the two compare equal when Pi took the brief unchanged.
- * Pi expands `/skill:name args` — the name runs to the first space, the arguments are the rest,
- * trimmed — and the transcript shows that skill and its arguments; the key respells both sides
- * that way. Anything else Pi rewrote (a prompt template, an input handler) still differs.
- */
-const inputKey = (text: string): string => {
-  const trimmed = text.trim();
-  const space = trimmed.indexOf(" ");
-  if (!trimmed.startsWith("/skill:") || space === -1) return trimmed;
-  const args = trimmed.slice(space + 1).trim();
-  return args ? `${trimmed.slice(0, space)} ${args}` : trimmed.slice(0, space);
-};
-/** The brief as Piano will display its user message. This Pi inherits Piano's environment, so
- * the redaction reads the same known secrets Piano's does. */
-const briefFingerprint = (prompt: string): string =>
-  fingerprint(inputKey(compileRedaction().text(prompt)));
-/** A shown user message, with an expanded skill put back as the command it came from. */
-const inputFingerprint = (input: RenderMsg): string =>
-  fingerprint(inputKey(input.skill ? `/skill:${input.skill.name} ${input.text}` : input.text));
 const baselineFingerprintOf = (messages: ReadonlyArray<RenderMsg>): string =>
   fingerprint(JSON.stringify(messages.map((m) => [m.id, m.role, m.text, m.toolCalls ?? null])));
 
@@ -219,6 +197,7 @@ export function startSession(
     { deadlineMs: START_DEADLINE_MS, signal },
     (link, settle) => {
       let selectionId: string | null = null;
+      let inputId: string | null = null;
       let requested = false;
       let handle: SessionHandle | null = null;
       let snapshot: Snapshot | null = null;
@@ -243,7 +222,22 @@ export function startSession(
           );
           return;
         }
-        if (handle.submissionId === null) handle = { ...handle, submissionId: submission.id };
+        if (handle.submissionId === null && submission.inputId !== inputId) {
+          settle(
+            result(
+              "created",
+              "uncertain",
+              "The submission could not be tied to the creation request.",
+            ),
+          );
+          return;
+        }
+        if (handle.submissionId === null)
+          handle = {
+            ...handle,
+            submissionId: submission.id,
+            inputFingerprint: submission.inputFingerprint ?? "",
+          };
         if (submission.outcome === "submitting") return;
         settle(result("created", submission.outcome, submission.detail));
       };
@@ -264,6 +258,7 @@ export function startSession(
           if (!requested) {
             requested = true;
             selectionId = link.nonce();
+            inputId = selectionId;
             link.send({
               _tag: "create_session",
               selectionId,
@@ -327,7 +322,7 @@ export function startSession(
                   // Taken before the prompt is sent, so startup output is never read as an answer.
                   baselineMessages: messages.length,
                   baselineFingerprint: oversized(snapshot) ? "" : baselineFingerprintOf(messages),
-                  inputFingerprint: briefFingerprint(prompt),
+                  inputFingerprint: "", // Filled only by this submission's server-owned proof.
                   anchorMessageId: null,
                 };
                 expectedSubmission = (snapshot.state.submission?.id ?? 0) + 1;
@@ -551,7 +546,12 @@ function attribute(
   if (handle.anchorMessageId !== null && prompts[0]?.id !== handle.anchorMessageId)
     return mismatch("This input's message is no longer where it was recorded.");
   const input = prompts[0];
-  if (input && inputFingerprint(input) !== handle.inputFingerprint)
+  if (
+    input &&
+    (!handle.inputFingerprint ||
+      submission.inputFingerprint !== handle.inputFingerprint ||
+      input.inputFingerprint !== handle.inputFingerprint)
+  )
     return mismatch(
       "The initial input was transformed or replaced; its answer cannot be attributed.",
     );

@@ -83,9 +83,17 @@ const locate = Effect.fn("PiHistory.locate")(function* (
 const sessionIds = (cwd: string): Effect.Effect<ReadonlySet<string>> =>
   Effect.map(listed(directoryPath(cwd)), (infos) => new Set(infos.map((info) => info.id)));
 
+/** Pi parses and migrates only in memory: a persistent manager can rewrite legacy/empty files. */
+const readSession = (path: string, sessionId: string): SessionManager => {
+  const entries = parseSessionEntries(readFileSync(path, "utf8"));
+  if (!entries.some((entry) => entry.type === "session" && entry.id === sessionId))
+    throw new Error("Missing session header");
+  return SessionManager.inMemory(undefined, undefined, entries);
+};
+
 /** A saved session's facts as Pi would report them, read from its file. */
 const savedFacts = (path: string, sessionId: string): PiSessionFacts => {
-  const sm = SessionManager.open(path);
+  const sm = readSession(path, sessionId);
   // Use Pi's own compaction/context-edit/active-branch projection, the same
   // display scope as RPC get_messages. Never infer selection from an answer.
   const context = sm.buildSessionContext();
@@ -116,7 +124,7 @@ const savedFacts = (path: string, sessionId: string): PiSessionFacts => {
 
 const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
   // The transcript was projected for display as it was built; the rest is projected here.
-  Effect.sync(() => projectSnapshot(snapshotOf(savedFacts(path, sessionId)))).pipe(
+  Effect.try(() => projectSnapshot(snapshotOf(savedFacts(path, sessionId)))).pipe(
     Effect.orElseSucceed(() => ({
       state: {
         sessionId,
@@ -137,12 +145,7 @@ const exportBranch = Effect.fn("PiHistory.exportBranch")(function* (
   return yield* Effect.try({
     try: () => {
       if (!file) throw new Error("Missing history");
-      // Opening a persistent manager can rewrite legacy/empty files. Pi parses and migrates
-      // this read-only snapshot in memory instead; even an old session stays untouched.
-      const entries = parseSessionEntries(readFileSync(file, "utf8"));
-      if (!entries.some((entry) => entry.type === "session" && entry.id === sessionId))
-        throw new Error("Missing session header");
-      const manager = SessionManager.inMemory(undefined, undefined, entries);
+      const manager = readSession(file, sessionId);
       const header = manager.getHeader();
       const branch = manager.getBranch();
       if (header?.id !== sessionId || !branch.some((entry) => entry.type === "message"))

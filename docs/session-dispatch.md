@@ -69,8 +69,14 @@ Settlement means execution stopped, **not that the task or its checks succeeded*
 without a new assistant answer returns `null`. The parent should assess the child's answer and
 reported evidence rather than treating settlement as verification.
 
-Observation is scoped to the fresh session's initial submission and live host generation. Later
-input, a restarted host, rewritten/compacted input, missing observations or unreadable projections can prevent attribution;
+Observation is scoped to the fresh session's initial submission and live host generation. Input
+equality uses opaque, process-keyed evidence computed by the server before display redaction,
+with Pi skill commands normalized there. Creation adopts evidence only from a submission
+carrying its own request correlation ID; another caller winning the first-submission race is
+not its input. Redacted display text is never proof of equality.
+The evidence is not persisted separately; old handles without it, missing proof, or a server
+restart cannot establish attribution. Later input, a restarted host, rewritten/compacted input,
+missing observations or unreadable projections can prevent attribution;
 the result explains the limitation and links to the session. Handles live in normal Pi tool history,
 not a durable job or per-turn receipt database. Reopening a parent does not restore a lost execution
 observation. Inspect the child directly when an exact result cannot be established.

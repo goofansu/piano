@@ -317,7 +317,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     const trimmed = text?.trim() ?? "";
     if (!trimmed && !attachments?.length) return;
     // Sent only once this client has attached, so it observes the prompt.
-    yield* session.act({ _tag: "prompt", text: trimmed, attachments });
+    yield* session.act({ _tag: "prompt", text: trimmed, attachments, inputId: selectionId });
   });
 
   return {

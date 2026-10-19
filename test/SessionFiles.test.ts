@@ -6,7 +6,9 @@ import { displayPath, sessionFiles, splitPath, visibleFiles } from "../web/src/l
 const call = (id: string, name: string, args: Record<string, unknown>) => ({
   id,
   name,
-  args: JSON.stringify(args),
+  args: "[REDACTED]", // Display arguments need not even be JSON; only server facts name files.
+  writtenPath:
+    name === "write" || name === "edit" ? String(args.path ?? args.file_path ?? "") : undefined,
 });
 const assistant = (id: string, toolCalls: ReturnType<typeof call>[]): RenderMsg => ({
   id,
@@ -57,6 +59,18 @@ test("a failed or unfinished call touched nothing", () => {
     result("c4"),
   ]);
   assert.deepEqual(files, [{ path: "src/ok.ts", messageId: "a2" }]);
+});
+
+test("display arguments cannot supply missing file identity", () => {
+  assert.deepEqual(
+    sessionFiles([
+      assistant("a", [
+        { id: "c", name: "write", args: '{"path":"not-authoritative.ts"}', writtenPath: undefined },
+      ]),
+      result("c"),
+    ]),
+    [],
+  );
 });
 
 test("a path splits into its name and directory", () => {

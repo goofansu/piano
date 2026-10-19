@@ -377,6 +377,7 @@ test("Files lists what the selected session wrote or edited: the latest few at t
     id,
     name: "write",
     args: JSON.stringify({ path, content: "" }),
+    writtenPath: path,
   });
   const paths = Array.from({ length: 7 }, (_, i) => `src/part-${i}.ts`);
   const written: AppState = {

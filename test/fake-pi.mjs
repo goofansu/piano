@@ -596,10 +596,71 @@ function handle(cmd) {
         provider: model.provider,
         timestamp: Date.now(),
       };
+      if (cmd.message === "identity files")
+        asst.content.push({
+          type: "toolCall",
+          id: "write1",
+          name: "write",
+          arguments: {
+            path: "keys/sk-abcdefghijklmnopqrstuvwxyz123456.ts",
+            content: "sk-content-abcdefghijklmnopqrstuvwxyz",
+          },
+        });
       messages.push(asst);
       if (cmd.message === "live context")
         liveContext = { tokens: 42000, contextWindow: 200000, percent: 21 };
       out({ type: "message_end", message: asst });
+      if (cmd.message === "identity files") {
+        const result = {
+          role: "toolResult",
+          toolCallId: "write1",
+          toolName: "write",
+          content: "written",
+          isError: false,
+          nestedCalls: {
+            complete: true,
+            calls: [
+              {
+                id: "write1/edit",
+                name: "edit",
+                arguments: {
+                  file_path: "keys/ghp_nested123456789.ts",
+                  newText: "sk-content-abcdefghijklmnopqrstuvwxyz",
+                },
+                status: "ok",
+              },
+              {
+                id: "write1/failed",
+                name: "edit",
+                arguments: { path: "failed.ts" },
+                status: "error",
+              },
+              {
+                id: "write1/pending",
+                name: "write",
+                arguments: { path: "pending.ts" },
+                status: "unfinished",
+              },
+            ],
+          },
+        };
+        out({
+          type: "tool_execution_start",
+          toolCallId: "write1/edit",
+          parentToolCallId: "write1",
+          toolName: "edit",
+          args: result.nestedCalls.calls[0].arguments,
+        });
+        out({
+          type: "tool_execution_end",
+          toolCallId: "write1/edit",
+          toolName: "edit",
+          result: { content: [{ type: "text", text: "edited" }] },
+          isError: false,
+        });
+        messages.push(result);
+        out({ type: "message_end", message: result });
+      }
       out({ type: "turn_end", message: asst, toolResults: [] });
       if (cmd.message === "live context") {
         liveStage = 1;
