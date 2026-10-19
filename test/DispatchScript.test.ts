@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -28,40 +19,13 @@ const script = fileURLToPath(new URL("../scripts/dispatch-session.ts", import.me
 const origin = "http://localhost:7172";
 
 function fixture(t: TestContext) {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), "piano-dispatch-")));
-  const main = join(dir, "main checkout");
-  const linked = join(dir, "linked checkout");
-  const plain = join(dir, "not git");
-  t.after(() => {
-    try {
-      if (existsSync(linked)) {
-        execFileSync("git", ["-C", main, "worktree", "remove", "--force", linked]);
-        execFileSync("git", ["-C", main, "branch", "-D", "linked"]);
-      }
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-  mkdirSync(main);
-  mkdirSync(plain);
-  const git = (...args: string[]) => execFileSync("git", ["-C", main, ...args], { stdio: "pipe" });
-  git("init");
-  git(
-    "-c",
-    "user.name=Test",
-    "-c",
-    "user.email=test@example.invalid",
-    "commit",
-    "--allow-empty",
-    "-m",
-    "initial",
-  );
-  git("worktree", "add", "-b", "linked", linked);
-  const alias = join(dir, "alias");
-  symlinkSync(linked, alias);
+  const dir = mkdtempSync(join(tmpdir(), "piano-dispatch-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const cwd = join(dir, "work dir");
+  mkdirSync(cwd);
   const prompt = join(dir, "prompt.txt");
   writeFileSync(prompt, "Reply with exactly: PORTABLE");
-  return { dir, main, linked, plain, alias, prompt };
+  return { dir, cwd, prompt };
 }
 
 function run(args: string[], url: string, env: NodeJS.ProcessEnv = {}) {
@@ -80,10 +44,7 @@ function run(args: string[], url: string, env: NodeJS.ProcessEnv = {}) {
 }
 
 /** Minimal wire peer: exercise the actual CLI/native WebSocket, without a server or Pi history. */
-async function peer(
-  t: TestContext,
-  registration: "ready" | "refused" | "closed" | "wrong-path" = "ready",
-) {
+async function peer(t: TestContext) {
   const requests: ClientMessage[] = [];
   const origins: (string | undefined)[] = [];
   const sockets = new Set<Socket>();
@@ -136,31 +97,6 @@ async function peer(
         const message = decodeClientMessage(payload.toString());
         requests.push(message);
         if (message._tag === "ping") send({ _tag: "pong", nonce: message.nonce });
-        if (message._tag === "add_worktree") {
-          if (registration === "closed") {
-            socket.destroy();
-            return;
-          }
-          // A refusal for somebody else's request must not abort this registration.
-          send({
-            _tag: "worktree_result",
-            requestId: "unrelated",
-            result: { status: "error", detail: "not yours" },
-          });
-          send({
-            _tag: "worktree_result",
-            requestId: message.requestId,
-            result:
-              registration === "refused"
-                ? { status: "error", detail: "Main folder must be added first" }
-                : {
-                    status: "ready",
-                    folder: message.folder,
-                    path: registration === "wrong-path" ? message.folder : message.path,
-                    branch: "linked",
-                  },
-          });
-        }
         if (message._tag === "create_session") {
           const cursor = {
             cwd: message.cwd,
@@ -204,69 +140,25 @@ async function peer(
   return { url, requests, origins };
 }
 
-test("CLI registers a canonical linked worktree before dispatch, preserves defaults and prints a handle/link", async (t) => {
+test("CLI dispatches the prompt file to the resolved directory with Piano's defaults and prints a handle/link", async (t) => {
   const f = fixture(t);
   const p = await peer(t);
-  const result = await run([f.prompt, f.alias], p.url, {
-    GIT_DIR: join(f.main, ".git"),
-    GIT_WORK_TREE: f.main,
-  });
+  const result = await run([f.prompt, f.cwd], p.url);
   assert.equal(result.code, 0, result.stderr);
   const json = JSON.parse(result.stdout);
   assert.equal(json.creation, "created");
   assert.equal(json.submission, "started");
-  assert.equal(json.cwd, f.linked);
-  assert.equal(json.worktreeOf, f.main);
+  assert.equal(json.cwd, f.cwd);
   assert.equal(json.link, `${origin}/s/portable-session`);
   assert.equal(json.handle.sessionId, "portable-session");
-  const mutations = p.requests.filter(
-    (m) => m._tag === "add_worktree" || m._tag === "create_session",
-  );
-  assert.deepEqual(
-    mutations.map((m) => m._tag),
-    ["add_worktree", "create_session"],
-  );
-  assert.equal(mutations[0]._tag, "add_worktree");
-  if (mutations[0]._tag === "add_worktree") {
-    assert.equal(mutations[0].folder, f.main);
-    assert.equal(mutations[0].path, f.linked);
-  }
-  assert.equal(mutations[1]._tag, "create_session");
-  if (mutations[1]._tag === "create_session") {
-    assert.deepEqual(mutations[1].options, {});
-    assert.equal(mutations[1].text, "Reply with exactly: PORTABLE");
-  }
-  assert.ok(p.requests.some((m) => m._tag === "ack" && m.deliveryId === 2));
-  assert.deepEqual(p.origins, [origin, origin]);
-});
-
-test("register-only distinguishes main checkout, non-Git and linked worktree without creating sessions", async (t) => {
-  const f = fixture(t);
-  const p = await peer(t);
-  for (const cwd of [f.main, f.plain, f.alias]) {
-    const result = await run(["--register-only", cwd], p.url);
-    assert.equal(result.code, 0, result.stderr);
-    assert.deepEqual(JSON.parse(result.stdout), {
-      registered: cwd === f.alias,
-      cwd: cwd === f.alias ? f.linked : cwd,
-      folder: cwd === f.alias ? f.main : null,
-    });
-  }
-  assert.equal(p.requests.filter((m) => m._tag === "add_worktree").length, 1);
-  assert.equal(p.requests.filter((m) => m._tag === "create_session").length, 0);
-});
-
-test("registration refusal, lost reply and mismatched identity prevent creation and release the unused out file", async (t) => {
-  const f = fixture(t);
-  for (const mode of ["refused", "closed", "wrong-path"] as const) {
-    const p = await peer(t, mode);
-    const out = join(f.dir, `${mode}.json`);
-    const result = await run([f.prompt, f.linked, out], p.url);
-    assert.equal(result.code, 4, result.stderr);
-    assert.match(result.stderr, /Refusing to create a session/);
-    assert.equal(p.requests.filter((m) => m._tag === "create_session").length, 0);
-    assert.equal(existsSync(out), false);
-  }
+  assert.deepEqual([json.model, json.thinkingLevel], [null, null]);
+  const creates = p.requests.filter((m) => m._tag === "create_session");
+  assert.equal(creates.length, 1, "create_session is sent exactly once");
+  assert.ok(creates[0]._tag === "create_session");
+  assert.equal(creates[0].cwd, f.cwd);
+  assert.deepEqual(creates[0].options, {});
+  assert.equal(creates[0].text, "Reply with exactly: PORTABLE");
+  assert.deepEqual(p.origins, [origin]);
 });
 
 test("explicit flags override env, save full JSON exclusively and forward model/effort", async (t) => {
@@ -275,7 +167,7 @@ test("explicit flags override env, save full JSON exclusively and forward model/
   const out = join(f.dir, "start.json");
   const args = [
     f.prompt,
-    f.main,
+    f.cwd,
     out,
     "--model",
     "provider/model",
@@ -296,12 +188,17 @@ test("explicit flags override env, save full JSON exclusively and forward model/
   const again = await run(args, p.url);
   assert.equal(again.code, 3);
   assert.match(again.stderr, /exists/);
-  assert.equal(p.requests.length, before);
+  assert.equal(
+    p.requests.length,
+    before,
+    "an existing output file stops the dispatch before any network side effect",
+  );
 });
 
-test("invalid configuration, input and linked subdirectories fail before network side effects", async (t) => {
+test("invalid configuration and input fail before network side effects and reserve no output file", async (t) => {
   const f = fixture(t);
   const p = await peer(t);
+  const out = join(f.dir, "never.json");
   for (const extra of [
     ["--thinkingLevel", "extreme"],
     ["--model", "bare-id"],
@@ -309,15 +206,12 @@ test("invalid configuration, input and linked subdirectories fail before network
     ["--origin", `${origin}/`],
     ["--unknown"],
   ]) {
-    const result = await run([f.prompt, f.linked, ...extra], p.url);
+    const result = await run([f.prompt, f.cwd, out, ...extra], p.url);
     assert.equal(result.code, 2, result.stderr);
   }
+  assert.equal((await run([f.prompt, join(f.dir, "missing"), out], p.url)).code, 2);
   writeFileSync(f.prompt, "  \n");
-  assert.equal((await run([f.prompt, f.linked], p.url)).code, 2);
-  const subdir = join(f.linked, "subdirectory");
-  mkdirSync(subdir);
-  const result = await run(["--register-only", subdir], p.url);
-  assert.equal(result.code, 4);
-  assert.match(result.stderr, /worktree root/);
+  assert.equal((await run([f.prompt, f.cwd, out], p.url)).code, 2);
+  assert.equal(existsSync(out), false);
   assert.deepEqual(p.requests, []);
 });

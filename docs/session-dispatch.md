@@ -7,9 +7,9 @@ be opened and continued without taking the parent away from its conversation.
 
 ## From a terminal (Linux and macOS)
 
-With Node.js 24, Git on `PATH`, dependencies installed (`npm ci`) and Piano running **on the
-same machine**, run the bundled script from any Piano checkout. It uses Node built-ins and
-Piano's existing dispatch modules; there is no global CLI or extra dependency to install.
+With Node.js 24, dependencies installed (`npm ci`) and Piano running **on the same machine**, run
+the bundled script from any Piano checkout. It uses Node built-ins and Piano's existing dispatch
+modules; there is no global CLI or extra dependency to install.
 
 ```bash
 # From your Piano checkout; both bash and zsh work.
@@ -23,15 +23,11 @@ node scripts/dispatch-session.ts /tmp/piano-brief.txt "$HOME/work/my-repo"
 # Alternatively, save the JSON as well. Use a fresh output path for each dispatch.
 node scripts/dispatch-session.ts /tmp/piano-brief.txt "$HOME/work/my-worktree" /tmp/piano-start.json \
   --model provider/model-id --thinkingLevel medium
-
-# Register an existing linked worktree without starting a session.
-node scripts/dispatch-session.ts --register-only "$HOME/work/my-worktree"
 ```
 
-The two dispatch examples are alternatives: running both starts two sessions. The prompt argument
-is a UTF-8 **file**, not inline text. Use `node /path/to/piano/scripts/dispatch-session.ts …` from
+The two examples are alternatives: running both starts two sessions. The prompt argument is a
+UTF-8 **file**, not inline text. Use `node /path/to/piano/scripts/dispatch-session.ts …` from
 another directory; prompt, cwd and output paths are relative to your shell's current directory.
-Real paths are resolved before registration (including macOS `/tmp` → `/private/tmp` aliases).
 
 `--ws-url` and `--origin` override the respective environment variables. Both are required via
 flags or environment. The WebSocket URL must use a loopback host (`127.0.0.1`, `localhost` or
@@ -40,32 +36,28 @@ origin with no path or trailing slash, accepted by the server's
 [origin policy](configuration.md#browser-origins). For example, Vite development may use
 `--origin http://localhost:5173`; a private proxy setup uses its allowed public HTTPS origin and
 the local backend's WebSocket port. The Origin also supplies the base for the returned session link.
-This is not a remote-worker client: filesystem paths must refer to the server's machine.
+This is not a remote-worker client: the directory must be on the server's machine.
 
 Omit `--model` and `--thinkingLevel` to keep Piano's normal new-session defaults. Supported effort
 values are `off`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`; the selected model must
 support the chosen value. Run `node scripts/dispatch-session.ts --help` for the full syntax.
 
-For a linked worktree, **add its main checkout as a folder in Piano first**. The script registers
-the worktree under that folder with `add_worktree` before dispatching. A refusal, lost connection,
-invalid reply or 30-second registration timeout prevents session creation rather than adding the
-worktree as a separate folder. Pass the worktree root, not a subdirectory. Linked worktrees from
-a bare repository without a main checkout are refused. Main checkouts and non-Git directories
-need no worktree registration; `--register-only` reports `registered: false` for them and does
-not add a folder. No worktree is created by this script.
+Piano places the directory the same way for every way of starting a session (the New page, the
+`piano_start_session` tool and this script); see [checkout choice](#setup-and-checkout-choice).
+No worktree is created by this script.
 
 Exit codes: `0` means a JSON result was reported, **not** that work succeeded; inspect `creation`
-and `submission`. `1` is an unexpected failure, `2` invalid input/configuration, `3` an existing
-output file, and `4` failed worktree detection/registration. Errors go to stderr. A start result
-includes the full dispatch handle, session `link` when known, `worktreeOf`, and requested
+and `submission`. `1` is an unexpected failure, `2` invalid input or configuration and `3` an
+existing output file. Errors go to stderr. A start result includes the full dispatch handle, the
+session `link` when known, the directory Piano placed the session in as `cwd`, and the requested
 `model` / `thinkingLevel` (`null` when omitted, not the resolved defaults). It does not wait for
 the agent to finish. The handle can be passed unchanged to the existing `piano_wait_sessions` tool.
 
 The optional output file is reserved exclusively before network side effects, including against
-concurrent invocations. It is removed on a pre-dispatch failure; once creation is attempted, it
-is kept even if empty after an interrupted run. An existing or empty output file is **not proof
-of success**. Inspect Piano before retrying an uncertain dispatch; never blindly delete the file
-and resend. Without an output file there is no file-based duplicate-dispatch guard.
+concurrent invocations, and kept once creation is attempted, even if the run was interrupted and
+left it empty. An existing or empty output file is **not proof of success**. Inspect Piano before
+retrying an uncertain dispatch; never blindly delete the file and resend. Without an output file
+there is no file-based duplicate-dispatch guard.
 
 ## Links between sessions
 
@@ -90,8 +82,11 @@ Piano launch.
 
 The child defaults to the parent's checkout, with a fresh conversation—not a transcript fork.
 The optional `cwd` selects an existing directory through Piano's ordinary creation and registration
-checks; it does not create a worktree. Concurrent writing tasks should use separate prepared
-worktrees, or an explicit handoff. The optional `model` uses the normal `provider/model` selection;
+checks; it does not create a worktree. The root of a linked Git worktree is listed under its main
+checkout's folder, which Piano adds when it is not a folder yet; any other directory, including a
+subdirectory of a checkout, becomes a folder of its own, as on the New page. A checkout Git cannot
+read refuses creation. Concurrent writing tasks should use separate prepared worktrees, or an
+explicit handoff. The optional `model` uses the normal `provider/model` selection;
 omitting it uses the new session's normal defaults, not necessarily the parent's model.
 The optional `thinkingLevel` sets reasoning effort: `off`, `minimal`, `low`, `medium`, `high`,
 `xhigh` or `max`. Choose a level supported by the selected model. Omitting it preserves normal

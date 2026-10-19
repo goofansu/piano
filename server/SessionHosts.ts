@@ -6,6 +6,7 @@
  * keys ownership by the physical checkout it returns and calls it under that key's lock.
  */
 import { randomUUID } from "node:crypto";
+import { realpath } from "node:fs/promises";
 import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
 import { isWorking } from "../shared/sessionProjection.ts";
 import type {
@@ -15,8 +16,10 @@ import type {
   Snapshot,
   StartOptions,
 } from "../shared/wire.ts";
+import { Directories } from "./Directories.ts";
+import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
-import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
+import { Registry, RegistryError, type RegistryLookupError } from "./Registry.ts";
 import { makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
 import {
   checkoutMissing,
@@ -24,6 +27,7 @@ import {
   SessionReferences,
   SessionReferencesLive,
 } from "./SessionReferences.ts";
+import { worktreeOwner } from "./Worktrees.ts";
 
 export interface OpenSpec {
   readonly cwd: string;
@@ -42,7 +46,7 @@ export interface Opened {
 export type SessionReadback =
   | { readonly _tag: "live"; readonly session: PiSession }
   | { readonly _tag: "saved"; readonly cwd: string; readonly snapshot: Snapshot };
-/** A new session in a directory, which becomes a folder if it is not registered yet. */
+/** A new session in a directory; an unregistered one is placed by `place` first. */
 export interface CreateSpec {
   readonly cwd: string;
   /** Initial project; it must be active, checked before anything is registered. */
@@ -271,10 +275,39 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         );
       const open = (spec: OpenSpec) => start(spec).pipe(Effect.map(({ session }) => session));
 
+      /**
+       * Where a new session's directory belongs. Git says what the directory is; Piano decides
+       * the placement (INV-01): the root of a linked worktree is listed under its main checkout's
+       * folder, added when missing, and any other directory becomes a folder of its own. The
+       * worktree is recorded under Git's spelling of its path, which discovery matches, and a
+       * folder already registered under an alias of the main checkout is reused. A checkout Git
+       * cannot read refuses creation instead of registering it blindly (INV-06).
+       */
+      const place = Effect.fn("SessionHosts.place")(function* (raw: string) {
+        const path = directoryPath(raw);
+        const data = yield* registry.get;
+        if (data.folders.includes(path) || data.worktrees.some((w) => w.path === path)) return path;
+        // Piano's own answer for a missing directory, before Git is asked anything about it.
+        yield* Directories.require(path).pipe(
+          Effect.mapError((e) => new RegistryError({ detail: e.detail })),
+        );
+        const owner = yield* worktreeOwner(path).pipe(
+          Effect.mapError((e) => rejected(`Cannot read the checkout ${path}: ${e.detail}`)),
+        );
+        if (!owner) return yield* registry.ensureFolder(path);
+        const physical = yield* Effect.forEach(data.folders, (folder) =>
+          Effect.promise(() => realpath(folder).catch(() => undefined)),
+        );
+        const folder =
+          data.folders[physical.indexOf(owner.main)] ?? (yield* registry.ensureFolder(owner.main));
+        yield* registry.addWorktree({ folder, path: owner.root, branch: owner.branch ?? "" });
+        return owner.root;
+      });
+
       const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
         // Registry writes run before the ownership lock; an unavailable project registers nothing.
         if (spec.projectId !== undefined) yield* registry.requireActiveProject(spec.projectId);
-        const cwd = yield* registry.ensureFolder(spec.cwd);
+        const cwd = yield* place(spec.cwd);
         const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
         // Only a fresh server-generated ID may create a reference. Registration and initial
         // membership survive a disconnected requester, as acquisition is server-owned.
