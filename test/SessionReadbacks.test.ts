@@ -49,6 +49,7 @@ const harness = Effect.gen(function* () {
     observationVersion: () => observation,
     context: () => ({ _tag: "context", messages: [contextMessage] }),
     publication,
+    entries: [],
   });
   return {
     readbacks,

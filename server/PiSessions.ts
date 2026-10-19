@@ -260,10 +260,15 @@ const openSession = (spec: PiSessionSpec) =>
     const generation = randomUUID();
     const recoveryMs = yield* PiDialogRecoveryMs;
 
-    // Ready check and initial transcript. Both race the child exiting early.
-    const initial = yield* Effect.all([
+    // Ready check, initial transcript and entries. All race the child exiting early. Entries are
+    // best effort, as usage readbacks are: a failed read opens without Runs' spend or the
+    // dispatching session, and usage readbacks then count every entry.
+    const [state, messages, entries] = yield* Effect.all([
       child.read(piReadbacks.state),
       child.read(piReadbacks.messages),
+      child
+        .read(piReadbacks.entries())
+        .pipe(Effect.catchTag("PiSessionError", () => Effect.succeed<ReadonlyArray<unknown>>([]))),
     ]).pipe(
       // Readiness failure wins too: race waits for a first success and would
       // suppress a deadline until a still-live child eventually exits.
@@ -276,7 +281,7 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
     const projector = new PiProjector({ generation });
-    const opened = projector.snapshot({ source: "live", state: initial[0], messages: initial[1] });
+    const opened = projector.snapshot({ source: "live", state, messages, entries });
     if (opened.state.sessionId !== spec.sessionId)
       return yield* new PiSessionError({
         reason: "protocol",
@@ -334,6 +339,7 @@ const openSession = (spec: PiSessionSpec) =>
       observationVersion: child.observationVersion,
       context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
       publication,
+      entries,
     });
 
     const onRecord = ({ record, receivedAt }: { record: PiRecord; receivedAt: number }) =>
@@ -584,8 +590,9 @@ const openSession = (spec: PiSessionSpec) =>
         }
       });
 
-    // Cached values must be available without waiting for a slow/failed readback.
-    // Uncached sessions retain the initial statistics readiness contract.
+    // Cached statistics are shown without waiting for a slow or failed usage readback; open has
+    // still waited for the one entries read above. Uncached sessions keep the initial statistics
+    // readiness contract.
     if (spec.lastKnownStats) yield* readbacks.schedule("stats");
     else yield* readbacks.refresh("stats");
     const actionCapacity = makeInboundCapacity(inboundLimits.requests);
