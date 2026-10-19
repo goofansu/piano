@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, WorktreeView } from "../shared/wire.ts";
-import { catalogEntry, recentSessions, sessionCatalog } from "../web/src/lib/sessionCatalog.ts";
+import {
+  catalogEntry,
+  recentSessions,
+  sessionCatalog,
+  sessionDestination,
+} from "../web/src/lib/sessionCatalog.ts";
 import {
   dateGroups,
   folderGroups,
@@ -168,6 +173,21 @@ test("lookup by ID resolves archived and closed-folder sessions for routing and 
     false,
     "archived sessions are not listed or searched",
   );
+});
+
+test("a session opens at the catalog's directory only while its history is there", () => {
+  assert.deepEqual(sessionDestination(state, "open-member"), {
+    sessionId: "open-member",
+    cwd: "/work/repo.feature",
+    title: "Open member",
+  });
+  assert.deepEqual(
+    sessionDestination(state, "closed-member"),
+    { sessionId: "closed-member", cwd: "/closed/app", title: "Closed member" },
+    "a missing folder still leaves the history readable",
+  );
+  assert.equal(sessionDestination(state, "lost"), "unlisted", "lost history cannot be opened");
+  assert.equal(sessionDestination(state, "missing"), "unlisted");
 });
 
 test("the palette lists newest first by creation time, a closed folder's session included", () => {

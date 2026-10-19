@@ -1028,7 +1028,6 @@ test("a dispatch names each session it started or waited on, with the parent's o
   assert.deepEqual(dispatch([start], "start"), [
     {
       sessionId: null,
-      cwd: "",
       title: "Review the current diff. Do not edit files.",
       status: "Starting",
       badge: "secondary",
@@ -1037,7 +1036,6 @@ test("a dispatch names each session it started or waited on, with the parent's o
   ]);
   assert.deepEqual(dispatch([start, started], "start")?.[0], {
     sessionId: "child-1",
-    cwd: "/repo",
     title: "Review the current diff. Do not edit files.",
     status: "Started",
     badge: "secondary",

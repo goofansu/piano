@@ -97,7 +97,6 @@ export interface ToolRow {
 export interface DispatchFacts {
   /** Null until Piano names the session, and when it was never created. */
   sessionId: string | null;
-  cwd: string;
   /** The brief's first line: what the session was asked to do. */
   title: string;
   /** The parent's observation, never the child's current state. */
@@ -264,7 +263,6 @@ function dispatchFacts(
     return [
       {
         sessionId: stringOf(handle?.sessionId) ?? null,
-        cwd: stringOf(handle?.cwd) ?? stringOf(result?.cwd) ?? stringOf(args?.cwd) ?? "",
         title: messageLabel(brief) || "New session",
         status,
         badge,
@@ -277,7 +275,6 @@ function dispatchFacts(
     const sessionId = stringOf(handle?.sessionId) ?? null;
     return {
       sessionId,
-      cwd: stringOf(handle?.cwd) ?? "",
       title: messageLabel((sessionId && briefs.get(sessionId)) || "") || "Session",
     };
   };
