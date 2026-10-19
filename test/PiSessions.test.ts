@@ -503,6 +503,21 @@ test("a dispatched session's first live snapshot names its parent while usage is
   );
 });
 
+test("a session whose entries Pi refuses still opens, without its parent", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "rejected-entries-dispatched",
+        dispatchedFrom: "the-parent",
+      });
+      const state = yield* session.state;
+      assert.equal(state.sessionId, "rejected-entries-dispatched");
+      assert.equal(state.dispatchedFrom, undefined);
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
+
 test("canonical context updates after a response and compaction while still running", async () => {
   await run(
     Effect.gen(function* () {

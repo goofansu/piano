@@ -590,8 +590,9 @@ const openSession = (spec: PiSessionSpec) =>
         }
       });
 
-    // Cached values must be available without waiting for a slow/failed readback.
-    // Uncached sessions retain the initial statistics readiness contract.
+    // Cached statistics are shown without waiting for a slow or failed usage readback; open has
+    // still waited for the one entries read above. Uncached sessions keep the initial statistics
+    // readiness contract.
     if (spec.lastKnownStats) yield* readbacks.schedule("stats");
     else yield* readbacks.refresh("stats");
     const actionCapacity = makeInboundCapacity(inboundLimits.requests);

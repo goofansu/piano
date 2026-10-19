@@ -184,6 +184,9 @@ function handle(cmd) {
     case "get_messages":
       return respond(cmd, { messages });
     case "get_entries": {
+      // rejected-entries: Pi refuses to read its entries, as a failing extension could.
+      if (sessionId.startsWith("rejected-entries"))
+        return respond(cmd, undefined, "entries unavailable");
       // A Pi without pi-subagent: ordinary entries, plus near misses another extension could write.
       const entries = [
         // Piano's extension records the dispatching session once, as it does for a new child.
