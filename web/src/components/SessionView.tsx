@@ -12,7 +12,7 @@ import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { drafts, sessionDraftKey } from "@/lib/messageDraft";
+import { drafts } from "@/lib/messageDraft";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
   completionTarget,
@@ -46,7 +46,7 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { workspace } = sessionContext(state);
+  const { workspace, draftKey } = sessionContext(state);
   // The registry's workspace for the directory, like Changes: it outlives a closed folder.
   const pullRequest = useSessionPullRequest(
     workspace?.id,
@@ -65,7 +65,6 @@ export function SessionView({ state, send }: Props) {
   const pane = sessionPane(state);
   const notices = sessionNotices(state, messagesOnly);
   const readOnly = notices.find((n) => n.placement === "composer");
-  const draftKey = t ? sessionDraftKey(t) : null;
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
   // The transcript reports where the reader is; the composer's jump list reads and moves it.
   const viewport = useNewTranscriptViewport();
@@ -114,10 +113,7 @@ export function SessionView({ state, send }: Props) {
                 : undefined}
             </Banner>
           ))}
-        <AddToChat
-          draftKey={readOnly ? null : draftKey}
-          className="relative flex min-h-0 flex-1 flex-col"
-        >
+        <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
           {pane.list && (
             <LocalFileContext value={(path) => openPanel({ kind: "file", path })}>
               <SessionDestinationContext value={destination}>
@@ -155,12 +151,14 @@ export function SessionView({ state, send }: Props) {
                 key={n.id}
                 extension={n.extension}
                 used={usedEditorRequest}
-                onAppend={(request) => {
-                  if (draftKey) {
-                    drafts.paragraph(draftKey, request.text);
-                    setUsedEditorRequest(request.id);
-                  }
-                }}
+                onAppend={
+                  draftKey
+                    ? (request) => {
+                        drafts.paragraph(draftKey, request.text);
+                        setUsedEditorRequest(request.id);
+                      }
+                    : undefined
+                }
               />
             ) : (
               <StatusLine key={n.id} notice={n} />
@@ -211,7 +209,8 @@ function ExtensionBlock({
 }: {
   extension: ExtensionState;
   used: string | undefined;
-  onAppend: (request: { id: string; text: string }) => void;
+  /** Omitted while the draft takes no additions, which hides Append. */
+  onAppend: ((request: { id: string; text: string }) => void) | undefined;
 }) {
   return (
     <section
@@ -236,16 +235,18 @@ function ExtensionBlock({
         <div>
           <p>Suggested message</p>
           <pre className="whitespace-pre-wrap break-words">{extension.editorRequest.text}</pre>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={used === extension.editorRequest.id}
-            onClick={() => {
-              if (extension.editorRequest) onAppend(extension.editorRequest);
-            }}
-          >
-            Append to draft
-          </Button>
+          {onAppend && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={used === extension.editorRequest.id}
+              onClick={() => {
+                if (extension.editorRequest) onAppend(extension.editorRequest);
+              }}
+            >
+              Append to draft
+            </Button>
+          )}
         </div>
       )}
     </section>

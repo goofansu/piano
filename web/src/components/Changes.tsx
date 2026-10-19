@@ -88,8 +88,9 @@ export function ChangesPanel({
   workspace: Workspace | undefined;
   session: SessionView | null;
   close: () => void;
-  /** Receives review text for the composer draft; the caller decides how to confirm. */
-  onAsk: (text: string) => void;
+  /** Receives review text for the composer draft; the caller decides how to confirm. Omitted
+   * while the draft takes no additions, which hides Ask. */
+  onAsk: ((text: string) => void) | undefined;
 }) {
   const { observation, error, busy, refresh } = useWorkspaceChanges(
     workspace,
@@ -99,7 +100,7 @@ export function ChangesPanel({
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
   const sheet = changesSheet({ observation, error, busy, disclosure });
   const { changes, body } = sheet;
-  const ask = (loaded: LoadedFile) => onAsk(askText(loaded));
+  const ask = onAsk && ((loaded: LoadedFile) => onAsk(askText(loaded)));
 
   return (
     <RightSidebar
@@ -196,7 +197,7 @@ function SheetBodyView({
 }: {
   body: SheetBody;
   onOpenChange: (path: string, open: boolean) => void;
-  onAsk: (loaded: LoadedFile) => void;
+  onAsk: ((loaded: LoadedFile) => void) | undefined;
 }) {
   switch (body.kind) {
     case "idle":
@@ -263,7 +264,7 @@ function LiveFile({
   observedAt: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAsk: (loaded: LoadedFile) => void;
+  onAsk: ((loaded: LoadedFile) => void) | undefined;
 }) {
   const seeded = useMemo<LoadedFile | undefined>(
     () =>
@@ -301,7 +302,8 @@ function LiveFile({
       file={file}
       open={open}
       onOpenChange={onOpenChange}
-      onAsk={loaded && open ? () => onAsk(loaded) : undefined}
+      canAsk={!!onAsk}
+      onAsk={onAsk && loaded && open ? () => onAsk(loaded) : undefined}
       message={fileMessage({ error, busy, loaded })}
       retry={error ? () => void fetched.refresh() : undefined}
     />
@@ -312,6 +314,7 @@ function FileSection({
   file,
   open,
   onOpenChange,
+  canAsk,
   onAsk,
   message,
   retry,
@@ -319,6 +322,8 @@ function FileSection({
   file: DiffFile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Ask shows at all; `onAsk` is set once the open file's patch can be quoted. */
+  canAsk: boolean;
   onAsk?: () => void;
   message?: string;
   retry?: () => void;
@@ -368,16 +373,18 @@ function FileSection({
             )}
           </Button>
         </CollapsibleTrigger>
-        <ItemActions>
-          <IconButton
-            label={`Ask about ${file.path}`}
-            tooltip="Ask about this file"
-            disabled={!onAsk}
-            onClick={onAsk}
-          >
-            <MessageSquarePlusIcon />
-          </IconButton>
-        </ItemActions>
+        {canAsk && (
+          <ItemActions>
+            <IconButton
+              label={`Ask about ${file.path}`}
+              tooltip="Ask about this file"
+              disabled={!onAsk}
+              onClick={onAsk}
+            >
+              <MessageSquarePlusIcon />
+            </IconButton>
+          </ItemActions>
+        )}
       </Item>
       <CollapsibleContent className="disclosure-content">
         {message && (
