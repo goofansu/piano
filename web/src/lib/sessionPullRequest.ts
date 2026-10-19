@@ -92,6 +92,9 @@ export interface SessionPullRequestLink {
   remove: () => Promise<PullRequestOutcome>;
 }
 
+const sameLink = (a: RegistryLink | null | undefined, b: RegistryLink | null | undefined) =>
+  a === b || (!!a && !!b && a.url === b.url && a.apiHost === b.apiHost && a.source === b.source);
+
 const POLL_MS = 60_000;
 const NOT_FOUND = "No open PR found for this branch.";
 const failure = (error: unknown) =>
@@ -147,6 +150,7 @@ export function createSessionPullRequest({
   });
   /** The registry's link for the observed session, as the catalog last reported it. */
   let link: RegistryLink | null | undefined;
+  let associationRevision = 0;
   /** The background search in flight; its answer reaches the registry, never this state. */
   let search: AbortController | undefined;
   /** Whether the observed session's work is going, so the next `observe` can tell an edge. */
@@ -158,11 +162,13 @@ export function createSessionPullRequest({
   const listeners = new Set<() => void>();
   const derive = (): SessionPullRequestState => {
     const { key, value, error, mutating } = observation.getState();
-    const read = error ? fallback(value, link, error) : value;
+    const read = error
+      ? fallback(sameLink(value?.link, link) ? value : undefined, link, error)
+      : value;
     // The registry says whether the session is linked; a read adds GitHub's facts to that link.
     // A value read for another link (changed or removed elsewhere) is not shown; a change in
     // flight keeps what it applies to until it settles.
-    const current = mutating || read?.link?.url === link?.url;
+    const current = mutating || sameLink(read?.link, link);
     return { key, value: current ? read : undefined, busy: mutating, finding, surface };
   };
   let state = derive();
@@ -191,7 +197,8 @@ export function createSessionPullRequest({
     if (!changing) {
       const linked = !!state.value?.link;
       if (surface === "link-form" && linked) return closeItself();
-      if ((surface === "details" || surface === "editing") && !linked) surface = "link-form";
+      if ((surface === "details" || surface === "editing") && !linked && !link)
+        surface = "link-form";
     }
     publish();
   });
@@ -200,6 +207,7 @@ export function createSessionPullRequest({
     const key = observation.getState().key;
     if (key === null) return { _tag: "superseded" };
     let failed: string | undefined;
+    const revision = associationRevision;
     changing = true;
     try {
       const value = await observation.mutate(async (signal, previous) => {
@@ -221,6 +229,16 @@ export function createSessionPullRequest({
       return { _tag: "superseded" };
     } finally {
       changing = false;
+      // A registry acknowledgement must not cancel the mutation. If the registry instead
+      // reported a conflicting association while it ran, reconcile after it settles.
+      const current = observation.getState();
+      if (
+        current.key === key &&
+        associationRevision !== revision &&
+        !sameLink(current.value?.link, link)
+      ) {
+        observation.refreshSoon(0);
+      }
     }
   };
 
@@ -241,7 +259,10 @@ export function createSessionPullRequest({
     },
     observe: (workspaceId, sessionId, next, nextWorking) => {
       const key = pullRequestKey(workspaceId, sessionId);
-      const { key: previous, value } = observation.getState();
+      const { key: previous } = observation.getState();
+      const previousLink = link;
+      const associationChanged = !sameLink(previousLink, next);
+      if (key !== previous || associationChanged) associationRevision++;
       // Work starting or stopping is an edge only within one session: a selection arriving
       // mid-turn is not a start, so it is read once, by the observation, not twice.
       const edge = key !== null && key === previous && nextWorking !== working;
@@ -256,14 +277,11 @@ export function createSessionPullRequest({
       // A newly linked session, or a new session, reads on its own; a link that changed
       // elsewhere is read afresh so GitHub's facts match it.
       observation.observe(key, !!next);
-      const reread = !!next && value !== undefined && value.link?.url !== next.url;
-      if (reread) observation.refreshSoon(0);
+      const alreadyReading = key !== previous || !previousLink;
+      if (next && !alreadyReading && (associationChanged || edge)) observation.refreshSoon(0);
       publish();
       if (!edge || key === null) return;
-      if (link) {
-        if (!reread) observation.refreshSoon(0);
-        return;
-      }
+      if (link) return;
       if (link !== undefined || working) return;
       endSearch();
       const controller = new AbortController();

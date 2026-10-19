@@ -28,14 +28,20 @@ const linked: SessionPullRequest = { link: registered, pullRequest: null };
 function server() {
   const requests: {
     action: SessionPullRequestAction | undefined;
+    signal: AbortSignal;
     resolve: (body: SessionPullRequest) => void;
     reject: (error: Error) => void;
   }[] = [];
   return {
     requests,
-    api: (_workspaceId: string, _sessionId: string, action: SessionPullRequestAction | undefined) =>
+    api: (
+      _workspaceId: string,
+      _sessionId: string,
+      action: SessionPullRequestAction | undefined,
+      { signal }: { signal: AbortSignal },
+    ) =>
       new Promise<SessionPullRequest>((resolve, reject) =>
-        requests.push({ action, resolve, reject }),
+        requests.push({ action, signal, resolve, reject }),
       ),
     last: () => requests[requests.length - 1]!,
   };
@@ -88,6 +94,99 @@ test("only a session the registry links is read; its link changing or going else
   pr.observe("w1", "s3", null, false);
   assert.equal(pi.requests.length, 2, "a link removed elsewhere stops reading");
   assert.equal(pr.getState().value, undefined, "and shows no link");
+});
+
+test("pending association changes supersede reads and fence late success and failure", async () => {
+  const { pi, pr, notes, stop } = setup(registered);
+  const a = pi.last();
+  const b = { ...registered, url: "https://github.com/example/repo/pull/43" };
+  pr.observe("w1", "s1", b, false);
+  assert.equal(pi.requests.length, 2, "B reads immediately without a timer or work edge");
+  assert.equal(a.signal.aborted, true);
+  const readB = pi.last();
+  pr.observe("w1", "s1", { ...b }, false);
+  assert.equal(pi.requests.length, 2, "equivalent broadcasts leave B running");
+  const c: SessionPullRequestLink = { ...b, apiHost: "github.int.exe.xyz" };
+  pr.observe("w1", "s1", c, true);
+  assert.equal(pi.requests.length, 3, "host change and work edge share one read");
+  assert.equal(readB.signal.aborted, true);
+  pi.last().resolve({ link: c, pullRequest: null });
+  await settle();
+  a.resolve(linked);
+  readB.reject(new Error("stale B failure"));
+  await settle();
+  assert.deepEqual(pr.getState().value, { link: c, pullRequest: null });
+  assert.deepEqual(notes.error, []);
+  pr.open();
+  assert.equal(pr.getState().surface, "details");
+  stop();
+});
+
+test("selection and becoming linked each start only one read, even with a work edge", async () => {
+  const { pi, pr, stop } = setup(registered);
+  pi.last().resolve(linked);
+  await settle();
+  const b = { ...registered, url: "https://github.com/example/repo/pull/43" };
+  pr.observe("w1", "s2", b, true);
+  assert.equal(pi.requests.length, 2);
+  assert.equal(pi.last().signal.aborted, false);
+  pr.observe("w1", "s2", null, true);
+  assert.equal(pi.last().signal.aborted, true);
+  pi.last().resolve({ link: b, pullRequest: null });
+  await settle();
+  assert.equal(pr.getState().value, undefined);
+  pr.observe("w1", "s2", b, false);
+  assert.equal(pi.requests.length, 3);
+  assert.equal(pi.last().signal.aborted, false);
+  stop();
+});
+
+for (const action of ["link", "discover", "remove"] as const) {
+  for (const conflicting of [false, true]) {
+    test(`${action} survives an early registry ${conflicting ? "conflict and reconciles" : "acknowledgement"}`, async () => {
+      const { pi, pr, stop } = setup(action === "discover" ? undefined : registered);
+      if (action !== "discover") {
+        pi.last().resolve(linked);
+        await settle();
+      }
+      const b = { ...registered, url: "https://github.com/example/repo/pull/43" };
+      const result = action === "remove" ? unlinked : { link: b, pullRequest: null };
+      const saving = action === "link" ? pr.link(b.url) : pr[action]();
+      const mutation = pi.last();
+      const sent = pi.requests.length;
+      const next = conflicting ? { ...b, source: "branch" as const } : result.link;
+      pr.observe("w1", "s1", next, true);
+      assert.equal(mutation.signal.aborted, false);
+      assert.equal(pi.requests.length, sent, "registry and work edge do not interrupt a change");
+      mutation.resolve(result);
+      assert.equal((await saving)._tag, "saved");
+      assert.equal(pi.requests.length, sent + (conflicting ? 1 : 0));
+      if (conflicting) {
+        assert.equal(pr.getState().value, undefined, "the conflicting mutation is not current");
+        pi.last().resolve({ link: next, pullRequest: null });
+        await settle();
+      }
+      assert.deepEqual(pr.getState().value?.link, next);
+      stop();
+    });
+  }
+}
+
+test("a changed association keeps an edit and a failed refresh uses the new link", async () => {
+  const { pi, pr, stop } = setup(registered);
+  pi.last().resolve(linked);
+  await settle();
+  pr.open();
+  pr.edit();
+  const b: SessionPullRequestLink = { ...registered, apiHost: "github.int.exe.xyz" };
+  pr.observe("w1", "s1", b, false);
+  assert.equal(pr.getState().value, undefined, "old host facts are not current");
+  assert.equal(pr.getState().surface, "editing");
+  pi.last().reject(new Error("B is offline"));
+  await settle();
+  assert.deepEqual(pr.getState().value, { link: b, pullRequest: null, error: "B is offline" });
+  assert.equal(pr.getState().surface, "editing");
+  stop();
 });
 
 test("opening while unlinked offers the link form; a link found when work stops closes it", async () => {
