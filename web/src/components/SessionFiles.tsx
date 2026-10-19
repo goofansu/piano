@@ -30,7 +30,7 @@ export function SessionFiles({ files, cwd }: Props) {
       description="written or edited in this session"
     >
       {files.map((file) => {
-        const { name, dir } = splitPath(displayPath(file.path, cwd, abbrevHome));
+        const { name, dir } = splitPath(displayPath(file, cwd, abbrevHome));
         return (
           <li key={file.path} className="flex items-center">
             <button

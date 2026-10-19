@@ -10,7 +10,8 @@ import { useObservation } from "./useObservation.ts";
  * The files the selected session wrote or edited that follow its workspace's `.gitignore`, decided
  * once for every surface that lists them (the composer's Files popover and the palette's Files
  * group), so they agree and Git is asked once. Git decides (INV-01), read afresh whenever the set
- * of paths changes and on focus. Until the next answer the last one still applies, so a known
+ * of paths changes and on focus; its answer also names the file each path places to, so one file
+ * edited under several spellings is one entry. Until the next answer the last one still applies, so a known
  * ignored file never flashes back; a path the last answer did not cover shows until Git says
  * otherwise. Without a Git workspace, or after a failed read, every file shows until a successful
  * read restores filtering. The app provides it through `SessionFilesContext`.
