@@ -1,7 +1,7 @@
 import { toast } from "sonner";
 import { ChangesPanel } from "@/components/Changes";
 import { WorkspaceFile } from "@/components/WorkspaceFile";
-import { drafts, sessionDraftKey } from "@/lib/messageDraft";
+import { drafts } from "@/lib/messageDraft";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -12,8 +12,7 @@ export function SessionPanel({ state }: { state: AppState }) {
   const { settings, sidebar: panel, openPanel, closeSidebar } = useNavigation();
   const t = state.session;
   if (settings || !t || !panel) return null;
-  const { workspace, changesWorkspace } = sessionContext(state);
-  const draftKey = sessionDraftKey(t);
+  const { workspace, changesWorkspace, draftKey } = sessionContext(state);
   if (panel === "changes")
     return (
       <ChangesPanel
@@ -21,11 +20,14 @@ export function SessionPanel({ state }: { state: AppState }) {
         workspace={changesWorkspace}
         session={t}
         close={closeSidebar}
-        onAsk={(text) => {
-          if (!draftKey) return;
-          drafts.paragraph(draftKey, text);
-          toast.success("Added to your message");
-        }}
+        onAsk={
+          draftKey
+            ? (text) => {
+                drafts.paragraph(draftKey, text);
+                toast.success("Added to your message");
+              }
+            : undefined
+        }
       />
     );
   return (

@@ -16,6 +16,7 @@ import type {
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
 import { abbrevHome } from "./format.ts";
+import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
@@ -231,6 +232,11 @@ export interface SessionContext {
   /** Changes can open: a Git workspace whose checkout is still there. */
   canOpenChanges: boolean;
   checkoutMissing: boolean;
+  /**
+   * The selected session's draft while its composer takes input; `null` once it is read-only, so
+   * quoting, Ask and extensions cannot add to a draft nobody can see or send.
+   */
+  draftKey: DraftKey | null;
 }
 
 /** Everything the header, palette and session view show about the selected session's location. */
@@ -261,6 +267,7 @@ export function sessionContext(state: AppState): SessionContext {
     changesWorkspace,
     canOpenChanges: !!changesWorkspace && !checkoutMissing,
     checkoutMissing,
+    draftKey: session && !checkoutMissing ? sessionDraftKey(session) : null,
   };
 }
 

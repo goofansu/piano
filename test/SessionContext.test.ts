@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
+import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import {
   completionTarget,
   directoryChoices,
@@ -96,6 +97,17 @@ test("a session whose folder was closed keeps its registry workspace for Changes
   assert.equal(ctx.workspace?.id, "ws:/closed");
   assert.equal(ctx.changesWorkspace?.id, "ws:/closed");
   assert.equal(ctx.canOpenChanges, true);
+});
+
+test("only a session whose composer accepts input has a writable draft", () => {
+  const live = sessionContext({ ...base, session: session("/work/repo.feature") });
+  assert.equal(live.draftKey, sessionDraftKey({ cwd: "/work/repo.feature", sessionId: "s1" }));
+  const missing = sessionContext({
+    ...base,
+    session: session("/work/repo.feature", { checkoutMissing: true }),
+  });
+  assert.equal(missing.draftKey, null, "a read-only session's draft takes no additions");
+  assert.equal(sessionContext({ ...base, session: null }).draftKey, null);
 });
 
 test("a removed checkout keeps its workspace identity but cannot open Changes; a non-Git folder has no Changes workspace", () => {
