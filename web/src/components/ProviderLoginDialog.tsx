@@ -53,10 +53,9 @@ interface OpenSignIn {
 }
 
 /** The sign-in dialog for `signIn`, or closed while it is undefined. Closing keeps the last
- * sign-in's face (and the `providers` that named it) while the dialog animates closed; reopening
- * mounts a new attempt by its new key. Explicit dismissal cancels pending sign-in; browser
- * disconnect still preserves it. `api` runs another sign-in of the same shape, such as an MCP
- * server's. */
+ * sign-in's attempt mounted while the dialog animates closed; reopening mounts a new attempt by its
+ * new key. Explicit dismissal cancels pending sign-in; browser disconnect still preserves it.
+ * `api` runs another sign-in of the same shape, such as an MCP server's. */
 export function ProviderLoginDialog({
   signIn,
   providers,
@@ -70,13 +69,13 @@ export function ProviderLoginDialog({
   signedIn: () => void;
   api?: SignInApi;
 }) {
-  const shown = useLastShown(signIn && { ...signIn, providers });
+  const shown = useLastShown(signIn);
   return shown ? (
     <SignInDialog
       key={shown.key}
       open={!!signIn}
       provider={shown.provider}
-      providers={shown.providers}
+      providers={providers}
       close={close}
       signedIn={signedIn}
       api={api}

@@ -165,14 +165,14 @@ export function ProjectDialogView({
   close,
 }: {
   open: boolean;
-  dialog: ProjectDialog;
+  dialog: ProjectDialog | undefined;
   name: string;
   allowed: boolean;
   edit: (name: string) => void;
   submit: () => void;
   close: () => void;
 }) {
-  const editing = !!dialog.project;
+  const editing = !!dialog?.project;
   const nameInput = useRef<HTMLInputElement>(null);
   return (
     <Dialog open={open} onOpenChange={(open) => !open && close()}>
@@ -212,7 +212,7 @@ export function ProjectDialogView({
               Cancel
             </Button>
             <Button type="submit" disabled={!allowed}>
-              {editing ? "Save" : dialog.assign ? "Create and add session" : "Create project"}
+              {editing ? "Save" : dialog?.assign ? "Create and add session" : "Create project"}
             </Button>
           </DialogFooter>
         </form>
