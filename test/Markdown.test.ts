@@ -56,6 +56,15 @@ test("GitHub rendering leaves code and unrelated URLs alone and escapes untruste
   assert.ok(!renderMarkdown(`[javascript](javascript:alert(1))`).includes("<a"));
 });
 
+test("a bold or italic bare URL links without its emphasis markers", () => {
+  const html = renderMarkdown(
+    "See **https://github.com/a/b/pull/7** and *https://github.com/a/b*.",
+  );
+  assert.ok(html.includes('<strong><a href="https://github.com/a/b/pull/7"'), html);
+  assert.ok(html.includes("b#7</a></strong>"), html);
+  assert.ok(html.includes("a/b</a></em>."), html);
+});
+
 test("Linear links reuse the MCP logo and preserve destinations and labels", () => {
   const url = "https://linear.app/team/issue/ENG-42/fix?x=1&y=2#comment";
   const html = renderMarkdown(`${url}, [**Fix**](${url}) <${url}>`);

@@ -87,6 +87,68 @@ function localFilePath(destination: string): string | undefined {
   }
 }
 
+/**
+ * Code spans, markdown links and images, autolinks and bare URLs: the one expression for what
+ * inline text the transcript treats as code or as a link. Code comes first so a URL inside it is
+ * never a link.
+ */
+const INLINE =
+  /`([^`\n]+)`|(!?)\[([^\]\n]*)\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g;
+/** Punctuation that ends the sentence, not the URL; `*` is a bold or italic marker around it. */
+const URL_END = /[.,!?;:)'"\]*]+$/;
+const WEB = /^https?:\/\//;
+
+type InlineToken =
+  | { kind: "code"; code: string }
+  | { kind: "image" | "link"; label: string; destination: string; source: string }
+  | { kind: "autolink"; url: string }
+  /** `rest` is the sentence punctuation or emphasis marker after the URL, which stays prose. */
+  | { kind: "bare"; url: string; rest: string };
+
+function inlineToken(
+  match: string,
+  code: string | undefined,
+  image: string | undefined,
+  label: string | undefined,
+  destination: string | undefined,
+  autolink: string | undefined,
+): InlineToken {
+  if (code !== undefined) return { kind: "code", code };
+  if (destination !== undefined)
+    return { kind: image ? "image" : "link", label: label ?? "", destination, source: match };
+  if (autolink !== undefined) return { kind: "autolink", url: autolink };
+  const url = match.replace(URL_END, "");
+  return { kind: "bare", url, rest: match.slice(url.length) };
+}
+
+function renderToken(token: InlineToken, images: boolean): string {
+  switch (token.kind) {
+    case "code":
+      return `<code>${escH(token.code)}</code>`;
+    case "image": {
+      const path = images ? localFilePath(token.destination) : undefined;
+      return path
+        ? `<span data-local-image="${escH(path)}"><button type="button" class="local-file-link" data-local-file="${escH(path)}">${escH(token.label || "Image")}</button></span>`
+        : escH(token.source);
+    }
+    case "link": {
+      if (WEB.test(token.destination)) return webLink(token.destination, token.label);
+      const path = localFilePath(token.destination);
+      // Custom inline action: shadcn has no HTML-string Markdown renderer.
+      // Paths live in data, not hrefs, so even modified clicks cannot request filesystem URLs.
+      return path
+        ? `<button type="button" class="local-file-link" data-local-file="${escH(path)}">${renderInline(token.label, false)}</button>`
+        : escH(token.source);
+    }
+    case "autolink":
+    case "bare": {
+      const decoration = resolveLinkDecoration(token.url);
+      if (decoration) return webLink(token.url, token.url, decoration);
+      return escH(token.kind === "bare" ? token.url : `<${token.url}>`);
+    }
+  }
+}
+
 function renderInline(s: string, links = true, images = false): string {
   const ph: string[] = [];
   s = s.replaceAll("\u0000", "\uFFFD");
@@ -95,47 +157,14 @@ function renderInline(s: string, links = true, images = false): string {
       ph.push(`<code>${escH(c)}</code>`);
       return `\u0000${ph.length - 1}`;
     });
-  if (links) {
-    // Protect whole links before formatting prose, so URL punctuation never becomes markup.
-    s = s.replace(
-      /`([^`\n]+)`|(!?)\[([^\]\n]*)\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g,
-      (
-        match,
-        code: string | undefined,
-        image: string | undefined,
-        label: string | undefined,
-        href: string | undefined,
-        autolink: string | undefined,
-      ) => {
-        let html: string;
-        if (code !== undefined) html = `<code>${escH(code)}</code>`;
-        else if (href !== undefined) {
-          if (image) {
-            const path = images ? localFilePath(href) : undefined;
-            html = path
-              ? `<span data-local-image="${escH(path)}"><button type="button" class="local-file-link" data-local-file="${escH(path)}">${escH(label || "Image")}</button></span>`
-              : escH(match);
-          } else if (/^https?:\/\//.test(href)) html = webLink(href, label ?? "");
-          else {
-            const path = localFilePath(href);
-            // Custom inline action: shadcn has no HTML-string Markdown renderer.
-            // Paths live in data, not hrefs, so even modified clicks cannot request filesystem URLs.
-            html = path
-              ? `<button type="button" class="local-file-link" data-local-file="${escH(path)}">${renderInline(label ?? "", false)}</button>`
-              : escH(match);
-          }
-        } else {
-          const url = autolink ?? match.replace(/[.,!?;:)'"\]]+$/, "");
-          const decoration = resolveLinkDecoration(url);
-          html = decoration
-            ? webLink(url, url, decoration) + (autolink ? "" : escH(match.slice(url.length)))
-            : escH(match);
-        }
-        ph.push(html);
-        return `\u0000${ph.length - 1}`;
-      },
-    );
-  }
+  // Protect whole links before formatting prose, so URL punctuation never becomes markup.
+  if (links)
+    s = s.replace(INLINE, (...match: (string | undefined)[]) => {
+      const [whole, code, image, label, destination, autolink] = match;
+      const token = inlineToken(whole!, code, image, label, destination, autolink);
+      ph.push(renderToken(token, images));
+      return `\u0000${ph.length - 1}${token.kind === "bare" ? token.rest : ""}`;
+    });
   s = escH(s);
   s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
@@ -144,9 +173,44 @@ function renderInline(s: string, links = true, images = false): string {
   return s;
 }
 
+export interface MarkdownLink {
+  url: string;
+  /** The markdown link text as written, possibly empty; autolinks and bare URLs have none. */
+  label?: string;
+  /**
+   * How it was written. The transcript always links a `markdown` link; it links an `autolink`
+   * (`<https://…>`) or a `bare` URL only when a provider decorates it (GitHub, Linear).
+   */
+  kind: "markdown" | "autolink" | "bare";
+}
+
+/**
+ * Every web link in `src` in the order written, recognized exactly as `renderMarkdown` does: the
+ * same blocks (a fenced block is code, nothing else is) and the same inline expression (code
+ * spans and images are not links; a bare URL sheds sentence punctuation).
+ */
+export function markdownLinks(src: string): MarkdownLink[] {
+  const links: MarkdownLink[] = [];
+  walkMarkdown(src, (text) => {
+    for (const [whole, code, image, label, destination, autolink] of text.matchAll(INLINE)) {
+      const token = inlineToken(whole, code, image, label, destination, autolink);
+      if (token.kind === "link" && WEB.test(token.destination))
+        links.push({ url: token.destination, label: token.label, kind: "markdown" });
+      else if (token.kind === "autolink" || token.kind === "bare")
+        links.push({ url: token.url, kind: token.kind });
+    }
+    return "";
+  });
+  return links;
+}
+
 export function renderMarkdown(src: string, images = false): string {
+  return walkMarkdown(src, (text) => renderInline(text, true, images));
+}
+
+/** The block structure: `inline` renders each run of inline text; fenced code never reaches it. */
+function walkMarkdown(src: string, inline: (text: string) => string): string {
   if (!src) return "";
-  const inline = (text: string) => renderInline(text, true, images);
   const lines = src.split("\n");
   let out = "";
   let para: string[] = [];
@@ -240,7 +304,7 @@ export function renderMarkdown(src: string, images = false): string {
         i++;
       } while (i < lines.length && /^>(?:\s|$)/.test(lines[i]));
       i--;
-      out += `<blockquote>${renderMarkdown(quote.join("\n"), images)}</blockquote>`;
+      out += `<blockquote>${walkMarkdown(quote.join("\n"), inline)}</blockquote>`;
       continue;
     }
     const um = ln.match(/^[-*] (.*)/);
