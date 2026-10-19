@@ -85,6 +85,7 @@ interface Table<K extends Collection> {
   readonly name: K;
   readonly columns: ReadonlyArray<string>;
   readonly keys: number;
+  key(item: Item<K>): ReadonlyArray<string>;
   encode(item: Item<K>, position: number): Row;
   decode(row: Stored): Item<K>;
 }
@@ -99,6 +100,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
     name: "projects",
     columns: ["id", "name", "archived", "position"],
     keys: 1,
+    key: (p) => [p.id],
     encode: (p, i) => [p.id, p.name, Number(p.archived), i],
     decode: (r) => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived) }),
   },
@@ -106,6 +108,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
     name: "workspaces",
     columns: ["path", "id", "folder_path", "position"],
     keys: 1,
+    key: (w) => [w.path],
     encode: (w, i) => [w.path, w.id, w.folder, i],
     decode: (r) => ({
       id: r.id as string,
@@ -117,6 +120,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
     name: "folders",
     columns: ["path", "position"],
     keys: 1,
+    key: (path) => [path],
     encode: (path, i) => [path, i],
     decode: (r) => r.path as string,
   },
@@ -124,6 +128,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
     name: "worktrees",
     columns: ["path", "folder_path", "branch", "position"],
     keys: 1,
+    key: (w) => [w.path],
     encode: (w, i) => [w.path, w.folder, w.branch, i],
     decode: (r) => ({
       path: r.path as string,
@@ -151,6 +156,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       "position",
     ],
     keys: 2,
+    key: (s) => [s.cwd, s.sessionId],
     encode: (s, i) => [
       s.cwd,
       s.sessionId,
@@ -197,39 +203,48 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
   },
 };
 const tables: ReadonlyArray<Table<Collection>> = Object.values(codecs);
-const rows = (table: Table<Collection>, d: RegistryData): Row[] =>
-  (d[table.name] as ReadonlyArray<Item<Collection>>).map((item, i) => table.encode(item, i));
-
-/** No full-table rewrite: only changed/new rows and removed keys are written. */
+/** Unchanged collections and rows are not encoded. Position is persisted data, not just identity. */
 function persist(db: DatabaseSync, before: RegistryData, after: RegistryData) {
-  const changes = tables.map((table) => {
-    const key = (r: Row) => JSON.stringify(r.slice(0, table.keys));
-    return {
-      ...table,
-      key,
-      previous: new Map(rows(table, before).map((r) => [key(r), r])),
-      next: new Map(rows(table, after).map((r) => [key(r), r])),
-    };
-  });
-  for (const table of [...changes].reverse()) {
+  const changes = tables
+    .filter((table) => before[table.name] !== after[table.name])
+    .map((table) => {
+      const previous = new Map(
+        before[table.name].map((item, position) => {
+          const key = table.key(item);
+          return [JSON.stringify(key), { item, position, key }] as const;
+        }),
+      );
+      const upserts: Row[] = [];
+      after[table.name].forEach((item, position) => {
+        const key = JSON.stringify(table.key(item));
+        const old = previous.get(key);
+        previous.delete(key);
+        if (old?.item === item && old.position === position) return;
+        const row = table.encode(item, position);
+        const prior = old && table.encode(old.item, old.position);
+        if (!prior || row.some((value, i) => value !== prior[i])) upserts.push(row);
+      });
+      return { table, upserts, removals: [...previous.values()].map(({ key }) => key) };
+    });
+  for (const { table, removals } of [...changes].reverse()) {
+    if (!removals.length) continue;
     const remove = db.prepare(
       `DELETE FROM ${table.name} WHERE ${table.columns
         .slice(0, table.keys)
         .map((c) => `${c} = ?`)
         .join(" AND ")}`,
     );
-    for (const [key, row] of table.previous)
-      if (!table.next.has(key)) remove.run(...row.slice(0, table.keys));
+    for (const key of removals) remove.run(...key);
   }
-  for (const table of changes) {
+  for (const { table, upserts } of changes) {
+    if (!upserts.length) continue;
     const upsert =
       db.prepare(`INSERT INTO ${table.name} (${table.columns.join(",")}) VALUES (${table.columns.map(() => "?").join(",")})
       ON CONFLICT (${table.columns.slice(0, table.keys).join(",")}) DO UPDATE SET ${table.columns
         .slice(table.keys)
         .map((c) => `${c} = excluded.${c}`)
         .join(",")}`);
-    for (const [key, row] of table.next)
-      if (JSON.stringify(row) !== JSON.stringify(table.previous.get(key))) upsert.run(...row);
+    for (const row of upserts) upsert.run(...row);
   }
 }
 

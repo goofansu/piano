@@ -110,20 +110,47 @@ const currentSchema = Schema.Struct({
 
 /** Path references keep their spelling: never move or merge Pi's alias-based history. */
 function withWorkspaces(data: RegistryData): RegistryData {
-  const workspaces = [...data.workspaces];
+  const paths = new Set(data.workspaces.map((w) => w.path));
+  const parents = new Map(data.worktrees.map((w) => [w.path, w.folder]));
+  const added: Workspace[] = [];
   for (const path of [
     ...data.folders,
     ...data.worktrees.map((w) => w.path),
     ...data.sessions.map((s) => s.cwd),
   ]) {
-    if (!workspaces.some((w) => w.path === path))
-      workspaces.push({
-        id: randomUUID(),
-        path,
-        folder: data.worktrees.find((w) => w.path === path)?.folder ?? path,
-      });
+    if (!paths.has(path)) {
+      paths.add(path);
+      added.push({ id: randomUUID(), path, folder: parents.get(path) ?? path });
+    }
   }
-  return { ...data, workspaces };
+  return added.length ? { ...data, workspaces: [...data.workspaces, ...added] } : data;
+}
+
+/** Mutations are immutable. Compare only replaced items, retaining value-equal references too. */
+function shareCollection<A>(before: ReadonlyArray<A>, after: ReadonlyArray<A>): ReadonlyArray<A> {
+  if (before === after) return before;
+  let unchanged = before.length === after.length;
+  const shared = after.map((item, i) => {
+    if (item === before[i] || JSON.stringify(item) === JSON.stringify(before[i])) return before[i];
+    unchanged = false;
+    return item;
+  });
+  return unchanged ? before : shared;
+}
+function shareUnchanged(before: RegistryData, after: RegistryData): RegistryData {
+  const data: RegistryData = {
+    version: after.version,
+    projects: shareCollection(before.projects, after.projects),
+    workspaces: shareCollection(before.workspaces, after.workspaces),
+    folders: shareCollection(before.folders, after.folders),
+    worktrees: shareCollection(before.worktrees, after.worktrees),
+    sessions: shareCollection(before.sessions, after.sessions),
+  };
+  return Object.keys(data).every(
+    (key) => data[key as keyof RegistryData] === before[key as keyof RegistryData],
+  )
+    ? before
+    : data;
 }
 function decode(value: unknown): RegistryData {
   const initial: RegistryData = Schema.decodeUnknownSync(currentSchema)(value);
@@ -296,8 +323,8 @@ export const RegistryLive = Layer.effect(
             catch: (e) => (e instanceof RegistryError ? e : recovery(path, e)),
           });
           if (next === current) return undefined;
-          const data = withWorkspaces(next);
-          if (JSON.stringify(data) === JSON.stringify(current)) return undefined;
+          const data = shareUnchanged(current, next);
+          if (data === current) return undefined;
           yield* Effect.try({
             try: () => database.save(current, data),
             catch: (e) => recovery(path, e),
@@ -455,7 +482,7 @@ export const RegistryLive = Layer.effect(
           if (d.folders.includes(path) || d.worktrees.some((w) => w.path === path)) return path;
           yield* requireDirectory(path);
           yield* update((x) =>
-            x.folders.includes(path) ? x : { ...x, folders: [...x.folders, path] },
+            x.folders.includes(path) ? x : withWorkspaces({ ...x, folders: [...x.folders, path] }),
           );
           return path;
         }),
@@ -467,7 +494,7 @@ export const RegistryLive = Layer.effect(
         update((d) =>
           d.worktrees.some((w) => w.path === entry.path)
             ? d
-            : { ...d, worktrees: [...d.worktrees, entry] },
+            : withWorkspaces({ ...d, worktrees: [...d.worktrees, entry] }),
         ),
       addSession: (cwd, sessionId, title, projectId) =>
         update((d) => {
@@ -478,7 +505,7 @@ export const RegistryLive = Layer.effect(
                 "Project is unavailable or archived. Choose a current project before starting.",
             });
           const t = now();
-          return {
+          return withWorkspaces({
             ...d,
             sessions: [
               ...d.sessions,
@@ -492,7 +519,7 @@ export const RegistryLive = Layer.effect(
                 archived: false,
               },
             ],
-          };
+          });
         }),
       touchSession: (cwd, sessionId, text) =>
         update((d) => ({
