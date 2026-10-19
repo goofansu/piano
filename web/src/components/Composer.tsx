@@ -1,5 +1,5 @@
 import { isWorking } from "@shared/sessionProjection";
-import type { ClientCommand, Workspace } from "@shared/wire";
+import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { ContextDetails } from "@/components/ContextDetails";
@@ -44,8 +44,6 @@ import type { SessionView } from "@/store";
 interface Props {
   /** The selected session; `null` while it loads. */
   session: SessionView | null;
-  /** The session's Git workspace, whose `.gitignore` the Files list follows; none for a non-Git folder. */
-  workspace?: Workspace;
   /** `null` while the session is loading; the composer is disabled then. */
   draftKey: DraftKey | null;
   completion?: CompletionContext;
@@ -71,7 +69,6 @@ const queueModePreference = createPreference<DeliveryMode>({
  */
 export function Composer({
   session: t,
-  workspace,
   draftKey,
   completion,
   disabled,
@@ -102,7 +99,7 @@ export function Composer({
   const streaming = !!t && isWorking(t.state);
   const usage = t?.state;
   const messages = t?.messages ?? [];
-  const files = useSessionFiles(t, workspace);
+  const files = useSessionFiles();
   const queuedMessages = t?.state.queuedMessages ?? [];
   const editor = useDraftEditor(draftKey);
   const [queueMode, setQueueMode] = usePreference(queueModePreference);
