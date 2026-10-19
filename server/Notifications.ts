@@ -2,7 +2,7 @@
 import { Clock, Context, Data, Effect, Layer, Queue, Semaphore } from "effect";
 import type { NotificationAction, NotificationSettings } from "../shared/notifications.ts";
 import { ExeDev, ExeDevLive } from "./ExeDev.ts";
-import { AllowedOrigins } from "./OriginPolicy.ts";
+import { AllowedOrigins, sessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry } from "./Registry.ts";
 
 export class NotificationError extends Data.TaggedError("NotificationError")<{
@@ -53,8 +53,10 @@ export const NotificationsLive = Layer.effect(
     const registry = yield* Registry;
     const exe = yield* ExeDev;
     const fetch = yield* NotificationFetch;
-    // Deployment-owned origins, never request headers or a guessed VM hostname.
-    const origin = [...(yield* AllowedOrigins)].find((value) => value.startsWith("https://"));
+    // Deployment-owned origins, never request headers or a guessed VM hostname. The same origin
+    // a dispatched session links to; Slack needs it to be HTTPS.
+    const chosen = sessionLinkOrigin(yield* AllowedOrigins);
+    const origin = chosen?.startsWith("https://") ? chosen : undefined;
     const problem = origin
       ? undefined
       : "Set a public HTTPS Piano origin in PIANO_ALLOWED_ORIGINS.";

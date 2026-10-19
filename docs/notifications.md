@@ -33,11 +33,10 @@ notifications. No prompt, response content, session title or filesystem path is 
 contains only the session ID, and Slack link/media previews are disabled. Delivery is server-owned,
 continues with the browser closed, and does not use a Pi extension.
 
-The first HTTPS origin in `PIANO_ALLOWED_ORIGINS` is used for links, for example
-`https://your-vm.exe.xyz/s/<sessionId>`. Put your preferred public Piano origin first if you configure
-multiple HTTPS aliases. No URL is inferred from request headers or the VM name. If no HTTPS origin
-is configured, Settings explains what to configure and disables selection/Test rather than sending
-a broken or localhost link. Off remains available. Tests link to Piano's home page because they do
+Links use the [session link origin](configuration.md#session-link-origin), the same one a
+dispatched session links to, for example `https://your-vm.exe.xyz/s/<sessionId>`. No URL is
+inferred from request headers or the VM name. If that origin is not HTTPS, Settings explains what
+to configure and disables selection/Test rather than sending a broken or localhost link. Off remains available. Tests link to Piano's home page because they do
 not belong to a session. Links still require normal private exe.dev access; posting them does not
 grant Slack channel members access to Piano.
 

@@ -43,7 +43,7 @@ Piano sets two variables in that child's environment, from the running server in
 | Variable | Value |
 | --- | --- |
 | `PIANO_SESSION_WS_URL` | `ws://<listener host>:<PORT>/ws`, the same socket the browser uses. The listener is addressed directly, so a child reaches Piano without going through a proxy; `0.0.0.0` and `::` become their loopback addresses. |
-| `PIANO_SESSION_ORIGIN` | An origin from `PIANO_ALLOWED_ORIGINS`: the one naming the listener when it is allowed, otherwise the first configured one. It is also the base for a `/s/<sessionId>` link into Piano's UI, so there is no separate base-URL variable. |
+| `PIANO_SESSION_ORIGIN` | The [session link origin](#session-link-origin). It is also the base for a `/s/<sessionId>` link into Piano's UI, so there is no separate base-URL variable. |
 
 The origin is chosen from the configured set, never added to it, so starting a child cannot widen
 the [origin policy](#browser-origins). The extension sends it as the `Origin` header on the upgrade,
@@ -82,6 +82,19 @@ entry with a path, a trailing slash, credentials, a wildcard or `null` is invali
 entry stops startup. Behind a proxy or on a custom Vite port, list the origin the browser uses, not
 the backend address. For the exe.dev setup, see
 [origin configuration](hosted-development.md#origin-configuration).
+
+### Session link origin
+
+Piano links into its UI, `<origin>/s/<sessionId>`, from a dispatched session and from a
+[Slack notification](notifications.md). Both take the origin from `PIANO_ALLOWED_ORIGINS`, by one
+rule:
+
+1. the first HTTPS origin, because a link has to open from a remote browser;
+2. otherwise the origin naming the listener (`HOST:PORT`);
+3. otherwise the first configured origin, which in development is Vite's.
+
+Without `PIANO_ALLOWED_ORIGINS` this is the listener's loopback origin. To link through a different
+HTTPS alias, list it first. The origin is never taken from a request header.
 
 ## Notifications
 
