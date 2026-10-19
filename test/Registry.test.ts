@@ -12,6 +12,7 @@ import {
   RegistryDatabasePath,
   RegistryLive,
 } from "../server/Registry.ts";
+import { openRegistryDatabase } from "../server/RegistryDatabase.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
 function fixture(t: TestContext) {
@@ -695,6 +696,154 @@ test("INV-01: competing backends cannot overwrite each other's committed metadat
     await second.dispose();
   }
 });
+
+test("PIN-50: metadata writes share unchanged collections and rows; value-equal writes do not publish or revise", async (t) => {
+  const f = fixture(t),
+    cwd = `${f.root}/alias/../folder`;
+  seedRegistry(f.dbPath, {
+    projects: [{ id: "project", name: "Project", archived: false }],
+    sessions: ["one", "two"].map((sessionId) => ({
+      cwd,
+      sessionId,
+      createdAt: "then",
+      updatedAt: "then",
+    })),
+  });
+  let saved: RegistryData | undefined;
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      let notifications = 0;
+      yield* r.onChange(() =>
+        Effect.sync(() => {
+          notifications++;
+        }),
+      );
+      const before = yield* r.get;
+      yield* r.touchSession(cwd, "one", "First prompt");
+      yield* r.mirrorSession(cwd, "one", {
+        sessionName: "Pi name",
+        stats: { cost: 2, statsUpdatedAt: 3 },
+      });
+      yield* r.pinSession(cwd, "one", true);
+      const entry = (yield* r.get).sessions[0];
+      yield* r.setSessionLink(entry, "pullRequest", {
+        url: "https://github.com/o/r/pull/1",
+        source: "manual",
+      });
+      saved = yield* r.get;
+      for (const name of ["projects", "folders", "worktrees", "workspaces"] as const)
+        assert.equal(saved[name], before[name], `${name} keeps its identity`);
+      assert.equal(saved.sessions[1], before.sessions[1], "unrelated session keeps its identity");
+      assert.equal(saved.sessions[0].cwd, cwd);
+      assert.notEqual(saved.sessions[0].updatedAt, "then");
+      assert.equal(saved.sessions[0].title, "Pi name");
+      assert.deepEqual(saved.workspaces, before.workspaces);
+      assert.equal(notifications, 4);
+      const db = new DatabaseSync(f.dbPath, { readOnly: true });
+      try {
+        const revision = () => db.prepare("SELECT revision FROM registry_meta").get()!.revision;
+        const priorRevision = revision();
+        yield* r.saveProject({ id: "project", name: "Project" });
+        yield* r.archiveProject("project", false);
+        yield* r.assignProject(cwd, "one", null);
+        yield* r.removeFolder("/missing");
+        yield* r.removeSession(cwd, "missing");
+        yield* r.touchSession(cwd, "missing");
+        yield* r.mirrorSession(cwd, "one", { stats: { cost: 2, statsUpdatedAt: 3 } });
+        yield* r.setSessionLink(saved.sessions[0], "pullRequest", {
+          url: "https://github.com/o/r/pull/1",
+          source: "manual",
+        });
+        assert.equal(yield* r.get, saved, "a true no-op retains the published state");
+        assert.equal(notifications, 4);
+        assert.equal(revision(), priorRevision);
+      } finally {
+        db.close();
+      }
+    }).pipe(Effect.scoped),
+  );
+  assert.deepEqual(await f.get(), saved, "all changed metadata survives reopening");
+});
+
+test("PIN-50: new cwd creates one workspace, keeping aliases and worktree parents", async (t) => {
+  const f = fixture(t),
+    folder = join(f.root, "folder"),
+    cwd = `${folder}/../worktree`;
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.addWorktree({ path: cwd, folder, branch: "feature" });
+      const before = yield* r.get;
+      yield* r.addSession(cwd, "one");
+      yield* r.addSession(cwd, "two");
+      assert.equal((yield* r.get).workspaces, before.workspaces);
+      yield* r.addSession(`${cwd}/alias`, "new");
+      yield* r.addSession(`${cwd}/alias`, "another");
+    }),
+  );
+  const data = await f.get();
+  assert.deepEqual(
+    data.workspaces.map(({ path, folder }) => ({ path, folder })),
+    [
+      { path: cwd, folder },
+      { path: `${cwd}/alias`, folder: `${cwd}/alias` },
+    ],
+  );
+});
+
+// Registry does not expose removal for every collection. Exercise the existing database save
+// boundary too, so position handling is protected for every ordered table, including parents.
+for (const name of ["projects", "workspaces", "folders", "worktrees", "sessions"] as const) {
+  test(`PIN-50: deleting the first ${name} row persists shifted positions and restart order`, async (t) => {
+    const f = fixture(t);
+    const paths = ["a", "b", "c"].map((p) => join(f.root, p));
+    const workspaces = paths.map((path, i) => ({ id: `w${i}`, path, folder: path }));
+    seedRegistry(f.dbPath, {
+      workspaces,
+      projects: name === "projects" ? paths.map((id) => ({ id, name: id, archived: false })) : [],
+      folders: name === "folders" ? paths : [],
+      worktrees:
+        name === "worktrees"
+          ? paths.map((path) => ({ path, folder: path, branch: "feature" }))
+          : [],
+      sessions:
+        name === "sessions"
+          ? paths.map((cwd) => ({ cwd, sessionId: "same", createdAt: "then", updatedAt: "then" }))
+          : [],
+    });
+    const db = openRegistryDatabase(f.dbPath);
+    const before = db.data;
+    const after = { ...before, [name]: before[name].slice(1) };
+    try {
+      db.save(before, after);
+    } finally {
+      db.close();
+    }
+    const stored = new DatabaseSync(f.dbPath, { readOnly: true });
+    try {
+      assert.deepEqual(
+        stored
+          .prepare(`SELECT position FROM ${name} ORDER BY position`)
+          .all()
+          .map((r) => r.position),
+        [0, 1],
+      );
+    } finally {
+      stored.close();
+    }
+    assert.deepEqual(await f.get(), after);
+    // Reinsert at the end: stale positions must not tie with the appended item.
+    const reopened = openRegistryDatabase(f.dbPath);
+    const appended = { ...reopened.data, [name]: [...reopened.data[name], before[name][0]] };
+    try {
+      reopened.save(reopened.data, appended);
+    } finally {
+      reopened.close();
+    }
+    assert.deepEqual(await f.get(), appended);
+  });
+}
 
 test("database location honors data home and DB override", () => {
   const env = { ...process.env };
