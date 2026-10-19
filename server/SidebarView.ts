@@ -5,7 +5,7 @@
  * (a browser request, a Pi rename mirrored by SessionHosts) needs no publish step of its own.
  *
  * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06)
- * and session availability run independently, each single-flight and coalesced. Host acquisition
+ * and session availability are two CoalescedReaders, each single-flight on its own. Host acquisition
  * and completed retirement recheck Pi history through SessionReferences without waiting for Git.
  * Git results never install availability, so an older run cannot undo that judgement. A prompt,
  * rename or pin publishes from the last observations without starting either reader. DirectoryFacts
@@ -21,6 +21,7 @@ import type {
   WorktreeDiscovery,
   WorktreeView,
 } from "../shared/wire.ts";
+import { type CoalescedReader, makeCoalescedReader } from "./CoalescedReader.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { Registry, type RegistryData, shownReference } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
@@ -95,16 +96,6 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       // One writer, separate from Git/trust. Key individual members, not just their checkout:
       // a new member must not inherit a sibling's previously observed missing-history verdict.
       let unavailable = new Map<string, SessionReference["unavailable"]>();
-      let availabilityRunning = false;
-      let availabilityRequested = 0;
-      let availabilityWaiters: Array<{
-        readonly target: number;
-        readonly done: Deferred.Deferred<void>;
-      }> = [];
-      let running = false;
-      let dirty = false;
-      let started = 0;
-      let waiters: Array<{ readonly after: number; readonly done: Deferred.Deferred<void> }> = [];
 
       /** Git discovery only; trust is read under the publishing lock when this is installed. */
       const observe = Effect.fn("SidebarView.observe")(function* (data: RegistryData) {
@@ -244,54 +235,31 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         }),
       );
 
-      const runs: Effect.Effect<void> = Effect.gen(function* () {
-        while (true) {
-          const run = yield* Effect.sync(() => {
-            if (!dirty) {
-              running = false;
-              return 0;
-            }
-            dirty = false;
-            return ++started;
-          });
-          if (!run) return;
-          yield* registry.get.pipe(
-            Effect.flatMap(observe),
-            Effect.flatMap(install),
-            Effect.catchCause((cause) => Effect.logWarning("sidebar discovery failed", cause)),
-          );
-          const done = waiters.filter((w) => w.after < run);
-          waiters = waiters.filter((w) => w.after >= run);
-          yield* Effect.forEach(done, (w) => Deferred.succeed(w.done, undefined));
-        }
+      /** A Git run reads the registry's folders, discovers each and installs the result. */
+      const git = makeCoalescedReader({
+        name: "sidebar discovery",
+        scope: layerScope,
+        read: () =>
+          registry.get.pipe(Effect.flatMap(observe), Effect.flatMap(install), Effect.as(true)),
       });
-
-      /** Marks the view dirty and starts a run unless one is going; `done` resolves after a run that starts from now. */
-      const request = (done?: Deferred.Deferred<void>) =>
-        Effect.suspend(() => {
-          dirty = true;
-          if (done) waiters.push({ after: started, done });
-          if (running) return Effect.void;
-          running = true;
-          return Effect.asVoid(Effect.forkIn(runs, layerScope));
-        });
 
       // Availability has its own reader: neither slow Git nor frequent Pi state frames belong
       // on its invalidation path. A request during I/O invalidates that result and queues one
       // more read. Only this reader installs availability; Git and trust cannot overwrite it.
-      const availabilityRuns: Effect.Effect<void> = Effect.gen(function* () {
-        while (true) {
-          const version = availabilityRequested;
-          const installed = yield* Effect.gen(function* () {
+      const availability: CoalescedReader = makeCoalescedReader({
+        name: "sidebar availability",
+        scope: layerScope,
+        read: (superseded) =>
+          Effect.gen(function* () {
             const data = yield* registry.get;
             const members = projectMembersOf(data);
             const judged = yield* references.availability(members);
             return yield* locked(
               Effect.gen(function* () {
-                if (version !== availabilityRequested) return false;
+                if (superseded()) return false;
                 if (membersOf(data) !== membersOf(yield* registry.get)) {
                   // A registry write can be visible before its listener requests this reader.
-                  availabilityRequested++;
+                  yield* availability.request();
                   return false;
                 }
                 unavailable = new Map(
@@ -304,32 +272,9 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
                 return true;
               }),
             );
-          }).pipe(
-            // As with Git failure, keep the last observation and let a later request retry.
-            Effect.catchCause((cause) =>
-              Effect.logWarning("sidebar availability failed", cause).pipe(Effect.as(true)),
-            ),
-          );
-          if (installed) {
-            const done = availabilityWaiters.filter((w) => w.target <= version);
-            availabilityWaiters = availabilityWaiters.filter((w) => w.target > version);
-            yield* Effect.forEach(done, (w) => Deferred.succeed(w.done, undefined));
-          }
-          if (version === availabilityRequested) {
-            availabilityRunning = false;
-            return;
-          }
-        }
+          }),
       });
-      const requestAvailability = (done?: Deferred.Deferred<void>) =>
-        Effect.suspend(() => {
-          const target = ++availabilityRequested;
-          if (done) availabilityWaiters.push({ target, done });
-          if (availabilityRunning) return Effect.void;
-          availabilityRunning = true;
-          return Effect.asVoid(Effect.forkIn(availabilityRuns, layerScope));
-        });
-      const refresh = request().pipe(Effect.andThen(requestAvailability()));
+      const refresh = git.request().pipe(Effect.andThen(availability.request()));
       const changed = publish(true).pipe(Effect.andThen(refresh));
       // Awaited by the writer, so a session reference is on its way to browsers before its prompt reaches Pi.
       // Statistics and the Radius share change nothing shown and must not start a Git run. Neither
@@ -346,7 +291,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       // Subscribe during construction, before callers can start a host. A bounded invalidation
       // survives even if acquisition and retirement coalesce to the same empty host list.
       yield* hosts.lifecycleChanges.pipe(
-        Stream.runForEach(() => requestAvailability()),
+        Stream.runForEach(() => availability.request()),
         Effect.forkScoped({ startImmediately: true }),
       );
       // Started now, so a trust decision made once the layer is built is not missed.
@@ -374,8 +319,8 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         fresh: Effect.gen(function* () {
           const done = yield* Deferred.make<void>();
           const available = yield* Deferred.make<void>();
-          yield* request(done);
-          yield* requestAvailability(available);
+          yield* git.request(done);
+          yield* availability.request(available);
           yield* Deferred.await(done);
           yield* Deferred.await(available);
           return latest ?? { _tag: "registry", folders: [] };
