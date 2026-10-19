@@ -1,11 +1,9 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { LinkIcon, MessageSquareQuoteIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { IconButton } from "@/components/IconButton";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
-import { UsageDivider } from "@/components/UsageDivider";
-import { Button } from "@/components/ui/button";
+import { UsageListPopover } from "@/components/UsageListPopover";
 import { displayUrl, type SessionLink, sessionLinks } from "@/lib/sessionLinks";
 import { listRow } from "@/lib/styles";
 import { jumpEntries, revealEntries, transcriptRows } from "@/lib/transcript";
@@ -22,7 +20,6 @@ interface Props {
  * transcript to the message that mentioned the link last. Absent while the session has none.
  */
 export function SessionLinks({ messages, working = false }: Props) {
-  const [open, setOpen] = useState(false);
   const viewport = useTranscriptViewport();
   const links = useMemo(() => sessionLinks(messages), [messages]);
   // Fallback destinations, from the rows the transcript renders, like the jump list's entries.
@@ -30,95 +27,51 @@ export function SessionLinks({ messages, working = false }: Props) {
     () => jumpEntries(transcriptRows(messages, { working })),
     [messages, working],
   );
-  // Conversation order, newest at the bottom like the transcript; opening shows the end, since
-  // the links wanted are nearly always recent.
-  const list = useRef<HTMLUListElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const frame = requestAnimationFrame(() => {
-      const box = list.current;
-      if (box) box.scrollTop = box.scrollHeight;
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [open]);
   if (links.length === 0) return null;
   const reveal = (link: SessionLink) => {
-    setOpen(false);
     for (const entry of revealEntries(messages, entries, link.messageId))
       if (viewport?.jump(entry)) return;
   };
   return (
-    <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Links"
-            aria-description={`${links.length} ${links.length === 1 ? "link" : "links"} in the conversation`}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-            className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink"
+    <UsageListPopover
+      label="Links"
+      icon={LinkIcon}
+      count={links.length}
+      noun={["link", "links"]}
+      description="in the conversation"
+    >
+      {links.map((link) => (
+        <li key={link.url} className="flex items-center pr-2">
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(listRow, "min-w-0 flex-1 py-1.5 pl-4 pr-2")}
           >
-            <LinkIcon aria-hidden className="size-3.5 md:hidden" />
-            {links.length}
-            <span className="hidden md:inline">{links.length === 1 ? "link" : "links"}</span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="end"
-          collisionPadding={16}
-          aria-label="Links"
-          className="w-[28rem] max-w-[calc(100vw-2rem)] gap-0 p-0 font-sans"
-        >
-          <p className="border-b border-line px-4 py-2.5 text-sm font-medium">Links</p>
-          <ul
-            ref={list}
-            className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1"
+            {/* Two lines: links in one session mostly share a prefix, so a URL cut short
+                after the host says nothing. The title, then the whole URL below it, both in
+                mono like the Files rows and the file viewer. Every row is a link, so no
+                glyph marks it as one. */}
+            <span className="flex min-w-0 flex-1 flex-col">
+              {link.label && <span className="truncate font-mono text-ink">{link.label}</span>}
+              <span
+                className={cn("truncate font-mono text-xs", link.label ? "text-ink-3" : "text-ink")}
+              >
+                {displayUrl(link.url)}
+              </span>
+            </span>
+          </a>
+          {/* A bubble with quote marks: the message this link was cited in. */}
+          <IconButton
+            label="Jump to message"
+            side="left"
+            className="shrink-0 text-ink-3"
+            onClick={() => reveal(link)}
           >
-            {links.map((link) => (
-              <li key={link.url} className="flex items-center pr-2">
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => setOpen(false)}
-                  className={cn(listRow, "min-w-0 flex-1 py-1.5 pl-4 pr-2")}
-                >
-                  {/* Two lines: links in one session mostly share a prefix, so a URL cut short
-                      after the host says nothing. The title, then the whole URL below it, both in
-                      mono like the Files rows and the file viewer. Every row is a link, so no
-                      glyph marks it as one. */}
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    {link.label && (
-                      <span className="truncate font-mono text-ink">{link.label}</span>
-                    )}
-                    <span
-                      className={cn(
-                        "truncate font-mono text-xs",
-                        link.label ? "text-ink-3" : "text-ink",
-                      )}
-                    >
-                      {displayUrl(link.url)}
-                    </span>
-                  </span>
-                </a>
-                {/* A bubble with quote marks: the message this link was cited in. */}
-                <IconButton
-                  label="Jump to message"
-                  side="left"
-                  className="shrink-0 text-ink-3"
-                  onClick={() => reveal(link)}
-                >
-                  <MessageSquareQuoteIcon />
-                </IconButton>
-              </li>
-            ))}
-          </ul>
-        </PopoverContent>
-      </Popover>
-      <UsageDivider />
-    </>
+            <MessageSquareQuoteIcon />
+          </IconButton>
+        </li>
+      ))}
+    </UsageListPopover>
   );
 }
