@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 import type { SessionSubmission, WaitStatus } from "../../shared/dispatch.ts";
 import { applySessionEvent, cursorStep, isWorking } from "../../shared/sessionProjection.ts";
+import { turnEnding } from "../../shared/turnEnding.ts";
 import type {
   ClientMessage,
   RenderMsg,
@@ -493,20 +494,6 @@ const closureReading = (closure: SessionClosure, completed: boolean): Reading =>
   }
 };
 
-/** Stop reasons that name an interruption rather than a failure. */
-const CANCELLED_STOPS = new Set([
-  "abort",
-  "aborted",
-  "cancel",
-  "cancelled",
-  "canceled",
-  "interrupted",
-]);
-/** Stop reasons that prove the turn ended of its own accord, whatever it had to say. */
-const NORMAL_STOPS = new Set(["stop", "end_turn"]);
-/** Stop reasons that name a failure rather than an ordinary end of turn. */
-const FAILED_STOPS = new Set(["error", "failure", "failed", "refusal"]);
-
 interface Attributed {
   readonly answer: string | null;
   readonly attribution: Attribution;
@@ -651,19 +638,20 @@ function verdict(
   if (attributed.attribution === "unattributable")
     return { status: "unknown", terminal: true, detail: attributed.detail };
   const message = attributed.message;
-  const stop = message?.stopReason?.toLowerCase();
+  const stop = message?.stopReason;
+  const ending = turnEnding(stop);
   // An interrupted turn often also carries an error: the interruption is the better answer.
-  if (stop && CANCELLED_STOPS.has(stop))
+  if (ending === "cancelled")
     return { status: "cancelled", terminal: true, detail: `Pi stopped: ${stop}` };
   if (message?.isError || message?.errorMessage)
     return { status: "failed", terminal: true, detail: message.errorMessage };
-  if (stop && FAILED_STOPS.has(stop))
+  if (ending === "failed")
     return { status: "failed", terminal: true, detail: `Pi stopped: ${stop}` };
   if (
     sawResponseCompleted ||
     submission?.outcome === "handled" ||
     attributed.answer !== null ||
-    (stop && NORMAL_STOPS.has(stop))
+    ending === "completed"
   )
     return { status: "settled", terminal: true };
   return {
@@ -701,7 +689,7 @@ function observeHandle(
     let captured: Attributed | null = null;
     /** Positive evidence that this input's turn finished, rather than merely stopped arriving. */
     const completed = (attributed: Attributed) =>
-      sawResponseCompleted || attributed.message?.stopReason === "stop";
+      sawResponseCompleted || turnEnding(attributed.message?.stopReason) === "completed";
     const observation = (
       status: WaitStatus,
       ending: WaitEnding,

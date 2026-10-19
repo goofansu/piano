@@ -353,7 +353,12 @@ function handle(cmd) {
         const message = {
           role: "assistant",
           content: [{ type: "text", text: "Private reply" }],
-          stopReason: cmd.message === "notification error" ? "error" : "stop",
+          stopReason:
+            cmd.message === "notification error"
+              ? "error"
+              : cmd.message === "notification length"
+                ? "length"
+                : "stop",
         };
         messages.push(message);
         out({ type: "message_end", message });
