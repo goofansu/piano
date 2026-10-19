@@ -1,6 +1,6 @@
 /**
  * The per-session commands the sidebar row menu, the session header and the command palette offer,
- * described once: label, icon, group, whether it is available now, and what running it means.
+ * described once: label, icon, whether it is available now, and what running it means.
  * Surfaces render these descriptors and hand them to the one `CommandHost` (see `commands.ts`).
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
@@ -32,16 +32,6 @@ export type SessionCommandId =
   | "delete"
   | "new-session-here";
 
-/** Sections a menu separates; the palette lists them in this order under Session commands. */
-export type SessionCommandGroup =
-  | "copy"
-  | "open"
-  | "display"
-  | "manage"
-  | "share"
-  | "destructive"
-  | "create";
-
 export type SessionCommandIcon =
   | "copy"
   | "changes"
@@ -71,8 +61,9 @@ export interface SessionCommand {
   id: SessionCommandId;
   label: string;
   icon: SessionCommandIcon;
-  group: SessionCommandGroup;
   enabled: boolean;
+  /** Shown in the destructive style: Delete. */
+  destructive?: true;
   /** A toggle that is on: Messages only. Its label already names what running it does. */
   checked?: boolean;
   /** Direct synonyms of the label, for palette search; not topics or what the command touches. */
@@ -194,7 +185,6 @@ export function sessionCommands(
         id: "copy-working-directory",
         label: "Copy working directory",
         icon: "copy",
-        group: "copy",
         enabled: true,
         keywords: ["path", "cwd"],
         intent: { kind: "copy", value: session.cwd, label: "Working directory" },
@@ -205,7 +195,6 @@ export function sessionCommands(
               id: "copy-branch",
               label: "Copy git branch",
               icon: "copy",
-              group: "copy",
               enabled: true,
               intent: { kind: "copy", value: ctx.branch, label: "Git branch" },
             } as const,
@@ -215,7 +204,6 @@ export function sessionCommands(
         id: "copy-session-id",
         label: "Copy session ID",
         icon: "copy",
-        group: "copy",
         enabled: !!ctx.sessionId,
         intent: { kind: "copy", value: ctx.sessionId ?? "", label: "Session ID" },
       },
@@ -223,7 +211,6 @@ export function sessionCommands(
         id: "copy-all",
         label: "Copy session details",
         icon: "copy",
-        group: "copy",
         enabled: true,
         intent: { kind: "copy", value: all, label: "Session details" },
       },
@@ -231,7 +218,6 @@ export function sessionCommands(
         id: "changes",
         label: "Changes",
         icon: "changes",
-        group: "open",
         enabled: ctx.canOpenChanges,
         keywords: ["diff"],
         intent: { kind: "changes" },
@@ -240,7 +226,6 @@ export function sessionCommands(
         id: "pull-request",
         label: "Pull request",
         icon: "pull-request",
-        group: "open",
         enabled: !!session.sessionId,
         keywords: ["pr"],
         intent: { kind: "pull-request" },
@@ -249,7 +234,6 @@ export function sessionCommands(
         id: "messages-only",
         label: "Messages only",
         icon: "messages",
-        group: "display",
         enabled: true,
         checked: messagesOnly,
         intent: { kind: "messages-only", on: !messagesOnly },
@@ -268,7 +252,6 @@ export function sessionCommands(
         id: "rename",
         label: "Rename",
         icon: "rename",
-        group: "manage",
         keywords: ["title"],
         enabled: !!subject && canRenameSession(state, subject),
         intent: { kind: "rename", target: subject },
@@ -279,7 +262,6 @@ export function sessionCommands(
               id: "pin" as const,
               label: reference?.pinned ? "Unpin" : "Pin",
               icon: reference?.pinned ? ("unpin" as const) : ("pin" as const),
-              group: "manage" as const,
               enabled: state.connected && !!reference && !reference.archived,
               intent: {
                 kind: "send" as const,
@@ -299,7 +281,6 @@ export function sessionCommands(
               id: "share" as const,
               label: "Share",
               icon: "share" as const,
-              group: "share" as const,
               enabled: !!subject && canShareSession(state, subject),
               keywords: ["link", "publish"],
               intent: { kind: "share" as const, target: subject },
@@ -310,7 +291,6 @@ export function sessionCommands(
         id: "archive",
         label: "Archive",
         icon: "archive",
-        group: "manage",
         enabled: mutable,
         intent: {
           kind: "archive",
@@ -322,7 +302,7 @@ export function sessionCommands(
         id: "delete",
         label: "Delete",
         icon: "delete",
-        group: "destructive",
+        destructive: true,
         enabled: mutable,
         intent: { kind: "delete", target: subject },
       },
@@ -333,7 +313,6 @@ export function sessionCommands(
       id: "new-session-here",
       label: "New session here",
       icon: "new",
-      group: "create",
       enabled: !session.state.checkoutMissing,
       keywords: ["directory"],
       detail: session.cwd,

@@ -137,7 +137,7 @@ export function SessionCommandMenuItem({
 }) {
   return (
     <DropdownMenuItem
-      variant={command.group === "destructive" ? "destructive" : undefined}
+      variant={command.destructive ? "destructive" : undefined}
       disabled={!command.enabled}
       onSelect={() => run(command)}
     >

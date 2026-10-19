@@ -79,6 +79,11 @@ export interface PaletteCommandRow<C extends PaletteCommand> {
   command: C;
 }
 
+/** A Session commands row: one of the session's own commands, or one of its project membership rows. */
+export type PaletteSessionCommandRow =
+  | (PaletteCommandRow<SessionCommand> & { kind: "session" })
+  | (PaletteCommandRow<ProjectCommand> & { kind: "project" });
+
 export interface PaletteLinkRow {
   key: string;
   /** Search text: the label and the URL. */
@@ -106,7 +111,7 @@ export type PaletteGroup =
   | {
       id: "session";
       heading: "Session commands";
-      rows: PaletteCommandRow<SessionCommand | ProjectCommand>[];
+      rows: PaletteSessionCommandRow[];
     }
   /** The selected session's web links, each opened in a new tab. */
   /** The files the selected session wrote or edited, each opened in the file viewer. */
@@ -199,27 +204,32 @@ function commandRow<C extends PaletteCommand>(c: C, key: string = c.id): Palette
  * from project. Projects are unbounded, so before a search
  * New project stands for the picker and the destinations wait for a search.
  */
-function projectRows(menu: SessionProjectMenu): PaletteCommandRow<ProjectCommand>[] {
+function projectRows(menu: SessionProjectMenu): PaletteSessionCommandRow[] {
   const choice = (command: ProjectCommand, name: string) => ({
     ...command,
     label: `${menu.entry.label}: ${name}`,
   });
+  const row = (command: ProjectCommand, key: string) => ({
+    ...commandRow(command, key),
+    kind: "project" as const,
+  });
   return [
-    ...(menu.open ? [commandRow(menu.open, "project:open")] : []),
-    commandRow(choice(menu.create, menu.create.label), "project:new"),
+    ...(menu.open ? [row(menu.open, "project:open")] : []),
+    row(choice(menu.create, menu.create.label), "project:new"),
     ...menu.destinations.map((d) => ({
-      ...commandRow(choice(d.command, d.project.name), `project:${d.project.id}`),
+      ...row(choice(d.command, d.project.name), `project:${d.project.id}`),
       searchOnly: true,
     })),
-    ...(menu.remove ? [commandRow(menu.remove, "project:remove")] : []),
+    ...(menu.remove ? [row(menu.remove, "project:remove")] : []),
   ];
 }
 
 /** Session commands with the membership rows after the manage commands, where the header menu has them. */
-function sessionRows(input: PaletteInput): PaletteCommandRow<SessionCommand | ProjectCommand>[] {
-  const rows: PaletteCommandRow<SessionCommand | ProjectCommand>[] = input.sessionCommands.map(
-    (c) => commandRow(c),
-  );
+function sessionRows(input: PaletteInput): PaletteSessionCommandRow[] {
+  const rows: PaletteSessionCommandRow[] = input.sessionCommands.map((c) => ({
+    ...commandRow(c),
+    kind: "session",
+  }));
   if (!input.sessionProject) return rows;
   const at = rows.findIndex((r) => r.key === "archive");
   rows.splice(at < 0 ? rows.length : at, 0, ...projectRows(input.sessionProject));
