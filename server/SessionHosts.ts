@@ -15,7 +15,7 @@ import type {
   Snapshot,
   StartOptions,
 } from "../shared/wire.ts";
-import { Notifications, NotificationsLive } from "./Notifications.ts";
+import { type Notifications, NotificationsLive } from "./Notifications.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
 import { makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
