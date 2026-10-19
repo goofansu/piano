@@ -12,7 +12,16 @@
  * kept: later interference cannot retract what this call saw.
  */
 import { createHash } from "node:crypto";
-import type { SessionSubmission, WaitStatus } from "../../shared/dispatch.ts";
+import type {
+  Attribution,
+  SessionCreation,
+  SessionHandle,
+  SessionObservation,
+  SessionSubmission,
+  StartResult,
+  WaitEnding,
+  WaitStatus,
+} from "../../shared/dispatch.ts";
 import { applySessionEvent, cursorStep, isWorking } from "../../shared/sessionProjection.ts";
 import { turnEnding } from "../../shared/turnEnding.ts";
 import type {
@@ -36,55 +45,14 @@ export interface StartRequest {
   readonly dispatchedFrom?: string;
 }
 
-/**
- * Everything a later wait needs, and nothing a model cannot read back: it is JSON the tool result
- * carries through the conversation. The attribution facts are bounded — a digest and two ids,
- * never a copy of the transcript.
- */
-export interface SessionHandle {
-  /** Piano's own spelling of the directory, as it reported it; a wait addresses the session with it. */
-  readonly cwd: string;
-  readonly sessionId: string;
-  /** The child incarnation that took the prompt. A restarted Pi cannot answer for it. */
-  readonly generation: string;
-  /** Submission id within that incarnation; null when Pi never acknowledged the input. */
-  readonly submissionId: number | null;
-  /** Transcript length when the session was created, before the prompt was sent. */
-  readonly baselineMessages: number;
-  /** Digest of the prefix's content, not positional ids which compaction can reuse. */
-  readonly baselineFingerprint: string;
-  /** Identifies the brief even when admission arrives before its user message. */
-  readonly inputFingerprint: string;
-  /** The user message this prompt produced, when it arrived before the start returned. */
-  readonly anchorMessageId: string | null;
-}
-
-/** Whether the session exists. "refused" started nothing; "uncertain" may have started everything. */
-export type SessionCreation = "created" | "refused" | "uncertain";
-
-export interface StartResult {
-  readonly cwd: string;
-  readonly creation: SessionCreation;
-  readonly submission: SessionSubmission;
-  /** Present exactly when `creation` is "created". */
-  readonly handle: SessionHandle | null;
-  readonly detail?: string;
-}
-
-/** Why observation stopped, kept apart from what was observed. */
-export type WaitEnding = "observed" | "deadline" | "aborted";
-
-export type Attribution = "attributed" | "no-output" | "unattributable";
-
-export interface SessionObservation {
-  readonly handle: SessionHandle;
-  readonly status: WaitStatus;
-  readonly ending: WaitEnding;
-  /** The assistant text this handle's input produced, or null when it cannot be attributed. */
-  readonly answer: string | null;
-  readonly attribution: Attribution;
-  readonly detail?: string;
-}
+export type {
+  Attribution,
+  SessionCreation,
+  SessionHandle,
+  SessionObservation,
+  StartResult,
+  WaitEnding,
+} from "../../shared/dispatch.ts";
 
 /** A wait's bounds. A model asking for less than a second, or for an hour, gets neither. */
 export const WAIT_DEFAULT_MS = 30_000;
