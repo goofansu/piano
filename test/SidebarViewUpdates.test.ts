@@ -158,7 +158,7 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
   );
 });
 
-test("INV-01/06/07: a prompt, rename or pin publishes without rediscovery; membership still runs", async () => {
+test("INV-01/06/07: a prompt, rename or pin starts no reader; membership and folders start only theirs", async (t) => {
   const git = slowGit();
   await run(
     git,
@@ -169,6 +169,24 @@ test("INV-01/06/07: a prompt, rename or pin publishes without rediscovery; membe
       yield* registry.addSession(first, "s1", "Before");
       yield* view.fresh;
       const quiet = git.calls;
+      // Pi's history directory is availability's input; count its scans and header reads.
+      let scans = 0,
+        reads = 0;
+      const readdir = fsPromises.readdir;
+      t.after(() => {
+        t.mock.restoreAll();
+        syncBuiltinESMExports();
+      });
+      t.mock.method(fsPromises, "readdir", (...args: unknown[]) => {
+        if (args[0] === join(root, "sessions")) scans++;
+        return Reflect.apply(readdir, fsPromises, args);
+      });
+      syncBuiltinESMExports();
+      const read = fs.read;
+      t.mock.method(fs, "read", (...args: unknown[]) => {
+        reads++;
+        return Reflect.apply(read, fs, args);
+      });
 
       // Exactly the writes a prompt (activity), a Pi rename and the sidebar's pin control make.
       // Each is visible, so each must publish; none is read by a discovery run.
@@ -188,17 +206,32 @@ test("INV-01/06/07: a prompt, rename or pin publishes without rediscovery; membe
       // for a fresh view here would itself request discovery and hide an erroneous request.
       yield* Effect.yieldNow;
       assert.equal(git.calls, quiet, "no discovery run for visible metadata or a project row");
+      assert.equal(scans, 0, "no history scan for visible metadata or a project row");
 
-      // Membership is read by a run, so assigning the session asks for one of its own: hold Git
-      // and the run arrives there, with no timer deciding when to look.
-      const held = git.hold();
+      // Membership is availability's input, not Git's: assigning the session asks history
+      // whether s1 is saved (it is not) and asks Git nothing.
       yield* registry.assignProject(first, "s1", "outcome");
-      yield* held;
-      git.release();
-      assert.equal(
-        git.calls,
-        quiet + 1,
-        "project membership is an observation input and rediscovered",
+      const judged = yield* nextView(
+        view,
+        (m) => m.sessionReferences?.[0]?.unavailable === "history",
+      );
+      assert.equal(judged.sessionReferences?.[0]?.projectId, "outcome");
+      yield* Effect.yieldNow;
+      assert.ok(scans > 0, "project membership rejudged availability");
+      assert.equal(git.calls, quiet, "project membership started no Git discovery");
+
+      // A folder is Git's input, not availability's: registering one discovers it and reads no history.
+      const scanned = scans,
+        headers = reads;
+      yield* registry.ensureFolder(second);
+      const grown = yield* nextView(view, (m) => m.folders.length === 2);
+      assert.deepEqual(grown.folders.map((f) => f.path).sort(), [first, second]);
+      yield* Effect.yieldNow;
+      assert.ok(git.calls > quiet, "a new folder was discovered");
+      assert.deepEqual(
+        [scans - scanned, reads - headers],
+        [0, 0],
+        "a new folder started no history scan or header read",
       );
     }),
   );
