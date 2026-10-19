@@ -26,7 +26,6 @@ import { createPaletteCatalog } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
 import { PALETTE_PAGE_SIZE, type PalettePage, paletteSelection } from "@/lib/paletteSearch";
-import { sessionContext } from "@/lib/sessionContext";
 import { openLink } from "@/lib/sessionLinks";
 import { useNavigation } from "@/lib/useNavigation";
 import { usePaletteSearch } from "@/lib/usePaletteSearch";
@@ -107,10 +106,7 @@ function PaletteContents({
     [],
   );
   const { commands: sessionCommandList } = useSessionCommands();
-  // Read only while open: the composer's Files button keeps the same observation live otherwise.
-  const files = useSessionFiles(state.session, sessionContext(state).changesWorkspace, {
-    enabled: open,
-  });
+  const files = useSessionFiles();
   const groups = catalog(state, {
     globalCommands: globalCommandList,
     sessionCommands: sessionCommandList,

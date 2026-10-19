@@ -1,21 +1,36 @@
 import type { Workspace, WorkspaceIgnoredFiles } from "@shared/wire";
-import { useMemo, useRef } from "react";
-import type { SessionView } from "../store.ts";
+import { createContext, useContext, useMemo, useRef } from "react";
+import type { AppState, SessionView } from "../store.ts";
 import { workspaceIgnoredFiles } from "./api.ts";
+import { sessionContext } from "./sessionContext.ts";
 import { type SessionFile, sessionFiles, visibleFiles } from "./sessionFiles.ts";
 import { useObservation } from "./useObservation.ts";
 
 /**
- * The files a session wrote or edited that follow the workspace's `.gitignore`: Git decides
- * (INV-01), read afresh whenever the set of paths changes and on focus. Until the next answer the
- * last one still applies, so a known ignored file never flashes back; a path the last answer did
- * not cover shows until Git says otherwise. Without a Git workspace, or after a failed read,
- * every file shows until a successful read restores filtering.
+ * The files the selected session wrote or edited that follow its workspace's `.gitignore`, decided
+ * once for every surface that lists them (the composer's Files popover and the palette's Files
+ * group), so they agree and Git is asked once. Git decides (INV-01), read afresh whenever the set
+ * of paths changes and on focus. Until the next answer the last one still applies, so a known
+ * ignored file never flashes back; a path the last answer did not cover shows until Git says
+ * otherwise. Without a Git workspace, or after a failed read, every file shows until a successful
+ * read restores filtering. The app provides it through `SessionFilesContext`.
  */
-export function useSessionFiles(
+export function useSessionFilesController(state: AppState): SessionFile[] {
+  return useVisibleFiles(state.session, sessionContext(state).changesWorkspace);
+}
+
+export const SessionFilesContext = createContext<SessionFile[] | null>(null);
+
+/** The selected session's files as `useSessionFilesController` decided them. */
+export function useSessionFiles(): SessionFile[] {
+  const files = useContext(SessionFilesContext);
+  if (!files) throw new Error("useSessionFiles needs SessionFilesContext");
+  return files;
+}
+
+function useVisibleFiles(
   session: SessionView | null,
   workspace: Workspace | undefined,
-  { enabled = true }: { enabled?: boolean } = {},
 ): SessionFile[] {
   const messages = session?.messages;
   const files = useMemo(() => sessionFiles(messages ?? []), [messages]);
@@ -33,7 +48,7 @@ export function useSessionFiles(
         throw new Error("Files returned a different workspace.");
       return answer;
     },
-    { enabled, focus: true },
+    { focus: true },
   );
   const last = useRef<WorkspaceIgnoredFiles>(undefined);
   // Observation normally retains stale data on transport failure. Files instead fail open,
