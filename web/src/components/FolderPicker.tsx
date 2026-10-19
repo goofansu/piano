@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevHome } from "@/lib/format";
+import { isImeKey } from "@/lib/keys";
 import { listRow } from "@/lib/styles";
 import { useFolderBrowser } from "@/lib/useFolderBrowser";
 
@@ -75,7 +76,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           value={input}
           onChange={(e) => browser.setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            if (e.key === "Enter" && !isImeKey(e)) {
               e.preventDefault();
               select();
             }

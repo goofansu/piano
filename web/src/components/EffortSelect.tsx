@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@shared/wire";
 import { useId } from "react";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { isImeKey } from "@/lib/keys";
 
 interface Props {
   value: ThinkingLevel;
@@ -40,7 +41,7 @@ export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, 
             key={level}
             value={level}
             onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+              if (isImeKey(event)) return;
               if (event.key === "Enter" && onCommit) {
                 event.preventDefault();
                 event.stopPropagation();
