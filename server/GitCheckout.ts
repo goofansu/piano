@@ -12,6 +12,7 @@ import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { Data, Effect, Semaphore } from "effect";
 import type { Workspace } from "../shared/wire.ts";
+import { gitEnvironment } from "./GitEnvironment.ts";
 import {
   GitCommand,
   type RunOptions,
@@ -21,9 +22,7 @@ import {
 } from "./Subprocess.ts";
 
 function hardenedEnv(extra: Record<string, string> = {}, userConfig = false): NodeJS.ProcessEnv {
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
-  );
+  const env = gitEnvironment();
   const config = userConfig ? {} : { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
   return {
     ...env,

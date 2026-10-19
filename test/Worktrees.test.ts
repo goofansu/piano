@@ -28,7 +28,11 @@ import {
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", ["-C", cwd, ...args], {
     encoding: "utf8",
-    env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+    env: {
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+    },
   }).trim();
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(realpathSync(tmpdir()), "piano-worktrees-")),
@@ -133,6 +137,75 @@ test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints
       root: repo,
       subject: "baseline",
     });
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("INV-06/INV-07: real Worktrunk creation ignores inherited Git redirection", async (t) => {
+  const { root, repo } = fixture(t);
+  const { repo: other } = fixture(t);
+  for (const [path, identity] of [
+    [repo, "requested"],
+    [other, "unrelated"],
+  ]) {
+    writeFileSync(join(path, "identity"), identity);
+    git(path, "add", "identity");
+    git(
+      path,
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.invalid",
+      "commit",
+      "-qm",
+      identity,
+    );
+  }
+  const before = {
+    head: git(other, "rev-parse", "HEAD"),
+    branches: git(other, "for-each-ref", "refs/heads"),
+    worktrees: git(other, "worktree", "list", "--porcelain"),
+  };
+  const config = join(root, "wt.toml");
+  writeFileSync(config, 'worktree-path = "../custom/{{ branch | sanitize }}"\n');
+  const inherited = {
+    GIT_DIR: join(other, ".git"),
+    GIT_WORK_TREE: other,
+    GIT_COMMON_DIR: join(other, ".git"),
+    GIT_INDEX_FILE: join(other, ".git", "index"),
+    GIT_OBJECT_DIRECTORY: join(other, ".git", "objects"),
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: join(root, "missing-objects"),
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "core.bare",
+    GIT_CONFIG_VALUE_0: "true",
+    GIT_CONFIG_GLOBAL: join(root, "missing-config"),
+    WORKTRUNK_CONFIG_PATH: config,
+  };
+  const saved = Object.fromEntries(Object.keys(inherited).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, inherited);
+  try {
+    const created = await Effect.runPromise(createWorktree(repo, "requested-branch"));
+    assert.equal(
+      git(created.path, "rev-parse", "--path-format=absolute", "--git-common-dir"),
+      join(repo, ".git"),
+    );
+    assert.equal(git(created.path, "rev-parse", "HEAD"), git(repo, "rev-parse", "HEAD"));
+    assert.equal(readFileSync(join(created.path, "identity"), "utf8"), "requested");
+    assert.equal(created.path, join(root, "custom", "requested-branch"));
+    assert.equal(git(repo, "rev-parse", "requested-branch"), git(repo, "rev-parse", "HEAD"));
+    assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${created.path}\n`));
+    assert.deepEqual(
+      {
+        head: git(other, "rev-parse", "HEAD"),
+        branches: git(other, "for-each-ref", "refs/heads"),
+        worktrees: git(other, "worktree", "list", "--porcelain"),
+      },
+      before,
+    );
   } finally {
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];
@@ -250,6 +323,7 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
     home = join(root, "home");
   mkdirSync(join(config, "worktrunk"), { recursive: true });
   mkdirSync(home);
+  writeFileSync(join(home, ".gitconfig"), "[piano]\nmarker = user-config-loaded\n");
   const env = {
     ...process.env,
     HOME: home,
@@ -287,7 +361,10 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
     assert.equal(w.detached, true);
   }
   mkdirSync(join(repo, ".config"));
-  writeFileSync(join(repo, ".config", "wt.toml"), 'pre-start = "echo ran > hook-ran; exit 3"\n');
+  writeFileSync(
+    join(repo, ".config", "wt.toml"),
+    'pre-start = "git config piano.marker > hook-ran; exit 3"\n',
+  );
   git(repo, "add", ".config");
   git(
     repo,
@@ -300,6 +377,9 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
     "-m",
     "hook",
   );
+  const skipped = await run(createWorktree(repo, "hooks-off"));
+  assert.equal(skipped.hooks, "skipped");
+  assert.equal(existsSync(join(skipped.path, "hook-ran")), false);
   const rejected = await run(createWorktree(repo, "unapproved", { hooks: true }).pipe(Effect.flip));
   assert.match(rejected.detail, /approval/i);
   assert.equal(existsSync(join(root, "custom", "unapproved")), false);
@@ -313,7 +393,7 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
   const failed = await run(createWorktree(repo, "partial", { hooks: true }).pipe(Effect.flip));
   assert.match(failed.detail, /Creation was not confirmed/);
   const partial = join(root, "custom", "partial");
-  assert.equal(existsSync(join(partial, "hook-ran")), true);
+  assert.equal(readFileSync(join(partial, "hook-ran"), "utf8"), "user-config-loaded\n");
   observed = await run(listWorktrees(repo));
   assert.ok(observed.status === "ready" && observed.worktrees.some((w) => w.path === partial));
 
