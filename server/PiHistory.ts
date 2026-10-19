@@ -10,14 +10,21 @@
  * caller knows and reports the one file, no file, or a conflict: distinct physical files claiming
  * the same session ID. A conflict is never resolved by choosing one.
  */
-import { readFileSync } from "node:fs";
-import { realpath } from "node:fs/promises";
-import { parseSessionEntries, SessionManager } from "@earendil-works/pi-coding-agent";
+import { createReadStream, readFileSync } from "node:fs";
+import { readdir, realpath } from "node:fs/promises";
+import { join } from "node:path";
+import { StringDecoder } from "node:string_decoder";
+import {
+  type FileEntry,
+  parseSessionEntries,
+  type SessionHeader,
+  SessionManager,
+} from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Snapshot } from "../shared/wire.ts";
 import { compileRedaction, projectSnapshot } from "./DisplayProjection.ts";
-import { directoryPath, sessionDirFor } from "./PiEnv.ts";
+import { agentDir, directoryPath, sessionDirFor } from "./PiEnv.ts";
 import { type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
 import { PiSessionError } from "./PiTransport.ts";
 
@@ -49,11 +56,71 @@ export interface PiHistory {
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 
-// Pi filters a shared session directory by the header's cwd, so each spelling lists its own files.
-const listed = (cwd: string) =>
-  Effect.promise(() => SessionManager.list(cwd, sessionDirFor(cwd))).pipe(
-    Effect.orElseSucceed(() => []),
+// Pi's list() builds searchable text from every transcript. Discovery needs only headers, but
+// findById() returns the first match and would hide conflicting files. Read every header instead,
+// without opening a persistent manager. Stop at the first parsed entry, as Pi's list() does;
+// do not cap valid headers, which Pi may still open beyond findById()'s discovery limit.
+const readHeader = async (file: string): Promise<SessionHeader | undefined> => {
+  const input = createReadStream(file, { highWaterMark: 4096 });
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  const header = (line: string) => {
+    // Pi parses physical lines without trimming them. parseSessionEntries() trims its input,
+    // accepting e.g. a BOM-prefixed header that Pi's persistent file loader cannot open.
+    let entry: FileEntry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      return undefined;
+    }
+    return entry
+      ? entry.type === "session" && typeof entry.id === "string"
+        ? entry
+        : null
+      : undefined;
+  };
+  // Exiting the iterator closes the stream, including errors and an early header match.
+  for await (const chunk of input) {
+    pending += decoder.write(chunk);
+    let newline = pending.indexOf("\n");
+    while (newline !== -1) {
+      const found = header(pending.slice(0, newline));
+      if (found !== undefined) return found ?? undefined;
+      pending = pending.slice(newline + 1);
+      newline = pending.indexOf("\n");
+    }
+  }
+  return header(pending + decoder.end()) ?? undefined;
+};
+
+const listed = Effect.fn("PiHistory.listed")(function* (cwd: string) {
+  // Match Pi's default directory encoding. Only a non-default shared store filters by header cwd;
+  // old headers in a checkout's own store may omit cwd. Never create a store while inspecting it.
+  const defaultDir = join(
+    directoryPath(agentDir()),
+    "sessions",
+    `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`,
   );
+  const dir = sessionDirFor(cwd) ?? defaultDir;
+  const names = yield* Effect.tryPromise(() => readdir(dir)).pipe(Effect.orElseSucceed(() => []));
+  const infos = yield* Effect.forEach(
+    names.filter((name) => name.endsWith(".jsonl")),
+    (name) =>
+      Effect.tryPromise(async () => {
+        const path = join(dir, name);
+        const info = await readHeader(path);
+        if (
+          !info ||
+          (dir !== defaultDir &&
+            (typeof info.cwd !== "string" || !info.cwd || directoryPath(info.cwd) !== cwd))
+        )
+          return undefined;
+        return { id: info.id, path };
+      }).pipe(Effect.orElseSucceed(() => undefined)),
+    { concurrency: 16 },
+  );
+  return infos.filter((info) => info !== undefined);
+});
 
 const locate = Effect.fn("PiHistory.locate")(function* (
   sessionId: string,

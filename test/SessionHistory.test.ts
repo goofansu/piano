@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import {
+import fs, {
+  appendFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -120,6 +122,56 @@ test("INV-01: distinct files claiming one session are a conflict, never a choice
   assert.deepEqual(await run(history.locate("claimed", [alias])), { _tag: "file", path: first });
 });
 
+test("INV-01: conflicts in one directory are found again after history changes", async () => {
+  const first = seed(cwd, "duplicate", "original duplicate");
+  assert.deepEqual(await run(history.locate("duplicate", [cwd])), { _tag: "file", path: first });
+  const second = seed(cwd, "duplicate", "new duplicate");
+  const found = await run(history.locate("duplicate", [cwd]));
+  assert.equal(found._tag, "conflict");
+  if (found._tag === "conflict") assert.deepEqual([...found.paths].sort(), [first, second].sort());
+  rmSync(first);
+  assert.deepEqual(await run(history.locate("duplicate", [cwd])), { _tag: "file", path: second });
+  rmSync(second);
+  assert.deepEqual(await run(history.locate("duplicate", [cwd])), { _tag: "missing" });
+});
+
+test("INV-01: history discovery reads headers, not neighboring transcript bodies", async (t) => {
+  const store = mkdtempSync(join(root, "large-history-"));
+  const target = seed(cwd, "small", "small destination", store);
+  for (const id of ["large-a", "large-b"]) {
+    const file = seed(cwd, id, id, store);
+    appendFileSync(
+      file,
+      `${JSON.stringify({ type: "message", message: { role: "user", content: "x".repeat(1024 * 1024) } })}\n`,
+    );
+  }
+  // Observe actual filesystem I/O, preserving real reads and parsing. The budget is deliberately
+  // much larger than the headers, but smaller than one transcript: no wall-clock threshold.
+  const read = fs.read;
+  let bytes = 0;
+  t.mock.method(fs, "read", (...args: unknown[]) => {
+    const callback = args.pop() as (...result: unknown[]) => void;
+    return Reflect.apply(read, fs, [
+      ...args,
+      (...result: unknown[]) => {
+        bytes += Number(result[1] ?? 0);
+        callback(...result);
+      },
+    ]);
+  });
+  const previous = process.env.PI_CODING_AGENT_SESSION_DIR;
+  process.env.PI_CODING_AGENT_SESSION_DIR = store;
+  try {
+    assert.deepEqual(await run(history.locate("small", [cwd])), { _tag: "file", path: target });
+    assert.ok(bytes > 0 && bytes < 128 * 1024, `locating one session read ${bytes} bytes`);
+    bytes = 0;
+    assert.deepEqual(await run(history.sessionIds(cwd)), new Set(["small", "large-a", "large-b"]));
+    assert.ok(bytes > 0 && bytes < 128 * 1024, `listing session IDs read ${bytes} bytes`);
+  } finally {
+    process.env.PI_CODING_AGENT_SESSION_DIR = previous;
+  }
+});
+
 test("INV-01: one physical file listed twice is still one file", async () => {
   const file = seed(cwd, "linked", "linked history");
   symlinkSync(file, join(sessions, "linked-copy.jsonl"));
@@ -228,6 +280,67 @@ test("INV-01: a saved session names the session that dispatched it, from its own
   );
   const own = await run(history.peek("own", seed(cwd, "own", "own history")));
   assert.equal(own.state.dispatchedFrom, undefined);
+});
+
+test("INV-01/12: header discovery accepts Pi's legacy and partial-file conventions without writing", async () => {
+  const folder = join(root, "headers");
+  const header = { type: "session", version: 2, id: "header", cwd: folder };
+  const wide = { ...header, id: "wide", metadata: "界".repeat(3000) };
+  const cases = [
+    ["header", `\nnot-json\r\n${JSON.stringify(header)}\r\n{unfinished`],
+    ["wide", JSON.stringify(wide)],
+    [
+      "not-first",
+      `${JSON.stringify({ type: "message" })}\n${JSON.stringify({ ...header, id: "not-first" })}`,
+    ],
+    [
+      "large-header",
+      JSON.stringify({ ...header, id: "large-header", metadata: "x".repeat(1024 * 1024) }),
+    ],
+    ["bom", `\uFEFF${JSON.stringify({ ...header, id: "bom" })}`],
+  ];
+  const files = cases.map(([id, text]) => {
+    const path = join(sessions, `${id}.jsonl`);
+    writeFileSync(path, text);
+    return path;
+  });
+  const readable = new Set(["header", "wide", "large-header"]);
+  assert.deepEqual(await run(history.sessionIds(folder)), readable);
+  for (const [index, [id, contents]] of cases.entries()) {
+    assert.deepEqual(
+      await run(history.locate(id, [folder])),
+      readable.has(id) ? { _tag: "file", path: files[index] } : { _tag: "missing" },
+    );
+    assert.equal(readFileSync(files[index], "utf8"), contents);
+  }
+  for (const file of files) rmSync(file);
+});
+
+test("INV-01/12: default stores follow Pi's encoding and accept old headers without cwd", async () => {
+  const folder = join(root, "default:界");
+  const previous = process.env.PI_CODING_AGENT_SESSION_DIR;
+  delete process.env.PI_CODING_AGENT_SESSION_DIR;
+  try {
+    // Use Pi to choose the default path, so this guards Piano's adapter against SDK rule changes.
+    const store = SessionManager.create(folder).getSessionDir();
+    const file = seed(folder, "old-default", "default history", store);
+    const contents = readFileSync(file, "utf8").replace(`,"cwd":${JSON.stringify(folder)}`, "");
+    writeFileSync(file, contents);
+    assert.deepEqual(await run(history.locate("old-default", [folder])), {
+      _tag: "file",
+      path: file,
+    });
+    // An explicit setting naming the default store has the same non-filtering semantics in Pi.
+    process.env.PI_CODING_AGENT_SESSION_DIR = store;
+    assert.deepEqual(await run(history.sessionIds(folder)), new Set(["old-default"]));
+    assert.equal(readFileSync(file, "utf8"), contents);
+    delete process.env.PI_CODING_AGENT_SESSION_DIR;
+    rmSync(store, { recursive: true, force: true });
+    assert.deepEqual(await run(history.locate("old-default", [folder])), { _tag: "missing" });
+    assert.equal(existsSync(store), false, "inspection must not create an empty Pi store");
+  } finally {
+    process.env.PI_CODING_AGENT_SESSION_DIR = previous;
+  }
 });
 
 test("INV-01: a relative sessionDir setting is read from the folder, as the Pi child reads it", async () => {
