@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { REFRESH_SPIN_MS } from "@/lib/radiusSetup";
 import { type RadiusToolView, radiusUninstallCopy } from "@/lib/radiusSetupView";
 import { useRadiusSetup } from "@/lib/useRadiusSetup";
 
@@ -63,8 +64,16 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
           </svg>
           Radius
         </h2>
-        <IconButton label="Refresh setup" disabled={!view.canRefresh} onClick={setup.refreshByHand}>
-          <RefreshCwIcon />
+        <IconButton
+          label={setup.refreshing ? "Refreshing setup…" : "Refresh setup"}
+          aria-busy={setup.refreshing}
+          disabled={!view.canRefresh}
+          onClick={setup.refreshByHand}
+        >
+          <RefreshCwIcon
+            className={setup.refreshing ? "animate-spin motion-reduce:animate-none" : undefined}
+            style={{ animationDuration: `${REFRESH_SPIN_MS}ms` }}
+          />
         </IconButton>
       </div>
       {view.attention && (
