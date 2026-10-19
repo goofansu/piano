@@ -227,15 +227,12 @@ const MESSAGES: CheckoutMessages = {
     `Unsupported repository path (including embedded repositories): ${JSON.stringify(path)}`,
 };
 
-interface CheckoutOptions extends Pick<ObserveOptions<string>, "limit" | "writes" | "messages"> {
+interface CheckoutOptions extends Pick<ObserveOptions, "limit" | "writes" | "messages"> {
   /** The Git executable (`GitCommand`). */
   readonly git: string;
   readonly signal: AbortSignal;
 }
-export interface ReadOptions extends Pick<RunOptions, "input" | "limit" | "okCodes"> {
-  /** Run outside the checkout with the same hardening, e.g. `diff --no-index` over copies. */
-  readonly cwd?: string;
-}
+export type ReadOptions = Pick<RunOptions, "input" | "limit" | "okCodes">;
 
 /** A verified checkout root; every read is hardened and bounded. */
 export interface Checkout {
@@ -281,12 +278,12 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
       args: readonly string[],
       read: ReadOptions & { truncate?: boolean } = {},
     ) => {
-      const { cwd: elsewhere = cwd, limit = options.limit, ...rest } = read;
+      const { limit = options.limit, ...rest } = read;
       try {
         return await runGit(
           options.git,
           args,
-          { ...rest, cwd: elsewhere, limit, config, env },
+          { ...rest, cwd, limit, config, env },
           options.signal,
         );
       } catch (error) {
@@ -340,7 +337,7 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
   });
 }
 
-export interface ObserveOptions<S extends string> {
+export interface ObserveOptions {
   /** The permits this observation takes one of: the caller's concurrency policy. */
   readonly slots: Semaphore.Semaphore;
   /** Default stdout bound for each read. */
@@ -352,40 +349,33 @@ export interface ObserveOptions<S extends string> {
   readonly messages?: Partial<CheckoutMessages>;
   /** Cancels the read after this many milliseconds (default 30 s). */
   readonly timeout?: number;
-  /** The status of a checkout this module refuses: not the root, over `limit`, non-UTF-8,
-   * incomplete or with unsafe paths. Default `"error"`. */
-  readonly unsupported?: S;
-  /** The status of the caller's own failure; `undefined` means `"error"`. */
-  readonly status?: (error: unknown) => S | undefined;
 }
 
-export interface CheckoutObservation<R, S extends string> {
+export interface CheckoutObservation<R> {
   readonly workspace: Workspace;
   readonly observedAt: string;
-  readonly result: R | { readonly status: S | "error"; readonly detail: string };
+  readonly result: R | { readonly status: "error"; readonly detail: string };
 }
 
 /** A point-in-time observation of the checkout at `workspace.path` (INV-07): one of `slots`
  * permits, the path opened as a checkout root with `GitCommand` under this module's hardening,
- * `read` cancelled after `timeout`, any failure kept as `{ status, detail }` rather than thrown.
+ * `read` cancelled after `timeout`, any failure kept as `{ status: "error", detail }` rather than
+ * thrown.
  */
-export const observeCheckout = Effect.fn("GitCheckout.observeCheckout")(function* <
-  R,
-  S extends string = never,
->(
+export const observeCheckout = Effect.fn("GitCheckout.observeCheckout")(function* <R>(
   workspace: Workspace,
-  options: ObserveOptions<S>,
+  options: ObserveOptions,
   read: (checkout: Checkout, signal: AbortSignal) => Promise<R>,
-): Effect.fn.Return<CheckoutObservation<R, S>> {
+): Effect.fn.Return<CheckoutObservation<R>> {
   const git = yield* GitCommand;
   const { slots, limit, writes, messages, timeout = 30_000 } = options;
   return yield* Semaphore.withPermits(
     slots,
     1,
   )(
-    Effect.promise(async (interrupt): Promise<CheckoutObservation<R, S>> => {
+    Effect.promise(async (interrupt): Promise<CheckoutObservation<R>> => {
       const signal = AbortSignal.any([interrupt, AbortSignal.timeout(timeout)]);
-      let result: CheckoutObservation<R, S>["result"];
+      let result: CheckoutObservation<R>["result"];
       try {
         const checkout = await openCheckout(workspace.path, {
           git,
@@ -397,9 +387,7 @@ export const observeCheckout = Effect.fn("GitCheckout.observeCheckout")(function
         result = await read(checkout, signal);
       } catch (error) {
         result = {
-          status:
-            (error instanceof CheckoutError ? options.unsupported : options.status?.(error)) ??
-            "error",
+          status: "error",
           detail: error instanceof Error ? error.message : String(error),
         };
       }
