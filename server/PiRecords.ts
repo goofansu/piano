@@ -10,6 +10,7 @@
  */
 import { Option, Schema } from "effect";
 import { imageType } from "../shared/attachments.ts";
+import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
 import type {
   Dialog,
   ModelChoice,
@@ -308,7 +309,7 @@ export const dispatchedFromOf = (entries: ReadonlyArray<unknown>): string | unde
   for (const entry of entries) {
     if (!entry || typeof entry !== "object") continue;
     const { type, customType, data } = entry as Record<string, unknown>;
-    if (type !== "custom" || customType !== "piano.dispatch") continue;
+    if (type !== "custom" || customType !== DISPATCH_ENTRY) continue;
     const parent =
       data && typeof data === "object"
         ? (data as Record<string, unknown>).parentSessionId
@@ -549,7 +550,7 @@ export const sessionArgs = (spec: {
   ...(spec.name && !spec.sessionFile ? ["--name", spec.name] : []),
   // Piano's extension records it once in a new session; saved history already holds it.
   ...(spec.dispatchedFrom && !spec.sessionFile
-    ? ["--piano-dispatched-from", spec.dispatchedFrom]
+    ? [`--${DISPATCHED_FROM_FLAG}`, spec.dispatchedFrom]
     : []),
 ];
 

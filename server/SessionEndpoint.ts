@@ -10,6 +10,7 @@
  * The address names the listener, not a proxy: the child runs beside the server, so it reaches
  * the loopback port directly even when the only allowed origin is a public proxy origin.
  */
+import { SESSION_ORIGIN, SESSION_WS_URL } from "../shared/dispatch.ts";
 
 export interface SessionEndpoint {
   /** The WebSocket Piano already serves, addressed on the listener. */
@@ -50,6 +51,6 @@ export function sessionEndpoint(
  * separate base-URL variable, because a second spelling of the same origin could drift from it.
  */
 export const sessionEnvironment = (endpoint: SessionEndpoint): Record<string, string> => ({
-  PIANO_SESSION_WS_URL: endpoint.wsUrl,
-  PIANO_SESSION_ORIGIN: endpoint.origin,
+  [SESSION_WS_URL]: endpoint.wsUrl,
+  [SESSION_ORIGIN]: endpoint.origin,
 });

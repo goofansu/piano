@@ -1,4 +1,10 @@
 import type { FinalOutput, RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
+import {
+  type SessionSubmission,
+  START_TOOL,
+  WAIT_TOOL,
+  type WaitStatus,
+} from "../../../shared/dispatch.ts";
 import { abbrevHome, stripAnsi, toolArgsText } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
@@ -177,9 +183,6 @@ const VERBS: Record<string, [running: string, done: string]> = {
   ls: ["Listing", "Listed"],
 };
 
-const START_TOOL = "piano_start_session";
-const WAIT_TOOL = "piano_wait_sessions";
-
 const recordOf = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -196,7 +199,7 @@ const parsed = (text: string | undefined) => {
 const stringOf = (value: unknown) => (typeof value === "string" ? value : undefined);
 
 /** What became of a dispatch's first prompt, in the words the badge shows. */
-const SUBMISSION: Record<string, [status: string, badge: Badge]> = {
+const SUBMISSION: Record<SessionSubmission, [status: string, badge: Badge]> = {
   started: ["Started", "secondary"],
   queued: ["Queued", "secondary"],
   handled: ["Handled", "secondary"],
@@ -206,7 +209,7 @@ const SUBMISSION: Record<string, [status: string, badge: Badge]> = {
   uncertain: ["Uncertain", "warning"],
 };
 /** What a wait observed. Finished is settlement, which does not say the task succeeded. */
-const OBSERVED: Record<string, [status: string, badge: Badge]> = {
+const OBSERVED: Record<WaitStatus, [status: string, badge: Badge]> = {
   running: ["Running", "secondary"],
   settled: ["Finished", "secondary"],
   failed: ["Failed", "destructive"],
@@ -256,7 +259,7 @@ function dispatchFacts(
       : creation === "refused"
         ? ["Not started", "destructive"]
         : creation === "created"
-          ? (SUBMISSION[stringOf(result.submission) ?? ""] ?? ["Uncertain", "warning"])
+          ? (SUBMISSION[result.submission as SessionSubmission] ?? ["Uncertain", "warning"])
           : ["Uncertain", "warning"];
     return [
       {
@@ -289,7 +292,7 @@ function dispatchFacts(
   const results = Array.isArray(result.results) ? result.results : [];
   return results.map((value) => {
     const r = recordOf(value);
-    const [status, badge] = OBSERVED[stringOf(r?.status) ?? ""] ?? ["Unknown", "warning"];
+    const [status, badge] = OBSERVED[r?.status as WaitStatus] ?? ["Unknown", "warning"];
     const answer = stringOf(r?.answer);
     const detail = stringOf(r?.detail);
     return {

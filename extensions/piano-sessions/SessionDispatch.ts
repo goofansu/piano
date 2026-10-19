@@ -12,6 +12,7 @@
  * kept: later interference cannot retract what this call saw.
  */
 import { createHash } from "node:crypto";
+import type { SessionSubmission, WaitStatus } from "../../shared/dispatch.ts";
 import { applySessionEvent, cursorStep, isWorking } from "../../shared/sessionProjection.ts";
 import type {
   ClientMessage,
@@ -60,16 +61,6 @@ export interface SessionHandle {
 /** Whether the session exists. "refused" started nothing; "uncertain" may have started everything. */
 export type SessionCreation = "created" | "refused" | "uncertain";
 
-/** What became of the first prompt, in Pi's own submission words. */
-export type SessionSubmission =
-  | "started"
-  | "queued"
-  | "handled"
-  | "rejected"
-  | "uncertain"
-  | "waiting_for_input"
-  | "not_sent";
-
 export interface StartResult {
   readonly cwd: string;
   readonly creation: SessionCreation;
@@ -78,15 +69,6 @@ export interface StartResult {
   readonly handle: SessionHandle | null;
   readonly detail?: string;
 }
-
-/** What the session was doing when observation stopped; never a judgement of the work's quality. */
-export type WaitStatus =
-  | "running"
-  | "settled"
-  | "failed"
-  | "cancelled"
-  | "waiting_for_input"
-  | "unknown";
 
 /** Why observation stopped, kept apart from what was observed. */
 export type WaitEnding = "observed" | "deadline" | "aborted";

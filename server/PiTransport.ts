@@ -3,6 +3,7 @@
  * It never publishes browser state or decides dialog/action semantics. */
 import { Cause, Clock, Context, Data, Deferred, Effect, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+import { SESSION_ORIGIN, SESSION_WS_URL } from "../shared/dispatch.ts";
 import type { SessionClosure } from "../shared/wire.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
@@ -119,8 +120,8 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
       env: {
         WATCH_REPORT_DEPENDENCIES: undefined,
         // A Piano started inside another session must not inherit that parent's instance.
-        PIANO_SESSION_WS_URL: undefined,
-        PIANO_SESSION_ORIGIN: undefined,
+        [SESSION_WS_URL]: undefined,
+        [SESSION_ORIGIN]: undefined,
         ...cli.env,
       },
       stdin: "pipe",

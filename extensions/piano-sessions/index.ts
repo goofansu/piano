@@ -1,6 +1,13 @@
 /** Bundled Pi tools: dispatch through Piano, never launch or own another Pi process. */
 import { type JsonValue, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+  DISPATCH_ENTRY,
+  DISPATCHED_FROM_FLAG,
+  START_TOOL,
+  WAIT_STATUSES,
+  WAIT_TOOL,
+} from "../../shared/dispatch.ts";
 import { ThinkingLevel } from "../../shared/wire.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import { startSession, waitSessions } from "./SessionDispatch.ts";
@@ -18,11 +25,7 @@ const Handle = Type.Object({
 const NullableString = Type.Union([Type.String(), Type.Null()]);
 const Observation = Type.Object({
   handle: Handle,
-  status: Type.Union(
-    ["running", "settled", "failed", "cancelled", "waiting_for_input", "unknown"].map((value) =>
-      Type.Literal(value),
-    ),
-  ),
+  status: Type.Union(WAIT_STATUSES.map((value) => Type.Literal(value))),
   ending: Type.Union([Type.Literal("observed"), Type.Literal("deadline"), Type.Literal("aborted")]),
   answer: NullableString,
   attribution: Type.Union([
@@ -33,11 +36,6 @@ const Observation = Type.Object({
   detail: Type.Optional(Type.String()),
   link: Type.String(),
 });
-
-/** Pi's custom entry naming the session that dispatched this one; never part of model context. */
-export const DISPATCH_ENTRY = "piano.dispatch";
-/** Piano passes it when it creates a dispatched session, and only then. */
-const DISPATCHED_FROM_FLAG = "piano-dispatched-from";
 
 export default function pianoSessions(pi: ExtensionAPI) {
   // Registered before the configuration check, so Pi always knows the flag Piano may pass.
@@ -92,7 +90,7 @@ export default function pianoSessions(pi: ExtensionAPI) {
 
   pi.registerTool(
     defineTool({
-      name: "piano_start_session",
+      name: START_TOOL,
       label: "Start Piano session",
       promptSnippet: "Dispatch work to a new Piano session when explicitly requested",
       promptGuidelines: [
@@ -145,7 +143,7 @@ export default function pianoSessions(pi: ExtensionAPI) {
   );
   pi.registerTool(
     defineTool({
-      name: "piano_wait_sessions",
+      name: WAIT_TOOL,
       label: "Wait for Piano sessions",
       promptSnippet: "Wait for explicitly dispatched Piano work",
       description:
