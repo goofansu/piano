@@ -7,8 +7,9 @@
  * Registry (INV-01) and running hosts are read on every publish. Git worktree discovery (INV-06)
  * and session availability are two CoalescedReaders, each single-flight on its own. Host acquisition
  * and completed retirement recheck Pi history through SessionReferences without waiting for Git.
- * Git results never install availability, so an older run cannot undo that judgement. A prompt,
- * rename or pin publishes from the last observations without starting either reader. DirectoryFacts
+ * Git results never install availability, so an older run cannot undo that judgement. A registry
+ * write starts only the reader whose input it changed; a prompt, rename or pin starts neither and
+ * publishes from the last observations. DirectoryFacts
  * announces trust decisions; trust is re-read then and on each Git run.
  */
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
@@ -52,17 +53,15 @@ interface Observation {
   readonly trust: ReadonlyMap<string, ProjectTrust>;
 }
 
+/** What a Git run reads: the registered folders and worktrees. A change here starts one. */
 const shapeOf = (data: RegistryData) =>
   JSON.stringify([data.folders, data.worktrees.map((w) => [w.folder, w.path])]);
-/** The sessions a run judges availability for. One decision, used both to observe and to compare,
- * so what a run reads and what starts a run cannot drift apart. */
+/** The sessions an availability read judges. One decision, used both to read and to compare,
+ * so what the reader reads and what starts it cannot drift apart. */
 const projectMembersOf = (data: RegistryData) => data.sessions.filter((s) => s.projectId);
 const memberKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
 const membersOf = (data: RegistryData) =>
   JSON.stringify(projectMembersOf(data).map((s) => [s.cwd, s.sessionId]));
-/** Inputs to a full refresh: Git's folders/worktrees and availability's project members.
- * A visible change outside these publishes from the last observations without starting a reader. */
-const observedOf = (data: RegistryData) => JSON.stringify([shapeOf(data), membersOf(data)]);
 /** The registry facts the view shows. Statistics and the Radius share are not among them; a
  * session's pull request link is, so a link write reaches browsers without a Git run. */
 const visibleOf = (data: RegistryData) =>
@@ -275,19 +274,20 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
           }),
       });
       const refresh = git.request().pipe(Effect.andThen(availability.request()));
-      const changed = publish(true).pipe(Effect.andThen(refresh));
       // Awaited by the writer, so a session reference is on its way to browsers before its prompt reaches Pi.
       // Statistics and the Radius share change nothing shown and must not start a Git run. Neither
-      // may a visible change no observation reads: a prompt's activity record, a rename or a pin
-      // publishes from the last observation, while a folder, worktree or project membership change
-      // rediscovers (INV-06).
-      yield* registry.onChange((before, after) =>
-        visibleOf(before) === visibleOf(after)
-          ? Effect.void
-          : observedOf(before) === observedOf(after)
-            ? publish(true)
-            : changed,
-      );
+      // may a visible change no reader reads: a prompt's activity record, a rename or a pin
+      // publishes from the last observations. Each reader starts only for the input it reads: a
+      // folder or worktree change rediscovers (INV-06), a membership change rejudges availability.
+      yield* registry.onChange((before, after) => {
+        if (visibleOf(before) === visibleOf(after)) return Effect.void;
+        const shape = shapeOf(before) !== shapeOf(after);
+        const members = membersOf(before) !== membersOf(after);
+        return publish(true).pipe(
+          Effect.andThen(shape ? git.request() : Effect.void),
+          Effect.andThen(members ? availability.request() : Effect.void),
+        );
+      });
       // Subscribe during construction, before callers can start a host. A bounded invalidation
       // survives even if acquisition and retirement coalesce to the same empty host list.
       yield* hosts.lifecycleChanges.pipe(
