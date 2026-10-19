@@ -179,7 +179,11 @@ test("Session commands offer the session's project membership, named as the menu
     "Add to project: Billing",
     "Add to project: Launch",
   ]);
-  assert.deepEqual(membership(member), ["Move to project: New project", "Remove from project"]);
+  assert.deepEqual(membership(member), [
+    "Open project: Launch",
+    "Move to project: New project",
+    "Remove from project",
+  ]);
   assert.deepEqual(membership(member, "billing"), ["Move to project: Billing"]);
   const group = palette(member, "remove").find((g) => g.id === "session");
   assert.ok(group?.id === "session");
@@ -194,7 +198,27 @@ test("Session commands offer the session's project membership, named as the menu
   );
   assert.ok(offline?.id === "session");
   for (const r of offline.rows.filter((r) => /project/.test(r.label)))
-    assert.equal(r.enabled, false, r.label);
+    assert.equal(r.enabled, r.key === "project:open", r.label);
+});
+
+test("Session commands reach the session's project home, as the header's project link does", () => {
+  const archived: AppState = {
+    ...inSession,
+    projects: [{ id: "launch", name: "Launch", archived: true }],
+    sessionReferences: references.map((r) =>
+      r.sessionId === "s1" ? { ...r, projectId: "launch" } : r,
+    ),
+  };
+  const open = (state: AppState) => {
+    const group = palette(state, "open project").find((g) => g.id === "session");
+    return group?.id === "session" ? group.rows.find((r) => r.key === "project:open") : undefined;
+  };
+  assert.equal(open(inSession), undefined, "a session in no project has no project to open");
+  const row = open(archived);
+  assert.equal(row?.label, "Open project: Launch");
+  assert.equal(row?.enabled, true, "an archived project's home offers Unarchive");
+  assert.deepEqual(row?.command.intent, { kind: "new-session", projectId: "launch" });
+  assert.ok(open({ ...archived, connected: false })?.enabled, "it only navigates");
 });
 
 test("search uses direct command synonyms, not related topics or opposite display choices", () => {

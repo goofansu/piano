@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { Project } from "../shared/wire.ts";
 import {
   canStartSessionIn,
+  openProjectCommand,
   projectCommands,
   projectDestinations,
   sessionProjectMenu,
@@ -128,4 +129,22 @@ test("a session's project menu: Move for a member, Add otherwise, one connection
   );
   for (const c of [offline.create, offline.remove!, ...offline.destinations.map((d) => d.command)])
     assert.equal(c.enabled, false, c.label);
+});
+
+test("a member session opens its project's home, even archived, which a new session cannot start in", () => {
+  const s: AppState = {
+    ...state,
+    connected: false,
+    sessionReferences: [
+      sessionReference("/repo", "s1", { projectId: "p3" }),
+      sessionReference("/repo", "s2"),
+    ],
+  };
+  const open = sessionProjectMenu(s, { cwd: "/repo", sessionId: "s1" }).open;
+  assert.deepEqual(open, openProjectCommand(legacy));
+  assert.equal(open?.label, "Open project: Legacy");
+  assert.equal(open?.enabled, true, "navigation needs neither an active project nor a connection");
+  assert.deepEqual(open?.intent, { kind: "new-session", projectId: "p3" });
+  assert.equal(byId(legacy)["new-session"]?.enabled, false, "starting a session there stays off");
+  assert.equal(sessionProjectMenu(s, { cwd: "/repo", sessionId: "s2" }).open, undefined);
 });

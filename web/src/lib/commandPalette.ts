@@ -194,8 +194,9 @@ function commandRow<C extends PaletteCommand>(c: C, key: string = c.id): Palette
 }
 
 /**
- * The membership rows, named as the header menu's buttons: the picker's entry and the choice
- * ("Move to project: Billing"), and Remove from project. Projects are unbounded, so before a search
+ * The membership rows, named as the header menu's buttons: the header's project link ("Open
+ * project: Launch"), the picker's entry and the choice ("Move to project: Billing"), and Remove
+ * from project. Projects are unbounded, so before a search
  * New project stands for the picker and the destinations wait for a search.
  */
 function projectRows(menu: SessionProjectMenu): PaletteCommandRow<ProjectCommand>[] {
@@ -204,6 +205,7 @@ function projectRows(menu: SessionProjectMenu): PaletteCommandRow<ProjectCommand
     label: `${menu.entry.label}: ${name}`,
   });
   return [
+    ...(menu.open ? [commandRow(menu.open, "project:open")] : []),
     commandRow(choice(menu.create, menu.create.label), "project:new"),
     ...menu.destinations.map((d) => ({
       ...commandRow(choice(d.command, d.project.name), `project:${d.project.id}`),
