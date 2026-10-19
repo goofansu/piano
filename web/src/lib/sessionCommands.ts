@@ -179,11 +179,9 @@ export function sessionCommands(
   const session = state.session;
   const ctx = sessionContext(state);
   const selected = !!session && (!target || isSelectedSession(state, target));
-  const subject =
-    target ??
-    (session?.sessionId
-      ? { cwd: session.cwd, sessionId: session.sessionId, title: ctx.title }
-      : undefined);
+  // The registry title, as a sidebar row hands over; "Untitled" is display copy, not a title.
+  const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
+  const subject = target ?? (ref && { ...ref, title: sessionReference(state, ref)?.title });
   const commands: SessionCommand[] = [];
   if (selected && session) {
     const messagesOnly = options.messagesOnly ?? false;

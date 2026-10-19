@@ -263,6 +263,22 @@ test("rename starts from the session's title, and a project edit from its name",
   assert.equal(subject.getState().text, "");
 });
 
+test("an untitled selected session renames from the same empty title in the header and its sidebar row", () => {
+  const renameTarget = (target?: SessionTarget) => {
+    const intent = sessionCommands(withWorkspace, target).find((c) => c.id === "rename")?.intent;
+    assert.equal(intent?.kind, "rename");
+    return intent.kind === "rename" ? intent.target : undefined;
+  };
+  // The sidebar row hands over the registry title, which an untitled session lacks.
+  const row = { cwd: "/repo", sessionId: "s1", title: undefined };
+  assert.deepEqual(renameTarget(), renameTarget(row));
+  const { subject } = forms();
+  subject.open({ kind: "rename-session", target: renameTarget()! });
+  assert.equal(subject.getState().text, "");
+  subject.edit("Untitled");
+  assert.equal(subject.answer().allowed, true);
+});
+
 test("creating a project opens it; creating one for a session or editing one does not", () => {
   const created = forms();
   created.subject.open({ kind: "project", dialog: {} });
