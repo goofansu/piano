@@ -1,6 +1,6 @@
 import type { NotificationAction } from "@shared/notifications";
 import { CheckCircle2Icon } from "lucide-react";
-import { useId, useState } from "react";
+import { useId } from "react";
 import { toast } from "sonner";
 import {
   SettingsAlert,
@@ -14,7 +14,9 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/co
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { changeIntegrationsSettings } from "@/lib/api";
+import { type IntegrationsReady, integrationsView } from "@/lib/integrationsView";
 import { useObservation } from "@/lib/useObservation";
+import { useSetupActions } from "@/lib/useSetupActions";
 
 const MANAGE_INTEGRATIONS = "https://exe.dev/integrations";
 /** The radio group needs a value for "no webhook"; this sentinel never leaves this file. */
@@ -31,30 +33,34 @@ export function IntegrationsSettings() {
     (signal) => changeIntegrationsSettings({ action: "refresh" }, { signal }),
     { focus: true },
   );
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const value = observed.value;
-  const loading = !value && !observed.failure;
-  const names = observed.failure ? null : value?.integrations;
-  const failed = !loading && names == null;
-  const selected = value?.selected ?? null;
-  const missing = !!selected && names != null && !names.includes(selected);
-  const problem = value?.problem;
-  const nothing = names?.length === 0 && !selected;
-  const change = async (action: NotificationAction) => {
-    if (busy) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await observed.mutate((signal) => changeIntegrationsSettings(action, { signal }));
-      if (action.action === "test") toast.success("Test notification accepted.");
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not change notifications.");
-      await observed.refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
+  const actions = useSetupActions({
+    refresh: () => void observed.refresh(),
+    success: (text) => toast.success(text),
+  });
+  const busy = actions.running !== undefined;
+  const view = integrationsView({
+    settings: observed.value,
+    loadFailed: !!observed.failure,
+    busy,
+  });
+  const change = (action: NotificationAction) =>
+    void actions.run({
+      id: action.action,
+      run: () => observed.mutate((signal) => changeIntegrationsSettings(action, { signal })),
+      done: action.action === "test" ? "Test notification accepted." : undefined,
+      fallback: "Could not change notifications.",
+    });
+  const refresh = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-muted-foreground"
+      disabled={busy || observed.loading}
+      onClick={() => void observed.refresh()}
+    >
+      Refresh
+    </Button>
+  );
   return (
     <SettingsSectionFrame title="Integrations" sectionId="settings-integrations">
       <p className="text-sm text-muted-foreground">
@@ -63,9 +69,13 @@ export function IntegrationsSettings() {
           Manage integrations on exe.dev
         </SettingsExternalLink>
       </p>
-      {problem && <SettingsAlert title="Configure Piano’s public URL">{problem}</SettingsAlert>}
-      {error && <SettingsAlert title="Notifications need attention">{error}</SettingsAlert>}
-      {failed && (
+      {view.status !== "loading" && view.problem && (
+        <SettingsAlert title="Configure Piano’s public URL">{view.problem}</SettingsAlert>
+      )}
+      {actions.error && (
+        <SettingsAlert title="Notifications need attention">{actions.error}</SettingsAlert>
+      )}
+      {view.status === "unavailable" && (
         <SettingsAlert title="Couldn’t load integrations">
           <p>Check the exe.dev Reflection integration and try again.</p>
           <Button
@@ -78,7 +88,7 @@ export function IntegrationsSettings() {
           </Button>
         </SettingsAlert>
       )}
-      {loading ? (
+      {view.status === "loading" ? (
         <SettingsSkeleton label="Loading integrations…">
           <Skeleton className="h-28 w-full rounded-xl" />
         </SettingsSkeleton>
@@ -87,7 +97,7 @@ export function IntegrationsSettings() {
           <ItemContent className="min-w-0">
             <ItemTitle>
               Slack
-              {selected && !missing && (
+              {view.on && (
                 <>
                   <CheckCircle2Icon className="size-3.5 text-brand" aria-hidden />
                   <span className="sr-only">(On)</span>
@@ -97,38 +107,19 @@ export function IntegrationsSettings() {
             <ItemDescription>Sends a message when an agent finishes responding.</ItemDescription>
           </ItemContent>
           <ItemActions className="shrink-0">
-            {selected && !missing && (
+            {view.on && (
               <Button
                 variant="outline"
                 size="sm"
-                disabled={busy || !!problem}
-                onClick={() => void change({ action: "test" })}
+                disabled={view.testDisabled}
+                onClick={() => change({ action: "test" })}
               >
                 Test
               </Button>
             )}
-            {(nothing || missing) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                disabled={busy || observed.loading}
-                onClick={() => void observed.refresh()}
-              >
-                Refresh
-              </Button>
-            )}
+            {view.refresh && refresh}
           </ItemActions>
-          {/* Off stays reachable through discovery failures and a missing public URL; only
-              choosing a webhook waits for both. */}
-          <WebhookChoice
-            names={names ?? []}
-            selected={selected}
-            missing={missing}
-            disabled={busy}
-            webhooksDisabled={busy || !!problem}
-            choose={(name) => void change({ action: "select", name })}
-          />
+          <WebhookChoice view={view} choose={(name) => change({ action: "select", name })} />
         </Item>
       )}
     </SettingsSectionFrame>
@@ -136,30 +127,17 @@ export function IntegrationsSettings() {
 }
 
 function WebhookChoice({
-  names,
-  selected,
-  missing,
-  disabled,
-  webhooksDisabled,
+  view,
   choose,
 }: {
-  names: readonly string[];
-  selected: string | null;
-  /** The saved name is not in the current catalog: shown checked but unpickable. */
-  missing: boolean;
-  disabled: boolean;
-  webhooksDisabled: boolean;
+  view: IntegrationsReady;
   choose: (name: string | null) => void;
 }) {
   const id = useId();
-  const option = (value: string, label: string, off = false) => (
-    <Field key={value} orientation="horizontal">
-      <RadioGroupItem
-        id={`${id}-${value}`}
-        value={value}
-        disabled={off ? disabled : webhooksDisabled || off}
-      />
-      <FieldLabel htmlFor={`${id}-${value}`} className="font-normal">
+  const option = (key: string, value: string, label: React.ReactNode, disabled: boolean) => (
+    <Field key={key} orientation="horizontal">
+      <RadioGroupItem id={`${id}-${key}`} value={value} disabled={disabled} />
+      <FieldLabel htmlFor={`${id}-${key}`} className="font-normal">
         {label}
       </FieldLabel>
     </Field>
@@ -168,20 +146,25 @@ function WebhookChoice({
     <RadioGroup
       aria-label="Slack webhook"
       className="basis-full gap-2"
-      value={selected ?? OFF}
+      value={view.checked ?? OFF}
       onValueChange={(value) => choose(value === OFF ? null : value)}
     >
-      {option(OFF, "Off", true)}
-      {missing && selected && (
-        <Field key={selected} orientation="horizontal">
-          <RadioGroupItem id={`${id}-missing`} value={selected} disabled />
-          <FieldLabel htmlFor={`${id}-missing`} className="font-normal">
-            {selected} <span className="text-muted-foreground">(not attached)</span>
-          </FieldLabel>
-        </Field>
+      {option("off", OFF, "Off", view.offDisabled)}
+      {view.options.map(({ name, notAttached, disabled }) =>
+        option(
+          notAttached ? `${name}-missing` : name,
+          name,
+          notAttached ? (
+            <>
+              {name} <span className="text-muted-foreground">(not attached)</span>
+            </>
+          ) : (
+            name
+          ),
+          disabled,
+        ),
       )}
-      {names.map((name) => option(name, name))}
-      {names.length === 0 && !missing && (
+      {view.noWebhooks && (
         <p className="text-sm text-muted-foreground">No webhooks attached to this VM.</p>
       )}
     </RadioGroup>
