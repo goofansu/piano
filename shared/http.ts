@@ -26,6 +26,13 @@ import {
   WorkspaceIgnoredFiles,
 } from "./wire.ts";
 
+/**
+ * How many paths one ignored-files request carries. A session writes as many files as it writes,
+ * so this bounds the request, not the question: the browser adapter reads a longer list in
+ * batches of this size and answers it as one observation.
+ */
+export const IGNORED_PATHS_LIMIT = 1000;
+
 export type Method = "GET" | "POST" | "PUT" | "DELETE";
 
 /** The only values a URL carries: IDs the registry resolves. The server answers 404 for an unknown one. */
@@ -217,7 +224,7 @@ export const Endpoints = {
     query: ["workspaceId"],
     body: Schema.Struct({
       paths: Schema.Array(Schema.String.check(Schema.isMaxLength(4096))).check(
-        Schema.isMaxLength(1000),
+        Schema.isMaxLength(IGNORED_PATHS_LIMIT),
       ),
     }),
     invalid: "File paths are required in the request body.",

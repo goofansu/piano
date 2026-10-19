@@ -12,12 +12,18 @@ import {
   type Endpoint,
   Endpoints,
   type IdParam,
+  IGNORED_PATHS_LIMIT,
   type Json,
   type SignInEndpoints,
 } from "../../../shared/http.ts";
 import type { McpSetupRequest } from "../../../shared/mcp.ts";
 import type { RadiusSetupAction } from "../../../shared/radius.ts";
-import type { SessionPullRequestAction, ThinkingLevel } from "../../../shared/wire.ts";
+import type {
+  SessionPullRequestAction,
+  ThinkingLevel,
+  Workspace,
+  WorkspaceIgnoredFiles,
+} from "../../../shared/wire.ts";
 
 export type { RadiusSetupAction };
 
@@ -156,11 +162,60 @@ export const workspaceChanges = (workspaceId: string, options?: RequestOptions) 
 export const workspaceChangedFile = (workspaceId: string, path: string, options?: RequestOptions) =>
   call(Endpoints.workspaceChangedFile, { query: { workspaceId }, body: { path } }, options);
 
-export const workspaceIgnoredFiles = (
+const sameWorkspace = (a: Workspace, b: Workspace) =>
+  a.id === b.id && a.path === b.path && a.folder === b.folder;
+
+/**
+ * Which of `paths` Git ignores, which lie outside the workspace, and the name each one inside it
+ * places to: one observation however many paths are asked about. A request carries
+ * `IGNORED_PATHS_LIMIT` paths, so a longer list is read one batch at a time, in order, and the
+ * batches are joined here — `placed[i]` still names `inside[i]`, and `ignored`/`outside` keep the
+ * order the paths were sent in. The read stops at the first abort, failure or error result rather
+ * than publishing the batches before it. The answer carries the oldest `observedAt` it was built
+ * from: no part of it is fresher.
+ *
+ * Every batch must name the same workspace, by all of its identity — ID, path and folder (INV-07).
+ * A reply that names another is as far outside the contract as a malformed one, so it fails the
+ * same way `call` does, an `ApiError` carrying the reply's status, with the reason in its message.
+ */
+export const workspaceIgnoredFiles = async (
   workspaceId: string,
   paths: readonly string[],
   options?: RequestOptions,
-) => call(Endpoints.workspaceIgnoredFiles, { query: { workspaceId }, body: { paths } }, options);
+): Promise<WorkspaceIgnoredFiles> => {
+  const read = (batch: readonly string[]) =>
+    call(
+      Endpoints.workspaceIgnoredFiles,
+      { query: { workspaceId }, body: { paths: batch } },
+      options,
+    );
+  if (paths.length <= IGNORED_PATHS_LIMIT) return read(paths);
+  const ignored: string[] = [],
+    outside: string[] = [],
+    inside: string[] = [],
+    placed: string[] = [];
+  let first: WorkspaceIgnoredFiles | undefined;
+  for (let at = 0; at < paths.length; at += IGNORED_PATHS_LIMIT) {
+    options?.signal?.throwIfAborted();
+    const answer = await read(paths.slice(at, at + IGNORED_PATHS_LIMIT));
+    if (first && !sameWorkspace(first.workspace, answer.workspace))
+      throw new ApiError(
+        "Files answered for more than one workspace. Refresh folders and try again.",
+        200,
+      );
+    first ??= answer;
+    if (answer.result.status !== "ready") return answer;
+    ignored.push(...answer.result.ignored);
+    outside.push(...answer.result.outside);
+    inside.push(...answer.result.inside);
+    placed.push(...answer.result.placed);
+  }
+  return {
+    workspace: first!.workspace,
+    observedAt: first!.observedAt,
+    result: { status: "ready", ignored, outside, inside, placed },
+  };
+};
 
 // Session pull request
 

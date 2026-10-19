@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { IGNORED_PATHS_LIMIT } from "../shared/http.ts";
+import type { WorkspaceIgnoredFiles } from "../shared/wire.ts";
 import {
   ApiError,
   listDirectory,
@@ -11,6 +13,7 @@ import {
   workspaceChanges,
   workspaceFile,
   workspaceFileDownload,
+  workspaceIgnoredFiles,
 } from "../web/src/lib/api.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
@@ -142,4 +145,116 @@ test("a response outside the contract is rejected with the endpoint's message, n
   } finally {
     globalThis.fetch = contract;
   }
+});
+
+/** `count` filler paths named after `tag`, to push the interesting ones across a request boundary. */
+const filler = (count: number, tag: string) =>
+  Array.from({ length: count }, (_, i) => `src/${tag}${i}.ts`);
+
+test("INV-01/07: more paths than one request carries are read in bounded batches and answered as one observation", async (t) => {
+  await writeFile(join(repo, ".gitignore"), "scratch/\n*.log\n");
+  t.after(() => rm(join(repo, ".gitignore"), { force: true }));
+  const direct = globalThis.fetch;
+  const sent: number[] = [];
+  globalThis.fetch = (input, init) => {
+    const body =
+      typeof init?.body === "string" ? (JSON.parse(init.body) as { paths?: string[] }) : {};
+    if (Array.isArray(body.paths)) sent.push(body.paths.length);
+    return direct(input, init);
+  };
+  t.after(() => {
+    globalThis.fetch = direct;
+  });
+  // Aliases of one file, an ignored path and an outside path on each side of the boundary.
+  const paths = [
+    "src/app.ts",
+    `${repo}/src/app.ts`,
+    "scratch/notes.md",
+    "/elsewhere/x.ts",
+    ...filler(IGNORED_PATHS_LIMIT - 4, "a"),
+    "./src/app.ts",
+    "build.log",
+    "../sibling.ts",
+    ...filler(7, "b"),
+  ];
+  const answer = await workspaceIgnoredFiles(workspaceId, paths);
+  assert.deepEqual(sent, [IGNORED_PATHS_LIMIT, 10], "bounded batches, in order");
+  assert.deepEqual(answer.workspace, { id: workspaceId, folder: repo, path: repo });
+  assert.ok(answer.result.status === "ready");
+  const { ignored, outside, inside, placed } = answer.result;
+  const expectedOutside = ["/elsewhere/x.ts", "../sibling.ts"];
+  assert.deepEqual(outside, expectedOutside);
+  assert.deepEqual(
+    inside,
+    paths.filter((p) => !expectedOutside.includes(p)),
+    "every path inside the workspace, once, in request order",
+  );
+  assert.deepEqual(ignored, ["scratch/notes.md", "build.log"]);
+  // `placed[i]` still names `inside[i]` after the merge, so spellings of one file are one file.
+  const names = new Map(inside.map((path, i) => [path, placed[i]]));
+  assert.equal(names.size, inside.length);
+  for (const spelling of ["src/app.ts", `${repo}/src/app.ts`, "./src/app.ts"])
+    assert.equal(names.get(spelling), "src/app.ts", spelling);
+  assert.equal(names.get("scratch/notes.md"), "scratch/notes.md");
+  assert.equal(names.get("build.log"), "build.log");
+  assert.equal(names.get("src/a0.ts"), "src/a0.ts");
+  assert.equal(names.get("src/b6.ts"), "src/b6.ts");
+});
+
+test("INV-07: a batched read stops at an abort and refuses a reply naming another workspace", async (t) => {
+  const direct = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = direct;
+  });
+  const paths = filler(IGNORED_PATHS_LIMIT + 1, "c");
+  let answered = 0;
+  const controller = new AbortController();
+  globalThis.fetch = async (input, init) => {
+    const response = await direct(input, init);
+    if (++answered === 1) controller.abort();
+    return response;
+  };
+  await assert.rejects(
+    workspaceIgnoredFiles(workspaceId, paths, { signal: controller.signal }),
+    (error: unknown) => error instanceof Error && error.name === "AbortError",
+  );
+  assert.equal(answered, 1, "no request after the abort");
+  // Whatever a later batch replies, the batches before it are never published as one ready answer.
+  const second = async (reply: (body: WorkspaceIgnoredFiles) => Response) => {
+    answered = 0;
+    globalThis.fetch = async (input, init) => {
+      const response = await direct(input, init);
+      return ++answered < 2 ? response : reply((await response.json()) as WorkspaceIgnoredFiles);
+    };
+  };
+  for (const workspace of [{ id: "another" }, { path: "/elsewhere" }, { folder: "/elsewhere" }]) {
+    await second((body) =>
+      Response.json({ ...body, workspace: { ...body.workspace, ...workspace } }),
+    );
+    await assert.rejects(
+      workspaceIgnoredFiles(workspaceId, paths),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.status === 200 &&
+        error.message ===
+          "Files answered for more than one workspace. Refresh folders and try again.",
+      Object.keys(workspace)[0],
+    );
+  }
+  await second((body) =>
+    Response.json({
+      ...body,
+      result: { status: "error", detail: "Files requires the Git checkout root." },
+    }),
+  );
+  const failed = await workspaceIgnoredFiles(workspaceId, paths);
+  assert.deepEqual(failed.result, {
+    status: "error",
+    detail: "Files requires the Git checkout root.",
+  });
+  await second(() => new Response("<html>Bad gateway</html>", { status: 502 }));
+  await assert.rejects(
+    workspaceIgnoredFiles(workspaceId, paths),
+    (error: unknown) => error instanceof ApiError && error.status === 502,
+  );
 });
