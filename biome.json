@@ -20,7 +20,8 @@
       "test/**",
       "web/src/**",
       "web/vite.config.ts",
-      "!web/src/components/ui"
+      "!web/src/components/ui",
+      "!web/src/hooks/use-mobile.ts"
     ]
   },
   "formatter": {

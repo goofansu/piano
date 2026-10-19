@@ -7,6 +7,12 @@ Standard controls import from `ui/`; customized controls import the
 app components below. App wrappers forward props and refs and compose caller event handlers.
 The CLI also owns `web/src/hooks/use-mobile.ts`.
 
+Always exclude upstream shadcn source from Biome formatting, linting and import organization
+through `biome.json` → `files.includes`. This includes generated hooks and other dependencies
+outside `components/ui/`: add a specific exclusion whenever the CLI introduces another
+upstream-owned path. Keep Piano-owned hooks and wrappers checked; do not exclude their whole
+directories. Preserve upstream formatting as well as behavior.
+
 `web/components.json` deliberately sets `rsc: true` to preserve upstream `"use client"` directives
 in generated files. Piano is still a client-side Vite app: this CLI option does not enable React
 Server Components, and those directives do not change its runtime behavior. Keep the directives

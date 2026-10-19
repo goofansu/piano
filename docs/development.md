@@ -11,8 +11,10 @@ quotes (also in JSX), semicolons and trailing commas. `npm run format` rewrites 
 `npm run format:check` only reports.
 
 Biome formats application and test source and the maintained JS and JSON config. It skips
-`web/src/components/ui`, so upstream shadcn updates stay reviewable. Tailwind checks still cover
-that folder. Biome leaves lockfiles, captured evidence, vendored skills, Markdown and YAML alone.
+upstream shadcn source (`web/src/components/ui/` and `web/src/hooks/use-mobile.ts`) so updates stay
+reviewable. Always add specific Biome exclusions for new upstream-owned paths, including files
+outside `components/ui/`; see [shadcn ownership](shadcn-ui.md). Tailwind checks still cover upstream
+components. Biome leaves lockfiles, captured evidence, vendored skills, Markdown and YAML alone.
 Put mechanical formatting in its own commit, apart from behavior changes.
 
 `npm run lint` runs `biome check` (rules and formatting), then `npm run lint:tailwind`. The Tailwind
