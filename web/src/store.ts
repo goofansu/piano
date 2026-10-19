@@ -12,7 +12,7 @@ import type {
   Workspace,
 } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
-import { applySessionEvent } from "../../shared/sessionProjection.ts";
+import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
 import * as FirstMessage from "./lib/firstMessage.ts";
 
 export type { PendingCreate } from "./lib/firstMessage.ts";
@@ -180,9 +180,14 @@ export function sessionDelivery(
     m.cursor.sessionId !== t.sessionId
   )
     return "ignore";
-  if (!t.cursor || m.cursor.generation !== t.cursor.generation) return "resync";
-  if (m.cursor.sequence <= t.cursor.sequence) return "ignore";
-  return m.cursor.sequence === t.cursor.sequence + 1 ? "apply" : "resync";
+  switch (cursorStep(t.cursor, m.cursor)) {
+    case "next":
+      return "apply";
+    case "duplicate":
+      return "ignore";
+    default:
+      return "resync";
+  }
 }
 
 function applyServer(s: AppState, m: ServerMessage): AppState {
@@ -231,8 +236,9 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       // The first snapshot for a new attachment may have the same sequence or
       // a new host generation. Only compare cursors within an established attachment.
       if (!s.selecting && s.session?.cursor && m.cursor) {
-        if (m.cursor.generation !== s.session.cursor.generation) return { ...s, resync: true };
-        if (m.cursor.sequence <= s.session.cursor.sequence) return s;
+        const step = cursorStep(s.session.cursor, m.cursor);
+        if (step === "other-generation") return { ...s, resync: true };
+        if (step === "duplicate") return s;
       }
       // A selection without a session (what the server answers after archiving the one
       // being viewed) has nothing to show; sessions start from the New page.

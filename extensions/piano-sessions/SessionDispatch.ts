@@ -12,7 +12,7 @@
  * kept: later interference cannot retract what this call saw.
  */
 import { createHash } from "node:crypto";
-import { applySessionEvent, isWorking } from "../../shared/sessionProjection.ts";
+import { applySessionEvent, cursorStep, isWorking } from "../../shared/sessionProjection.ts";
 import type {
   ClientMessage,
   RenderMsg,
@@ -397,10 +397,8 @@ export function startSession(
             }
             case "session": {
               if (!snapshot || !handle) return;
-              if (
-                message.cursor.generation !== handle.generation ||
-                message.cursor.sequence > sequence + 1
-              ) {
+              const step = cursorStep({ generation: handle.generation, sequence }, message.cursor);
+              if (step === "other-generation" || step === "gap") {
                 settle(
                   result(
                     "created",
@@ -410,7 +408,7 @@ export function startSession(
                 );
                 return;
               }
-              if (message.cursor.sequence <= sequence) return;
+              if (step === "duplicate") return;
               sequence = message.cursor.sequence;
               snapshot = applySessionEvent(snapshot, message.event);
               if (
@@ -850,13 +848,14 @@ function observeHandle(
             if (!snapshot) return;
             // A frame of another incarnation, or a gap in this one, cannot be folded into
             // this view: the cursor is the only ordering this attachment has.
-            if (message.cursor.generation !== generation) {
+            const step = cursorStep({ generation, sequence }, message.cursor);
+            if (step === "other-generation") {
               generation = message.cursor.generation;
               evaluate();
               return;
             }
-            if (message.cursor.sequence <= sequence) return;
-            if (message.cursor.sequence > sequence + 1) {
+            if (step === "duplicate") return;
+            if (step === "gap") {
               snapshot = null;
               reattach("Frames were missed and the session could not be re-read.");
               return;
