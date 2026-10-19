@@ -20,8 +20,8 @@ the Slack card and actionable errors: no raw webhook input or routine saved-stat
 
 Piano sends one line, “Agent finished responding.” followed by the session's URL, when a live
 agent run settles with a successful final response. The message waits **60 seconds** first: any
-action in that session (a prompt, steer or abort), opening it in a browser, or archiving or
-deleting it during the wait drops it, and a newer completion restarts the wait. A session started by Piano's dispatch tool notifies
+action in that session (a prompt, steer, abort or model change), opening it in a browser, or
+renaming, archiving or deleting it during the wait drops it, and a newer completion restarts the wait. A session started by Piano's dispatch tool notifies
 like any other: the parent's wait observing it does not count as opening it. Cancellation also
 applies while waiting for the send quota or integration discovery, until delivery is claimed; an
 in-flight request cannot be recalled.

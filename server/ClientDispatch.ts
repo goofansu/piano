@@ -249,7 +249,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     },
     rename_session: {
       admission: "ordinary",
-      run: ({ cwd, sessionId, title }) => hosts.rename(cwd, sessionId, title),
+      run: ({ cwd, sessionId, title }) => sessions.rename(cwd, sessionId, title),
       unanswered: plainError,
     },
     pin_session: {

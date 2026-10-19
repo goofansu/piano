@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Deferred, Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { makeClientSessions } from "../server/ClientSessions.ts";
+import { type ClientSessions, makeClientSessions } from "../server/ClientSessions.ts";
 import { ExeDevFetch } from "../server/ExeDev.ts";
 import {
   NotificationDelayMs,
@@ -435,7 +435,7 @@ test("a completion waits a minute and is dropped when the session is acted on or
   );
 });
 
-test("through the session host, a person opening or acting on the session during the wait drops the message; an observer does not", async (t) => {
+test("through a client, a person opening, acting on or renaming the session during the wait drops the message; an observer does not", async (t) => {
   const texts: string[] = [];
   let next = Deferred.makeUnsafe<void>();
   const f = await startRouter(
@@ -476,8 +476,13 @@ test("through the session host, a person opening or acting on the session during
         yield* Fiber.join(settled);
       }),
     );
-  // A client selects the session, as a browser does or, with `observer`, Piano's dispatch wait.
-  const open = (session: PiSession, observer?: boolean) =>
+  // A client selects the session, as a browser does or, with `observer`, Piano's dispatch wait,
+  // then makes `request`.
+  const open = (
+    session: PiSession,
+    observer?: boolean,
+    request?: (client: ClientSessions, selectionId: string) => Effect.Effect<unknown, unknown>,
+  ) =>
     f.run(
       Effect.scoped(
         Effect.gen(function* () {
@@ -485,12 +490,14 @@ test("through the session host, a person opening or acting on the session during
             send: () => Effect.void,
             overflow: () => Effect.void,
           });
+          const selectionId = crypto.randomUUID();
           yield* yield* client.select({
             cwd: session.spec.cwd,
             sessionId: session.spec.sessionId,
-            selectionId: crypto.randomUUID(),
+            selectionId,
             observer,
           });
+          if (request) yield* request(client, selectionId);
         }),
       ),
     );
@@ -521,10 +528,20 @@ test("through the session host, a person opening or acting on the session during
   await open(session);
   await f.run(TestClock.adjust(120_000));
   assert.equal(texts.length, 1);
-  // An action during the wait drops it as well.
+  // A person's action or rename during the wait drops it as well, even from a client whose
+  // selection did not count; Piano's own actions on the session do not.
   await complete(session);
   await f.run(TestClock.adjust(30_000));
-  await f.run(session.act({ _tag: "set_thinking_level", level: "low" }));
+  await open(session, true, (client, selectionId) =>
+    client.act(selectionId, { _tag: "set_thinking_level", level: "low" }),
+  );
+  await f.run(TestClock.adjust(120_000));
+  assert.equal(texts.length, 1);
+  await complete(session);
+  await f.run(TestClock.adjust(30_000));
+  await open(session, true, (client) =>
+    client.rename(session.spec.cwd, session.spec.sessionId, "Renamed"),
+  );
   await f.run(TestClock.adjust(120_000));
   assert.equal(texts.length, 1);
 });
@@ -577,13 +594,17 @@ test("archiving or deleting a session during the wait drops its message", async 
       const archived = yield* complete();
       const deleted = yield* complete();
       yield* TestClock.adjust(30_000);
-      yield* hosts.archive(archived.cwd, archived.sessionId);
-      yield* hosts.delete(deleted.cwd, deleted.sessionId);
+      const client = yield* makeClientSessions({
+        send: () => Effect.void,
+        overflow: () => Effect.void,
+      });
+      yield* client.retire(archived.cwd, archived.sessionId, "archive");
+      yield* client.retire(deleted.cwd, deleted.sessionId, "delete");
       // Due after both retired completions, so delivery order shows whether they were dropped.
       yield* notifications.completed("sentinel");
       yield* TestClock.adjust(60_000);
       yield* Deferred.await(sentinelSent);
-    }),
+    }).pipe(Effect.scoped),
   );
   assert.deepEqual(texts, ["Agent finished responding. https://piano.example.test/s/sentinel"]);
 });

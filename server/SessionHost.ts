@@ -102,8 +102,6 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   const act: PiSession["act"] = Effect.fn("SessionHost.act")(function* (action) {
     if (closing)
       return yield* rejected("Pi is closing. Wait for shutdown before reopening history.");
-    // Any action means the user is here: a completion message waiting for this session is dropped.
-    yield* notifications.touched(raw.spec.sessionId);
     // Outside the ownership lock, like the work itself: the reference and its project already
     // exist, so activity is recorded before Pi sees the input.
     if (sessionActionPolicy[action._tag].activity)
@@ -136,8 +134,8 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
     );
     return yield* Fiber.join(fiber);
   });
-  // Subscribing to events is not presence: observers subscribe too. ClientSessions decides when a
-  // person opened the session.
+  // Neither an action nor a subscription here is presence: ClientSessions decides when a person
+  // is at the session.
   const session: PiSession = { ...raw, act };
 
   const busy = Effect.map(raw.state, (state) => actions > 0 || !state.isQuiescent);
