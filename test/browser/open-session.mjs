@@ -46,12 +46,16 @@ await run(
       stats: { cost, statsUpdatedAt: Date.now() },
     });
     history({ sessionId: "login-bug", cwd, messages: [1, 2, 3, 4, 5, 6].flatMap(exchange) });
-    history({ sessionId: "release-notes", cwd, messages: exchange(1) });
+    // Alternating prompts and Markdown replies expose per-row forced layout on session switches.
+    const release = Array.from({ length: 60 }, (_, i) => exchange(i + 1)).flat();
+    release.at(-2).content += `\n\n${paragraph.repeat(4)}`;
+    release.at(-1).content[0].text += '\n\n```ts\nconst release = "ready";\n```';
+    history({ sessionId: "release-notes", cwd, messages: release });
     return {
       folders: [cwd],
       sessions: [
         reference("login-bug", "Fix the login bug", 0.063),
-        reference("release-notes", "Release notes", 0.0105),
+        reference("release-notes", "Release notes", 0.63),
       ],
     };
   },
@@ -108,6 +112,7 @@ await run(
     await page.ab("fill", '[aria-label="Message"]', "Add a regression test");
     await page.ab("press", "Enter");
     await page.see("echo: Add a regression test");
+    assert.equal(await inView("Question 1:"), true, "a reply does not move a reader who jumped up");
     await page.capture("4-follow-up");
 
     // Pi now runs the session, so its fresh total includes the follow-up.
@@ -163,5 +168,54 @@ await run(
     );
     await page.see("Answer 1.");
     await page.capture("7-palette-switch");
+
+    // Reopening a long session must not force a transcript layout for every prompt. Counting
+    // browser layouts catches read/write thrashing without a flaky wall-clock performance limit.
+    await page.click("button", "Fix the login bug");
+    await page.see("echo: Add a regression test");
+    const layouts = await page.layouts(async () => {
+      await page.click("button", "Release notes");
+      await page.see("Answer 60.");
+      await page.until(`!!document.querySelector('button[aria-label="Copy code"]')`);
+    });
+    console.log(`Reopened 60 turns: ${layouts} browser layouts`);
+    assert.ok(layouts < 20, `switching a 60-turn session took ${layouts} layouts`);
+    await page.until(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
+    })()`);
+
+    // Deferred overflow measurement still offers long prompts' complete text and works again
+    // after collapsing and resizing. Code-copy controls remain present in the adjacent reply.
+    await page.click("button", "Show more");
+    await page.until(
+      `document.querySelector('button[aria-expanded="true"][aria-controls]')?.textContent.includes('Show less')`,
+    );
+    const promptSize = () =>
+      page.evaluate(`(() => {
+      const toggle = [...document.querySelectorAll('button[aria-controls]')]
+        .find(b => /Show (more|less)/.test(b.textContent));
+      const text = document.getElementById(toggle.getAttribute('aria-controls'));
+      return { height: text.clientHeight, content: text.scrollHeight };
+    })()`);
+    const expanded = await promptSize();
+    assert.equal(expanded.height, expanded.content, "expanded prompt shows all its text");
+    await page.click("button", "Show less");
+    const collapsed = await promptSize();
+    assert.ok(collapsed.height < collapsed.content, "collapsed prompt is capped again");
+    await page.ab("set", "viewport", "800", "900");
+    await page.click("button", "Show more");
+    const resized = await promptSize();
+    assert.equal(resized.height, resized.content, "prompt still expands after resizing");
+    await page.click("button", "Copy code");
+    await page.until(`!!document.querySelector('button[aria-label="Code copied"]')`);
+    await page.ab("focus", '[aria-label="Message"]');
+    await page.press("Mod+v");
+    assert.equal(
+      await page.evaluate(`document.querySelector('[aria-label="Message"]').value`),
+      'const release = "ready";',
+      "copy contains only the fenced code",
+    );
+    await page.capture("8-reopened-long-session");
   },
 );

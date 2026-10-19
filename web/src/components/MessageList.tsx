@@ -66,6 +66,10 @@ export const SessionDestinationContext = createContext<
   (sessionId: string) => SessionDestination | "unlisted"
 >(() => "unlisted");
 
+// Initial prompt measurements run together in the parent's layout effect, after every
+// Markdown child has finished writing its DOM and before initial scroll pinning.
+const PromptMeasurementsContext = createContext<Set<() => void> | null>(null);
+
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
   pending: RenderMsg | null;
@@ -104,6 +108,11 @@ export function MessageList({
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
+  const [promptMeasurements] = useState(() => new Set<() => void>());
+  useLayoutEffect(() => {
+    for (const measure of promptMeasurements) measure();
+    promptMeasurements.clear();
+  });
   const own = useNewTranscriptViewport();
   const viewport = useTranscriptViewport() ?? own;
   const atBottom = useSyncExternalStore(viewport.subscribe, viewport.atBottom, () => true);
@@ -156,12 +165,14 @@ export function MessageList({
           {/* Adjacent tool rows keep one gap, even when the previous message also had text. */}
           <div className="flex flex-col gap-6 [&>[data-ends-with-tools]+[data-tools-only]]:-mt-3">
             {dispatchedFrom && <DispatchedFrom parent={dispatchedFrom} />}
-            {submittedInput && (
-              <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />
-            )}
-            {rows.map((row) => (
-              <TranscriptRowView key={row.key} row={row} />
-            ))}
+            <PromptMeasurementsContext value={promptMeasurements}>
+              {submittedInput && (
+                <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />
+              )}
+              {rows.map((row) => (
+                <TranscriptRowView key={row.key} row={row} />
+              ))}
+            </PromptMeasurementsContext>
             {activity && (
               <Row glyph={<Keys playing className="text-brand" />}>
                 <span className="sr-only">
@@ -485,17 +496,26 @@ function UserMessage({
   const textId = useId();
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
-  // Measure against the cap while closed; re-measure when the column resizes.
+  const measurements = useContext(PromptMeasurementsContext);
+  // A read here would interleave with adjacent Markdown layout effects' writes, forcing a
+  // transcript layout per prompt. The parent batches these reads; ResizeObserver handles local
+  // expansion and column resizing, including changes that don't render the parent.
   // biome-ignore lint/correctness/useExhaustiveDependencies: text and expansion change the measured DOM; a capped element may gain overflow without resizing.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
-    measure();
+    const measure = () => {
+      measurements?.delete(measure);
+      setOverflows(el.scrollHeight > el.clientHeight + 1);
+    };
+    measurements?.add(measure);
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, [text, open]);
+    return () => {
+      measurements?.delete(measure);
+      ro.disconnect();
+    };
+  }, [text, open, measurements]);
   const clamped = !open && overflows;
   const long = overflows || open;
   const toggle = () => setOpen((o) => !o);

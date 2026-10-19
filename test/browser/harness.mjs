@@ -185,6 +185,52 @@ export async function run(name, setup, journey) {
     see: (text) => ab("wait", "--text", text),
     until: (js) => ab("wait", "--fn", js),
     capture: (step) => ab("screenshot", join(evidence, `${step}.png`)),
+    /** Count actual browser layouts across an interaction, without a machine-speed threshold. */
+    layouts: async (interaction) => {
+      const socket = new WebSocket(await ab("get", "cdp-url"));
+      let id = 0;
+      const call = (method, params = {}, sessionId) =>
+        new Promise((resolve, reject) => {
+          const requestId = ++id;
+          const timer = setTimeout(() => {
+            socket.removeEventListener("message", receive);
+            reject(new Error(`CDP ${method} timed out`));
+          }, 10000);
+          const receive = ({ data }) => {
+            const message = JSON.parse(data);
+            if (message.id !== requestId) return;
+            clearTimeout(timer);
+            socket.removeEventListener("message", receive);
+            if (message.error) reject(new Error(JSON.stringify(message.error)));
+            else resolve(message.result);
+          };
+          socket.addEventListener("message", receive);
+          socket.send(JSON.stringify({ id: requestId, method, params, sessionId }));
+        });
+      try {
+        await new Promise((resolve, reject) => {
+          socket.addEventListener("open", resolve, { once: true });
+          socket.addEventListener("error", reject, { once: true });
+        });
+        const { targetInfos } = await call("Target.getTargets");
+        const target = targetInfos.find((t) => t.type === "page" && t.url.startsWith(`${web}/`));
+        assert.ok(target, "the scratch page has a CDP target");
+        const { sessionId } = await call("Target.attachToTarget", {
+          targetId: target.targetId,
+          flatten: true,
+        });
+        await call("Performance.enable", {}, sessionId);
+        const count = async () => {
+          const { metrics } = await call("Performance.getMetrics", {}, sessionId);
+          return metrics.find((m) => m.name === "LayoutCount").value;
+        };
+        const before = await count();
+        await interaction();
+        return (await count()) - before;
+      } finally {
+        socket.close();
+      }
+    },
     /** What the fake Pis received, in order: `{ command, text?, args?, sessionId }`. */
     received: () =>
       existsSync(audit)
