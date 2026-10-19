@@ -37,7 +37,6 @@ import type {
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
-import { enabledModelPatterns } from "./PiEnv.ts";
 import { PiHistory } from "./PiHistory.ts";
 import {
   type PiExchange,
@@ -92,7 +91,7 @@ export interface PiSession {
 
 export interface ProbeResult {
   readonly commands: ReadonlyArray<SlashCommand>;
-  /** In Pi's order, each with the efforts Pi accepts for it and whether Pi's `enabledModels` scopes it in. */
+  /** In Pi's order, each with the efforts Pi accepts for it. */
   readonly models: ReadonlyArray<ModelChoice>;
   readonly defaultModel?: string;
   readonly defaultThinkingLevel?: string;
@@ -105,7 +104,7 @@ export class PiSessions extends Context.Service<
     readonly open: (spec: PiSessionSpec) => Effect.Effect<PiSession, PiSessionError, Scope.Scope>;
     /**
      * One-shot `pi --mode rpc --no-session`: available models, slash commands and Pi's default.
-     * `globalSettingsOnly` ignores the directory's project resources, and scopes no model in.
+     * `globalSettingsOnly` ignores the directory's project resources.
      */
     readonly probe: (
       cwd: string,
@@ -654,7 +653,7 @@ const probe = (
       cwd,
     );
     const [models, state, commands] = yield* Effect.all([
-      child.read(piReadbacks.models(options?.globalSettingsOnly ? [] : enabledModelPatterns(cwd))),
+      child.read(piReadbacks.models),
       child.read(piReadbacks.state),
       child.read(piReadbacks.commands),
     ]).pipe(

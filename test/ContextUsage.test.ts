@@ -16,7 +16,6 @@ const model = (ref: string, contextWindow: number): ModelChoice => ({
   id: ref.split("/")[1]!,
   reasoning: false,
   contextWindow,
-  enabled: true,
   thinkingLevels: ["off"],
 });
 const catalog: ModelCatalog = {

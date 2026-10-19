@@ -16,7 +16,6 @@ const model = (ref: string, name?: string): ModelChoice => {
     ...(name ? { name } : {}),
     reasoning: true,
     contextWindow: 200000,
-    enabled: true,
     thinkingLevels: ["off", "low", "medium", "high"],
   };
 };

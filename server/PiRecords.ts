@@ -429,37 +429,15 @@ const thinkingLevelsOf = (m: RawModel): ThinkingLevel[] =>
         return true;
       });
 
-/** Pi's `enabledModels` patterns, matched case-insensitively against `provider/id` or the bare id; `*` is a wildcard. */
-function enabledMatcher(patterns: ReadonlyArray<string>): (ref: string, id: string) => boolean {
-  const tests = patterns.map((p) => {
-    const lowered = p.toLowerCase();
-    if (lowered.includes("*")) {
-      const re = new RegExp(
-        `^${lowered
-          .split("*")
-          .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-          .join(".*")}$`,
-      );
-      return (ref: string, id: string) => re.test(ref) || re.test(id);
-    }
-    return (ref: string, id: string) => ref === lowered || id === lowered;
-  });
-  return (ref, id) => tests.some((t) => t(ref.toLowerCase(), id.toLowerCase()));
-}
-
 /**
- * Pi's `get_available_models` reply as the browser's model choices, in Pi's order: the efforts
- * each model accepts and whether Pi's `enabledModels` setting scopes it in. Undefined when malformed.
+ * Pi's `get_available_models` reply as the browser's model choices, in Pi's order, with the efforts
+ * each model accepts. Undefined when malformed.
  */
-export const modelChoicesOf = (
-  data: unknown,
-  enabledPatterns: ReadonlyArray<string>,
-): ReadonlyArray<ModelChoice> | undefined => {
+export const modelChoicesOf = (data: unknown): ReadonlyArray<ModelChoice> | undefined => {
   const models = Schema.decodeUnknownOption(Schema.Struct({ models: Schema.Array(RawModel) }))(
     data,
   );
   if (models._tag === "None") return;
-  const isEnabled = enabledMatcher(enabledPatterns);
   return models.value.models.map((m): ModelChoice => {
     const ref = `${m.provider}/${m.id}`;
     return {
@@ -469,7 +447,6 @@ export const modelChoicesOf = (
       name: m.name,
       reasoning: !!m.reasoning,
       contextWindow: m.contextWindow,
-      enabled: isEnabled(ref, m.id),
       thinkingLevels: thinkingLevelsOf(m),
     };
   });
@@ -520,12 +497,12 @@ export const piReadbacks = {
     decode: commandsOf,
     invalid: "Pi returned an invalid command catalog.",
   } satisfies PiReadback<ReadonlyArray<SlashCommand>>,
-  /** Model choices, scoped in by Pi's `enabledModels` patterns. */
-  models: (enabledPatterns: ReadonlyArray<string>): PiReadback<ReadonlyArray<ModelChoice>> => ({
+  /** Model choices, in Pi's order. */
+  models: {
     command: { type: "get_available_models" },
-    decode: (data) => modelChoicesOf(data, enabledPatterns),
+    decode: modelChoicesOf,
     invalid: "Pi returned an invalid model catalog.",
-  }),
+  } satisfies PiReadback<ReadonlyArray<ModelChoice>>,
 };
 
 // ── Outbound commands ────────────────────────────────────────────────────────

@@ -659,7 +659,6 @@ export const ModelChoice = Schema.Struct({
   name: Schema.optional(Schema.String),
   reasoning: Schema.Boolean,
   contextWindow: Schema.Number,
-  enabled: Schema.Boolean,
   /** Efforts this model accepts, in ascending order; `["off"]` when it cannot reason. */
   thinkingLevels: Schema.Array(ThinkingLevel),
 });
