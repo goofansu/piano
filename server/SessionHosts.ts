@@ -15,7 +15,7 @@ import type {
   Snapshot,
   StartOptions,
 } from "../shared/wire.ts";
-import { type Notifications, NotificationsLive } from "./Notifications.ts";
+import { Notifications, NotificationsLive } from "./Notifications.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, type RegistryError, type RegistryLookupError } from "./Registry.ts";
 import { makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
@@ -121,6 +121,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
     Effect.gen(function* () {
       const registry = yield* Registry;
       const references = yield* SessionReferences;
+      const notifications = yield* Notifications;
       const layerScope = yield* Effect.scope;
       const hostServices = yield* Effect.context<
         PiSessions | Registry | SessionReferences | Notifications
@@ -319,6 +320,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               ? yield* close(key, host).pipe(Effect.andThen(references.resolve(ref.cwd, id)))
               : ref;
             yield* remove ? references.remove(final) : references.archive(final);
+            // A retired session's link opens nothing to act on: drop its pending message.
+            yield* notifications.touched(id);
           }),
         );
 
