@@ -184,7 +184,8 @@ export async function startRealPiDispatch(
 
   const nonce = randomUUID().slice(0, 8);
   const parentSecret = `PARENT-SECRET-${nonce}`;
-  const brief = `BRIEF-${nonce}: reply with exactly ECHO-${nonce} and nothing else.`;
+  // Carries a token-shaped value, which Piano shows redacted: the answer is still the brief's.
+  const brief = `BRIEF-${nonce}: reply with exactly ECHO-${nonce} and nothing else. token: unshown`;
   const answer = `ECHO-${nonce}`;
   const report = `PARENT_REPORT: ${answer}`;
   const parentPrompt = `${parentSecret}. Dispatch this work in a new session and wait for its answer.`;

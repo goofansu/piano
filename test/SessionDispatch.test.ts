@@ -11,6 +11,7 @@ import {
   startSession,
   waitSessions,
 } from "../extensions/piano-sessions/SessionDispatch.ts";
+import { serializeMessage } from "../server/PiRecords.ts";
 import {
   type ClientMessage,
   encodeServerMessage,
@@ -1067,6 +1068,38 @@ test("late startup output before the initial user message is not its answer", bo
   assert.equal(result!.answer, null);
   assert.equal(result!.status, "unknown");
 });
+
+// The child's user message as Piano really renders it: redacted for display, and a skill brief
+// shown as the skill plus its arguments, the way Pi expanded it.
+const briefs = [
+  {
+    name: "a token-shaped value",
+    brief: "do the thing with token: x",
+    sent: "do the thing with token: x",
+  },
+  {
+    name: "a skill command",
+    brief: "/skill:review  the diff ",
+    sent: '<skill name="review" location="/s/SKILL.md">\nReferences are relative to /s.\n\nRead it.\n</skill>\n\nthe diff',
+  },
+];
+for (const { name, brief, sent } of briefs) {
+  test(`a brief with ${name} is attributed as the transcript shows it`, bounded, async () => {
+    const h = world();
+    const shown = serializeMessage("m1", { role: "user", content: sent });
+    assert.ok(shown);
+    assert.notEqual(shown.text, brief.trim(), "the transcript does not show the brief verbatim");
+    const wait = waitSessions([await handleOf([], null, brief)], undefined, h.env);
+    h.last().accept();
+    h.last().frame(
+      socketSnapshot(h.last(), idle([shown, message("m2", "assistant", "the thing is done")])),
+    );
+    const [result] = await wait;
+    assert.equal(result!.attribution, "attributed", result!.detail);
+    assert.equal(result!.status, "settled");
+    assert.equal(result!.answer, "the thing is done");
+  });
+}
 
 test("an empty final answer never falls back to earlier tool-use prose", bounded, async () => {
   const h = world();
