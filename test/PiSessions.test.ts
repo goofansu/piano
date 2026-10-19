@@ -488,6 +488,21 @@ test("without pi-subagent, Run usage stays absent and never fails Pi's stats", a
   );
 });
 
+test("a dispatched session's first live snapshot names its parent while usage is still unread", async () => {
+  await run(
+    Effect.gen(function* () {
+      // Cached statistics: open does not wait for usage, which this Pi never answers.
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "held-usage-dispatched",
+        dispatchedFrom: "the-parent",
+        lastKnownStats: { cost: 0.5, statsUpdatedAt: 1 },
+      });
+      assert.equal((yield* session.state).dispatchedFrom, "the-parent");
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
+
 test("canonical context updates after a response and compaction while still running", async () => {
   await run(
     Effect.gen(function* () {

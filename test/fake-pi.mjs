@@ -33,6 +33,9 @@ const sessionId = args[args.indexOf("--session-id") + 1] || "nosession";
 const modelArg = args.includes("--model") ? args[args.indexOf("--model") + 1] : "fake/alpha";
 let model = { provider: modelArg.split("/")[0], id: modelArg.split("/")[1] };
 let thinkingLevel = "medium";
+const dispatchedFrom = args.includes("--piano-dispatched-from")
+  ? args[args.indexOf("--piano-dispatched-from") + 1]
+  : undefined;
 let sessionName = environmentFixture ?? "fake";
 const state = () => ({
   model,
@@ -183,6 +186,17 @@ function handle(cmd) {
     case "get_entries": {
       // A Pi without pi-subagent: ordinary entries, plus near misses another extension could write.
       const entries = [
+        // Piano's extension records the dispatching session once, as it does for a new child.
+        ...(dispatchedFrom
+          ? [
+              {
+                type: "custom",
+                id: "e-dispatch",
+                customType: "piano.dispatch",
+                data: { parentSessionId: dispatchedFrom },
+              },
+            ]
+          : []),
         {
           type: "custom_message",
           id: "e-other",
@@ -223,6 +237,8 @@ function handle(cmd) {
       return respond(cmd, { entries: entries.slice(since + 1), leafId: entries.at(-1).id });
     }
     case "get_session_stats":
+      // held-usage: Pi never answers a usage readback, as if it were slow.
+      if (sessionId.startsWith("held-usage")) return;
       if (sessionId === "capacity-readback" && capacityHeld.length) {
         heldReads.push(cmd);
         return capacityCount();

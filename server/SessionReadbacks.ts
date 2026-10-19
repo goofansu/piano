@@ -10,7 +10,6 @@
 import { Clock, Effect, type Scope } from "effect";
 import type { SessionEvent } from "../shared/wire.ts";
 import {
-  dispatchedFromOf,
   type PiReadback,
   piReadbacks,
   type RawMessage,
@@ -30,6 +29,8 @@ export interface SessionReadbacksOptions {
   /** Pi's current context as the event replacing projected history; called under the lock. */
   readonly context: (messages: ReadonlyArray<RawMessage>) => SessionEvent;
   readonly publication: SessionPublication;
+  /** The entries the opening snapshot counted; usage readbacks continue after them. */
+  readonly entries: ReadonlyArray<unknown>;
 }
 
 /** An operation token: a state readback owed to one is dropped once a later one starts. */
@@ -61,6 +62,7 @@ export const makeSessionReadbacks = ({
   observationVersion,
   context,
   publication,
+  entries: opening,
 }: SessionReadbacksOptions): SessionReadbacks => {
   const factVersions = { model: 0, thinkingLevel: 0, sessionName: 0, sessionFile: 0 };
   let statsVersion = 0;
@@ -73,10 +75,8 @@ export const makeSessionReadbacks = ({
       if (next[field] !== previous[field]) factVersions[field] += 1;
   });
 
-  /** Run usage, and the dispatching session, from entries Pi appended since the last read. Only
-   * the stats worker reads. */
-  const ledger = new RunLedger();
-  let dispatchedFrom: string | undefined;
+  /** Run usage from entries Pi appended since the last read. Only the stats worker reads. */
+  const ledger = new RunLedger().add(opening);
   const readEntries = Effect.gen(function* () {
     const entries = (since?: string) => read(piReadbacks.entries(since));
     const since = ledger.since;
@@ -89,8 +89,7 @@ export const makeSessionReadbacks = ({
       ),
     );
     ledger.add(added);
-    dispatchedFrom ??= dispatchedFromOf(added);
-    return { subagents: ledger.usage, dispatchedFrom };
+    return { subagents: ledger.usage };
   });
 
   /** Canonical projected context and billed cost from Pi, not partial response usage.

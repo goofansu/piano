@@ -321,29 +321,28 @@ export const dispatchedFromOf = (entries: ReadonlyArray<unknown>): string | unde
 };
 
 /**
- * What Pi establishes about one session, and from where: a running child's `get_state` and
- * `get_messages`, or its saved file read without Pi. Either becomes a Snapshot only through
- * {@link snapshotOf} or {@link PiProjector.snapshot}.
+ * What Pi establishes about one session, and from where: a running child's `get_state`,
+ * `get_messages` and `get_entries`, or its saved file read without Pi. Either becomes a Snapshot
+ * only through {@link snapshotOf} or {@link PiProjector.snapshot}.
  */
-export type PiSessionFacts =
-  | {
-      readonly source: "live";
-      readonly state: RawState;
-      readonly messages: ReadonlyArray<RawMessage>;
-    }
-  | {
-      readonly source: "saved";
-      readonly state: RawState;
-      readonly messages: ReadonlyArray<RawMessage>;
-      /** Every entry in the file, on any branch: Run spend counts all of them, as Pi's totals do.
-       * A live session reads its entries incrementally instead, after its first snapshot. */
-      readonly entries: ReadonlyArray<unknown>;
-    };
+export interface PiSessionFacts {
+  readonly source: "live" | "saved";
+  readonly state: RawState;
+  readonly messages: ReadonlyArray<RawMessage>;
+  /** Every entry, on any branch: Run spend counts all of them, as Pi's totals do, and the
+   * dispatching session is recorded once in them. A live session reads later ones incrementally. */
+  readonly entries: ReadonlyArray<unknown>;
+}
 
-/** The one projection of a Pi session into a Snapshot. A live session adds its run's own state
- * (compacting only if Pi says so, nothing queued); a saved one adds its Runs' spend. */
+/** The one projection of a Pi session into a Snapshot, with its Runs' spend and the session that
+ * dispatched it. A live session adds its run's own state (compacting only if Pi says so, nothing
+ * queued). */
 const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Snapshot => {
-  const state = stateFactsOf(facts.state);
+  const state = {
+    ...stateFactsOf(facts.state),
+    subagents: new RunLedger().add(facts.entries).usage,
+    dispatchedFrom: dispatchedFromOf(facts.entries),
+  };
   return {
     state:
       facts.source === "live"
@@ -353,11 +352,7 @@ const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Sn
             isRetrying: false,
             queuedMessages: [],
           }
-        : {
-            ...state,
-            subagents: new RunLedger().add(facts.entries).usage,
-            dispatchedFrom: dispatchedFromOf(facts.entries),
-          },
+        : state,
     messages: serializeWithProjection(facts.messages, projection),
     dialogs: [],
   };
