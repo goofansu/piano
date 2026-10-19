@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RenderMsg } from "../shared/wire.ts";
+import { renderMarkdown } from "../web/src/lib/markdown.ts";
 import { displayUrl, sessionLinks } from "../web/src/lib/sessionLinks.ts";
 
 const msg = (id: string, role: RenderMsg["role"], text: string): RenderMsg => ({ id, role, text });
@@ -34,7 +35,6 @@ test("a URL inside code is not a link, and a bare URL sheds trailing punctuation
         "```",
         "fetch('https://fenced.example.com')",
         "```",
-        "    https://indented.example.com/x",
         "Then read https://example.com/guide), or (https://example.com/other).",
         "Open **http://localhost:3036/vite-dev/** and *http://faria.lvh.me:3017*.",
       ].join("\n"),
@@ -49,6 +49,32 @@ test("a URL inside code is not a link, and a bare URL sheds trailing punctuation
       "http://faria.lvh.me:3017",
     ],
   );
+});
+
+test("the Links list and the transcript agree on which text is a link", () => {
+  const hrefs = (text: string) =>
+    [...renderMarkdown(text).matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]);
+  for (const [text, urls] of [
+    [
+      "- Fixes:\n    - [the PR](https://example.com/pr) and https://github.com/a/b/pull/7",
+      ["https://example.com/pr", "https://github.com/a/b/pull/7"],
+    ],
+    ["1. Step\n\n    See [docs](https://example.com/docs)", ["https://example.com/docs"]],
+    ["~~~\nhttps://github.com/a/b/pull/8\n~~~", ["https://github.com/a/b/pull/8"]],
+    [
+      "```\nhttps://github.com/a/b/pull/9\n```\nhttps://github.com/a/b/pull/10",
+      ["https://github.com/a/b/pull/10"],
+    ],
+    ["See **https://github.com/a/b/pull/7** now", ["https://github.com/a/b/pull/7"]],
+    ["![shot](https://example.com/a.png)", []],
+  ] as const) {
+    assert.deepEqual(hrefs(text), urls, text);
+    assert.deepEqual(
+      sessionLinks([msg("a1", "assistant", text)]).map((l) => l.url),
+      urls,
+      text,
+    );
+  }
 });
 
 test("a link's label is its markdown text, else GitHub's compact name; a non-web link is skipped", () => {

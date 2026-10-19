@@ -4,7 +4,7 @@
  * lockfile and error-text URLs nobody means to revisit.
  */
 import type { RenderMsg } from "../../../shared/wire.ts";
-import { githubLabel } from "./markdown.ts";
+import { githubLabel, markdownLinks } from "./markdown.ts";
 
 export interface SessionLink {
   url: string;
@@ -13,16 +13,6 @@ export interface SessionLink {
   /** The message that mentions it last. */
   messageId: string;
 }
-
-/** Fenced blocks (an open one runs to the end), then indented and inline code: never links. */
-const FENCE = /```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)/g;
-const CODE = /^(?: {4}|\t).*$|`[^`\n]+`/gm;
-/** A markdown link, an autolink, or a bare URL; the same shapes `renderMarkdown` links. */
-const LINK =
-  /\[([^\]\n]*)\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g;
-const WEB = /^https?:\/\//;
-/** Punctuation that ends the sentence, not the URL; `*` is a bold or italic marker around it. */
-const TRAILING = /[.,!?;:)'"\]*]+$/;
 
 /** The URL as a list shows it: no scheme, no "www.", no trailing slash, so what differs is in view. */
 export function displayUrl(url: string): string {
@@ -49,17 +39,11 @@ export function sessionLinks(messages: ReadonlyArray<RenderMsg>): SessionLink[] 
     if (message.role !== "user" && message.role !== "assistant") continue;
     if (!message.text.includes("http")) continue;
     const found: SessionLink[] = [];
-    for (const match of message.text.replace(FENCE, " ").replace(CODE, " ").matchAll(LINK)) {
-      const [whole, text, href, autolink] = match;
-      let url: string;
-      let label: string | undefined;
-      if (href !== undefined) {
-        if (!WEB.test(href)) continue;
-        url = href;
-        label = text?.trim() && text.trim() !== href ? text.trim() : undefined;
-      } else url = autolink ?? whole.replace(TRAILING, "");
-      label ??= githubLabel(url);
-      found.push({ url, ...(label ? { label } : {}), messageId: message.id });
+    // Every link the transcript recognizes, plus the bare URLs it leaves undecorated and unlinked.
+    for (const link of markdownLinks(message.text)) {
+      const text = link.label?.trim();
+      const label = (text && text !== link.url ? text : undefined) ?? githubLabel(link.url);
+      found.push({ url: link.url, ...(label ? { label } : {}), messageId: message.id });
     }
     const fresh = found.filter((link) => {
       if (seen.has(link.url)) return false;
