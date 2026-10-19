@@ -295,9 +295,6 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.exeDevEnvironment, () =>
       Effect.flatMap(ExeDev, (exe) => exe.detected).pipe(Effect.map((detected) => ({ detected }))),
     );
-    yield* serve(Endpoints.integrationsSettings, () =>
-      Effect.flatMap(Notifications, (notifications) => notifications.state()),
-    );
     yield* serve(Endpoints.changeIntegrationsSettings, ({ body }) =>
       Effect.flatMap(Notifications, (notifications) => notifications.change(body)),
     );

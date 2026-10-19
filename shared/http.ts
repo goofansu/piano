@@ -318,15 +318,6 @@ export const Endpoints = {
     noStore: true,
     fallback: "Could not detect exe.dev.",
   }),
-  integrationsSettings: endpoint({
-    method: "GET",
-    path: "/api/settings/integrations",
-    response: NotificationSettings,
-    noStore: true,
-    refused: 409,
-    redact: false,
-    fallback: "Could not load notifications.",
-  }),
   changeIntegrationsSettings: endpoint({
     method: "POST",
     path: "/api/settings/integrations",
