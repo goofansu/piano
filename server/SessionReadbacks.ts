@@ -26,6 +26,11 @@ export interface SessionReadbacksOptions {
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
   /** Moves with every Pi record received; a readback it moved during may already be stale. */
   readonly observationVersion: () => number;
+  /** Records fully projected, not merely received. Drain only outside the publication lock. */
+  readonly processedVersion: () => number;
+  readonly drain: Effect.Effect<void, PiSessionError>;
+  /** No started message is still waiting for its end event. Checked under the lock. */
+  readonly contextReady: () => boolean;
   /** Pi's current context as the event replacing projected history; called under the lock. */
   readonly context: (messages: ReadonlyArray<RawMessage>) => SessionEvent;
   readonly publication: SessionPublication;
@@ -60,6 +65,9 @@ export const makeSessionReadbacks = ({
   scope,
   read,
   observationVersion,
+  processedVersion,
+  drain,
+  contextReady,
   context,
   publication,
   entries: opening,
@@ -67,6 +75,7 @@ export const makeSessionReadbacks = ({
   const factVersions = { model: 0, thinkingLevel: 0, sessionName: 0, sessionFile: 0 };
   let statsVersion = 0;
   let contextVersion = 0;
+  let contextPending = false;
   let operationVersion = 0;
   const { announced, patchState } = publication;
   // A readback started before a published change keeps the newer model, effort, name and file.
@@ -168,29 +177,50 @@ export const makeSessionReadbacks = ({
    * This is not historical replay or the phase-5 transport sequencing contract. */
   const refreshContext = Effect.gen(function* () {
     const version = ++contextVersion;
-    for (let attempt = 0; attempt < contextAttempts; attempt++) {
-      const outputVersion = observationVersion();
-      const messages = yield* read(piReadbacks.messages);
-      if (version !== contextVersion || announced()) return;
-      const applied = yield* publication.transaction((transaction) =>
-        Effect.gen(function* () {
-          if (version !== contextVersion || outputVersion !== observationVersion() || announced())
-            return false;
-          yield* transaction.publish(context(messages));
-          return true;
-        }),
-      );
-      if (applied) return yield* patchState({ projectionError: undefined });
-    }
-    yield* patchState({
-      projectionError:
+    contextPending = false;
+    const failed = (detail: string) =>
+      patchState(() => {
+        if (version !== contextVersion || announced()) return {};
+        contextPending = true;
+        return { projectionError: detail };
+      });
+    yield* Effect.gen(function* () {
+      for (let attempt = 0; attempt < contextAttempts; attempt++) {
+        yield* drain;
+        const outputVersion = observationVersion();
+        const messages = yield* read(piReadbacks.messages);
+        // Pi installs finalized agent history before awaiting message_end extension handlers.
+        // Even a drained, unchanged output watermark is not sufficient during an active run.
+        const state = yield* read(piReadbacks.state);
+        if (version !== contextVersion || announced()) return;
+        const applied = yield* publication.transaction((transaction) =>
+          Effect.gen(function* () {
+            if (
+              version !== contextVersion ||
+              outputVersion !== observationVersion() ||
+              outputVersion !== processedVersion() ||
+              !contextReady() ||
+              state.isStreaming ||
+              announced()
+            )
+              return false;
+            yield* transaction.publish(context(messages));
+            yield* transaction.mergeState({ projectionError: undefined });
+            contextPending = false;
+            return true;
+          }),
+        );
+        if (applied) return;
+      }
+      yield* failed(
         "Pi context changed during refresh. This view may be stale until the next command or settled boundary.",
-    });
-  }).pipe(
-    Effect.catchTag("PiSessionError", (error) =>
-      patchState({ projectionError: `Current context refresh failed: ${error.detail}` }),
-    ),
-  );
+      );
+    }).pipe(
+      Effect.catchTag("PiSessionError", (error) =>
+        failed(`Current context refresh failed: ${error.detail}`),
+      ),
+    );
+  });
 
   const refresh = (kind: RefreshKind, operation?: ReadbackOperation): Effect.Effect<void> =>
     kind === "stats"
@@ -204,7 +234,9 @@ export const makeSessionReadbacks = ({
   const refreshing = new Set<RefreshKind>();
   const requested = new Set<RefreshKind>();
   const schedule = Effect.fnUntraced(function* (...kinds: ReadonlyArray<RefreshKind>) {
-    for (const kind of kinds) {
+    // Retry an unresolved context at the next persisted boundary, not in an unbounded loop.
+    const retry = contextPending && kinds.includes("stats") ? ["context" as const] : [];
+    for (const kind of [...kinds, ...retry]) {
       requested.add(kind);
       if (refreshing.has(kind)) continue;
       refreshing.add(kind);

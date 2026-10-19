@@ -659,6 +659,9 @@ test("INV-02/03: hung readbacks time out visibly without blocking a later dialog
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
       const s = yield* registered("hung-inspection");
+      const initialStateReads = records("hung-inspection").filter(
+        (r) => r.command === "get_state",
+      ).length;
       const silenced = yield* observe(
         s,
         (e) => e._tag === "notice" && e.message === "barrier /silence",
@@ -676,8 +679,15 @@ test("INV-02/03: hung readbacks time out visibly without blocking a later dialog
       yield* waitAudit(
         "hung-inspection",
         (rs) =>
-          rs.filter((r) => r.command === "get_state").length >= 3 &&
+          rs.filter((r) => r.command === "get_state").length >= initialStateReads + 2 &&
           rs.filter((r) => r.command === "get_session_stats").length >= 2,
+      );
+      yield* TestClock.adjust(1000);
+      // The handled command also reconciles context. Its fresh activity read must time out
+      // independently; a previous state timeout is not evidence that this query has completed.
+      yield* waitAudit(
+        "hung-inspection",
+        (rs) => rs.filter((r) => r.command === "get_state").length >= initialStateReads + 4,
       );
       yield* TestClock.adjust(1000);
       yield* Fiber.join(command);
