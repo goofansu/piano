@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
@@ -33,6 +41,31 @@ function fixture(t: TestContext) {
     );
   return { repo, git, gitInput, preview };
 }
+test("ignored files: internal directory aliases share identity without poisoning Git's ignore query", async (t) => {
+  const { repo } = fixture(t);
+  mkdirSync(join(repo, "src"));
+  writeFileSync(join(repo, "src/a.ts"), "export const a = 1;\n");
+  symlinkSync("src", join(repo, "alias"));
+  writeFileSync(join(repo, ".gitignore"), "*.log\n");
+  writeFileSync(join(repo, "build.log"), "ignored output\n");
+  const observation = await Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* (yield* WorkspaceChanges).ignored({ id: "scratch", folder: repo, path: repo }, [
+        "src/a.ts",
+        "alias/a.ts",
+        "build.log",
+      ]);
+    }).pipe(Effect.provide(WorkspaceChangesLive)),
+  );
+  assert.deepEqual(observation.result, {
+    status: "ready",
+    ignored: ["build.log"],
+    outside: [],
+    inside: ["src/a.ts", "alias/a.ts", "build.log"],
+    placed: ["src/a.ts", "src/a.ts", "build.log"],
+  });
+});
+
 function ready(value: Observation) {
   assert.equal(value.result.status, "ready", JSON.stringify(value.result));
   if (value.result.status !== "ready") throw new Error("Preview failed");

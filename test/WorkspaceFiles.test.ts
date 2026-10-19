@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Effect } from "effect";
-import { readWorkspaceFile } from "../server/WorkspaceFiles.ts";
+import { place, readWorkspaceFile } from "../server/WorkspaceFiles.ts";
 
 test("workspace file reads are bounded and never fall back to a neighboring workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "piano-files-"));
@@ -89,6 +89,57 @@ test("workspace file reads are bounded and never fall back to a neighboring work
     await assert.rejects(read("program.md"), /not supported/);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("placement resolves directory aliases but preserves leaf symlinks and bounded reads", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "piano-placement-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const repo = join(root, "repo");
+  const alias = join(root, "root-alias");
+  const outside = join(root, "outside");
+  await mkdir(join(repo, "src"), { recursive: true });
+  await mkdir(outside);
+  await writeFile(join(repo, "src/a.ts"), "export const a = 1;\n");
+  await writeFile(join(outside, "secret"), "not workspace content\n");
+  await symlink(repo, alias);
+  await symlink("src", join(repo, "alias"));
+  await symlink(outside, join(repo, "external"));
+  await symlink("a.ts", join(repo, "src/leaf.ts"));
+  await symlink(join(outside, "secret"), join(repo, "src/external-leaf"));
+  await symlink("missing", join(repo, "src/dangling-leaf"));
+
+  for (const workspacePath of [repo, alias]) {
+    const workspace = { id: "scratch", folder: repo, path: workspacePath };
+    for (const path of [
+      "src/a.ts",
+      "alias/a.ts",
+      join(repo, "alias/a.ts"),
+      join(alias, "alias/a.ts"),
+    ])
+      assert.equal(await place(workspace, path), "src/a.ts", path);
+    assert.equal(await place(workspace, "alias/not-yet/deleted.ts"), "src/not-yet/deleted.ts");
+    assert.equal(await place(workspace, "missing/child.ts"), "missing/child.ts");
+    assert.equal(await place(workspace, "external/secret"), undefined);
+    assert.equal(await place(workspace, "external/not-yet/file"), undefined);
+    assert.equal(await place(workspace, "../outside/secret"), undefined);
+    for (const leaf of ["leaf.ts", "external-leaf", "dangling-leaf"])
+      assert.equal(await place(workspace, `alias/${leaf}`), `src/${leaf}`);
+
+    const read = (path: string) =>
+      Effect.runPromise(
+        readWorkspaceFile(workspace, path).pipe(
+          Effect.mapError((error) => new Error(error.detail)),
+        ),
+      );
+    assert.deepEqual(await read("alias/a.ts"), await read("src/a.ts"));
+    assert.equal((await read("alias/leaf.ts")).path, "src/leaf.ts");
+    for (const path of ["external/secret", "alias/external-leaf"])
+      await assert.rejects(read(path), /inside this workspace/);
+    await assert.rejects(read("alias/dangling-leaf"), /Check the path and read permissions/);
+    await assert.rejects(read("alias/not-yet/deleted.ts"), /Check the path and read permissions/);
+    await assert.rejects(read("alias"), /regular file/);
+    await assert.rejects(read("."), /regular file/);
   }
 });
 
