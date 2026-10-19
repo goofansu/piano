@@ -1,4 +1,5 @@
 /** Node 24's WebSocket accepts Undici's options, including an explicit Origin header. */
+import { SESSION_ORIGIN, SESSION_WS_URL } from "../../shared/dispatch.ts";
 import type { SocketEnvironment } from "../../web/src/lib/ws.ts";
 
 export interface DispatchConfiguration {
@@ -10,10 +11,12 @@ export interface DispatchConfiguration {
 export function dispatchConfiguration(
   env: NodeJS.ProcessEnv = process.env,
 ): DispatchConfiguration | undefined {
-  if (!env.PIANO_SESSION_WS_URL || !env.PIANO_SESSION_ORIGIN) return undefined;
+  const wsUrl = env[SESSION_WS_URL];
+  const configured = env[SESSION_ORIGIN];
+  if (!wsUrl || !configured) return undefined;
   try {
-    const url = new URL(env.PIANO_SESSION_WS_URL);
-    const origin = new URL(env.PIANO_SESSION_ORIGIN);
+    const url = new URL(wsUrl);
+    const origin = new URL(configured);
     if (
       !["ws:", "wss:"].includes(url.protocol) ||
       !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
@@ -23,7 +26,7 @@ export function dispatchConfiguration(
       url.search ||
       url.hash ||
       !["http:", "https:"].includes(origin.protocol) ||
-      origin.origin !== env.PIANO_SESSION_ORIGIN
+      origin.origin !== configured
     )
       return undefined;
     return { url: url.href, origin: origin.origin };
