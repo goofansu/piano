@@ -228,6 +228,34 @@ test("INV-02/05: a reattached session applies offline draft choices before its n
   );
 });
 
+test("INV-02: a pick reaches a session another client started after this one showed it stopped", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const id = (yield* started()).spec.sessionId;
+      yield* hosts.release(cwd, id);
+      const { sessions, next } = yield* client;
+      yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "B" });
+      // Another tab starts the session; this one still shows the saved snapshot.
+      yield* hosts.open({ cwd, sessionId: id });
+      yield* sessions.act(
+        "B",
+        { _tag: "prompt", text: "with my pick" },
+        { model: "fake/beta", thinkingLevel: "high" },
+      );
+      const reply = yield* next(
+        (m) =>
+          m._tag === "session" &&
+          m.event._tag === "message_end" &&
+          m.event.message.role === "assistant",
+      );
+      assert.ok(reply._tag === "session" && reply.event._tag === "message_end");
+      assert.equal(reply.event.message.model, "fake/beta");
+      assert.equal((yield* (yield* hosts.get(cwd, id))!.state).thinkingLevel, "high");
+    }),
+  );
+});
+
 test("a new-session selection shows what it creates only while it is still selected", async () => {
   await run(
     Effect.gen(function* () {
