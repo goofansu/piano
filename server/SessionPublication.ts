@@ -7,7 +7,8 @@
  * DeliveryOverflow and attaches again. Internal to PiSessions, which owns the child, the projector
  * and actions; SessionReadbacks and SessionDialogs land their work through it.
  */
-import { Effect, Ref, Semaphore, Stream } from "effect";
+import { isDeepStrictEqual } from "node:util";
+import { Effect, Fiber, Ref, Semaphore, Stream } from "effect";
 import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
 import type { Dialog, SessionEvent, SessionFrame, SessionState, Snapshot } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
@@ -30,7 +31,8 @@ const transactionBrand: unique symbol = Symbol("PublicationTransaction");
 /** Only supplied by `transaction`. Use inline: never retain it or fork work with it. */
 export interface PublicationTransaction {
   readonly [transactionBrand]: true;
-  /** Fold one event into the snapshot and send it to every subscriber. */
+  /** Fold immediately; cumulative partials coalesce before sequencing/delivery. Every other
+   * event flushes the partial first and is delivered immediately, in order. */
   readonly publish: (event: SessionEvent) => Effect.Effect<void>;
   /** Merge state fields and publish the result if anything changed, telling every
    * `onStateChange` listener first. Working or a model change makes the context figure last known. */
@@ -53,6 +55,7 @@ export interface SessionPublication {
   ) => Effect.Effect<void>;
   /** Hear every state change `mergeState` publishes, under the lock. */
   readonly onStateChange: (listener: StateChangeListener) => void;
+  /** Latest folded content, including any not-yet-published partial; no cursor or flush. */
   readonly snapshot: Effect.Effect<Snapshot>;
   readonly state: Effect.Effect<SessionState>;
   readonly dialogs: Effect.Effect<ReadonlyArray<Dialog>>;
@@ -61,7 +64,8 @@ export interface SessionPublication {
   /** Mark Pi as gone; true only for the first caller, which publishes the closure. */
   readonly announce: () => boolean;
   /** The snapshot with its cursor, then contiguous live frames until `closed`. `present` sets the
-   * snapshot's state from the retained one, under the lock. */
+   * snapshot's state from the retained one, under the lock. Pending partials flush under that
+   * same lock before attachment, so the snapshot content and cursor describe one boundary. */
   readonly subscribe: (
     present: (snapshot: Snapshot) => SessionState,
   ) => Stream.Stream<SessionFrame, DeliveryOverflow>;
@@ -84,11 +88,62 @@ export const makeSessionPublication = Effect.fn("SessionPublication.make")(funct
   const cursor = () => ({ cwd, sessionId, generation, sequence });
   const state = Effect.map(Ref.get(snapshotRef), (snapshot) => snapshot.state);
 
-  const publish = Effect.fnUntraced(function* (event: SessionEvent) {
-    yield* Ref.update(snapshotRef, (snapshot) => applySessionEvent(snapshot, event));
+  let pending: Extract<SessionEvent, { _tag: "message_update" }> | undefined;
+  let timer: Fiber.Fiber<void> | undefined;
+  let closed = false;
+
+  const deliver = Effect.fnUntraced(function* (event: SessionEvent) {
     sequence++;
     const frame: SessionFrame = { ...projectSessionEvent(event), cursor: cursor() };
     for (const subscriber of subscribers) yield* subscriber.offer(frame);
+  });
+
+  // All callers hold the publication lock. A barrier cancels the old timer, so it cannot
+  // flush a newer message early. The timer clears its own handle before calling flush.
+  const flush = Effect.fnUntraced(function* () {
+    if (timer) {
+      const previous = timer;
+      timer = undefined;
+      yield* Fiber.interrupt(previous);
+    }
+    if (!pending) return;
+    const event = pending;
+    pending = undefined;
+    yield* deliver(event);
+  });
+
+  const publish = Effect.fnUntraced(function* (event: SessionEvent) {
+    if (event._tag === "message_update") {
+      if (closed) return;
+      if (pending && pending.message.id !== event.message.id) yield* flush();
+      const snapshot = yield* Ref.get(snapshotRef);
+      // Compare the safe projection without serializing a growing prefix on every delta.
+      // This also drops thinking-only updates and repeated masked suffixes.
+      if (isDeepStrictEqual(snapshot.pending, event.message)) return;
+      yield* Ref.set(snapshotRef, applySessionEvent(snapshot, event));
+      pending = event;
+      if (!timer) {
+        // Session-owned, not tied to the caller's request fiber. There is at most one
+        // one-shot timer; every barrier (including closed on release) cancels it.
+        timer = yield* Effect.sleep("50 millis").pipe(
+          Effect.andThen(
+            locked(
+              Effect.suspend(() => {
+                timer = undefined;
+                return flush();
+              }),
+            ),
+          ),
+          Effect.interruptible,
+          Effect.forkDetach({ startImmediately: true }),
+        );
+      }
+      return;
+    }
+    yield* flush();
+    if (event._tag === "closed") closed = true;
+    yield* Ref.update(snapshotRef, (snapshot) => applySessionEvent(snapshot, event));
+    yield* deliver(event);
   });
 
   const mergeState = Effect.fnUntraced(function* (patch: Partial<SessionState>) {
@@ -130,6 +185,7 @@ export const makeSessionPublication = Effect.fn("SessionPublication.make")(funct
       Stream.unwrap(
         locked(
           Effect.gen(function* () {
+            yield* flush();
             const sub = yield* makeDelivery<SessionFrame>();
             subscribers.add(sub);
             const retained = yield* Ref.get(snapshotRef);
