@@ -28,8 +28,8 @@ process.env.PI_CODING_AGENT_DIR = join(root, "agent");
 process.env.PI_CODING_AGENT_SESSION_DIR = sessions;
 after(() => rmSync(root, { recursive: true, force: true }));
 
-const seed = (path: string, id: string, text: string) => {
-  const file = join(sessions, `${text.replaceAll(" ", "-")}.jsonl`);
+const seed = (path: string, id: string, text: string, dir = sessions) => {
+  const file = join(dir, `${text.replaceAll(" ", "-")}.jsonl`);
   writeFileSync(
     file,
     [
@@ -195,4 +195,24 @@ test("INV-01: a saved session names the session that dispatched it, from its own
   );
   const own = await run(history.peek("own", seed(cwd, "own", "own history")));
   assert.equal(own.state.dispatchedFrom, undefined);
+});
+
+test("INV-01: a relative sessionDir setting is read from the folder, as the Pi child reads it", async () => {
+  const folder = join(root, "relative");
+  const store = join(folder, ".pi", "sessions");
+  mkdirSync(store, { recursive: true });
+  writeFileSync(
+    join(folder, ".pi", "settings.json"),
+    JSON.stringify({ sessionDir: ".pi/sessions" }),
+  );
+  const file = seed(folder, "relative", "relative history", store);
+  // Only the setting names the store here; Pi would otherwise prefer the environment.
+  const previous = process.env.PI_CODING_AGENT_SESSION_DIR;
+  delete process.env.PI_CODING_AGENT_SESSION_DIR;
+  try {
+    assert.ok((await run(history.sessionIds(folder))).has("relative"));
+    assert.deepEqual(await run(history.locate("relative", [folder])), { _tag: "file", path: file });
+  } finally {
+    process.env.PI_CODING_AGENT_SESSION_DIR = previous;
+  }
 });
