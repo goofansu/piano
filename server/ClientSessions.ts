@@ -159,18 +159,16 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     yield* Deferred.await(ready);
   });
 
-  // Caller holds navigation.
-  const attachOpened = Effect.fn("ClientSessions.attachOpened")(function* <E>(
+  // Caller holds navigation and has just opened `session`.
+  const attachOpened = Effect.fn("ClientSessions.attachOpened")(function* (
     selectionId: string,
-    open: Effect.Effect<PiSession, E>,
+    session: PiSession,
   ) {
-    const session = yield* open;
     const selection = { cwd: session.spec.cwd, sessionId: session.spec.sessionId, selectionId };
     if (current(selection)) {
       selected = selection;
       yield* attachTo(session, selection);
     }
-    return session;
   });
 
   const show = Effect.fn("ClientSessions.show")(function* (selection: Selection) {
@@ -201,34 +199,40 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     );
   });
 
+  // Draft choices travel with the input. Pi took them as launch arguments if this request
+  // launched it; a session that was already running, here or in another tab, takes them as
+  // actions in order before submission. A name only names a session Pi launches.
+  const applyChoices = Effect.fn("ClientSessions.applyChoices")(function* (
+    session: PiSession,
+    start: StartOptions | undefined,
+  ) {
+    if (start?.model) yield* session.act({ _tag: "set_model", model: start.model });
+    if (start?.thinkingLevel)
+      yield* session.act({ _tag: "set_thinking_level", level: start.thinkingLevel });
+    return session;
+  });
+
   // The attached session for this selection, or the selected one started with `start`.
   const target = (selectionId: string, start: StartOptions | undefined) =>
     navigate(
       Effect.gen(function* () {
         if (!selected || selected.selectionId !== selectionId) return yield* refuse("stale");
-        if (attachment?.selectionId === selectionId) {
-          const session = attachment.session;
-          // Offline draft choices travel with the input: apply them in order before submission.
-          if (start?.model) yield* session.act({ _tag: "set_model", model: start.model });
-          if (start?.thinkingLevel)
-            yield* session.act({ _tag: "set_thinking_level", level: start.thinkingLevel });
-          return session;
-        }
+        if (attachment?.selectionId === selectionId)
+          return yield* applyChoices(attachment.session, start);
         const { cwd, sessionId } = selected;
         // Creating belongs to `create`, which registers the folder and project first.
         if (sessionId === null) return yield* refuse("no_session");
         if (!start) return yield* refuse("not_running");
         // A start reaches browsers as a `hosts` update.
-        return yield* attachOpened(
-          selectionId,
-          hosts.open({
-            cwd,
-            sessionId,
-            model: start.model,
-            thinkingLevel: start.thinkingLevel,
-            name: start.name,
-          }),
-        );
+        const { session, launched } = yield* hosts.start({
+          cwd,
+          sessionId,
+          model: start.model,
+          thinkingLevel: start.thinkingLevel,
+          name: start.name,
+        });
+        yield* attachOpened(selectionId, session);
+        return launched ? session : yield* applyChoices(session, start);
       }),
     );
 
@@ -284,7 +288,9 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     selectionId: string,
     { text, attachments, ...spec }: CreateSessionRequest,
   ) {
-    const session = yield* navigate(attachOpened(selectionId, hosts.create(spec)));
+    const session = yield* navigate(
+      hosts.create(spec).pipe(Effect.tap((session) => attachOpened(selectionId, session))),
+    );
     const trimmed = text?.trim() ?? "";
     if (!trimmed && !attachments?.length) return;
     // Sent only once this client has attached, so it observes the prompt.

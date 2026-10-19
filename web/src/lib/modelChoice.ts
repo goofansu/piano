@@ -77,7 +77,8 @@ export const emptyChoice = (target: ModelTarget): HeldChoice => ({
  * The picker for `target`, given what it holds; a pick made for another target is dropped. While
  * the session cannot take input (`ready` false), or once anything is picked, a session counts as
  * unhosted: the choice stays local through reconnect and travels in the next prompt's start
- * options, which the server applies before submitting, instead of a set_model racing reconnect.
+ * options, which the server applies before submitting, whether that prompt starts Pi or finds it
+ * already running, instead of a set_model racing reconnect.
  */
 export function modelChoice(
   held: HeldChoice,
