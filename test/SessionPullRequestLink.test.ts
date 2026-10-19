@@ -20,8 +20,8 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const URL = "https://github.com/example/repo/pull/42";
 const registered: SessionPullRequestLink = { url: URL, source: "manual" };
-const unlinked: SessionPullRequest = { link: null, pullRequest: null, discovery: true };
-const linked: SessionPullRequest = { link: registered, pullRequest: null, discovery: true };
+const unlinked: SessionPullRequest = { link: null, pullRequest: null };
+const linked: SessionPullRequest = { link: registered, pullRequest: null };
 
 /** Piano's PR endpoint, answered by the test one request at a time. */
 function server() {
@@ -162,7 +162,7 @@ test("background reads never reset an edit in progress", async () => {
   await settle();
   pr.edit();
   pr.activity(true);
-  pi.last().resolve({ ...linked, discovery: false });
+  pi.last().resolve(linked);
   await settle();
   pr.activity(false);
   pi.last().reject(new Error("rate limited"));

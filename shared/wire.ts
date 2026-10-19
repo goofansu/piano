@@ -755,8 +755,6 @@ export type PullRequest = typeof PullRequest.Type;
 export const SessionPullRequest = Schema.Struct({
   link: Schema.NullOr(SessionPullRequestLink),
   pullRequest: Schema.NullOr(PullRequest),
-  /** Removal disables discovery until explicitly requested again. */
-  discovery: Schema.Boolean,
   error: Schema.optional(Schema.String),
 });
 export type SessionPullRequest = typeof SessionPullRequest.Type;

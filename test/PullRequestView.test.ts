@@ -28,15 +28,11 @@ const pr = (overrides: Partial<PullRequest> = {}): PullRequest => ({
 const linked = (pullRequest: PullRequest | null): SessionPullRequest => ({
   link: { url, source: "manual" },
   pullRequest,
-  discovery: true,
 });
 
-test("no link has no view, even with discovery state", () => {
+test("no link has no view", () => {
   assert.equal(pullRequestView(undefined, now), undefined);
-  assert.equal(
-    pullRequestView({ link: null, pullRequest: null, discovery: false }, now),
-    undefined,
-  );
+  assert.equal(pullRequestView({ link: null, pullRequest: null }, now), undefined);
 });
 
 test("a link whose GitHub status is unavailable is named from its URL", () => {
@@ -116,7 +112,6 @@ test("the trigger names the PR by number with its status, else reads as PR", () 
   const unnamed: SessionPullRequest = {
     link: { url: "https://github.com/", source: "manual" },
     pullRequest: null,
-    discovery: true,
   };
   assert.deepEqual(pullRequestTrigger(pullRequestView(unnamed, now)!), {
     label: "PR",
