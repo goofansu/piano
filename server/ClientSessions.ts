@@ -55,7 +55,7 @@ const refused = {
 const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) =>
   Effect.fail(new ActRefused({ reason, detail }));
 
-export interface ClientSessions {
+interface ClientSessions {
   /** Claims the selection at once; the returned effect loads it and shows it if it is still current. */
   readonly select: (selection: Selection) => Effect.Effect<Effect.Effect<void, PiSessionError>>;
   /**
