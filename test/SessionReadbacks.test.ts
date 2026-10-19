@@ -83,6 +83,7 @@ const harness = Effect.gen(function* () {
         assert.equal(read.type, type);
         return read;
       }),
+    nextRead: Queue.take(reads),
     pending: Queue.size(reads),
     answer: (read: PendingRead, raw: unknown) => Deferred.succeed(read.reply, raw),
   };
@@ -161,6 +162,7 @@ test("a context raced by Pi output is read three times, then becomes a projectio
       const pi = yield* harness;
       const refresh = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
       for (let attempt = 0; attempt < 3; attempt++) {
+        yield* pi.answer(yield* pi.next("get_state"), rawState({}));
         const read = yield* pi.next("get_messages");
         pi.output();
         yield* pi.answer(read, { messages: [] });
@@ -176,6 +178,7 @@ test("a context raced by Pi output is read three times, then becomes a projectio
 
       // The next unraced readback publishes the context and clears the error.
       const retry = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
+      yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* Fiber.join(retry);
@@ -191,7 +194,9 @@ test("unchanged received output cannot certify a context while records remain un
       const pi = yield* harness;
       pi.buffer();
       const refresh = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
+      yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
+      yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       const retry = yield* pi.next("get_messages");
       assert.equal(
@@ -208,11 +213,63 @@ test("unchanged received output cannot certify a context while records remain un
   );
 });
 
+for (const activeAt of ["preflight", "post-read"]) {
+  test(`active ${activeAt} defers without retrying, then a stats boundary recovers pending context`, async () => {
+    await run(
+      Effect.gen(function* () {
+        const pi = yield* harness;
+        yield* pi.readbacks.schedule("context", "context");
+        yield* pi.answer(
+          yield* pi.next("get_state"),
+          rawState({ isStreaming: activeAt === "preflight" }),
+        );
+        if (activeAt === "post-read") {
+          // Pi can start after preflight, before agent_start reaches Piano: no output
+          // watermark moves here. Only the retained post-read state check prevents publication.
+          yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
+          yield* pi.answer(yield* pi.next("get_state"), rawState({ isStreaming: true }));
+        }
+        while (!pi.readbacks.idle()) yield* Effect.yieldNow;
+        assert.equal(yield* pi.pending, 0, "activity does not spend three snapshot attempts");
+        assert.equal(yield* pi.contextLanded, false);
+        assert.equal((yield* pi.state).projectionError, undefined);
+
+        // No explicit context request: the pending intent must survive until this boundary.
+        yield* pi.readbacks.schedule("stats");
+        for (let i = 0; i < 5; i++) {
+          const read = yield* pi.nextRead;
+          switch (read.type) {
+            case "get_state":
+              yield* pi.answer(read, rawState({}));
+              break;
+            case "get_messages":
+              yield* pi.answer(read, { messages: [] });
+              break;
+            case "get_session_stats":
+              yield* pi.answer(read, { cost: 1 });
+              break;
+            case "get_entries":
+              yield* pi.answer(read, { entries: [] });
+              break;
+            default:
+              assert.fail(`Unexpected read: ${read.type}`);
+          }
+        }
+        while (!pi.readbacks.idle()) yield* Effect.yieldNow;
+        assert.equal(yield* pi.pending, 0);
+        assert.equal(yield* pi.contextLanded, true);
+        assert.equal((yield* pi.state).projectionError, undefined);
+      }),
+    );
+  });
+}
+
 test("requests made while a readback runs coalesce into one more run", async () => {
   await run(
     Effect.gen(function* () {
       const pi = yield* harness;
       yield* pi.readbacks.schedule("context");
+      yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       const first = yield* pi.next("get_messages");
       assert.equal(pi.readbacks.idle(), false);
       yield* pi.readbacks.schedule("context");
@@ -221,6 +278,7 @@ test("requests made while a readback runs coalesce into one more run", async () 
       yield* Effect.yieldNow;
       assert.equal(yield* pi.pending, 0, "one worker per kind: no concurrent read");
       yield* pi.answer(first, { messages: [] });
+      yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));

@@ -113,7 +113,7 @@ test("readback replies of the wrong shape surface as refresh errors and recover,
       const failed = yield* settledState((s) => s.statsRefreshError !== undefined);
       assert.equal(
         failed.projectionError,
-        "Current context refresh failed: Pi returned an invalid message history.",
+        "Current context refresh failed: Pi returned an invalid session state.",
       );
       assert.equal(
         failed.stateRefreshError,
@@ -129,6 +129,14 @@ test("readback replies of the wrong shape surface as refresh errors and recover,
       assert.equal(recovered.projectionError, undefined);
       assert.equal(recovered.stateRefreshError, undefined);
       assert.equal(recovered.cost, 1.23);
+      // Once preflight succeeds, an invalid full history must still surface and recover.
+      yield* observe(session, "/history-malformed");
+      assert.equal(
+        (yield* settledState((s) => s.projectionError !== undefined)).projectionError,
+        "Current context refresh failed: Pi returned an invalid message history.",
+      );
+      yield* observe(session, "/refresh-recover");
+      yield* settledState((s) => s.projectionError === undefined);
     }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
   );
 });
@@ -626,7 +634,12 @@ test("delivered Run usage projects from waits, results and Notifications, live a
         },
       );
 
-      yield* observe(session, "/usage-compact", (e) => e._tag === "context");
+      // A previous boundary's context can still arrive while this command starts.
+      yield* observe(
+        session,
+        "/usage-compact",
+        (e) => e._tag === "context" && e.messages[0]?.text === "Compacted",
+      );
       const after = yield* stateWhere(session, (state) => state.subagents?.total.runs === 4);
       assert.deepEqual(
         (yield* snapshot(session)).messages.flatMap((message) =>
