@@ -1,16 +1,33 @@
 /** Bundled Pi tools: dispatch through Piano, never launch or own another Pi process. */
-import { type JsonValue, Type } from "@earendil-works/pi-ai";
+import { type JsonValue, type Static, type TSchema, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
   DISPATCH_ENTRY,
   DISPATCHED_FROM_FLAG,
+  type SessionHandle,
   START_TOOL,
+  type StartArguments,
+  type StartToolResult,
   WAIT_STATUSES,
   WAIT_TOOL,
+  type WaitArguments,
+  type WaitToolResult,
 } from "../../shared/dispatch.ts";
 import { ThinkingLevel } from "../../shared/wire.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import { startSession, waitSessions } from "./SessionDispatch.ts";
+
+/** The schema one of these literals has. */
+type LiteralSchema<Value> = Value extends string ? ReturnType<typeof Type.Literal<Value>> : never;
+/** A union of the given literals. Mapping the values in place would type it as a union of none. */
+const literals = <const Values extends ReadonlyArray<string>>(
+  values: Values,
+  options?: { description: string },
+) =>
+  Type.Union(
+    values.map((value) => Type.Literal(value)) as unknown as [LiteralSchema<Values[number]>],
+    options,
+  );
 
 const Handle = Type.Object({
   cwd: Type.String(),
@@ -25,7 +42,7 @@ const Handle = Type.Object({
 const NullableString = Type.Union([Type.String(), Type.Null()]);
 const Observation = Type.Object({
   handle: Handle,
-  status: Type.Union(WAIT_STATUSES.map((value) => Type.Literal(value))),
+  status: literals(WAIT_STATUSES),
   ending: Type.Union([Type.Literal("observed"), Type.Literal("deadline"), Type.Literal("aborted")]),
   answer: NullableString,
   attribution: Type.Union([
@@ -36,6 +53,58 @@ const Observation = Type.Object({
   detail: Type.Optional(Type.String()),
   link: Type.String(),
 });
+const StartParameters = Type.Object({
+  prompt: Type.String({ minLength: 1, description: "Self-contained work brief" }),
+  cwd: Type.Optional(Type.String({ minLength: 1 })),
+  model: Type.Optional(Type.String({ minLength: 1 })),
+  thinkingLevel: Type.Optional(
+    literals(ThinkingLevel.literals, {
+      description: "Reasoning effort; choose a level supported by the selected model.",
+    }),
+  ),
+});
+const StartOutput = Type.Object({
+  cwd: Type.String(),
+  creation: Type.Union([
+    Type.Literal("created"),
+    Type.Literal("refused"),
+    Type.Literal("uncertain"),
+  ]),
+  submission: Type.String(),
+  handle: Type.Union([Handle, Type.Null()]),
+  detail: Type.Optional(Type.String()),
+  link: NullableString,
+});
+const WaitParameters = Type.Object({
+  sessions: Type.Array(Handle, { minItems: 1, maxItems: 32 }),
+  timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 60000 })),
+});
+const WaitOutput = Type.Object({ results: Type.Array(Observation) });
+
+/**
+ * The schemas describe shared/dispatch.ts's shapes to Pi; these fail the type check when they
+ * drift apart. A schema may be looser than its shape (the start output's submission is any
+ * string), but every value of the shape must fit it and both must name the same fields.
+ */
+type Describes<Schema extends TSchema, Shape> = [Shape] extends [Static<Schema>]
+  ? [keyof Shape] extends [keyof Static<Schema>]
+    ? [keyof Static<Schema>] extends [keyof Shape]
+      ? true
+      : false
+    : false
+  : false;
+type Exact<Schema extends TSchema, Shape> = [Static<Schema>] extends [Shape]
+  ? Describes<Schema, Shape>
+  : false;
+type Holds<T extends true> = T;
+export type SchemaChecks = [
+  Holds<Exact<typeof Handle, SessionHandle>>,
+  Holds<Exact<typeof Observation, WaitToolResult["results"][number]>>,
+  Holds<Exact<typeof StartParameters, StartArguments>>,
+  Holds<Describes<typeof StartOutput, StartToolResult>>,
+  Holds<Exact<typeof WaitParameters, WaitArguments>>,
+  Holds<Exact<typeof WaitOutput, WaitToolResult>>,
+];
 
 export default function pianoSessions(pi: ExtensionAPI) {
   // Registered before the configuration check, so Pi always knows the flag Piano may pass.
@@ -98,31 +167,8 @@ export default function pianoSessions(pi: ExtensionAPI) {
       ],
       description:
         "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout; use separate prepared worktrees for concurrent writing tasks. model is an optional provider/model; thinkingLevel optionally sets reasoning effort supported by that model. Omitted options use normal new-session defaults, not the parent's settings. Returns the initial prompt's disposition, a handle to pass unchanged to piano_wait_sessions, and an Open session link. Creation/admission is not completion. On uncertain delivery inspect Piano before trying again: never automatically repeat dispatch.",
-      parameters: Type.Object({
-        prompt: Type.String({ minLength: 1, description: "Self-contained work brief" }),
-        cwd: Type.Optional(Type.String({ minLength: 1 })),
-        model: Type.Optional(Type.String({ minLength: 1 })),
-        thinkingLevel: Type.Optional(
-          Type.Union(
-            ThinkingLevel.literals.map((level) => Type.Literal(level)),
-            {
-              description: "Reasoning effort; choose a level supported by the selected model.",
-            },
-          ),
-        ),
-      }),
-      outputSchema: Type.Object({
-        cwd: Type.String(),
-        creation: Type.Union([
-          Type.Literal("created"),
-          Type.Literal("refused"),
-          Type.Literal("uncertain"),
-        ]),
-        submission: Type.String(),
-        handle: Type.Union([Handle, Type.Null()]),
-        detail: Type.Optional(Type.String()),
-        link: NullableString,
-      }),
+      parameters: StartParameters,
+      outputSchema: StartOutput,
       async execute(_id, params, signal, _update, ctx) {
         if (!params.prompt.trim())
           throw new Error("A non-empty, self-contained work brief is required.");
@@ -136,7 +182,11 @@ export default function pianoSessions(pi: ExtensionAPI) {
             environment,
             observationSignal,
           );
-          return { ...result, link: result.handle ? link(result.handle.sessionId) : null };
+          const output: StartToolResult = {
+            ...result,
+            link: result.handle ? link(result.handle.sessionId) : null,
+          };
+          return output;
         });
       },
     }),
@@ -148,11 +198,8 @@ export default function pianoSessions(pi: ExtensionAPI) {
       promptSnippet: "Wait for explicitly dispatched Piano work",
       description:
         "Observe fresh work sessions using the exact handles returned by piano_start_session. Default wait 30 seconds; timeoutMs allows 1000–60000. Returns partial results with running, settled, failed, cancelled, waiting_for_input or unknown status, answer or null, and Open session links. ending=deadline is an observation limit, not child failure. Cancelling this wait never stops children. Later input, a restarted host or missing evidence may prevent attribution; inspect that session instead. Settlement does not certify task/check success, handled input may have no answer, and child completion does not automatically wake this parent.",
-      parameters: Type.Object({
-        sessions: Type.Array(Handle, { minItems: 1, maxItems: 32 }),
-        timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 60000 })),
-      }),
-      outputSchema: Type.Object({ results: Type.Array(Observation) }),
+      parameters: WaitParameters,
+      outputSchema: WaitOutput,
       async execute(_id, params, signal) {
         return invoke(signal, async (observationSignal) => {
           const results = await waitSessions(
@@ -161,9 +208,10 @@ export default function pianoSessions(pi: ExtensionAPI) {
             environment,
             observationSignal,
           );
-          return {
+          const output: WaitToolResult = {
             results: results.map((result) => ({ ...result, link: link(result.handle.sessionId) })),
           };
+          return output;
         });
       },
     }),

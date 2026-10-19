@@ -1,9 +1,15 @@
 import type { FinalOutput, RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
 import {
+  type SessionCreation,
+  type SessionHandle,
   type SessionSubmission,
   START_TOOL,
+  type StartArguments,
+  type StartToolResult,
   WAIT_TOOL,
+  type WaitArguments,
   type WaitStatus,
+  type WaitToolResult,
 } from "../../../shared/dispatch.ts";
 import { abbrevHome, stripAnsi, toolArgsText } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
@@ -217,6 +223,66 @@ const OBSERVED: Record<WaitStatus, [status: string, badge: Badge]> = {
   unknown: ["Unknown", "warning"],
 };
 
+/**
+ * A dispatch tool's JSON as a saved session gives it back: the shared shape, but any field may be
+ * missing, so an older or damaged record renders what it can. Each reader keeps a field only when
+ * it has the right kind, and spells its name through the shared type, so a renamed field fails
+ * the type check here instead of emptying the row.
+ */
+type Recovered<T> = {
+  readonly [K in keyof T]?: NonNullable<T[K]> extends ReadonlyArray<infer E>
+    ? Recovered<E>[]
+    : NonNullable<T[K]> extends object
+      ? Recovered<NonNullable<T[K]>>
+      : T[K];
+};
+const oneOf = <T extends string>(names: Record<T, unknown>, value: unknown): T | undefined =>
+  typeof value === "string" && Object.hasOwn(names, value) ? (value as T) : undefined;
+const creationOf = (value: unknown): SessionCreation | undefined =>
+  value === "created" || value === "refused" || value === "uncertain" ? value : undefined;
+const handleOf = (value: unknown): Recovered<SessionHandle> => ({
+  sessionId: stringOf(recordOf(value)?.sessionId),
+});
+const startArgumentsOf = (args: string | undefined): Recovered<StartArguments> | undefined => {
+  const a = parsed(args);
+  return a && { prompt: stringOf(a.prompt) };
+};
+const waitArgumentsOf = (args: string | undefined): Recovered<WaitArguments> | undefined => {
+  const a = parsed(args);
+  return a && { sessions: Array.isArray(a.sessions) ? a.sessions.map(handleOf) : [] };
+};
+/** Undefined when the output is not the tool's JSON (a refused brief). */
+const startResultOf = (text: string | undefined): Recovered<StartToolResult> | undefined => {
+  const r = parsed(text);
+  return (
+    r && {
+      creation: creationOf(r.creation),
+      submission: oneOf(SUBMISSION, r.submission),
+      handle: handleOf(r.handle),
+      detail: stringOf(r.detail),
+    }
+  );
+};
+/** Undefined when the output is not the tool's JSON. */
+const waitResultOf = (text: string | undefined): Recovered<WaitToolResult> | undefined => {
+  const r = parsed(text);
+  return (
+    r && {
+      results: (Array.isArray(r.results) ? r.results : []).map(
+        (value): Recovered<WaitToolResult["results"][number]> => {
+          const observation = recordOf(value);
+          return {
+            handle: handleOf(observation?.handle),
+            status: oneOf(OBSERVED, observation?.status),
+            answer: stringOf(observation?.answer),
+            detail: stringOf(observation?.detail),
+          };
+        },
+      ),
+    }
+  );
+};
+
 /** The briefs of every session this transcript dispatched, so a wait can name what it waits on. */
 function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, string> {
   const briefs = new Map<string, string>();
@@ -224,11 +290,11 @@ function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, string>
   for (const m of messages) {
     for (const call of m.toolCalls ?? [])
       if (call.name === START_TOOL) {
-        const brief = stringOf(parsed(call.args)?.prompt);
+        const brief = startArgumentsOf(call.args)?.prompt;
         if (brief) calls.set(call.id, brief);
       }
     const brief = m.role === "tool_result" && m.toolCallId ? calls.get(m.toolCallId) : undefined;
-    const sessionId = stringOf(recordOf(parsed(m.text)?.handle)?.sessionId);
+    const sessionId = brief ? startResultOf(m.text)?.handle?.sessionId : undefined;
     if (brief && sessionId) briefs.set(sessionId, brief);
   }
   return briefs;
@@ -243,61 +309,56 @@ function dispatchFacts(
   briefs: ReadonlyMap<string, string>,
 ): DispatchFacts[] | undefined {
   if (call.name !== START_TOOL && call.name !== WAIT_TOOL) return undefined;
-  const args = parsed(call.args);
   const settled = outcome === "done" || outcome === "failed";
-  const result = settled ? parsed(output) : undefined;
-  if (settled && !result) return undefined;
   if (call.name === START_TOOL) {
-    const brief = stringOf(args?.prompt) ?? "";
-    const handle = recordOf(result?.handle);
-    const creation = stringOf(result?.creation);
+    const result = settled ? startResultOf(output) : undefined;
+    if (settled && !result) return undefined;
+    const brief = startArgumentsOf(call.args)?.prompt ?? "";
     const [status, badge]: [string, Badge] = !result
       ? outcome === "incomplete"
         ? ["Incomplete", "warning"]
         : ["Starting", "secondary"]
-      : creation === "refused"
+      : result.creation === "refused"
         ? ["Not started", "destructive"]
-        : creation === "created"
-          ? (SUBMISSION[result.submission as SessionSubmission] ?? ["Uncertain", "warning"])
+        : result.creation === "created" && result.submission
+          ? SUBMISSION[result.submission]
           : ["Uncertain", "warning"];
     return [
       {
-        sessionId: stringOf(handle?.sessionId) ?? null,
+        sessionId: result?.handle?.sessionId ?? null,
         title: messageLabel(brief) || "New session",
         status,
         badge,
         ...(call.args ? { params: toolArgsText(call.args) } : {}),
-        ...(stringOf(result?.detail) ? { detail: stringOf(result?.detail) } : {}),
+        ...(result?.detail ? { detail: result.detail } : {}),
       },
     ];
   }
-  const observed = (handle: Record<string, unknown> | undefined) => {
-    const sessionId = stringOf(handle?.sessionId) ?? null;
+  const result = settled ? waitResultOf(output) : undefined;
+  if (settled && !result) return undefined;
+  const observed = (handle: Recovered<SessionHandle> | undefined) => {
+    const sessionId = handle?.sessionId ?? null;
     return {
       sessionId,
       title: messageLabel((sessionId && briefs.get(sessionId)) || "") || "Session",
     };
   };
   if (!result) {
-    const sessions = Array.isArray(args?.sessions) ? args.sessions : [];
+    const sessions = waitArgumentsOf(call.args)?.sessions ?? [];
     return sessions.map((handle) => ({
-      ...observed(recordOf(handle)),
+      ...observed(handle),
       status: outcome === "incomplete" ? "Incomplete" : "Waiting",
       badge: outcome === "incomplete" ? ("warning" as const) : ("secondary" as const),
     }));
   }
-  const results = Array.isArray(result.results) ? result.results : [];
-  return results.map((value) => {
-    const r = recordOf(value);
-    const [status, badge] = OBSERVED[r?.status as WaitStatus] ?? ["Unknown", "warning"];
-    const answer = stringOf(r?.answer);
-    const detail = stringOf(r?.detail);
+  return (result.results ?? []).map((r) => {
+    const [status, badge] = r.status ? OBSERVED[r.status] : ["Unknown", "warning" as const];
     return {
-      ...observed(recordOf(r?.handle)),
+      ...observed(r.handle),
       status,
       badge,
-      ...(answer ? { answer } : {}),
-      ...(detail ? { detail } : {}),
+      ...(r.answer ? { answer: r.answer } : {}),
+      ...(r.detail ? { detail: r.detail } : {}),
     };
   });
 }

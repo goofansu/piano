@@ -1,6 +1,13 @@
 /// <reference lib="dom" />
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type {
+  SessionHandle,
+  StartArguments,
+  StartToolResult,
+  WaitArguments,
+  WaitToolResult,
+} from "../shared/dispatch.ts";
 import type { RenderMsg, SubagentCard, ToolExecution } from "../shared/wire.ts";
 import { messageError } from "../web/src/lib/messageError.ts";
 import {
@@ -985,7 +992,17 @@ test("a tool's output shows as text: terminal colours, hyperlink escapes and \\r
 });
 
 test("a dispatch names each session it started or waited on, with the parent's observation", () => {
-  const handle = { cwd: "/repo", sessionId: "child-1" };
+  // Typed against the shared shapes, so a field the extension renames breaks this fixture too.
+  const handle: SessionHandle = {
+    cwd: "/repo",
+    sessionId: "child-1",
+    generation: "g1",
+    submissionId: 1,
+    baselineMessages: 0,
+    baselineFingerprint: "b",
+    inputFingerprint: "i",
+    anchorMessageId: null,
+  };
   const brief = "Review the current diff.\nDo not edit files.";
   const params = `prompt:\n${brief}\nthinkingLevel: low`;
   const start: RenderMsg = {
@@ -996,7 +1013,7 @@ test("a dispatch names each session it started or waited on, with the parent's o
       {
         id: "s",
         name: "piano_start_session",
-        args: JSON.stringify({ prompt: brief, thinkingLevel: "low" }),
+        args: JSON.stringify({ prompt: brief, thinkingLevel: "low" } satisfies StartArguments),
       },
     ],
   };
@@ -1004,14 +1021,24 @@ test("a dispatch names each session it started or waited on, with the parent's o
     id: "started",
     role: "tool_result",
     toolCallId: "s",
-    text: JSON.stringify({ cwd: "/repo", creation: "created", submission: "started", handle }),
+    text: JSON.stringify({
+      cwd: "/repo",
+      creation: "created",
+      submission: "started",
+      handle,
+      link: "http://x/s/child-1",
+    } satisfies StartToolResult),
   };
   const wait: RenderMsg = {
     id: "wait",
     role: "assistant",
     text: "",
     toolCalls: [
-      { id: "w", name: "piano_wait_sessions", args: JSON.stringify({ sessions: [handle] }) },
+      {
+        id: "w",
+        name: "piano_wait_sessions",
+        args: JSON.stringify({ sessions: [handle] } satisfies WaitArguments),
+      },
     ],
   };
   const waited: RenderMsg = {
@@ -1019,8 +1046,17 @@ test("a dispatch names each session it started or waited on, with the parent's o
     role: "tool_result",
     toolCallId: "w",
     text: JSON.stringify({
-      results: [{ handle, status: "settled", answer: "No findings.", link: "http://x/s/child-1" }],
-    }),
+      results: [
+        {
+          handle,
+          status: "settled",
+          ending: "observed",
+          answer: "No findings.",
+          attribution: "attributed",
+          link: "http://x/s/child-1",
+        },
+      ],
+    } satisfies WaitToolResult),
   };
   const dispatch = (messages: RenderMsg[], id: string) =>
     reply(transcriptRows(messages), id).tools[0]?.dispatch;
