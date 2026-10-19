@@ -104,3 +104,25 @@ export function recentSessions(state: AppState): SessionEntry[] {
 export function catalogEntry(state: AppState, sessionId: string): SessionEntry | undefined {
   return entries(state).find((s) => s.sessionId === sessionId);
 }
+
+/** Where a session opens: its catalog directory and title. */
+export interface SessionDestination {
+  sessionId: string;
+  cwd: string;
+  title: string;
+}
+
+/**
+ * Whether a session can be opened, and where: the one rule every link to a session follows. A
+ * session opens when the catalog knows it and its history is there, at the catalog's directory;
+ * otherwise it is "unlisted" and nothing offers to open it.
+ */
+export function sessionDestination(
+  state: AppState,
+  sessionId: string,
+): SessionDestination | "unlisted" {
+  const entry = catalogEntry(state, sessionId);
+  return entry && !entry.disabled
+    ? { sessionId, cwd: entry.cwd, title: entry.title || "Untitled" }
+    : "unlisted";
+}

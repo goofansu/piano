@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Banner } from "@/components/Banner";
 import { Composer } from "@/components/Composer";
 import { LocalFileContext } from "@/components/Markdown";
-import { MessageList } from "@/components/MessageList";
+import { MessageList, SessionDestinationContext } from "@/components/MessageList";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { drafts, sessionDraftKey } from "@/lib/messageDraft";
-import { catalogEntry } from "@/lib/sessionCatalog";
+import { sessionDestination } from "@/lib/sessionCatalog";
 import {
   completionTarget,
   sessionActivity,
@@ -59,12 +59,9 @@ export function SessionView({ state, send }: Props) {
   );
   const { status, replyActivity } = sessionActivity(state, messagesOnly);
   const parentId = t?.state.dispatchedFrom;
-  const parent = parentId ? catalogEntry(state, parentId) : undefined;
-  const dispatchedFrom = !parentId
-    ? undefined
-    : parent && !parent.disabled
-      ? { sessionId: parentId, cwd: parent.cwd, title: parent.title || "Untitled" }
-      : ("unlisted" as const);
+  const dispatchedFrom = parentId ? sessionDestination(state, parentId) : undefined;
+  // Dispatch rows offer to open a session only where the catalog can open it.
+  const destination = (sessionId: string) => sessionDestination(state, sessionId);
   const pane = sessionPane(state);
   const notices = sessionNotices(state, messagesOnly);
   const readOnly = notices.find((n) => n.placement === "composer");
@@ -123,17 +120,19 @@ export function SessionView({ state, send }: Props) {
         >
           {pane.list && (
             <LocalFileContext value={(path) => openPanel({ kind: "file", path })}>
-              <MessageList
-                showTools={!messagesOnly}
-                messages={t?.messages ?? []}
-                pending={t?.pending ?? null}
-                submittedInput={input}
-                tools={tools}
-                activity={replyActivity}
-                working={!!t && isWorking(t.state)}
-                placeholder={pane.placeholder}
-                dispatchedFrom={dispatchedFrom}
-              />
+              <SessionDestinationContext value={destination}>
+                <MessageList
+                  showTools={!messagesOnly}
+                  messages={t?.messages ?? []}
+                  pending={t?.pending ?? null}
+                  submittedInput={input}
+                  tools={tools}
+                  activity={replyActivity}
+                  working={!!t && isWorking(t.state)}
+                  placeholder={pane.placeholder}
+                  dispatchedFrom={dispatchedFrom}
+                />
+              </SessionDestinationContext>
             </LocalFileContext>
           )}
           {pane.skeleton && <TranscriptSkeleton />}

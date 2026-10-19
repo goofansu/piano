@@ -14,6 +14,7 @@ import {
   TerminalIcon,
 } from "lucide-react";
 import {
+  createContext,
   useContext,
   useEffect,
   useId,
@@ -37,6 +38,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { abbrevHome, clamp, stripAnsi, toolArgsText } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
 import { routePath } from "@/lib/routes";
+import type { SessionDestination } from "@/lib/sessionCatalog";
 import { disclosureRow } from "@/lib/styles";
 import {
   BOTTOM_ENTRY,
@@ -55,6 +57,15 @@ import { domViewportElement } from "@/lib/transcriptViewport";
 import { NavigationContext } from "@/lib/useNavigation";
 import { useNewTranscriptViewport, useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
+/**
+ * Where a session the transcript names opens, from the session catalog (`sessionDestination`),
+ * so a dispatch row offers exactly the sessions the sidebar and palette open. Without a provider,
+ * as in module tests, no session is offered.
+ */
+export const SessionDestinationContext = createContext<
+  (sessionId: string) => SessionDestination | "unlisted"
+>(() => "unlisted");
+
 interface Props {
   messages: ReadonlyArray<RenderMsg>;
   pending: RenderMsg | null;
@@ -70,8 +81,8 @@ interface Props {
   className?: string;
   /** Show only jump-list messages and errors without changing authoritative history. */
   showTools?: boolean;
-  /** The session that dispatched this one; without a catalog entry it cannot be opened. */
-  dispatchedFrom?: { sessionId: string; cwd: string; title: string } | "unlisted";
+  /** The session that dispatched this one; "unlisted" when the catalog cannot open it. */
+  dispatchedFrom?: SessionDestination | "unlisted";
 }
 
 /**
@@ -643,7 +654,9 @@ function SubagentCardView({
 /** A session a dispatch tool started or waited on: the call's arguments, what the parent observed, and a way
  * to open it beside the header, so reaching the session never needs the row unfolded. */
 function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: ToolOutcome }) {
-  const { sessionId, cwd, title, status, badge, params, answer, detail } = session;
+  const { sessionId, title, status, badge, params, answer, detail } = session;
+  const destinationOf = useContext(SessionDestinationContext);
+  const destination = sessionId ? destinationOf(sessionId) : "unlisted";
   return (
     <FoldRow
       glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
@@ -657,7 +670,7 @@ function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: To
       canOpen={!!(params || answer || detail)}
       bodyClassName="flex flex-col gap-3"
       data={{ "data-slot": "dispatch-row", "data-session-id": sessionId ?? undefined }}
-      action={sessionId && <OpenSession cwd={cwd} sessionId={sessionId} />}
+      action={destination !== "unlisted" && <OpenSession {...destination} />}
     >
       {detail && <p className="text-xs text-ink-3">{detail}</p>}
       {params && (
@@ -685,7 +698,7 @@ function useSessionLink(cwd: string, sessionId: string) {
   };
 }
 
-function OpenSession({ cwd, sessionId }: { cwd: string; sessionId: string }) {
+function OpenSession({ cwd, sessionId }: SessionDestination) {
   const link = useSessionLink(cwd, sessionId);
   return (
     <IconButton asChild label="Open session" size="icon-xs" className="-my-1 shrink-0 text-ink-3">
@@ -712,7 +725,7 @@ function DispatchedFrom({ parent }: { parent: NonNullable<Props["dispatchedFrom"
   );
 }
 
-function ParentLink({ sessionId, cwd, title }: { sessionId: string; cwd: string; title: string }) {
+function ParentLink({ sessionId, cwd, title }: SessionDestination) {
   const link = useSessionLink(cwd, sessionId);
   // An inline link inside a sentence: no shadcn component reads as running text.
   return (
