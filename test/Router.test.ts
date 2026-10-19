@@ -316,3 +316,36 @@ test("the services refuse what Router used to: the filesystem root, an empty dir
   assert.deepEqual(providers, { status: 502, body: { error: "Could not load OAuth providers." } });
   assert.ok(!JSON.stringify(providers).includes("auth.json"));
 });
+
+test("INV-11: a listed directory's path and name round-trip, however token-like; an error's text stays redacted", async (t) => {
+  const { mkdirSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const secret = "router-identity-secret-42";
+  process.env.PIANO_ROUTER_TOKEN = secret;
+  const parent = join(server.root, "picker");
+  const names = ["sk-demo", "xoxb-bot", `x${secret}`];
+  for (const name of names) mkdirSync(join(parent, name), { recursive: true });
+  t.after(() => {
+    delete process.env.PIANO_ROUTER_TOKEN;
+    rmSync(parent, { recursive: true, force: true });
+  });
+  const listing = await reply(await post("/api/ls", JSON.stringify({ path: parent })));
+  assert.equal(listing.status, 200);
+  assert.deepEqual(
+    listing.body.entries.map((entry: { name: string; path: string }) => [entry.name, entry.path]),
+    names.map((name) => [name, join(parent, name)]).sort((a, b) => a[0].localeCompare(b[0])),
+  );
+  // The browser opens an entry by sending its path back.
+  const opened = await reply(
+    await post("/api/ls", JSON.stringify({ path: listing.body.entries[0].path })),
+  );
+  assert.equal(opened.status, 200);
+  assert.equal(opened.body.path, listing.body.entries[0].path);
+  assert.equal(opened.body.parent, parent);
+
+  const missing = await reply(
+    await post("/api/ls", JSON.stringify({ path: join(parent, "sk-missing") })),
+  );
+  assert.equal(missing.status, 400);
+  assert.ok(!JSON.stringify(missing.body).includes("sk-missing"), missing.body.error);
+});

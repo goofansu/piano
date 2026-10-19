@@ -21,8 +21,42 @@ export const isSecretName = (key: string) =>
  * string, so a projected object costs one environment scan however many strings it holds. */
 export interface DisplayRedaction {
   readonly text: (text: string, streaming?: boolean) => string;
+  /** Every string in Pi content (the transcript, an export), whatever its key. */
   readonly value: <T>(value: T) => T;
+  /** A wire value (shared/wire.ts, shared/http.ts): every string except the identities below. */
+  readonly wire: <T>(value: T) => T;
 }
+
+/**
+ * The wire fields that name a directory or file. The browser matches them against each other and
+ * sends them back (`select`, `/api/ls`, the registry's folders and sessions), so they leave
+ * verbatim: a redacted path names nothing. Within the wire vocabulary these keys never hold
+ * display text; anywhere they do, in Pi content, `value` applies instead. A path is not a secret
+ * store: one spelled like a token is shown as spelled.
+ */
+const IDENTITY_FIELDS: ReadonlySet<string> = new Set([
+  "path", // DirListing, DirEntry, FolderView, Workspace, WorktreeView/Facts, ChangeFile, FilePreview
+  "cwd", // SessionReference, SessionCursor, HostInfo, ModelCatalog, the socket's cwd envelopes
+  "folder", // Workspace, the socket's worktree messages
+  "parent", // DirListing
+  "home", // DirListing
+  "gitRoot", // DirListing
+  "currentPath", // WorktreeDiscovery
+  "sessionFile", // SessionState
+  "ignored", // WorkspaceIgnoredFiles: the paths as sent
+  "outside",
+]);
+
+const isIdentity = (field: unknown) =>
+  typeof field === "string" ||
+  (Array.isArray(field) && field.every((item) => typeof item === "string"));
+
+/** A `name` that is its object's `path`'s last segment (a folder's, a listed directory's) says
+ * nothing the path does not, so it keeps the path's spelling too. */
+const namesPath = (item: Record<string, unknown>) =>
+  typeof item.name === "string" &&
+  typeof item.path === "string" &&
+  item.name === (item.path.split("/").filter(Boolean).pop() ?? item.path);
 
 export function compileRedaction(): DisplayRedaction {
   const secrets = Object.entries(process.env)
@@ -71,16 +105,34 @@ export function compileRedaction(): DisplayRedaction {
       ) as T;
     return item;
   };
-  return { text, value };
+  const wire = <T>(item: T): T => {
+    if (typeof item === "string") return text(item) as T;
+    if (Array.isArray(item)) return item.map(wire) as T;
+    if (item && typeof item === "object") {
+      const record = item as Record<string, unknown>;
+      const named = namesPath(record);
+      return Object.fromEntries(
+        Object.entries(record).map(([key, field]) => [
+          key,
+          (IDENTITY_FIELDS.has(key) && isIdentity(field)) || (named && key === "name")
+            ? field
+            : wire(field),
+        ]),
+      ) as T;
+    }
+    return item;
+  };
+  return { text, value, wire };
 }
 
 export function redactDisplay(text: string, streaming = false): string {
   return compileRedaction().text(text, streaming);
 }
 
-/** One rule for all outbound string values, including notices, errors and snapshots. */
+/** One rule for all outbound wire values, including notices, errors and snapshots: display text
+ * is redacted, directory and file identities are not. */
 export function projectDisplay<T>(value: T): T {
-  return compileRedaction().value(value);
+  return compileRedaction().wire(value);
 }
 
 /** Session events whose payload PiRecords projected where Pi content entered: rendered messages

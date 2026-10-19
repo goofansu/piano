@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { NodeWS } from "@effect/platform-node/NodeSocket";
 
-test("INV-11: a message Pi did not produce is redacted at socket egress", {
+test("INV-11: a message Pi did not produce is redacted at socket egress; the directories it names are not", {
   timeout: 30_000,
 }, async () => {
-  const root = mkdtempSync(join(tmpdir(), "piano-egress-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-egress-")));
   const reservation = createServer();
   reservation.listen(0, "127.0.0.1");
   await once(reservation, "listening");
@@ -75,6 +75,44 @@ test("INV-11: a message Pi did not produce is redacted at socket egress", {
     const error = JSON.parse(await failed);
     assert.equal(error.message, `Not a directory: ${join(root, "[REDACTED]")}`);
     assert.ok(!received.join("\n").includes(canary), "no message carries the secret");
+
+    // A directory is an identity the browser sends back, not display text: a path that looks like
+    // a token keeps its spelling in every message naming it, while display text stays redacted.
+    const dir = join(root, "sk-demo");
+    mkdirSync(dir);
+    const messages = (tag: string) =>
+      received.map((text) => JSON.parse(text)).filter((message) => message._tag === tag);
+    ws.send(
+      JSON.stringify({
+        _tag: "create_session",
+        selectionId: "s2",
+        cwd: dir,
+        options: { name: "Release sk-abcdef123" },
+      }),
+    );
+    const titled = Date.now() + 15_000;
+    const reference = () =>
+      messages("registry")
+        .flatMap((message) => message.sessionReferences ?? [])
+        .find((session) => session.title !== undefined);
+    while (!reference() || !messages("selected").length) {
+      assert.ok(Date.now() < titled, received.join("\n"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const registry = messages("registry").at(-1);
+    assert.deepEqual(
+      registry.folders.map((folder: { path: string; name: string }) => [folder.path, folder.name]),
+      [[dir, "sk-demo"]],
+    );
+    assert.deepEqual(
+      registry.workspaces.map((workspace: { path: string }) => workspace.path),
+      [dir],
+    );
+    assert.equal(reference()?.cwd, dir);
+    assert.equal(reference()?.title, "Release [REDACTED]");
+    const selected = messages("selected")[0];
+    assert.equal(selected.cwd, dir);
+    assert.equal(selected.cursor?.cwd ?? dir, dir);
     ws.close();
   } finally {
     const exited = once(child, "exit");
