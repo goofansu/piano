@@ -185,25 +185,22 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     const { cwd, sessionId, selectionId } = selection;
     // A person opening the session is here: a completion message waiting for it is dropped.
     if (sessionId && !selection.observer) yield* notifications.touched(sessionId);
-    const running = sessionId ? yield* hosts.get(cwd, sessionId) : undefined;
-    const view = running
-      ? undefined
-      : sessionId
-        ? yield* hosts.peek(cwd, sessionId)
-        : { cwd, snapshot: emptySnapshot("") };
+    const view = sessionId
+      ? yield* hosts.read(cwd, sessionId)
+      : { _tag: "saved" as const, cwd, snapshot: emptySnapshot("") };
     yield* navigate(
       Effect.gen(function* () {
         if (!current(selection)) return;
-        if (running) return yield* attachTo(running, selection);
+        if (view._tag === "live") return yield* attachTo(view.session, selection);
         yield* detach;
         yield* send({
           _tag: "selected",
           selectionId,
           cursor: null,
-          cwd: view!.cwd,
+          cwd: view.cwd,
           sessionId,
           hosted: false,
-          snapshot: view!.snapshot,
+          snapshot: view.snapshot,
         });
       }),
     );

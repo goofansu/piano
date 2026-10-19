@@ -150,6 +150,16 @@ const registered = (sessionId: string) =>
     yield* (yield* Registry).addSession(cwd, sessionId);
     return yield* (yield* SessionHosts).open({ cwd, sessionId });
   });
+/** Assert stopped readbacks through the same boundary selection uses. */
+const saved = Effect.fn("test.saved")(function* (
+  hosts: SessionHosts["Service"],
+  cwd: string,
+  id: string,
+) {
+  const view = yield* hosts.read(cwd, id);
+  assert.ok(view._tag === "saved", "expected a stopped session's saved readback");
+  return view;
+});
 const seed = (path: string, id: string, name: string) => {
   const file = join(root, "sessions", `${name}.jsonl`);
   writeFileSync(
@@ -208,7 +218,7 @@ test("INV-01/03: last-known statistics survive host and registry restart without
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
-      const view = yield* hosts.peek(cwd, id);
+      const view = yield* saved(hosts, cwd, id);
       assert.equal(view.cwd, alias);
       assert.equal(view.snapshot.state.cost, 1.23);
       assert.deepEqual(view.snapshot.state.context, stats.contextUsage);
@@ -223,7 +233,7 @@ test("INV-01/03: last-known statistics survive host and registry restart without
         "peeking never starts Pi",
       );
       yield* (yield* Registry).addSession(cwd, "uncached-stats");
-      const unknown = (yield* hosts.peek(cwd, "uncached-stats")).snapshot.state;
+      const unknown = (yield* saved(hosts, cwd, "uncached-stats")).snapshot.state;
       assert.equal(unknown.context, undefined);
       assert.equal(unknown.cost, undefined, "no invented zero or another session's cache");
 
@@ -275,7 +285,7 @@ test("INV-01/03: last-known statistics survive host and registry restart without
       const closed = yield* observe(s, (e) => e._tag === "closed");
       process.kill(records(id).findLast((r) => r.event === "spawn")!.pid, "SIGUSR1");
       yield* Fiber.join(closed);
-      const stopped = (yield* hosts.peek(cwd, id)).snapshot.state;
+      const stopped = (yield* saved(hosts, cwd, id)).snapshot.state;
       assert.equal(stopped.cost, 0);
       assert.equal(stopped.contextIsLastKnown, true);
     }),
@@ -284,7 +294,7 @@ test("INV-01/03: last-known statistics survive host and registry restart without
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
-      const cached = (yield* hosts.peek(cwd, id)).snapshot.state;
+      const cached = (yield* saved(hosts, cwd, id)).snapshot.state;
       assert.deepEqual(cached.context, { tokens: null, contextWindow: 2000, percent: null });
       assert.equal(cached.cost, 0);
       writeFileSync(statsFile, JSON.stringify({ cost: 0 }));
@@ -296,7 +306,7 @@ test("INV-01/03: last-known statistics survive host and registry restart without
         "Pi omission clears cached context when no model/window is available",
       );
       yield* hosts.release(cwd, id);
-      assert.equal((yield* hosts.peek(cwd, id)).snapshot.state.context, undefined);
+      assert.equal((yield* saved(hosts, cwd, id)).snapshot.state.context, undefined);
     }),
     { statsFile },
   );
@@ -317,7 +327,7 @@ test("INV-01/02/06: deleted checkout history remains readable and can be archive
       // SessionReferences' tests own how a removed checkout's history is found and read.
       assert.equal(yield* hosts.get(path, "missing-archive"), undefined);
       assert.equal(
-        (yield* hosts.peek(path, "missing-archive")).snapshot.state.checkoutMissing,
+        (yield* saved(hosts, path, "missing-archive")).snapshot.state.checkoutMissing,
         true,
       );
       assert.match(
@@ -362,7 +372,7 @@ for (const removed of ["checkout", "alias"])
           /checkout no longer exists/,
         );
         assert.equal(yield* hosts.get(path, id), undefined);
-        const view = yield* hosts.peek(path, id);
+        const view = yield* saved(hosts, path, id);
         assert.equal(view.cwd, link);
         assert.equal(view.snapshot.state.checkoutMissing, true);
         assert.equal(records(id).filter((r) => r.event === "exit").length, 1);
@@ -677,7 +687,7 @@ test("INV-02/03: hung readbacks time out visibly without blocking a later dialog
       const closed = yield* observe(s, (e) => e._tag === "closed");
       process.kill(records("hung-inspection")[0].pid, "SIGUSR1");
       yield* Fiber.join(closed);
-      const view = yield* hosts.peek(cwd, "hung-inspection");
+      const view = yield* saved(hosts, cwd, "hung-inspection");
       const closure = view.snapshot.state.closure;
       assert.equal(
         closure?._tag === "exited" && closure.code,

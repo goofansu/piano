@@ -55,7 +55,8 @@ test("real Pi reopens the exact legacy alias file without moving history or invo
         assert.equal(snapshot.snapshot.messages[0].text, "LEGACY_ALIAS_HISTORY");
         assert.equal(yield* hosts.get(alias, "real-alias"), s);
         yield* hosts.release(cwd, "real-alias");
-        const view = yield* hosts.peek(alias, "real-alias");
+        const view = yield* hosts.read(alias, "real-alias");
+        assert.ok(view._tag === "saved");
         assert.equal(view.snapshot.state.sessionFile, file);
         assert.equal(view.snapshot.messages[0].text, "LEGACY_ALIAS_HISTORY");
         assert.match(readFileSync(file, "utf8"), /LEGACY_ALIAS_HISTORY/);

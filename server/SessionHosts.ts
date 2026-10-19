@@ -39,6 +39,10 @@ export interface Opened {
   readonly session: PiSession;
   readonly launched: boolean;
 }
+/** A validated live attachment target or a saved view, chosen under the ownership lock. */
+export type SessionReadback =
+  | { readonly _tag: "live"; readonly session: PiSession }
+  | { readonly _tag: "saved"; readonly cwd: string; readonly snapshot: Snapshot };
 /** A new session in a directory, which becomes a folder if it is not registered yet. */
 export interface CreateSpec {
   readonly cwd: string;
@@ -97,10 +101,12 @@ export class SessionHosts extends Context.Service<
     ) => Effect.Effect<string, PiSessionError | RegistryError>;
     /** Release keeps history and registration; it is not abort-current or archive. */
     readonly release: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
-    readonly peek: (
+    /** Resolve once under the ownership lock, returning the live session or reading its saved
+     * view before releasing ownership. Never starts Pi. */
+    readonly read: (
       cwd: string,
       sessionId: string,
-    ) => Effect.Effect<{ cwd: string; snapshot: Snapshot }, PiSessionError>;
+    ) => Effect.Effect<SessionReadback, PiSessionError>;
     /** Capture Pi's saved branch under the ownership lock, without starting a child. */
     readonly exportBranch: (
       cwd: string,
@@ -270,6 +276,26 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const get = (cwd: string, id: string) =>
         resolved(cwd, id, ({ host }) => Effect.succeed(host?.session));
 
+      const read = Effect.fn("SessionHosts.read")(function* (
+        cwd: string,
+        id: string,
+      ): Effect.fn.Return<SessionReadback, PiSessionError> {
+        return yield* resolved(cwd, id, ({ key, ref, host }) =>
+          Effect.gen(function* (): Effect.fn.Return<SessionReadback> {
+            if (host) return { _tag: "live", session: host.session };
+            const snapshot = yield* references.peek(ref);
+            yield* mirrorSession(registry, ref.cwd, id, {
+              sessionName: snapshot.state.sessionName,
+            });
+            return {
+              _tag: "saved",
+              cwd: ref.cwd,
+              snapshot: { ...snapshot, state: { ...snapshot.state, closure: exits.get(key) } },
+            };
+          }),
+        );
+      });
+
       // Pi is read outside the ownership lock, as input runs. `get` has already stopped a host
       // whose checkout is gone, and a query writes nothing, so the checkout is not re-checked.
       const commands = Effect.fn("SessionHosts.commands")(
@@ -352,19 +378,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         rename,
         release,
         get,
-        peek: (cwd, id) =>
-          resolved(cwd, id, ({ key, ref }) =>
-            Effect.gen(function* () {
-              const snapshot = yield* references.peek(ref);
-              yield* mirrorSession(registry, ref.cwd, id, {
-                sessionName: snapshot.state.sessionName,
-              });
-              return {
-                cwd: ref.cwd,
-                snapshot: { ...snapshot, state: { ...snapshot.state, closure: exits.get(key) } },
-              };
-            }),
-          ),
+        read,
         exportBranch: (cwd, id) =>
           resolved(cwd, id, ({ ref, host }) =>
             Effect.gen(function* () {

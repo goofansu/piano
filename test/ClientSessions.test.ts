@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import fs, { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -76,6 +76,79 @@ const resultFor = (sent: ServerMessage[]) =>
   sent
     .filter((m) => m._tag === "action_result")
     .map((m) => m._tag === "action_result" && m.sessionId);
+
+test("INV-01/02: selecting saved history spends one discovery read budget without starting Pi", async (t) => {
+  const store = mkdtempSync(join(root, "selection-history-"));
+  const id = "saved-selection";
+  let discoveryBytes = 0;
+  for (const sessionId of [id, ...Array.from({ length: 8 }, (_, i) => `neighbor-${i}`)]) {
+    const contents =
+      [
+        {
+          type: "session",
+          version: 3,
+          id: sessionId,
+          cwd,
+          timestamp: "2026-10-05T00:00:00Z",
+          // Small files fit within a header read; their combined size defines a one-pass budget.
+          padding: "x".repeat(2048),
+        },
+        {
+          type: "message",
+          id: "saved",
+          parentId: null,
+          timestamp: "2026-10-05T00:00:01Z",
+          message: { role: "user", content: "Saved conversation", timestamp: 1 },
+        },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n") + "\n";
+    writeFileSync(join(store, `${sessionId}.jsonl`), contents);
+    discoveryBytes += Buffer.byteLength(contents);
+  }
+  // Observe real filesystem bytes at the selection boundary, not calls between services.
+  // Allow a little slack, but not a second directory discovery. Pi's saved-view read is sync.
+  const read = fs.read;
+  let bytes = 0;
+  t.mock.method(fs, "read", (...args: unknown[]) => {
+    const callback = args.pop() as (...result: unknown[]) => void;
+    return Reflect.apply(read, fs, [
+      ...args,
+      (...result: unknown[]) => {
+        bytes += Number(result[1] ?? 0);
+        callback(...result);
+      },
+    ]);
+  });
+  const previous = process.env.PI_CODING_AGENT_SESSION_DIR;
+  process.env.PI_CODING_AGENT_SESSION_DIR = store;
+  try {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        yield* (yield* Registry).addSession(cwd, id);
+        const { sessions, next } = yield* client;
+        yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "saved" });
+        const selected = yield* next((m) => m._tag === "selected");
+        assert.ok(selected._tag === "selected" && !selected.hosted);
+        assert.deepEqual(
+          selected.snapshot.messages.map((m) => m.text),
+          ["Saved conversation"],
+        );
+        assert.deepEqual(yield* hosts.list, [], "selection must not start Pi");
+        t.diagnostic(
+          `selection discovery read ${bytes} bytes; one-pass fixture ${discoveryBytes} bytes`,
+        );
+        assert.ok(
+          bytes > 0 && bytes <= discoveryBytes + 1024,
+          `selection discovery read ${bytes} bytes; budget ${discoveryBytes + 1024}`,
+        );
+      }),
+    );
+  } finally {
+    process.env.PI_CODING_AGENT_SESSION_DIR = previous;
+  }
+});
 
 test("INV-05: a lookup that finishes after a reselect shows nothing and keeps the newer attachment", async () => {
   await run(
@@ -333,6 +406,18 @@ test("INV-02: retiring the selected session detaches before Pi stops, clears the
         sent.filter((m) => m._tag === "toast").map((m) => m._tag === "toast" && m.message),
         ["Session deleted"],
       );
+      // A stale link cannot show a retired conversation, even when archive kept its history.
+      const shown = sent.filter((m) => m._tag === "selected").length;
+      for (const [sessionId, detail] of [
+        [a.spec.sessionId, /archived/],
+        [b.spec.sessionId, /no longer registered/],
+      ] as const) {
+        const show = yield* sessions.select({ cwd, sessionId, selectionId: "retired" });
+        const result = yield* Effect.result(show);
+        assert.ok(result._tag === "Failure", "a retired selection must be refused");
+        assert.match(result.failure.detail, detail);
+      }
+      assert.equal(sent.filter((m) => m._tag === "selected").length, shown);
     }),
   );
 });
