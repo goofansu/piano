@@ -45,6 +45,8 @@ export const ToolCall = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   args: Schema.String,
+  /** Supported write/edit target, extracted before display redaction. Not proof of success. */
+  writtenPath: Schema.optional(Schema.String),
 });
 
 /** Latest cumulative usage for ONE response/result, never a streaming delta. */
@@ -219,6 +221,7 @@ export const ToolExecution = Schema.Struct({
   parentId: Schema.optional(Schema.String),
   name: Schema.String,
   args: Schema.String,
+  writtenPath: Schema.optional(Schema.String),
   text: Schema.String,
   status: Schema.Literals(["running", "success", "error", "incomplete"]),
   outputKind: Schema.Literals(["latest-update", "final", "unavailable"]),
@@ -244,6 +247,8 @@ export const RenderMsg = Schema.Struct({
   id: Schema.String,
   role: Schema.Literals(["user", "assistant", "tool_result", "context"]),
   text: Schema.String,
+  /** Process-keyed equality evidence for recorded text input, never a hash of display text. */
+  inputFingerprint: Schema.optional(Schema.String),
   attachments: Schema.optional(
     Schema.Array(Schema.Struct({ kind: Schema.Literal("image"), url: Schema.String })),
   ),
@@ -315,6 +320,10 @@ export type QueuedMessage = typeof QueuedMessage.Type;
  */
 export const PromptSubmission = Schema.Struct({
   id: Schema.Number,
+  /** Caller correlation only, never a retry/deduplication key. */
+  inputId: Schema.optional(Schema.String),
+  /** Same server-owned equality token as recorded input, before Pi transforms or redacts it. */
+  inputFingerprint: Schema.optional(Schema.String),
   outcome: Schema.Literals(["submitting", "started", "queued", "handled", "rejected", "uncertain"]),
   detail: Schema.optional(Schema.String),
 });
@@ -489,7 +498,11 @@ export type ProviderLoginState = Types.Mutable<typeof ProviderLoginState.Type>;
 
 /** Everything a browser client may do to a running session. */
 export const SessionAction = Schema.Union([
-  Schema.TaggedStruct("prompt", { text: Schema.String, attachments: attachmentInput }),
+  Schema.TaggedStruct("prompt", {
+    text: Schema.String,
+    attachments: attachmentInput,
+    inputId: Schema.optional(Schema.String),
+  }),
   Schema.TaggedStruct("steer", { text: Schema.String, attachments: attachmentInput }),
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("stop", {}),

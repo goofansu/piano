@@ -48,8 +48,8 @@ export interface SessionHandle {
   readonly baselineMessages: number;
   /** Digest of the prefix's content, not positional ids which compaction can reuse. */
   readonly baselineFingerprint: string;
-  /** Identifies the brief as the transcript shows it, even when admission arrives before its
-   * user message. */
+  /** Server-issued, process-keyed equality evidence for the raw brief (with Pi skill normalization).
+   * Empty means unavailable. Never reconstruct it from display text. */
   readonly inputFingerprint: string;
   /** The user message this prompt produced, when it arrived before the start returned. */
   readonly anchorMessageId: string | null;

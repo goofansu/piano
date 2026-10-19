@@ -8,6 +8,7 @@
  * PiSessions owns the child, locking, publication and readback scheduling; it never inspects or
  * builds a record's fields itself.
  */
+import { createHmac, randomBytes } from "node:crypto";
 import { Option, Schema } from "effect";
 import { imageType } from "../shared/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
@@ -107,6 +108,31 @@ const recordOf = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
+/** Equality evidence, not display text or a durable receipt. The key never leaves this process.
+ * Pi owns skill expansion; normalize only its command name/arguments, before redaction. Plain
+ * input stays byte-for-byte: a transformed prompt must not become equal through trimming. */
+const inputKey = randomBytes(32);
+export function inputFingerprint(text: string): string {
+  const { text: args, skill } = splitSkill(text);
+  const command = skill ? `/skill:${skill.name}${args ? ` ${args}` : ""}` : text;
+  const space = command.indexOf(" ");
+  const normalized =
+    command.startsWith("/skill:") && space !== -1
+      ? ["skill", command.slice(7, space), command.slice(space + 1).trim()]
+      : command.startsWith("/skill:")
+        ? ["skill", command.slice(7), ""]
+        : ["text", command];
+  return createHmac("sha256", inputKey).update(JSON.stringify(normalized)).digest("hex");
+}
+
+/** Only supported writing tools supply file identity; arbitrary arguments remain display text. */
+function writtenPath(name: string | undefined, args: unknown): string | undefined {
+  if (name !== "write" && name !== "edit") return undefined;
+  const fields = recordOf(args);
+  const path = fields?.path ?? fields?.file_path;
+  return typeof path === "string" && path.trim() ? path : undefined;
+}
+
 export function serializeMessage(
   id: string,
   msg: RawMessage,
@@ -119,6 +145,10 @@ export function serializeMessage(
       id,
       role: "user",
       ...splitSkill(textOf(msg.content)),
+      inputFingerprint:
+        Array.isArray(msg.content) && msg.content.some((c) => c.type !== "text")
+          ? undefined
+          : inputFingerprint(textOf(msg.content)),
       attachments: Array.isArray(msg.content)
         ? msg.content.flatMap((block) => {
             if (block.type !== "image") return [];
@@ -132,7 +162,12 @@ export function serializeMessage(
     const blocks = Array.isArray(msg.content) ? msg.content : [];
     const toolCalls = blocks
       .filter((c) => c.type === "toolCall")
-      .map((c) => ({ id: c.id ?? "", name: c.name ?? "", args: argsOf(c.arguments) }));
+      .map((c) => ({
+        id: c.id ?? "",
+        name: c.name ?? "",
+        args: argsOf(c.arguments),
+        writtenPath: writtenPath(c.name, c.arguments),
+      }));
     result = {
       id,
       role: "assistant",
@@ -159,6 +194,7 @@ export function serializeMessage(
         parentId: c.id.includes("/") ? c.id.slice(0, c.id.lastIndexOf("/")) : msg.toolCallId,
         name: c.name,
         args: argsOf(c.arguments),
+        writtenPath: writtenPath(c.name, c.arguments),
         status: c.status === "ok" ? "success" : c.status === "error" ? "error" : "incomplete",
         text: "",
         outputKind: "unavailable",
@@ -187,7 +223,7 @@ export function serializeMessage(
   else if (msg.role === "bashExecution")
     result = { id, role: "context", label: `Shell: ${msg.command ?? ""}`, text: msg.output ?? "" };
   else return null; // System declarations and thinking are outside this display scope.
-  const projected = redaction.value(result);
+  const projected = redaction.wire(result);
   if (projected.role === "assistant") projection.assistant(projected);
   return projected;
 }
@@ -232,7 +268,7 @@ interface MessageEventRecord extends PiRecord {
 }
 type Block =
   | { type: "text"; text: string }
-  | { type: "tool"; id: string; name: string; args: string };
+  | { type: "tool"; id: string; name: string; args: string; writtenPath?: string };
 
 // ── Readbacks ────────────────────────────────────────────────────────────────
 
@@ -905,6 +941,7 @@ export class PiProjector {
                 id: b.id ?? "",
                 name: b.name ?? "",
                 args: argsOf(b.arguments),
+                writtenPath: writtenPath(b.name, b.arguments),
               });
           });
         this.partial = serializeMessage(this.nextId(), event.message) ?? undefined;
@@ -949,6 +986,7 @@ export class PiProjector {
                 id: ev.toolCall.id,
                 name: ev.toolCall.name,
                 args: argsOf(ev.toolCall.arguments),
+                writtenPath: writtenPath(ev.toolCall.name, ev.toolCall.arguments),
               });
             break;
         }
@@ -974,10 +1012,14 @@ export class PiProjector {
         const ended = event.type === "tool_execution_end";
         const result = ended ? event.result : event.partialResult;
         const redaction = compileRedaction();
-        const tool: ToolExecution = redaction.value({
+        const tool: ToolExecution = redaction.wire({
           id,
           parentId: event.parentToolCallId ?? old?.parentId,
           name: event.toolName ?? old?.name ?? "",
+          writtenPath:
+            event.args === undefined
+              ? old?.writtenPath
+              : writtenPath(event.toolName ?? old?.name, event.args),
           args:
             event.args === undefined
               ? (old?.args ?? "")
@@ -1024,7 +1066,7 @@ export class PiProjector {
     if (!this.partial) return [];
     const blocks = [...this.blocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b);
     const redaction = compileRedaction();
-    this.partial = redaction.value({
+    this.partial = redaction.wire({
       ...this.partial,
       text: redaction.text(
         blocks
@@ -1034,7 +1076,16 @@ export class PiProjector {
         true,
       ),
       toolCalls: blocks.flatMap((b) =>
-        b.type === "tool" ? [{ id: b.id, name: b.name, args: redaction.text(b.args, true) }] : [],
+        b.type === "tool"
+          ? [
+              {
+                id: b.id,
+                name: b.name,
+                args: redaction.text(b.args, true),
+                writtenPath: b.writtenPath,
+              },
+            ]
+          : [],
       ),
     });
     return [{ _tag: "message_update", message: this.partial }];

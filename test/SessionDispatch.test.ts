@@ -6,12 +6,15 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { NodeServices } from "@effect/platform-node";
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import {
   type SessionHandle,
   startSession,
   waitSessions,
 } from "../extensions/piano-sessions/SessionDispatch.ts";
-import { serializeMessage } from "../server/PiRecords.ts";
+import { PiCli } from "../server/PiCli.ts";
+import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import {
   type ClientMessage,
   encodeServerMessage,
@@ -23,7 +26,60 @@ import {
 } from "../shared/wire.ts";
 import type { SocketEnvironment, SocketEvents } from "../web/src/lib/ws.ts";
 
-/** Nothing here waits on anything real; a test that does is broken, not slow. */
+/** Obtain both halves of the equality evidence through the public PiSessions seam. */
+const projected = new Map<string, Promise<{ input: RenderMsg; proof: string | undefined }>>();
+function projectionFor(prompt: string) {
+  let result = projected.get(prompt);
+  if (!result) {
+    result = Effect.runPromise(
+      Effect.gen(function* () {
+        const sessions = yield* PiSessions;
+        const session = yield* sessions.open({ cwd: process.cwd(), sessionId: "dispatch-proof" });
+        const ready = yield* Deferred.make<void>();
+        const observed = yield* session.events.pipe(
+          Stream.tap((event) =>
+            event._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+          Stream.takeUntil(
+            (event) => event._tag === "message_end" && event.message.role === "assistant",
+          ),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(ready);
+        yield* session.act({ _tag: "prompt", text: prompt });
+        yield* Fiber.join(observed);
+        const snapshot = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
+        const event = snapshot[0];
+        assert.equal(event._tag, "snapshot");
+        if (event._tag !== "snapshot") throw new Error("snapshot missing");
+        const input = event.snapshot.messages.find((m) => m.role === "user");
+        assert.ok(input);
+        return { input, proof: event.snapshot.state.submission?.inputFingerprint };
+      }).pipe(
+        Effect.timeout("5 seconds"),
+        Effect.scoped,
+        Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer))),
+        Effect.provideService(PiCli, {
+          node: process.execPath,
+          cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
+          extraArgs: [],
+        }),
+      ),
+    );
+    projected.set(prompt, result);
+  }
+  return result;
+}
+const defaultProof = (await projectionFor("do the thing")).proof;
+const withProof = (state: Partial<SessionState>) => ({
+  ...state,
+  ...(state.submission
+    ? { submission: { inputFingerprint: defaultProof, ...state.submission } }
+    : {}),
+});
+
+/** The dispatch observer uses deterministic fake sockets and clock, never model calls. */
 const bounded = { timeout: 5_000 };
 
 const asked = "/scratch/repo/";
@@ -155,13 +211,25 @@ const message = (
   role: RenderMsg["role"],
   text: string,
   over: Partial<RenderMsg> = {},
-): RenderMsg => ({ id, role, text, ...over });
+): RenderMsg => ({
+  id,
+  role,
+  text,
+  ...(role === "user"
+    ? { inputFingerprint: text === "do the thing" ? defaultProof : "different-input" }
+    : {}),
+  ...over,
+});
 
 const snapshotOf = (
   state: Partial<SessionState> = {},
   messages: ReadonlyArray<RenderMsg> = [],
   dialogs: Snapshot["dialogs"] = [],
-): Snapshot => ({ state: { sessionId, isStreaming: false, ...state }, messages, dialogs });
+): Snapshot => ({
+  state: { sessionId, isStreaming: false, ...withProof(state) },
+  messages,
+  dialogs,
+});
 
 const selected = (
   selectionId: string,
@@ -195,7 +263,15 @@ const frameOf = (
     generation: options.generation ?? "g1",
     sequence: options.sequence ?? 2,
   },
-  event,
+  event:
+    event._tag === "submission"
+      ? {
+          ...event,
+          submission: { inputId: selectionId, inputFingerprint: defaultProof, ...event.submission },
+        }
+      : event._tag === "state"
+        ? { ...event, state: { ...event.state, ...withProof(event.state) } }
+        : event,
 });
 
 const dialog = (over: Partial<Snapshot["dialogs"][number]> = {}) => ({
@@ -221,7 +297,15 @@ const handleOf = async (
   const socket = h.last();
   socket.frame(selected(socket.selection(), snapshotOf({}, baseline)));
   socket.frame(
-    frameOf(socket.selection(), { _tag: "submission", submission: { id: 1, outcome: "started" } }),
+    frameOf(socket.selection(), {
+      _tag: "submission",
+      submission: {
+        id: 1,
+        outcome: "started",
+        inputFingerprint:
+          prompt === "/compact" ? "different-input" : (await projectionFor(prompt)).proof,
+      },
+    }),
   );
   const result = await start;
   assert.ok(result.handle);
@@ -304,6 +388,35 @@ test("a start records the message Pi logged for its prompt", bounded, async () =
   const result = await start;
   assert.equal(result.handle?.anchorMessageId, "m1");
 });
+
+for (const inputId of [undefined, "another-request"]) {
+  test(
+    `a start never adopts a submission for ${inputId ?? "an unknown request"}`,
+    bounded,
+    async () => {
+      const h = world();
+      const start = startSession({ cwd, prompt: "do the thing" }, h.env);
+      h.last().accept();
+      const socket = h.last();
+      socket.frame(selected(socket.selection(), snapshotOf()));
+      socket.frame(
+        frameOf(socket.selection(), {
+          _tag: "submission",
+          submission: {
+            id: 1,
+            outcome: "started",
+            inputId,
+            inputFingerprint: defaultProof,
+          },
+        }),
+      );
+      const result = await start;
+      assert.equal(result.submission, "uncertain");
+      assert.equal(result.handle?.submissionId, null);
+      assert.equal(result.handle?.inputFingerprint, "");
+    },
+  );
+}
 
 test("a refused creation names nothing and claims nothing", bounded, async () => {
   const h = world();
@@ -464,7 +577,9 @@ test(
     socket.frame(
       socketSnapshot(
         socket,
-        idle([message("m1", "user", "/compact")], { submission: { id: 1, outcome: "handled" } }),
+        idle([message("m1", "user", "/compact")], {
+          submission: { id: 1, outcome: "handled", inputFingerprint: "different-input" },
+        }),
       ),
     );
     const [observation] = await wait;
@@ -1075,30 +1190,93 @@ const briefs = [
   {
     name: "a token-shaped value",
     brief: "do the thing with token: x",
-    sent: "do the thing with token: x",
   },
   {
     name: "a skill command",
     brief: "/skill:review  the diff ",
-    sent: '<skill name="review" location="/s/SKILL.md">\nReferences are relative to /s.\n\nRead it.\n</skill>\n\nthe diff',
   },
+  { name: "a skill with secret-shaped arguments", brief: "/skill:review token: abcdefghijklmnop" },
 ];
-for (const { name, brief, sent } of briefs) {
+for (const { name, brief } of briefs) {
   test(`a brief with ${name} is attributed as the transcript shows it`, bounded, async () => {
     const h = world();
-    const shown = serializeMessage("m1", { role: "user", content: sent });
-    assert.ok(shown);
+    const { input: shown, proof } = await projectionFor(brief);
     assert.notEqual(shown.text, brief.trim(), "the transcript does not show the brief verbatim");
     const wait = waitSessions([await handleOf([], null, brief)], undefined, h.env);
     h.last().accept();
     h.last().frame(
-      socketSnapshot(h.last(), idle([shown, message("m2", "assistant", "the thing is done")])),
+      socketSnapshot(
+        h.last(),
+        idle([shown, message("m2", "assistant", "the thing is done")], {
+          submission: { id: 1, outcome: "started", inputFingerprint: proof },
+        }),
+      ),
     );
     const [result] = await wait;
     assert.equal(result!.attribution, "attributed", result!.detail);
     assert.equal(result!.status, "settled");
     assert.equal(result!.answer, "the thing is done");
   });
+}
+
+for (const prefix of ["do the thing with", "/skill:review"]) {
+  test(
+    `distinct raw briefs that display identically cannot share an answer: ${prefix}`,
+    bounded,
+    async () => {
+      const h = world();
+      const brief = `${prefix} token: abcdefghijklmnop`;
+      const { input: shown } = await projectionFor(`${prefix} token: otherabcdefghijklmnop`);
+      const { input: original, proof } = await projectionFor(brief);
+      assert.equal(shown.text, original.text);
+      const wait = waitSessions([await handleOf([], null, brief)], undefined, h.env);
+      h.last().accept();
+      h.last().frame(
+        socketSnapshot(
+          h.last(),
+          idle([shown, message("m2", "assistant", "wrong answer")], {
+            submission: { id: 1, outcome: "started", inputFingerprint: proof },
+          }),
+        ),
+      );
+      const [result] = await wait;
+      assert.equal(result!.answer, null);
+      assert.equal(result!.attribution, "unattributable");
+      assert.equal(result!.status, "unknown");
+    },
+  );
+}
+
+for (const missing of ["handle", "submission", "input"] as const) {
+  test(
+    `missing ${missing} equality evidence cannot attribute displayed text`,
+    bounded,
+    async () => {
+      const h = world();
+      const original = await handleOf();
+      const handle = missing === "handle" ? { ...original, inputFingerprint: "" } : original;
+      const messages = answered().map((m) =>
+        missing === "input" && m.role === "user" ? { ...m, inputFingerprint: undefined } : m,
+      );
+      const wait = waitSessions([handle], undefined, h.env);
+      h.last().accept();
+      h.last().frame(
+        socketSnapshot(
+          h.last(),
+          idle(messages, {
+            submission: {
+              id: 1,
+              outcome: "started",
+              inputFingerprint: missing === "submission" ? undefined : defaultProof,
+            },
+          }),
+        ),
+      );
+      const [result] = await wait;
+      assert.equal(result!.answer, null);
+      assert.equal(result!.attribution, "unattributable");
+    },
+  );
 }
 
 test("an empty final answer never falls back to earlier tool-use prose", bounded, async () => {

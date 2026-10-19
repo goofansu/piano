@@ -21,20 +21,22 @@ export const isSecretName = (key: string) =>
  * string, so a projected object costs one environment scan however many strings it holds. */
 export interface DisplayRedaction {
   readonly text: (text: string, streaming?: boolean) => string;
-  /** Every string in Pi content (the transcript, an export), whatever its key. */
+  /** Every string in raw Pi content (for example an export), whatever its key. */
   readonly value: <T>(value: T) => T;
   /** A wire value (shared/wire.ts, shared/http.ts): every string except the identities below. */
   readonly wire: <T>(value: T) => T;
 }
 
 /**
- * The wire fields that name a directory or file. The browser matches them against each other and
+ * The wire fields that name a directory or file, or carry opaque correlation evidence. The browser matches them against each other and
  * sends them back (`select`, `/api/ls`, the registry's folders and sessions), so they leave
  * verbatim: a redacted path names nothing. Within the wire vocabulary these keys never hold
- * display text; anywhere they do, in Pi content, `value` applies instead. A path is not a secret
+ * display text; raw Pi content uses `value`, while PiRecords' typed wire output uses `wire`. A path is not a secret
  * store: one spelled like a token is shown as spelled.
  */
 const IDENTITY_FIELDS: ReadonlySet<string> = new Set([
+  "inputFingerprint", // Opaque, process-keyed input equality evidence, never display content
+  "writtenPath", // Supported write/edit targets extracted by PiRecords before redaction
   "path", // DirListing, DirEntry, FolderView, Workspace, WorktreeView/Facts, ChangeFile, FilePreview
   "cwd", // SessionReference, SessionCursor, HostInfo, ModelCatalog, the socket's cwd envelopes
   "folder", // Workspace, the socket's worktree messages

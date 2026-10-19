@@ -14,18 +14,6 @@ export interface SessionFile {
   placed?: string;
 }
 
-const WRITING_TOOLS = new Set(["write", "edit"]);
-
-function calledPath(args: string): string | undefined {
-  try {
-    const a = JSON.parse(args) as Record<string, unknown>;
-    const path = a.path ?? a.file_path;
-    return typeof path === "string" && path.trim() ? path : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Every file a successful write or edit touched, in conversation order, each path once at its
  * latest touch. A call without a result yet, or whose result is an error, is not a touch.
@@ -43,14 +31,17 @@ export function sessionFiles(messages: ReadonlyArray<RenderMsg>): SessionFile[] 
   const groups: SessionFile[][] = [];
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]!;
-    if (message.role !== "assistant" || !message.toolCalls?.length) continue;
     const found: SessionFile[] = [];
-    for (const call of message.toolCalls) {
-      if (!WRITING_TOOLS.has(call.name)) continue;
-      if (!settled.has(call.id) || failed.has(call.id)) continue;
-      const path = calledPath(call.args);
-      if (path) found.push({ path, messageId: message.id });
-    }
+    if (message.role === "assistant")
+      for (const call of message.toolCalls ?? []) {
+        if (!settled.has(call.id) || failed.has(call.id)) continue;
+        if (call.writtenPath) found.push({ path: call.writtenPath, messageId: message.id });
+      }
+    if (message.role === "tool_result")
+      for (const call of message.nestedCalls ?? []) {
+        if (call.status === "success" && call.writtenPath)
+          found.push({ path: call.writtenPath, messageId: message.id });
+      }
     const fresh = found.filter((file) => {
       if (seen.has(file.path)) return false;
       seen.add(file.path);

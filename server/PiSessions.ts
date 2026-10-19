@@ -39,6 +39,7 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { PiHistory } from "./PiHistory.ts";
 import {
+  inputFingerprint,
   type PiExchange,
   PiProjector,
   type PiRecord,
@@ -473,8 +474,20 @@ const openSession = (spec: PiSessionSpec) =>
             aborting = undefined;
             promptOperations.add(operation);
             const id = ++submissionId;
+            const proof = action.attachments?.length ? undefined : inputFingerprint(action.text);
             const submit = (outcome: PromptSubmission["outcome"], detail?: string) =>
-              apply([{ _tag: "submission", submission: { id, outcome, detail } }]);
+              apply([
+                {
+                  _tag: "submission",
+                  submission: {
+                    id,
+                    inputFingerprint: proof,
+                    outcome,
+                    detail,
+                    inputId: action._tag === "prompt" ? action.inputId : undefined,
+                  },
+                },
+              ]);
             // Once dispatched, acknowledgement tracking belongs to the session,
             // not the browser/caller that may disconnect while Pi handles input.
             const work = Effect.gen(function* () {
