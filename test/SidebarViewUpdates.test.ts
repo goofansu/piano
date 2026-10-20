@@ -582,6 +582,8 @@ test("INV-01/05: fresh awaits availability; a lifetime during its read invalidat
       const gitUpdated = yield* nextView(view, (m) => m.folders.length === 2).pipe(
         Effect.forkChild({ startImmediately: true }),
       );
+      // Ensure a real read even when unchanged headers from the previous refresh are cached.
+      seedHistory(cwd, "new-marker");
       const held = holdHistoryRead(t);
       let freshDone = false;
       const full = yield* view.fresh.pipe(
@@ -682,7 +684,7 @@ test("INV-01/06: established-host prompts do not rescan history; a never-written
       yield* hosts.release(first, id);
       const missing = yield* nextView(view, (m) => ref(m)?.unavailable === "history");
       assert.equal(ref(missing)?.unavailable, "history");
-      assert.ok(reads > 0, "retirement did inspect the real history directory");
+      assert.ok(scans > 0, "retirement did inspect the real history directory");
       t.diagnostic(
         `retirement: ${git.calls - runs} Git runs, ${scans} history scans, ${reads} header reads`,
       );

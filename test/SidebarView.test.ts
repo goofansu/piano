@@ -159,6 +159,12 @@ test("sidebar view: sessions sort by title with untitled last, or by last activi
     [undefined, "Carol", "Zeta new", "Beta titled", "Zeta old"],
     "a tie on activity falls back to the title",
   );
+  const tied = ["Task 10", "task 2", "TASK 2", undefined, "task 1"].map((title) => ({ title }));
+  assert.deepEqual(
+    sortSessions(tied, "name"),
+    [tied[4], tied[1], tied[2], tied[0], tied[3]],
+    "numeric case-insensitive ties retain input order, with untitled last",
+  );
 });
 
 test("sidebar view: folders order by name (case-insensitive, numeric-aware) or by their latest session, empty folders last", () => {

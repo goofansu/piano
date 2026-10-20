@@ -10,8 +10,8 @@
  * caller knows and reports the one file, no file, or a conflict: distinct physical files claiming
  * the same session ID. A conflict is never resolved by choosing one.
  */
-import { createReadStream, readFileSync } from "node:fs";
-import { readdir, realpath } from "node:fs/promises";
+import { type BigIntStats, createReadStream, readFileSync } from "node:fs";
+import { readdir, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
@@ -93,63 +93,6 @@ const readHeader = async (file: string): Promise<SessionHeader | undefined> => {
   return header(pending + decoder.end()) ?? undefined;
 };
 
-const listed = Effect.fn("PiHistory.listed")(function* (cwd: string) {
-  // Match Pi's default directory encoding. Only a non-default shared store filters by header cwd;
-  // old headers in a checkout's own store may omit cwd. Never create a store while inspecting it.
-  const defaultDir = join(
-    directoryPath(agentDir()),
-    "sessions",
-    `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`,
-  );
-  const dir = sessionDirFor(cwd) ?? defaultDir;
-  const names = yield* Effect.tryPromise(() => readdir(dir)).pipe(Effect.orElseSucceed(() => []));
-  const infos = yield* Effect.forEach(
-    names.filter((name) => name.endsWith(".jsonl")),
-    (name) =>
-      Effect.tryPromise(async () => {
-        const path = join(dir, name);
-        const info = await readHeader(path);
-        if (
-          !info ||
-          (dir !== defaultDir &&
-            (typeof info.cwd !== "string" || !info.cwd || directoryPath(info.cwd) !== cwd))
-        )
-          return undefined;
-        return { id: info.id, path };
-      }).pipe(Effect.orElseSucceed(() => undefined)),
-    { concurrency: 16 },
-  );
-  return infos.filter((info) => info !== undefined);
-});
-
-const locate = Effect.fn("PiHistory.locate")(function* (
-  sessionId: string,
-  checkouts: Iterable<string>,
-): Effect.fn.Return<HistoryLocation, PiSessionError> {
-  // One physical file can be listed through several spellings; count it once.
-  const files = new Map<string, string>();
-  for (const cwd of new Set([...checkouts].map(directoryPath))) {
-    for (const info of yield* listed(cwd)) {
-      if (info.id !== sessionId) continue;
-      // A listed file must resolve; unlike a checkout it has no missing state to fall back on.
-      const physical = yield* Effect.tryPromise({
-        try: () => realpath(info.path),
-        catch: (error) => rejected(`Cannot resolve Pi history ${info.path}: ${String(error)}`),
-      });
-      files.set(physical, info.path);
-    }
-  }
-  const paths = [...files.values()];
-  return paths.length === 0
-    ? { _tag: "missing" }
-    : paths.length === 1
-      ? { _tag: "file", path: paths[0] }
-      : { _tag: "conflict", paths };
-});
-
-const sessionIds = (cwd: string): Effect.Effect<ReadonlySet<string>> =>
-  Effect.map(listed(directoryPath(cwd)), (infos) => new Set(infos.map((info) => info.id)));
-
 /** Pi parses and migrates only in memory: a persistent manager can rewrite legacy/empty files. */
 const readSession = (path: string, sessionId: string): SessionManager => {
   const entries = parseSessionEntries(readFileSync(path, "utf8"));
@@ -225,10 +168,108 @@ const exportBranch = Effect.fn("PiHistory.exportBranch")(function* (
   });
 });
 
-export const PiHistory: PiHistory = {
-  exportBranch,
-  locate,
-  sessionIds,
-  peek: (sessionId, file) =>
-    file ? peekFile(file, sessionId) : Effect.succeed(emptySnapshot(sessionId)),
+// Only discovery metadata is retained, never transcripts or arbitrary header metadata. Every
+// lookup still enumerates the store and stats each candidate: directory mtime alone cannot detect
+// in-place rewrites. ctime detects same-size rewrites with restored mtime, but even nanosecond
+// stat fields can share a filesystem clock tick. Do not cache recent writes until that tick is
+// safely past; this also keeps active/partial histories on the real-read path.
+const headerVersion = (info: BigIntStats) =>
+  [info.dev, info.ino, info.mode, info.size, info.mtimeNs, info.ctimeNs].join(":");
+const HEADER_CACHE_LIMIT = 4096;
+
+/** A disposable, bounded header cache owned by one PiSessions service. */
+export const makePiHistory = (): PiHistory => {
+  const headers = new Map<string, { version: string; info: Pick<SessionHeader, "id" | "cwd"> }>();
+  const header = async (path: string) => {
+    try {
+      const before = await stat(path, { bigint: true });
+      const version = headerVersion(before);
+      const cached = headers.get(path);
+      // Refresh insertion order for LRU eviction. A failed/unstable read never enters the cache.
+      headers.delete(path);
+      if (cached?.version === version) {
+        headers.set(path, cached);
+        return cached.info;
+      }
+      const found = await readHeader(path);
+      if (!found) return undefined;
+      const info = { id: found.id, cwd: found.cwd };
+      if (
+        before.ctimeMs < BigInt(Date.now() - 1000) &&
+        headerVersion(await stat(path, { bigint: true })) === version
+      ) {
+        headers.set(path, { version, info });
+        if (headers.size > HEADER_CACHE_LIMIT) headers.delete(headers.keys().next().value!);
+      }
+      return info;
+    } catch (error) {
+      headers.delete(path);
+      throw error;
+    }
+  };
+
+  const listed = Effect.fn("PiHistory.listed")(function* (cwd: string) {
+    // Match Pi's default directory encoding. Only a non-default shared store filters by header cwd;
+    // old headers in a checkout's own store may omit cwd. Never create a store while inspecting it.
+    const defaultDir = join(
+      directoryPath(agentDir()),
+      "sessions",
+      `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`,
+    );
+    const dir = sessionDirFor(cwd) ?? defaultDir;
+    const names = yield* Effect.tryPromise(() => readdir(dir)).pipe(Effect.orElseSucceed(() => []));
+    const infos = yield* Effect.forEach(
+      names.filter((name) => name.endsWith(".jsonl")),
+      (name) =>
+        Effect.tryPromise(async () => {
+          const path = join(dir, name);
+          const info = await header(path);
+          if (
+            !info ||
+            (dir !== defaultDir &&
+              (typeof info.cwd !== "string" || !info.cwd || directoryPath(info.cwd) !== cwd))
+          )
+            return undefined;
+          return { id: info.id, path };
+        }).pipe(Effect.orElseSucceed(() => undefined)),
+      { concurrency: 16 },
+    );
+    return infos.filter((info) => info !== undefined);
+  });
+
+  const locate = Effect.fn("PiHistory.locate")(function* (
+    sessionId: string,
+    checkouts: Iterable<string>,
+  ): Effect.fn.Return<HistoryLocation, PiSessionError> {
+    // One physical file can be listed through several spellings; count it once.
+    const files = new Map<string, string>();
+    for (const cwd of new Set([...checkouts].map(directoryPath))) {
+      for (const info of yield* listed(cwd)) {
+        if (info.id !== sessionId) continue;
+        // A listed file must resolve; unlike a checkout it has no missing state to fall back on.
+        const physical = yield* Effect.tryPromise({
+          try: () => realpath(info.path),
+          catch: (error) => rejected(`Cannot resolve Pi history ${info.path}: ${String(error)}`),
+        });
+        files.set(physical, info.path);
+      }
+    }
+    const paths = [...files.values()];
+    return paths.length === 0
+      ? { _tag: "missing" }
+      : paths.length === 1
+        ? { _tag: "file", path: paths[0] }
+        : { _tag: "conflict", paths };
+  });
+
+  const sessionIds = (cwd: string): Effect.Effect<ReadonlySet<string>> =>
+    Effect.map(listed(directoryPath(cwd)), (infos) => new Set(infos.map((info) => info.id)));
+
+  return {
+    exportBranch,
+    locate,
+    sessionIds,
+    peek: (sessionId, file) =>
+      file ? peekFile(file, sessionId) : Effect.succeed(emptySnapshot(sessionId)),
+  };
 };

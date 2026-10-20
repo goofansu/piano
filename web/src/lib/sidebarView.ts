@@ -21,8 +21,8 @@ export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
 ];
 
 /** The one name order: case-insensitive, with numbers by value ("Q2" before "Q10"). */
-export const byName = (a: string, b: string) =>
-  a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
+const nameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+export const byName = (a: string, b: string) => nameCollator.compare(a, b);
 /** ISO timestamps order as text; nothing known sorts last. */
 const latest = (times: Iterable<string | undefined>) => {
   let max = "";

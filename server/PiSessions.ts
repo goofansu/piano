@@ -37,7 +37,7 @@ import type {
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
-import { PiHistory } from "./PiHistory.ts";
+import { makePiHistory, type PiHistory } from "./PiHistory.ts";
 import {
   inputFingerprint,
   type PiExchange,
@@ -736,7 +736,7 @@ export const PiSessionsLive: Layer.Layer<PiSessions, never, ChildProcessSpawner>
       open: (spec) => openSession(spec).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
       probe: (cwd, options) =>
         probe(cwd, options).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
-      history: PiHistory,
+      history: makePiHistory(),
     });
   }),
 );

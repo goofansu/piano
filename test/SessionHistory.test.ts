@@ -6,13 +6,17 @@ import fs, {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
+  statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
@@ -48,6 +52,11 @@ const seed = (path: string, id: string, text: string, dir = sessions) => {
       .join("\n") + "\n",
   );
   return file;
+};
+// Discovery deliberately rereads files within one second of ctime: filesystem timestamps can
+// collide within a clock tick. Await that specific boundary when testing stable-file reuse.
+const settleHistoryWrite = async (file: string) => {
+  await delay(Math.max(0, statSync(file).ctimeMs + 1001 - Date.now()));
 };
 const run = Effect.runPromise;
 // Saved sessions are read through PiSessions without starting Pi.
@@ -145,6 +154,7 @@ test("INV-01: history discovery reads headers, not neighboring transcript bodies
       `${JSON.stringify({ type: "message", message: { role: "user", content: "x".repeat(1024 * 1024) } })}\n`,
     );
   }
+  await settleHistoryWrite(join(store, "large-b.jsonl"));
   // Observe actual filesystem I/O, preserving real reads and parsing. The budget is deliberately
   // much larger than the headers, but smaller than one transcript: no wall-clock threshold.
   const read = fs.read;
@@ -166,9 +176,61 @@ test("INV-01: history discovery reads headers, not neighboring transcript bodies
     assert.ok(bytes > 0 && bytes < 128 * 1024, `locating one session read ${bytes} bytes`);
     bytes = 0;
     assert.deepEqual(await run(history.sessionIds(cwd)), new Set(["small", "large-a", "large-b"]));
-    assert.ok(bytes > 0 && bytes < 128 * 1024, `listing session IDs read ${bytes} bytes`);
+    assert.equal(bytes, 0, "unchanged-store listing reuses validated headers");
+    assert.deepEqual(await run(history.locate("small", [cwd])), { _tag: "file", path: target });
+    assert.equal(bytes, 0, "unchanged-store revisits do not reread headers");
+    appendFileSync(target, "\n");
+    assert.deepEqual(await run(history.locate("small", [cwd])), { _tag: "file", path: target });
+    assert.ok(bytes > 0 && bytes < 16 * 1024, `refreshing one changed file read ${bytes} bytes`);
   } finally {
     process.env.PI_CODING_AGENT_SESSION_DIR = previous;
+  }
+});
+
+test("INV-01: warmed discovery refreshes rewrites, replacements and partial headers", async () => {
+  const folder = join(root, "changing");
+  const file = seed(folder, "before", "changing history");
+  utimesSync(file, 1000, 1000);
+  await settleHistoryWrite(file);
+  assert.deepEqual(await run(history.sessionIds(folder)), new Set(["before"]));
+  const original = readFileSync(file, "utf8");
+  const metadata = statSync(file);
+  // Same size and restored mtime must not conceal an in-place header rewrite.
+  writeFileSync(file, original.replace('"id":"before"', '"id":"after!"'));
+  utimesSync(file, metadata.atime, metadata.mtime);
+  assert.deepEqual(await run(history.locate("before", [folder])), { _tag: "missing" });
+  assert.deepEqual(await run(history.sessionIds(folder)), new Set(["after!"]));
+
+  const replacement = seed(folder, "replacement", "replacement history");
+  renameSync(replacement, file);
+  assert.deepEqual(await run(history.locate("replacement", [folder])), {
+    _tag: "file",
+    path: file,
+  });
+  assert.deepEqual(await run(history.locate("after!", [folder])), { _tag: "missing" });
+
+  writeFileSync(file, '{"type":"session"');
+  assert.deepEqual(await run(history.sessionIds(folder)), new Set());
+  appendFileSync(file, `,"version":3,"id":"completed","cwd":${JSON.stringify(folder)}}\n`);
+  assert.deepEqual(await run(history.locate("completed", [folder])), { _tag: "file", path: file });
+  // A failing read must not preserve the last good header, or poison a later successful read.
+  rmSync(file);
+  symlinkSync(join(root, "missing-target"), file);
+  assert.deepEqual(await run(history.sessionIds(folder)), new Set());
+  rmSync(file);
+  writeFileSync(file, original);
+  assert.deepEqual(await run(history.sessionIds(folder)), new Set(["before"]));
+});
+
+test("INV-01: recent same-size header rewrites are visible even within a filesystem clock tick", async () => {
+  const folder = join(root, "rapid-writes");
+  const file = seed(folder, "rapid-a", "rapid history");
+  const original = readFileSync(file, "utf8");
+  for (let i = 0; i < 20; i++) {
+    const id = i % 2 === 0 ? "rapid-a" : "rapid-b";
+    writeFileSync(file, original.replace('"rapid-a"', JSON.stringify(id)));
+    utimesSync(file, 1000, 1000);
+    assert.deepEqual(await run(history.sessionIds(folder)), new Set([id]));
   }
 });
 
