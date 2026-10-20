@@ -35,6 +35,7 @@ export interface TrustDecision {
   readonly trust: ProjectTrust;
   readonly catalog: ModelCatalog;
   readonly notice: string;
+  readonly level: "success" | "warning";
 }
 
 export class WorkspaceCommands extends Context.Service<
@@ -123,10 +124,16 @@ export const WorkspaceCommandsLive = Layer.effect(
         // Pi's resources for this directory, and so its models and commands, change for sessions
         // started from now. DirectoryFacts announces it; every client and the sidebar hear it there.
         const decision = yield* facts.setTrust(path, trusted);
+        if (decision.trust.trusted !== trusted)
+          return {
+            ...decision,
+            level: "warning" as const,
+            notice: `Pi changed this folder back to ${decision.trust.trusted ? "trusted" : "untrusted"} while reloading. Check your Pi extensions before trying again.`,
+          };
         const notice = trusted
           ? "Trusted. Sessions started from now load this folder's Pi settings and skills."
           : "Untrusted. Sessions started from now skip this folder's Pi settings and skills.";
-        return { ...decision, notice };
+        return { ...decision, notice, level: "success" as const };
       }),
 
       addWorktree: Effect.fn("WorkspaceCommands.addWorktree")(function* (folder, path) {

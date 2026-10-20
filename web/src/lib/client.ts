@@ -7,7 +7,12 @@
  */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
-import { closureNeedsAttention, focusedDirectory, sessionReady } from "./sessionContext.ts";
+import {
+  closureNeedsAttention,
+  directoryTrust,
+  focusedDirectory,
+  sessionReady,
+} from "./sessionContext.ts";
 import { readStorage, writeStorage } from "./storage.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason } from "./ws.ts";
 
@@ -87,9 +92,7 @@ export function createClient({
   let connection: Connection | null = null;
   /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
-  // A fresh focus/connection starts quietly; only later changes merit an explanation.
-  let observedTrust: boolean | undefined;
-  const manualTrust = new Map<string, boolean>();
+  const manualTrust = new Set<string>();
   const listeners = new Set<(update: ClientUpdate) => void>();
   const messageListeners = new Set<(message: ServerMessage) => void>();
 
@@ -115,8 +118,6 @@ export function createClient({
   const apply = (action: Action) => {
     const next = withNewPageDirectory(reduce(state, action));
     if (next === state) return;
-    if (!next.connected || focusedDirectory(next)?.cwd !== focusedDirectory(state)?.cwd)
-      observedTrust = undefined;
     state = next;
     askAboutFocus();
     for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
@@ -148,7 +149,7 @@ export function createClient({
       if (sessionReady(state) && state.selectionId)
         connection?.send({ ...m, selectionId: state.selectionId });
     } else {
-      if (m._tag === "set_trust") manualTrust.set(m.path, m.trusted);
+      if (m._tag === "set_trust") manualTrust.add(m.path);
       connection?.send(m);
     }
   };
@@ -171,17 +172,19 @@ export function createClient({
     const wasResync = state.resync;
     let trustNotice: string | undefined;
     if (m._tag === "trust") {
-      if (m.cwd === focusedDirectory(state)?.cwd) {
-        if (
-          m.trust.required &&
-          observedTrust !== undefined &&
-          observedTrust !== m.trust.trusted &&
-          !manualTrust.has(m.cwd)
-        )
-          trustNotice = `Pi marked this folder as ${m.trust.trusted ? "trusted" : "untrusted"}.`;
-        observedTrust = m.trust.required ? m.trust.trusted : undefined;
-      }
-      if (manualTrust.get(m.cwd) === m.trust.trusted) manualTrust.delete(m.cwd);
+      const displayed = directoryTrust(state, m.cwd);
+      if (
+        m.cwd === focusedDirectory(state)?.cwd &&
+        m.trust.required &&
+        displayed?.required &&
+        displayed.trusted !== m.trust.trusted &&
+        m.requested === undefined &&
+        !manualTrust.has(m.cwd)
+      )
+        trustNotice = `Pi marked this folder as ${m.trust.trusted ? "trusted" : "untrusted"}.`;
+      // A decision can finish with the opposite outcome if a Pi extension saves trust on reload.
+      // Only its explicit reply settles it; a concurrent probe is not an acknowledgement.
+      if (m.requested !== undefined) manualTrust.delete(m.cwd);
     }
     // Trust failures use the uncorrelated error reply; don't leave future changes suppressed.
     if (m._tag === "error" && !m.selectionId) manualTrust.clear();

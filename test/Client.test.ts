@@ -258,13 +258,50 @@ test("trust changes on screen notify once; initial results and other directories
   h.status(false);
   h.status(true);
   trust("/a", false);
-  assert.equal(h.notes.length, 2, "switching and reconnecting establish a fresh baseline");
+  assert.deepEqual(
+    h.notes.slice(2),
+    [
+      ["Pi marked this folder as untrusted.", "info"],
+      ["Pi marked this folder as trusted.", "info"],
+      ["Pi marked this folder as untrusted.", "info"],
+    ],
+    "switching and reconnecting still explain changes from the displayed value",
+  );
+});
+
+test("the first probe explains a change from the directory trust already displayed", () => {
+  const h = harness();
+  h.status(true);
+  h.server({
+    _tag: "registry",
+    folders: [
+      {
+        path: "/repo",
+        name: "repo",
+        discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
+        worktrees: [
+          {
+            path: "/a",
+            workspace: { id: "ws-a", folder: "/repo", path: "/a" },
+            branch: "feature",
+            root: false,
+            status: "current",
+            trust: { required: true, trusted: false },
+          },
+        ],
+      },
+    ],
+    projects: [],
+  });
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+  assert.deepEqual(h.notes, [["Pi marked this folder as trusted.", "info"]]);
 });
 
 test("manual trust changes keep their confirmation without an automatic-change toast", () => {
   const h = harness();
-  const trust = (trusted: boolean) =>
-    h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted } });
+  const trust = (trusted: boolean, requested?: boolean) =>
+    h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted }, requested });
   h.status(true);
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   trust(false);
@@ -273,7 +310,7 @@ test("manual trust changes keep their confirmation without an automatic-change t
   h.server({ _tag: "catalogs_invalidated" });
   trust(true); // The refresh can win the race with the explicit response.
   h.server({ _tag: "toast", level: "success", message: "Trusted." });
-  trust(true);
+  trust(true, true);
   assert.deepEqual(h.notes, [["Trusted.", "success"]]);
   trust(false);
   assert.deepEqual(h.notes[1], ["Pi marked this folder as untrusted.", "info"]);
@@ -281,6 +318,26 @@ test("manual trust changes keep their confirmation without an automatic-change t
   h.server({ _tag: "error", message: "Could not save trust" });
   trust(true);
   assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as trusted.", "info"]);
+});
+
+test("a reversed manual decision settles without duplicate or permanently suppressed notices", () => {
+  const h = harness();
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+  h.client.send({ _tag: "set_trust", path: "/a", trusted: false });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+  h.server({ _tag: "toast", level: "warning", message: "Pi changed this folder back to trusted." });
+  h.server({
+    _tag: "trust",
+    cwd: "/a",
+    trust: { required: true, trusted: true },
+    requested: false,
+  });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+  assert.deepEqual(h.notes, [["Pi changed this folder back to trusted.", "warning"]]);
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
+  assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as untrusted.", "info"]);
 });
 
 test("INV-02: a closure notifies by its kind, never by its wording", () => {

@@ -224,12 +224,12 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       // Every client hears `catalogs_invalidated`; the requesting one also gets its answers at once.
       run: (request) =>
         Effect.gen(function* () {
-          const { cwd, trust, catalog, notice } = yield* commands.setTrust(
+          const { cwd, trust, catalog, notice, level } = yield* commands.setTrust(
             request.path,
             request.trusted,
           );
-          yield* send({ _tag: "toast", level: "success", message: notice });
-          yield* send({ _tag: "trust", cwd, trust });
+          yield* send({ _tag: "toast", level, message: notice });
+          yield* send({ _tag: "trust", cwd, trust, requested: request.trusted });
           yield* send({ _tag: "models", catalog });
         }),
       unanswered: plainError,

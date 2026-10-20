@@ -361,7 +361,12 @@ test("a trust decision answers the requester with a notice, the new trust and th
         const [toast, trust, models, ...rest] = answers(from);
         assert.ok(toast?._tag === "toast" && toast.level === "success");
         assert.match(toast.message, /^Trusted\./);
-        assert.deepEqual(trust, { _tag: "trust", cwd, trust: { required: true, trusted: true } });
+        assert.deepEqual(trust, {
+          _tag: "trust",
+          cwd,
+          trust: { required: true, trusted: true },
+          requested: true,
+        });
         assert.equal(models?._tag, "models");
         assert.deepEqual(rest, []);
       }),
@@ -369,6 +374,38 @@ test("a trust decision answers the requester with a notice, the new trust and th
   } finally {
     rmSync(join(cwd, ".agents"), { recursive: true, force: true });
   }
+});
+
+test("untrust reports the final outcome when a Pi extension remembers trust again", async () => {
+  const directory = join(root, "retrust");
+  mkdirSync(join(directory, ".pi"), { recursive: true });
+  writeFileSync(join(directory, ".pi/settings.json"), "{}");
+  await run(
+    Effect.gen(function* () {
+      const facts = yield* DirectoryFacts;
+      yield* facts.catalog(directory);
+      assert.equal((yield* facts.trust(directory)).trust.trusted, true);
+      const { receive } = yield* client;
+      const from = sent.length;
+      yield* yield* receive({ _tag: "set_trust", path: directory, trusted: false });
+      const replies = answers(from);
+      const final = yield* facts.trust(directory);
+      assert.equal(final.trust.trusted, true, "the extension saved trust during reload");
+      assert.deepEqual(
+        replies.find((m) => m._tag === "trust"),
+        {
+          _tag: "trust",
+          ...final,
+          requested: false,
+        },
+      );
+      const notices = replies.filter((m) => m._tag === "toast");
+      assert.equal(notices.length, 1);
+      assert.equal(notices[0]?.level, "warning");
+      assert.match(notices[0]?.message ?? "", /Pi.*trusted.*reload/i);
+    }),
+    ["--remember-project-trust"],
+  );
 });
 
 /**

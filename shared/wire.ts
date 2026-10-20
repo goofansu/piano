@@ -921,7 +921,12 @@ export const ServerMessage = Schema.Union([
     requestId: Schema.optional(Schema.String),
     discovery: WorktreeDiscovery,
   }),
-  Schema.TaggedStruct("trust", { cwd: Schema.String, trust: ProjectTrust }),
+  Schema.TaggedStruct("trust", {
+    cwd: Schema.String,
+    trust: ProjectTrust,
+    /** Present only on a completed set_trust reply, even when Pi overrode the requested value. */
+    requested: Schema.optional(Schema.Boolean),
+  }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
   /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */
   Schema.TaggedStruct("selected", {

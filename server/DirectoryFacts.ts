@@ -155,8 +155,10 @@ export const DirectoryFactsLive = Layer.effect(
         // Pi resolves trust from the nearest saved ancestor, so a decision here can change any
         // directory beneath it: every catalog re-probes, not only this one.
         yield* invalidate;
-        const { trust: fresh } = yield* trust(cwd);
-        return { cwd, trust: fresh, catalog: yield* locked(cwd) };
+        const catalog = yield* locked(cwd);
+        // Personal extensions can save a different decision while Pi reloads. Report the
+        // resulting trust, not the value saved before the probe ran.
+        return { ...(yield* trust(cwd)), catalog };
       }),
       invalidate,
       changes: Stream.fromPubSub(changes),
