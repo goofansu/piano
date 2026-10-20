@@ -149,24 +149,65 @@ test("INV-11: real HTTP and WebSocket boundaries reject untrusted origins before
       assert.equal(await handshake(origin), 101);
     }
     assert.equal((await fetch(`${base}/api/folders`)).status, 200, "safe reads need no Origin");
-    // The actual ws parser must reject fragmented messages before JSON/schema
-    // decoding, not just check individual fragments after they have accumulated.
-    for (const fragmented of [false, true]) {
-      const ws = new NodeWS.WebSocket(`${base.replace("http", "ws")}/ws`, { origin: base });
-      await once(ws, "open");
-      const closed = once(ws, "close");
-      if (fragmented) {
-        const half = Buffer.alloc(inboundLimits.frameBytes / 2, 120);
-        ws.send(half, { fin: false });
-        ws.send(half, { fin: false });
-        ws.send("x", { fin: true });
-      } else ws.send(Buffer.alloc(inboundLimits.frameBytes + 1, 120));
-      const [code] = await closed;
-      assert.equal(
-        code,
-        1009,
-        `oversized ${fragmented ? "fragmented" : "single"} input closes with 1009`,
-      );
+    for (const compressed of [false, true]) {
+      const connect = () =>
+        new NodeWS.WebSocket(`${base.replace("http", "ws")}/ws`, {
+          origin: base,
+          perMessageDeflate: compressed,
+        });
+      const ws = connect();
+      try {
+        const opened = once(ws, "open");
+        const [response] = await once(ws, "upgrade");
+        await opened;
+        assert.equal(ws.extensions, compressed ? "permessage-deflate" : "");
+        if (compressed) {
+          const extensions = response.headers["sec-websocket-extensions"];
+          assert.match(extensions, /server_no_context_takeover/);
+          assert.match(extensions, /client_no_context_takeover/);
+        }
+        // Both small control messages and bulk payloads survive negotiation unchanged.
+        // The no-extension case also protects native Node WebSocket dispatch clients.
+        for (const nonce of ["small", "large-".repeat(2048)]) {
+          const pong = new Promise<string>((resolve) => {
+            const receive = (data: NodeWS.RawData) => {
+              const message = JSON.parse(data.toString());
+              if (message._tag === "pong") {
+                ws.off("message", receive);
+                resolve(message.nonce);
+              }
+            };
+            ws.on("message", receive);
+          });
+          ws.send(JSON.stringify({ _tag: "ping", nonce }));
+          assert.equal(await pong, nonce);
+        }
+      } finally {
+        ws.terminate();
+      }
+      // The actual parser bounds the complete *inflated* message, including fragments,
+      // before JSON/schema decoding. Highly compressible input must not bypass the limit.
+      for (const fragmented of [false, true]) {
+        const oversized = connect();
+        try {
+          await once(oversized, "open");
+          const closed = once(oversized, "close");
+          if (fragmented) {
+            const half = Buffer.alloc(inboundLimits.frameBytes / 2, 120);
+            oversized.send(half, { fin: false });
+            oversized.send(half, { fin: false });
+            oversized.send("x", { fin: true });
+          } else oversized.send(Buffer.alloc(inboundLimits.frameBytes + 1, 120));
+          const [code] = await closed;
+          assert.equal(
+            code,
+            1009,
+            `oversized ${compressed ? "compressed" : "plain"} ${fragmented ? "fragmented" : "single"} input closes with 1009`,
+          );
+        } finally {
+          oversized.terminate();
+        }
+      }
     }
   } finally {
     const exited = once(child, "exit");

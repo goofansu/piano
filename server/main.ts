@@ -46,12 +46,22 @@ const drain = () => {
 };
 process.once("SIGINT", drain);
 process.once("SIGTERM", drain);
-// ws enforces the complete-message limit while assembling fragments, before JSON parsing.
+// ws bounds the complete inflated message while assembling fragments, before JSON parsing.
 const Infra = NodeHttpServer.layer(() => server, {
   port: PORT,
   host: HOST,
   gracefulShutdownTimeout: "3 seconds",
-  websocket: { maxPayload: inboundLimits.frameBytes, perMessageDeflate: false },
+  websocket: {
+    maxPayload: inboundLimits.frameBytes,
+    perMessageDeflate: {
+      // Independent messages avoid retaining a cross-message compression dictionary.
+      // ws applies the threshold only with no context takeover: leave token/control frames alone.
+      serverNoContextTakeover: true,
+      clientNoContextTakeover: true,
+      threshold: 1024,
+      zlibDeflateOptions: { level: 3 },
+    },
+  },
 });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
