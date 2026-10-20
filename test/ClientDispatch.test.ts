@@ -54,6 +54,7 @@ const run = <A, E>(
     E,
     WorkspaceCommands | SidebarView | DirectoryFacts | SessionHosts | Registry | Scope.Scope
   >,
+  extraArgs: string[] = [],
 ) => {
   sent.length = 0;
   discovered = undefined;
@@ -65,7 +66,7 @@ const run = <A, E>(
       Effect.provideService(PiCli, {
         node: process.execPath,
         cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
-        extraArgs: [],
+        extraArgs,
       }),
       Effect.provideService(RegistryDatabasePath, join(root, `registry-${++databases}.db`)),
       Effect.timeout("10 seconds"),
@@ -86,6 +87,29 @@ const answers = (from: number) =>
     .filter(
       (m) => m._tag !== "hosts" && m._tag !== "registry" && m._tag !== "catalogs_invalidated",
     );
+
+test("directory selection reports trust remembered by an extension during the model probe", async () => {
+  const directory = join(root, "extension-trust");
+  mkdirSync(join(directory, ".pi"), { recursive: true });
+  writeFileSync(join(directory, ".pi/settings.json"), "{}");
+  await run(
+    Effect.gen(function* () {
+      const facts = yield* DirectoryFacts;
+      assert.equal((yield* facts.trust(directory)).trust.trusted, false);
+      const { receive } = yield* client;
+      const from = sent.length;
+      const models = yield* receive({ _tag: "models", cwd: directory });
+      const trust = yield* receive({ _tag: "trust", cwd: directory });
+      yield* Effect.all([models, trust], { concurrency: "unbounded" });
+      assert.equal((yield* facts.trust(directory)).trust.trusted, true);
+      assert.deepEqual(
+        answers(from).filter((m) => m._tag === "trust"),
+        [{ _tag: "trust", cwd: directory, trust: { required: true, trusted: true } }],
+      );
+    }),
+    ["--remember-project-trust"],
+  );
+});
 
 for (const control of ["answer", "abort"] as const) {
   test(`INV-02/04/05: client saturation rejects before selection changes and leaves ${control} live`, async () => {

@@ -211,8 +211,12 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     },
     trust: {
       admission: "ordinary",
-      run: ({ cwd }) =>
-        facts.trust(cwd).pipe(Effect.flatMap((trust) => send({ _tag: "trust", ...trust }))),
+      run: Effect.fn("ClientDispatch.trust")(function* ({ cwd }) {
+        // Directory selection asks for models and trust concurrently. Personal extensions can
+        // remember a trust decision while that probe starts, so read Pi's store only afterwards.
+        yield* facts.catalog(cwd);
+        yield* send({ _tag: "trust", ...(yield* facts.trust(cwd)) });
+      }),
       unanswered: plainError,
     },
     set_trust: {

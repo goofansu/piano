@@ -4,6 +4,11 @@ import { closeSync, existsSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
+// Simulate a personal extension remembering its project_trust decision during startup.
+if (args.includes("--remember-project-trust")) {
+  const { ProjectTrustStore, getAgentDir } = await import("@earendil-works/pi-coding-agent");
+  new ProjectTrustStore(getAgentDir()).set(process.cwd(), true);
+}
 const verifyChildEnvironment = args.includes("--verify-child-environment");
 let verifiedImage = false;
 if (verifyChildEnvironment) {
