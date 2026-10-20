@@ -28,6 +28,8 @@ export interface SessionPullRequestState {
   key: string | null;
   /** The last read or change, keeping the saved link with the reason when GitHub is unreadable. */
   value: SessionPullRequest | undefined;
+  /** The registry links the session; its details may show before the first read lands. */
+  linked: boolean;
   /** An explicit change is in flight. */
   busy: boolean;
   /** "Find from branch" is in flight. */
@@ -80,7 +82,10 @@ export interface SessionPullRequestLink {
     link: RegistryLink | null | undefined,
     working: boolean,
   ) => void;
-  /** Shows linked details immediately, refreshing only if stale and no read is in flight; else the link form. */
+  /**
+   * Shows the details of a session the registry links immediately, even before its first read
+   * lands, refreshing only if stale and no read is in flight; else the link form.
+   */
   open: () => void;
   /** Hides the surface without reporting it through `closed`. */
   close: () => void;
@@ -156,6 +161,8 @@ export function createSessionPullRequest({
   let associationRevision = 0;
   /** The background search in flight; its answer reaches the registry, never this state. */
   let search: AbortController | undefined;
+  /** The one answer to "is this session linked?": the registry's, never GitHub's read. */
+  const linked = () => !!link;
   /** Whether the observed session's work is going, so the next `observe` can tell an edge. */
   let working = false;
   let surface: PullRequestSurface = "closed",
@@ -172,7 +179,14 @@ export function createSessionPullRequest({
     // A value read for another link (changed or removed elsewhere) is not shown; a change in
     // flight keeps what it applies to until it settles.
     const current = mutating || sameLink(read?.link, link);
-    return { key, value: current ? read : undefined, busy: mutating, finding, surface };
+    return {
+      key,
+      value: current ? read : undefined,
+      linked: linked(),
+      busy: mutating,
+      finding,
+      surface,
+    };
   };
   let state = derive();
   const publish = () => {
@@ -196,12 +210,10 @@ export function createSessionPullRequest({
 
   observation.subscribe(() => {
     state = derive();
-    // A read moves the surface only when the link itself appeared or disappeared.
+    // The surface moves only when the registry's link itself appeared or disappeared.
     if (!changing) {
-      const linked = !!state.value?.link;
-      if (surface === "link-form" && linked) return closeItself();
-      if ((surface === "details" || surface === "editing") && !linked && !link)
-        surface = "link-form";
+      if (surface === "link-form" && linked()) return closeItself();
+      if ((surface === "details" || surface === "editing") && !linked()) surface = "link-form";
     }
     publish();
   });
@@ -297,11 +309,11 @@ export function createSessionPullRequest({
     },
     open: () => {
       if (surface !== "closed") return;
-      show(state.value?.link ? "details" : "link-form");
+      show(linked() ? "details" : "link-form");
       const { loading, mutating } = observation.getState();
-      // A focus read may already be running or just finished when the user clicks the PR.
+      // A first, focus or work read may already be running or just finished when the user clicks the PR.
       if (
-        state.value?.link &&
+        linked() &&
         !loading &&
         !mutating &&
         (readAt === undefined || now() - readAt >= POLL_MS)

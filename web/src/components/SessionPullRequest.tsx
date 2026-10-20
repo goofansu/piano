@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   type PullRequestView,
@@ -93,6 +94,35 @@ function SessionPullRequestTrigger({
         <p className="text-wrap">{face.tooltip}</p>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Anchors details opened before the first read lands; the read replaces it with the real trigger. */
+function LoadingPullRequestTrigger({ ref }: { ref: React.Ref<HTMLButtonElement> }) {
+  const mobile = useIsMobile();
+  return (
+    <PopoverTrigger asChild>
+      <Button ref={ref} variant="ghost" size={mobile ? "xs" : "lg"} aria-label="Pull request">
+        <GitPullRequestIcon
+          data-icon="inline-start"
+          className="text-muted-foreground"
+          aria-hidden
+        />{" "}
+        PR
+      </Button>
+    </PopoverTrigger>
+  );
+}
+
+/** Where the facts will be while the first read is in flight; the header names it. */
+function PullRequestDetailsSkeleton() {
+  return (
+    <div className="flex flex-col gap-3" aria-busy="true">
+      <span className="sr-only">Loading pull request…</span>
+      <Skeleton className="h-4 w-4/5" />
+      <Skeleton className="h-5 w-16" />
+      <Skeleton className="h-3 w-1/2" />
+    </div>
   );
 }
 
@@ -178,7 +208,8 @@ export function SessionPullRequestControl({
   const link = pr.value?.link;
   const view = pullRequestView(pr.value);
   const popoverOpen = pr.surface === "details" || pr.surface === "editing";
-  const showingDetails = !!view && pr.surface === "details";
+  // The registry's link decides that details show; until the first read lands they are loading.
+  const showingDetails = pr.linked && pr.surface === "details";
   // Opening, cancel and successful discovery replace the focused form controls.
   useEffect(() => {
     if (showingDetails) closeRef.current?.focus();
@@ -204,7 +235,11 @@ export function SessionPullRequestControl({
         </DialogContent>
       </Dialog>
       <Popover open={popoverOpen} onOpenChange={onOpenChange}>
-        {view && <SessionPullRequestTrigger view={view} ref={triggerRef} />}
+        {view ? (
+          <SessionPullRequestTrigger view={view} ref={triggerRef} />
+        ) : (
+          showingDetails && <LoadingPullRequestTrigger ref={triggerRef} />
+        )}
         <PopoverContent
           onCloseAutoFocus={restoreFocus}
           align="start"
@@ -235,7 +270,9 @@ export function SessionPullRequestControl({
               <XIcon />
             </Button>
           </PopoverHeader>
-          {view && showingDetails ? (
+          {showingDetails && !view ? (
+            <PullRequestDetailsSkeleton />
+          ) : view && showingDetails ? (
             <>
               {/* Plain PR facts, not a second card inside the popover. */}
               <div className="flex min-w-0 flex-col gap-2">

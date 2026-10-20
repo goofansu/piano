@@ -48,6 +48,7 @@ export function useSessionPullRequest(
   const current = state.key === pullRequestKey(workspaceId, sessionId);
   return {
     value: current ? state.value : undefined,
+    linked: current && state.linked,
     busy: current && state.busy,
     finding: current && state.finding,
     surface: current && panel.open ? state.surface : "closed",
