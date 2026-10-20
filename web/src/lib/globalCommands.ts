@@ -7,8 +7,9 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
+import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
-import { directoryTrust, focusedDirectory } from "./sessionContext.ts";
+import { focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
 
 export type Appearance = "light" | "dark" | "system";
@@ -106,16 +107,16 @@ export function radioChoice(
 export function trustCommand(state: AppState, cwd: string | undefined): GlobalCommand | undefined {
   if (!cwd) return undefined;
   if (state.session?.cwd === cwd && state.session.state.checkoutMissing) return undefined;
-  const pending = state.pendingTrust.find((decision) => decision.cwd === cwd);
-  const trust = pending ? pending.trust : directoryTrust(state, cwd);
+  const pending = !!pendingTrust(state, cwd);
+  const trust = displayedTrust(state, cwd);
   if (!trust?.required) return undefined;
   return {
     id: "trust",
     label: trust.trusted ? "Untrust folder" : "Trust folder",
     icon: trust.trusted ? "untrusted" : "trusted",
     group: "trust",
-    enabled: state.connected && !pending,
-    pending: !!pending,
+    enabled: canDecideTrust(state, cwd),
+    pending,
     pressed: trust.trusted,
     intent: { kind: "send", command: { _tag: "set_trust", path: cwd, trusted: !trust.trusted } },
   };

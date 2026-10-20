@@ -927,6 +927,8 @@ export const ServerMessage = Schema.Union([
     /** Present only on a completed set_trust reply, even when Pi overrode the requested value. */
     requested: Schema.optional(Schema.Boolean),
   }),
+  /** A set_trust that ended without its `trust` reply, for the path the request named. */
+  Schema.TaggedStruct("trust_failed", { cwd: Schema.String, message: Schema.String }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
   /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */
   Schema.TaggedStruct("selected", {

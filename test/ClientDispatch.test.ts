@@ -562,7 +562,7 @@ const refusals: {
   ],
   set_trust: [
     { _tag: "set_trust", path: cwd, trusted: true },
-    { _tag: "error", message: "REFUSED" },
+    { _tag: "trust_failed", cwd, message: "REFUSED" },
   ],
   rename_session: [
     { _tag: "rename_session", cwd, sessionId: "x", title: "t" },

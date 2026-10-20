@@ -7,12 +7,8 @@
  */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
-import {
-  closureNeedsAttention,
-  directoryTrust,
-  focusedDirectory,
-  sessionReady,
-} from "./sessionContext.ts";
+import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
+import { closureNeedsAttention, focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { readStorage, writeStorage } from "./storage.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason } from "./ws.ts";
 
@@ -152,9 +148,8 @@ export function createClient({
         connection?.send({ ...m, selectionId: state.selectionId });
     } else {
       if (m._tag === "set_trust") {
-        if (!state.connected || state.pendingTrust.some((pending) => pending.cwd === m.path))
-          return;
-        apply({ type: "trust_pending", cwd: m.path, trust: directoryTrust(state, m.path) });
+        if (!canDecideTrust(state, m.path)) return;
+        apply({ type: "trust_pending", cwd: m.path });
       }
       connection?.send(m);
     }
@@ -175,23 +170,12 @@ export function createClient({
     // Decide before applying: a frame the projection rejects must not notify either.
     const notifySession = m._tag === "session" && sessionDelivery(state, m) === "apply";
     const wasResync = state.resync;
-    let trustNotice: string | undefined;
-    if (m._tag === "trust") {
-      const displayed = directoryTrust(state, m.cwd);
-      if (
-        m.cwd === focusedDirectory(state)?.cwd &&
-        m.trust.required &&
-        displayed?.required &&
-        displayed.trusted !== m.trust.trusted &&
-        m.requested === undefined &&
-        !state.pendingTrust.some((pending) => pending.cwd === m.cwd)
-      )
-        trustNotice = `Pi marked this folder as ${m.trust.trusted ? "trusted" : "untrusted"}.`;
-    }
+    const notice =
+      m._tag === "trust" ? trustNotice(state, focusedDirectory(state)?.cwd, m) : undefined;
     apply({ type: "server", message: m });
-    if (trustNotice) notify(trustNotice, "info");
+    if (notice) notify(notice, "info");
     if (!wasResync && state.resync && state.connected) reselect(state.session);
-    if (m._tag === "error") notify(m.message, "error");
+    if (m._tag === "error" || m._tag === "trust_failed") notify(m.message, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
     else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError)
       notify(m.result.stopError, "error");

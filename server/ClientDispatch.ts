@@ -232,7 +232,12 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
           yield* send({ _tag: "trust", cwd, trust, requested: request.trusted });
           yield* send({ _tag: "models", catalog });
         }),
-      unanswered: plainError,
+      // The browser holds the directory's trust control until this decision settles.
+      unanswered: ({ path }, reason) => ({
+        _tag: "trust_failed",
+        cwd: path,
+        message: unansweredText(reason),
+      }),
     },
     // The command answers every outcome, failures included, and has the sidebar rediscover.
     create_worktree: {

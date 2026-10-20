@@ -316,7 +316,7 @@ test("manual trust changes keep their confirmation without an automatic-change t
   trust(false);
   assert.deepEqual(h.notes[1], ["Pi marked this folder as untrusted.", "info"]);
   h.client.send({ _tag: "set_trust", path: "/a", trusted: true });
-  h.server({ _tag: "error", message: "Could not save trust" });
+  h.server({ _tag: "trust_failed", cwd: "/a", message: "Could not save trust" });
   trust(true);
   assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as trusted.", "info"]);
 });
@@ -424,9 +424,17 @@ for (const ending of ["error", "disconnect"] as const) {
     h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
     assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, true);
     h.server({ _tag: "error", selectionId: "unrelated", message: "Session error" });
-    assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true);
-    if (ending === "error") h.server({ _tag: "error", message: "Could not save trust" });
-    else {
+    h.server({ _tag: "error", message: "Could not rename session" });
+    h.server({ _tag: "trust_failed", cwd: "/b", message: "Could not save trust" });
+    assert.equal(
+      trustCommand(h.client.getState(), "/a")?.pending,
+      true,
+      "only this decision's own failure settles it",
+    );
+    if (ending === "error") {
+      h.server({ _tag: "trust_failed", cwd: "/a", message: "Could not save trust" });
+      assert.deepEqual(h.notes.at(-1), ["Could not save trust", "error"]);
+    } else {
       h.status(false);
       assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
       h.client.send(request);
