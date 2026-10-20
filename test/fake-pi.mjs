@@ -257,16 +257,29 @@ function handle(cmd) {
       });
     case "get_messages":
       messageReads++;
-      if (messageReads > 1) {
-        if (sessionId === "startup-read-failure")
-          return respond(cmd, undefined, "startup read failed");
-        if (sessionId === "startup-read-exit") return process.exit(3);
-        if (
-          sessionId === "startup-churn" ||
-          (sessionId === "startup-during-read" && messageReads === 2)
-        )
-          startupNotice();
-      }
+      // Open's one context read comes first; these fixtures disturb it.
+      if (sessionId === "startup-read-failure")
+        return respond(cmd, undefined, "startup read failed");
+      if (sessionId === "startup-read-exit") return process.exit(3);
+      if (
+        sessionId === "startup-churn" ||
+        (sessionId === "startup-during-read" && messageReads === 1)
+      )
+        startupNotice();
+      // context-reads: Pi's context reports how many times it has been read.
+      if (sessionId === "context-reads")
+        return respond(cmd, {
+          messages: [
+            ...messages,
+            {
+              role: "custom",
+              customType: "reads",
+              content: `context reads: ${messageReads}`,
+              display: true,
+              timestamp: 1,
+            },
+          ],
+        });
       return respond(cmd, { messages });
     case "get_entries": {
       // rejected-entries: Pi refuses to read its entries, as a failing extension could.
