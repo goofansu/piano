@@ -109,21 +109,44 @@ const currentSchema = Schema.Struct({
 });
 
 /** Path references keep their spelling: never move or merge Pi's alias-based history. */
-function withWorkspaces(data: RegistryData): RegistryData {
-  const paths = new Set(data.workspaces.map((w) => w.path));
-  const parents = new Map(data.worktrees.map((w) => [w.path, w.folder]));
-  const added: Workspace[] = [];
-  for (const path of [
+function withWorkspaces(
+  data: RegistryData,
+  candidates: ReadonlyArray<string> = [
     ...data.folders,
     ...data.worktrees.map((w) => w.path),
     ...data.sessions.map((s) => s.cwd),
-  ]) {
+  ],
+): RegistryData {
+  const paths = new Set(data.workspaces.map((w) => w.path));
+  const parents = new Map(data.worktrees.map((w) => [w.path, w.folder]));
+  const added: Workspace[] = [];
+  for (const path of candidates) {
     if (!paths.has(path)) {
       paths.add(path);
       added.push({ id: randomUUID(), path, folder: parents.get(path) ?? path });
     }
   }
   return added.length ? { ...data, workspaces: [...data.workspaces, ...added] } : data;
+}
+/**
+ * Every write keeps "each folder, worktree and session cwd has a workspace", which `decode`
+ * requires on the next start. Only rows that are new or replaced at their index are checked, and
+ * a replaced row that keeps its path adds nothing, so a session metadata update compares
+ * references without building the workspace path set.
+ */
+function withAddedWorkspaces(before: RegistryData, after: RegistryData): RegistryData {
+  const candidates: string[] = [];
+  const scan = <A>(was: ReadonlyArray<A>, is: ReadonlyArray<A>, path: (row: A) => string) => {
+    if (was === is) return;
+    is.forEach((row, i) => {
+      const old = was[i];
+      if (row !== old && (old === undefined || path(row) !== path(old))) candidates.push(path(row));
+    });
+  };
+  scan(before.folders, after.folders, (p) => p);
+  scan(before.worktrees, after.worktrees, (w) => w.path);
+  scan(before.sessions, after.sessions, (s) => s.cwd);
+  return candidates.length ? withWorkspaces(after, candidates) : after;
 }
 
 /** Mutations are immutable. Compare only replaced items, retaining value-equal references too. */
@@ -319,7 +342,7 @@ export const RegistryLive = Layer.effect(
             catch: (e) => (e instanceof RegistryError ? e : recovery(path, e)),
           });
           if (next === current) return undefined;
-          const data = shareUnchanged(current, next);
+          const data = shareUnchanged(current, withAddedWorkspaces(current, next));
           if (data === current) return undefined;
           yield* Effect.try({
             try: () => database.save(current, data),
@@ -464,7 +487,7 @@ export const RegistryLive = Layer.effect(
           if (d.folders.includes(path) || d.worktrees.some((w) => w.path === path)) return path;
           yield* requireDirectory(path);
           yield* update((x) =>
-            x.folders.includes(path) ? x : withWorkspaces({ ...x, folders: [...x.folders, path] }),
+            x.folders.includes(path) ? x : { ...x, folders: [...x.folders, path] },
           );
           return path;
         }),
@@ -476,7 +499,7 @@ export const RegistryLive = Layer.effect(
         update((d) =>
           d.worktrees.some((w) => w.path === entry.path)
             ? d
-            : withWorkspaces({ ...d, worktrees: [...d.worktrees, entry] }),
+            : { ...d, worktrees: [...d.worktrees, entry] },
         ),
       addSession: (cwd, sessionId, title, projectId) =>
         update((d) => {
@@ -487,7 +510,7 @@ export const RegistryLive = Layer.effect(
                 "Project is unavailable or archived. Choose a current project before starting.",
             });
           const t = now();
-          return withWorkspaces({
+          return {
             ...d,
             sessions: [
               ...d.sessions,
@@ -501,7 +524,7 @@ export const RegistryLive = Layer.effect(
                 archived: false,
               },
             ],
-          });
+          };
         }),
       touchSession: (cwd, sessionId, text) =>
         update((d) => ({

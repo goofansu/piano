@@ -169,6 +169,33 @@ test("INV-01/07: a folder keeps its workspace identity when closed and reopened"
   assert.equal(workspaceId(await f.get()), id);
 });
 
+test("INV-01/07: every path a write adds has a workspace when the database reopens", async (t) => {
+  const f = fixture(t),
+    folder = join(f.root, "folder"),
+    worktree = join(f.root, "folder.feature"),
+    sessionCwd = join(f.root, "elsewhere");
+  mkdirSync(folder);
+  const writes: Array<[string, Effect.Effect<unknown, unknown, Registry>]> = [
+    [folder, Effect.flatMap(Registry, (r) => r.ensureFolder(folder))],
+    [
+      worktree,
+      Effect.flatMap(Registry, (r) => r.addWorktree({ folder, path: worktree, branch: "feature" })),
+    ],
+    [sessionCwd, Effect.flatMap(Registry, (r) => r.addSession(sessionCwd, "s1"))],
+  ];
+  for (const [path, write] of writes) {
+    await f.run(write);
+    // Each `run` and `get` opens Piano's database afresh, so `get` succeeding means it decoded.
+    const workspace = (await f.get()).workspaces.find((w) => w.path === path);
+    assert.ok(workspace?.id, `${path} has a workspace after reopening`);
+  }
+  assert.equal(
+    (await f.get()).workspaces.find((w) => w.path === worktree)?.folder,
+    folder,
+    "a worktree's workspace names its folder",
+  );
+});
+
 test("INV-01: a session with every optional field set, linked without an API host, survives restart", async (t) => {
   const f = fixture(t),
     folder = join(f.root, "folder");
