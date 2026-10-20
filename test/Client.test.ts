@@ -327,6 +327,17 @@ test("a reversed manual decision settles without duplicate or permanently suppre
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   h.client.send({ _tag: "set_trust", path: "/a", trusted: false });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
+  assert.equal(
+    trustCommand(h.client.getState(), "/a")?.pressed,
+    true,
+    "a temporary probe must not change the pending label",
+  );
+  assert.equal(
+    h.client.getState().trusts["/a"]?.trusted,
+    false,
+    "the live observation is still recorded",
+  );
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   h.server({ _tag: "toast", level: "warning", message: "Pi changed this folder back to trusted." });
   h.server({
@@ -337,6 +348,8 @@ test("a reversed manual decision settles without duplicate or permanently suppre
   });
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   assert.deepEqual(h.notes, [["Pi changed this folder back to trusted.", "warning"]]);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, true);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
   assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as untrusted.", "info"]);
 });
@@ -366,6 +379,11 @@ test("trust decisions disable every command surface immediately and reject repea
   h.client.send(request);
   assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
   assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true, "a probe is not a receipt");
+  assert.equal(
+    trustCommand(h.client.getState(), "/a")?.pressed,
+    false,
+    "keep the pre-click label until the decision reply",
+  );
   h.server({ _tag: "trust", cwd: "/b", trust: { required: true, trusted: true }, requested: true });
   assert.equal(
     trustCommand(h.client.getState(), "/a")?.pending,
@@ -386,6 +404,13 @@ test("trust decisions disable every command surface immediately and reject repea
   assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, true);
   h.client.send(request);
   assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true }, requested: true });
+  assert.equal(
+    trustCommand(h.client.getState(), "/a")?.pressed,
+    true,
+    "a successful decision replaces the snapshot",
+  );
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
 });
 
 for (const ending of ["error", "disconnect"] as const) {
@@ -396,6 +421,8 @@ for (const ending of ["error", "disconnect"] as const) {
     h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
     const request = { _tag: "set_trust", path: "/a", trusted: false } as const;
     h.client.send(request);
+    h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
+    assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, true);
     h.server({ _tag: "error", selectionId: "unrelated", message: "Session error" });
     assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true);
     if (ending === "error") h.server({ _tag: "error", message: "Could not save trust" });
@@ -411,6 +438,11 @@ for (const ending of ["error", "disconnect"] as const) {
       h.status(true);
     }
     assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
+    assert.equal(
+      trustCommand(h.client.getState(), "/a")?.pressed,
+      false,
+      "ending pending reveals the latest observation",
+    );
     assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, true);
     assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
     h.client.send(request);

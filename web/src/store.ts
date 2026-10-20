@@ -45,8 +45,8 @@ export interface AppState {
   catalogRevision: number;
   /** Pi's trust outcome per directory asked about, including directories that are not registered yet. */
   trusts: Record<string, ProjectTrust>;
-  /** Directories with a trust decision in flight on this connection; probes cannot settle them. */
-  pendingTrust: readonly string[];
+  /** In-flight decisions retain their pre-click display while live observations keep updating. */
+  pendingTrust: ReadonlyArray<{ cwd: string; trust: ProjectTrust | undefined }>;
   session: SessionView | null;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
@@ -84,7 +84,7 @@ export const initialState: AppState = {
 export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
-  | { type: "trust_pending"; cwd: string }
+  | { type: "trust_pending"; cwd: string; trust: ProjectTrust | undefined }
   | {
       type: "selecting";
       selectionId: string;
@@ -118,7 +118,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         pendingCreate: a.connected ? s.pendingCreate : FirstMessage.connectionLost(s.pendingCreate),
       };
     case "trust_pending":
-      return { ...s, pendingTrust: [...s.pendingTrust, a.cwd] };
+      return { ...s, pendingTrust: [...s.pendingTrust, { cwd: a.cwd, trust: a.trust }] };
     case "selecting":
       return {
         ...s,
@@ -236,7 +236,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         pendingTrust:
           m.requested === undefined
             ? s.pendingTrust
-            : s.pendingTrust.filter((cwd) => cwd !== m.cwd),
+            : s.pendingTrust.filter((pending) => pending.cwd !== m.cwd),
       };
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;

@@ -106,16 +106,16 @@ export function radioChoice(
 export function trustCommand(state: AppState, cwd: string | undefined): GlobalCommand | undefined {
   if (!cwd) return undefined;
   if (state.session?.cwd === cwd && state.session.state.checkoutMissing) return undefined;
-  const trust = directoryTrust(state, cwd);
+  const pending = state.pendingTrust.find((decision) => decision.cwd === cwd);
+  const trust = pending ? pending.trust : directoryTrust(state, cwd);
   if (!trust?.required) return undefined;
-  const pending = state.pendingTrust.includes(cwd);
   return {
     id: "trust",
     label: trust.trusted ? "Untrust folder" : "Trust folder",
     icon: trust.trusted ? "untrusted" : "trusted",
     group: "trust",
     enabled: state.connected && !pending,
-    pending,
+    pending: !!pending,
     pressed: trust.trusted,
     intent: { kind: "send", command: { _tag: "set_trust", path: cwd, trusted: !trust.trusted } },
   };

@@ -152,8 +152,9 @@ export function createClient({
         connection?.send({ ...m, selectionId: state.selectionId });
     } else {
       if (m._tag === "set_trust") {
-        if (!state.connected || state.pendingTrust.includes(m.path)) return;
-        apply({ type: "trust_pending", cwd: m.path });
+        if (!state.connected || state.pendingTrust.some((pending) => pending.cwd === m.path))
+          return;
+        apply({ type: "trust_pending", cwd: m.path, trust: directoryTrust(state, m.path) });
       }
       connection?.send(m);
     }
@@ -183,7 +184,7 @@ export function createClient({
         displayed?.required &&
         displayed.trusted !== m.trust.trusted &&
         m.requested === undefined &&
-        !state.pendingTrust.includes(m.cwd)
+        !state.pendingTrust.some((pending) => pending.cwd === m.cwd)
       )
         trustNotice = `Pi marked this folder as ${m.trust.trusted ? "trusted" : "untrusted"}.`;
     }
