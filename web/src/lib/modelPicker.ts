@@ -60,7 +60,8 @@ export interface ModelPickerView {
   /** The shown model and effort are already Pi's defaults for new sessions. */
   isDefault: boolean;
   canSaveDefault: boolean;
-  saveLabel: string;
+  /** Pi's defaults as the trigger names them, such as "claude-x · medium"; null when unknown. */
+  defaultLabel: string | null;
 }
 
 export function modelPickerView(s: ModelPickerInput): ModelPickerView {
@@ -101,6 +102,10 @@ export function modelPickerView(s: ModelPickerInput): ModelPickerView {
     isDefault,
     canSaveDefault:
       !s.disabled && !waitingForModel && !s.saving && !isDefault && !!shown && !catalog?.error,
-    saveLabel: isDefault ? "Default for new sessions" : "Use for new sessions",
+    defaultLabel: catalog?.defaultModel
+      ? [catalog.defaultModel.split("/").pop(), catalog.defaultThinkingLevel]
+          .filter(Boolean)
+          .join(" · ")
+      : null,
   };
 }

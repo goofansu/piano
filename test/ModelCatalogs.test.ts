@@ -160,3 +160,22 @@ test("a failed save reports its failure once", async () => {
   assert.equal(p.view().saving, false);
   assert.deepEqual(p.notes, [["Pi is busy", "error"]]);
 });
+
+test("a save stays pending until a catalog shows the saved defaults", async () => {
+  const p = page({
+    "/scratch": catalog("t0", { defaultThinkingLevel: "off" }),
+    "/older": {
+      ...catalog("t0", { defaultModel: "anthropic/opus", defaultThinkingLevel: "high" }),
+      cwd: "/older",
+    },
+  });
+  p.status(true);
+  await p.view().saveDefaults("anthropic/opus", "high");
+  assert.equal(p.view().saving, true, "Pi answered before its catalog; /older predates the save");
+  p.server({
+    _tag: "models",
+    catalog: catalog("t1", { defaultModel: "anthropic/opus", defaultThinkingLevel: "high" }),
+  });
+  assert.equal(p.view().saving, false);
+  assert.deepEqual(p.notes, [], "the picker's own default is the confirmation");
+});

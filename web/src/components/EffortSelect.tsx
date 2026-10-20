@@ -52,7 +52,8 @@ export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, 
               }
             }}
             aria-description={level === defaultLevel ? "Default effort" : undefined}
-            className="flex-auto px-1 text-xs"
+            // Reserve the filled, outlined treatment for the choice, not the pointer.
+            className="flex-auto px-1 text-xs hover:bg-transparent data-[state=on]:border-ink data-[state=on]:bg-muted data-[state=on]:text-ink"
           >
             {level}
           </ToggleGroupItem>

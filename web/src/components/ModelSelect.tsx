@@ -245,16 +245,26 @@ export function ModelSelect({
             defaultLevel={catalog?.defaultThinkingLevel}
             disabled={!view.effortEnabled}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-w-0 pointer-coarse:min-h-11"
-            disabled={!view.canSaveDefault}
-            onClick={() => void models.saveDefaults(want, effort)}
-          >
-            {saving && <Spinner data-icon="inline-start" />}
-            <span className="truncate">{view.saveLabel}</span>
-          </Button>
+          {/* Keep the description and action in place while selection and saving change. */}
+          <div className="flex min-h-6 items-center justify-between gap-2 text-xs text-ink-3 pointer-coarse:min-h-11">
+            <span className="min-w-0">
+              <span className="block">New sessions</span>
+              <span className="block truncate" title={view.defaultLabel ?? undefined}>
+                {view.defaultLabel ?? "Not available"}
+              </span>
+            </span>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="w-28 shrink-0 pointer-coarse:min-h-11"
+              disabled={!view.canSaveDefault}
+              aria-busy={saving}
+              onClick={() => void models.saveDefaults(want, effort)}
+            >
+              {saving && <Spinner data-icon="inline-start" aria-hidden />}
+              {saving ? "Saving…" : view.isDefault ? "Default" : "Make default"}
+            </Button>
+          </div>
         </div>
       </PickerContent>
     </Popover>

@@ -105,7 +105,7 @@ test("empty search promotes only the opening selection, without duplicates or li
 test("the shown selection is the default only when both model and effort match Pi's", () => {
   const same = view({ value: "anthropic/claude-x", effort: "medium" });
   assert.equal(same.isDefault, true);
-  assert.equal(same.saveLabel, "Default for new sessions");
+  assert.equal(same.defaultLabel, "claude-x · medium");
   assert.equal(same.canSaveDefault, false, "nothing to save");
   for (const over of [
     { value: "openai/gpt-y", effort: "medium" },
@@ -113,7 +113,6 @@ test("the shown selection is the default only when both model and effort match P
   ] satisfies Partial<ModelPickerInput>[]) {
     const v = view(over);
     assert.equal(v.isDefault, false, JSON.stringify(over));
-    assert.equal(v.saveLabel, "Use for new sessions");
     assert.equal(v.canSaveDefault, true);
   }
   assert.equal(
