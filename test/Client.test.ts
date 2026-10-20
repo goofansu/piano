@@ -236,6 +236,53 @@ test("notifications: applied session notices notify; rejected frames do not", ()
   ]);
 });
 
+test("trust changes on screen notify once; initial results and other directories stay quiet", () => {
+  const h = harness();
+  const trust = (cwd: string, trusted: boolean) =>
+    h.server({ _tag: "trust", cwd, trust: { required: true, trusted } });
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  trust("/a", false);
+  trust("/b", false);
+  assert.deepEqual(h.notes, []);
+  trust("/a", true);
+  trust("/a", true);
+  trust("/b", true);
+  assert.deepEqual(h.notes, [["Pi marked this folder as trusted.", "info"]]);
+  trust("/a", false);
+  assert.deepEqual(h.notes[1], ["Pi marked this folder as untrusted.", "info"]);
+  h.client.dispatch({ type: "new_directory", cwd: "/b" });
+  trust("/b", false);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  trust("/a", true);
+  h.status(false);
+  h.status(true);
+  trust("/a", false);
+  assert.equal(h.notes.length, 2, "switching and reconnecting establish a fresh baseline");
+});
+
+test("manual trust changes keep their confirmation without an automatic-change toast", () => {
+  const h = harness();
+  const trust = (trusted: boolean) =>
+    h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted } });
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  trust(false);
+  h.client.send({ _tag: "set_trust", path: "/a", trusted: true });
+  trust(false); // An older probe can finish before the explicit decision.
+  h.server({ _tag: "catalogs_invalidated" });
+  trust(true); // The refresh can win the race with the explicit response.
+  h.server({ _tag: "toast", level: "success", message: "Trusted." });
+  trust(true);
+  assert.deepEqual(h.notes, [["Trusted.", "success"]]);
+  trust(false);
+  assert.deepEqual(h.notes[1], ["Pi marked this folder as untrusted.", "info"]);
+  h.client.send({ _tag: "set_trust", path: "/a", trusted: true });
+  h.server({ _tag: "error", message: "Could not save trust" });
+  trust(true);
+  assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as trusted.", "info"]);
+});
+
 test("INV-02: a closure notifies by its kind, never by its wording", () => {
   const cases: Array<[SessionClosure, boolean]> = [
     [{ _tag: "released", detail: "Pi was released" }, false],

@@ -87,6 +87,9 @@ export function createClient({
   let connection: Connection | null = null;
   /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
+  // A fresh focus/connection starts quietly; only later changes merit an explanation.
+  let observedTrust: boolean | undefined;
+  const manualTrust = new Map<string, boolean>();
   const listeners = new Set<(update: ClientUpdate) => void>();
   const messageListeners = new Set<(message: ServerMessage) => void>();
 
@@ -112,6 +115,8 @@ export function createClient({
   const apply = (action: Action) => {
     const next = withNewPageDirectory(reduce(state, action));
     if (next === state) return;
+    if (!next.connected || focusedDirectory(next)?.cwd !== focusedDirectory(state)?.cwd)
+      observedTrust = undefined;
     state = next;
     askAboutFocus();
     for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
@@ -142,7 +147,10 @@ export function createClient({
       // An action belongs to the attachment it was aimed at; never send it on a stale or pending one.
       if (sessionReady(state) && state.selectionId)
         connection?.send({ ...m, selectionId: state.selectionId });
-    } else connection?.send(m);
+    } else {
+      if (m._tag === "set_trust") manualTrust.set(m.path, m.trusted);
+      connection?.send(m);
+    }
   };
 
   /** A fresh attachment for the session on screen, so the server re-attaches this socket. */
@@ -151,6 +159,7 @@ export function createClient({
   };
 
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
+    if (!connected) manualTrust.clear();
     apply({ type: "connected", connected });
     if (connected) reselect(state.session ?? state.selecting);
     else if (reason) notify(...disconnectNotices[reason]);
@@ -160,7 +169,24 @@ export function createClient({
     // Decide before applying: a frame the projection rejects must not notify either.
     const notifySession = m._tag === "session" && sessionDelivery(state, m) === "apply";
     const wasResync = state.resync;
+    let trustNotice: string | undefined;
+    if (m._tag === "trust") {
+      if (m.cwd === focusedDirectory(state)?.cwd) {
+        if (
+          m.trust.required &&
+          observedTrust !== undefined &&
+          observedTrust !== m.trust.trusted &&
+          !manualTrust.has(m.cwd)
+        )
+          trustNotice = `Pi marked this folder as ${m.trust.trusted ? "trusted" : "untrusted"}.`;
+        observedTrust = m.trust.required ? m.trust.trusted : undefined;
+      }
+      if (manualTrust.get(m.cwd) === m.trust.trusted) manualTrust.delete(m.cwd);
+    }
+    // Trust failures use the uncorrelated error reply; don't leave future changes suppressed.
+    if (m._tag === "error" && !m.selectionId) manualTrust.clear();
     apply({ type: "server", message: m });
+    if (trustNotice) notify(trustNotice, "info");
     if (!wasResync && state.resync && state.connected) reselect(state.session);
     if (m._tag === "error") notify(m.message, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
