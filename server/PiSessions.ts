@@ -261,12 +261,12 @@ const openSession = (spec: PiSessionSpec) =>
     const generation = randomUUID();
     const recoveryMs = yield* PiDialogRecoveryMs;
 
-    // Ready check, initial transcript and entries. All race the child exiting early. Entries are
-    // best effort, as usage readbacks are: a failed read opens without Runs' spend or the
-    // dispatching session, and usage readbacks then count every entry.
-    const [state, , entries] = yield* Effect.all([
+    // Ready check and entries, both racing the child exiting early. The transcript is not read
+    // here: the context refresh below reads it once, after records are drained. Entries are best
+    // effort, as usage readbacks are: a failed read opens without Runs' spend or the dispatching
+    // session, and usage readbacks then count every entry.
+    const [state, entries] = yield* Effect.all([
       child.read(piReadbacks.state),
-      child.read(piReadbacks.messages),
       child
         .read(piReadbacks.entries())
         .pipe(Effect.catchTag("PiSessionError", () => Effect.succeed<ReadonlyArray<unknown>>([]))),
@@ -282,9 +282,10 @@ const openSession = (spec: PiSessionSpec) =>
       ),
     );
     const projector = new PiProjector({ generation });
-    // The readiness read is not an event boundary: its history can overlap buffered records
-    // or contain a finalized message whose message_end is still awaiting an extension.
-    // Project records onto an empty provisional transcript, then reconcile before exposing it.
+    // Readiness is not an event boundary: Pi's history then can overlap buffered records or
+    // contain a finalized message whose message_end is still awaiting an extension. Project
+    // records onto an empty provisional transcript; the context refresh reconciles it before
+    // exposing it.
     const opened = projector.snapshot({ source: "live", state, messages: [], entries });
     if (opened.state.sessionId !== spec.sessionId)
       return yield* new PiSessionError({

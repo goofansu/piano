@@ -208,6 +208,24 @@ for (const sessionId of ["startup-overlap", "startup-overlap-identical", "startu
   });
 }
 
+test("opening reads Pi's context once", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "context-reads",
+      });
+      const frames = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
+      assert.equal(frames[0]._tag, "snapshot");
+      if (frames[0]._tag !== "snapshot") return;
+      assert.deepEqual(
+        frames[0].snapshot.messages.map((message) => message.text),
+        ["context reads: 1"],
+      );
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
+
 for (const role of ["custom", "assistant"]) {
   test(`startup ${role} history visible before delayed message_end preserves dialogs and correlation`, async () => {
     await run(
