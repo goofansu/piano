@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
+import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import {
   completionTarget,
   directoryChoices,
-  directoryTrust,
   focusedDirectory,
   sessionActivity,
   sessionCheckoutMissing,

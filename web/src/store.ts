@@ -13,6 +13,12 @@ import type {
 } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
+import {
+  applyTrustFrame,
+  beginTrustDecision,
+  dropTrustDecisions,
+  type PendingTrust,
+} from "./lib/directoryTrust.ts";
 import * as FirstMessage from "./lib/firstMessage.ts";
 
 export type { PendingCreate } from "./lib/firstMessage.ts";
@@ -45,8 +51,8 @@ export interface AppState {
   catalogRevision: number;
   /** Pi's trust outcome per directory asked about, including directories that are not registered yet. */
   trusts: Record<string, ProjectTrust>;
-  /** In-flight decisions retain their pre-click display while live observations keep updating. */
-  pendingTrust: ReadonlyArray<{ cwd: string; trust: ProjectTrust | undefined }>;
+  /** In-flight trust decisions on this connection; `directoryTrust.ts` owns how they settle. */
+  pendingTrust: readonly PendingTrust[];
   session: SessionView | null;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
@@ -84,7 +90,7 @@ export const initialState: AppState = {
 export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
-  | { type: "trust_pending"; cwd: string; trust: ProjectTrust | undefined }
+  | { type: "trust_pending"; cwd: string }
   | {
       type: "selecting";
       selectionId: string;
@@ -110,15 +116,14 @@ function reduceAction(s: AppState, a: Action): AppState {
     case "connected":
       // A reopened socket is not attached until it receives a new selection snapshot.
       return {
-        ...s,
+        ...(a.connected ? s : dropTrustDecisions(s)),
         connected: a.connected,
-        pendingTrust: a.connected ? s.pendingTrust : [],
         selectionId: a.connected ? s.selectionId : null,
         selecting: !a.connected && s.pendingCreate ? null : s.selecting,
         pendingCreate: a.connected ? s.pendingCreate : FirstMessage.connectionLost(s.pendingCreate),
       };
     case "trust_pending":
-      return { ...s, pendingTrust: [...s.pendingTrust, { cwd: a.cwd, trust: a.trust }] };
+      return beginTrustDecision(s, a.cwd);
     case "selecting":
       return {
         ...s,
@@ -230,14 +235,8 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       // The client re-asks for the focused directory on the revision; the old catalog stays until its replacement arrives, so open pickers do not flash empty.
       return { ...s, catalogRevision: s.catalogRevision + 1 };
     case "trust":
-      return {
-        ...s,
-        trusts: { ...s.trusts, [m.cwd]: m.trust },
-        pendingTrust:
-          m.requested === undefined
-            ? s.pendingTrust
-            : s.pendingTrust.filter((pending) => pending.cwd !== m.cwd),
-      };
+    case "trust_failed":
+      return applyTrustFrame(s, m);
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
       if (
@@ -291,9 +290,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
             : s.pendingCreate,
       };
     case "error":
-      // Trust failures have no selection correlation; don't leave their controls pending forever.
-      if (!m.selectionId) return s.pendingTrust.length ? { ...s, pendingTrust: [] } : s;
-      if (m.selectionId !== s.selectionId || !s.pendingCreate) return s;
+      if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;
       return {
         ...s,
         selecting: null,

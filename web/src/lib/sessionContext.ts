@@ -6,7 +6,6 @@
 import type {
   FolderView,
   Project,
-  ProjectTrust,
   SessionClosure,
   SessionReference,
   Workspace,
@@ -15,6 +14,7 @@ import type {
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
+import { directoryTrust } from "./directoryTrust.ts";
 import { abbrevHome } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
@@ -90,14 +90,6 @@ export function directoryChoices(state: AppState, cwd: string): DirectoryChoices
  */
 export function workspaceFor(state: AppState, cwd: string | undefined): Workspace | undefined {
   return cwd === undefined ? undefined : state.workspaces.find((w) => w.path === cwd);
-}
-
-/** Pi's trust outcome for a directory: the latest probe, else what discovery recorded for a known worktree. */
-export function directoryTrust(state: AppState, cwd: string): ProjectTrust | undefined {
-  return (
-    state.trusts[cwd] ??
-    state.folders.flatMap((f) => f.worktrees).find((w) => w.path === cwd)?.trust
-  );
 }
 
 export interface FocusedDirectory {
