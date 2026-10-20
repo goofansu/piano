@@ -215,6 +215,26 @@ test("opening while unlinked offers the link form; a link found when work stops 
   assert.equal(pr.getState().surface, "details", "reopening shows the link");
 });
 
+test("opening a linked session before its first read lands shows its details throughout", async () => {
+  const { pi, pr, closes } = setup(registered);
+  assert.equal(pi.requests.length, 1, "selection starts the first read");
+  pr.open();
+  assert.equal(
+    pr.getState().surface,
+    "details",
+    "the registry's link decides, not the pending read",
+  );
+  assert.equal(pr.getState().linked, true);
+  assert.equal(pr.getState().value, undefined, "no facts yet");
+  assert.equal(pi.requests.length, 1, "opening joins the first read");
+  pi.last().resolve(linked);
+  await settle();
+  assert.equal(pr.getState().surface, "details", "the read fills the details in place");
+  assert.deepEqual(pr.getState().value, linked);
+  assert.equal(closes(), 0, "the panel never closes itself");
+  assert.equal(pi.requests.length, 1);
+});
+
 test("opening details reuses the loaded facts without replacing a background read", async () => {
   const { pi, pr } = setup(registered);
   pi.last().resolve(linked);
