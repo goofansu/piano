@@ -700,3 +700,51 @@ test("INV-01: save_project with a session saves both, and an unknown session is 
     }),
   );
 });
+
+test("INV-01: a browser's checkout poll re-observes without resending the sidebar it already has", async () => {
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.ensureFolder(cwd);
+      yield* view.fresh;
+      const queue = yield* Queue.unbounded<ServerMessage>();
+      const { receive } = yield* makeClientDispatch({
+        send: (m) => Queue.offer(queue, m).pipe(Effect.asVoid),
+        overflow: (e) => Effect.die(e),
+      });
+      let snapshots = 0;
+      /** The next sidebar this browser is sent that holds `sessions` session references. */
+      const sidebarWith = (sessions: number) =>
+        Effect.gen(function* () {
+          for (;;) {
+            const m = yield* Queue.take(queue);
+            if (m._tag !== "registry") continue;
+            snapshots++;
+            if ((m.sessionReferences?.length ?? 0) === sessions) return m;
+          }
+        });
+
+      const initial = yield* sidebarWith(0);
+      assert.deepEqual(
+        [snapshots, initial.folders.map((f) => f.path)],
+        [1, [cwd]],
+        "the connection is given the sidebar once",
+      );
+
+      // The page's five-second checkout poll, which keeps Git's branch projection current.
+      for (let poll = 0; poll < 3; poll++) {
+        yield* yield* receive({ _tag: "registry" });
+        yield* view.fresh;
+      }
+
+      yield* registry.addSession(cwd, "polled", "Polled");
+      const changed = yield* sidebarWith(1);
+      assert.deepEqual(
+        [snapshots, changed.sessionReferences?.map((s) => s.title)],
+        [2, ["Polled"]],
+        "only the new session was sent after the initial sidebar",
+      );
+    }),
+  );
+});

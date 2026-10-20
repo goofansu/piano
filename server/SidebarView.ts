@@ -11,6 +11,10 @@
  * write starts only the reader whose input it changed; a prompt, rename or pin starts neither and
  * publishes from the last observations. DirectoryFacts
  * announces trust decisions; trust is re-read then and on each Git run.
+ *
+ * A subscriber receives the latest view once and then only the views that differ from the one
+ * before: re-observing is frequent (every page load, every five-second checkout poll, every Pi
+ * resource invalidation), and finding the same facts again is not news for any browser.
  */
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import type {
@@ -36,7 +40,9 @@ export class SidebarView extends Context.Service<
   {
     /** Rediscover in the background, for facts that change outside Piano (a page load, a Refresh). */
     readonly refresh: Effect.Effect<void>;
-    /** The latest view, if one exists, then every later one. Subscribes now, so nothing published after this returns is missed. */
+    /** The latest view, if one exists, then every later view that differs from the one before it.
+     * Subscribes now, so nothing published after this returns is missed, and the latest view is
+     * never also the first of the later ones. */
     readonly subscribe: Effect.Effect<Stream.Stream<SidebarMessage>, never, Scope.Scope>;
     /** A view after both Git discovery and availability reads started after this call. */
     readonly fresh: Effect.Effect<SidebarMessage>;
@@ -69,6 +75,14 @@ const visibleOf = (data: RegistryData) =>
     ...data,
     sessions: data.sessions.map(shownReference),
   });
+/**
+ * What a browser's sidebar differs by. Every observation carries the time it ran as
+ * `discovery.observedAt`, which is a fact about the run and not about the folder: a page load,
+ * the five-second checkout poll or a Pi resource invalidation re-observes, and the view it finds
+ * must not be sent to every browser again just because it was read again.
+ */
+const shownAs = (message: SidebarMessage) =>
+  JSON.stringify(message, (key, value) => (key === "observedAt" ? undefined : value));
 
 export interface SidebarViewOptions {
   /** Git worktree discovery for one folder; tests replace it to control timing. */
@@ -91,6 +105,8 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       const publishing = yield* Semaphore.make(1);
 
       let latest: SidebarMessage | undefined;
+      /** What the last published view showed, so a repeat observation publishes nothing. */
+      let published: string | undefined;
       let observation: Observation | undefined;
       // One writer, separate from Git/trust. Key individual members, not just their checkout:
       // a new member must not inherit a sibling's previously observed missing-history verdict.
@@ -205,7 +221,12 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       });
 
       const locked = Semaphore.withPermits(publishing, 1);
-      /** Publish from the current registry and the last observation; `sameShape` skips it when that observation no longer covers the registry. Holds the lock. */
+      /**
+       * Publish from the current registry and the last observation; `sameShape` skips it when
+       * that observation no longer covers the registry. A view that shows what the last
+       * published one showed is kept as the latest, for a new subscriber and for `fresh`, and
+       * not sent again: a browser hears about changes, not about readings. Holds the lock.
+       */
       const send = Effect.fnUntraced(function* (sameShape: boolean) {
         const seen = observation;
         if (!seen) return;
@@ -213,6 +234,9 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         if (sameShape && shapeOf(data) !== seen.shape) return;
         const message = yield* assemble(data, yield* hosts.list, seen);
         latest = message;
+        const shown = shownAs(message);
+        if (shown === published) return;
+        published = shown;
         yield* PubSub.publish(pubsub, message);
       });
       const publish = (sameShape: boolean) => locked(send(sameShape));
@@ -307,14 +331,18 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
 
       return SidebarView.of({
         refresh,
-        subscribe: PubSub.subscribe(pubsub).pipe(
-          Effect.map((subscription) => {
-            const now = latest;
-            return Stream.concat(
-              now ? Stream.make(now) : Stream.empty,
-              Stream.fromSubscription(subscription),
-            );
-          }),
+        // Under the publishing lock, so the latest view and the subscription meet exactly:
+        // a view published while a browser subscribes reaches it once, not as both.
+        subscribe: locked(
+          PubSub.subscribe(pubsub).pipe(
+            Effect.map((subscription) => {
+              const now = latest;
+              return Stream.concat(
+                now ? Stream.make(now) : Stream.empty,
+                Stream.fromSubscription(subscription),
+              );
+            }),
+          ),
         ),
         fresh: Effect.gen(function* () {
           const done = yield* Deferred.make<void>();

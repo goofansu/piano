@@ -7,7 +7,7 @@ import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
-import { HttpRouter, HttpStaticServer } from "effect/http";
+import { HttpRouter } from "effect/http";
 import { inboundLimits } from "./InboundCapacity.ts";
 import { AllowedOrigins, configuredOrigins } from "./OriginPolicy.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
@@ -16,6 +16,7 @@ import { agentDir } from "./PiEnv.ts";
 import { RegistryDatabasePath } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { sessionEndpoint, sessionEnvironment } from "./SessionEndpoint.ts";
+import { staticAssets } from "./StaticAssets.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -62,11 +63,7 @@ const Services = PianoServicesLive({ idleMs: IDLE_MS }).pipe(
   Layer.provide(Infra),
 );
 
-const Routes = Layer.mergeAll(
-  AppRouter,
-  HttpStaticServer.layer({ root: WEB_DIST, index: "index.html", spa: true }),
-  Drain,
-);
+const Routes = Layer.mergeAll(AppRouter, staticAssets({ root: WEB_DIST }), Drain);
 
 const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog: true }).pipe(
   Layer.provide(Services),

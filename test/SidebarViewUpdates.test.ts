@@ -346,6 +346,48 @@ test("INV-01/INV-07: a session reference keeps its registry creation time and wo
   );
 });
 
+test("INV-01: a repeated observation that found nothing new publishes no view; a real change still does", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView,
+        facts = yield* DirectoryFacts;
+      yield* registry.ensureFolder(first);
+      yield* registry.addSession(first, "s1", "One");
+      yield* view.fresh;
+
+      // One browser is listening. Everything until the new session is another browser's page
+      // load, its five-second checkout poll and a Pi resource invalidation: each re-observes,
+      // none of them changes what this browser shows.
+      const views = yield* view.subscribe.pipe(
+        Effect.flatMap((s) =>
+          s.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true })),
+        ),
+      );
+      const runs = git.calls;
+      yield* view.fresh;
+      yield* view.fresh;
+      yield* facts.invalidate;
+      assert.ok(git.calls > runs, "the repeated observations really ran");
+
+      yield* registry.addSession(first, "s2", "Two");
+      const [initial, next] = [...(yield* Fiber.join(views))];
+      assert.equal(
+        initial?.sessionReferences?.length,
+        1,
+        "the subscriber starts from the latest view",
+      );
+      assert.deepEqual(
+        next?.sessionReferences?.map((s) => s.title),
+        ["One", "Two"],
+        "the next view is the new session, not a repeat of the one already shown",
+      );
+    }),
+  );
+});
+
 test("INV-01: a trust decision reaches the sidebar without a registry write", async () => {
   const skilled = join(root, "skilled");
   // A project skill makes the directory's trust matter to Pi.
@@ -535,11 +577,11 @@ test("INV-01/05: fresh awaits availability; a lifetime during its read invalidat
       const before = yield* view.fresh;
       const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === "rapid");
       assert.equal(ref(before)?.unavailable, "history");
-      const oldGit = before.folders[0]!.discovery.observedAt;
-      const gitUpdated = yield* nextView(
-        view,
-        (m) => m.folders[0]?.discovery.observedAt !== oldGit,
-      ).pipe(Effect.forkChild({ startImmediately: true }));
+      // A second folder is the next Git run's news: re-observing the same checkouts publishes
+      // nothing, so the view that names both folders is what says that run installed.
+      const gitUpdated = yield* nextView(view, (m) => m.folders.length === 2).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
       const held = holdHistoryRead(t);
       let freshDone = false;
       const full = yield* view.fresh.pipe(
@@ -552,6 +594,7 @@ test("INV-01/05: fresh awaits availability; a lifetime during its read invalidat
       );
       yield* held.entered;
       try {
+        yield* registry.ensureFolder(second);
         yield* Fiber.join(gitUpdated);
         yield* Effect.yieldNow;
         assert.equal(freshDone, false, "Git completed, but fresh still owes an availability read");
