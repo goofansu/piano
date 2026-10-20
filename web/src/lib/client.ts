@@ -20,7 +20,10 @@ export type NotifyLevel = "success" | "info" | "warning" | "error";
 export type Notify = (message: string, level?: NotifyLevel) => void;
 
 /** Browser-local changes; connection status, server frames and selection correlation stay with the client. */
-export type LocalAction = Exclude<Action, { type: "connected" | "server" | "selecting" }>;
+export type LocalAction = Exclude<
+  Action,
+  { type: "connected" | "server" | "selecting" | "trust_pending" }
+>;
 
 /** The directory the last session was created in, offered first on a fresh New page. */
 export interface LastDirectory {
@@ -92,7 +95,6 @@ export function createClient({
   let connection: Connection | null = null;
   /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
-  const manualTrust = new Set<string>();
   const listeners = new Set<(update: ClientUpdate) => void>();
   const messageListeners = new Set<(message: ServerMessage) => void>();
 
@@ -149,7 +151,10 @@ export function createClient({
       if (sessionReady(state) && state.selectionId)
         connection?.send({ ...m, selectionId: state.selectionId });
     } else {
-      if (m._tag === "set_trust") manualTrust.add(m.path);
+      if (m._tag === "set_trust") {
+        if (!state.connected || state.pendingTrust.includes(m.path)) return;
+        apply({ type: "trust_pending", cwd: m.path });
+      }
       connection?.send(m);
     }
   };
@@ -160,7 +165,6 @@ export function createClient({
   };
 
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
-    if (!connected) manualTrust.clear();
     apply({ type: "connected", connected });
     if (connected) reselect(state.session ?? state.selecting);
     else if (reason) notify(...disconnectNotices[reason]);
@@ -179,15 +183,10 @@ export function createClient({
         displayed?.required &&
         displayed.trusted !== m.trust.trusted &&
         m.requested === undefined &&
-        !manualTrust.has(m.cwd)
+        !state.pendingTrust.includes(m.cwd)
       )
         trustNotice = `Pi marked this folder as ${m.trust.trusted ? "trusted" : "untrusted"}.`;
-      // A decision can finish with the opposite outcome if a Pi extension saves trust on reload.
-      // Only its explicit reply settles it; a concurrent probe is not an acknowledgement.
-      if (m.requested !== undefined) manualTrust.delete(m.cwd);
     }
-    // Trust failures use the uncorrelated error reply; don't leave future changes suppressed.
-    if (m._tag === "error" && !m.selectionId) manualTrust.clear();
     apply({ type: "server", message: m });
     if (trustNotice) notify(trustNotice, "info");
     if (!wasResync && state.resync && state.connected) reselect(state.session);

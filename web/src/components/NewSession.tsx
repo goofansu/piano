@@ -37,6 +37,7 @@ import { ProjectDestinationItems } from "@/components/Projects";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
 import { newSessionCommand, newSessionReady } from "@/lib/composerControl";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
@@ -293,6 +294,7 @@ function TrustToggle({
       size="sm"
       aria-pressed={trusted}
       aria-label="Directory trust"
+      aria-busy={command.pending || undefined}
       disabled={!command.enabled}
       className={cn(picker, "shrink-0", trusted ? "text-ink-3" : "text-ink-2")}
       title={
@@ -302,7 +304,17 @@ function TrustToggle({
       }
       onClick={() => run(command)}
     >
-      {trusted ? <ShieldCheckIcon /> : <ShieldOffIcon />}
+      {command.pending ? (
+        <Spinner
+          data-icon="inline-start"
+          aria-label="Updating trust"
+          className="motion-reduce:animate-none"
+        />
+      ) : trusted ? (
+        <ShieldCheckIcon data-icon="inline-start" />
+      ) : (
+        <ShieldOffIcon data-icon="inline-start" />
+      )}
       <span className="max-[360px]:hidden">{trusted ? "Trusted" : "Untrusted"}</span>
     </Button>
   );

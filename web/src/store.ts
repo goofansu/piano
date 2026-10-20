@@ -45,6 +45,8 @@ export interface AppState {
   catalogRevision: number;
   /** Pi's trust outcome per directory asked about, including directories that are not registered yet. */
   trusts: Record<string, ProjectTrust>;
+  /** Directories with a trust decision in flight on this connection; probes cannot settle them. */
+  pendingTrust: readonly string[];
   session: SessionView | null;
   /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
@@ -71,6 +73,7 @@ export const initialState: AppState = {
   catalogs: {},
   catalogRevision: 0,
   trusts: {},
+  pendingTrust: [],
   session: null,
   selecting: null,
   selectionFailure: null,
@@ -81,6 +84,7 @@ export const initialState: AppState = {
 export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
+  | { type: "trust_pending"; cwd: string }
   | {
       type: "selecting";
       selectionId: string;
@@ -108,10 +112,13 @@ function reduceAction(s: AppState, a: Action): AppState {
       return {
         ...s,
         connected: a.connected,
+        pendingTrust: a.connected ? s.pendingTrust : [],
         selectionId: a.connected ? s.selectionId : null,
         selecting: !a.connected && s.pendingCreate ? null : s.selecting,
         pendingCreate: a.connected ? s.pendingCreate : FirstMessage.connectionLost(s.pendingCreate),
       };
+    case "trust_pending":
+      return { ...s, pendingTrust: [...s.pendingTrust, a.cwd] };
     case "selecting":
       return {
         ...s,
@@ -223,7 +230,14 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       // The client re-asks for the focused directory on the revision; the old catalog stays until its replacement arrives, so open pickers do not flash empty.
       return { ...s, catalogRevision: s.catalogRevision + 1 };
     case "trust":
-      return { ...s, trusts: { ...s.trusts, [m.cwd]: m.trust } };
+      return {
+        ...s,
+        trusts: { ...s.trusts, [m.cwd]: m.trust },
+        pendingTrust:
+          m.requested === undefined
+            ? s.pendingTrust
+            : s.pendingTrust.filter((cwd) => cwd !== m.cwd),
+      };
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
       if (
@@ -277,7 +291,9 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
             : s.pendingCreate,
       };
     case "error":
-      if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;
+      // Trust failures have no selection correlation; don't leave their controls pending forever.
+      if (!m.selectionId) return s.pendingTrust.length ? { ...s, pendingTrust: [] } : s;
+      if (m.selectionId !== s.selectionId || !s.pendingCreate) return s;
       return {
         ...s,
         selecting: null,

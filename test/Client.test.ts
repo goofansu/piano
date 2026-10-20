@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
+import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import type { ConnectionHandlers, DisconnectReason } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
@@ -339,6 +340,83 @@ test("a reversed manual decision settles without duplicate or permanently suppre
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
   assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as untrusted.", "info"]);
 });
+
+test("trust decisions disable every command surface immediately and reject repeat sends until their reply", () => {
+  const h = harness();
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
+  h.server({ _tag: "trust", cwd: "/b", trust: { required: true, trusted: false } });
+  let updated = false;
+  h.client.subscribe((update) => {
+    if (update === "immediate") updated = true;
+  });
+  const request = { _tag: "set_trust", path: "/a", trusted: true } as const;
+  h.client.send(request);
+  assert.equal(updated, true, "pending feedback does not wait for a server frame or paint");
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, false);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, false, "no optimistic trust");
+  assert.equal(trustCommand(h.client.getState(), "/b")?.enabled, true);
+  h.client.dispatch({ type: "new_directory", cwd: "/b" });
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.client.send(request);
+  h.client.send({ ...request, trusted: false });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+  h.client.send(request);
+  assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true, "a probe is not a receipt");
+  h.server({ _tag: "trust", cwd: "/b", trust: { required: true, trusted: true }, requested: true });
+  assert.equal(
+    trustCommand(h.client.getState(), "/a")?.pending,
+    true,
+    "another directory cannot settle it",
+  );
+  h.server({
+    _tag: "trust",
+    cwd: "/a",
+    trust: { required: true, trusted: false },
+    requested: true,
+  });
+  assert.equal(
+    trustCommand(h.client.getState(), "/a")?.pending,
+    false,
+    "even a reversed decision settles",
+  );
+  assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, true);
+  h.client.send(request);
+  assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
+});
+
+for (const ending of ["error", "disconnect"] as const) {
+  test(`trust pending ends on ${ending} without replaying the decision`, () => {
+    const h = harness();
+    h.status(true);
+    h.client.dispatch({ type: "new_directory", cwd: "/a" });
+    h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+    const request = { _tag: "set_trust", path: "/a", trusted: false } as const;
+    h.client.send(request);
+    h.server({ _tag: "error", selectionId: "unrelated", message: "Session error" });
+    assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true);
+    if (ending === "error") h.server({ _tag: "error", message: "Could not save trust" });
+    else {
+      h.status(false);
+      assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
+      h.client.send(request);
+      assert.equal(
+        h.sent.filter((m) => m._tag === "set_trust").length,
+        1,
+        "offline sends are dropped",
+      );
+      h.status(true);
+    }
+    assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
+    assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, true);
+    assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
+    h.client.send(request);
+    assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
+  });
+}
 
 test("INV-02: a closure notifies by its kind, never by its wording", () => {
   const cases: Array<[SessionClosure, boolean]> = [

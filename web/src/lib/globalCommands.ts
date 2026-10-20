@@ -71,6 +71,8 @@ export interface GlobalCommand {
   icon: GlobalCommandIcon;
   group: GlobalCommandGroup;
   enabled: boolean;
+  /** The command is awaiting its server decision. */
+  pending?: boolean;
   /** The current choice of its group. */
   checked?: boolean;
   /** A toggle that is on: the directory is trusted. Its label already names what running it does. */
@@ -106,12 +108,14 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   if (state.session?.cwd === cwd && state.session.state.checkoutMissing) return undefined;
   const trust = directoryTrust(state, cwd);
   if (!trust?.required) return undefined;
+  const pending = state.pendingTrust.includes(cwd);
   return {
     id: "trust",
     label: trust.trusted ? "Untrust folder" : "Trust folder",
     icon: trust.trusted ? "untrusted" : "trusted",
     group: "trust",
-    enabled: state.connected,
+    enabled: state.connected && !pending,
+    pending,
     pressed: trust.trusted,
     intent: { kind: "send", command: { _tag: "set_trust", path: cwd, trusted: !trust.trusted } },
   };
