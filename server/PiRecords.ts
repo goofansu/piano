@@ -1038,7 +1038,10 @@ export class PiProjector {
               )
             : old?.subagent,
         });
-        this.tools.set(id, tool);
+        // Only unfinished executions need correlation for later updates/settlement. Publication
+        // owns completed previews; retaining them here keeps obsolete output after compaction.
+        if (ended) this.tools.delete(id);
+        else this.tools.set(id, tool);
         return [{ _tag: "tool_update", tool }];
       }
       default:
@@ -1054,12 +1057,12 @@ export class PiProjector {
   private settle(): SessionEvent[] {
     this.partial = undefined;
     this.blocks.clear();
-    return [...this.tools.values()].flatMap((tool) => {
-      if (tool.status !== "running") return [];
-      const incomplete: ToolExecution = { ...tool, status: "incomplete" };
-      this.tools.set(tool.id, incomplete);
-      return [{ _tag: "tool_update" as const, tool: incomplete }];
-    });
+    const events = [...this.tools.values()].map((tool) => ({
+      _tag: "tool_update" as const,
+      tool: { ...tool, status: "incomplete" as const },
+    }));
+    this.tools.clear();
+    return events;
   }
 
   private update(): SessionEvent[] {

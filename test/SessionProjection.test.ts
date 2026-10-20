@@ -193,6 +193,11 @@ test("safe live/reload output retains tools and extension state without inventin
         );
         assert.equal(nested.at(-1)?.tool.text, "nested final [REDACTED]");
         assert.equal(nested.at(-1)?.tool.parentId, "parent");
+        assert.deepEqual(
+          snap.tools?.map((tool) => tool.id).sort(),
+          ["parent", "parent/1"],
+          "current-context executions, including nested output, survive reattachment",
+        );
         assert.equal(
           snap.messages.find((m) => m.role === "tool_result")?.nestedCalls?.[0].status,
           "success",
@@ -221,6 +226,11 @@ test("safe live/reload output retains tools and extension state without inventin
         assert.deepEqual(
           compacted.messages.map((m) => m.text),
           ["Authoritative compacted context [REDACTED]"],
+        );
+        assert.deepEqual(
+          compacted.tools,
+          [],
+          "compaction releases executions whose owning calls left the context",
         );
         yield* observe(
           session,
