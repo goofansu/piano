@@ -18,19 +18,15 @@ import {
 } from "./PiRecords.ts";
 import type { PiSessionError } from "./PiTransport.ts";
 import type { SessionPublication } from "./SessionPublication.ts";
+import type { SessionRecordProgress } from "./SessionRecordProgress.ts";
 import { RunLedger } from "./Subagents.ts";
 
 export interface SessionReadbacksOptions {
   /** Workers belong to the session, not to the requesting browser. */
   readonly scope: Scope.Scope;
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
-  /** Moves with every Pi record received; a readback it moved during may already be stale. */
-  readonly observationVersion: () => number;
-  /** Records fully projected, not merely received. Drain only outside the publication lock. */
-  readonly processedVersion: () => number;
-  readonly drain: Effect.Effect<void, PiSessionError>;
-  /** No started message is still waiting for its end event. Checked under the lock. */
-  readonly contextReady: () => boolean;
+  /** Pi records received and processed; whether Pi's context may replace projected history. */
+  readonly progress: SessionRecordProgress;
   /** Pi's current context as the event replacing projected history; called under the lock. */
   readonly context: (messages: ReadonlyArray<RawMessage>) => SessionEvent;
   readonly publication: SessionPublication;
@@ -64,10 +60,7 @@ const contextAttempts = 3;
 export const makeSessionReadbacks = ({
   scope,
   read,
-  observationVersion,
-  processedVersion,
-  drain,
-  contextReady,
+  progress,
   context,
   publication,
   entries: opening,
@@ -107,7 +100,7 @@ export const makeSessionReadbacks = ({
   const refreshStats = Effect.gen(function* () {
     const version = ++statsVersion;
     const modelVersion = factVersions.model;
-    const outputVersion = observationVersion();
+    const outputVersion = progress.observed();
     yield* patchState({ contextIsLastKnown: true });
     yield* Effect.gen(function* () {
       const stats = yield* read(piReadbacks.stats);
@@ -119,7 +112,7 @@ export const makeSessionReadbacks = ({
           ? {
               ...stats,
               statsUpdatedAt,
-              contextIsLastKnown: outputVersion !== observationVersion(),
+              contextIsLastKnown: outputVersion !== progress.observed(),
               statsRefreshError: undefined,
             }
           : {},
@@ -197,12 +190,12 @@ export const makeSessionReadbacks = ({
     });
     yield* Effect.gen(function* () {
       for (let attempt = 0; attempt < contextAttempts; attempt++) {
-        yield* drain;
-        const outputVersion = observationVersion();
+        yield* progress.drain;
+        const outputVersion = progress.observed();
         const before = yield* read(piReadbacks.state);
         if (version !== contextVersion || announced()) return;
-        const ready = yield* publication.transaction(() => Effect.sync(contextReady));
-        if (before.isStreaming || !ready) return yield* defer;
+        const open = yield* publication.transaction(() => Effect.sync(progress.messageOpen));
+        if (before.isStreaming || open) return yield* defer;
         const messages = yield* read(piReadbacks.messages);
         // Pi installs finalized agent history before awaiting message_end extension handlers.
         // Even a drained, unchanged output watermark is not sufficient during an active run.
@@ -213,9 +206,7 @@ export const makeSessionReadbacks = ({
           Effect.gen(function* () {
             if (
               version !== contextVersion ||
-              outputVersion !== observationVersion() ||
-              outputVersion !== processedVersion() ||
-              !contextReady() ||
+              !progress.settledSince(outputVersion) ||
               state.isStreaming ||
               announced()
             )

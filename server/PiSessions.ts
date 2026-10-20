@@ -8,6 +8,8 @@
  * - SessionPublication: the snapshot, its lock, sequence and cursor, and atomic snapshot/live
  *   subscription.
  * - SessionReadbacks: readback workers and freshness, landing through the publication.
+ * - SessionRecordProgress: received and processed records, open messages, and when Pi's context
+ *   may replace projected history.
  * - SessionDialogs: dialog claims and their one terminal resolution, under the publication lock.
  * - PiRecords: protocol translation, not process or publication lifecycle. Its one projection
  *   turns Pi's facts into every Snapshot, a live child's or a saved file's.
@@ -54,6 +56,7 @@ import { type PiLane, PiSessionError, PiTransport } from "./PiTransport.ts";
 import { makeSessionDialogs } from "./SessionDialogs.ts";
 import { makeSessionPublication } from "./SessionPublication.ts";
 import { makeSessionReadbacks } from "./SessionReadbacks.ts";
+import { makeSessionRecordProgress } from "./SessionRecordProgress.ts";
 
 // ── Interface ────────────────────────────────────────────────────────────────
 
@@ -307,27 +310,9 @@ const openSession = (spec: PiSessionSpec) =>
     });
     const { transaction, apply, patchState, announced } = publication;
     let submissionId = 0;
-    let processedVersion = 0;
-    let processed: Deferred.Deferred<void> | undefined;
-    let unfinishedMessages = 0;
+    const progress = makeSessionRecordProgress({ observed: child.observationVersion });
     let initializing = true;
     const initialRefreshes = new Set<RefreshKind>();
-    const drainRecords = Effect.gen(function* () {
-      const target = child.observationVersion();
-      while (processedVersion < target) {
-        processed ??= yield* Deferred.make<void>();
-        yield* Deferred.await(processed);
-      }
-    }).pipe(
-      Effect.timeoutOrElse({
-        duration: "1 second",
-        orElse: () =>
-          new PiSessionError({
-            reason: "timeout",
-            detail: "Pi records did not drain. Reopen history before continuing.",
-          }),
-      }),
-    );
     // Cancellation owner: operation tokens fence late abort/readback results.
     // Work belongs to sessionScope, not the lifetime of the requesting browser.
     const promptOperations = new Set<number>();
@@ -361,53 +346,41 @@ const openSession = (spec: PiSessionSpec) =>
     const readbacks = makeSessionReadbacks({
       scope: sessionScope,
       read: child.read,
-      observationVersion: child.observationVersion,
-      processedVersion: () => processedVersion,
-      drain: drainRecords,
-      contextReady: () => unfinishedMessages === 0,
+      progress,
       context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
       publication,
       entries,
     });
 
-    const onRecord = ({ record, receivedAt }: { record: PiRecord; receivedAt: number }) =>
-      Effect.gen(function* () {
-        if (announced()) return;
-        // Translate under the lock too: a history readback replaces the projector's correlation facts.
-        const { refresh, dialog } = yield* transaction((tx) =>
-          Effect.gen(function* () {
-            if (record.type === "message_start") unfinishedMessages++;
-            if (record.type === "message_end")
-              unfinishedMessages = Math.max(0, unfinishedMessages - 1);
-            if (record.type === "agent_settled") unfinishedMessages = 0;
-            const projected = projector.record(record, receivedAt);
-            if (projected.state) yield* tx.mergeState(projected.state);
-            for (const event of projected.events) yield* tx.publish(event);
-            return {
-              refresh: projected.refresh,
-              dialog: projected.dialog && (yield* dialogs.opened(tx, projected.dialog)),
-            };
-          }),
-        );
-        if (initializing) for (const kind of refresh) initialRefreshes.add(kind);
-        else yield* readbacks.schedule(...refresh);
-        if (dialog) yield* dialogs.watch(dialog);
-      });
+    const onRecord = Effect.fnUntraced(function* ({
+      record,
+      receivedAt,
+    }: {
+      record: PiRecord;
+      receivedAt: number;
+    }) {
+      if (announced()) return;
+      // Translate under the lock too: a history readback replaces the projector's correlation facts.
+      const { refresh, dialog } = yield* transaction((tx) =>
+        Effect.gen(function* () {
+          progress.project(record);
+          const projected = projector.record(record, receivedAt);
+          if (projected.state) yield* tx.mergeState(projected.state);
+          for (const event of projected.events) yield* tx.publish(event);
+          return {
+            refresh: projected.refresh,
+            dialog: projected.dialog && (yield* dialogs.opened(tx, projected.dialog)),
+          };
+        }),
+      );
+      if (initializing) for (const kind of refresh) initialRefreshes.add(kind);
+      else yield* readbacks.schedule(...refresh);
+      if (dialog) yield* dialogs.watch(dialog);
+    });
 
     const recordsDrained = yield* Deferred.make<void>();
     yield* child.records.pipe(
-      Stream.runForEach((item) =>
-        onRecord(item).pipe(
-          Effect.ensuring(
-            Effect.gen(function* () {
-              processedVersion++;
-              const previous = processed;
-              processed = undefined;
-              if (previous) yield* Deferred.succeed(previous, undefined);
-            }),
-          ),
-        ),
-      ),
+      Stream.runForEach((item) => onRecord(item).pipe(Effect.ensuring(progress.processed()))),
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause)
           ? Effect.void
@@ -476,7 +449,7 @@ const openSession = (spec: PiSessionSpec) =>
       isQuiescent:
         !announced() &&
         !child.hasPendingWork() &&
-        processedVersion === child.observationVersion() &&
+        progress.caughtUp() &&
         readbacks.idle() &&
         promptOperations.size === 0 &&
         settled(snapshot),
