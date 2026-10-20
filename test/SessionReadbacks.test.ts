@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Deferred, Effect, Fiber, Queue, type Scope } from "effect";
-import type { PiReadback } from "../server/PiRecords.ts";
+import { Deferred, type Duration, Effect, Fiber, Queue, type Scope } from "effect";
+import type { PiReadback, PiRecord } from "../server/PiRecords.ts";
 import { PiSessionError } from "../server/PiTransport.ts";
 import { makeSessionPublication } from "../server/SessionPublication.ts";
 import { makeSessionReadbacks } from "../server/SessionReadbacks.ts";
+import { makeSessionRecordProgress } from "../server/SessionRecordProgress.ts";
 import type { RenderMsg, SessionState } from "../shared/wire.ts";
 
 /** One readback Pi has been asked for, answered when the test resolves its raw reply. */
@@ -24,12 +25,32 @@ const initial: SessionState = {
 const contextMessage: RenderMsg = { id: "context", role: "user", text: "from Pi's context" };
 
 /** SessionReadbacks over a fake Pi whose reads wait on the test, landing through the session's
- * real SessionPublication. */
-const harness = Effect.gen(function* () {
+ * real SessionPublication and fenced by its real SessionRecordProgress. The test plays the
+ * transport (receiving records) and PiSessions (processing them). */
+const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Duration.Input } = {}) {
   const scope = yield* Effect.scope;
   const reads = yield* Queue.unbounded<PendingRead>();
-  let observation = 0;
+  let received = 0;
   let buffered = 0;
+  const progress = makeSessionRecordProgress({
+    observed: () => received,
+    drainDeadline: options.drainDeadline,
+  });
+  /** Process the oldest received record. */
+  const processOne = (record: PiRecord = { type: "future_event" }) =>
+    Effect.gen(function* () {
+      assert.ok(buffered > 0, "only a received record can be processed");
+      buffered--;
+      yield* publication.transaction(() => Effect.sync(() => progress.project(record)));
+      yield* progress.processed();
+    });
+  /** Pi sends a record and it is processed. */
+  const receiveProcessed = (record?: PiRecord) =>
+    Effect.suspend(() => {
+      received++;
+      buffered++;
+      return processOne(record);
+    });
   const publication = yield* makeSessionPublication({
     cwd: "/readbacks",
     sessionId: initial.sessionId,
@@ -47,10 +68,7 @@ const harness = Effect.gen(function* () {
           return yield* new PiSessionError({ reason: "protocol", detail: invalid });
         return value;
       }),
-    observationVersion: () => observation,
-    processedVersion: () => observation - buffered,
-    drain: Effect.void,
-    contextReady: () => true,
+    progress,
     context: () => ({ _tag: "context", messages: [contextMessage] }),
     publication,
     entries: [],
@@ -62,20 +80,19 @@ const harness = Effect.gen(function* () {
     contextLanded: Effect.map(publication.snapshot, (snapshot) =>
       snapshot.messages.some((message) => message.id === contextMessage.id),
     ),
-    /** A Pi record arrives: state facts change under the lock, and observed output moves. */
+    /** A Pi record arrives and is processed: state facts change under the lock. */
     record: (patch: Partial<SessionState>) =>
-      publication.patchState(patch).pipe(Effect.tap(() => Effect.sync(() => observation++))),
-    /** Pi's output moves without a state change. */
-    output: () => {
-      observation++;
-    },
+      publication.patchState(patch).pipe(Effect.andThen(receiveProcessed())),
+    /** A Pi record arrives and is processed without a state change; `record` shapes message
+     * boundaries. */
+    output: receiveProcessed,
+    /** A Pi record arrives but is not processed yet. */
     buffer: () => {
-      observation++;
+      received++;
       buffered++;
     },
-    drain: () => {
-      buffered = 0;
-    },
+    /** Process the oldest received record. */
+    process: processOne,
     /** The next readback Pi was asked for, which must be of `type`. */
     next: (type: string) =>
       Effect.gen(function* () {
@@ -101,7 +118,7 @@ const rawState = (fields: Record<string, unknown>) => ({
 test("a state readback started before a name change keeps the newer name", async () => {
   await run(
     Effect.gen(function* () {
-      const pi = yield* harness;
+      const pi = yield* harness();
       const refresh = yield* pi.readbacks
         .refresh("state", pi.readbacks.supersede())
         .pipe(Effect.forkChild);
@@ -122,7 +139,7 @@ test("a state readback started before a name change keeps the newer name", async
 test("a state readback owed to a superseded operation is dropped", async () => {
   await run(
     Effect.gen(function* () {
-      const pi = yield* harness;
+      const pi = yield* harness();
       const refresh = yield* pi.readbacks
         .refresh("state", pi.readbacks.supersede())
         .pipe(Effect.forkChild);
@@ -138,7 +155,7 @@ test("a state readback owed to a superseded operation is dropped", async () => {
 test("statistics read before a model switch are dropped", async () => {
   await run(
     Effect.gen(function* () {
-      const pi = yield* harness;
+      const pi = yield* harness();
       const refresh = yield* pi.readbacks.refresh("stats").pipe(Effect.forkChild);
       const stats = yield* pi.next("get_session_stats");
       yield* pi.record({ model: "fake/beta" });
@@ -159,12 +176,12 @@ test("statistics read before a model switch are dropped", async () => {
 test("a context raced by Pi output is read three times, then becomes a projection error", async () => {
   await run(
     Effect.gen(function* () {
-      const pi = yield* harness;
+      const pi = yield* harness();
       const refresh = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
       for (let attempt = 0; attempt < 3; attempt++) {
         yield* pi.answer(yield* pi.next("get_state"), rawState({}));
         const read = yield* pi.next("get_messages");
-        pi.output();
+        yield* pi.output();
         yield* pi.answer(read, { messages: [] });
         yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       }
@@ -188,27 +205,76 @@ test("a context raced by Pi output is read three times, then becomes a projectio
   );
 });
 
-test("unchanged received output cannot certify a context while records remain unprocessed", async () => {
+/** Let a worker that could proceed reach Pi. */
+const settleFibers = Effect.gen(function* () {
+  for (let i = 0; i < 10; i++) yield* Effect.yieldNow;
+});
+
+test("a record received while the context is read blocks replacement until it is processed", async () => {
   await run(
     Effect.gen(function* () {
-      const pi = yield* harness;
+      const pi = yield* harness();
       pi.buffer();
       const refresh = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
+      yield* settleFibers;
+      assert.equal(yield* pi.pending, 0, "Pi is not read before received records are processed");
+      // A second record arrives before the first is processed: the drain the refresh waited for
+      // ends, but the output it then reads includes a record not yet projected.
+      pi.buffer();
+      yield* pi.process();
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
+      yield* settleFibers;
+      assert.equal(yield* pi.contextLanded, false, "the read does not land over that record");
+      assert.equal(yield* pi.pending, 0, "the retry waits for it too");
+      yield* pi.process();
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
-      const retry = yield* pi.next("get_messages");
-      assert.equal(
-        yield* pi.contextLanded,
-        false,
-        "the first read did not land over buffered output",
-      );
-      pi.drain();
-      yield* pi.answer(retry, { messages: [] });
+      yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* Fiber.join(refresh);
       assert.equal(yield* pi.contextLanded, true);
+      assert.equal((yield* pi.state).projectionError, undefined);
+    }),
+  );
+});
+
+test("a record never processed fails the context read past the drain deadline", async () => {
+  await run(
+    Effect.gen(function* () {
+      const pi = yield* harness({ drainDeadline: "20 millis" });
+      pi.buffer();
+      yield* pi.readbacks.refresh("context");
+      assert.equal(yield* pi.pending, 0, "Pi's context is never read");
+      assert.equal(yield* pi.contextLanded, false);
+      assert.equal(
+        (yield* pi.state).projectionError,
+        "Current context refresh failed: Pi records did not drain. Reopen history before continuing.",
+      );
+    }),
+  );
+});
+
+test("an open message defers the context read until its end", async () => {
+  await run(
+    Effect.gen(function* () {
+      const pi = yield* harness();
+      yield* pi.output({ type: "message_start" });
+      const refresh = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
+      yield* pi.answer(yield* pi.next("get_state"), rawState({}));
+      yield* Fiber.join(refresh);
+      assert.equal(yield* pi.pending, 0, "Pi's context is not read while a message is open");
+      assert.equal(yield* pi.contextLanded, false);
+      assert.match((yield* pi.state).projectionError ?? "", /Pi context changed/);
+
+      yield* pi.output({ type: "message_end" });
+      const retry = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
+      yield* pi.answer(yield* pi.next("get_state"), rawState({}));
+      yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
+      yield* pi.answer(yield* pi.next("get_state"), rawState({}));
+      yield* Fiber.join(retry);
+      assert.equal(yield* pi.contextLanded, true);
+      assert.equal((yield* pi.state).projectionError, undefined);
     }),
   );
 });
@@ -217,7 +283,7 @@ for (const activeAt of ["preflight", "post-read"]) {
   test(`active ${activeAt} defers without retrying, then a stats boundary recovers pending context`, async () => {
     await run(
       Effect.gen(function* () {
-        const pi = yield* harness;
+        const pi = yield* harness();
         yield* pi.readbacks.schedule("context", "context");
         yield* pi.answer(
           yield* pi.next("get_state"),
@@ -267,7 +333,7 @@ for (const activeAt of ["preflight", "post-read"]) {
 test("requests made while a readback runs coalesce into one more run", async () => {
   await run(
     Effect.gen(function* () {
-      const pi = yield* harness;
+      const pi = yield* harness();
       yield* pi.readbacks.schedule("context");
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       const first = yield* pi.next("get_messages");
