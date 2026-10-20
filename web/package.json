@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "4.3.3",
+    "@tanstack/react-virtual": "^3.14.21",
     "class-variance-authority": "0.7.1",
     "cmdk": "^1.1.1",
     "cn": "^0.4.0",

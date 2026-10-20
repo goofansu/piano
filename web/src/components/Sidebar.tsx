@@ -42,6 +42,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  SessionListLayout,
+  type SessionRowPosition,
+  WindowedSessionList,
+} from "@/components/WindowedSessionList";
 import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
@@ -76,6 +81,13 @@ export function Sidebar({ state }: Props) {
     toggle,
   } = useSidebarList(state, view);
 
+  // Membership/group changes can move a virtual list even when the nav's total height stays
+  // constant. Ordinary selection or streaming must not force sidebar geometry reads.
+  const layout = JSON.stringify([
+    pinned && [pinned.open, pinned.sessions.length],
+    body?.kind === "sections" &&
+      body.sections.map((s) => [s.key, "open" in s && s.open, s.sessions.length]),
+  ]);
   const groupProps = { state, select };
   const section = (s: SidebarSection) => {
     const onOpenChange = (open: boolean) => toggle(s.key, open);
@@ -155,35 +167,37 @@ export function Sidebar({ state }: Props) {
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <nav className="relative px-3 pb-4" aria-label="Sessions">
-          {pinned && (
-            <Collapsible
-              open={pinned.open}
-              onOpenChange={(open) => toggle(pinned.key, open)}
-              aria-label="Pinned"
-              className="mb-1"
-            >
-              <div className={groupRow}>
-                <CollapsibleTrigger asChild>
-                  <button type="button" className={groupTrigger}>
-                    <Chevron open={pinned.open} />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">
-                      Pinned
-                    </span>
-                  </button>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsibleContent className="disclosure-content">
-                <SessionRows
-                  className="flex flex-col gap-1 py-1"
-                  sessions={pinned.sessions}
-                  select={select}
-                />
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-          {list()}
-        </nav>
+        <SessionListLayout.Provider value={layout}>
+          <nav className="relative px-3 pb-4" aria-label="Sessions">
+            {pinned && (
+              <Collapsible
+                open={pinned.open}
+                onOpenChange={(open) => toggle(pinned.key, open)}
+                aria-label="Pinned"
+                className="mb-1"
+              >
+                <div className={groupRow}>
+                  <CollapsibleTrigger asChild>
+                    <button type="button" className={groupTrigger}>
+                      <Chevron open={pinned.open} />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">
+                        Pinned
+                      </span>
+                    </button>
+                  </CollapsibleTrigger>
+                </div>
+                <CollapsibleContent className="disclosure-content">
+                  <SessionRows
+                    className="flex flex-col gap-1 py-1"
+                    sessions={pinned.sessions}
+                    select={select}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+            {list()}
+          </nav>
+        </SessionListLayout.Provider>
       </ScrollArea>
       <div className="shrink-0 p-3">
         <Button variant="ghost" className="w-full justify-start" onClick={() => openSettings()}>
@@ -341,8 +355,12 @@ const SessionRow = memo(
   function SessionRow({
     t,
     select,
+    position,
+    menuChanged,
   }: {
     t: SessionEntry;
+    position?: SessionRowPosition;
+    menuChanged?: (key: string, open: boolean) => void;
   } & Pick<GroupProps, "select">) {
     const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
     const { selected, disabled, hint, activity } = t;
@@ -350,6 +368,10 @@ const SessionRow = memo(
     const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
     return (
       <li
+        data-window-index={position?.index}
+        aria-posinset={position && position.index + 1}
+        aria-setsize={position?.total}
+        style={position && { position: "absolute", top: position.top, left: 0, width: "100%" }}
         className={cn(
           row,
           "group flex items-center rounded-lg pr-1 hover:bg-fill-hover",
@@ -387,7 +409,7 @@ const SessionRow = memo(
           ) : null}
           {hint && <span className="sr-only">{hint}</span>}
         </button>
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={(open) => menuChanged?.(sessionKey(t), open)}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
@@ -407,6 +429,10 @@ const SessionRow = memo(
   },
   (previous, next) =>
     previous.select === next.select &&
+    previous.menuChanged === next.menuChanged &&
+    previous.position?.index === next.position?.index &&
+    previous.position?.top === next.position?.top &&
+    previous.position?.total === next.position?.total &&
     // Compare every catalog field, not the changing AppState.
     Object.keys(previous.t).every(
       (key) => previous.t[key as keyof SessionEntry] === next.t[key as keyof SessionEntry],
@@ -449,15 +475,30 @@ const Chevron = ({ open }: { open: boolean }) => (
 function SessionRows({
   sessions,
   className,
-  ...row
+  select,
 }: Pick<GroupProps, "select"> & {
   sessions: readonly SessionEntry[];
   className: string;
 }) {
+  if (sessions.length > 100) {
+    return (
+      <WindowedSessionList sessions={sessions} className={className} rowClassName={row}>
+        {(s, position, menuChanged) => (
+          <SessionRow
+            key={sessionKey(s)}
+            t={s}
+            select={select}
+            position={position}
+            menuChanged={menuChanged}
+          />
+        )}
+      </WindowedSessionList>
+    );
+  }
   return (
     <ul className={className}>
       {sessions.map((s) => (
-        <SessionRow key={sessionKey(s)} t={s} {...row} />
+        <SessionRow key={sessionKey(s)} t={s} select={select} />
       ))}
     </ul>
   );

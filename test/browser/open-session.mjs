@@ -55,12 +55,69 @@ await run(
       folders: [cwd],
       sessions: [
         reference("login-bug", "Fix the login bug", 0.063),
+        // Metadata-only neighbors expose sidebar mounting cost without more transcript fixtures.
+        ...Array.from({ length: 1000 }, (_, i) =>
+          reference(`history-${i}`, `History ${String(i).padStart(4, "0")}`, 0),
+        ),
         reference("release-notes", "Release notes", 0.63),
       ],
     };
   },
   async (page) => {
     await page.open("/");
+    await page.see("Fix the login bug");
+    const nav = '[data-slot="layout-sidebar"] nav[aria-label="Sessions"]';
+    assert.ok(
+      (await page.evaluate(
+        `document.querySelector(${JSON.stringify(nav)}).querySelectorAll('li').length`,
+      )) < 100,
+      "a large sidebar mounts a window, not every session",
+    );
+    // Tab must traverse the next logical row, not jump over an unmounted gap to the last row.
+    const lastMounted = await page.evaluate(`(() => {
+      const nav = document.querySelector(${JSON.stringify(nav)});
+      const rows = [...nav.querySelectorAll('[aria-posinset]')];
+      const row = rows.filter(r => Number(r.getAttribute('aria-posinset')) < 1002).at(-1);
+      row.querySelector('button[aria-haspopup="menu"]').focus({ preventScroll: true });
+      return Number(row.getAttribute('aria-posinset'));
+    })()`);
+    await page.press("Tab");
+    assert.equal(
+      await page.evaluate(
+        `Number(document.activeElement.closest('li').getAttribute('aria-posinset'))`,
+      ),
+      lastMounted + 1,
+      "Tab crosses the virtual window boundary without skipping sessions",
+    );
+    await page.press("Shift+Tab");
+    assert.equal(
+      await page.evaluate(
+        `Number(document.activeElement.closest('li').getAttribute('aria-posinset'))`,
+      ),
+      lastMounted,
+      "reverse Tab reaches the previous row menu",
+    );
+    const menuLabel = await page.evaluate("document.activeElement.getAttribute('aria-label')");
+    await page.press("Enter");
+    await page.until("!!document.querySelector('[role=menu]')");
+    await page.evaluate(`(() => {
+      const viewport = document.querySelector(${JSON.stringify(nav)}).closest('[data-slot="scroll-area-viewport"]');
+      viewport.scrollTop = viewport.scrollHeight;
+      return true;
+    })()`);
+    await page.until(`(() => {
+      const nav = document.querySelector(${JSON.stringify(nav)});
+      return [...nav.querySelectorAll('[aria-posinset]')].some(r => Number(r.getAttribute('aria-posinset')) === 1001);
+    })()`);
+    assert.equal(
+      await page.evaluate("!!document.querySelector('[role=menu]')"),
+      true,
+      "scrolling retains an open row menu",
+    );
+    await page.press("Escape");
+    await page.until(
+      `document.activeElement?.getAttribute('aria-label') === ${JSON.stringify(menuLabel)}`,
+    );
     await page.click("button", "Fix the login bug");
     await page.see("Answer 6.");
     await page.capture("1-transcript");
@@ -168,6 +225,16 @@ await run(
     );
     await page.see("Answer 1.");
     await page.capture("7-palette-switch");
+    assert.equal(
+      await page.evaluate(`(() => {
+      const row = document.querySelector(${JSON.stringify(nav)}).querySelector('[aria-current="page"]');
+      const viewport = row.closest('[data-slot="scroll-area-viewport"]').getBoundingClientRect();
+      const box = row.getBoundingClientRect();
+      return box.top >= viewport.top && box.bottom <= viewport.bottom;
+    })()`),
+      true,
+      "palette selection reveals a formerly offscreen sidebar row",
+    );
 
     // Reopening a long session must not force a transcript layout for every prompt. Counting
     // browser layouts catches read/write thrashing without a flaky wall-clock performance limit.
