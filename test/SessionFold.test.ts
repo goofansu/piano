@@ -139,6 +139,45 @@ test("a partial reply lasts until its message ends or its run does; tool updates
   );
 });
 
+test("context replacement releases obsolete execution trees, not current or uncorrelated tools", () => {
+  const messages: Snapshot["messages"] = [
+    {
+      id: "calls",
+      role: "assistant",
+      text: "",
+      toolCalls: ["old", "kept"].map((id) => ({ id, name: "bash", args: "" })),
+    },
+  ];
+  const tools: NonNullable<Snapshot["tools"]> = [
+    // Deliberately before its parent: explicit ancestry need not follow arrival order.
+    { id: "grandchild", parentId: "child" },
+    { id: "child", parentId: "old" },
+    { id: "old/path/leaf" },
+    { id: "old" },
+    { id: "kept" },
+    { id: "startup" },
+  ].map((tool) => ({
+    ...tool,
+    name: "bash",
+    args: "",
+    text: "output",
+    status: "success",
+    outputKind: "final",
+  }));
+  const next = applySessionEvent(
+    { ...base, messages, tools },
+    {
+      _tag: "context",
+      messages: [{ id: "result", role: "tool_result", toolCallId: "kept", text: "output" }],
+    },
+  );
+  assert.deepEqual(
+    next.tools?.map((tool) => tool.id),
+    ["kept", "startup"],
+  );
+  assert.equal(next.tools?.[0], tools[4], "keep current-context output without copying it");
+});
+
 const fakeCli = {
   node: process.execPath,
   cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
