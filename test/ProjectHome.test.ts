@@ -23,6 +23,7 @@ const folder: FolderView = {
 const at = (minute: number) => `2026-10-21T08:${String(minute).padStart(2, "0")}:00Z`;
 const state: AppState = {
   ...initialState,
+  registryLoaded: true,
   folders: [folder],
   projects: [
     { id: "p1", name: "Performance tuning", archived: false },
@@ -50,7 +51,8 @@ const state: AppState = {
 };
 
 test("a project's home lists every member session, newest activity first, with its folder, branch and saved pull request", () => {
-  const home = projectHome(state, "p1")!;
+  const home = projectHome(state, "p1");
+  assert.equal(home.kind, "home");
   assert.deepEqual(
     home.sessions.map((s) => ({
       title: s.title,
@@ -84,7 +86,15 @@ test("a project's home lists every member session, newest activity first, with i
     ],
     "archived members and other projects' sessions stay out",
   );
-  assert.equal(projectHome(state, "gone"), undefined);
+});
+
+test("a project's home waits for the registry before deciding the project is missing", () => {
+  assert.deepEqual(
+    projectHome({ ...state, registryLoaded: false, projects: [] }, "p1"),
+    { kind: "loading" },
+    "before the first registry message the project is not known to be missing",
+  );
+  assert.deepEqual(projectHome(state, "gone"), { kind: "missing" });
 });
 
 test("rows keep their place while the page is open: new ones append, gone ones drop", () => {

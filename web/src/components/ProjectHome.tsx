@@ -14,6 +14,7 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
+import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { projectCommand } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
@@ -27,6 +28,32 @@ function useStableOrder(keys: readonly string[]): string[] {
   return order.current;
 }
 
+const page =
+  "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-12";
+
+/**
+ * The home's geometry while the registry loads, like the sidebar's skeleton: hidden from screen
+ * readers and late to appear, so a quick load shows the home without it and nothing is announced.
+ */
+function ProjectHomeSkeleton() {
+  return (
+    <div className={page}>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
+        <div className="flex min-w-0 items-center gap-2">
+          <ShowSidebarButton className="-ml-2" />
+          <div aria-hidden className="late-enter flex h-9 flex-1 items-center">
+            <Skeleton className="h-5 w-48" />
+          </div>
+        </div>
+        <div aria-hidden className="late-enter flex flex-col gap-2">
+          <Skeleton className="h-14 w-full rounded-lg" />
+          <Skeleton className="h-14 w-full rounded-lg" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * A project's home: its member sessions, newest activity first, each with its title, folder,
  * branch, saved pull request number and last activity. Everything comes from the session catalog the browser already holds.
@@ -35,9 +62,10 @@ export function ProjectHome({ state, projectId }: { state: AppState; projectId: 
   const { select, openNew } = useNavigation();
   const { run } = useCommands();
   const home = projectHome(state, projectId);
-  const order = useStableOrder(home?.sessions.map(sessionKey) ?? []);
+  const order = useStableOrder(home.kind === "home" ? home.sessions.map(sessionKey) : []);
 
-  if (!home)
+  if (home.kind === "loading") return <ProjectHomeSkeleton />;
+  if (home.kind === "missing")
     return (
       <>
         <ShowSidebarButton className="absolute top-2 left-2" />
@@ -58,7 +86,7 @@ export function ProjectHome({ state, projectId }: { state: AppState; projectId: 
   const now = Date.now();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-12">
+    <div className={page}>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
         <div className="flex min-w-0 items-center gap-2">
           <ShowSidebarButton className="-ml-2" />
