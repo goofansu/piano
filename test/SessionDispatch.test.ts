@@ -1213,7 +1213,7 @@ for (const { name, brief } of briefs) {
       ),
     );
     const [result] = await wait;
-    assert.equal(result!.attribution, "attributed", result!.detail);
+    assert.equal(result!.attribution, "attributed", result!.detail ?? "the brief is attributed");
     assert.equal(result!.status, "settled");
     assert.equal(result!.answer, "the thing is done");
   });

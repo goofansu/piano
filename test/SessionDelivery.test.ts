@@ -47,7 +47,7 @@ const socket = (limits: Partial<typeof socketLimits> = {}) =>
     );
     // Wait for the frames the window should allow by now, then give a writer that should be
     // blocked a moment to write more: a fixed sleep alone loses the race on a loaded machine.
-    const expectWritten = (expected: string, message?: string) =>
+    const expectWritten = (expected: string, message = "the expected frames are written") =>
       Effect.gen(function* () {
         const count = expected === "" ? 0 : expected.split(",").length;
         while (written.length < count) {
