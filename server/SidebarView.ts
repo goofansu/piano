@@ -133,7 +133,8 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         );
       });
 
-      /** Registry selects directories and sessions; discovery supplies current Git facts, never cached registry branches. */
+      /** Registry selects directories and sessions; discovery supplies current Git facts. A registered
+       * worktree's saved branch is shown only once Git no longer lists it, never in place of a failed read. */
       const assemble = Effect.fn("SidebarView.assemble")(function* (
         data: RegistryData,
         running: ReadonlyArray<HostInfo>,
@@ -194,19 +195,25 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             } satisfies FolderView;
           }),
         );
-        // A session's branch is Git's, from its open folder's discovery. Once Git no longer lists the
-        // worktree (removed, or its folder closed), the branch the registry saved when it registered
-        // the worktree stands in; a worktree Git still lists keeps Git's answer, detached included.
-        const live = new Map(
-          folders.flatMap((f) =>
-            f.worktrees.flatMap((w) =>
-              w.status === "current" ? [[w.path, w.branch] as const] : [],
-            ),
-          ),
-        );
-        const remembered = new Map(data.worktrees.map((w) => [w.path, w.branch || null] as const));
-        const branchOf = (cwd: string) =>
-          live.has(cwd) ? live.get(cwd)! : (remembered.get(cwd) ?? null);
+        // A session's branch is Git's, from its open folder's discovery; a worktree Git lists keeps
+        // Git's answer, detached included. The branch the registry saved when it registered the
+        // worktree stands in only once Git no longer lists it: a ready discovery left it out, or its
+        // folder closed. A failed or not-yet-run discovery is unknown, so no branch (INV-06).
+        const shown = new Map(folders.flatMap((f) => f.worktrees.map((w) => [w.path, w] as const)));
+        const open = new Set(data.folders);
+        const registered = new Map(data.worktrees.map((w) => [w.path, w] as const));
+        const branchOf = (cwd: string): string | null => {
+          const saved = registered.get(cwd)?.branch || null;
+          const view = shown.get(cwd);
+          if (view)
+            return view.status === "current"
+              ? view.branch
+              : view.status === "missing"
+                ? saved
+                : null;
+          // Not in any observed folder: closed, or opened after this discovery ran.
+          return open.has(registered.get(cwd)?.folder ?? cwd) ? null : saved;
+        };
         // References survive closed directories and missing history; discovery never removes them.
         // A member not yet observed counts as available until the next run says otherwise.
         const sessionReferences = data.sessions.map(
