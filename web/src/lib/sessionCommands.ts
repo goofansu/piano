@@ -23,6 +23,7 @@ export type SessionCommandId =
   | "copy-session-id"
   | "copy-all"
   | "changes"
+  | "wrap-changes"
   | "pull-request"
   | "messages-only"
   | "rename"
@@ -49,6 +50,7 @@ export type SessionCommandIntent =
   | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
+  | { kind: "wrap-changes"; on: boolean }
   | { kind: "pull-request" }
   /** Turn Messages only on or off. */
   | { kind: "messages-only"; on: boolean }
@@ -64,7 +66,7 @@ export interface SessionCommand {
   enabled: boolean;
   /** Shown in the destructive style: Delete. */
   destructive?: true;
-  /** A toggle that is on: Messages only. Its label already names what running it does. */
+  /** A display toggle that is currently on. */
   checked?: boolean;
   /** Direct synonyms of the label, for palette search; not topics or what the command touches. */
   keywords?: readonly string[];
@@ -165,7 +167,7 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
 export function sessionCommands(
   state: AppState,
   target?: SessionTarget,
-  options: { messagesOnly?: boolean; radiusSignedIn?: boolean } = {},
+  options: { messagesOnly?: boolean; changesWrap?: boolean; radiusSignedIn?: boolean } = {},
 ): SessionCommand[] {
   const session = state.session;
   const ctx = sessionContext(state);
@@ -221,6 +223,16 @@ export function sessionCommands(
         enabled: ctx.canOpenChanges,
         keywords: ["diff"],
         intent: { kind: "changes" },
+      },
+      {
+        id: "wrap-changes",
+        label: "Wrap",
+        detail: "Changes",
+        icon: "changes",
+        enabled: ctx.canOpenChanges,
+        checked: options.changesWrap ?? false,
+        keywords: ["wrap lines"],
+        intent: { kind: "wrap-changes", on: !options.changesWrap },
       },
       {
         id: "pull-request",

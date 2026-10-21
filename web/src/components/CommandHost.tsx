@@ -41,6 +41,7 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
+import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
@@ -80,6 +81,7 @@ export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
 interface CommandsValue {
   run: (command: Command) => void;
   messagesOnly: boolean;
+  changesWrap: boolean;
   state: AppState;
   radiusSignedIn: boolean;
   global: GlobalCommandContext;
@@ -95,9 +97,9 @@ export function useCommands() {
 
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
-  const { state, run, messagesOnly, radiusSignedIn } = useCommands();
+  const { state, run, messagesOnly, changesWrap, radiusSignedIn } = useCommands();
   return {
-    commands: sessionCommands(state, target, { messagesOnly, radiusSignedIn }),
+    commands: sessionCommands(state, target, { messagesOnly, changesWrap, radiusSignedIn }),
     run,
     messagesOnly,
   };
@@ -160,6 +162,7 @@ export function CommandHost({
 }) {
   const { openNew, openPanel, openSettings, closeSettings, settings } = useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
+  const [changesWrap, setChangesWrap] = useChangesWrap();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();
@@ -189,6 +192,7 @@ export function CommandHost({
     toggleSidebar: sidebar.toggle,
     setView,
     setMessagesOnly,
+    setChangesWrap,
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
     openForm: forms.open,
@@ -202,6 +206,7 @@ export function CommandHost({
       value={{
         run,
         messagesOnly,
+        changesWrap,
         state,
         radiusSignedIn,
         // The one global command context; "system" is next-themes' default before it reads storage.

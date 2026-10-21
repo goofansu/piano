@@ -56,6 +56,7 @@ export interface CommandEffects {
   setAppearance: (appearance: Appearance) => void;
   setView: (change: Partial<SidebarView>) => void;
   setMessagesOnly: (on: boolean) => void;
+  setChangesWrap: (on: boolean) => void;
   copy: (value: string, label: string) => void;
   openForm: (form: CommandForm) => void;
 }
@@ -99,6 +100,10 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       effects.copy(intent.value, intent.label);
       break;
     case "changes":
+      effects.openPanel("changes");
+      break;
+    case "wrap-changes":
+      effects.setChangesWrap(intent.on);
       effects.openPanel("changes");
       break;
     case "pull-request":

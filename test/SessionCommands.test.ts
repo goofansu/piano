@@ -63,6 +63,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-session-id": true,
     "copy-all": true,
     changes: true,
+    "wrap-changes": true,
     "pull-request": true,
     "messages-only": true,
     rename: true,
@@ -192,6 +193,21 @@ test("Messages only is off by default; running it toggles, and it is checked whi
       .map((c) => c.id),
     ["messages-only"],
   );
+});
+
+test("Wrap reflects the diff preference and is only available for an inspectable selected workspace", () => {
+  const command = (state: AppState, changesWrap?: boolean) =>
+    sessionCommands(state, undefined, { changesWrap }).find((c) => c.id === "wrap-changes")!;
+  assert.equal(command(base).checked, false);
+  assert.deepEqual(command(base).intent, { kind: "wrap-changes", on: true });
+  assert.equal(command(base, true).checked, true);
+  assert.deepEqual(command(base, true).intent, { kind: "wrap-changes", on: false });
+  assert.equal(command({ ...base, workspaces: [] }).enabled, false);
+  assert.equal(
+    command({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) }).enabled,
+    false,
+  );
+  assert.ok(!sessionCommands(base, other).some((c) => c.id === "wrap-changes"));
 });
 
 const headerIds = ({ details, open, manage, display, destructive }: SessionHeaderMenu) => [

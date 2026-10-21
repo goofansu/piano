@@ -1,19 +1,8 @@
-import {
-  CHANGES_INITIAL_PATCH_BYTES,
-  type ChangeFile,
-  type Workspace,
-  type WorkspaceChanges,
-} from "@shared/wire";
+import type { ChangeFile, Workspace, WorkspaceChanges } from "@shared/wire";
 import { cn } from "cn";
-import {
-  FileDiffIcon,
-  FileMinusIcon,
-  FilePlusIcon,
-  MessageSquarePlusIcon,
-  RefreshCwIcon,
-} from "lucide-react";
+import { FileDiffIcon, MessageSquarePlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { BranchLabel } from "@/components/BranchLabel";
+import { ChangesHeader } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { RightSidebar } from "@/components/RightSidebar";
@@ -43,7 +32,6 @@ import {
   changesSheet,
   checkWorkspaceResponse,
   type Disclosure,
-  FILE_PATCH_LIMIT,
   fileMessage,
   initialDisclosure,
   isLarge,
@@ -54,7 +42,7 @@ import {
   toggleFile,
 } from "@/lib/changesView";
 import { type DiffFile, lineCount } from "@/lib/diff";
-import { abbrevHome } from "@/lib/format";
+import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
@@ -99,7 +87,7 @@ export function ChangesPanel({
   );
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
   const sheet = changesSheet({ observation, error, busy, disclosure });
-  const { changes, body } = sheet;
+  const { body } = sheet;
   const ask = onAsk && ((loaded: LoadedFile) => onAsk(askText(loaded)));
 
   return (
@@ -107,79 +95,17 @@ export function ChangesPanel({
       label="Changes"
       title="Changes"
       close={close}
-      description={
-        <>
-          <span>Working tree against HEAD</span>
-          {sheet.branch && (
-            // Each separator travels with its segment, so a wrapped line never ends in one.
-            <span className="flex items-center gap-x-2">
-              <span aria-hidden>·</span>
-              <BranchLabel branch={sheet.branch} />
-            </span>
-          )}
-          <span className="flex min-w-0 items-center gap-x-2">
-            <span aria-hidden>·</span>
-            <span role="status" className="truncate">
-              {sheet.status}
-            </span>
-            {sheet.refreshing && <Spinner className="size-3" />}
-          </span>
-          {sheet.staleNote && (
-            <span role="status" title={sheet.staleNote.detail} className="basis-full text-ink-2">
-              {sheet.staleNote.text}
-            </span>
-          )}
-        </>
-      }
-      actions={
-        <>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-ink-2"
-            disabled={body.kind !== "files"}
-            onClick={() => setDisclosure(toggleEvery(disclosure, sheet))}
-          >
-            {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
-          </Button>
-          <IconButton label="Refresh changes" disabled={!workspace} onClick={refresh}>
-            <RefreshCwIcon />
-          </IconButton>
-        </>
-      }
-      footer={
-        changes && (
-          <Collapsible className="text-xs text-ink-2">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="-ml-2 h-7 text-xs">
-                Changes details
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="disclosure-content">
-              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all font-mono">
-                <dt>Checkout</dt>
-                <dd>{abbrevHome(changes.workspace.path)}</dd>
-                <dt>HEAD</dt>
-                <dd>{changes.result.head ?? "No commits yet"}</dd>
-                <dt>Observed</dt>
-                <dd>{new Date(changes.observedAt).toLocaleString()}</dd>
-              </dl>
-              <p className="mt-2 font-sans">
-                Live Git reads, not an immutable review or verification evidence. Expanding unloaded
-                files reads them afresh; files may change between reads. Refresh reloads all
-                patches. Ignored files are excluded. Renames appear as deletion and addition.
-              </p>
-              <p className="mt-2 font-sans">
-                Initial patch: {CHANGES_INITIAL_PATCH_BYTES.toLocaleString("en-US")} bytes. Per-file
-                patch: {FILE_PATCH_LIMIT}.{" "}
-                {changes.result.truncated ? "Expand unloaded files to read their patches." : ""}
-              </p>
-            </CollapsibleContent>
-          </Collapsible>
-        )
+      header={
+        <ChangesHeader
+          sheet={sheet}
+          canRefresh={!!workspace}
+          refresh={refresh}
+          toggleEvery={() => setDisclosure(toggleEvery(disclosure, sheet))}
+          close={close}
+        />
       }
     >
-      <div className="flex flex-col gap-3 p-4">
+      <div className="flex flex-col gap-3 p-3">
         <SheetBodyView
           body={body}
           onOpenChange={(path, next) => setDisclosure((d) => toggleFile(d, path, next))}
@@ -328,12 +254,9 @@ function FileSection({
   message?: string;
   retry?: () => void;
 }) {
-  const Icon =
-    file.status === "added"
-      ? FilePlusIcon
-      : file.status === "deleted"
-        ? FileMinusIcon
-        : FileDiffIcon;
+  const slash = file.path.lastIndexOf("/");
+  const directory = file.path.slice(0, slash + 1);
+  const filename = file.path.slice(slash + 1);
   const large = isLarge(file);
   const description = [
     file.status === "added" ? "New file" : file.status === "deleted" ? "Deleted" : undefined,
@@ -351,26 +274,25 @@ function FileSection({
       data-path={file.path}
     >
       {/* Sticky within the sheet's scroll area so the file name stays in view while its hunks scroll. */}
-      <Item size="sm" className="sticky top-0 z-10 gap-1 rounded-lg bg-background py-1.5 pl-1 pr-1">
+      <Item
+        size="sm"
+        className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-0 rounded-lg bg-background p-1"
+      >
         <CollapsibleTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className="h-auto min-w-0 flex-1 justify-start gap-2 whitespace-normal px-2 py-1.5 text-left font-normal"
+            className="h-auto min-h-9 min-w-0 justify-start gap-2 whitespace-normal px-2 py-2 text-left font-normal pointer-coarse:min-h-11"
             aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
-            <DisclosureChevron open={open} />
-            <Icon className="size-3.5 shrink-0 text-ink-2" aria-hidden />
+            <span className="self-start">
+              <DisclosureChevron open={open} />
+            </span>
             <ItemContent className="min-w-0 gap-0">
-              <ItemTitle className="min-w-0 break-all font-mono text-xs">{file.path}</ItemTitle>
-              {description && <ItemDescription className="text-xs">{description}</ItemDescription>}
+              <ItemTitle className="block w-full min-w-0 line-clamp-none font-mono text-xs [overflow-wrap:anywhere]">
+                {filename}
+              </ItemTitle>
             </ItemContent>
-            {!file.binary && (
-              <span className="ml-auto shrink-0 font-mono text-xs tabular-nums">
-                <span className="text-ok">+{file.additions}</span>{" "}
-                <span className="text-err">−{file.deletions}</span>
-              </span>
-            )}
           </Button>
         </CollapsibleTrigger>
         {canAsk && (
@@ -380,10 +302,43 @@ function FileSection({
               tooltip="Ask about this file"
               disabled={!onAsk}
               onClick={onAsk}
+              className="pointer-coarse:size-11"
             >
               <MessageSquarePlusIcon />
             </IconButton>
           </ItemActions>
+        )}
+        <Collapsible className="col-span-full min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 pr-2 pl-7">
+            {directory && (
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto min-h-7 min-w-0 flex-1 justify-start px-0 text-ink-3 pointer-coarse:min-h-11"
+                  aria-label={`Full path for ${file.path}`}
+                >
+                  <span className="truncate font-mono text-xs font-normal">{directory}</span>
+                </Button>
+              </CollapsibleTrigger>
+            )}
+            {!file.binary && (
+              <span className="ml-auto shrink-0 py-1 font-mono text-xs tabular-nums">
+                <span className="text-ok">+{file.additions}</span>{" "}
+                <span className="text-err">−{file.deletions}</span>
+              </span>
+            )}
+          </div>
+          {directory && (
+            <CollapsibleContent className="disclosure-content px-2 py-2 font-mono text-xs text-ink-2 [overflow-wrap:anywhere]">
+              {file.path}
+            </CollapsibleContent>
+          )}
+        </Collapsible>
+        {description && (
+          <ItemDescription className="col-span-full line-clamp-none px-2 pb-1 text-xs [overflow-wrap:anywhere]">
+            {description}
+          </ItemDescription>
         )}
       </Item>
       <CollapsibleContent className="disclosure-content">
@@ -413,16 +368,29 @@ function FileSection({
 
 /** Hand-written: no shadcn component renders a unified diff. Numbers, marks and tints follow the transcript's tokens. */
 function Hunks({ file }: { file: DiffFile }) {
+  const [wrap] = useChangesWrap();
+  // Fixed-layout wrapping must still leave room for large line numbers (not just two digits).
+  const digits = useMemo(() => {
+    let largest = 99;
+    for (const hunk of file.hunks)
+      for (const line of hunk.lines) largest = Math.max(largest, line.old ?? 0, line.new ?? 0);
+    return String(largest).length;
+  }, [file]);
   return (
     <div className="overflow-x-auto border-t border-line">
       <table
-        className="w-full border-collapse font-mono text-xs leading-5"
+        className={cn("w-full border-collapse font-mono text-xs leading-5", wrap && "table-fixed")}
         aria-label={`Diff of ${file.path}`}
       >
+        <colgroup>
+          <col style={{ width: `calc(${digits}ch + 1rem)` }} />
+          <col style={{ width: `calc(${digits}ch + 1rem)` }} />
+          <col />
+        </colgroup>
         <tbody>
           {file.hunks.map((hunk, h) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: a diff's hunks are positional and never reorder.
-            <HunkRows key={h} hunk={hunk} />
+            <HunkRows key={h} hunk={hunk} wrap={wrap} />
           ))}
         </tbody>
       </table>
@@ -430,11 +398,17 @@ function Hunks({ file }: { file: DiffFile }) {
   );
 }
 
-function HunkRows({ hunk }: { hunk: DiffFile["hunks"][number] }) {
+function HunkRows({ hunk, wrap }: { hunk: DiffFile["hunks"][number]; wrap: boolean }) {
   return (
     <>
       <tr className="bg-fill text-ink-3">
-        <td colSpan={3} className="select-none px-3 py-0.5 whitespace-pre">
+        <td
+          colSpan={3}
+          className={cn(
+            "select-none px-3 py-0.5",
+            wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "whitespace-pre",
+          )}
+        >
           {hunk.header}
         </td>
       </tr>
@@ -448,28 +422,32 @@ function HunkRows({ hunk }: { hunk: DiffFile["hunks"][number] }) {
             line.kind === "meta" && "text-ink-3",
           )}
         >
-          <td className="w-10 select-none pl-3 pr-1 text-right text-ink-3 tabular-nums">
+          <td className="select-none pl-2 pr-1 text-right align-top text-ink-3 tabular-nums">
             {line.old ?? ""}
           </td>
-          <td className="w-10 select-none pr-2 text-right text-ink-3 tabular-nums">
+          <td className="select-none pr-2 text-right align-top text-ink-3 tabular-nums">
             {line.new ?? ""}
           </td>
-          <td className="whitespace-pre pr-3">
-            <span
-              className={cn(
-                "inline-block w-4 select-none",
-                line.kind === "add" ? "text-ok" : line.kind === "del" ? "text-err" : "text-ink-3",
-              )}
-            >
-              {line.kind === "add"
-                ? "+"
-                : line.kind === "del"
-                  ? "−"
-                  : line.kind === "meta"
-                    ? "\\"
-                    : " "}
+          <td className="pr-3 align-top">
+            <span className={cn(wrap ? "grid grid-cols-[1rem_minmax(0,1fr)]" : "whitespace-pre")}>
+              <span
+                className={cn(
+                  "inline-block w-4 select-none",
+                  line.kind === "add" ? "text-ok" : line.kind === "del" ? "text-err" : "text-ink-3",
+                )}
+              >
+                {line.kind === "add"
+                  ? "+"
+                  : line.kind === "del"
+                    ? "−"
+                    : line.kind === "meta"
+                      ? "\\"
+                      : " "}
+              </span>
+              <span className={cn(wrap && "whitespace-pre-wrap [overflow-wrap:anywhere]")}>
+                {line.text}
+              </span>
             </span>
-            {line.text}
           </td>
         </tr>
       ))}

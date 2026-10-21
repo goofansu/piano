@@ -27,6 +27,7 @@ const ownKeys = (event: ReactKeyboardEvent<HTMLElement>) => {
 export function RightSidebar({
   label,
   title,
+  header,
   description,
   actions,
   toolbar,
@@ -37,6 +38,8 @@ export function RightSidebar({
   /** The landmark's accessible name ("Changes", "File viewer"). */
   label: string;
   title: ReactNode;
+  /** A viewer-specific heading; the shell still owns scrolling, sizing and dismissal. */
+  header?: ReactNode;
   description?: ReactNode;
   /** Controls at the header's end, before Close. */
   actions?: ReactNode;
@@ -49,22 +52,26 @@ export function RightSidebar({
   const mobile = useIsMobile();
   const frame = (
     <>
-      <header className="flex shrink-0 items-center gap-2 border-b border-line py-3 pr-3 pl-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
-          <h2 className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">{title}</h2>
-          {description && (
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-ink-3">
-              {description}
-            </div>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {actions}
-          <IconButton label={`Close ${label.toLowerCase()}`} onClick={close}>
-            <XIcon />
-          </IconButton>
-        </div>
-      </header>
+      {header ?? (
+        <header className="flex shrink-0 items-center gap-2 border-b border-line py-3 pr-3 pl-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
+            <h2 className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">
+              {title}
+            </h2>
+            {description && (
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-ink-3">
+                {description}
+              </div>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {actions}
+            <IconButton label={`Close ${label.toLowerCase()}`} onClick={close}>
+              <XIcon />
+            </IconButton>
+          </div>
+        </header>
+      )}
       {toolbar && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line pr-3 pl-4">
           {toolbar}
