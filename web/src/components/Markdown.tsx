@@ -1,7 +1,9 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
+  Component,
   createContext,
+  type ReactNode,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -43,18 +45,47 @@ function CopyCode({ text }: { text: string }) {
   );
 }
 
-/** HTML-safe prose, enhanced with diagrams only after their closing fence arrives. */
-export function Markdown({
-  text,
-  className,
-  images,
-  diagrams = true,
-}: {
+type MarkdownProps = {
   text: string;
   className?: string;
   images?: ReadonlyMap<string, string>;
   diagrams?: boolean;
-}) {
+};
+
+/** Keep unexpected render/layout-effect failures inside this prose surface, not the session or
+ * file viewer controls. New content retries; unrelated rerenders do not loop on the same error. */
+class MarkdownBoundary extends Component<MarkdownProps & { children: ReactNode }> {
+  state = { text: this.props.text, failed: false };
+
+  static getDerivedStateFromProps(props: MarkdownProps, state: { text: string }) {
+    return props.text === state.text ? null : { text: props.text, failed: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    // Custom escaped-source host: shadcn has no Markdown error fallback. React escapes the text.
+    return (
+      <div className={this.props.className}>
+        <div className="whitespace-pre-wrap break-words">{this.props.text}</div>
+      </div>
+    );
+  }
+}
+
+export function Markdown(props: MarkdownProps) {
+  return (
+    <MarkdownBoundary text={props.text} className={props.className}>
+      <MarkdownContent {...props} />
+    </MarkdownBoundary>
+  );
+}
+
+/** HTML-safe prose, enhanced with diagrams only after their closing fence arrives. */
+function MarkdownContent({ text, className, images, diagrams = true }: MarkdownProps) {
   const openFile = useContext(LocalFileContext);
   const ref = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
