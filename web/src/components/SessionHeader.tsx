@@ -1,4 +1,4 @@
-import { GitBranchIcon, MoreHorizontalIcon, SplitIcon } from "lucide-react";
+import { GitBranchIcon, MoreHorizontalIcon, SplitIcon, TargetIcon } from "lucide-react";
 import { useRef } from "react";
 import {
   CommandIcon,
@@ -74,26 +74,37 @@ export function SessionHeader({
           {cwd ? (
             <>
               <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-1">
-                {/* The project is the way back to where this session was opened from. */}
-                {openProject && projectMenu?.current && (
-                  <button
-                    type="button"
-                    className="-mb-0.5 max-w-full self-start truncate rounded text-xs text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => run(openProject)}
-                  >
-                    {projectMenu.current.name}
-                  </button>
-                )}
                 <h1 className="truncate text-sm font-medium">{session ? title : "New session"}</h1>
               </div>
               {/* Plain workspace metadata has no dedicated UI primitive. */}
               <div className="col-start-1 row-start-2 flex min-w-0 items-center gap-2">
                 {/* Full length while it fits. When space runs short each segment truncates to about 6rem, then
-                drops out whole, branch first: the line may wrap, but only its first row shows. */}
+                drops out whole, branch first: the line may wrap, but only its first row shows. The project
+                comes first and drops last; it is the way back to the project's home. */}
                 <div className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-center gap-x-1.5 overflow-hidden text-xs text-muted-foreground">
-                  <p className="max-w-full shrink-0 truncate">
-                    <span className="sr-only">{worktree ? "Folder: " : "Working directory: "}</span>
-                    {folder}
+                  {openProject && projectMenu?.current && (
+                    <button
+                      type="button"
+                      className="flex max-w-full shrink-0 items-center gap-1 rounded outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => run(openProject)}
+                    >
+                      <TargetIcon aria-hidden="true" className="size-3 shrink-0" />
+                      <span className="sr-only">Project: </span>
+                      <span className="truncate">{projectMenu.current.name}</span>
+                    </button>
+                  )}
+                  <p className="flex max-w-full shrink-0 items-center gap-1.5">
+                    {openProject && projectMenu?.current && (
+                      <span aria-hidden="true" className="text-ink-3/60">
+                        ·
+                      </span>
+                    )}
+                    <span className="truncate">
+                      <span className="sr-only">
+                        {worktree ? "Folder: " : "Working directory: "}
+                      </span>
+                      {folder}
+                    </span>
                   </p>
                   {worktree && (
                     <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1 font-mono">
