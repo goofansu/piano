@@ -4,7 +4,6 @@ import {
   browseInput,
   childPath,
   listing,
-  MAX_VISIBLE,
   parsePathInput,
   pickTarget,
 } from "../web/src/lib/folderPath.ts";
@@ -44,10 +43,13 @@ test("the prefix filter ignores case and caps visible rows", () => {
   );
   assert.equal(listing(entries, "").matches.length, 4);
 
-  const many = Array.from({ length: MAX_VISIBLE + 7 }, (_, i) => entry(`d${i}`));
+  const many = Array.from({ length: 507 }, (_, i) => entry(`d${i}`));
   const { matches, visible, hidden } = listing(many, "");
-  assert.equal(matches.length, MAX_VISIBLE + 7);
-  assert.equal(visible.length, MAX_VISIBLE);
+  assert.equal(matches.length, 507);
+  assert.deepEqual(
+    visible.map((e) => e.name),
+    many.slice(0, 500).map((e) => e.name),
+  );
   assert.equal(hidden, 7);
 });
 

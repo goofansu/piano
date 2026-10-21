@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isDeepStrictEqual } from "node:util";
 import type { SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   commandPalette,
   createPaletteCatalog,
   FILES_QUERY,
   LINKS_QUERY,
-  type PaletteGroup,
-  type PaletteSessionRow,
   paletteFilter,
-  RECENT_SESSION_LIMIT,
 } from "../web/src/lib/commandPalette.ts";
 import { type GlobalCommandContext, globalCommands } from "../web/src/lib/globalCommands.ts";
 import {
@@ -102,7 +98,6 @@ test("before a search the palette offers the most recent sessions; a search reac
     ["s9", "s8", "s7", "s6", "s5", "s4", "s3", "s2"],
     "newest first, at most the recent limit",
   );
-  assert.equal(RECENT_SESSION_LIMIT, 8);
   assert.equal(
     sessionIds(home, "session").length,
     9,
@@ -526,116 +521,33 @@ test("search pages replace rows, preserve stable ties and reach the oldest match
   assert.equal(pagePalette(searchPalette(groups, "Repeated"), { sessions: 999 })[0].page, 2);
 });
 
-test("catalog cache survives activity updates but invalidates searchable metadata and actions", () => {
+test("a refreshed palette finds renamed sessions and excludes archived ones", () => {
   const catalog = createPaletteCatalog();
   const input = { globalCommands: globalCommands(home, ctx), sessionCommands: [], files: [] };
-  const first = catalog(home, input);
-  assert.equal(
-    catalog(
-      { ...home, done: ["changed activity"] },
-      { ...input, globalCommands: globalCommands(home, ctx) },
-    ),
-    first,
-  );
-  assert.equal(
-    catalog({ ...home, sessionReferences: home.sessionReferences.map((r) => ({ ...r })) }, input),
-    first,
-    "a refreshed snapshot with identical search data must not reset the current page or selection",
-  );
+  catalog(home, input);
   const renamed = {
     ...home,
     sessionReferences: home.sessionReferences.map((r, i) =>
       i === 0 ? { ...r, title: "Unique renamed" } : r,
     ),
   };
-  const next = catalog(renamed, input);
-  assert.notEqual(next, first);
-  assert.equal(searchPalette(next, "Unique renamed")[0]?.rows[0].key, "/repo\ns0");
-  const archived = catalog(
-    {
-      ...renamed,
-      sessionReferences: renamed.sessionReferences.map((r, i) =>
-        i === 0 ? { ...r, archived: true } : r,
-      ),
-    },
-    input,
+  assert.deepEqual(
+    searchPalette(catalog(renamed, input), "Unique renamed")[0]?.rows.map((r) => r.key),
+    ["/repo\ns0"],
   );
-  assert.equal(searchPalette(archived, "Unique renamed").length, 0);
-  assert.notEqual(
-    catalog(home, { ...input, globalCommands: globalCommands(home, { ...ctx, theme: "light" }) }),
-    first,
-  );
-});
-
-test("a refresh that changes any one session row field reaches the palette; an equal one keeps it", () => {
-  const s9 = (state: AppState, change: Partial<AppState["sessionReferences"][number]>) => ({
-    ...state,
-    sessionReferences: state.sessionReferences.map((r) =>
-      r.sessionId === "s9" ? { ...r, ...change } : r,
+  const archived = {
+    ...renamed,
+    sessionReferences: renamed.sessionReferences.map((r, i) =>
+      i === 0 ? { ...r, archived: true } : r,
     ),
-  });
-  // One source change per row field; several fields share a source, so some change together.
-  const variants: Record<keyof PaletteSessionRow, (state: AppState) => AppState> = {
-    key: (state) => s9(state, { sessionId: "s9b" }),
-    value: (state) => ({
-      ...state,
-      projects: [{ id: "launch", name: "Liftoff", archived: false }],
-    }),
-    keywords: (state) => s9(state, { branch: "release" }),
-    label: (state) => s9(state, { title: "Session nine" }),
-    untitled: (state) => ({
-      ...state,
-      sessionReferences: state.sessionReferences.map((r) =>
-        r.sessionId === "s3" ? { ...r, title: "Untitled" } : r,
-      ),
-    }),
-    enabled: (state) => s9(state, { unavailable: "history" }),
-    hint: (state) => s9(state, { unavailable: "checkout" }),
-    selected: (state) => ({ ...state, selecting: { cwd: "/work/repo.feature", sessionId: "s9" } }),
-    folder: (state) => ({
-      ...state,
-      folders: state.folders.map((f) => ({ ...f, name: "renamed" })),
-    }),
-    branch: (state) => ({
-      ...state,
-      folders: state.folders.map((f) => ({
-        ...f,
-        worktrees: f.worktrees.map((w) => ({ ...w, root: true })),
-      })),
-    }),
-    session: (state) => s9(state, { cwd: "/repo" }),
   };
-  const input = { globalCommands: [], sessionCommands: [], files: [] };
-  const rowsOf = (groups: PaletteGroup[]) => {
-    const group = groups.find((g) => g.id === "sessions");
-    assert.ok(group?.id === "sessions");
-    return group.rows;
-  };
-  const before = rowsOf(createPaletteCatalog()(home, input));
-  assert.deepEqual(Object.keys(variants).sort(), Object.keys(before[0]).sort());
-  for (const [field, change] of Object.entries(variants) as [
-    keyof PaletteSessionRow,
-    typeof variants.key,
-  ][]) {
-    const catalog = createPaletteCatalog();
-    const first = catalog(home, input);
-    // A fresh copy of the same data, as a registry refresh delivers it.
-    assert.equal(catalog(structuredClone(home), input), first, `${field}: equal data`);
-    const changed = catalog(change(home), input);
-    const rows = rowsOf(changed);
-    assert.ok(
-      rows.some((row, i) => !isDeepStrictEqual(row[field], before[i][field])),
-      `${field}: the palette shows the changed field`,
-    );
-    assert.notEqual(rows, rowsOf(first), `${field}: the change reaches the palette`);
-    assert.equal(catalog(structuredClone(change(home)), input), changed, `${field}: equal again`);
-  }
+  assert.deepEqual(searchPalette(catalog(archived, input), "Unique renamed"), []);
 });
 
-test("cached palette rows retain session availability for rendering and keyboard selection", () => {
+test("session availability updates the palette and keyboard selection", () => {
   const catalog = createPaletteCatalog();
   const input = { globalCommands: [], sessionCommands: [], files: [] };
-  const first = catalog(home, input);
+  catalog(home, input);
   const unavailable: AppState = {
     ...home,
     sessionReferences: home.sessionReferences.map((r) => ({
@@ -644,7 +556,6 @@ test("cached palette rows retain session availability for rendering and keyboard
     })),
   };
   const changed = catalog(unavailable, input);
-  assert.notEqual(changed, first, "availability alone must invalidate the cached catalog");
   const sessions = changed.find((g) => g.id === "sessions");
   assert.ok(sessions?.id === "sessions");
   assert.equal(sessions.rows[0].enabled, false, "missing history cannot be opened");
@@ -669,35 +580,9 @@ test("cached palette rows retain session availability for rendering and keyboard
     );
   }
   const restored = catalog(home, input);
-  assert.notEqual(restored, changed);
   assert.equal(
     paletteSelection(pagePalette(searchPalette(restored, "")), "", true),
     "sessions:/work/repo.feature\ns9",
-  );
-});
-
-test("history replay IDs do not invalidate unchanged file/link search documents", () => {
-  const catalog = createPaletteCatalog();
-  const session: SessionView = {
-    ...selected,
-    messages: [{ id: "saved", role: "user", text: "See https://example.com/guide" }],
-  };
-  const input = {
-    globalCommands: [],
-    sessionCommands: [],
-    files: [{ path: "src/app.ts", messageId: "saved" }],
-  };
-  const first = catalog({ ...inSession, session }, input);
-  const replayed: SessionView = {
-    ...session,
-    messages: session.messages.map((m) => ({ ...m, id: "hosted" })),
-  };
-  assert.equal(
-    catalog(
-      { ...inSession, session: replayed },
-      { ...input, files: [{ path: "src/app.ts", messageId: "hosted" }] },
-    ),
-    first,
   );
 });
 

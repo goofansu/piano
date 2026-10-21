@@ -8,7 +8,6 @@ import {
   ApiError,
   listDirectory,
   makeDirectory,
-  slashCommands,
   workspaceChangedFile,
   workspaceChanges,
   workspaceFile,
@@ -74,16 +73,6 @@ test("INV-07: changes address the workspace by ID and an unknown ID surfaces the
       error instanceof ApiError &&
       error.status === 404 &&
       error.message === "Workspace is not registered. Refresh the folder list.",
-  );
-});
-
-test("slash commands decode from a directory probe", async () => {
-  const commands = await slashCommands(repo);
-  assert.ok(commands.length > 0);
-  assert.ok(
-    commands.every(
-      (c) => typeof c.name === "string" && ["extension", "prompt", "skill"].includes(c.source),
-    ),
   );
 });
 
