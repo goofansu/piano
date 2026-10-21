@@ -13,6 +13,7 @@ import {
   type PiReadback,
   piReadbacks,
   type RawMessage,
+  type RawState,
   type RefreshKind,
   stateFactsOf,
 } from "./PiRecords.ts";
@@ -25,6 +26,8 @@ export interface SessionReadbacksOptions {
   /** Workers belong to the session, not to the requesting browser. */
   readonly scope: Scope.Scope;
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
+  /** Pi's live state, failing once Pi no longer holds the hosted session. */
+  readonly readState: Effect.Effect<RawState, PiSessionError>;
   /** Pi records received and processed; whether Pi's context may replace projected history. */
   readonly progress: SessionRecordProgress;
   /** Pi's current context as the event replacing projected history; called under the lock. */
@@ -60,6 +63,7 @@ const contextAttempts = 3;
 export const makeSessionReadbacks = ({
   scope,
   read,
+  readState,
   progress,
   context,
   publication,
@@ -144,7 +148,7 @@ export const makeSessionReadbacks = ({
     function* (operation: ReadbackOperation) {
       if (operation !== operationVersion) return;
       const versions = { ...factVersions };
-      const raw = yield* read(piReadbacks.state);
+      const raw = yield* readState;
       yield* patchState(() => {
         if (operation !== operationVersion || announced()) return {};
         const observed = stateFactsOf(raw);
@@ -192,14 +196,14 @@ export const makeSessionReadbacks = ({
       for (let attempt = 0; attempt < contextAttempts; attempt++) {
         yield* progress.drain;
         const outputVersion = progress.observed();
-        const before = yield* read(piReadbacks.state);
+        const before = yield* readState;
         if (version !== contextVersion || announced()) return;
         const open = yield* publication.transaction(() => Effect.sync(progress.messageOpen));
         if (before.isStreaming || open) return yield* defer;
         const messages = yield* read(piReadbacks.messages);
         // Pi installs finalized agent history before awaiting message_end extension handlers.
         // Even a drained, unchanged output watermark is not sufficient during an active run.
-        const state = yield* read(piReadbacks.state);
+        const state = yield* readState;
         if (version !== contextVersion || announced()) return;
         if (state.isStreaming) return yield* defer;
         const applied = yield* publication.transaction((transaction) =>

@@ -256,6 +256,9 @@ const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>
     ),
   );
 
+const replacedDetail =
+  "Pi switched this process to another session, so Piano closed it. Reopen this session to continue; no input was resent.";
+
 const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
     const child = yield* PiTransport.spawn(sessionArgs(spec), spec.cwd);
@@ -342,10 +345,22 @@ const openSession = (spec: PiSessionSpec) =>
         if (aborting?.acknowledged && aborting.pendingPrompts.size === 0) aborting = undefined;
       });
 
+    // A hosted child never changes identity (INV-02, INV-07). Piano's extension cancels an
+    // extension's newSession/switchSession/fork; should Pi replace the session anyway, nothing it
+    // reports may land under this ID or checkout, so the child is closed before the readback is
+    // published. Both sessions' history stays where Pi saved it; reopening resumes this one.
+    const readState = Effect.gen(function* () {
+      const state = yield* child.read(piReadbacks.state);
+      if (state.sessionId === spec.sessionId) return state;
+      yield* child.fail(replacedDetail);
+      return yield* new PiSessionError({ reason: "protocol", detail: replacedDetail });
+    });
+
     // Readbacks land through publication's lock; Pi is read outside it.
     const readbacks = makeSessionReadbacks({
       scope: sessionScope,
       read: child.read,
+      readState,
       progress,
       context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
       publication,

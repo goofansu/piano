@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Deferred, type Duration, Effect, Fiber, Queue, type Scope } from "effect";
-import type { PiReadback, PiRecord } from "../server/PiRecords.ts";
+import { type PiReadback, type PiRecord, piReadbacks } from "../server/PiRecords.ts";
 import { PiSessionError } from "../server/PiTransport.ts";
 import { makeSessionPublication } from "../server/SessionPublication.ts";
 import { makeSessionReadbacks } from "../server/SessionReadbacks.ts";
@@ -57,17 +57,19 @@ const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Durat
     generation: "test",
     initial: { state: initial, messages: [], dialogs: [] },
   });
+  const read = <A>({ command, decode, invalid }: PiReadback<A>) =>
+    Effect.gen(function* () {
+      const reply = yield* Deferred.make<unknown, PiSessionError>();
+      yield* Queue.offer(reads, { type: String(command.type), reply });
+      const value = decode(yield* Deferred.await(reply));
+      if (value === undefined)
+        return yield* new PiSessionError({ reason: "protocol", detail: invalid });
+      return value;
+    });
   const readbacks = makeSessionReadbacks({
     scope,
-    read: <A>({ command, decode, invalid }: PiReadback<A>) =>
-      Effect.gen(function* () {
-        const reply = yield* Deferred.make<unknown, PiSessionError>();
-        yield* Queue.offer(reads, { type: String(command.type), reply });
-        const value = decode(yield* Deferred.await(reply));
-        if (value === undefined)
-          return yield* new PiSessionError({ reason: "protocol", detail: invalid });
-        return value;
-      }),
+    read,
+    readState: read(piReadbacks.state),
     progress,
     context: () => ({ _tag: "context", messages: [contextMessage] }),
     publication,
