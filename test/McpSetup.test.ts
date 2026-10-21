@@ -174,7 +174,7 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
       assert.equal((yield* setup.signIn.state)?.prompt?.id, waiting.prompt!.id);
       yield* setup.signIn.answer(waiting.id, waiting.prompt!.id, redirect.href);
       const finished = yield* until(setup, (state) => state.status !== "running");
-      assert.equal(finished.status, "success", finished.message);
+      assert.equal(finished.status, "success", finished.message ?? "sign-in succeeds");
       assert.ok(
         !JSON.stringify(finished).includes("private-"),
         "no token reaches the browser state",

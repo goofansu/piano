@@ -29,7 +29,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@shadcn/lint": "^0.2.1",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.5",
     "@typescript-eslint/parser": "^8.71.2",
     "concurrently": "^10.0.6",
     "eslint": "^10.13.0",
