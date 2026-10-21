@@ -22,15 +22,15 @@ import {
   SessionPullRequestAction,
   SlashCommand,
   WorkspaceChanges,
-  WorkspaceIgnoredFiles,
+  WorkspaceWrittenFiles,
 } from "./wire.ts";
 
 /**
- * How many paths one ignored-files request carries. A session writes as many files as it writes,
+ * How many paths one written-files request carries. A session writes as many files as it writes,
  * so this bounds the request, not the question: the browser adapter reads a longer list in
  * batches of this size and answers it as one observation.
  */
-export const IGNORED_PATHS_LIMIT = 1000;
+export const WRITTEN_PATHS_LIMIT = 1000;
 
 export type Method = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -217,18 +217,18 @@ export const Endpoints = {
     fallback: (status) => `File request failed (${status}).`,
   }),
 
-  workspaceIgnoredFiles: endpoint({
+  workspaceWrittenFiles: endpoint({
     method: "POST",
-    path: "/api/workspace/files/ignored",
+    path: "/api/workspace/files/written",
     query: ["workspaceId"],
     body: Schema.Struct({
       paths: Schema.Array(Schema.String.check(Schema.isMaxLength(4096))).check(
-        Schema.isMaxLength(IGNORED_PATHS_LIMIT),
+        Schema.isMaxLength(WRITTEN_PATHS_LIMIT),
       ),
     }),
     invalid: "File paths are required in the request body.",
-    response: WorkspaceIgnoredFiles,
-    fallback: (status) => `Ignored files request failed (${status}).`,
+    response: WorkspaceWrittenFiles,
+    fallback: (status) => `Files request failed (${status}).`,
   }),
 
   // Session pull request (GitHub facts are live)

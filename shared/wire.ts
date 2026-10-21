@@ -570,26 +570,35 @@ export const WorkspaceChanges = Schema.Struct({
 export type WorkspaceChanges = typeof WorkspaceChanges.Type;
 
 /**
- * Which of the paths a session wrote Git ignores, lie outside the workspace or no longer exist in
- * it, each as sent, and the name each path inside it places to (`placed[i]` for `inside[i]`),
- * relative to the workspace root, so spellings of one file are known to be one.
+ * Where one path a session wrote stands, as sent: `outside` the workspace, or inside it and placed
+ * at `placed` (its name relative to the workspace root, so spellings of one file are known to be
+ * one), where Git ignores it, it no longer exists (a later command removed it), or it is `listed`
+ * in the Files list. Git's verdict comes first: an ignored path is `ignored` whether or not it exists.
  */
-export const WorkspaceIgnoredFiles = Schema.Struct({
+export const WrittenFile = Schema.Union([
+  Schema.Struct({ path: Schema.String, verdict: Schema.Literal("outside") }),
+  Schema.Struct({
+    path: Schema.String,
+    verdict: Schema.Literals(["listed", "ignored", "missing"]),
+    placed: Schema.String,
+  }),
+]);
+export type WrittenFile = typeof WrittenFile.Type;
+
+/** One `WrittenFile` per path asked about, in the order they were sent. */
+export const WorkspaceWrittenFiles = Schema.Struct({
   workspace: Workspace,
   observedAt: Schema.String,
   result: Schema.Union([
-    Schema.Struct({
-      status: Schema.Literal("ready"),
-      ignored: Schema.Array(Schema.String),
-      outside: Schema.Array(Schema.String),
-      missing: Schema.Array(Schema.String),
-      inside: Schema.Array(Schema.String),
-      placed: Schema.Array(Schema.String),
-    }),
+    Schema.Struct({ status: Schema.Literal("ready"), files: Schema.Array(WrittenFile) }),
     Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
   ]),
 });
-export type WorkspaceIgnoredFiles = typeof WorkspaceIgnoredFiles.Type;
+export type WorkspaceWrittenFiles = typeof WorkspaceWrittenFiles.Type;
+
+/** Whether two observations name one workspace, by all of its identity (INV-07). */
+export const sameWorkspace = (a: Workspace, b: Workspace) =>
+  a.id === b.id && a.path === b.path && a.folder === b.folder;
 
 // ── Sidebar views ───────────────────────────────────────────────────────────
 

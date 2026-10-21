@@ -1,7 +1,7 @@
-import type { Workspace, WorkspaceIgnoredFiles } from "@shared/wire";
+import type { Workspace, WorkspaceWrittenFiles } from "@shared/wire";
 import { createContext, useContext, useMemo, useRef } from "react";
 import type { AppState, SessionView } from "../store.ts";
-import { workspaceIgnoredFiles } from "./api.ts";
+import { workspaceWrittenFiles } from "./api.ts";
 import { refreshKey } from "./changesView.ts";
 import { sessionContext } from "./sessionContext.ts";
 import { type SessionFile, sessionFiles, visibleFiles } from "./sessionFiles.ts";
@@ -39,21 +39,21 @@ function useVisibleFiles(
   const files = useMemo(() => sessionFiles(messages ?? []), [messages]);
   const key =
     workspace && files.length
-      ? JSON.stringify([workspace.id, workspace.path, files.map((file) => file.path)])
+      ? JSON.stringify([
+          { id: workspace.id, folder: workspace.folder, path: workspace.path },
+          files.map((file) => file.path),
+        ])
       : null;
-  const { value, error } = useObservation<WorkspaceIgnoredFiles>(
+  const { value, error } = useObservation<WorkspaceWrittenFiles>(
     key,
     async (signal, k) => {
-      const [id, path, paths] = JSON.parse(k) as [string, string, string[]];
-      const answer = await workspaceIgnoredFiles(id, paths, { signal });
-      // A response for another workspace never shows (INV-07).
-      if (answer.workspace.id !== id || answer.workspace.path !== path)
-        throw new Error("Files returned a different workspace.");
-      return answer;
+      // The adapter refuses a reply naming another workspace (INV-07).
+      const [asked, paths] = JSON.parse(k) as [Workspace, string[]];
+      return workspaceWrittenFiles(asked, paths, { signal });
     },
     { focus: true, trigger: refreshKey(session), debounce: 600 },
   );
-  const last = useRef<WorkspaceIgnoredFiles>(undefined);
+  const last = useRef<WorkspaceWrittenFiles>(undefined);
   // Observation normally retains stale data on transport failure. Files instead fail open,
   // just as for a Git error response; discard the fallback too so a new path cannot revive it.
   if (error !== undefined) last.current = undefined;

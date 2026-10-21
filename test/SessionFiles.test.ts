@@ -102,11 +102,12 @@ test("Git's answer hides ignored, outside and removed paths; without one, or aft
     observedAt: "now",
     result: {
       status: "ready" as const,
-      ignored: ["scratch/notes.md"],
-      outside: ["/elsewhere/x.ts"],
-      missing: ["docs/removed.md"],
-      inside: ["src/a.ts", "scratch/notes.md", "docs/removed.md"],
-      placed: ["src/a.ts", "scratch/notes.md", "docs/removed.md"],
+      files: [
+        { path: "src/a.ts", verdict: "listed" as const, placed: "src/a.ts" },
+        { path: "scratch/notes.md", verdict: "ignored" as const, placed: "scratch/notes.md" },
+        { path: "/elsewhere/x.ts", verdict: "outside" as const },
+        { path: "docs/removed.md", verdict: "missing" as const, placed: "docs/removed.md" },
+      ],
     },
   };
   const a = { path: "src/a.ts", messageId: "a1", placed: "src/a.ts" };
@@ -125,6 +126,7 @@ test("Git's answer hides ignored, outside and removed paths; without one, or aft
     undefined,
     { ...workspace, id: "other" },
     { ...workspace, path: "/work/other" },
+    { ...workspace, folder: "/work/other" },
   ]) {
     assert.deepEqual(visibleFiles(files, ready, current), files);
   }
@@ -159,11 +161,11 @@ test("one file under several spellings is one entry at its latest touch once Git
     observedAt: "now",
     result: {
       status: "ready" as const,
-      ignored: [],
-      outside: [],
-      missing: [],
-      inside: [...spellings, "src/b.ts"],
-      placed: ["src/a.ts", "src/a.ts", "src/a.ts", "src/a.ts", "src/b.ts"],
+      files: [...spellings, "src/b.ts"].map((path) => ({
+        path,
+        verdict: "listed" as const,
+        placed: path === "src/b.ts" ? "src/b.ts" : "src/a.ts",
+      })),
     },
   };
   // The latest touch's spelling is kept, so opening sends a path the call named.
@@ -174,7 +176,7 @@ test("one file under several spellings is one entry at its latest touch once Git
   // A spelling the answer does not cover yet keeps the text rule until a fresh answer.
   const stale = {
     ...ready,
-    result: { ...ready.result, inside: spellings.slice(0, 2), placed: ["src/a.ts", "src/a.ts"] },
+    result: { ...ready.result, files: ready.result.files.slice(0, 2) },
   };
   assert.deepEqual(shown(visibleFiles(files, stale, workspace)), [
     ["/tmp/repo/src/a.ts", "src/a.ts"],

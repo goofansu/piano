@@ -41,7 +41,7 @@ function fixture(t: TestContext) {
     );
   return { repo, git, gitInput, preview };
 }
-test("ignored files: internal directory aliases share identity without poisoning Git's ignore query; a removed file is missing", async (t) => {
+test("written files: internal directory aliases share identity without poisoning Git's ignore query; a removed file is missing", async (t) => {
   const { repo } = fixture(t);
   mkdirSync(join(repo, "src"));
   writeFileSync(join(repo, "src/a.ts"), "export const a = 1;\n");
@@ -50,7 +50,7 @@ test("ignored files: internal directory aliases share identity without poisoning
   writeFileSync(join(repo, "build.log"), "ignored output\n");
   const observation = await Effect.runPromise(
     Effect.gen(function* () {
-      return yield* (yield* WorkspaceChanges).ignored({ id: "scratch", folder: repo, path: repo }, [
+      return yield* (yield* WorkspaceChanges).written({ id: "scratch", folder: repo, path: repo }, [
         "src/a.ts",
         "alias/a.ts",
         "build.log",
@@ -60,11 +60,12 @@ test("ignored files: internal directory aliases share identity without poisoning
   );
   assert.deepEqual(observation.result, {
     status: "ready",
-    ignored: ["build.log"],
-    outside: [],
-    missing: ["src/removed.ts"],
-    inside: ["src/a.ts", "alias/a.ts", "build.log", "src/removed.ts"],
-    placed: ["src/a.ts", "src/a.ts", "build.log", "src/removed.ts"],
+    files: [
+      { path: "src/a.ts", verdict: "listed", placed: "src/a.ts" },
+      { path: "alias/a.ts", verdict: "listed", placed: "src/a.ts" },
+      { path: "build.log", verdict: "ignored", placed: "build.log" },
+      { path: "src/removed.ts", verdict: "missing", placed: "src/removed.ts" },
+    ],
   });
 });
 

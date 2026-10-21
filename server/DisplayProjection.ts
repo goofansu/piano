@@ -37,7 +37,7 @@ export interface DisplayRedaction {
 const IDENTITY_FIELDS: ReadonlySet<string> = new Set([
   "inputFingerprint", // Opaque, process-keyed input equality evidence, never display content
   "writtenPath", // Supported write/edit targets extracted by PiRecords before redaction
-  "path", // DirListing, DirEntry, FolderView, Workspace, WorktreeView/Facts, ChangeFile, FilePreview
+  "path", // DirListing, DirEntry, FolderView, Workspace, WorktreeView/Facts, ChangeFile, FilePreview, WrittenFile
   "cwd", // SessionReference, SessionCursor, HostInfo, ModelCatalog, the socket's cwd envelopes
   "folder", // Workspace, the socket's worktree messages
   "parent", // DirListing
@@ -45,11 +45,7 @@ const IDENTITY_FIELDS: ReadonlySet<string> = new Set([
   "gitRoot", // DirListing
   "currentPath", // WorktreeDiscovery
   "sessionFile", // SessionState
-  "ignored", // WorkspaceIgnoredFiles: the paths as sent
-  "outside",
-  "missing",
-  "inside",
-  "placed", // WorkspaceIgnoredFiles: the names the paths inside place to
+  "placed", // WrittenFile: the name a path inside the workspace places to
 ]);
 
 const isIdentity = (field: unknown) =>

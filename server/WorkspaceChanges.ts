@@ -9,9 +9,10 @@ import {
   CHANGES_FILE_PATCH_BYTES,
   CHANGES_INITIAL_PATCH_BYTES,
   type ChangeFile,
-  type WorkspaceIgnoredFiles as IgnoredObservation,
   type WorkspaceChanges as Observation,
   type Workspace,
+  type WrittenFile,
+  type WorkspaceWrittenFiles as WrittenObservation,
 } from "../shared/wire.ts";
 import { type Checkout, observeCheckout } from "./GitCheckout.ts";
 import { place } from "./WorkspaceFiles.ts";
@@ -20,13 +21,13 @@ export class WorkspaceChanges extends Context.Service<
   WorkspaceChanges,
   {
     readonly preview: (workspace: Workspace, path?: string) => Effect.Effect<Observation>;
-    /** Which of `paths` (as a session's tool calls named them: relative to the workspace, or
-     * absolute) Git ignores, which lie outside the workspace, and which no longer exist. A tracked
-     * file is never ignored. */
-    readonly ignored: (
+    /** Where each of `paths` (as a session's tool calls named them: relative to the workspace, or
+     * absolute) stands: outside the workspace, ignored by Git, no longer existing, or listed. A
+     * tracked file is never ignored. */
+    readonly written: (
       workspace: Workspace,
       paths: readonly string[],
-    ) => Effect.Effect<IgnoredObservation>;
+    ) => Effect.Effect<WrittenObservation>;
   }
 >()("piano/WorkspaceChanges") {}
 
@@ -106,41 +107,42 @@ async function preview(
   }
 }
 
-/** `git check-ignore` over the paths inside the workspace, placed as the Files list places them,
- * each answered with its placed name; it exits 1 when none is ignored. A path inside that names
- * nothing on disk (a file a later command removed) is missing; a dangling symlink still exists. */
-async function ignored(
+/** Each path placed as the Files list places it, then `git check-ignore` over the placed names of
+ * those inside (it exits 1 when none is ignored). A path inside that names nothing on disk (a file a
+ * later command removed) is missing; a dangling symlink still exists. */
+async function written(
   checkout: Checkout,
   workspace: Workspace,
   paths: readonly string[],
-): Promise<IgnoredObservation["result"]> {
-  const inside = new Map<string, string>();
-  const outside: string[] = [];
-  for (const path of paths) {
-    const name = await place(workspace, path);
-    if (name === undefined) outside.push(path);
-    else inside.set(path, name);
-  }
-  const missing: string[] = [];
-  for (const path of inside.keys())
-    await lstat(resolve(workspace.path, path)).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
-      missing.push(path);
+): Promise<WrittenObservation["result"]> {
+  const placed: (string | undefined)[] = [];
+  for (const path of paths) placed.push(await place(workspace, path));
+  const inside = placed.filter((name) => name !== undefined);
+  const hits = new Set<string>();
+  if (inside.length) {
+    const result = await checkout.run(["check-ignore", "-z", "--stdin"], {
+      input: Buffer.from(`${inside.join("\0")}\0`),
+      okCodes: [0, 1],
     });
-  const names = { inside: [...inside.keys()], placed: [...inside.values()] };
-  if (inside.size === 0) return { status: "ready", ignored: [], outside, missing, ...names };
-  const result = await checkout.run(["check-ignore", "-z", "--stdin"], {
-    input: Buffer.from(`${[...inside.values()].join("\0")}\0`),
-    okCodes: [0, 1],
-  });
-  const hits = new Set(result.stdout.toString("utf8").split("\0").filter(Boolean));
-  return {
-    status: "ready",
-    ignored: [...inside].filter(([, name]) => hits.has(name)).map(([path]) => path),
-    outside,
-    missing,
-    ...names,
-  };
+    for (const name of result.stdout.toString("utf8").split("\0")) if (name) hits.add(name);
+  }
+  const files: WrittenFile[] = [];
+  for (const [i, path] of paths.entries()) {
+    const name = placed[i];
+    if (name === undefined) files.push({ path, verdict: "outside" });
+    else if (hits.has(name)) files.push({ path, verdict: "ignored", placed: name });
+    else {
+      const exists = await lstat(resolve(workspace.path, path)).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+          return false;
+        },
+      );
+      files.push({ path, verdict: exists ? "listed" : "missing", placed: name });
+    }
+  }
+  return { status: "ready", files };
 }
 
 export const WorkspaceChangesLive = Layer.effect(
@@ -164,7 +166,7 @@ export const WorkspaceChangesLive = Layer.effect(
           },
           (checkout) => preview(checkout, path),
         ),
-      ignored: (workspace, paths) =>
+      written: (workspace, paths) =>
         observeCheckout(
           workspace,
           {
@@ -172,7 +174,7 @@ export const WorkspaceChangesLive = Layer.effect(
             limit: 1024 * 1024,
             messages: { root: "Files requires the Git checkout root." },
           },
-          (checkout) => ignored(checkout, workspace, paths),
+          (checkout) => written(checkout, workspace, paths),
         ),
     });
   }),
