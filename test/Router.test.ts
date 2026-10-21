@@ -57,11 +57,15 @@ test("a decoded body and the resolved workspace reach the handler; the reply is 
   assert.match(body.result.diff, /\+two/);
 });
 
-test("ignored files are what Git ignores among the paths a session wrote, as sent; outside paths are told apart; inside ones are placed", async (t) => {
+test("ignored files are what Git ignores among the paths a session wrote, as sent; outside and removed paths are told apart; inside ones are placed", async (t) => {
   const { writeFileSync, rmSync } = await import("node:fs");
   const { join } = await import("node:path");
   writeFileSync(join(server.repo, ".gitignore"), "scratch/\n*.log\nREADME.md\n");
-  t.after(() => rmSync(join(server.repo, ".gitignore")));
+  writeFileSync(join(server.repo, "src/app.ts"), "export {};\n");
+  t.after(() => {
+    rmSync(join(server.repo, ".gitignore"));
+    rmSync(join(server.repo, "src/app.ts"));
+  });
   const { status, body } = await reply(
     await post(
       `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
@@ -84,6 +88,8 @@ test("ignored files are what Git ignores among the paths a session wrote, as sen
     // README.md matches a pattern but is tracked, so Git does not ignore it.
     ignored: ["scratch/notes.md", `${server.repo}/build.log`],
     outside: ["/elsewhere/x.ts", "../sibling.ts"],
+    // Neither was ever written in this checkout.
+    missing: ["scratch/notes.md", `${server.repo}/build.log`],
     inside: ["scratch/notes.md", "src/app.ts", `${server.repo}/build.log`, "README.md"],
     placed: ["scratch/notes.md", "src/app.ts", "build.log", "README.md"],
   });
@@ -97,6 +103,7 @@ test("ignored files are what Git ignores among the paths a session wrote, as sen
     status: "ready",
     ignored: [],
     outside: [],
+    missing: [],
     inside: ["src/app.ts"],
     placed: ["src/app.ts"],
   });
@@ -124,6 +131,7 @@ test("an absolute path through a symlink to the workspace is inside it, as macOS
     status: "ready",
     ignored: [`${link}/scratch/notes.md`],
     outside: [],
+    missing: [`${link}/scratch/notes.md`, `${link}/src/app.ts`],
     inside: [`${link}/scratch/notes.md`, `${link}/src/app.ts`],
     placed: ["scratch/notes.md", "src/app.ts"],
   });
@@ -141,6 +149,7 @@ test("ignored-file paths and their placed names are identities, never redacted a
     status: "ready",
     ignored: [],
     outside: [],
+    missing: paths,
     inside: paths,
     placed: ["notes/token=abc12345.md", "keys/sk-abcdefghijklmnop.ts"],
   });

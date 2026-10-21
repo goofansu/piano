@@ -89,11 +89,12 @@ test("a path inside the session's directory shows relative to it; one outside ke
   assert.equal(shown("/work/api/a.ts", undefined), "/work/api/a.ts");
 });
 
-test("Git's answer hides ignored and outside paths; without one, or after a failed read, every file shows", () => {
+test("Git's answer hides ignored, outside and removed paths; without one, or after a failed read, every file shows", () => {
   const files = [
     { path: "src/a.ts", messageId: "a1" },
     { path: "scratch/notes.md", messageId: "a1" },
     { path: "/elsewhere/x.ts", messageId: "a2" },
+    { path: "docs/removed.md", messageId: "a2" },
   ];
   const workspace = { id: "w", folder: "/work/api", path: "/work/api" };
   const ready = {
@@ -103,8 +104,9 @@ test("Git's answer hides ignored and outside paths; without one, or after a fail
       status: "ready" as const,
       ignored: ["scratch/notes.md"],
       outside: ["/elsewhere/x.ts"],
-      inside: ["src/a.ts", "scratch/notes.md"],
-      placed: ["src/a.ts", "scratch/notes.md"],
+      missing: ["docs/removed.md"],
+      inside: ["src/a.ts", "scratch/notes.md", "docs/removed.md"],
+      placed: ["src/a.ts", "scratch/notes.md", "docs/removed.md"],
     },
   };
   const a = { path: "src/a.ts", messageId: "a1", placed: "src/a.ts" };
@@ -159,6 +161,7 @@ test("one file under several spellings is one entry at its latest touch once Git
       status: "ready" as const,
       ignored: [],
       outside: [],
+      missing: [],
       inside: [...spellings, "src/b.ts"],
       placed: ["src/a.ts", "src/a.ts", "src/a.ts", "src/a.ts", "src/b.ts"],
     },

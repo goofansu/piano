@@ -1,9 +1,9 @@
 /** Bounded live browsing (INV-01/07/09), deliberately independent of exact capture.
  * Only a disposable index is written. No hooks, clean filters, textconv or external diff.
  */
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
 import {
   CHANGES_FILE_PATCH_BYTES,
@@ -21,7 +21,8 @@ export class WorkspaceChanges extends Context.Service<
   {
     readonly preview: (workspace: Workspace, path?: string) => Effect.Effect<Observation>;
     /** Which of `paths` (as a session's tool calls named them: relative to the workspace, or
-     * absolute) Git ignores, and which lie outside the workspace. A tracked file is never ignored. */
+     * absolute) Git ignores, which lie outside the workspace, and which no longer exist. A tracked
+     * file is never ignored. */
     readonly ignored: (
       workspace: Workspace,
       paths: readonly string[],
@@ -106,7 +107,8 @@ async function preview(
 }
 
 /** `git check-ignore` over the paths inside the workspace, placed as the Files list places them,
- * each answered with its placed name; it exits 1 when none is ignored. */
+ * each answered with its placed name; it exits 1 when none is ignored. A path inside that names
+ * nothing on disk (a file a later command removed) is missing; a dangling symlink still exists. */
 async function ignored(
   checkout: Checkout,
   workspace: Workspace,
@@ -119,8 +121,14 @@ async function ignored(
     if (name === undefined) outside.push(path);
     else inside.set(path, name);
   }
+  const missing: string[] = [];
+  for (const path of inside.keys())
+    await lstat(resolve(workspace.path, path)).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+      missing.push(path);
+    });
   const names = { inside: [...inside.keys()], placed: [...inside.values()] };
-  if (inside.size === 0) return { status: "ready", ignored: [], outside, ...names };
+  if (inside.size === 0) return { status: "ready", ignored: [], outside, missing, ...names };
   const result = await checkout.run(["check-ignore", "-z", "--stdin"], {
     input: Buffer.from(`${[...inside.values()].join("\0")}\0`),
     okCodes: [0, 1],
@@ -130,6 +138,7 @@ async function ignored(
     status: "ready",
     ignored: [...inside].filter(([, name]) => hits.has(name)).map(([path]) => path),
     outside,
+    missing,
     ...names,
   };
 }

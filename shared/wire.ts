@@ -569,9 +569,9 @@ export const WorkspaceChanges = Schema.Struct({
 export type WorkspaceChanges = typeof WorkspaceChanges.Type;
 
 /**
- * Which of the paths a session wrote Git ignores or that lie outside the workspace, each as sent,
- * and the name each path inside it places to (`placed[i]` for `inside[i]`), relative to the
- * workspace root, so spellings of one file are known to be one.
+ * Which of the paths a session wrote Git ignores, lie outside the workspace or no longer exist in
+ * it, each as sent, and the name each path inside it places to (`placed[i]` for `inside[i]`),
+ * relative to the workspace root, so spellings of one file are known to be one.
  */
 export const WorkspaceIgnoredFiles = Schema.Struct({
   workspace: Workspace,
@@ -581,6 +581,7 @@ export const WorkspaceIgnoredFiles = Schema.Struct({
       status: Schema.Literal("ready"),
       ignored: Schema.Array(Schema.String),
       outside: Schema.Array(Schema.String),
+      missing: Schema.Array(Schema.String),
       inside: Schema.Array(Schema.String),
       placed: Schema.Array(Schema.String),
     }),

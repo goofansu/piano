@@ -166,13 +166,13 @@ const sameWorkspace = (a: Workspace, b: Workspace) =>
   a.id === b.id && a.path === b.path && a.folder === b.folder;
 
 /**
- * Which of `paths` Git ignores, which lie outside the workspace, and the name each one inside it
- * places to: one observation however many paths are asked about. A request carries
- * `IGNORED_PATHS_LIMIT` paths, so a longer list is read one batch at a time, in order, and the
- * batches are joined here — `placed[i]` still names `inside[i]`, and `ignored`/`outside` keep the
- * order the paths were sent in. The read stops at the first abort, failure or error result rather
- * than publishing the batches before it. The answer carries the oldest `observedAt` it was built
- * from: no part of it is fresher.
+ * Which of `paths` Git ignores, which lie outside the workspace, which no longer exist, and the
+ * name each one inside it places to: one observation however many paths are asked about. A request
+ * carries `IGNORED_PATHS_LIMIT` paths, so a longer list is read one batch at a time, in order, and
+ * the batches are joined here — `placed[i]` still names `inside[i]`, and `ignored`/`outside`/
+ * `missing` keep the order the paths were sent in. The read stops at the first abort, failure or
+ * error result rather than publishing the batches before it. The answer carries the oldest
+ * `observedAt` it was built from: no part of it is fresher.
  *
  * Every batch must name the same workspace, by all of its identity — ID, path and folder (INV-07).
  * A reply that names another is as far outside the contract as a malformed one, so it fails the
@@ -192,6 +192,7 @@ export const workspaceIgnoredFiles = async (
   if (paths.length <= IGNORED_PATHS_LIMIT) return read(paths);
   const ignored: string[] = [],
     outside: string[] = [],
+    missing: string[] = [],
     inside: string[] = [],
     placed: string[] = [];
   let first: WorkspaceIgnoredFiles | undefined;
@@ -207,13 +208,14 @@ export const workspaceIgnoredFiles = async (
     if (answer.result.status !== "ready") return answer;
     ignored.push(...answer.result.ignored);
     outside.push(...answer.result.outside);
+    missing.push(...answer.result.missing);
     inside.push(...answer.result.inside);
     placed.push(...answer.result.placed);
   }
   return {
     workspace: first!.workspace,
     observedAt: first!.observedAt,
-    result: { status: "ready", ignored, outside, inside, placed },
+    result: { status: "ready", ignored, outside, missing, inside, placed },
   };
 };
 

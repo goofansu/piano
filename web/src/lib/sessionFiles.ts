@@ -60,10 +60,10 @@ export function splitPath(path: string): { name: string; dir: string } {
 }
 
 /**
- * The files worth listing: those Git does not ignore and that lie inside the workspace, as the
- * latest observation for this workspace says (INV-07), each file once at its latest touch. The
- * answer names the file each path places to, so spellings of one file (relative, absolute,
- * through a symlink) are one entry; a path it does not cover stays as `sessionFiles` spelled it.
+ * The files worth listing: those Git does not ignore, that lie inside the workspace and that still
+ * exist there (a bash command may have removed one), as the latest observation for this workspace
+ * says (INV-07), each file once at its latest touch. The answer names the file each path places
+ * to, so spellings of one file (relative, absolute, through a symlink) are one entry; a path it does not cover stays as `sessionFiles` spelled it.
  * Without an answer, or after a failed read, every path shows: the facts in hand beat an empty list.
  */
 export function visibleFiles(
@@ -78,8 +78,8 @@ export function visibleFiles(
     observation.result.status !== "ready"
   )
     return [...files];
-  const { ignored, outside, inside, placed } = observation.result;
-  const hidden = new Set([...ignored, ...outside]);
+  const { ignored, outside, missing, inside, placed } = observation.result;
+  const hidden = new Set([...ignored, ...outside, ...missing]);
   const names = new Map(inside.map((path, i) => [path, placed[i]]));
   // Files come in conversation order, so moving a file to the end keeps it at its latest touch.
   const byName = new Map<string, SessionFile>();

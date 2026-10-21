@@ -41,7 +41,7 @@ function fixture(t: TestContext) {
     );
   return { repo, git, gitInput, preview };
 }
-test("ignored files: internal directory aliases share identity without poisoning Git's ignore query", async (t) => {
+test("ignored files: internal directory aliases share identity without poisoning Git's ignore query; a removed file is missing", async (t) => {
   const { repo } = fixture(t);
   mkdirSync(join(repo, "src"));
   writeFileSync(join(repo, "src/a.ts"), "export const a = 1;\n");
@@ -54,6 +54,7 @@ test("ignored files: internal directory aliases share identity without poisoning
         "src/a.ts",
         "alias/a.ts",
         "build.log",
+        "src/removed.ts",
       ]);
     }).pipe(Effect.provide(WorkspaceChangesLive)),
   );
@@ -61,8 +62,9 @@ test("ignored files: internal directory aliases share identity without poisoning
     status: "ready",
     ignored: ["build.log"],
     outside: [],
-    inside: ["src/a.ts", "alias/a.ts", "build.log"],
-    placed: ["src/a.ts", "src/a.ts", "build.log"],
+    missing: ["src/removed.ts"],
+    inside: ["src/a.ts", "alias/a.ts", "build.log", "src/removed.ts"],
+    placed: ["src/a.ts", "src/a.ts", "build.log", "src/removed.ts"],
   });
 });
 
