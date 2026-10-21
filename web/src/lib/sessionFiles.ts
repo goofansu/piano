@@ -3,7 +3,12 @@
  * Pi's own write and edit calls count, and only ones that succeeded: a failed edit changed
  * nothing, and a bash command's effects are unknowable from its text.
  */
-import type { RenderMsg, Workspace, WorkspaceIgnoredFiles } from "../../../shared/wire.ts";
+import {
+  type RenderMsg,
+  sameWorkspace,
+  type Workspace,
+  type WorkspaceWrittenFiles,
+} from "../../../shared/wire.ts";
 
 export interface SessionFile {
   /** As the tool call named it: absolute, or relative to the session's directory. */
@@ -60,41 +65,40 @@ export function splitPath(path: string): { name: string; dir: string } {
 }
 
 /**
- * The files worth listing: those Git does not ignore, that lie inside the workspace and that still
- * exist there (a bash command may have removed one), as the latest observation for this workspace
- * says (INV-07), each file once at its latest touch. The answer names the file each path places
- * to, so spellings of one file (relative, absolute, through a symlink) are one entry; a path it does not cover stays as `sessionFiles` spelled it.
- * Without an answer, or after a failed read, every path shows: the facts in hand beat an empty list.
+ * The files worth listing: those the latest observation for this workspace (INV-07) calls listed —
+ * inside the workspace, not ignored by Git and still existing (a bash command may have removed
+ * one) — each file once at its latest touch. The observation names the file each path places to,
+ * so spellings of one file (relative, absolute, through a symlink) are one entry; a path it does
+ * not cover stays as `sessionFiles` spelled it. Without an answer, or after a failed read, every
+ * path shows: the facts in hand beat an empty list.
  */
 export function visibleFiles(
   files: readonly SessionFile[],
-  observation: WorkspaceIgnoredFiles | undefined,
+  observation: WorkspaceWrittenFiles | undefined,
   workspace: Workspace | undefined,
 ): SessionFile[] {
   if (
     !workspace ||
-    observation?.workspace.id !== workspace.id ||
-    observation.workspace.path !== workspace.path ||
+    !observation ||
+    !sameWorkspace(observation.workspace, workspace) ||
     observation.result.status !== "ready"
   )
     return [...files];
-  const { ignored, outside, missing, inside, placed } = observation.result;
-  const hidden = new Set([...ignored, ...outside, ...missing]);
-  const names = new Map(inside.map((path, i) => [path, placed[i]]));
+  const verdicts = new Map(observation.result.files.map((file) => [file.path, file]));
   // Files come in conversation order, so moving a file to the end keeps it at its latest touch.
   const byName = new Map<string, SessionFile>();
   const shown: SessionFile[] = [];
   for (const file of files) {
-    if (hidden.has(file.path)) continue;
-    const name = names.get(file.path);
-    if (name === undefined) {
+    const verdict = verdicts.get(file.path);
+    if (verdict === undefined) {
       shown.push(file);
       continue;
     }
-    const entry = { ...file, placed: name };
-    const earlier = byName.get(name);
+    if (verdict.verdict !== "listed") continue;
+    const entry = { ...file, placed: verdict.placed };
+    const earlier = byName.get(verdict.placed);
     if (earlier) shown.splice(shown.indexOf(earlier), 1);
-    byName.set(name, entry);
+    byName.set(verdict.placed, entry);
     shown.push(entry);
   }
   return shown;

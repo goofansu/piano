@@ -57,7 +57,7 @@ test("a decoded body and the resolved workspace reach the handler; the reply is 
   assert.match(body.result.diff, /\+two/);
 });
 
-test("ignored files are what Git ignores among the paths a session wrote, as sent; outside and removed paths are told apart; inside ones are placed", async (t) => {
+test("written files: each path a session wrote, as sent, is outside, ignored by Git, removed or listed; inside ones are placed", async (t) => {
   const { writeFileSync, rmSync } = await import("node:fs");
   const { join } = await import("node:path");
   writeFileSync(join(server.repo, ".gitignore"), "scratch/\n*.log\nREADME.md\n");
@@ -68,7 +68,7 @@ test("ignored files are what Git ignores among the paths a session wrote, as sen
   });
   const { status, body } = await reply(
     await post(
-      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
+      `/api/workspace/files/written?workspaceId=${server.workspaceId}`,
       JSON.stringify({
         paths: [
           "scratch/notes.md",
@@ -85,27 +85,26 @@ test("ignored files are what Git ignores among the paths a session wrote, as sen
   assert.equal(body.workspace.id, server.workspaceId);
   assert.deepEqual(body.result, {
     status: "ready",
-    // README.md matches a pattern but is tracked, so Git does not ignore it.
-    ignored: ["scratch/notes.md", `${server.repo}/build.log`],
-    outside: ["/elsewhere/x.ts", "../sibling.ts"],
-    // Neither was ever written in this checkout.
-    missing: ["scratch/notes.md", `${server.repo}/build.log`],
-    inside: ["scratch/notes.md", "src/app.ts", `${server.repo}/build.log`, "README.md"],
-    placed: ["scratch/notes.md", "src/app.ts", "build.log", "README.md"],
+    files: [
+      // Neither ignored file was ever written in this checkout: Git's verdict comes first.
+      { path: "scratch/notes.md", verdict: "ignored", placed: "scratch/notes.md" },
+      { path: "src/app.ts", verdict: "listed", placed: "src/app.ts" },
+      { path: `${server.repo}/build.log`, verdict: "ignored", placed: "build.log" },
+      { path: "/elsewhere/x.ts", verdict: "outside" },
+      { path: "../sibling.ts", verdict: "outside" },
+      // README.md matches a pattern but is tracked, so Git does not ignore it.
+      { path: "README.md", verdict: "listed", placed: "README.md" },
+    ],
   });
   const none = await reply(
     await post(
-      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
+      `/api/workspace/files/written?workspaceId=${server.workspaceId}`,
       JSON.stringify({ paths: ["src/app.ts"] }),
     ),
   );
   assert.deepEqual(none.body.result, {
     status: "ready",
-    ignored: [],
-    outside: [],
-    missing: [],
-    inside: ["src/app.ts"],
-    placed: ["src/app.ts"],
+    files: [{ path: "src/app.ts", verdict: "listed", placed: "src/app.ts" }],
   });
 });
 
@@ -123,35 +122,33 @@ test("an absolute path through a symlink to the workspace is inside it, as macOS
   });
   const { body } = await reply(
     await post(
-      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
+      `/api/workspace/files/written?workspaceId=${server.workspaceId}`,
       JSON.stringify({ paths: [`${link}/scratch/notes.md`, `${link}/src/app.ts`] }),
     ),
   );
   assert.deepEqual(body.result, {
     status: "ready",
-    ignored: [`${link}/scratch/notes.md`],
-    outside: [],
-    missing: [`${link}/scratch/notes.md`, `${link}/src/app.ts`],
-    inside: [`${link}/scratch/notes.md`, `${link}/src/app.ts`],
-    placed: ["scratch/notes.md", "src/app.ts"],
+    files: [
+      { path: `${link}/scratch/notes.md`, verdict: "ignored", placed: "scratch/notes.md" },
+      { path: `${link}/src/app.ts`, verdict: "missing", placed: "src/app.ts" },
+    ],
   });
 });
 
-test("ignored-file paths and their placed names are identities, never redacted as display text", async () => {
+test("written-file paths and their placed names are identities, never redacted as display text", async () => {
   const paths = ["notes/token=abc12345.md", `${server.repo}/keys/sk-abcdefghijklmnop.ts`];
   const { body } = await reply(
     await post(
-      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
+      `/api/workspace/files/written?workspaceId=${server.workspaceId}`,
       JSON.stringify({ paths }),
     ),
   );
   assert.deepEqual(body.result, {
     status: "ready",
-    ignored: [],
-    outside: [],
-    missing: paths,
-    inside: paths,
-    placed: ["notes/token=abc12345.md", "keys/sk-abcdefghijklmnop.ts"],
+    files: [
+      { path: paths[0], verdict: "missing", placed: "notes/token=abc12345.md" },
+      { path: paths[1], verdict: "missing", placed: "keys/sk-abcdefghijklmnop.ts" },
+    ],
   });
 });
 

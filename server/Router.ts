@@ -249,8 +249,8 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.workspaceChangedFile, ({ workspace, body }) =>
       Effect.flatMap(WorkspaceChanges, (changes) => changes.preview(workspace, body.path)),
     );
-    yield* serve(Endpoints.workspaceIgnoredFiles, ({ workspace, body }) =>
-      Effect.flatMap(WorkspaceChanges, (changes) => changes.ignored(workspace, body.paths)),
+    yield* serve(Endpoints.workspaceWrittenFiles, ({ workspace, body }) =>
+      Effect.flatMap(WorkspaceChanges, (changes) => changes.written(workspace, body.paths)),
     );
 
     yield* serve(Endpoints.sessionPullRequest, ({ session }) =>
