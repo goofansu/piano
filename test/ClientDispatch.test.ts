@@ -204,7 +204,13 @@ test("INV-05: browser client recovers from dispatch saturation with a fresh expl
         initial: initialState,
         connect: (h) => {
           handlers = h;
-          return { send: (m) => requests.push(m), close: () => {} };
+          return {
+            send: (m) => {
+              requests.push(m);
+              return "sent";
+            },
+            close: () => {},
+          };
         },
         notify: () => {},
       });
@@ -256,7 +262,13 @@ for (const outcome of ["refused", "probe failure", "dispatch failure"] as const)
           initial: { ...initialState, catalogs: { ...catalogs.seed() } },
           connect: (h) => {
             handlers = h;
-            return { send: (m) => requests.push(m), close: () => {} };
+            return {
+              send: (m) => {
+                requests.push(m);
+                return "sent";
+              },
+              close: () => {},
+            };
           },
           notify: () => {},
           lastDirectory: { read: () => null, write: () => {} },
@@ -312,7 +324,13 @@ test("INV-05: an admitted selection failure settles the browser and permits expl
         initial: initialState,
         connect: (h) => {
           handlers = h;
-          return { send: (m) => requests.push(m), close: () => {} };
+          return {
+            send: (m) => {
+              requests.push(m);
+              return "sent";
+            },
+            close: () => {},
+          };
         },
         notify: () => {},
       });
@@ -419,7 +437,13 @@ function worktreePicker(receive: (m: ClientRequest) => Effect.Effect<Effect.Effe
     initial: initialState,
     connect: (h) => {
       handlers = h;
-      return { send: (m) => m._tag !== "ack" && commands.push(m), close: () => {} };
+      return {
+        send: (m) => {
+          m._tag !== "ack" && commands.push(m);
+          return "sent";
+        },
+        close: () => {},
+      };
     },
     notify: () => {},
     lastDirectory: { read: () => null, write: () => {} },

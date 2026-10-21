@@ -58,7 +58,13 @@ function page(url: string) {
     initial: { ...initialState, view: initialView(parseRoute(address.bar.location())) },
     connect: (h) => {
       handlers = h;
-      return { send: (m) => sent.push(m), close: () => {} };
+      return {
+        send: (m) => {
+          sent.push(m);
+          return "sent";
+        },
+        close: () => {},
+      };
     },
     notify: () => {},
     newSelectionId: () => `sel${++ids}`,

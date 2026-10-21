@@ -1,5 +1,5 @@
 import { isWorking } from "@shared/sessionProjection";
-import type { ClientCommand as ClientMessage, ExtensionState } from "@shared/wire";
+import type { ExtensionState } from "@shared/wire";
 import { cn } from "cn";
 import { useMemo, useState } from "react";
 import { Banner } from "@/components/Banner";
@@ -12,6 +12,7 @@ import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
@@ -30,7 +31,7 @@ import { type AppState, sessionKey } from "@/store";
 
 interface Props {
   state: AppState;
-  send: (m: ClientMessage) => void;
+  send: Client["send"];
 }
 
 export function SessionView({ state, send }: Props) {

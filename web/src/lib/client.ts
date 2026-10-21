@@ -10,7 +10,7 @@ import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
 import { closureNeedsAttention, focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { readStorage, writeStorage } from "./storage.ts";
-import type { Connection, ConnectionHandlers, DisconnectReason } from "./ws.ts";
+import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition } from "./ws.ts";
 
 export type NotifyLevel = "success" | "info" | "warning" | "error";
 export type Notify = (message: string, level?: NotifyLevel) => void;
@@ -65,7 +65,7 @@ export interface Client {
   /** Opens the connection; the returned function closes it. */
   start: () => () => void;
   /** Sends a command, correlating `select`, `create_session` and `act` with the current attachment. */
-  send: (command: ClientCommand) => void;
+  send: (command: ClientCommand) => SendDisposition;
   /** Selects a session unless it is already the one on screen or being fetched. */
   select: (cwd: string, sessionId: string | null) => void;
   dispatch: (action: LocalAction) => void;
@@ -121,7 +121,7 @@ export function createClient({
     for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
   };
 
-  const send = (m: ClientCommand) => {
+  const send = (m: ClientCommand): SendDisposition => {
     if (m._tag === "select" || m._tag === "create_session") {
       if (m._tag === "create_session") lastDirectory.write(m.cwd);
       const selectionId = newSelectionId();
@@ -141,17 +141,32 @@ export function createClient({
               }
             : undefined,
       });
-      connection?.send({ ...m, selectionId });
+      return connection?.send({ ...m, selectionId }) ?? "not-sent";
     } else if (m._tag === "act") {
       // An action belongs to the attachment it was aimed at; never send it on a stale or pending one.
-      if (sessionReady(state) && state.selectionId)
-        connection?.send({ ...m, selectionId: state.selectionId });
+      const disposition =
+        sessionReady(state) && state.selectionId
+          ? (connection?.send({ ...m, selectionId: state.selectionId }) ?? "not-sent")
+          : "not-sent";
+      if (m.action._tag === "prompt" || m.action._tag === "steer") {
+        if (disposition === "not-sent")
+          notify(
+            "Message not sent. Your draft is kept; retry when the session reconnects.",
+            "warning",
+          );
+        else if (disposition === "uncertain")
+          notify(
+            "Message delivery is uncertain. Check the conversation before sending again.",
+            "warning",
+          );
+      }
+      return disposition;
     } else {
       if (m._tag === "set_trust") {
-        if (!canDecideTrust(state, m.path)) return;
+        if (!canDecideTrust(state, m.path)) return "not-sent";
         apply({ type: "trust_pending", cwd: m.path });
       }
-      connection?.send(m);
+      return connection?.send(m) ?? "not-sent";
     }
   };
 

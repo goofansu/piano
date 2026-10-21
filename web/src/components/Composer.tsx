@@ -1,5 +1,4 @@
 import { isWorking } from "@shared/sessionProjection";
-import type { ClientCommand } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { ContextDetails } from "@/components/ContextDetails";
@@ -20,6 +19,7 @@ import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import type { Client } from "@/lib/client";
 import {
   composerControl,
   DELIVERY,
@@ -53,7 +53,7 @@ interface Props {
   actionsDisabled: boolean;
   /** Shown in place of the composer, which keeps its draft-local model picks meanwhile. */
   readOnly?: SessionNotice;
-  send: (m: ClientCommand) => void;
+  send: Client["send"];
 }
 
 /** The delivery mode is a sticky preference; the alternative always stays on Alt+Enter. */
@@ -118,10 +118,8 @@ export function Composer({
   const send = (alt: boolean) => {
     const kind = control.delivery(alt);
     if (!kind) return;
-    editor.submit((message) => {
-      sendCommand(messageCommand(kind, message, choice.start()));
+    if (editor.submit((message) => sendCommand(messageCommand(kind, message, choice.start()))))
       choice.submitted();
-    });
   };
   const figures = contextFigures(usage?.context, catalog, model);
   const queue = queuePanel(queuedMessages, streaming);
