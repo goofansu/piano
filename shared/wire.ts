@@ -622,7 +622,8 @@ export const SessionReference = Schema.Struct({
   pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)),
   /** Git's branch for that directory from the last discovery. Once Git no longer lists a registered
    * worktree (removed, or its folder closed), the branch saved when it was registered; null when
-   * neither is known, or when Git lists the directory as detached or non-Git. */
+   * neither is known (a failed or not-yet-run discovery is unknown, not a removal), or when Git
+   * lists the directory as detached or non-Git. */
   branch: Schema.NullOr(Schema.String),
   projectId: Schema.optional(Schema.String),
   archived: Schema.Boolean,

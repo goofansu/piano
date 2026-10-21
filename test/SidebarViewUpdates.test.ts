@@ -390,6 +390,37 @@ test("INV-01/07: a removed worktree's sessions keep the branch Piano registered;
   );
 });
 
+test("INV-06: while Git discovery fails, a worktree's sessions show no branch rather than the saved one", async () => {
+  const linked = join(root, "first.switched");
+  const git = {
+    ...slowGit(),
+    discover: (_folder: string) =>
+      Effect.succeed<WorktreeDiscovery>({
+        status: "error",
+        observedAt: new Date(1_700_000_000_000).toISOString(),
+        detail: "fatal: Unable to create '.git/index.lock': File exists.",
+      }),
+  };
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.ensureFolder(first);
+      yield* registry.addWorktree({
+        folder: first,
+        path: linked,
+        branch: "saved-at-registration",
+      });
+      for (const cwd of [first, linked]) yield* registry.addSession(cwd, cwd);
+      const branches = Object.fromEntries(
+        ((yield* view.fresh).sessionReferences ?? []).map((r) => [r.cwd, r.branch]),
+      );
+      assert.deepEqual(branches, { [first]: null, [linked]: null });
+    }),
+  );
+});
+
 test("INV-01: a repeated observation that found nothing new publishes no view; a real change still does", async () => {
   const git = slowGit();
   await run(
