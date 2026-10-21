@@ -86,6 +86,8 @@ function handle(c) {
           },
         ],
       });
+    case "get_entries":
+      return reply(c, { entries: [] });
     case "get_session_stats":
       return reply(
         c,

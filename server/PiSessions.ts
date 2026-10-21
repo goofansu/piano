@@ -17,6 +17,7 @@
  * The external dependency seam remains ChildProcessSpawner; tests use PiSessions.
  */
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { Cause, Context, Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { ChildProcessSpawner as Spawner } from "effect/process";
 
@@ -39,7 +40,7 @@ import type {
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
-import { makePiHistory, type PiHistory } from "./PiHistory.ts";
+import { makePiHistory, type PiHistory, savedEntries } from "./PiHistory.ts";
 import {
   inputFingerprint,
   type PiExchange,
@@ -267,16 +268,26 @@ const openSession = (spec: PiSessionSpec) =>
     const generation = randomUUID();
     const recoveryMs = yield* PiDialogRecoveryMs;
 
-    // Ready check and entries, both racing the child exiting early. The transcript is not read
-    // here: the context refresh below reads it once, after records are drained. Entries are best
-    // effort, as usage readbacks are: a failed read opens without Runs' spend or the dispatching
-    // session, and usage readbacks then count every entry.
-    const [state, entries] = yield* Effect.all([
-      child.read(piReadbacks.state),
-      child
-        .read(piReadbacks.entries())
-        .pipe(Effect.catchTag("PiSessionError", () => Effect.succeed<ReadonlyArray<unknown>>([]))),
-    ]).pipe(
+    // Every entry so far, for Runs' spend and the dispatching session. Pi's get_entries answers in
+    // one RPC line, which a long compacted history pushes past the line limit, closing the child.
+    // Once Pi has saved the session, its file is read as `history` reads it; before that, Pi holds
+    // no conversation and its reply is small.
+    const allEntries = (file: string | undefined) =>
+      file && existsSync(file)
+        ? savedEntries(file, spec.sessionId)
+        : child.read(piReadbacks.entries());
+
+    // Ready check, then entries from the file Pi opened, racing the child exiting early. The
+    // transcript is not read here: the context refresh below reads it once, after records are
+    // drained. Entries are best effort, as usage readbacks are: a failed read opens without Runs'
+    // spend or the dispatching session, and usage readbacks then count every entry.
+    const [state, entries] = yield* child.read(piReadbacks.state).pipe(
+      Effect.flatMap((state) =>
+        allEntries(state.sessionFile).pipe(
+          Effect.catchTag("PiSessionError", () => Effect.succeed<ReadonlyArray<unknown>>([])),
+          Effect.map((entries) => [state, entries] as const),
+        ),
+      ),
       // Readiness failure wins too: race waits for a first success and would
       // suppress a deadline until a still-live child eventually exits.
       Effect.raceFirst(
@@ -365,6 +376,7 @@ const openSession = (spec: PiSessionSpec) =>
       context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
       publication,
       entries,
+      allEntries: Effect.flatMap(publication.state, (current) => allEntries(current.sessionFile)),
     });
 
     const onRecord = Effect.fnUntraced(function* ({

@@ -11,6 +11,7 @@ import type { RenderMsg, SessionState } from "../shared/wire.ts";
 /** One readback Pi has been asked for, answered when the test resolves its raw reply. */
 interface PendingRead {
   readonly type: string;
+  readonly since?: unknown;
   readonly reply: Deferred.Deferred<unknown, PiSessionError>;
 }
 
@@ -60,7 +61,7 @@ const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Durat
   const read = <A>({ command, decode, invalid }: PiReadback<A>) =>
     Effect.gen(function* () {
       const reply = yield* Deferred.make<unknown, PiSessionError>();
-      yield* Queue.offer(reads, { type: String(command.type), reply });
+      yield* Queue.offer(reads, { type: String(command.type), since: command.since, reply });
       const value = decode(yield* Deferred.await(reply));
       if (value === undefined)
         return yield* new PiSessionError({ reason: "protocol", detail: invalid });
@@ -70,6 +71,12 @@ const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Durat
     scope,
     read,
     readState: read(piReadbacks.state),
+    // PiSessions reads Pi's saved file; here it is one more read the test answers.
+    allEntries: read({
+      command: { type: "saved_entries" },
+      decode: (entries) => (Array.isArray(entries) ? entries : undefined),
+      invalid: "Pi history is unreadable.",
+    }),
     progress,
     context: () => ({ _tag: "context", messages: [contextMessage] }),
     publication,
@@ -105,6 +112,8 @@ const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Durat
     nextRead: Queue.take(reads),
     pending: Queue.size(reads),
     answer: (read: PendingRead, raw: unknown) => Deferred.succeed(read.reply, raw),
+    refuse: (read: PendingRead, detail: string) =>
+      Deferred.fail(read.reply, new PiSessionError({ reason: "rejected", detail })),
   };
 });
 
@@ -162,8 +171,8 @@ test("statistics read before a model switch are dropped", async () => {
       const stats = yield* pi.next("get_session_stats");
       yield* pi.record({ model: "fake/beta" });
       yield* pi.answer(stats, { cost: 5 });
-      const entries = yield* pi.next("get_entries");
-      yield* pi.answer(entries, { entries: [] });
+      const entries = yield* pi.next("saved_entries");
+      yield* pi.answer(entries, []);
       yield* Fiber.join(refresh);
       const state = yield* pi.state;
       assert.equal(state.model, "fake/beta");
@@ -316,8 +325,8 @@ for (const activeAt of ["preflight", "post-read"]) {
             case "get_session_stats":
               yield* pi.answer(read, { cost: 1 });
               break;
-            case "get_entries":
-              yield* pi.answer(read, { entries: [] });
+            case "saved_entries":
+              yield* pi.answer(read, []);
               break;
             default:
               assert.fail(`Unexpected read: ${read.type}`);
@@ -352,6 +361,79 @@ test("requests made while a readback runs coalesce into one more run", async () 
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       while (!pi.readbacks.idle()) yield* Effect.yieldNow;
       assert.equal(yield* pi.pending, 0, "three requests during one read cost one more read");
+    }),
+  );
+});
+
+/** A Run's delivery as pi-subagent writes it into the session. */
+const delivered = (id: string, runId: string, input: number) => ({
+  type: "custom_message",
+  id,
+  customType: "subagent-notification",
+  content: "Result",
+  display: true,
+  details: {
+    runId,
+    subagentId: `sub-${runId}`,
+    agent: "reviewer",
+    label: "probe",
+    status: "completed",
+    durationMillis: 1,
+    usage: { input, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
+  },
+});
+
+test("Runs' spend reads Pi only for increments; whole-history reads are bounded", async () => {
+  await run(
+    Effect.gen(function* () {
+      const pi = yield* harness();
+      const tokens = Effect.map(pi.state, (state) => state.subagents?.total.totalTokens);
+      const stats = (entries: Effect.Effect<void, unknown>) =>
+        Effect.gen(function* () {
+          const refresh = yield* pi.readbacks.refresh("stats").pipe(Effect.forkChild);
+          yield* pi.answer(yield* pi.next("get_session_stats"), { cost: 1 });
+          yield* entries;
+          yield* Fiber.join(refresh);
+          assert.equal(yield* pi.pending, 0, "no whole-history get_entries");
+        });
+
+      // Never counted: every entry, from the bounded read.
+      yield* stats(
+        Effect.flatMap(pi.next("saved_entries"), (read) =>
+          pi.answer(read, [delivered("e1", "run-1", 10)]),
+        ),
+      );
+      assert.equal(yield* tokens, 10);
+
+      // Then only what follows the last entry read.
+      yield* stats(
+        Effect.gen(function* () {
+          const increment = yield* pi.next("get_entries");
+          assert.equal(increment.since, "e1");
+          yield* pi.answer(increment, { entries: [delivered("e2", "run-2", 5)] });
+        }),
+      );
+      assert.equal(yield* tokens, 15);
+
+      // A session that no longer holds it is counted afresh, from the bounded read again.
+      yield* stats(
+        Effect.gen(function* () {
+          yield* pi.refuse(yield* pi.next("get_entries"), "Entry not found: e2");
+          yield* pi.answer(yield* pi.next("saved_entries"), [delivered("e3", "run-3", 7)]);
+        }),
+      );
+      assert.equal(yield* tokens, 7);
+
+      // Unreadable: the last count stays, said to be incomplete.
+      yield* stats(
+        Effect.gen(function* () {
+          yield* pi.refuse(yield* pi.next("get_entries"), "Entry not found: e3");
+          yield* pi.refuse(yield* pi.next("saved_entries"), "history unreadable");
+        }),
+      );
+      const state = yield* pi.state;
+      assert.equal(state.subagents?.total.totalTokens, 7);
+      assert.match(state.statsRefreshError ?? "", /Subagent usage may be incomplete/);
     }),
   );
 });

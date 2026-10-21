@@ -35,6 +35,8 @@ export interface SessionReadbacksOptions {
   readonly publication: SessionPublication;
   /** The entries the opening snapshot counted; usage readbacks continue after them. */
   readonly entries: ReadonlyArray<unknown>;
+  /** Every entry so far, never as one RPC reply that a long history could push past its limit. */
+  readonly allEntries: Effect.Effect<ReadonlyArray<unknown>, PiSessionError>;
 }
 
 /** An operation token: a state readback owed to one is dropped once a later one starts. */
@@ -68,6 +70,7 @@ export const makeSessionReadbacks = ({
   context,
   publication,
   entries: opening,
+  allEntries,
 }: SessionReadbacksOptions): SessionReadbacks => {
   const factVersions = { model: 0, thinkingLevel: 0, sessionName: 0, sessionFile: 0 };
   let statsVersion = 0;
@@ -84,16 +87,16 @@ export const makeSessionReadbacks = ({
   /** Run usage from entries Pi appended since the last read. Only the stats worker reads. */
   const ledger = new RunLedger().add(opening);
   const readEntries = Effect.gen(function* () {
-    const entries = (since?: string) => read(piReadbacks.entries(since));
     const since = ledger.since;
-    // A session that no longer holds the last entry read is counted afresh.
-    const added = yield* entries(since).pipe(
-      Effect.catchTag("PiSessionError", (error) =>
-        since
-          ? Effect.sync(() => ledger.reset()).pipe(Effect.andThen(entries()))
-          : Effect.fail(error),
-      ),
-    );
+    // Only an increment comes from Pi. A session that no longer holds the last entry read is
+    // counted afresh, as is one never counted.
+    const added = since
+      ? yield* read(piReadbacks.entries(since)).pipe(
+          Effect.catchTag("PiSessionError", () =>
+            Effect.sync(() => ledger.reset()).pipe(Effect.andThen(allEntries)),
+          ),
+        )
+      : yield* allEntries;
     ledger.add(added);
     return { subagents: ledger.usage };
   });
@@ -122,10 +125,18 @@ export const makeSessionReadbacks = ({
           : {},
       );
       // Pi's figures above neither wait on nor fail with the Runs' entries; a failed read keeps
-      // the last count, and the next refresh continues from the last entry read.
-      const fromEntries = yield* readEntries.pipe(Effect.option);
-      if (fromEntries._tag === "Some")
-        yield* patchState(() => (current() ? fromEntries.value : {}));
+      // the last count, says it may be incomplete, and the next refresh continues from the last
+      // entry read.
+      yield* readEntries.pipe(
+        Effect.flatMap((usage) => patchState(() => (current() ? usage : {}))),
+        Effect.catchTag("PiSessionError", (error) =>
+          patchState(() =>
+            current()
+              ? { statsRefreshError: `Subagent usage may be incomplete: ${error.detail}` }
+              : {},
+          ),
+        ),
+      );
     }).pipe(
       Effect.catchTag("PiSessionError", (error) =>
         patchState(() =>

@@ -11,7 +11,7 @@
  * the same session ID. A conflict is never resolved by choosing one.
  */
 import { type BigIntStats, createReadStream, readFileSync } from "node:fs";
-import { readdir, realpath, stat } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
@@ -94,12 +94,42 @@ const readHeader = async (file: string): Promise<SessionHeader | undefined> => {
 };
 
 /** Pi parses and migrates only in memory: a persistent manager can rewrite legacy/empty files. */
-const readSession = (path: string, sessionId: string): SessionManager => {
-  const entries = parseSessionEntries(readFileSync(path, "utf8"));
+const sessionEntries = (content: string, sessionId: string) => {
+  const entries = parseSessionEntries(content);
   if (!entries.some((entry) => entry.type === "session" && entry.id === sessionId))
     throw new Error("Missing session header");
-  return SessionManager.inMemory(undefined, undefined, entries);
+  return entries;
 };
+const readSession = (path: string, sessionId: string): SessionManager =>
+  SessionManager.inMemory(
+    undefined,
+    undefined,
+    sessionEntries(readFileSync(path, "utf8"), sessionId),
+  );
+
+/**
+ * Every entry of a saved session, as Pi's `get_entries` lists them. Pi answers that in one RPC
+ * line, which a long compacted history can push past the line limit; the file has no such limit.
+ * Safe while Pi writes it: a line still being written is skipped and read by the next increment.
+ */
+export const savedEntries = Effect.fn("PiHistory.savedEntries")(function* (
+  path: string,
+  sessionId: string,
+) {
+  const content = yield* Effect.tryPromise({
+    try: () => readFile(path, "utf8"),
+    catch: (error) => rejected(`Cannot read Pi history ${path}: ${String(error)}`),
+  });
+  return yield* Effect.try({
+    try: (): ReadonlyArray<unknown> =>
+      SessionManager.inMemory(
+        undefined,
+        undefined,
+        sessionEntries(content, sessionId),
+      ).getEntries(),
+    catch: () => rejected(`Pi history ${path} is not session ${sessionId}.`),
+  });
+});
 
 /** A saved session's facts as Pi would report them, read from its file. */
 const savedFacts = (path: string, sessionId: string): PiSessionFacts => {

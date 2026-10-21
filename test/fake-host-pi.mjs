@@ -132,6 +132,11 @@ function handle(cmd) {
     return reply(cmd, state());
   }
   if (cmd.type === "get_messages") return reply(cmd, { messages });
+  if (cmd.type === "get_entries") {
+    const saved = entries.filter((x) => x.type !== "session");
+    const since = saved.findIndex((x) => x.id === cmd.since);
+    return reply(cmd, { entries: saved.slice(since + 1) });
+  }
   if (cmd.type === "get_session_stats") {
     if (!silence) {
       if (holdStats) heldStats.push(cmd);
