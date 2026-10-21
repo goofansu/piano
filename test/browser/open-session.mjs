@@ -209,13 +209,22 @@ await run(
     assert.equal(resized.height, resized.content, "prompt still expands after resizing");
     await page.click("button", "Copy code");
     await page.until(`!!document.querySelector('button[aria-label="Code copied"]')`);
-    await page.ab("focus", '[aria-label="Message"]');
-    await page.press("Mod+v");
-    assert.equal(
-      await page.evaluate(`document.querySelector('[aria-label="Message"]').value`),
-      'const release = "ready";',
-      "copy contains only the fenced code",
-    );
+    // Headless Chrome on macOS never pastes from the clipboard: a synthetic Cmd+V does nothing
+    // and clipboard reads are denied, even with the permission granted over CDP. CI (Linux)
+    // checks the copied content.
+    if (process.platform === "darwin") {
+      console.log(
+        "SKIP copied-content check on macOS (headless Chrome cannot paste); CI covers it",
+      );
+    } else {
+      await page.ab("focus", '[aria-label="Message"]');
+      await page.press("Mod+v");
+      assert.equal(
+        await page.evaluate(`document.querySelector('[aria-label="Message"]').value`),
+        'const release = "ready";',
+        "copy contains only the fenced code",
+      );
+    }
     await page.capture("8-reopened-long-session");
   },
 );
