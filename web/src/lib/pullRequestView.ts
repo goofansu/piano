@@ -4,6 +4,7 @@
  * submit rule. Pure, so the popover, its trigger and the form only render.
  */
 import type { PullRequest, SessionPullRequest } from "@shared/wire";
+import { timeAgo } from "./format.ts";
 import { canLink } from "./sessionPullRequest.ts";
 
 export type SignalOutcome = Exclude<PullRequest["checks"] | PullRequest["review"], "none">;
@@ -38,22 +39,6 @@ const SIGNAL_LABELS: Record<SignalOutcome, string> = {
   review_required: "Review required",
 };
 
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-const UNITS = [
-  ["year", 31536000],
-  ["month", 2592000],
-  ["week", 604800],
-  ["day", 86400],
-  ["hour", 3600],
-  ["minute", 60],
-] as const;
-function ago(iso: string, now: number) {
-  const seconds = (new Date(iso).getTime() - now) / 1000;
-  for (const [unit, size] of UNITS)
-    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
-  return "just now";
-}
-
 function repoFromUrl(url: string) {
   try {
     return new URL(url).pathname.split("/").slice(1, 3).join("/");
@@ -76,7 +61,7 @@ export function pullRequestView(
         outcome === "none" ? [] : [{ outcome, label: SIGNAL_LABELS[outcome] }],
       )
     : [];
-  const at = pr?.at && ago(pr.at, now);
+  const at = pr?.at && timeAgo(pr.at, now);
   return {
     url: link.url,
     number: pr ? String(pr.number) : link.url.split("/").pop() || undefined,

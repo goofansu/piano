@@ -85,3 +85,21 @@ export function abbrevPath(p: string | undefined, home?: string): string {
     )
     .join("/");
 }
+
+const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+const UNITS = [
+  ["year", 31536000],
+  ["month", 2592000],
+  ["week", 604800],
+  ["day", 86400],
+  ["hour", 3600],
+  ["minute", 60],
+] as const;
+
+/** How long ago `iso` was, in the largest whole unit: "2 hours ago", "yesterday", else "just now". */
+export function timeAgo(iso: string, now: number): string {
+  const seconds = (new Date(iso).getTime() - now) / 1000;
+  for (const [unit, size] of UNITS)
+    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
+  return "just now";
+}

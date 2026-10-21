@@ -9,7 +9,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { Fragment, memo } from "react";
-import { ActivityGlyph } from "@/components/ActivityGlyph";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import {
   SessionCommandMenuItem,
@@ -34,6 +33,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
+import { Keys } from "@/components/PianoMark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { ProjectCommandIconView, ProjectMenu } from "@/components/Projects";
 import { Hint } from "@/components/Shortcut";
@@ -346,6 +346,8 @@ const SessionRow = memo(
   } & Pick<GroupProps, "select">) {
     const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
     const { selected, disabled, hint, activity } = t;
+    // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
+    const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
     return (
       <li
         className={cn(
@@ -362,7 +364,13 @@ const SessionRow = memo(
           onClick={() => select(t.cwd, t.sessionId)}
           className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
         >
-          <ActivityGlyph activity={activity} />
+          <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
+            {activity === "working" ? (
+              <Keys playing className="text-brand" />
+            ) : (
+              dot && <span className={cn("size-2 rounded-full", dot)} />
+            )}
+          </span>
           <span
             className={cn(
               "min-w-0 flex-1 truncate",

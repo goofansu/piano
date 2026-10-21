@@ -106,10 +106,9 @@ The implementation uses registry v2 with an exact pre-migration backup. Restore 
 with the backend stopped; older Piano versions cannot read v2. Restoring it discards all subsequent
 registry edits, including newly added session references, but does not delete Pi-owned conversations.
 A project is a group in the sidebar beside the repositories, and `/projects/<id>` is its home:
-the branches its sessions run on, each shown by its latest session and saved pull request, then
-the members on a folder's own checkout. The home draws from what the browser already holds and
-reads only saved pull request links' states (PIN-83). `/projects/<id>/new` is its New page, where
-a session started joins it. Closed-directory and archived-session references remain reachable
+one card per member session, newest activity first, with its title, folder, branch and last
+activity. The home draws only from what the browser already holds (PIN-83).
+`/projects/<id>/new` is its New page, where a session started joins it. Closed-directory and archived-session references remain reachable
 from the group and from session search.
 
 ## Step 2 — Shared context and instructions, later
