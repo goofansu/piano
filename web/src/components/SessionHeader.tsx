@@ -79,32 +79,12 @@ export function SessionHeader({
               {/* Plain workspace metadata has no dedicated UI primitive. */}
               <div className="col-start-1 row-start-2 flex min-w-0 items-center gap-2">
                 {/* Full length while it fits. When space runs short each segment truncates to about 6rem, then
-                drops out whole, branch first: the line may wrap, but only its first row shows. The project
-                comes first and drops last; it is the way back to the project's home. */}
+                drops out whole from the end: the line may wrap, but only its first row shows. The project is
+                optional context, so it comes last and drops first; it is the way to the project's home. */}
                 <div className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-center gap-x-1.5 overflow-hidden text-xs text-muted-foreground">
-                  {openProject && projectMenu?.current && (
-                    <button
-                      type="button"
-                      className="flex max-w-full shrink-0 items-center gap-1 rounded outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => run(openProject)}
-                    >
-                      <TargetIcon aria-hidden="true" className="size-3 shrink-0" />
-                      <span className="sr-only">Project: </span>
-                      <span className="truncate">{projectMenu.current.name}</span>
-                    </button>
-                  )}
-                  <p className="flex max-w-full shrink-0 items-center gap-1.5">
-                    {openProject && projectMenu?.current && (
-                      <span aria-hidden="true" className="text-ink-3/60">
-                        ·
-                      </span>
-                    )}
-                    <span className="truncate">
-                      <span className="sr-only">
-                        {worktree ? "Folder: " : "Working directory: "}
-                      </span>
-                      {folder}
-                    </span>
+                  <p className="max-w-full shrink-0 truncate">
+                    <span className="sr-only">{worktree ? "Folder: " : "Working directory: "}</span>
+                    {folder}
                   </p>
                   {worktree && (
                     <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1 font-mono">
@@ -126,6 +106,22 @@ export function SessionHeader({
                         <span className="truncate">{branch}</span>
                       </span>
                     </p>
+                  )}
+                  {openProject && projectMenu?.current && (
+                    <span className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5">
+                      <span aria-hidden="true" className="text-ink-3/60">
+                        ·
+                      </span>
+                      <button
+                        type="button"
+                        className="flex min-w-0 items-center gap-1 rounded outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => run(openProject)}
+                      >
+                        <TargetIcon aria-hidden="true" className="size-3 shrink-0" />
+                        <span className="sr-only">Project: </span>
+                        <span className="truncate">{projectMenu.current.name}</span>
+                      </button>
+                    </span>
                   )}
                 </div>
               </div>
