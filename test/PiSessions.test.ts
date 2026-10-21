@@ -400,49 +400,54 @@ test("the readback that settles a turn keeps the ids its live messages carried",
   );
 });
 
-test("a skill prompt arrives as the command plus the user's own words, with the skill file folded beside them", async () => {
-  const seen = await run(
-    Effect.gen(function* () {
-      const sessions = yield* PiSessions;
-      const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "skill" });
-      const ready = yield* Deferred.make<void>();
-      const collector = yield* collectUntil(
-        t.events.pipe(
-          Stream.tap((e) =>
-            e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+for (const separator of [" ", "\n\n", "\r\n", "\t"]) {
+  test(`a skill prompt with separator ${JSON.stringify(separator)} arrives with its skill file folded`, async () => {
+    const seen = await run(
+      Effect.gen(function* () {
+        const sessions = yield* PiSessions;
+        const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "skill" });
+        const ready = yield* Deferred.make<void>();
+        const collector = yield* collectUntil(
+          t.events.pipe(
+            Stream.tap((e) =>
+              e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+            ),
           ),
-        ),
-        (e) => e._tag === "state" && !e.state.isStreaming,
-      ).pipe(Effect.forkChild);
-      yield* Deferred.await(ready);
-      yield* t.act({ _tag: "prompt", text: "/skill:research the Effect 4 RC changelog" });
-      const events = yield* Fiber.join(collector);
-      // A fresh subscriber reads the same split from Pi's retained history, not from the live event.
-      const snapshot = yield* collectUntil(t.events, (e) => e._tag === "snapshot");
-      return { events, snapshot };
-    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
-  );
-  const prompt = seen.events.find((e) => e._tag === "message_end" && e.message.role === "user");
-  assert.ok(prompt && prompt._tag === "message_end");
-  assert.deepEqual(
-    { text: prompt.message.text, skill: prompt.message.skill },
-    {
-      text: "the Effect 4 RC changelog",
-      skill: {
-        name: "research",
-        location: "/fake/skills/research/SKILL.md",
-        body: "# research\n\nFake skill body for **research**.",
+          (e) => e._tag === "state" && !e.state.isStreaming,
+        ).pipe(Effect.forkChild);
+        yield* Deferred.await(ready);
+        yield* t.act({
+          _tag: "prompt",
+          text: `/skill:research${separator}the Effect 4 RC changelog`,
+        });
+        const events = yield* Fiber.join(collector);
+        // A fresh subscriber reads the same split from Pi's retained history, not from the live event.
+        const snapshot = yield* collectUntil(t.events, (e) => e._tag === "snapshot");
+        return { events, snapshot };
+      }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+    );
+    const prompt = seen.events.find((e) => e._tag === "message_end" && e.message.role === "user");
+    assert.ok(prompt && prompt._tag === "message_end");
+    assert.deepEqual(
+      { text: prompt.message.text, skill: prompt.message.skill },
+      {
+        text: "the Effect 4 RC changelog",
+        skill: {
+          name: "research",
+          location: "/fake/skills/research/SKILL.md",
+          body: "# research\n\nFake skill body for **research**.",
+        },
       },
-    },
-  );
-  const replayed = (
-    seen.snapshot[0] as Extract<SessionEvent, { _tag: "snapshot" }>
-  ).snapshot.messages.find((m) => m.role === "user");
-  assert.deepEqual(
-    { text: replayed?.text, skill: replayed?.skill },
-    { text: prompt.message.text, skill: prompt.message.skill },
-  );
-});
+    );
+    const replayed = (
+      seen.snapshot[0] as Extract<SessionEvent, { _tag: "snapshot" }>
+    ).snapshot.messages.find((m) => m.role === "user");
+    assert.deepEqual(
+      { text: replayed?.text, skill: replayed?.skill },
+      { text: prompt.message.text, skill: prompt.message.skill },
+    );
+  });
+}
 
 const image: Attachment = {
   kind: "image",

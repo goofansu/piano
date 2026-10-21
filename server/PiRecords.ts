@@ -108,13 +108,18 @@ const recordOf = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
+// Pi's skill parser splits on a literal space, not other whitespace. Accept a command
+// on its own line without changing the skill body or interpreting unknown skills here.
+function skillCommandForPi(text: string): string {
+  return text.replace(/^(\/skill:[^\s]+)\s+/, "$1 ");
+}
 /** Equality evidence, not display text or a durable receipt. The key never leaves this process.
  * Pi owns skill expansion; normalize only its command name/arguments, before redaction. Plain
  * input stays byte-for-byte: a transformed prompt must not become equal through trimming. */
 const inputKey = randomBytes(32);
 export function inputFingerprint(text: string): string {
   const { text: args, skill } = splitSkill(text);
-  const command = skill ? `/skill:${skill.name}${args ? ` ${args}` : ""}` : text;
+  const command = skill ? `/skill:${skill.name}${args ? ` ${args}` : ""}` : skillCommandForPi(text);
   const space = command.indexOf(" ");
   const normalized =
     command.startsWith("/skill:") && space !== -1
@@ -638,7 +643,7 @@ export function piExchangeFor(
       return {
         command: {
           type: "prompt",
-          message: action.text,
+          message: skillCommandForPi(action.text),
           ...(attachments && {
             images: attachments.map((a) => ({ type: "image", data: a.data, mimeType: a.mimeType })),
           }),

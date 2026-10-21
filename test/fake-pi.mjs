@@ -121,9 +121,12 @@ const settle = (last) => {
 };
 /** Pi rewrites a `/skill:name args` prompt into the skill file before it enters history. */
 const expandSkill = (text) => {
-  const match = /^\/skill:(\S+)\s*([\s\S]*)$/.exec(text);
-  if (!match) return text;
-  const [, name, args] = match;
+  if (!text.startsWith("/skill:")) return text;
+  // Match Pi's literal-space delimiter, including its failure on a newline separator.
+  const space = text.indexOf(" ");
+  const name = space === -1 ? text.slice(7) : text.slice(7, space);
+  if (!name || /\s/.test(name)) return text;
+  const args = space === -1 ? "" : text.slice(space + 1).trim();
   const block = `<skill name="${name}" location="/fake/skills/${name}/SKILL.md">\nReferences are relative to /fake/skills/${name}.\n\n# ${name}\n\nFake skill body for **${name}**.\n</skill>`;
   return args ? `${block}\n\n${args}` : block;
 };

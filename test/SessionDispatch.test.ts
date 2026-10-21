@@ -1195,6 +1195,7 @@ const briefs = [
     name: "a skill command",
     brief: "/skill:review  the diff ",
   },
+  { name: "a multiline skill command", brief: "/skill:review\n\nTask: review the diff" },
   { name: "a skill with secret-shaped arguments", brief: "/skill:review token: abcdefghijklmnop" },
 ];
 for (const { name, brief } of briefs) {
