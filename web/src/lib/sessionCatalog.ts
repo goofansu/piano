@@ -4,7 +4,7 @@
  * Each entry is one registry reference, placed in its open folder and joined with the host
  * broadcast, the only source of running state.
  */
-import type { FolderView, Project, SessionReference } from "@shared/wire";
+import type { FolderView, Project, SessionReference, WorktreeView } from "@shared/wire";
 import { type AppState, sessionKey } from "../store.ts";
 import { findProject } from "./projectCommands.ts";
 
@@ -52,28 +52,83 @@ const HINTS = {
   checkout: "Folder missing. History can be read; restore the folder to continue.",
 } as const;
 
-function entries(state: AppState): SessionEntry[] {
+/** Where a session runs and what the registry calls it: the one reading of a session reference. */
+export interface SessionLocation {
+  /** The registered folder holding the directory; undefined once that folder is closed. */
+  folder: FolderView | undefined;
+  /** The folder's checkout at the directory. */
+  checkout: WorktreeView | undefined;
+  /** The folder's name, else the directory's last segment; empty without a directory. */
+  folderName: string;
+  /** A linked worktree's directory name; undefined for the folder's own checkout. */
+  worktreeName: string | undefined;
+  /** The reference's branch (Git's, or the one saved for a worktree Git no longer lists). */
+  branch: string | undefined;
+  /** The project the session belongs to, when that project exists. */
+  project: Project | undefined;
+  /** The registry's title, if any. */
+  title: string | undefined;
+}
+
+/** A worktree's directory without the `folder.` prefix Worktrunk gives it, since the folder is named beside it. */
+export function worktreeName(folder: string, path: string): string {
+  const base = path.split("/").pop() ?? path;
+  return base.startsWith(`${folder}.`) ? base.slice(folder.length + 1) : base;
+}
+
+/**
+ * Locates sessions in `state`: catalog rows and the selected session's header both read where a
+ * session runs from this. `cwd` is the session's directory, known before its reference is (a first
+ * message on its way); `ref` is its registry reference once there is one.
+ */
+export function sessionLocator(
+  state: AppState,
+): (cwd: string | undefined, ref: SessionReference | undefined) => SessionLocation {
   const folderOf = new Map<string, FolderView>();
-  for (const f of state.folders) for (const w of f.worktrees) folderOf.set(w.path, f);
+  // The first folder listing a directory holds it, as `folderFor` answers.
+  for (const f of state.folders)
+    for (const w of f.worktrees) if (!folderOf.has(w.path)) folderOf.set(w.path, f);
+  return (cwd, ref) => {
+    const folder = cwd === undefined ? undefined : folderOf.get(cwd);
+    const checkout = folder?.worktrees.find((w) => w.path === cwd);
+    const folderName = folder?.name ?? cwd?.split("/").pop() ?? "";
+    return {
+      folder,
+      checkout,
+      folderName,
+      worktreeName:
+        checkout && !checkout.root ? worktreeName(folderName, checkout.path) : undefined,
+      branch: ref?.branch ?? undefined,
+      project: findProject(state, ref?.projectId),
+      title: ref?.title,
+    };
+  };
+}
+
+/** The registered folder whose worktrees include `cwd`; undefined once that folder is closed. */
+export function folderFor(state: AppState, cwd: string | undefined): FolderView | undefined {
+  return sessionLocator(state)(cwd, undefined).folder;
+}
+
+function entries(state: AppState): SessionEntry[] {
+  const locate = sessionLocator(state);
   const hosts = new Map(state.hosts.map((h) => [sessionKey(h), h]));
   const done = new Set(state.done);
   const current = state.session ?? state.selecting;
   return state.sessionReferences.map((ref) => {
     const key = sessionKey(ref);
-    const folder = folderOf.get(ref.cwd);
-    const checkout = folder?.worktrees.find((w) => w.path === ref.cwd);
-    const project = findProject(state, ref.projectId);
+    const { folder, folderName, worktreeName, branch, project, title } = locate(ref.cwd, ref);
     const host = hosts.get(key);
     return {
       cwd: ref.cwd,
       sessionId: ref.sessionId,
-      title: ref.title,
+      title,
       createdAt: ref.createdAt,
       updatedAt: ref.updatedAt,
       folderPath: folder?.path,
-      folder: folder?.name ?? ref.cwd.split("/").pop() ?? ref.cwd,
-      branch: ref.branch ?? "",
-      inWorktree: !!checkout && !checkout.root,
+      folder: folderName,
+      branch: branch ?? "",
+      inWorktree: worktreeName !== undefined,
       projectId: ref.projectId,
       project,
       archived: ref.archived,

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
+import { catalogEntry } from "../web/src/lib/sessionCatalog.ts";
 import {
   completionTarget,
   directoryChoices,
@@ -88,12 +89,18 @@ test("a worktree session reads its folder, worktree, branch, project and workspa
   );
 });
 
+// A closed folder lists no checkout, so only the reference knows the branch it was registered on.
+const closed: AppState = {
+  ...base,
+  sessionReferences: [sessionReference("/closed", "s1", { branch: "saved-branch" })],
+};
+
 test("a session whose folder was closed keeps its registry workspace for Changes and its pull request", () => {
-  const ctx = sessionContext({ ...base, session: session("/closed") });
+  const ctx = sessionContext({ ...closed, session: session("/closed") });
   assert.equal(ctx.folder, undefined);
   assert.equal(ctx.folderName, "closed");
   assert.equal(ctx.worktreeName, undefined);
-  assert.equal(ctx.branch, undefined);
+  assert.equal(ctx.branch, "saved-branch", "the header shows the reference's saved branch");
   assert.equal(ctx.workspace?.id, "ws:/closed");
   assert.equal(ctx.changesWorkspace?.id, "ws:/closed");
   assert.equal(ctx.canOpenChanges, true);
@@ -123,11 +130,57 @@ test("a removed checkout keeps its workspace identity but cannot open Changes; a
     worktrees: [worktree("/repo", null, { status: "non-git" })],
     discovery: { status: "non-git", observedAt: "" },
   };
-  const nonGit = sessionContext({ ...base, folders: [plain], session: session("/repo") });
+  // The server sends no branch for a non-Git directory.
+  const nonGitState: AppState = {
+    ...base,
+    folders: [plain],
+    sessionReferences: [sessionReference("/repo", "s1", { branch: null, title: "Plain" })],
+  };
+  const nonGit = sessionContext({ ...nonGitState, session: session("/repo") });
   assert.equal(nonGit.workspace?.id, "ws:/repo");
   assert.equal(nonGit.changesWorkspace, undefined);
   assert.equal(nonGit.canOpenChanges, false);
   assert.equal(nonGit.branch, undefined);
+  assert.equal(nonGit.title, "Plain", "the context read this session's reference");
+});
+
+test("the header and the session's catalog row agree on where it runs", () => {
+  const plain: FolderView = {
+    ...folder,
+    worktrees: [worktree("/repo", null, { status: "non-git" })],
+    discovery: { status: "non-git", observedAt: "" },
+  };
+  const cases: Array<[string, AppState, string]> = [
+    ["a worktree", base, "/work/repo.feature"],
+    ["a closed folder", closed, "/closed"],
+    [
+      "a non-Git folder",
+      { ...base, folders: [plain], sessionReferences: [sessionReference("/repo", "s1")] },
+      "/repo",
+    ],
+  ];
+  for (const [name, state, cwd] of cases) {
+    const ctx = sessionContext({ ...state, session: session(cwd) });
+    const row = catalogEntry(state, "s1");
+    assert.ok(row, name);
+    assert.deepEqual(
+      {
+        folder: ctx.folderName,
+        inWorktree: ctx.worktreeName !== undefined,
+        branch: ctx.branch ?? "",
+        project: ctx.project,
+        title: ctx.title,
+      },
+      {
+        folder: row.folder,
+        inWorktree: row.inWorktree,
+        branch: row.branch,
+        project: row.project,
+        title: row.title || "Untitled",
+      },
+      name,
+    );
+  }
 });
 
 test("readiness needs a connected, settled attachment", () => {
