@@ -346,22 +346,35 @@ test("INV-01/INV-07: a session reference keeps its registry creation time and wo
   );
 });
 
-test("INV-01/07: a removed worktree's sessions keep the branch Piano registered; a worktree Git still lists keeps Git's", async () => {
+test("INV-01/07: a removed worktree's sessions keep the last branch Git reported for it; a worktree Git still lists keeps Git's", async () => {
   const live = join(root, "first.live"),
     detached = join(root, "first.detached"),
     removed = join(root, "first.removed");
+  // Git's answer as the test moves the checkouts: every worktree listed, then a failed read,
+  // then the linked worktrees gone.
+  let listing: "all" | "failed" | "gone" = "all";
   const git = {
     ...slowGit(),
     discover: (folder: string) =>
-      Effect.succeed<WorktreeDiscovery>({
-        status: "ready",
-        observedAt: new Date(1_700_000_000_000).toISOString(),
-        currentPath: folder,
-        worktrees: [
-          { path: folder, branch: "develop", detached: false, prunable: false },
-          { path: live, branch: "renamed-by-git", detached: false, prunable: false },
-          { path: detached, branch: null, detached: true, prunable: false },
-        ],
+      Effect.sync((): WorktreeDiscovery => {
+        const observedAt = new Date(1_700_000_000_000).toISOString();
+        if (listing === "failed")
+          return { status: "error", observedAt, detail: "fatal: index.lock exists" };
+        const main = { path: folder, branch: "develop", detached: false, prunable: false };
+        return {
+          status: "ready",
+          observedAt,
+          currentPath: folder,
+          worktrees:
+            listing === "gone"
+              ? [main]
+              : [
+                  main,
+                  { path: live, branch: "renamed-by-git", detached: false, prunable: false },
+                  { path: detached, branch: null, detached: true, prunable: false },
+                  { path: removed, branch: "feat-b", detached: false, prunable: false },
+                ],
+        };
       }),
   };
   await run(
@@ -373,19 +386,49 @@ test("INV-01/07: a removed worktree's sessions keep the branch Piano registered;
       for (const [path, branch] of [
         [live, "registered-live"],
         [detached, "registered-detached"],
-        [removed, "26672-latest-activity-sort"],
+        [removed, "feat-a"],
       ] as const)
         yield* registry.addWorktree({ folder: first, path, branch });
       for (const cwd of [first, live, detached, removed]) yield* registry.addSession(cwd, cwd);
-      const branches = Object.fromEntries(
-        ((yield* view.fresh).sessionReferences ?? []).map((r) => [r.cwd, r.branch]),
-      );
-      assert.deepEqual(branches, {
+      const shown = (m: SidebarMessage) =>
+        Object.fromEntries((m.sessionReferences ?? []).map((r) => [r.cwd, r.branch]));
+      assert.deepEqual(shown(yield* view.fresh), {
         [first]: "develop",
         [live]: "renamed-by-git",
         [detached]: null,
-        [removed]: "26672-latest-activity-sort",
+        [removed]: "feat-b",
       });
+
+      listing = "failed";
+      assert.deepEqual(
+        shown(yield* view.fresh),
+        { [first]: null, [live]: null, [detached]: null, [removed]: null },
+        "a failed read shows no branch",
+      );
+
+      listing = "gone";
+      assert.deepEqual(
+        shown(yield* view.fresh),
+        {
+          [first]: "develop",
+          [live]: "renamed-by-git",
+          [detached]: "registered-detached",
+          [removed]: "feat-b",
+        },
+        "once Git no longer lists them, each shows the last branch Git reported; a detached checkout or failed read reported none",
+      );
+
+      yield* registry.removeFolder(first);
+      assert.deepEqual(
+        shown(yield* view.fresh),
+        {
+          [first]: null,
+          [live]: "renamed-by-git",
+          [detached]: "registered-detached",
+          [removed]: "feat-b",
+        },
+        "a closed folder's worktrees keep it too",
+      );
     }),
   );
 });

@@ -630,8 +630,8 @@ export const SessionReference = Schema.Struct({
    * facts are read only for a linked session, so unlinked ones cost no GitHub call. */
   pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)),
   /** Git's branch for that directory from the last discovery. Once Git no longer lists a registered
-   * worktree (removed, or its folder closed), the branch saved when it was registered; null when
-   * neither is known (a failed or not-yet-run discovery is unknown, not a removal), or when Git
+   * worktree (removed, or its folder closed), the last branch Git reported for that worktree; null
+   * when neither is known (a failed or not-yet-run discovery is unknown, not a removal), or when Git
    * lists the directory as detached or non-Git. */
   branch: Schema.NullOr(Schema.String),
   projectId: Schema.optional(Schema.String),

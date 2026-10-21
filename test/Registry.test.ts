@@ -196,6 +196,48 @@ test("INV-01/07: every path a write adds has a workspace when the database reope
   );
 });
 
+test("INV-01: a worktree's observed branch replaces its last-known one in one write and survives reopening", async (t) => {
+  const f = fixture(t),
+    folder = join(f.root, "folder"),
+    one = join(f.root, "folder.one"),
+    two = join(f.root, "folder.two");
+  mkdirSync(folder);
+  let announced = 0;
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.ensureFolder(folder);
+      yield* r.addWorktree({ folder, path: one, branch: "feat-a" });
+      yield* r.addWorktree({ folder, path: two, branch: "feat-x" });
+      yield* r.onChange(() =>
+        Effect.sync(() => {
+          announced++;
+        }),
+      );
+      yield* r.observeWorktreeBranches([
+        { path: one, branch: "feat-b" },
+        { path: two, branch: "feat-y" },
+        { path: join(f.root, "unregistered"), branch: "other" },
+      ]);
+      // Nothing new: the same branches again, a blank one, an unregistered path.
+      yield* r.observeWorktreeBranches([
+        { path: one, branch: "feat-b" },
+        { path: two, branch: "" },
+        { path: join(f.root, "unregistered"), branch: "other" },
+      ]);
+    }).pipe(Effect.scoped),
+  );
+  assert.equal(
+    announced,
+    1,
+    "one announcement for the batch, none for a write that changes nothing",
+  );
+  assert.deepEqual((await f.get()).worktrees, [
+    { folder, path: one, branch: "feat-b" },
+    { folder, path: two, branch: "feat-y" },
+  ]);
+});
+
 test("INV-01: a session with every optional field set, linked without an API host, survives restart", async (t) => {
   const f = fixture(t),
     folder = join(f.root, "folder");
