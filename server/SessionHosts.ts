@@ -18,7 +18,6 @@ import type {
   WorktreeRequest,
 } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
-import { observeGit } from "./GitCheckout.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, RegistryError, type RegistryLookupError } from "./Registry.ts";
@@ -29,7 +28,7 @@ import {
   SessionReferences,
   SessionReferencesLive,
 } from "./SessionReferences.ts";
-import { createWorktree, WorktreeError, worktreeOwner } from "./Worktrees.ts";
+import { createWorktree, mainCheckoutOf, WorktreeError, worktreeOwner } from "./Worktrees.ts";
 
 export interface OpenSpec {
   readonly cwd: string;
@@ -319,9 +318,9 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
 
       /**
        * A new worktree for a new session, created through Worktrunk (INV-06) from the folder of
-       * `raw`'s repository: a linked worktree's main checkout, otherwise the checkout's root. The
-       * folder and the worktree are registered as `place` would; a failure starts nothing and
-       * never falls back to `raw` itself.
+       * `raw`'s repository: from anywhere in a linked worktree its main checkout, otherwise the
+       * checkout's root. The folder and the worktree are registered as `place` would; a failure
+       * starts nothing and never falls back to `raw` itself.
        */
       const placeWorktree = Effect.fn("SessionHosts.placeWorktree")(function* (
         raw: string,
@@ -331,18 +330,11 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         yield* Directories.require(path).pipe(
           Effect.mapError((e) => new WorktreeError({ detail: e.detail })),
         );
-        const owner = yield* worktreeOwner(path);
-        let main = owner?.main;
-        if (!main) {
-          const observed = yield* observeGit(path);
-          if (observed.status === "broken")
-            return yield* new WorktreeError({ detail: observed.detail });
-          if (observed.status === "non-git")
-            return yield* new WorktreeError({
-              detail: `${path} is not a Git checkout, so no worktree can be created from it.`,
-            });
-          main = observed.toplevel;
-        }
+        const main = yield* mainCheckoutOf(path);
+        if (!main)
+          return yield* new WorktreeError({
+            detail: `${path} is not a Git checkout, so no worktree can be created from it.`,
+          });
         const folder = yield* folderOf(main).pipe(
           Effect.mapError((e) => new WorktreeError({ detail: e.detail })),
         );

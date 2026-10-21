@@ -206,6 +206,19 @@ export const worktreeOwner = Effect.fn("Worktrees.worktreeOwner")(function* (
   return { root, main, branch: current.branch };
 });
 
+/** The main checkout that owns the repository containing `path`, in Git's spelling: from anywhere
+ * in a linked worktree, its main checkout; otherwise the checkout's own root (a main checkout, or
+ * a worktree of a bare repository, which has no main checkout). `null` for a non-Git directory.
+ * Metadata Git cannot read fails. */
+export const mainCheckoutOf = Effect.fn("Worktrees.mainCheckoutOf")(function* (
+  path: string,
+): Effect.fn.Return<string | null, WorktreeError> {
+  const checkout = yield* checkoutOf(path);
+  if (!checkout) return null;
+  const owner = yield* worktreeOwner(checkout.toplevel);
+  return owner?.main ?? checkout.toplevel;
+});
+
 /** New branches only. No prose-based retry of a possibly partially completed operation. */
 export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
   folder: string,
