@@ -14,6 +14,7 @@ import {
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
 } from "./attachments.ts";
+import { DISPOSITIONS } from "./dispatch.ts";
 
 /** Browser input, not a Pi protocol block. Future files get a distinct kind. */
 export const Attachment = Schema.Struct({
@@ -784,6 +785,43 @@ export const StartOptions = Schema.Struct({
 });
 export type StartOptions = typeof StartOptions.Type;
 
+/** A new worktree to create for a new session; see shared/dispatch.ts WorktreeRequest. */
+export const WorktreeRequest = Schema.Struct({
+  branch: Schema.String,
+  hooks: Schema.optional(Schema.Boolean),
+});
+export type WorktreeRequest = typeof WorktreeRequest.Type;
+
+/** One session's status as the server reads it; the caller adds the links it knows how to build. */
+export const SessionStatusFacts = Schema.Struct({
+  sessionId: Schema.String,
+  cwd: Schema.String,
+  projectId: Schema.NullOr(Schema.String),
+  disposition: Schema.Literals(DISPOSITIONS),
+  /** ISO time the disposition is dated from: the dialog's arrival, else the last recorded activity. */
+  since: Schema.NullOr(Schema.String),
+  /** Present exactly when `disposition` is "needs_input": the dialog's title and the answer kind. */
+  needs: Schema.NullOr(Schema.Struct({ title: Schema.String, kind: Schema.String })),
+  /** The final assistant text of the last turn, at most LAST_ANSWER_CHARS, or null. */
+  lastAnswer: Schema.NullOr(Schema.String),
+  /** Null when the directory is not a Git checkout Piano can read. */
+  changes: Schema.NullOr(
+    Schema.Struct({
+      branch: Schema.NullOr(Schema.String),
+      files: Schema.Number,
+      /** The session's linked pull request; `state` is null when GitHub could not be read. */
+      pullRequest: Schema.NullOr(
+        Schema.Struct({
+          number: Schema.Number,
+          url: Schema.String,
+          state: Schema.NullOr(Schema.String),
+        }),
+      ),
+    }),
+  ),
+});
+export type SessionStatusFacts = typeof SessionStatusFacts.Type;
+
 export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("registry", {}),
   /** Rediscover one registered folder; echo requestId so replies survive picker remounts. */
@@ -836,8 +874,18 @@ export const ClientMessage = Schema.Union([
     cwd: Schema.String,
     projectId: Schema.optional(Schema.String),
     options: StartOptions,
+    /** Create this new worktree from `cwd`'s repository and start the session there instead. */
+    worktree: Schema.optional(WorktreeRequest),
     text: Schema.optional(Schema.String),
     attachments: attachmentInput,
+  }),
+  /** Read sessions' status without starting Pi: one by ID, or every active session of a project. */
+  Schema.TaggedStruct("session_status", {
+    requestId: Schema.String,
+    target: Schema.Union([
+      Schema.Struct({ sessionId: Schema.String }),
+      Schema.Struct({ projectId: Schema.String }),
+    ]),
   }),
   /**
    * Act on the selected session. Reuse the selectionId from the current select or create_session
@@ -951,7 +999,17 @@ export const ServerMessage = Schema.Union([
     result: SessionActionResult,
   }),
   Schema.TaggedStruct("worktree_result", { requestId: Schema.String, result: WorktreeResult }),
-  /** Admission refused before selection or session creation started. */
+  Schema.TaggedStruct("session_status", {
+    requestId: Schema.String,
+    result: Schema.Union([
+      Schema.Struct({
+        status: Schema.Literal("ready"),
+        sessions: Schema.Array(SessionStatusFacts),
+      }),
+      Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
+    ]),
+  }),
+  /** Admission refused, or the requested worktree failed, before selection or session creation started. */
   Schema.TaggedStruct("selection_rejected", {
     selectionId: Schema.String,
     message: Schema.String,

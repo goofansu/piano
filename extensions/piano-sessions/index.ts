@@ -8,10 +8,14 @@ import {
 import {
   DISPATCH_ENTRY,
   DISPATCHED_FROM_FLAG,
+  DISPOSITIONS,
   type SessionHandle,
+  type SessionStatus,
   START_TOOL,
+  STATUS_TOOL,
   type StartArguments,
   type StartToolResult,
+  type StatusArguments,
   WAIT_STATUSES,
   WAIT_TOOL,
   type WaitArguments,
@@ -19,7 +23,7 @@ import {
 } from "../../shared/dispatch.ts";
 import { ThinkingLevel } from "../../shared/wire.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
-import { startSession, waitSessions } from "./SessionDispatch.ts";
+import { readStatus, startSession, waitSessions, withLinks } from "./SessionDispatch.ts";
 
 /** The schema one of these literals has. */
 type LiteralSchema<Value> = Value extends string ? ReturnType<typeof Type.Literal<Value>> : never;
@@ -57,9 +61,16 @@ const Observation = Type.Object({
   detail: Type.Optional(Type.String()),
   link: Type.String(),
 });
+const Worktree = Type.Object({
+  branch: Type.String({ minLength: 1, description: "New branch name; it must not exist yet" }),
+  hooks: Type.Optional(
+    Type.Boolean({ description: "Run approved Worktrunk hooks; unapproved hooks refuse creation" }),
+  ),
+});
 const StartParameters = Type.Object({
   prompt: Type.String({ minLength: 1, description: "Self-contained work brief" }),
   cwd: Type.Optional(Type.String({ minLength: 1 })),
+  worktree: Type.Optional(Worktree),
   model: Type.Optional(Type.String({ minLength: 1 })),
   thinkingLevel: Type.Optional(
     literals(ThinkingLevel.literals, {
@@ -76,6 +87,7 @@ const StartOutput = Type.Object({
   ]),
   submission: Type.String(),
   handle: Type.Union([Handle, Type.Null()]),
+  worktree: Type.Union([Type.Object({ path: Type.String(), branch: Type.String() }), Type.Null()]),
   detail: Type.Optional(Type.String()),
   link: NullableString,
 });
@@ -84,6 +96,36 @@ const WaitParameters = Type.Object({
   timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 60000 })),
 });
 const WaitOutput = Type.Object({ results: Type.Array(Observation) });
+const StatusParameters = Type.Object({
+  sessionId: Type.String({
+    minLength: 1,
+    description: "A session ID, as a start or link names it",
+  }),
+});
+const StatusOutput = Type.Object({
+  sessionId: Type.String(),
+  cwd: Type.String(),
+  projectId: NullableString,
+  disposition: literals(DISPOSITIONS),
+  since: NullableString,
+  needs: Type.Union([
+    Type.Object({ title: Type.String(), kind: Type.String(), link: Type.String() }),
+    Type.Null(),
+  ]),
+  lastAnswer: NullableString,
+  changes: Type.Union([
+    Type.Object({
+      branch: NullableString,
+      files: Type.Number(),
+      pullRequest: Type.Union([
+        Type.Object({ number: Type.Number(), url: Type.String(), state: NullableString }),
+        Type.Null(),
+      ]),
+    }),
+    Type.Null(),
+  ]),
+  link: Type.String(),
+});
 
 /**
  * The schemas describe shared/dispatch.ts's shapes to Pi; these fail the type check when they
@@ -108,6 +150,8 @@ export type SchemaChecks = [
   Holds<Describes<typeof StartOutput, StartToolResult>>,
   Holds<Exact<typeof WaitParameters, WaitArguments>>,
   Holds<Exact<typeof WaitOutput, WaitToolResult>>,
+  Holds<Exact<typeof StatusParameters, StatusArguments>>,
+  Holds<Describes<typeof StatusOutput, SessionStatus>>,
 ];
 
 export default function pianoSessions(pi: ExtensionAPI) {
@@ -182,7 +226,7 @@ export default function pianoSessions(pi: ExtensionAPI) {
         "Use Piano session tools only when the user explicitly asks to dispatch work through Piano. Otherwise, work in the current session. Waiting for that dispatched work is part of the authorized request.",
       ],
       description:
-        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout; use separate prepared worktrees for concurrent writing tasks. model is an optional provider/model; thinkingLevel optionally sets reasoning effort supported by that model. Omitted options use normal new-session defaults, not the parent's settings. Returns the initial prompt's disposition, a handle to pass unchanged to piano_wait_sessions, and an Open session link. Creation/admission is not completion. On uncertain delivery inspect Piano before trying again: never automatically repeat dispatch.",
+        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there; use it for each concurrent writing task. A branch that exists, a hook that needs approval or a non-Git cwd refuses the start and creates no session. model is an optional provider/model; thinkingLevel optionally sets reasoning effort supported by that model. Omitted options use normal new-session defaults, not the parent's settings. Returns the initial prompt's disposition, a handle to pass unchanged to piano_wait_sessions, and an Open session link. Creation/admission is not completion. On uncertain delivery inspect Piano before trying again: never automatically repeat dispatch.",
       parameters: StartParameters,
       outputSchema: StartOutput,
       async execute(_id, params, signal, _update, ctx) {
@@ -202,6 +246,27 @@ export default function pianoSessions(pi: ExtensionAPI) {
             ...result,
             link: result.handle ? link(result.handle.sessionId) : null,
           };
+          return output;
+        });
+      },
+    }),
+  );
+  pi.registerTool(
+    defineTool({
+      name: STATUS_TOOL,
+      label: "Piano session status",
+      promptSnippet: "Read a Piano session's status by its ID",
+      description:
+        "Read what a Piano session is doing and what it needs, by session ID, without waiting or opening it. Works for any session Piano lists, after a lost reply or a Piano restart. Returns disposition (running, needs_input, settled, exited or unknown) with since, what a needs_input session asks for, the last turn's final answer (bounded) or null, changes (branch, changed files, linked pull request) and the session link. settled means execution stopped, not that the task succeeded; unknown means live facts are gone and history proves no ending. One read: call again to observe later.",
+      parameters: StatusParameters,
+      outputSchema: StatusOutput,
+      async execute(_id, params, signal) {
+        return invoke(signal, async (readSignal) => {
+          const reply = await readStatus({ sessionId: params.sessionId }, environment, readSignal);
+          if (reply.status === "error") throw new Error(reply.detail);
+          const [facts] = reply.sessions;
+          if (!facts) throw new Error(`Piano lists no session ${params.sessionId}.`);
+          const output: SessionStatus = withLinks(facts, link);
           return output;
         });
       },

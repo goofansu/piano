@@ -24,6 +24,7 @@ import { RegistryLive } from "./Registry.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
 import { SessionSharingLive } from "./SessionSharing.ts";
+import { SessionStatusLive } from "./SessionStatus.ts";
 import { SidebarViewLive, type SidebarViewOptions } from "./SidebarView.ts";
 import { WorkspaceChangesLive } from "./WorkspaceChanges.ts";
 import { WorkspaceCommandsLive } from "./WorkspaceCommands.ts";
@@ -49,13 +50,14 @@ export const PianoCoreLive = (options: PianoServicesOptions) =>
 /** The network services Piano calls; a test replaces one by providing its own. */
 export const PianoAdaptersLive = Layer.mergeAll(RadiusArtifactsLive, GitHubPullRequestsLive);
 
-/** Everything the router answers from: the core plus settings, setup, changes, pull requests and sharing. */
+/** Everything the router answers from: the core plus settings, setup, changes, pull requests,
+ * session status and sharing. */
 export const PianoServicesLive = (options: PianoServicesOptions) =>
   Layer.mergeAll(
     PiSettingsLive,
     RadiusSetupLive,
     McpSetupLive,
-    WorkspaceChangesLive,
+    SessionStatusLive,
     SessionPullRequestsLive,
     SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
-  ).pipe(Layer.provideMerge(PianoCoreLive(options)));
+  ).pipe(Layer.provideMerge(WorkspaceChangesLive), Layer.provideMerge(PianoCoreLive(options)));

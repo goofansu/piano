@@ -14,13 +14,16 @@
 import { createHash } from "node:crypto";
 import type {
   Attribution,
+  CreatedWorktree,
   SessionCreation,
   SessionHandle,
   SessionObservation,
+  SessionStatus,
   SessionSubmission,
   StartResult,
   WaitEnding,
   WaitStatus,
+  WorktreeRequest,
 } from "../../shared/dispatch.ts";
 import { applySessionEvent, cursorStep, isWorking } from "../../shared/sessionProjection.ts";
 import { turnEnding } from "../../shared/turnEnding.ts";
@@ -29,6 +32,7 @@ import type {
   RenderMsg,
   ServerMessage,
   SessionClosure,
+  SessionStatusFacts,
   Snapshot,
   ThinkingLevel,
 } from "../../shared/wire.ts";
@@ -38,7 +42,10 @@ import { type Connection, openConnection, type SocketEnvironment } from "../../w
 
 export interface StartRequest {
   readonly prompt: string;
+  /** The session's directory; with `worktree`, the checkout whose repository it branches from. */
   readonly cwd: string;
+  /** Start in a new worktree Piano creates; a failure creates no session. */
+  readonly worktree?: WorktreeRequest;
   readonly model?: string;
   readonly thinkingLevel?: ThinkingLevel;
   /** The dispatching session, recorded in the new one's history for its backlink. */
@@ -191,7 +198,7 @@ export function startSession(
   environment: SocketEnvironment,
   signal?: AbortSignal,
 ): Promise<StartResult> {
-  const { cwd, prompt, model, thinkingLevel, dispatchedFrom } = request;
+  const { cwd, prompt, model, thinkingLevel, dispatchedFrom, worktree } = request;
   return observe<StartResult>(
     environment,
     { deadlineMs: START_DEADLINE_MS, signal },
@@ -207,7 +214,18 @@ export function startSession(
         creation: SessionCreation,
         submission: SessionSubmission,
         detail?: string,
-      ): StartResult => ({ cwd: handle?.cwd ?? cwd, creation, submission, handle, detail });
+      ): StartResult => ({
+        cwd: handle?.cwd ?? cwd,
+        creation,
+        submission,
+        handle,
+        // A session exists only once its worktree was created, at the path Piano placed it in.
+        worktree:
+          handle && worktree
+            ? ({ path: handle.cwd, branch: worktree.branch.trim() } satisfies CreatedWorktree)
+            : null,
+        detail,
+      });
       const unnamed = (detail: string) => result("uncertain", "uncertain", detail);
       const mine = (message: ServerMessage) =>
         selectionId !== null && selectionOf(message) === selectionId;
@@ -264,6 +282,7 @@ export function startSession(
               selectionId,
               cwd,
               options: { model, thinkingLevel, dispatchedFrom },
+              ...(worktree ? { worktree } : {}),
               text: prompt,
             });
             return;
@@ -895,5 +914,63 @@ export function waitSessions(
         attention.abort();
       return result;
     }),
+  );
+}
+
+// ── Reading status ──────────────────────────────────────────────────────────
+
+/** A status read waits this long for Piano's answer, which may include a GitHub lookup. */
+const STATUS_DEADLINE_MS = 30_000;
+
+export type StatusTarget = { readonly sessionId: string } | { readonly projectId: string };
+
+/** A status with the links its reader opens: the session, and the dialog it needs answered there. */
+export const withLinks = (
+  facts: SessionStatusFacts,
+  link: (sessionId: string) => string,
+): SessionStatus => ({
+  ...facts,
+  link: link(facts.sessionId),
+  needs: facts.needs && { ...facts.needs, link: link(facts.sessionId) },
+});
+
+export type StatusReply =
+  | { readonly status: "ready"; readonly sessions: ReadonlyArray<SessionStatusFacts> }
+  | { readonly status: "error"; readonly detail: string };
+
+/**
+ * One read of sessions' status: a session by ID, or a project's active sessions. It mutates
+ * nothing, so a connection lost before the answer simply asks again.
+ */
+export function readStatus(
+  target: StatusTarget,
+  environment: SocketEnvironment,
+  signal?: AbortSignal,
+): Promise<StatusReply> {
+  return observe<StatusReply>(
+    environment,
+    { deadlineMs: STATUS_DEADLINE_MS, signal },
+    (link, settle) => {
+      let requestId: string | null = null;
+      return {
+        connected: () => {
+          requestId = link.nonce();
+          link.send({ _tag: "session_status", requestId, target });
+        },
+        disconnected: (fatal) => {
+          if (fatal)
+            settle({
+              status: "error",
+              detail: "The connection was dropped for a frame over the delivery limit.",
+            });
+        },
+        message: (message) => {
+          if (message._tag === "session_status" && message.requestId === requestId)
+            settle(message.result);
+        },
+        deadline: () => ({ status: "error", detail: "Piano did not answer before the deadline." }),
+        aborted: () => ({ status: "error", detail: "The status read was abandoned." }),
+      };
+    },
   );
 }

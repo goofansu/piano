@@ -1,9 +1,12 @@
 import type { FinalOutput, RenderMsg, SubagentCard, ToolExecution } from "@shared/wire";
 import {
+  type Disposition,
   type SessionCreation,
   type SessionHandle,
+  type SessionStatus,
   type SessionSubmission,
   START_TOOL,
+  STATUS_TOOL,
   type StartArguments,
   type StartToolResult,
   WAIT_TOOL,
@@ -105,6 +108,8 @@ export interface DispatchFacts {
   sessionId: string | null;
   /** The brief's first line: what the session was asked to do. */
   title: string;
+  /** The branch of the worktree the session works in, when the parent knows it. */
+  branch?: string;
   /** The parent's observation, never the child's current state. */
   status: string;
   badge: Badge;
@@ -223,6 +228,15 @@ const OBSERVED: Record<WaitStatus, [status: string, badge: Badge]> = {
   unknown: ["Unknown", "warning"],
 };
 
+/** What a status read reported. Finished is settlement, which does not say the task succeeded. */
+const DISPOSITION: Record<Disposition, [status: string, badge: Badge]> = {
+  running: ["Running", "secondary"],
+  needs_input: ["Needs input", "warning"],
+  settled: ["Finished", "secondary"],
+  exited: ["Exited", "warning"],
+  unknown: ["Unknown", "warning"],
+};
+
 /**
  * A dispatch tool's JSON as a saved session gives it back: the shared shape, but any field may be
  * missing, so an older or damaged record renders what it can. Each reader keeps a field only when
@@ -243,9 +257,10 @@ const creationOf = (value: unknown): SessionCreation | undefined =>
 const handleOf = (value: unknown): Recovered<SessionHandle> => ({
   sessionId: stringOf(recordOf(value)?.sessionId),
 });
+const worktreeOf = (value: unknown) => ({ branch: stringOf(recordOf(value)?.branch) });
 const startArgumentsOf = (args: string | undefined): Recovered<StartArguments> | undefined => {
   const a = parsed(args);
-  return a && { prompt: stringOf(a.prompt) };
+  return a && { prompt: stringOf(a.prompt), worktree: worktreeOf(a.worktree) };
 };
 const waitArgumentsOf = (args: string | undefined): Recovered<WaitArguments> | undefined => {
   const a = parsed(args);
@@ -259,7 +274,21 @@ const startResultOf = (text: string | undefined): Recovered<StartToolResult> | u
       creation: creationOf(r.creation),
       submission: oneOf(SUBMISSION, r.submission),
       handle: handleOf(r.handle),
+      worktree: worktreeOf(r.worktree),
       detail: stringOf(r.detail),
+    }
+  );
+};
+/** Undefined when the output is not the tool's JSON (an unknown session). */
+const statusResultOf = (text: string | undefined): Recovered<SessionStatus> | undefined => {
+  const r = parsed(text);
+  return (
+    r && {
+      sessionId: stringOf(r.sessionId),
+      disposition: oneOf(DISPOSITION, r.disposition),
+      needs: { title: stringOf(recordOf(r.needs)?.title) },
+      lastAnswer: stringOf(r.lastAnswer),
+      changes: { branch: stringOf(recordOf(r.changes)?.branch) },
     }
   );
 };
@@ -283,9 +312,15 @@ const waitResultOf = (text: string | undefined): Recovered<WaitToolResult> | und
   );
 };
 
-/** The briefs of every session this transcript dispatched, so a wait can name what it waits on. */
-function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, string> {
-  const briefs = new Map<string, string>();
+/** What this transcript dispatched to a session: its brief, and the branch of its new worktree. */
+interface Dispatched {
+  readonly brief: string;
+  readonly branch?: string;
+}
+
+/** Every session this transcript dispatched, so a wait or a status can name what it reads. */
+function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, Dispatched> {
+  const briefs = new Map<string, Dispatched>();
   const calls = new Map<string, string>();
   for (const m of messages) {
     for (const call of m.toolCalls ?? [])
@@ -294,8 +329,9 @@ function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, string>
         if (brief) calls.set(call.id, brief);
       }
     const brief = m.role === "tool_result" && m.toolCallId ? calls.get(m.toolCallId) : undefined;
-    const sessionId = brief ? startResultOf(m.text)?.handle?.sessionId : undefined;
-    if (brief && sessionId) briefs.set(sessionId, brief);
+    const result = brief ? startResultOf(m.text) : undefined;
+    const sessionId = result?.handle?.sessionId;
+    if (brief && sessionId) briefs.set(sessionId, { brief, branch: result?.worktree?.branch });
   }
   return briefs;
 }
@@ -306,14 +342,49 @@ function dispatchFacts(
   call: ToolCall,
   output: string | undefined,
   outcome: ToolOutcome,
-  briefs: ReadonlyMap<string, string>,
+  briefs: ReadonlyMap<string, Dispatched>,
 ): DispatchFacts[] | undefined {
-  if (call.name !== START_TOOL && call.name !== WAIT_TOOL) return undefined;
+  if (call.name !== START_TOOL && call.name !== WAIT_TOOL && call.name !== STATUS_TOOL)
+    return undefined;
   const settled = outcome === "done" || outcome === "failed";
+  const observed = (sessionId: string | null) => {
+    const dispatched = sessionId ? briefs.get(sessionId) : undefined;
+    return {
+      sessionId,
+      title: messageLabel(dispatched?.brief ?? "") || "Session",
+      ...(dispatched?.branch ? { branch: dispatched.branch } : {}),
+    };
+  };
+  if (call.name === STATUS_TOOL) {
+    const result = settled ? statusResultOf(output) : undefined;
+    if (settled && !result) return undefined;
+    const asked = stringOf(parsed(call.args)?.sessionId) ?? null;
+    const facts = observed(result?.sessionId ?? asked);
+    const branch = result?.changes?.branch ?? facts.branch;
+    const [status, badge]: [string, Badge] = result
+      ? result.disposition
+        ? DISPOSITION[result.disposition]
+        : ["Unknown", "warning"]
+      : outcome === "incomplete"
+        ? ["Incomplete", "warning"]
+        : ["Reading", "secondary"];
+    return [
+      {
+        ...facts,
+        ...(branch ? { branch } : {}),
+        status,
+        badge,
+        ...(result?.lastAnswer ? { answer: result.lastAnswer } : {}),
+        ...(result?.needs?.title ? { detail: result.needs.title } : {}),
+      },
+    ];
+  }
   if (call.name === START_TOOL) {
     const result = settled ? startResultOf(output) : undefined;
     if (settled && !result) return undefined;
-    const brief = startArgumentsOf(call.args)?.prompt ?? "";
+    const args = startArgumentsOf(call.args);
+    const brief = args?.prompt ?? "";
+    const branch = result?.worktree?.branch ?? args?.worktree?.branch;
     const [status, badge]: [string, Badge] = !result
       ? outcome === "incomplete"
         ? ["Incomplete", "warning"]
@@ -327,6 +398,7 @@ function dispatchFacts(
       {
         sessionId: result?.handle?.sessionId ?? null,
         title: messageLabel(brief) || "New session",
+        ...(branch ? { branch } : {}),
         status,
         badge,
         ...(call.args ? { params: toolArgsText(call.args) } : {}),
@@ -336,17 +408,10 @@ function dispatchFacts(
   }
   const result = settled ? waitResultOf(output) : undefined;
   if (settled && !result) return undefined;
-  const observed = (handle: Recovered<SessionHandle> | undefined) => {
-    const sessionId = handle?.sessionId ?? null;
-    return {
-      sessionId,
-      title: messageLabel((sessionId && briefs.get(sessionId)) || "") || "Session",
-    };
-  };
   if (!result) {
     const sessions = waitArgumentsOf(call.args)?.sessions ?? [];
     return sessions.map((handle) => ({
-      ...observed(handle),
+      ...observed(handle.sessionId ?? null),
       status: outcome === "incomplete" ? "Incomplete" : "Waiting",
       badge: outcome === "incomplete" ? ("warning" as const) : ("secondary" as const),
     }));
@@ -354,7 +419,7 @@ function dispatchFacts(
   return (result.results ?? []).map((r) => {
     const [status, badge] = r.status ? OBSERVED[r.status] : ["Unknown", "warning" as const];
     return {
-      ...observed(r.handle),
+      ...observed(r.handle?.sessionId ?? null),
       status,
       badge,
       ...(r.answer ? { answer: r.answer } : {}),

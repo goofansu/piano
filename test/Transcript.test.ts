@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
   SessionHandle,
+  SessionStatus,
   StartArguments,
   StartToolResult,
   WaitArguments,
@@ -1026,6 +1027,7 @@ test("a dispatch names each session it started or waited on, with the parent's o
       creation: "created",
       submission: "started",
       handle,
+      worktree: null,
       link: "http://x/s/child-1",
     } satisfies StartToolResult),
   };
@@ -1121,5 +1123,94 @@ test("a dispatch names each session it started or waited on, with the parent's o
     dispatch([start, refused], "start"),
     undefined,
     "a failure the tool reported as text stays an ordinary tool call",
+  );
+});
+
+test("a dispatch into a new worktree names its branch, and a status read reports what the session needs", () => {
+  const handle: SessionHandle = {
+    cwd: "/repo/.worktrees/task-a",
+    sessionId: "child-a",
+    generation: "g1",
+    submissionId: 1,
+    baselineMessages: 0,
+    baselineFingerprint: "b",
+    inputFingerprint: "i",
+    anchorMessageId: null,
+  };
+  const call = (id: string, name: string, args: unknown): RenderMsg => ({
+    id,
+    role: "assistant",
+    text: "",
+    toolCalls: [{ id, name, args: JSON.stringify(args) }],
+  });
+  const result = (id: string, value: unknown): RenderMsg => ({
+    id: `${id}-result`,
+    role: "tool_result",
+    toolCallId: id,
+    text: JSON.stringify(value),
+  });
+  const start = call("s", "piano_start_session", {
+    prompt: "Fix the login bug.",
+    worktree: { branch: "task-a" },
+  } satisfies StartArguments);
+  const started = result("s", {
+    cwd: handle.cwd,
+    creation: "created",
+    submission: "started",
+    handle,
+    worktree: { path: handle.cwd, branch: "task-a" },
+    link: "http://x/s/child-a",
+  } satisfies StartToolResult);
+  const wait = call("w", "piano_wait_sessions", { sessions: [handle] } satisfies WaitArguments);
+  const status = call("q", "piano_session_status", { sessionId: "child-a" });
+  const read = (needs: SessionStatus["needs"], lastAnswer: string | null) =>
+    result("q", {
+      sessionId: "child-a",
+      cwd: handle.cwd,
+      projectId: null,
+      disposition: needs ? "needs_input" : "settled",
+      since: "2026-10-21T00:00:00.000Z",
+      needs,
+      lastAnswer,
+      changes: { branch: "task-a", files: 2, pullRequest: null },
+      link: "http://x/s/child-a",
+    } satisfies SessionStatus);
+  const dispatch = (messages: RenderMsg[], id: string) =>
+    reply(transcriptRows(messages), id).tools[0]?.dispatch?.[0];
+
+  assert.equal(
+    dispatch([start], "s")?.branch,
+    "task-a",
+    "the requested branch shows while starting",
+  );
+  assert.equal(dispatch([start, started], "s")?.branch, "task-a");
+  assert.deepEqual(
+    [dispatch([start, started, wait], "w")?.title, dispatch([start, started, wait], "w")?.branch],
+    ["Fix the login bug.", "task-a"],
+    "a wait names the branch beside the brief",
+  );
+  const needs = dispatch(
+    [
+      start,
+      started,
+      status,
+      read({ title: "Allow rm -rf?", kind: "confirm", link: "http://x/s/child-a" }, null),
+    ],
+    "q",
+  );
+  assert.deepEqual(
+    [needs?.title, needs?.branch, needs?.status, needs?.badge, needs?.detail],
+    ["Fix the login bug.", "task-a", "Needs input", "warning", "Allow rm -rf?"],
+  );
+  const settled = dispatch([status, read(null, "Fixed.")], "q");
+  assert.deepEqual(
+    [settled?.sessionId, settled?.title, settled?.status, settled?.answer],
+    ["child-a", "Session", "Finished", "Fixed."],
+    "a session this transcript did not start is still named by its ID's row",
+  );
+  assert.equal(
+    dispatch([status, { ...read(null, null), text: "Piano lists no session child-a." }], "q"),
+    undefined,
+    "an unknown session stays an ordinary tool call",
   );
 });

@@ -7,12 +7,15 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Queue, type Scope } from "effect";
 import { type ClientRequest, makeClientDispatch } from "../server/ClientDispatch.ts";
 import { DirectoryFacts } from "../server/DirectoryFacts.ts";
+import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
+import { type SessionStatus, SessionStatusLive } from "../server/SessionStatus.ts";
 import { SidebarView } from "../server/SidebarView.ts";
+import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import type { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
 import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
@@ -52,13 +55,24 @@ const run = <A, E>(
   effect: Effect.Effect<
     A,
     E,
-    WorkspaceCommands | SidebarView | DirectoryFacts | SessionHosts | Registry | Scope.Scope
+    | WorkspaceCommands
+    | SidebarView
+    | DirectoryFacts
+    | SessionHosts
+    | SessionStatus
+    | Registry
+    | Scope.Scope
   >,
   extraArgs: string[] = [],
 ) => {
   sent.length = 0;
   discovered = undefined;
-  const layer = PianoCoreLive({ idleMs: 0, discover }).pipe(Layer.provide(NodeServices.layer));
+  const layer = SessionStatusLive.pipe(
+    Layer.provide(GitHubPullRequestsLive),
+    Layer.provideMerge(WorkspaceChangesLive),
+    Layer.provideMerge(PianoCoreLive({ idleMs: 0, discover })),
+    Layer.provide(NodeServices.layer),
+  );
   return Effect.runPromise(
     effect.pipe(
       Effect.scoped,
@@ -529,6 +543,10 @@ const refusals: {
   create_session: [
     { _tag: "create_session", selectionId: "s2", cwd, options: {}, text: "hi" },
     { _tag: "selection_rejected", selectionId: "s2", message: "REFUSED" },
+  ],
+  session_status: [
+    { _tag: "session_status", requestId: "st1", target: { sessionId: "x" } },
+    { _tag: "session_status", requestId: "st1", result: { status: "error", detail: "REFUSED" } },
   ],
   act: [
     { _tag: "act", selectionId: "s3", action: { _tag: "prompt", text: "hi" } },

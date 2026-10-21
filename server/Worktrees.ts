@@ -228,6 +228,11 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
       detail: "Enter a literal new branch name, not a checkout shortcut.",
     });
   }
+  // Worktrunk would refuse it too, but only after it ran, which leaves creation unconfirmed.
+  if ((yield* git(folder, ["branch", "--list", branch])).trim())
+    return yield* new WorktreeError({
+      detail: `Branch ${branch} already exists. Enter a new branch name.`,
+    });
   // Only a failure from here on may leave a checkout behind; the checks above create nothing.
   return yield* Effect.gen(function* () {
     const result = yield* json(

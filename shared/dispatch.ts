@@ -4,10 +4,15 @@
  * browser (which renders the tool calls). Each side imports these names and shapes rather than
  * spelling them, so a renamed tool, field or status fails the type check instead of drifting.
  */
-import type { ThinkingLevel } from "./wire.ts";
+import type { SessionStatusFacts, ThinkingLevel, WorktreeRequest } from "./wire.ts";
+
+/** A new worktree for the session: a new branch created through Worktrunk, as on the New page.
+ * `hooks` runs approved Worktrunk hooks (unapproved ones refuse creation); off by default. */
+export type { SessionStatusFacts, WorktreeRequest };
 
 export const START_TOOL = "piano_start_session";
 export const WAIT_TOOL = "piano_wait_sessions";
+export const STATUS_TOOL = "piano_session_status";
 
 /** What became of the first prompt, in Pi's own submission words. */
 export type SessionSubmission =
@@ -58,12 +63,20 @@ export interface SessionHandle {
 /** Whether the session exists. "refused" started nothing; "uncertain" may have started everything. */
 export type SessionCreation = "created" | "refused" | "uncertain";
 
+/** The worktree Piano created and placed the session in. */
+export interface CreatedWorktree {
+  readonly path: string;
+  readonly branch: string;
+}
+
 export interface StartResult {
   readonly cwd: string;
   readonly creation: SessionCreation;
   readonly submission: SessionSubmission;
   /** Present exactly when `creation` is "created". */
   readonly handle: SessionHandle | null;
+  /** The worktree the session was placed in, when the start asked for one and the session exists. */
+  readonly worktree: CreatedWorktree | null;
   readonly detail?: string;
 }
 
@@ -85,8 +98,10 @@ export interface SessionObservation {
 /** The start tool's arguments, as the model sends them. */
 export interface StartArguments {
   readonly prompt: string;
-  /** Defaults to the dispatching session's checkout. */
+  /** Defaults to the dispatching session's checkout. With `worktree`, the checkout to branch from. */
   readonly cwd?: string;
+  /** Create a new worktree from `cwd`'s repository and start the session there. */
+  readonly worktree?: WorktreeRequest;
   readonly model?: string;
   readonly thinkingLevel?: ThinkingLevel;
 }
@@ -105,6 +120,28 @@ export interface StartToolResult extends StartResult {
 /** The wait tool's result JSON: one observation per handle, in the order they were given. */
 export interface WaitToolResult {
   readonly results: (SessionObservation & { readonly link: string })[];
+}
+
+/** The status tool's arguments: a session Piano lists, by its ID. */
+export interface StatusArguments {
+  readonly sessionId: string;
+}
+
+/**
+ * What a session is doing, from what Piano holds now. `settled` is execution stopped, never task
+ * success (INV-03); `exited` is a Pi child that stopped without settling; `unknown` is a session
+ * whose live facts are gone (Piano restarted) and whose history proves no ending.
+ */
+export const DISPOSITIONS = ["running", "needs_input", "settled", "exited", "unknown"] as const;
+export type Disposition = (typeof DISPOSITIONS)[number];
+
+/** How many characters of the last answer a status carries. */
+export const LAST_ANSWER_CHARS = 2000;
+
+/** A status as the tool and the script report it. */
+export interface SessionStatus extends Omit<SessionStatusFacts, "needs"> {
+  readonly link: string;
+  readonly needs: (NonNullable<SessionStatusFacts["needs"]> & { readonly link: string }) | null;
 }
 
 /** Pi's custom entry naming the session that dispatched this one; never part of model context. */

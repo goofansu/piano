@@ -15,8 +15,10 @@ import type {
   SlashCommand,
   Snapshot,
   StartOptions,
+  WorktreeRequest,
 } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
+import { observeGit } from "./GitCheckout.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, RegistryError, type RegistryLookupError } from "./Registry.ts";
@@ -27,7 +29,7 @@ import {
   SessionReferences,
   SessionReferencesLive,
 } from "./SessionReferences.ts";
-import { worktreeOwner } from "./Worktrees.ts";
+import { createWorktree, WorktreeError, worktreeOwner } from "./Worktrees.ts";
 
 export interface OpenSpec {
   readonly cwd: string;
@@ -52,6 +54,8 @@ export interface CreateSpec {
   /** Initial project; it must be active, checked before anything is registered. */
   readonly projectId?: string;
   readonly options: StartOptions;
+  /** Create this new branch's worktree from `cwd`'s repository and start the session there. */
+  readonly worktree?: WorktreeRequest;
 }
 /** Only `create`'s fresh server-generated ID may create a registry reference. */
 interface Creation {
@@ -95,7 +99,10 @@ export class SessionHosts extends Context.Service<
      */
     readonly create: (
       spec: CreateSpec,
-    ) => Effect.Effect<PiSession, PiSessionError | RegistryError | RegistryLookupError>;
+    ) => Effect.Effect<
+      PiSession,
+      PiSessionError | RegistryError | RegistryLookupError | WorktreeError
+    >;
     /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
     readonly rename: (
       cwd: string,
@@ -283,6 +290,16 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
        * folder already registered under an alias of the main checkout is reused. A checkout Git
        * cannot read refuses creation instead of registering it blindly (INV-06).
        */
+      /** The registered folder for a main checkout: one registered under an alias of it is
+       * reused, otherwise the checkout is added under Git's spelling. */
+      const folderOf = Effect.fn("SessionHosts.folderOf")(function* (main: string) {
+        const data = yield* registry.get;
+        const physical = yield* Effect.forEach(data.folders, (folder) =>
+          Effect.promise(() => realpath(folder).catch(() => undefined)),
+        );
+        return data.folders[physical.indexOf(main)] ?? (yield* registry.ensureFolder(main));
+      });
+
       const place = Effect.fn("SessionHosts.place")(function* (raw: string) {
         const path = directoryPath(raw);
         const data = yield* registry.get;
@@ -295,19 +312,60 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           Effect.mapError((e) => rejected(`Cannot read the checkout ${path}: ${e.detail}`)),
         );
         if (!owner) return yield* registry.ensureFolder(path);
-        const physical = yield* Effect.forEach(data.folders, (folder) =>
-          Effect.promise(() => realpath(folder).catch(() => undefined)),
-        );
-        const folder =
-          data.folders[physical.indexOf(owner.main)] ?? (yield* registry.ensureFolder(owner.main));
+        const folder = yield* folderOf(owner.main);
         yield* registry.addWorktree({ folder, path: owner.root, branch: owner.branch ?? "" });
         return owner.root;
+      });
+
+      /**
+       * A new worktree for a new session, created through Worktrunk (INV-06) from the folder of
+       * `raw`'s repository: a linked worktree's main checkout, otherwise the checkout's root. The
+       * folder and the worktree are registered as `place` would; a failure starts nothing and
+       * never falls back to `raw` itself.
+       */
+      const placeWorktree = Effect.fn("SessionHosts.placeWorktree")(function* (
+        raw: string,
+        worktree: WorktreeRequest,
+      ) {
+        const path = directoryPath(raw);
+        yield* Directories.require(path).pipe(
+          Effect.mapError((e) => new WorktreeError({ detail: e.detail })),
+        );
+        const owner = yield* worktreeOwner(path);
+        let main = owner?.main;
+        if (!main) {
+          const observed = yield* observeGit(path);
+          if (observed.status === "broken")
+            return yield* new WorktreeError({ detail: observed.detail });
+          if (observed.status === "non-git")
+            return yield* new WorktreeError({
+              detail: `${path} is not a Git checkout, so no worktree can be created from it.`,
+            });
+          main = observed.toplevel;
+        }
+        const folder = yield* folderOf(main).pipe(
+          Effect.mapError((e) => new WorktreeError({ detail: e.detail })),
+        );
+        const created = yield* createWorktree(folder, worktree.branch.trim(), {
+          hooks: worktree.hooks,
+        });
+        yield* registry
+          .addWorktree({ folder, path: created.path, branch: created.branch })
+          .pipe(
+            Effect.mapError(
+              (e) =>
+                new WorktreeError({ detail: `${e.detail} ${created.path}`, unconfirmed: true }),
+            ),
+          );
+        return created.path;
       });
 
       const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
         // Registry writes run before the ownership lock; an unavailable project registers nothing.
         if (spec.projectId !== undefined) yield* registry.requireActiveProject(spec.projectId);
-        const cwd = yield* place(spec.cwd);
+        const cwd = spec.worktree
+          ? yield* placeWorktree(spec.cwd, spec.worktree)
+          : yield* place(spec.cwd);
         const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
         // Only a fresh server-generated ID may create a reference. Registration and initial
         // membership survive a disconnected requester, as acquisition is server-owned.

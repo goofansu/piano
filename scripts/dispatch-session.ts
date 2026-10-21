@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-/** Start a Piano session from a terminal, over the same dispatch modules the Pi extension uses.
- * Piano places the directory: a linked worktree is listed under its main checkout's folder. */
+/** Start a Piano session, or read sessions' status, from a terminal, over the same dispatch modules
+ * the Pi extension uses. Piano places the directory: a linked worktree is listed under its main
+ * checkout's folder, and `--worktree` has Piano create a new one first. */
 import { closeSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -8,22 +9,35 @@ import {
   dispatchConfiguration,
   nodeSocketEnvironment,
 } from "../extensions/piano-sessions/NodeSocket.ts";
-import { startSession } from "../extensions/piano-sessions/SessionDispatch.ts";
+import {
+  readStatus,
+  type StatusTarget,
+  startSession,
+  withLinks,
+} from "../extensions/piano-sessions/SessionDispatch.ts";
 import { ThinkingLevel } from "../shared/wire.ts";
 
 const levels = ThinkingLevel.literals.join(", ");
 const usage = `Usage: node scripts/dispatch-session.ts <prompt-file> <cwd> [out-file] [options]
+       node scripts/dispatch-session.ts status <sessionId> [--ws-url URL] [--origin ORIGIN]
+       node scripts/dispatch-session.ts list --project <projectId> [--ws-url URL] [--origin ORIGIN]
 
 Options:
   --ws-url URL          Override PIANO_SESSION_WS_URL (loopback ws[s]://host:port/ws)
   --origin ORIGIN       Override PIANO_SESSION_ORIGIN (allowed HTTP(S) origin, no trailing /)
+  --worktree BRANCH     Create a new worktree on new branch BRANCH from <cwd>'s repository and
+                        start the session there; a failure creates no session
+  --hooks               With --worktree, run approved Worktrunk hooks (default: off)
   --model provider/id   New session model; omitted uses Piano's default
   --thinkingLevel LEVEL  ${levels}; omitted uses Piano's default
+  --project ID          With list, the project whose active sessions to read
   --help               Show this help
 
-Prints start JSON to stdout, and optionally saves it exclusively to out-file.
+A start prints its JSON to stdout, and optionally saves it exclusively to out-file.
+status prints one session's status JSON; list prints one status JSON object per line.
 Exit codes: 0 result reported (inspect creation/submission), 1 unexpected failure,
-2 invalid input/configuration, 3 output already exists.
+2 invalid input/configuration (including a session or project Piano does not list),
+3 output already exists.
 Never automatically retry an uncertain dispatch; inspect Piano first.`;
 
 class CliError extends Error {
@@ -44,12 +58,18 @@ function argumentsFromCommandLine() {
         origin: { type: "string" },
         model: { type: "string" },
         thinkingLevel: { type: "string" },
+        worktree: { type: "string" },
+        hooks: { type: "boolean" },
+        project: { type: "string" },
       },
     });
   } catch (error) {
     throw new CliError(2, `${(error as Error).message}\n${usage}`);
   }
 }
+
+const sessionLink = (origin: string, sessionId: string) =>
+  new URL(`/s/${encodeURIComponent(sessionId)}`, origin).href;
 
 const isThinkingLevel = (value: string): value is ThinkingLevel =>
   (ThinkingLevel.literals as readonly string[]).includes(value);
@@ -60,23 +80,53 @@ async function main() {
     console.log(usage);
     return;
   }
+  const config = dispatchConfiguration({
+    ...process.env,
+    PIANO_SESSION_WS_URL: values["ws-url"] ?? process.env.PIANO_SESSION_WS_URL,
+    PIANO_SESSION_ORIGIN: values.origin ?? process.env.PIANO_SESSION_ORIGIN,
+  });
+  const configured = () => {
+    if (!config)
+      throw new CliError(
+        2,
+        "Set --ws-url / PIANO_SESSION_WS_URL to a loopback ws[s]://host:port/ws URL and --origin / PIANO_SESSION_ORIGIN to an allowed HTTP(S) origin (no path or trailing slash).",
+      );
+    return config;
+  };
+  const command = positionals[0];
+  if (command === "status" || command === "list") {
+    let target: StatusTarget;
+    if (command === "status") {
+      if (positionals.length !== 2 || values.project !== undefined) throw new CliError(2, usage);
+      target = { sessionId: positionals[1]! };
+    } else {
+      if (positionals.length !== 1 || !values.project) throw new CliError(2, usage);
+      target = { projectId: values.project };
+    }
+    const { origin } = configured();
+    const reply = await readStatus(target, nodeSocketEnvironment(configured()));
+    if (reply.status === "error") throw new CliError(2, reply.detail);
+    const statuses = reply.sessions.map((facts) =>
+      withLinks(facts, (id) => sessionLink(origin, id)),
+    );
+    if (command === "status") console.log(JSON.stringify(statuses[0], null, 2));
+    else for (const status of statuses) console.log(JSON.stringify(status));
+    return;
+  }
   if (positionals.length < 2 || positionals.length > 3) throw new CliError(2, usage);
+  if (values.project !== undefined) throw new CliError(2, "--project belongs to list");
+  if (values.hooks && values.worktree === undefined)
+    throw new CliError(2, "--hooks needs --worktree");
+  const worktree = values.worktree?.trim();
+  if (worktree !== undefined && (!worktree || worktree.startsWith("-")))
+    throw new CliError(2, "--worktree must name a new branch");
   const model = values.model;
   if (model !== undefined && !/^[^/\s]+\/\S+$/.test(model))
     throw new CliError(2, "--model must be provider/id");
   const thinkingLevel = values.thinkingLevel;
   if (thinkingLevel !== undefined && !isThinkingLevel(thinkingLevel))
     throw new CliError(2, `Invalid --thinkingLevel; choose ${levels}`);
-  const config = dispatchConfiguration({
-    ...process.env,
-    PIANO_SESSION_WS_URL: values["ws-url"] ?? process.env.PIANO_SESSION_WS_URL,
-    PIANO_SESSION_ORIGIN: values.origin ?? process.env.PIANO_SESSION_ORIGIN,
-  });
-  if (!config)
-    throw new CliError(
-      2,
-      "Set --ws-url / PIANO_SESSION_WS_URL to a loopback ws[s]://host:port/ws URL and --origin / PIANO_SESSION_ORIGIN to an allowed HTTP(S) origin (no path or trailing slash).",
-    );
+  const { origin } = configured();
   const [promptFile, rawCwd, outFile] = positionals;
   const cwd = resolve(rawCwd);
   let prompt: string;
@@ -103,12 +153,16 @@ async function main() {
   }
   try {
     const result = await startSession(
-      { prompt, cwd, model, thinkingLevel },
-      nodeSocketEnvironment(config),
+      {
+        prompt,
+        cwd,
+        model,
+        thinkingLevel,
+        ...(worktree ? { worktree: { branch: worktree, hooks: values.hooks } } : {}),
+      },
+      nodeSocketEnvironment(configured()),
     );
-    const link = result.handle
-      ? new URL(`/s/${encodeURIComponent(result.handle.sessionId)}`, config.origin).href
-      : null;
+    const link = result.handle ? sessionLink(origin, result.handle.sessionId) : null;
     const json = JSON.stringify(
       { ...result, link, model: model ?? null, thinkingLevel: thinkingLevel ?? null },
       null,

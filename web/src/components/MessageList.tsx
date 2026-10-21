@@ -26,6 +26,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
+import { BranchLabel } from "@/components/BranchLabel";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { Markdown } from "@/components/Markdown";
@@ -674,7 +675,7 @@ function SubagentCardView({
 /** A session a dispatch tool started or waited on: the call's arguments, what the parent observed, and a way
  * to open it beside the header, so reaching the session never needs the row unfolded. */
 function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: ToolOutcome }) {
-  const { sessionId, title, status, badge, params, answer, detail } = session;
+  const { sessionId, title, branch, status, badge, params, answer, detail } = session;
   const destinationOf = useContext(SessionDestinationContext);
   const destination = sessionId ? destinationOf(sessionId) : "unlisted";
   return (
@@ -683,6 +684,7 @@ function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: To
       header={
         <>
           <span className="min-w-20 flex-1 truncate font-medium text-ink">{title}</span>
+          {branch && <BranchLabel branch={branch} className="max-w-40 shrink text-xs text-ink-3" />}
           <Badge variant={badge}>{status}</Badge>
         </>
       }

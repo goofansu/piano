@@ -15,8 +15,10 @@ import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { sessionActionPolicy } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
+import { SessionStatus } from "./SessionStatus.ts";
 import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceCommands, worktreeFailure } from "./WorkspaceCommands.ts";
+import { WorktreeError } from "./Worktrees.ts";
 
 /** Every client message except delivery acknowledgements, which belong to the transport. */
 export type ClientRequest = Exclude<ClientMessage, { _tag: "ack" }>;
@@ -105,6 +107,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   const sidebar = yield* SidebarView;
   const registry = yield* Registry;
   const commands = yield* WorkspaceCommands;
+  const status = yield* SessionStatus;
   const sessions = yield* makeClientSessions(output);
   const { send } = output;
 
@@ -126,12 +129,43 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     },
     create_session: {
       admission: "claim",
-      claim: sessions.create,
+      // A failed worktree creation may still have left a checkout: the sidebar rediscovers.
+      claim: (request) =>
+        sessions
+          .create(request)
+          .pipe(
+            Effect.map((work) =>
+              work.pipe(
+                Effect.tapError((e) =>
+                  e instanceof WorktreeError && e.unconfirmed ? sidebar.refresh : Effect.void,
+                ),
+              ),
+            ),
+          ),
       // Creation may already have submitted its first message; a failure keeps that uncertain.
+      // A worktree failure comes before any session exists, so nothing was started.
       unanswered: ({ selectionId }, reason) =>
-        reason._tag === "refused"
+        reason._tag === "refused" ||
+        (reason._tag === "failed" && reason.error instanceof WorktreeError)
           ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
           : { _tag: "error", message: unansweredText(reason), selectionId },
+    },
+    // A read: it answers every outcome, an unknown session or project included.
+    session_status: {
+      admission: "ordinary",
+      run: ({ requestId, target }) =>
+        status.read(target).pipe(
+          Effect.match({
+            onSuccess: (sessions) => ({ status: "ready" as const, sessions }),
+            onFailure: (e) => ({ status: "error" as const, detail: e.detail }),
+          }),
+          Effect.flatMap((result) => send({ _tag: "session_status", requestId, result })),
+        ),
+      unanswered: ({ requestId }, reason) => ({
+        _tag: "session_status",
+        requestId,
+        result: { status: "error", detail: unansweredText(reason) },
+      }),
     },
     act: {
       admission: ({ action }) =>
