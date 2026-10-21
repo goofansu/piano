@@ -18,16 +18,13 @@ import { directoryTrust } from "./directoryTrust.ts";
 import { abbrevHome } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
+import { folderFor, sessionLocator } from "./sessionCatalog.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
 type SessionRef = { cwd: string; sessionId: string };
 
-/** The registered folder whose worktrees include `cwd`; undefined once that folder is closed. */
-export function folderFor(state: AppState, cwd: string | undefined): FolderView | undefined {
-  return cwd === undefined
-    ? undefined
-    : state.folders.find((f) => f.worktrees.some((w) => w.path === cwd));
-}
+// Where a session runs is the catalog's to decide; the folder lookup is re-exported for its callers.
+export { folderFor };
 
 /** What the New session directory picker's trigger names. */
 export type DirectoryTrigger =
@@ -195,12 +192,6 @@ export function sessionCheckoutMissing(state: AppState, target: SessionRef): boo
   );
 }
 
-/** A worktree's directory without the `folder.` prefix Worktrunk gives it, since the folder is named beside it. */
-export function worktreeName(folder: string, path: string): string {
-  const base = path.split("/").pop() ?? path;
-  return base.startsWith(`${folder}.`) ? base.slice(folder.length + 1) : base;
-}
-
 export interface SessionContext {
   /** Session actions may be sent (see `sessionReady`). */
   ready: boolean;
@@ -234,12 +225,11 @@ export interface SessionContext {
 /** Everything the header, palette and session view show about the selected session's location. */
 export function sessionContext(state: AppState): SessionContext {
   const session = state.session;
+  // Before the session exists, a first message is on its way in the directory it starts in.
   const cwd = session?.cwd ?? state.pendingCreate?.cwd;
-  const folder = folderFor(state, cwd);
-  const checkout = folder?.worktrees.find((w) => w.path === cwd);
-  const folderName = folder?.name ?? cwd?.split("/").pop() ?? "";
   const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
-  const info = ref && sessionReference(state, ref);
+  const location = sessionLocator(state)(cwd, ref && sessionReference(state, ref));
+  const { folder, checkout } = location;
   const workspace = workspaceFor(state, session?.cwd);
   const checkoutMissing = !!session?.state.checkoutMissing;
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
@@ -248,12 +238,13 @@ export function sessionContext(state: AppState): SessionContext {
     cwd,
     folder,
     checkout,
-    folderName,
-    worktreeName: checkout && !checkout.root ? worktreeName(folderName, checkout.path) : undefined,
-    branch: info?.branch ?? undefined,
-    title: session?.state.sessionName || info?.title || "Untitled",
+    folderName: location.folderName,
+    worktreeName: location.worktreeName,
+    branch: location.branch,
+    // Pi's live name outranks the registry's saved title.
+    title: session?.state.sessionName || location.title || "Untitled",
     sessionId: session?.sessionId ?? undefined,
-    project: sessionProject(state, ref),
+    project: location.project,
     workspace,
     changesWorkspace,
     canOpenChanges: !!changesWorkspace && !checkoutMissing,
