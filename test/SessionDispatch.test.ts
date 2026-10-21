@@ -15,6 +15,7 @@ import {
 } from "../extensions/piano-sessions/SessionDispatch.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import { dispositionOf } from "../shared/sessionStatus.ts";
 import {
   type ClientMessage,
   encodeServerMessage,
@@ -793,6 +794,39 @@ test(
     assert.equal(observation!.status, "running");
     assert.match(observation!.detail ?? "", /pending work/i);
     assert.equal(h.sentOf("select").length, 4, "rechecks are bounded");
+  },
+);
+
+test(
+  "an idle session whose dialog answer may not have reached Pi is unknown, as its status reads",
+  bounded,
+  async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    h.last().accept();
+    const socket = h.last();
+    const detail =
+      "Dialog response delivery is uncertain. It will not be retried or reopened. Inspect the session; restart Pi if blocked.";
+    // A timed-out write keeps the host from ever reporting quiescence.
+    const uncertain = idle(answered(), {
+      isQuiescent: false,
+      dialogResolution: {
+        id: "d1",
+        generation: "g1",
+        reason: "answered",
+        delivery: "uncertain",
+        detail,
+      },
+    });
+    socket.frame(socketSnapshot(socket, uncertain));
+    for (let recheck = 0; recheck < 3; recheck++) {
+      h.advance(250);
+      socket.frame(socketSnapshot(socket, uncertain));
+    }
+    const [observation] = await wait;
+    assert.equal(observation!.status, "unknown");
+    assert.equal(observation!.detail, detail);
+    assert.equal(dispositionOf(uncertain, true).disposition, "unknown", "status reads it alike");
   },
 );
 
