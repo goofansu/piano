@@ -212,7 +212,7 @@ export interface SessionContext {
   folderName: string;
   /** Linked worktree's directory name; omitted for the folder's own checkout. */
   worktreeName: string | undefined;
-  /** Git's branch for the selected session's checkout, while discovery is ready. */
+  /** The shared session branch: Git's when listed, otherwise the branch Piano registered. */
   branch: string | undefined;
   title: string;
   sessionId: string | undefined;
@@ -250,8 +250,7 @@ export function sessionContext(state: AppState): SessionContext {
     checkout,
     folderName,
     worktreeName: checkout && !checkout.root ? worktreeName(folderName, checkout.path) : undefined,
-    branch:
-      session && folder?.discovery.status === "ready" ? (checkout?.branch ?? undefined) : undefined,
+    branch: info?.branch ?? undefined,
     title: session?.state.sessionName || info?.title || "Untitled",
     sessionId: session?.sessionId ?? undefined,
     project: sessionProject(state, ref),

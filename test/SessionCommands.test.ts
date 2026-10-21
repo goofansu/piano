@@ -43,8 +43,8 @@ const base: AppState = {
   folders: [folder],
   workspaces: [ws("/repo"), ws("/work/repo.feature")],
   sessionReferences: [
-    sessionReference("/work/repo.feature", "s1"),
-    sessionReference("/repo", "s2"),
+    sessionReference("/work/repo.feature", "s1", { branch: "feature" }),
+    sessionReference("/repo", "s2", { branch: "main" }),
   ],
   session: session("/work/repo.feature"),
 };
