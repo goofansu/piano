@@ -1,4 +1,4 @@
-import type { ModelCatalog, SessionAction, ThinkingLevel } from "@shared/wire";
+import type { ModelCatalog, SessionAction, StartOptions, ThinkingLevel } from "@shared/wire";
 import { useState } from "react";
 import { emptyChoice, type ModelChange, type ModelTarget, modelChoice } from "@/lib/modelChoice";
 
@@ -21,8 +21,8 @@ export function useModelChoice(
   return {
     model: choice.model,
     effort: choice.effort,
-    start: () => choice.start,
-    submitted: () => setHeld(choice.submitted),
+    /** Sends with the start options; a send that consumed its input clears the pick it carried. */
+    submit: (send: (start: StartOptions) => boolean) => setHeld(choice.submit(send)),
     onModelChange: (model: string) => apply(choice.chooseModel(model)),
     onEffortChange: (level: ThinkingLevel) => apply(choice.chooseEffort(level)),
   };

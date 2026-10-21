@@ -191,7 +191,21 @@ test("offline: a pick made while disconnected survives reconnect and travels wit
     thinkingLevel: "minimal",
   });
   // Once the prompt carried it, Pi's selection shows again and changes go to Pi.
-  const after = modelChoice(online.submitted, catalog, hosted);
+  // A prompt known not sent keeps the pick for the retry.
+  assert.equal(
+    online.submit(() => false),
+    offline,
+  );
+  let carried: unknown;
+  const after = modelChoice(
+    online.submit((start) => {
+      carried = start;
+      return true;
+    }),
+    catalog,
+    hosted,
+  );
+  assert.deepEqual(carried, { model: "a/deep" });
   assert.deepEqual([after.model, after.effort, after.start], ["a/quick", "low", {}]);
   assert.equal(after.chooseModel("a/deep").kind, "act");
 });

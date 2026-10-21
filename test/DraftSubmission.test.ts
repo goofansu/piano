@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type ClientMessage, encodeServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
-import { messageCommand } from "../web/src/lib/composerControl.ts";
-import { createDrafts, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
+import { messageCommand, newSessionCommand } from "../web/src/lib/composerControl.ts";
+import { createDrafts, NEW_SESSION_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/modelChoice.ts";
 import { openConnection, type SocketEnvironment, type SocketEvents } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
 /** Real transport and client; only the external socket and reconnect clock are controlled. */
-function harness() {
+function harness({ select = true } = {}) {
   const sockets: Array<{
     events: SocketEvents;
     open: boolean;
@@ -77,8 +77,10 @@ function harness() {
       ),
     );
   accept();
-  client.select("/scratch", "existing");
-  selected();
+  if (select) {
+    client.select("/scratch", "existing");
+    selected();
+  }
   return {
     client,
     stop,
@@ -88,6 +90,7 @@ function harness() {
     notices,
     reconnect: () => online(),
     actions: () => sockets.flatMap((s) => s.sent).filter((m) => m._tag === "act"),
+    creations: () => sockets.flatMap((s) => s.sent).filter((m) => m._tag === "create_session"),
   };
 }
 
@@ -113,11 +116,13 @@ test("PIN-61: CLOSING before onclose retains the full draft for explicit retry a
   assert.equal(pick.kind, "hold");
   let held = pick.held;
   const submit = () => {
-    const choice = modelChoice(held, null, target);
-    const consumed = drafts.submit(key, (message) =>
-      h.client.send(messageCommand("steering", message, choice.start)),
-    );
-    if (consumed) held = choice.submitted;
+    let consumed = false;
+    held = modelChoice(held, null, target).submit((start) => {
+      consumed = drafts.submit(key, (message) =>
+        h.client.send(messageCommand("steering", message, start)),
+      );
+      return consumed;
+    });
     return consumed;
   };
 
@@ -174,4 +179,74 @@ test("PIN-61: a throwing send is uncertain and reconnect never replays it", (t) 
   h.accept();
   h.selected();
   assert.equal(h.actions().length, 1);
+});
+
+test("a new session's first message that is known not sent stays on the New page as a draft", (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  h.client.dispatch({ type: "new_directory", cwd: "/scratch" });
+  const drafts = createDrafts();
+  drafts.setText(NEW_SESSION_DRAFT, "Start here");
+  const before = drafts.get(NEW_SESSION_DRAFT);
+  const target: ModelTarget = { kind: "new", cwd: "/scratch" };
+  const pick = modelChoice(emptyChoice(target), null, target).chooseModel("test/held");
+  assert.equal(pick.kind, "hold");
+  let held = pick.held;
+  const submit = () => {
+    let consumed = false;
+    held = modelChoice(held, null, target).submit((start) => {
+      consumed = drafts.submit(NEW_SESSION_DRAFT, (message) =>
+        h.client.send(newSessionCommand({ cwd: "/scratch", projectId: undefined }, message, start)),
+      );
+      return consumed;
+    });
+    return consumed;
+  };
+
+  h.last().open = false; // CLOSING, but no onclose callback yet.
+  assert.equal(submit(), false, "known-unsent must not consume the draft");
+  assert.equal(h.creations().length, 0);
+  assert.deepEqual(drafts.get(NEW_SESSION_DRAFT), before);
+  assert.deepEqual(h.client.getState().view, { kind: "new", cwd: "/scratch" });
+  assert.equal(
+    h.client.getState().pendingCreate,
+    null,
+    "nothing was sent, so nothing is uncertain",
+  );
+  assert.equal(h.client.getState().selecting, null);
+  assert.match(h.notices[0] ?? "", /Message not sent.*retry/);
+  assert.deepEqual(held.pick, { model: "test/held" });
+
+  h.reconnect();
+  h.accept();
+  assert.equal(h.creations().length, 0, "reconnect does not replay the creation");
+  assert.equal(submit(), true);
+  assert.equal(h.creations().length, 1);
+  assert.equal(h.creations()[0]!.options.model, "test/held");
+  assert.deepEqual(held.pick, {});
+  assert.equal(h.client.getState().view.kind, "session");
+  assert.equal(h.client.getState().pendingCreate?.text, "Start here");
+  assert.equal(h.client.getState().pendingCreate?.outcome, "starting");
+  assert.equal(drafts.sendable(NEW_SESSION_DRAFT), false);
+});
+
+test("a new session's first message whose send throws opens the session as uncertain and never replays", (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  drafts.setText(NEW_SESSION_DRAFT, "Possibly started");
+  h.last().throws = true;
+  assert.equal(
+    drafts.submit(NEW_SESSION_DRAFT, (message) =>
+      h.client.send(newSessionCommand({ cwd: "/scratch", projectId: undefined }, message, {})),
+    ),
+    true,
+  );
+  assert.equal(drafts.sendable(NEW_SESSION_DRAFT), false);
+  assert.equal(h.client.getState().view.kind, "session");
+  assert.equal(h.client.getState().pendingCreate?.text, "Possibly started");
+  assert.equal(h.client.getState().pendingCreate?.outcome, "uncertain");
+  h.reconnect();
+  h.accept();
+  assert.equal(h.creations().length, 1, "reconnect never replays the creation");
 });

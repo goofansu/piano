@@ -99,10 +99,11 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
   });
 
   const submit = () => {
-    // Creating switches the main pane to the new session at once, so this page never shows a pending state.
+    // A creation that is sent switches the main pane to the new session at once, so this page never
+    // shows a pending state; one known not sent keeps the draft and the pick here.
     if (!ready) return;
-    editor.submit((message) =>
-      send(newSessionCommand({ cwd, projectId }, message, choice.start())),
+    choice.submit((start) =>
+      editor.submit((message) => send(newSessionCommand({ cwd, projectId }, message, start))),
     );
   };
 
