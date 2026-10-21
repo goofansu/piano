@@ -114,7 +114,7 @@ export function ProjectHome({ state, projectId }: { state: AppState; projectId: 
                     <ItemTitle className="w-full min-w-0">
                       <span className="min-w-0 flex-1 truncate">{s.title || "Untitled"}</span>
                     </ItemTitle>
-                    <ItemDescription className="flex min-w-0 items-center gap-1.5">
+                    <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
                       {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
                       <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
                       {s.branch && <BranchLabel branch={s.branch} />}
