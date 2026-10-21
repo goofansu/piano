@@ -576,6 +576,8 @@ function handle(cmd) {
         }
         return;
       }
+      // Read and dropped: never acknowledged and never run, so Pi stays idle.
+      if (cmd.message === "ignore input") return;
       if (cmd.message === "withhold acknowledgement") {
         delayedPrompt = cmd;
         streaming = true;
