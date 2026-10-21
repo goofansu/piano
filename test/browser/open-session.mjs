@@ -3,6 +3,7 @@
 // cost, then stop a running reply.
 // node test/browser/open-session.mjs [evidence-directory]
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { run } from "./harness.mjs";
 
 const timestamp = Date.now();
@@ -51,11 +52,25 @@ await run(
     release.at(-2).content += `\n\n${paragraph.repeat(4)}`;
     release.at(-1).content[0].text += '\n\n```ts\nconst release = "ready";\n```';
     history({ sessionId: "release-notes", cwd, messages: release });
+    const worktrees = ["live", "gone"].map((name) => {
+      const path = `${cwd}.${name}`;
+      execFileSync("git", ["-C", cwd, "worktree", "add", "-b", `feat-${name}`, path]);
+      if (name === "gone") execFileSync("git", ["-C", cwd, "worktree", "remove", path]);
+      history({ sessionId: name, cwd: path, messages: exchange(1) });
+      return { folder: cwd, path, branch: `feat-${name}` };
+    });
     return {
       folders: [cwd],
+      worktrees,
+      projects: [{ id: "qa", name: "QA Project", archived: false }],
       sessions: [
         reference("login-bug", "Fix the login bug", 0.063),
         reference("release-notes", "Release notes", 0.63),
+        ...worktrees.map((w, i) => ({
+          ...reference(i === 0 ? "live" : "gone", i === 0 ? "Live worktree" : "Gone worktree", 0),
+          cwd: w.path,
+          projectId: "qa",
+        })),
       ],
     };
   },
@@ -226,5 +241,28 @@ await run(
       );
     }
     await page.capture("8-reopened-long-session");
+
+    // PIN-88: opening a project member keeps the branch shown on its home card, even after
+    // Git stops listing its worktree. The same header segments remain on a live worktree.
+    await page.ab("set", "viewport", "1280", "900");
+    for (const [id, title] of [
+      ["live", "Live worktree"],
+      ["gone", "Gone worktree"],
+    ]) {
+      await page.open("/projects/qa");
+      await page.see(`feat-${id}`);
+      const card = `button[role="listitem"]:nth-child(${id === "live" ? 1 : 2})`;
+      assert.match(
+        await page.evaluate(`document.querySelector(${JSON.stringify(card)}).textContent`),
+        new RegExp(`${title}api.*feat-${id}`),
+      );
+      await page.ab("click", card);
+      await page.see("Answer 1.");
+      const header = await page.evaluate("document.querySelector('header').textContent");
+      assert.match(header, new RegExp(`Folder: apiWorktree: ${id}/Git branch: feat-${id}`));
+      assert.match(header, /Project: QA Project/);
+      console.log(`Session header (${id}): ${header}`);
+      await page.capture(`9-header-${id}`);
+    }
   },
 );
