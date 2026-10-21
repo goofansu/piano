@@ -29,7 +29,7 @@ function useStableOrder(keys: readonly string[]): string[] {
 
 /**
  * A project's home: its member sessions, newest activity first, each with its title, folder,
- * branch and last activity. Everything comes from the session catalog the browser already holds.
+ * branch, saved pull request number and last activity. Everything comes from the session catalog the browser already holds.
  */
 export function ProjectHome({ state, projectId }: { state: AppState; projectId: string }) {
   const { select, openNew } = useNavigation();
@@ -115,8 +115,10 @@ export function ProjectHome({ state, projectId }: { state: AppState; projectId: 
                       <span className="min-w-0 flex-1 truncate">{s.title || "Untitled"}</span>
                     </ItemTitle>
                     <ItemDescription className="flex min-w-0 items-center gap-1.5">
-                      <span className="truncate">{s.folder}</span>
+                      {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
+                      <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
                       {s.branch && <BranchLabel branch={s.branch} />}
+                      {s.pullRequest && <span className="shrink-0">#{s.pullRequest}</span>}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions className="self-start text-xs text-ink-3">

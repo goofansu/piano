@@ -194,17 +194,26 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             } satisfies FolderView;
           }),
         );
-        // A session's branch is its open folder's discovery; a closed folder's session has none known.
-        const branchOf = new Map(
-          folders.flatMap((f) => f.worktrees.map((w) => [w.path, w.branch] as const)),
+        // A session's branch is Git's, from its open folder's discovery. Once Git no longer lists the
+        // worktree (removed, or its folder closed), the branch the registry saved when it registered
+        // the worktree stands in; a worktree Git still lists keeps Git's answer, detached included.
+        const live = new Map(
+          folders.flatMap((f) =>
+            f.worktrees.flatMap((w) =>
+              w.status === "current" ? [[w.path, w.branch] as const] : [],
+            ),
+          ),
         );
+        const remembered = new Map(data.worktrees.map((w) => [w.path, w.branch || null] as const));
+        const branchOf = (cwd: string) =>
+          live.has(cwd) ? live.get(cwd)! : (remembered.get(cwd) ?? null);
         // References survive closed directories and missing history; discovery never removes them.
         // A member not yet observed counts as available until the next run says otherwise.
         const sessionReferences = data.sessions.map(
           (s): SessionReference => ({
             ...shownReference(s),
             workspaceId: data.workspaces.find((w) => w.path === s.cwd)!.id,
-            branch: branchOf.get(s.cwd) ?? null,
+            branch: branchOf(s.cwd),
             unavailable:
               !s.projectId || hosted(s.cwd, s.sessionId)
                 ? undefined

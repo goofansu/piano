@@ -40,6 +40,7 @@ const state: AppState = {
       projectId: "p1",
       branch: "fix-sort",
       updatedAt: at(5),
+      pullRequest: { url: "https://github.com/eduvo/openapply/pull/26674", source: "manual" },
     }),
     // Its worktree is gone: Git no longer reports a branch for it.
     sessionReference("/work/repo.gone", "gone", { projectId: "p1", updatedAt: at(3) }),
@@ -48,19 +49,38 @@ const state: AppState = {
   ],
 };
 
-test("a project's home lists every member session, newest activity first, with its folder and branch", () => {
+test("a project's home lists every member session, newest activity first, with its folder, branch and saved pull request", () => {
   const home = projectHome(state, "p1")!;
   assert.deepEqual(
     home.sessions.map((s) => ({
       title: s.title,
       folder: s.folder,
       branch: s.branch,
+      pullRequest: s.pullRequest,
       updatedAt: s.updatedAt,
     })),
     [
-      { title: "fix sorting", folder: "repo", branch: "fix-sort", updatedAt: at(5) },
-      { title: undefined, folder: "repo.gone", branch: "", updatedAt: at(3) },
-      { title: "newton from katie", folder: "repo", branch: "develop", updatedAt: at(1) },
+      {
+        title: "fix sorting",
+        folder: "repo",
+        branch: "fix-sort",
+        pullRequest: "26674",
+        updatedAt: at(5),
+      },
+      {
+        title: undefined,
+        folder: "repo.gone",
+        branch: "",
+        pullRequest: undefined,
+        updatedAt: at(3),
+      },
+      {
+        title: "newton from katie",
+        folder: "repo",
+        branch: "develop",
+        pullRequest: undefined,
+        updatedAt: at(1),
+      },
     ],
     "archived members and other projects' sessions stay out",
   );

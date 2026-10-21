@@ -346,6 +346,50 @@ test("INV-01/INV-07: a session reference keeps its registry creation time and wo
   );
 });
 
+test("INV-01/07: a removed worktree's sessions keep the branch Piano registered; a worktree Git still lists keeps Git's", async () => {
+  const live = join(root, "first.live"),
+    detached = join(root, "first.detached"),
+    removed = join(root, "first.removed");
+  const git = {
+    ...slowGit(),
+    discover: (folder: string) =>
+      Effect.succeed<WorktreeDiscovery>({
+        status: "ready",
+        observedAt: new Date(1_700_000_000_000).toISOString(),
+        currentPath: folder,
+        worktrees: [
+          { path: folder, branch: "develop", detached: false, prunable: false },
+          { path: live, branch: "renamed-by-git", detached: false, prunable: false },
+          { path: detached, branch: null, detached: true, prunable: false },
+        ],
+      }),
+  };
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.ensureFolder(first);
+      for (const [path, branch] of [
+        [live, "registered-live"],
+        [detached, "registered-detached"],
+        [removed, "26672-latest-activity-sort"],
+      ] as const)
+        yield* registry.addWorktree({ folder: first, path, branch });
+      for (const cwd of [first, live, detached, removed]) yield* registry.addSession(cwd, cwd);
+      const branches = Object.fromEntries(
+        ((yield* view.fresh).sessionReferences ?? []).map((r) => [r.cwd, r.branch]),
+      );
+      assert.deepEqual(branches, {
+        [first]: "develop",
+        [live]: "renamed-by-git",
+        [detached]: null,
+        [removed]: "26672-latest-activity-sort",
+      });
+    }),
+  );
+});
+
 test("INV-01: a repeated observation that found nothing new publishes no view; a real change still does", async () => {
   const git = slowGit();
   await run(
