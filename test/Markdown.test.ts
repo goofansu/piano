@@ -1,6 +1,62 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderMarkdown } from "../web/src/lib/markdown.ts";
+import { markdownLinks, renderMarkdown } from "../web/src/lib/markdown.ts";
+
+test("pathological nesting falls back atomically to escaped source for rendering and discovery", () => {
+  const source = `[before](https://example.test)\n\n${"> ".repeat(5000)}<script>&"quoted`;
+  assert.equal(
+    renderMarkdown(source, true),
+    `<pre><code>[before](https://example.test)\n\n${"&gt; ".repeat(5000)}&lt;script&gt;&amp;&quot;quoted</code></pre>`,
+  );
+  assert.deepEqual(markdownLinks(source), []);
+});
+
+test("unmatched brackets remain prose at increasing sizes, without hiding later links", () => {
+  for (const size of [4000, 8000, 16000, 32000, 128000]) {
+    const brackets = "[".repeat(size);
+    const source = `${brackets}\n[ok](https://example.test)`;
+    assert.equal(
+      renderMarkdown(source),
+      `<p>${brackets}<br><a href="https://example.test" target="_blank" rel="noreferrer">ok</a></p>`,
+    );
+    assert.deepEqual(markdownLinks(source), [
+      { url: "https://example.test", label: "ok", kind: "markdown" },
+    ]);
+  }
+});
+
+test("source, structure and cumulative work budgets discard partial rendering and discovery", () => {
+  for (const tail of [
+    "x".repeat(256 * 1024),
+    "`x` ".repeat(10001),
+    `|head|\n|---|\n${"|".repeat(10001)}`,
+    // Repeated block traversals exceed the work budget even below the nesting limit.
+    `${"> ".repeat(30)}${"x".repeat(150000)}`,
+  ]) {
+    const source = `[before](https://example.test)\n\n${tail}`;
+    assert.equal(
+      renderMarkdown(source, true),
+      `<pre><code>${source.replaceAll(">", "&gt;")}</code></pre>`,
+    );
+    assert.deepEqual(markdownLinks(source), []);
+  }
+});
+
+test("nested quotes and bracket scanner preserve ordinary inline contracts", () => {
+  const source =
+    "> Outer\n> > [a[b](https://example.test/a(b)) `code`\n> >\n> > ```html\n> > <script>\n> > ```";
+  assert.equal(
+    renderMarkdown(source),
+    '<blockquote><p>Outer</p><blockquote><p><a href="https://example.test/a(b)" target="_blank" rel="noreferrer">a[b</a> <code>code</code></p><pre><code>&lt;script&gt;</code></pre></blockquote></blockquote>',
+  );
+  assert.deepEqual(markdownLinks(source), [
+    { url: "https://example.test/a(b)", label: "a[b", kind: "markdown" },
+  ]);
+  // Failed bracket candidates must not swallow code or web URLs in the remaining prose.
+  assert.deepEqual(markdownLinks("[[broken](oops(( `https://hidden.test` https://visible.test"), [
+    { url: "https://visible.test", kind: "bare" },
+  ]);
+});
 
 test("GitHub issue, PR and repository links are compact without changing destinations or custom labels", () => {
   const url = "https://github.com/goofansu/herdr-hunk/issues/2?x=1&y=2#issuecomment-3";

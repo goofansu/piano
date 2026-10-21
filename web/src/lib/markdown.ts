@@ -60,8 +60,13 @@ function resolveLinkDecoration(href: string): LinkDecoration | undefined {
   return undefined;
 }
 
-function webLink(href: string, label: string, decoration = resolveLinkDecoration(href)): string {
-  const text = renderInline(decoration && label === href ? decoration.label : label, false);
+function webLink(
+  href: string,
+  label: string,
+  budget: Budget,
+  decoration = resolveLinkDecoration(href),
+): string {
+  const text = renderInline(decoration && label === href ? decoration.label : label, budget, false);
   return `<a href="${escH(href)}" target="_blank" rel="noreferrer"${decoration ? ` class="brand-link" title="${escH(href)}"` : ""}>${decoration?.icon ?? ""}${text}</a>`;
 }
 
@@ -87,13 +92,25 @@ function localFilePath(destination: string): string | undefined {
   }
 }
 
-/**
- * Code spans, markdown links and images, autolinks and bare URLs: the one expression for what
- * inline text the transcript treats as code or as a link. Code comes first so a URL inside it is
- * never a link.
- */
-const INLINE =
-  /`([^`\n]+)`|(!?)\[([^\]\n]*)\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/g;
+/** All entry points share these limits. Fallback itself is only a linear escaped-source copy.
+ * Bound parser input, recursive block depth, rescanning work and generated structure separately. */
+const MAX_SOURCE = 256 * 1024;
+const MAX_DEPTH = 32;
+const EXHAUSTED = Symbol("Markdown budget exhausted");
+type Budget = { work: number; nodes: number };
+function budgetFor(src: string): Budget {
+  if (src.length > MAX_SOURCE) throw EXHAUSTED;
+  return { work: Math.min(4 * 1024 * 1024, 32 * (src.length + 1)), nodes: 10_000 };
+}
+function spend(budget: Budget, work: number, nodes = 0) {
+  budget.work -= work;
+  budget.nodes -= nodes;
+  if (budget.work < 0 || budget.nodes < 0) throw EXHAUSTED;
+}
+
+// Sticky, not a searching expression: each attempt starts at the scanner's cursor. These
+// alternatives have disjoint delimiters and linear work; bracket destinations are scanned below.
+const INLINE = /`([^`\n]+)`|<(https?:\/\/[^<>\s]+)>|https?:\/\/[^\s<>`]+/y;
 /** Punctuation that ends the sentence, not the URL; `*` is a bold or italic marker around it. */
 const URL_END = /[.,!?;:)'"\]*]+$/;
 const WEB = /^https?:\/\//;
@@ -105,23 +122,67 @@ type InlineToken =
   /** `rest` is the sentence punctuation or emphasis marker after the URL, which stays prose. */
   | { kind: "bare"; url: string; rest: string };
 
-function inlineToken(
-  match: string,
-  code: string | undefined,
-  image: string | undefined,
-  label: string | undefined,
-  destination: string | undefined,
-  autolink: string | undefined,
-): InlineToken {
-  if (code !== undefined) return { kind: "code", code };
-  if (destination !== undefined)
-    return { kind: image ? "image" : "link", label: label ?? "", destination, source: match };
-  if (autolink !== undefined) return { kind: "autolink", url: autolink };
-  const url = match.replace(URL_END, "");
-  return { kind: "bare", url, rest: match.slice(url.length) };
+/** Inline runs are single lines. Cache the next closing bracket (including absence) and failed
+ * destinations: thousands of opening brackets must not each search the same suffix. Destination
+ * scans spend fuel per character, so overlapping malformed destinations cannot become quadratic. */
+function* inlineTokens(text: string, budget: Budget) {
+  let closing = -1;
+  let failedThrough = -1;
+  for (let at = 0; at < text.length; ) {
+    spend(budget, 1);
+    let token: InlineToken | undefined;
+    let end = at + 1;
+    const image = text[at] === "!" && text[at + 1] === "[";
+    const opening = image ? at + 1 : at;
+    if ((image || text[at] === "[") && opening > failedThrough) {
+      if (closing < opening) {
+        closing = text.indexOf("]", opening + 1);
+        if (closing === -1) closing = text.length;
+      }
+      if (text[closing + 1] === "(") {
+        let depth = 0;
+        let cursor = closing + 2;
+        for (; cursor < text.length; cursor++) {
+          spend(budget, 1);
+          const char = text[cursor];
+          if (char === "(" && ++depth > 1) break;
+          if (char === ")" && depth-- === 0) {
+            end = cursor + 1;
+            token = {
+              kind: image ? "image" : "link",
+              label: text.slice(opening + 1, closing),
+              destination: text.slice(closing + 2, cursor),
+              source: text.slice(at, end),
+            };
+            break;
+          }
+        }
+      }
+      if (!token) failedThrough = closing;
+    }
+    if (!token && (text[at] === "`" || text[at] === "<" || text[at] === "h")) {
+      INLINE.lastIndex = at;
+      const match = INLINE.exec(text);
+      if (match) {
+        const [whole, code, autolink] = match;
+        end = INLINE.lastIndex;
+        if (code !== undefined) token = { kind: "code", code };
+        else if (autolink !== undefined) token = { kind: "autolink", url: autolink };
+        else {
+          const url = whole.replace(URL_END, "");
+          token = { kind: "bare", url, rest: whole.slice(url.length) };
+        }
+      }
+    }
+    if (token) {
+      spend(budget, end - at, 1);
+      yield { token, at, end };
+    }
+    at = end;
+  }
 }
 
-function renderToken(token: InlineToken, images: boolean): string {
+function renderToken(token: InlineToken, budget: Budget, images: boolean): string {
   switch (token.kind) {
     case "code":
       return `<code>${escH(token.code)}</code>`;
@@ -132,24 +193,24 @@ function renderToken(token: InlineToken, images: boolean): string {
         : escH(token.source);
     }
     case "link": {
-      if (WEB.test(token.destination)) return webLink(token.destination, token.label);
+      if (WEB.test(token.destination)) return webLink(token.destination, token.label, budget);
       const path = localFilePath(token.destination);
       // Custom inline action: shadcn has no HTML-string Markdown renderer.
       // Paths live in data, not hrefs, so even modified clicks cannot request filesystem URLs.
       return path
-        ? `<button type="button" class="local-file-link" data-local-file="${escH(path)}">${renderInline(token.label, false)}</button>`
+        ? `<button type="button" class="local-file-link" data-local-file="${escH(path)}">${renderInline(token.label, budget, false)}</button>`
         : escH(token.source);
     }
     case "autolink":
     case "bare": {
       const decoration = resolveLinkDecoration(token.url);
-      if (decoration) return webLink(token.url, token.url, decoration);
+      if (decoration) return webLink(token.url, token.url, budget, decoration);
       return escH(token.kind === "bare" ? token.url : `<${token.url}>`);
     }
   }
 }
 
-function renderInline(s: string, links = true, images = false): string {
+function renderInline(s: string, budget: Budget, links = true, images = false): string {
   const ph: string[] = [];
   s = s.replaceAll("\u0000", "\uFFFD");
   if (!links)
@@ -158,13 +219,18 @@ function renderInline(s: string, links = true, images = false): string {
       return `\u0000${ph.length - 1}`;
     });
   // Protect whole links before formatting prose, so URL punctuation never becomes markup.
-  if (links)
-    s = s.replace(INLINE, (...match: (string | undefined)[]) => {
-      const [whole, code, image, label, destination, autolink] = match;
-      const token = inlineToken(whole!, code, image, label, destination, autolink);
-      ph.push(renderToken(token, images));
-      return `\u0000${ph.length - 1}${token.kind === "bare" ? token.rest : ""}`;
-    });
+  if (links) {
+    const parts: string[] = [];
+    let previous = 0;
+    for (const { token, at, end } of inlineTokens(s, budget)) {
+      parts.push(s.slice(previous, at));
+      ph.push(renderToken(token, budget, images));
+      parts.push(`\u0000${ph.length - 1}${token.kind === "bare" ? token.rest : ""}`);
+      previous = end;
+    }
+    parts.push(s.slice(previous));
+    s = parts.join("");
+  }
   s = escH(s);
   s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
@@ -186,32 +252,54 @@ export interface MarkdownLink {
 
 /**
  * Every web link in `src` in the order written, recognized exactly as `renderMarkdown` does: the
- * same blocks (a fenced block is code, nothing else is) and the same inline expression (code
+ * same blocks (a fenced block is code, nothing else is) and the same inline scanner (code
  * spans and images are not links; a bare URL sheds sentence punctuation).
  */
 export function markdownLinks(src: string): MarkdownLink[] {
   const links: MarkdownLink[] = [];
-  walkMarkdown(src, (text) => {
-    for (const [whole, code, image, label, destination, autolink] of text.matchAll(INLINE)) {
-      const token = inlineToken(whole, code, image, label, destination, autolink);
-      if (token.kind === "link" && WEB.test(token.destination))
-        links.push({ url: token.destination, label: token.label, kind: "markdown" });
-      else if (token.kind === "autolink" || token.kind === "bare")
-        links.push({ url: token.url, kind: token.kind });
-    }
-    return "";
-  });
-  return links;
+  try {
+    const budget = budgetFor(src);
+    walkMarkdown(
+      src,
+      (text) => {
+        for (const { token } of inlineTokens(text, budget)) {
+          if (token.kind === "link" && WEB.test(token.destination))
+            links.push({ url: token.destination, label: token.label, kind: "markdown" });
+          else if (token.kind === "autolink" || token.kind === "bare")
+            links.push({ url: token.url, kind: token.kind });
+        }
+        return "";
+      },
+      budget,
+    );
+    return links;
+  } catch {
+    // No partial discovery from a document that could not be parsed safely.
+    return [];
+  }
 }
 
 export function renderMarkdown(src: string, images = false): string {
-  return walkMarkdown(src, (text) => renderInline(text, true, images));
+  try {
+    const budget = budgetFor(src);
+    return walkMarkdown(src, (text) => renderInline(text, budget, true, images), budget);
+  } catch {
+    return `<pre><code>${escH(src)}</code></pre>`;
+  }
 }
 
 /** The block structure: `inline` renders each run of inline text; fenced code never reaches it. */
-function walkMarkdown(src: string, inline: (text: string) => string): string {
+function walkMarkdown(
+  src: string,
+  inline: (text: string) => string,
+  budget: Budget,
+  depth = 0,
+): string {
+  if (depth > MAX_DEPTH) throw EXHAUSTED;
+  spend(budget, src.length + 1);
   if (!src) return "";
   const lines = src.split("\n");
+  spend(budget, 0, lines.length);
   let out = "";
   let para: string[] = [];
   let fence = false;
@@ -238,7 +326,11 @@ function walkMarkdown(src: string, inline: (text: string) => string): string {
       tbl = [];
       return;
     }
-    const cells = (r: string) => r.replace(/^\|/, "").replace(/\|$/, "").split("|");
+    const cells = (r: string) => {
+      const values = r.replace(/^\|/, "").replace(/\|$/, "").split("|");
+      spend(budget, 0, values.length);
+      return values;
+    };
     out +=
       '<div class="markdown-table-scroll" role="region" aria-label="Table" tabindex="0"><table><thead><tr>';
     cells(tbl[0]).forEach((c) => {
@@ -304,7 +396,7 @@ function walkMarkdown(src: string, inline: (text: string) => string): string {
         i++;
       } while (i < lines.length && /^>(?:\s|$)/.test(lines[i]));
       i--;
-      out += `<blockquote>${walkMarkdown(quote.join("\n"), inline)}</blockquote>`;
+      out += `<blockquote>${walkMarkdown(quote.join("\n"), inline, budget, depth + 1)}</blockquote>`;
       continue;
     }
     const um = ln.match(/^[-*] (.*)/);

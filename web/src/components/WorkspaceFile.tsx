@@ -95,21 +95,27 @@ export function WorkspaceFile({
   const [images, setImages] = useState<ReadonlyMap<string, string>>(new Map());
   useEffect(() => {
     setImages(new Map());
-    if (result?.kind !== "markdown" || !workspaceId) return;
+    if (mode !== "preview" || result?.kind !== "markdown" || !workspaceId) return;
     const controller = new AbortController();
     const urls = new Map<string, string>();
-    const document = new DOMParser().parseFromString(
-      renderMarkdown(result.content, true),
-      "text/html",
-    );
-    const paths = [
-      ...new Set(
-        Array.from(
-          document.querySelectorAll<HTMLElement>("[data-local-image]"),
-          (element) => element.dataset.localImage!,
+    let paths: string[];
+    try {
+      const document = new DOMParser().parseFromString(
+        renderMarkdown(result.content, true),
+        "text/html",
+      );
+      paths = [
+        ...new Set(
+          Array.from(
+            document.querySelectorAll<HTMLElement>("[data-local-image]"),
+            (element) => element.dataset.localImage!,
+          ),
         ),
-      ),
-    ].slice(0, 8);
+      ].slice(0, 8);
+    } catch {
+      // Image enhancement is optional; preview fallback and Source must remain available.
+      return;
+    }
     void (async () => {
       let total = 0;
       for (const path of paths) {
@@ -136,7 +142,7 @@ export function WorkspaceFile({
       controller.abort();
       for (const url of urls.values()) URL.revokeObjectURL(url);
     };
-  }, [result, workspaceId]);
+  }, [mode, result, workspaceId]);
   const [saving, setSaving] = useState(false);
   // The browser saves the file through a short-lived object URL; the server sends exact bytes.
   const save = async () => {
