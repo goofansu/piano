@@ -155,7 +155,7 @@ test("aliases are replaced and real moves are pushed, with a title for each scre
   assert.equal(p.navigation.getState().settings, null);
   assert.deepEqual(
     p.entries,
-    ["/new", "/s/a", "/settings/radius", "/projects/p1"],
+    ["/new", "/s/a", "/settings/radius", "/projects/p1/new"],
     "leaving Settings for the New page is one entry, not two",
   );
   assert.equal(p.title(), "Launch - Piano");
@@ -163,6 +163,30 @@ test("aliases are replaced and real moves are pushed, with a title for each scre
   const bare = page("/settings");
   assert.deepEqual(bare.navigation.getState().settings, "providers");
   assert.deepEqual(bare.entries, ["/settings/providers"], "/settings is an alias for Providers");
+});
+
+test("a project's address opens its home; its New page has an address of its own", () => {
+  const p = page("/projects/p1");
+  assert.deepEqual(p.client.getState().view, { kind: "project", projectId: "p1" });
+  p.registry();
+  assert.deepEqual(p.entries, ["/projects/p1"]);
+  assert.equal(p.title(), "Launch - Piano");
+
+  p.navigation.openNew(undefined, "p1");
+  assert.deepEqual(p.entries, ["/projects/p1", "/projects/p1/new"]);
+  assert.equal(p.client.getState().view.kind, "new");
+  p.back();
+  assert.deepEqual(p.client.getState().view, { kind: "project", projectId: "p1" });
+  assert.equal(p.title(), "Launch - Piano");
+
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openProject("p1");
+  assert.deepEqual(p.entries, ["/projects/p1", "/s/a", "/projects/p1"]);
+  assert.deepEqual(p.client.getState().view, { kind: "project", projectId: "p1" });
+
+  const fresh = page("/projects/p1/new");
+  assert.deepEqual(fresh.client.getState().view, { kind: "new", projectId: "p1" });
 });
 
 test("back and forward apply the address bar's route; back onto the same New page keeps its directory", () => {

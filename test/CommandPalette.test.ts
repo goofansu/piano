@@ -212,7 +212,7 @@ test("Session commands reach the session's project home, as the header's project
   const row = open(archived);
   assert.equal(row?.label, "Open project: Launch");
   assert.equal(row?.enabled, true, "an archived project's home offers Unarchive");
-  assert.deepEqual(row?.command.intent, { kind: "new-session", projectId: "launch" });
+  assert.deepEqual(row?.command.intent, { kind: "open-project", projectId: "launch" });
   assert.ok(open({ ...archived, connected: false })?.enabled, "it only navigates");
 });
 

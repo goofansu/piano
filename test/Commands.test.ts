@@ -7,6 +7,7 @@ import { globalCommands, trustCommand } from "../web/src/lib/globalCommands.ts";
 import {
   assignProjectCommand,
   newProjectCommand,
+  openProjectCommand,
   projectCommands,
 } from "../web/src/lib/projectCommands.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
@@ -71,6 +72,17 @@ test("enabled commands reach the effect their intent names", () => {
       ["openNew", undefined, undefined],
     ],
     [byId(projectCommands(online, launch), "new-session"), ["openNew", undefined, "p1"]],
+    [openProjectCommand(launch), ["openProject", "p1"]],
+    [
+      byId(
+        globalCommands(
+          { ...online, view: { kind: "project", projectId: "p1" } },
+          { settingsOpen: false, view: { groupBy: "date", sortBy: "recent" } },
+        ),
+        "new-session-in-project",
+      ),
+      ["openNew", undefined, "p1"],
+    ],
     [
       byId(projectCommands(online, launch), "edit"),
       ["openForm", { kind: "project", dialog: { project: launch } }],

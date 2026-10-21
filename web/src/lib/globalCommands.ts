@@ -8,6 +8,7 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
+import { canStartSessionIn, findProject } from "./projectCommands.ts";
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
 import { focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
@@ -25,6 +26,7 @@ export type GlobalCommandId =
   | "settings"
   | `settings-${SettingsSection}`
   | "new-session"
+  | "new-session-in-project"
   | "trust"
   | "toggle-sidebar"
   | `appearance-${Appearance}`
@@ -56,7 +58,8 @@ export type GlobalCommandIntent =
   | { kind: "home" }
   /** Open Settings, at `section` when given. */
   | { kind: "settings"; section?: SettingsSection }
-  | { kind: "new-session" }
+  /** Open the New session page, for `projectId` when given. */
+  | { kind: "new-session"; projectId?: string }
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -122,9 +125,25 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   };
 }
 
+/** On a project's home, its New session in project button, named as the button is. */
+function projectNewSession(state: AppState): GlobalCommand[] {
+  const project = state.view.kind === "project" ? findProject(state, state.view.projectId) : null;
+  if (!project) return [];
+  return [
+    {
+      id: "new-session-in-project",
+      label: "New session in project",
+      icon: "new",
+      group: "navigate",
+      enabled: canStartSessionIn(state, project.id),
+      intent: { kind: "new-session", projectId: project.id },
+    },
+  ];
+}
+
 /**
  * Global commands, in the palette's order: Home or Settings (whichever is not open), each Settings
- * section, New session, trust for the directory the main pane is about, Toggle sidebar, the
+ * section, New session, New session in project on a project's home, trust for the directory the main pane is about, Toggle sidebar, the
  * appearances, then each sidebar grouping and sort, with the current one of each checked.
  */
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
@@ -167,6 +186,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       enabled: true,
       intent: { kind: "new-session" },
     },
+    ...projectNewSession(state),
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",

@@ -51,6 +51,7 @@ export interface CommandEffects {
   closeSettings: () => void;
   openSettings: (section?: SettingsSection) => void;
   openNew: (cwd?: string, projectId?: string) => void;
+  openProject: (projectId: string) => void;
   openPanel: (panel: Panel) => void;
   toggleSidebar: () => void;
   setAppearance: (appearance: Appearance) => void;
@@ -80,6 +81,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
         "cwd" in intent ? intent.cwd : undefined,
         "projectId" in intent ? intent.projectId : undefined,
       );
+      break;
+    case "open-project":
+      effects.openProject(intent.projectId);
       break;
     case "toggle-sidebar":
       effects.toggleSidebar();

@@ -5,6 +5,7 @@ import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
+import { ProjectHome } from "@/components/ProjectHome";
 import { SessionPanel } from "@/components/SessionPanel";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
@@ -104,6 +105,8 @@ export default function App() {
                         projectId={state.view.projectId}
                         onProjectChange={(id) => openNew(undefined, id)}
                       />
+                    ) : state.view.kind === "project" ? (
+                      <ProjectHome state={state} projectId={state.view.projectId} />
                     ) : state.view.kind === "missing-session" ? (
                       <Empty className="flex-1 px-4" role="alert">
                         <EmptyHeader>

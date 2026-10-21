@@ -58,8 +58,10 @@ export type ProjectCommandId =
 export type ProjectCommandIcon = "new" | "edit" | "archive" | "unarchive" | "folder" | "remove";
 
 export type ProjectCommandIntent =
-  /** Open the New session page as the project's home; it sends nothing. */
+  /** Open the New session page for the project; it sends nothing. */
   | { kind: "new-session"; projectId: string }
+  /** Open the project's home; it sends nothing. */
+  | { kind: "open-project"; projectId: string }
   /** Open the project dialog: to rename `dialog.project`, or to create a project (taking `dialog.assign`). */
   | { kind: "project-dialog"; dialog: ProjectDialog }
   /** Send this registry change. */
@@ -122,7 +124,7 @@ export function projectCommand(
 }
 
 /**
- * Open `project`'s home, the New session page that names it: the way back from one of its sessions.
+ * Open `project`'s home, its branches and other member sessions: the way back from one of its sessions.
  * Unlike New session in project, which an archived project disables because it takes no new
  * sessions, this stays enabled: an archived project's home is where it offers Unarchive. It only
  * navigates, so it does not wait for a connection either.
@@ -133,7 +135,7 @@ export function openProjectCommand(project: Project): ProjectCommand {
     label: `Open project: ${project.name}`,
     icon: "folder",
     enabled: true,
-    intent: { kind: "new-session", projectId: project.id },
+    intent: { kind: "open-project", projectId: project.id },
   };
 }
 

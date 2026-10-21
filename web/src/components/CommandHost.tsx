@@ -160,7 +160,8 @@ export function CommandHost({
   send: (command: ClientCommand) => void;
   children: React.ReactNode;
 }) {
-  const { openNew, openPanel, openSettings, closeSettings, settings } = useNavigation();
+  const { openNew, openProject, openPanel, openSettings, closeSettings, settings } =
+    useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [changesWrap, setChangesWrap] = useChangesWrap();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
@@ -188,6 +189,7 @@ export function CommandHost({
     closeSettings,
     openSettings,
     openNew,
+    openProject,
     openPanel,
     toggleSidebar: sidebar.toggle,
     setView,

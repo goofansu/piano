@@ -144,7 +144,7 @@ test("a member session opens its project's home, even archived, which a new sess
   assert.deepEqual(open, openProjectCommand(legacy));
   assert.equal(open?.label, "Open project: Legacy");
   assert.equal(open?.enabled, true, "navigation needs neither an active project nor a connection");
-  assert.deepEqual(open?.intent, { kind: "new-session", projectId: "p3" });
+  assert.deepEqual(open?.intent, { kind: "open-project", projectId: "p3" });
   assert.equal(byId(legacy)["new-session"]?.enabled, false, "starting a session there stays off");
   assert.equal(sessionProjectMenu(s, { cwd: "/repo", sessionId: "s2" }).open, undefined);
 });

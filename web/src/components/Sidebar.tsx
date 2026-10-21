@@ -9,6 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { Fragment, memo } from "react";
+import { ActivityGlyph } from "@/components/ActivityGlyph";
 import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
 import {
   SessionCommandMenuItem,
@@ -33,7 +34,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import { Keys } from "@/components/PianoMark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { ProjectCommandIconView, ProjectMenu } from "@/components/Projects";
 import { Hint } from "@/components/Shortcut";
@@ -46,7 +46,7 @@ import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import { projectCommands, sessionProjectMenu } from "@/lib/projectCommands";
+import { openProjectCommand, projectCommands, sessionProjectMenu } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { sessionRowMenu } from "@/lib/sessionCommands";
 import type { SidebarSection } from "@/lib/sidebarList";
@@ -346,8 +346,6 @@ const SessionRow = memo(
   } & Pick<GroupProps, "select">) {
     const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
     const { selected, disabled, hint, activity } = t;
-    // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
-    const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
     return (
       <li
         className={cn(
@@ -364,13 +362,7 @@ const SessionRow = memo(
           onClick={() => select(t.cwd, t.sessionId)}
           className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
         >
-          <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-            {activity === "working" ? (
-              <Keys playing className="text-brand" />
-            ) : (
-              dot && <span className={cn("size-2 rounded-full", dot)} />
-            )}
-          </span>
+          <ActivityGlyph activity={activity} />
           <span
             className={cn(
               "min-w-0 flex-1 truncate",
@@ -484,7 +476,13 @@ function ProjectGroup({
   const members = sessions;
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
-  const menu = commands.filter((c) => c.id !== "new-session");
+  // Open project first: the group's name only folds it, so the menu is the way to the project's home.
+  const menu = project
+    ? [
+        { ...openProjectCommand(project), label: "Open project" },
+        ...commands.filter((c) => c.id !== "new-session"),
+      ]
+    : [];
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={groupRow}>
