@@ -53,8 +53,11 @@ export interface ModelChoice extends ModelSelection {
   start: StartOptions;
   chooseModel: (model: string) => ModelChange;
   chooseEffort: (level: ThinkingLevel) => ModelChange;
-  /** What to hold once a prompt has carried the pick. */
-  submitted: HeldChoice;
+  /**
+   * Hands the start options to `send`, which reports whether it consumed the input they travel
+   * with. Returns what to hold next: nothing picked once a prompt carried the pick, else the pick.
+   */
+  submit: (send: (start: StartOptions) => boolean) => HeldChoice;
 }
 
 /**
@@ -94,13 +97,14 @@ export function modelChoice(
     effective.kind === "session" && effective.hosted
       ? { kind: "act", action }
       : { kind: "hold", held: { scope, pick: next } };
+  const start = startOptions(catalog, effective, pick);
   return {
     ...selectModel(catalog, effective, pick),
-    start: startOptions(catalog, effective, pick),
+    start,
     chooseModel: (model) => change({ ...pick, model }, { _tag: "set_model", model }),
     chooseEffort: (level) =>
       change({ ...pick, thinkingLevel: level }, { _tag: "set_thinking_level", level }),
-    submitted: { scope, pick: {} },
+    submit: (send) => (send(start) ? { scope, pick: {} } : held),
   };
 }
 

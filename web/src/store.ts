@@ -127,8 +127,8 @@ function reduceAction(s: AppState, a: Action): AppState {
       };
     case "trust_pending":
       return beginTrustDecision(s, a.cwd);
-    case "selecting":
-      return {
+    case "selecting": {
+      const next: AppState = {
         ...s,
         selectionId: a.selectionId,
         resync: false,
@@ -143,6 +143,9 @@ function reduceAction(s: AppState, a: Action): AppState {
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)),
       };
+      // A selection that lands on a closed connection is lost at once, as if the socket closed after it.
+      return s.connected ? next : reduceAction(next, { type: "connected", connected: false });
+    }
     case "new":
       // Picking a project, or New session again, on the New page keeps the directory chosen there.
       return {

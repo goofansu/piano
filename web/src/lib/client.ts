@@ -39,6 +39,20 @@ const disconnectNotices: Record<DisconnectReason, [string, NotifyLevel]> = {
   ],
 };
 
+const NOT_SENT = "Message not sent. Your draft is kept; retry when the session reconnects.";
+
+/** The input a creation carries, shown as the new session's first message until Pi records it. */
+const firstMessage = (m: Extract<ClientCommand, { _tag: "create_session" }>) =>
+  m.text?.trim() || m.attachments?.length
+    ? {
+        text: m.text ?? "",
+        attachments: m.attachments?.map((a) => ({
+          kind: "image" as const,
+          url: `data:${a.mimeType};base64,${a.data}`,
+        })),
+      }
+    : undefined;
+
 const LAST_DIR = "piano.lastDir";
 const storedLastDirectory: LastDirectory = {
   read: () => readStorage(LAST_DIR),
@@ -123,25 +137,31 @@ export function createClient({
 
   const send = (m: ClientCommand): SendDisposition => {
     if (m._tag === "select" || m._tag === "create_session") {
-      if (m._tag === "create_session") lastDirectory.write(m.cwd);
       const selectionId = newSelectionId();
-      apply({
-        type: "selecting",
-        selectionId,
-        cwd: m.cwd,
-        sessionId: m._tag === "select" ? m.sessionId : null,
-        firstMessage:
-          m._tag === "create_session" && (m.text?.trim() || m.attachments?.length)
-            ? {
-                text: m.text ?? "",
-                attachments: m.attachments?.map((a) => ({
-                  kind: "image" as const,
-                  url: `data:${a.mimeType};base64,${a.data}`,
-                })),
-              }
-            : undefined,
-      });
-      return connection?.send({ ...m, selectionId }) ?? "not-sent";
+      const selecting = () =>
+        apply({
+          type: "selecting",
+          selectionId,
+          cwd: m.cwd,
+          sessionId: m._tag === "select" ? m.sessionId : null,
+          firstMessage: m._tag === "create_session" ? firstMessage(m) : undefined,
+        });
+      // A select is navigation: the pane switches at once and a reconnect re-sends it (INV-02/05).
+      if (m._tag === "select") {
+        selecting();
+        return connection?.send({ ...m, selectionId }) ?? "not-sent";
+      }
+      // A creation carries the person's input and never replays, so one known not sent leaves them
+      // on the New page with their draft. Any other outcome opens the session; a connection lost
+      // during the send has already been applied, so its first message shows as uncertain.
+      const disposition = connection?.send({ ...m, selectionId }) ?? "not-sent";
+      if (disposition === "not-sent") {
+        if (firstMessage(m)) notify(NOT_SENT, "warning");
+      } else {
+        lastDirectory.write(m.cwd);
+        selecting();
+      }
+      return disposition;
     } else if (m._tag === "act") {
       // An action belongs to the attachment it was aimed at; never send it on a stale or pending one.
       const disposition =
@@ -149,11 +169,7 @@ export function createClient({
           ? (connection?.send({ ...m, selectionId: state.selectionId }) ?? "not-sent")
           : "not-sent";
       if (m.action._tag === "prompt" || m.action._tag === "steer") {
-        if (disposition === "not-sent")
-          notify(
-            "Message not sent. Your draft is kept; retry when the session reconnects.",
-            "warning",
-          );
+        if (disposition === "not-sent") notify(NOT_SENT, "warning");
         else if (disposition === "uncertain")
           notify(
             "Message delivery is uncertain. Check the conversation before sending again.",

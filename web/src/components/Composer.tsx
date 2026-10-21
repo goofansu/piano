@@ -118,8 +118,9 @@ export function Composer({
   const send = (alt: boolean) => {
     const kind = control.delivery(alt);
     if (!kind) return;
-    if (editor.submit((message) => sendCommand(messageCommand(kind, message, choice.start()))))
-      choice.submitted();
+    choice.submit((start) =>
+      editor.submit((message) => sendCommand(messageCommand(kind, message, start))),
+    );
   };
   const figures = contextFigures(usage?.context, catalog, model);
   const queue = queuePanel(queuedMessages, streaming);
