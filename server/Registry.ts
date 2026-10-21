@@ -263,7 +263,16 @@ export class Registry extends Context.Service<
     /** Make sure a directory is usable as a session cwd: a folder root or a registered worktree. Adds it as a folder otherwise. */
     readonly ensureFolder: (path: string) => Effect.Effect<string, RegistryError>;
     readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
+    /** Register a worktree. An already registered path keeps its entry. */
     readonly addWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
+    /**
+     * Save the branch Git last reported for registered worktrees, as their last-known value
+     * (INV-01): shown once Git no longer lists them. One write and one announcement for the batch;
+     * an unregistered path, a blank branch or an unchanged one is left alone.
+     */
+    readonly observeWorktreeBranches: (
+      observed: ReadonlyArray<{ readonly path: string; readonly branch: string }>,
+    ) => Effect.Effect<void, RegistryError>;
     /** Register a session and its initial, currently active project in one write. Existing references stay unchanged. */
     readonly addSession: (
       cwd: string,
@@ -501,6 +510,22 @@ export const RegistryLive = Layer.effect(
             ? d
             : { ...d, worktrees: [...d.worktrees, entry] },
         ),
+      observeWorktreeBranches: Effect.fn("Registry.observeWorktreeBranches")(function* (observed) {
+        const branches = new Map(
+          observed.filter((o) => o.branch.trim()).map((o) => [o.path, o.branch] as const),
+        );
+        if (!branches.size) return;
+        yield* update((d) => {
+          let changed = false;
+          const worktrees = d.worktrees.map((w) => {
+            const branch = branches.get(w.path);
+            if (branch === undefined || branch === w.branch) return w;
+            changed = true;
+            return { ...w, branch };
+          });
+          return changed ? { ...d, worktrees } : d;
+        });
+      }),
       addSession: (cwd, sessionId, title, projectId) =>
         update((d) => {
           if (d.sessions.some(isSession(cwd, sessionId))) return d;

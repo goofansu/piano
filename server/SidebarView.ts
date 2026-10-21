@@ -134,7 +134,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       });
 
       /** Registry selects directories and sessions; discovery supplies current Git facts. A registered
-       * worktree's saved branch is shown only once Git no longer lists it, never in place of a failed read. */
+       * worktree's last-known branch is shown only once Git no longer lists it, never in place of a failed read. */
       const assemble = Effect.fn("SidebarView.assemble")(function* (
         data: RegistryData,
         running: ReadonlyArray<HostInfo>,
@@ -196,9 +196,10 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
           }),
         );
         // A session's branch is Git's, from its open folder's discovery; a worktree Git lists keeps
-        // Git's answer, detached included. The branch the registry saved when it registered the
-        // worktree stands in only once Git no longer lists it: a ready discovery left it out, or its
-        // folder closed. A failed or not-yet-run discovery is unknown, so no branch (INV-06).
+        // Git's answer, detached included. The registry's last-known branch, the last one Git
+        // reported for the worktree, stands in only once Git no longer lists it: a ready discovery
+        // left it out, or its folder closed. A failed or not-yet-run discovery is unknown, so no
+        // branch (INV-06).
         const shown = new Map(folders.flatMap((f) => f.worktrees.map((w) => [w.path, w] as const)));
         const open = new Set(data.folders);
         const registered = new Map(data.worktrees.map((w) => [w.path, w] as const));
@@ -274,12 +275,38 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         }),
       );
 
-      /** A Git run reads the registry's folders, discovers each and installs the result. */
+      /**
+       * The branch each registered worktree is on, where a ready discovery of its folder lists it
+       * on one. A detached checkout, a worktree Git no longer lists and a failed or non-Git
+       * discovery report none, so they never replace the last branch Git did report.
+       */
+      const branchesOf = (data: RegistryData, run: Omit<Observation, "trust">) =>
+        data.worktrees.flatMap((w) => {
+          const discovery = run.discoveries.get(w.folder);
+          if (discovery?.status !== "ready") return [];
+          const path = w.path === w.folder ? discovery.currentPath : w.path;
+          const branch = discovery.worktrees.find((f) => f.path === path)?.branch;
+          return branch && branch !== w.branch ? [{ path: w.path, branch }] : [];
+        });
+
+      /**
+       * A Git run reads the registry's folders, discovers each and installs the result, then saves
+       * the branches it saw as each worktree's last-known one (INV-01), outside the publishing lock
+       * the registry's listener takes. That write changes no folder or worktree path, so it starts
+       * no Git run, and while Git lists a worktree it shows Git's branch, so its view is no news.
+       */
       const git = makeCoalescedReader({
         name: "sidebar discovery",
         scope: layerScope,
         read: () =>
-          registry.get.pipe(Effect.flatMap(observe), Effect.flatMap(install), Effect.as(true)),
+          Effect.gen(function* () {
+            const data = yield* registry.get;
+            const run = yield* observe(data);
+            yield* install(run);
+            const observed = branchesOf(data, run);
+            if (observed.length) yield* registry.observeWorktreeBranches(observed);
+            return true;
+          }),
       });
 
       // Availability has its own reader: neither slow Git nor frequent Pi state frames belong

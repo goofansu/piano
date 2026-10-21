@@ -203,7 +203,7 @@ export interface SessionContext {
   folderName: string;
   /** Linked worktree's directory name; omitted for the folder's own checkout. */
   worktreeName: string | undefined;
-  /** The shared session branch: Git's when listed, otherwise the branch Piano registered. */
+  /** The shared session branch: Git's when listed, otherwise the last branch Git reported for the worktree. */
   branch: string | undefined;
   title: string;
   sessionId: string | undefined;
