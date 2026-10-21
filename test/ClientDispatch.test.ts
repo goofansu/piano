@@ -686,6 +686,26 @@ test("an admitted worktree request is answered with the command's result under i
   );
 });
 
+test("a session start in a missing directory is rejected as never started", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { receive } = yield* client;
+      const missing = join(root, "missing");
+      const from = sent.length;
+      yield* yield* receive({
+        _tag: "create_session",
+        selectionId: "new",
+        cwd: missing,
+        options: {},
+        text: "hi",
+      });
+      assert.deepEqual(answers(from), [
+        { _tag: "selection_rejected", selectionId: "new", message: `Not a directory: ${missing}` },
+      ]);
+    }),
+  );
+});
+
 test("a request that fails reaches the client as an error for its selection, and the next request is still served", async () => {
   await run(
     Effect.gen(function* () {

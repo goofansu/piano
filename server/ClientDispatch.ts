@@ -14,11 +14,10 @@ import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { sessionActionPolicy } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
-import { SessionHosts } from "./SessionHosts.ts";
+import { SessionHosts, SessionNotCreated } from "./SessionHosts.ts";
 import { SessionStatus } from "./SessionStatus.ts";
 import { SidebarView } from "./SidebarView.ts";
 import { WorkspaceCommands, worktreeFailure } from "./WorkspaceCommands.ts";
-import { WorktreeError } from "./Worktrees.ts";
 
 /** Every client message except delivery acknowledgements, which belong to the transport. */
 export type ClientRequest = Exclude<ClientMessage, { _tag: "ack" }>;
@@ -137,16 +136,18 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
             Effect.map((work) =>
               work.pipe(
                 Effect.tapError((e) =>
-                  e instanceof WorktreeError && e.unconfirmed ? sidebar.refresh : Effect.void,
+                  e instanceof SessionNotCreated && e.checkoutUnconfirmed
+                    ? sidebar.refresh
+                    : Effect.void,
                 ),
               ),
             ),
           ),
-      // Creation may already have submitted its first message; a failure keeps that uncertain.
-      // A worktree failure comes before any session exists, so nothing was started.
+      // Creation may already have submitted its first message; a failure keeps that uncertain,
+      // unless SessionHosts says it failed before any session existed, so nothing was started.
       unanswered: ({ selectionId }, reason) =>
         reason._tag === "refused" ||
-        (reason._tag === "failed" && reason.error instanceof WorktreeError)
+        (reason._tag === "failed" && reason.error instanceof SessionNotCreated)
           ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
           : { _tag: "error", message: unansweredText(reason), selectionId },
     },

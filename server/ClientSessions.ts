@@ -16,9 +16,8 @@ import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Attachment, ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import type { PiSession, PiSessionError } from "./PiSessions.ts";
-import type { RegistryError, RegistryLookupError } from "./Registry.ts";
-import { type CreateSpec, SessionHosts } from "./SessionHosts.ts";
-import type { WorktreeError } from "./Worktrees.ts";
+import type { RegistryError } from "./Registry.ts";
+import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
 /** A new session and the first message to send it, if any. */
 export interface CreateSessionRequest extends CreateSpec {
@@ -65,9 +64,7 @@ interface ClientSessions {
    */
   readonly create: (
     request: CreateSessionRequest & { readonly selectionId: string },
-  ) => Effect.Effect<
-    Effect.Effect<void, PiSessionError | RegistryError | RegistryLookupError | WorktreeError>
-  >;
+  ) => Effect.Effect<Effect.Effect<void, PiSessionError | SessionNotCreated>>;
   /**
    * Sends `action` to the selected session, starting it with `start` when it is not running,
    * and delivers any `action_result`. Never creates a session. Reuse the current select or

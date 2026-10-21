@@ -18,13 +18,8 @@ import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
-import {
-  Registry,
-  RegistryDatabasePath,
-  RegistryLive,
-  RegistryLookupError,
-} from "../server/Registry.ts";
-import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
+import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
+import { SessionHosts, SessionHostsLive, SessionNotCreated } from "../server/SessionHosts.ts";
 import type { SessionEvent } from "../shared/wire.ts";
 
 const root = mkdtempSync(join(tmpdir(), "piano-hosts-"));
@@ -730,8 +725,8 @@ test("INV-01: creating with an archived or unknown project registers no folder, 
       yield* registry.archiveProject("old", true);
       for (const projectId of ["old", "missing", ""]) {
         const error = yield* hosts.create({ cwd, projectId, options: {} }).pipe(Effect.flip);
-        assert.ok(error instanceof RegistryLookupError);
-        assert.equal(error.message, unavailableProject);
+        assert.ok(error instanceof SessionNotCreated);
+        assert.equal(error.detail, unavailableProject);
       }
       const data = yield* registry.get;
       assert.deepEqual([data.sessions.length, data.folders.length], [0, 0]);
