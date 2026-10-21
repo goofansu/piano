@@ -24,7 +24,8 @@ import { ChildProcessSpawner as Spawner } from "effect/process";
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
-import { isWorking, withLastKnownStats } from "../shared/sessionProjection.ts";
+import { withLastKnownStats } from "../shared/sessionProjection.ts";
+import { liveActivityOf } from "../shared/sessionStatus.ts";
 import type {
   ModelChoice,
   PromptSubmission,
@@ -238,15 +239,7 @@ export const PiDialogRecoveryMs = Context.Reference<number>("piano/PiDialogRecov
 });
 
 /** Retained state shows nothing Pi could still continue on its own or that awaits an answer. */
-const settled = ({ state, dialogs }: Snapshot) =>
-  dialogs.length === 0 &&
-  !isWorking(state) &&
-  !state.isStopping &&
-  !state.queuedMessages?.length &&
-  state.dialogResolution?.delivery !== "pending" &&
-  state.dialogResolution?.delivery !== "uncertain" &&
-  state.submission?.outcome !== "submitting" &&
-  state.submission?.outcome !== "uncertain";
+const settled = (snapshot: Snapshot) => liveActivityOf(snapshot)._tag === "idle";
 
 /** What leaves the session seam, results and error details alike, is display-projected. */
 const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>

@@ -25,7 +25,8 @@ import type {
   WaitStatus,
   WorktreeRequest,
 } from "../../shared/dispatch.ts";
-import { applySessionEvent, cursorStep, isWorking } from "../../shared/sessionProjection.ts";
+import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
+import { liveActivityOf } from "../../shared/sessionStatus.ts";
 import { turnEnding } from "../../shared/turnEnding.ts";
 import type {
   ClientMessage,
@@ -612,29 +613,33 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
       terminal: true,
       detail: submission.detail ?? "Pi refused the input.",
     };
+  // This input's own delivery is uncertain: nothing later in the session can settle it.
   if (submission?.outcome === "uncertain")
     return {
       status: "unknown",
       terminal: true,
       detail: submission.detail ?? "Prompt delivery is uncertain.",
     };
-  const dialog = snapshot.dialogs[0];
-  if (dialog)
-    return {
-      status: "waiting_for_input",
-      terminal: true,
-      detail: dialog.message ?? dialog.title ?? `Pi is waiting for a ${dialog.method} answer.`,
-    };
-  // A retry, a compaction or a queued message is work this session will do by itself.
-  if (
-    isWorking(state) ||
-    state.isStopping ||
-    submission?.outcome === "submitting" ||
-    (state.queuedMessages?.length ?? 0) > 0
-  )
-    return { status: "running", terminal: false };
-  if (attributed.pending) return { status: "running", terminal: false, detail: attributed.detail };
-  return { status: "unknown", terminal: true, needsQuiescence: true };
+  const activity = liveActivityOf(snapshot);
+  switch (activity._tag) {
+    case "needs_input": {
+      const { dialog } = activity;
+      return {
+        status: "waiting_for_input",
+        terminal: true,
+        detail: dialog.message ?? dialog.title ?? `Pi is waiting for a ${dialog.method} answer.`,
+      };
+    }
+    case "running":
+      return { status: "running", terminal: false };
+    // Pi may act on it or never do anything, and never becomes quiescent: as status reads it.
+    case "uncertain":
+      return { status: "unknown", terminal: true, detail: activity.detail };
+    case "idle":
+      if (attributed.pending)
+        return { status: "running", terminal: false, detail: attributed.detail };
+      return { status: "unknown", terminal: true, needsQuiescence: true };
+  }
 }
 
 /** The verdict for an idle, quiescent session, from the facts it kept about this input. */

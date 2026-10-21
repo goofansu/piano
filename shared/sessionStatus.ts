@@ -1,7 +1,7 @@
 /**
  * What a session is doing, read from one Snapshot: the disposition a status reports and the last
- * answer it carries. Pure, so every reader of a session (the status read, a project's home) says
- * the same thing about the same snapshot.
+ * answer it carries. Pure, so every reader of a session (the host's quiescence, the status read, a
+ * project's home, the wait tool) says the same thing about the same snapshot.
  */
 import { type Disposition, LAST_ANSWER_CHARS } from "./dispatch.ts";
 import { isWorking } from "./sessionProjection.ts";
@@ -9,37 +9,66 @@ import { turnEnding } from "./turnEnding.ts";
 import type { Dialog, Snapshot } from "./wire.ts";
 
 /**
+ * What a live session is doing, from its retained state alone: waiting on a dialog, holding work
+ * Pi or Piano is still carrying out, idle after an input or dialog answer Piano could not confirm
+ * delivering (Pi may act on it or never do anything), or idle with nothing pending. Only an idle
+ * session can be done, and only once its host also confirms quiescence.
+ */
+export type LiveActivity =
+  | { readonly _tag: "needs_input"; readonly dialog: Dialog }
+  | { readonly _tag: "running" }
+  | { readonly _tag: "uncertain"; readonly detail: string }
+  | { readonly _tag: "idle" };
+
+export function liveActivityOf({ state, dialogs }: Snapshot): LiveActivity {
+  const dialog = dialogs[0];
+  if (dialog) return { _tag: "needs_input", dialog };
+  // A retry, a compaction, a queued message or an answer being written is work under way.
+  if (
+    isWorking(state) ||
+    state.isStopping ||
+    state.submission?.outcome === "submitting" ||
+    (state.queuedMessages?.length ?? 0) > 0 ||
+    state.dialogResolution?.delivery === "pending"
+  )
+    return { _tag: "running" };
+  if (state.submission?.outcome === "uncertain")
+    return {
+      _tag: "uncertain",
+      detail: state.submission.detail ?? "Prompt delivery is uncertain.",
+    };
+  if (state.dialogResolution?.delivery === "uncertain")
+    return { _tag: "uncertain", detail: state.dialogResolution.detail };
+  return { _tag: "idle" };
+}
+
+/**
  * `live` is a running host's snapshot; otherwise it is saved history, with the closure Piano
  * remembers for this server process, if any. Saved history alone proves an ending only when its
  * last message is a reply whose turn ended; anything else is unknown, never a guess.
  *
- * A live session is settled only when its host publishes `isQuiescent`, the one answer to "is
- * this session done?" that the wait tool also waits for. An idle Pi whose last input or dialog
- * answer Piano could not confirm delivering may never become quiescent, nor do anything: unknown.
+ * A live session is settled only when idle and its host publishes `isQuiescent`, the point the
+ * wait tool also waits for; uncertain delivery reads unknown, as the wait tool reports it.
  */
 export function dispositionOf(
   snapshot: Snapshot,
   live: boolean,
 ): { readonly disposition: Disposition; readonly dialog?: Dialog } {
-  const { state, dialogs } = snapshot;
+  const { state } = snapshot;
   if (live) {
-    const dialog = dialogs[0];
-    if (dialog) return { disposition: "needs_input", dialog };
-    if (
-      isWorking(state) ||
-      state.isStopping ||
-      state.submission?.outcome === "submitting" ||
-      (state.queuedMessages?.length ?? 0) > 0
-    )
-      return { disposition: "running" };
-    if (
-      state.submission?.outcome === "uncertain" ||
-      state.dialogResolution?.delivery === "uncertain"
-    )
-      return { disposition: "unknown" };
-    // Pi looks idle, but Piano may still be delivering an answer, awaiting an acknowledgement or
-    // catching up on output: running until the host says otherwise.
-    return { disposition: state.isQuiescent === true ? "settled" : "running" };
+    const activity = liveActivityOf(snapshot);
+    switch (activity._tag) {
+      case "needs_input":
+        return { disposition: "needs_input", dialog: activity.dialog };
+      case "running":
+        return { disposition: "running" };
+      case "uncertain":
+        return { disposition: "unknown" };
+      case "idle":
+        // Pi looks idle, but Piano may still await an acknowledgement or be catching up on
+        // output: running until the host says otherwise.
+        return { disposition: state.isQuiescent === true ? "settled" : "running" };
+    }
   }
   if (state.closure)
     return {
