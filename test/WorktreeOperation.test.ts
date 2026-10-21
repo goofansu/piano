@@ -37,7 +37,13 @@ function picker() {
     initial: initialState,
     connect: (h) => {
       handlers = h;
-      return { send: (m) => sent.push(m), close: () => {} };
+      return {
+        send: (m) => {
+          sent.push(m);
+          return "sent";
+        },
+        close: () => {},
+      };
     },
     notify: () => {},
     lastDirectory: { read: () => null, write: () => {} },

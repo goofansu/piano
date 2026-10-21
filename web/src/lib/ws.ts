@@ -13,8 +13,12 @@ import {
   type ServerMessage,
 } from "../../../shared/wire.ts";
 
+/** Local disposition only: `sent` is socket acceptance, not a server or Pi receipt.
+ * A throwing send is uncertain; only a socket checked non-open is known not to have sent. */
+export type SendDisposition = "not-sent" | "sent" | "uncertain";
+
 export interface Connection {
-  send: (m: ClientMessage) => void;
+  send: (m: ClientMessage) => SendDisposition;
   close: () => void;
 }
 
@@ -205,11 +209,13 @@ export function openConnection(
       try {
         if (!ws?.isOpen()) {
           recover.current();
-          return;
+          return "not-sent";
         }
         ws.send(encodeClientMessage(m));
+        return "sent";
       } catch {
         recover.current();
+        return "uncertain";
       }
     },
     close,

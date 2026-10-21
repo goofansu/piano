@@ -16,7 +16,13 @@ function harness() {
     initial: initialState,
     connect: (h) => {
       handlers = h;
-      return { send: (m) => sent.push(m), close: () => {} };
+      return {
+        send: (m) => {
+          sent.push(m);
+          return "sent";
+        },
+        close: () => {},
+      };
     },
     notify: (message, level) => notes.push([message, level]),
     newSelectionId: () => `sel${++ids}`,
@@ -539,7 +545,13 @@ function focusHarness(options: { remembered?: string | null; initial?: typeof in
     initial: options.initial ?? initialState,
     connect: (h) => {
       handlers = h;
-      return { send: (m) => sent.push(m), close: () => {} };
+      return {
+        send: (m) => {
+          sent.push(m);
+          return "sent";
+        },
+        close: () => {},
+      };
     },
     notify: () => {},
     newSelectionId: () => `sel${++ids}`,

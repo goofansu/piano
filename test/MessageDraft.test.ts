@@ -205,7 +205,10 @@ test("submit delivers text, quotes and images as one message, then empties all t
   await drafts.addImages(key, [pngFile("shot.png")], encode);
   const delivered: DraftMessage[] = [];
   assert.equal(
-    drafts.submit(key, (message) => delivered.push(message)),
+    drafts.submit(key, (message) => {
+      delivered.push(message);
+      return "sent";
+    }),
     true,
   );
   assert.deepEqual(delivered, [
@@ -255,7 +258,10 @@ test("submit refuses while images are being read and keeps the whole draft", asy
   );
   const delivered: DraftMessage[] = [];
   assert.equal(
-    drafts.submit(key, (message) => delivered.push(message)),
+    drafts.submit(key, (message) => {
+      delivered.push(message);
+      return "sent";
+    }),
     true,
   );
   assert.equal(delivered[0]?.attachments.length, 1);

@@ -15,6 +15,7 @@ import {
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
 } from "../../../shared/attachments.ts";
+import type { SendDisposition } from "./ws.ts";
 
 /** Identifies one draft; built only here, so a bare string cannot address one. */
 export type DraftKey = string & { readonly __draft: unique symbol };
@@ -175,11 +176,11 @@ export interface Drafts {
   addQuote: (key: DraftKey | null, selected: string) => void;
   removeQuote: (key: DraftKey | null, index: number) => void;
   /**
-   * Hands the draft's message to `deliver`, then empties its text, images and quotes together.
-   * While the draft is not sendable (nothing to send, or images still being read) it delivers
-   * nothing and keeps the draft. Returns whether it delivered.
+   * Hands the draft to `deliver`. Known-unsent input stays intact and returns false, as does
+   * an unsendable draft. Otherwise consumes all parts and returns true, even when delivery is
+   * uncertain: socket acceptance is not remote acceptance, and input must never auto-replay.
    */
-  submit: (key: DraftKey | null, deliver: (message: DraftMessage) => void) => boolean;
+  submit: (key: DraftKey | null, deliver: (message: DraftMessage) => SendDisposition) => boolean;
   /** Appends each queue Pi hands back to its own session's draft as a paragraph; returns the stop function. */
   follow: (source: DraftSource) => () => void;
 }
@@ -271,7 +272,7 @@ export function createDrafts(): Drafts {
     submit(key, deliver) {
       const draft = get(key);
       if (!key || !isSendable(draft)) return false;
-      deliver(draftMessage(draft));
+      if (deliver(draftMessage(draft)) === "not-sent") return false;
       update(key, () => EMPTY_DRAFT);
       return true;
     },

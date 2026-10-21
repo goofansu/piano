@@ -24,6 +24,7 @@ import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
+import type { SendDisposition } from "@/lib/ws";
 
 /**
  * One draft, addressed by its key (`null` while none is), bound to React: its parts from `drafts`,
@@ -48,8 +49,8 @@ export function useDraftEditor(key: DraftKey | null) {
     ref,
     setText: (value: string) => drafts.setText(key, value),
     append,
-    /** Hands the draft to `deliver`, then empties it; see `Drafts.submit`. */
-    submit: (deliver: (message: DraftMessage) => void) => drafts.submit(key, deliver),
+    /** Consumes the draft unless delivery is known-unsent; see `Drafts.submit`. */
+    submit: (deliver: (message: DraftMessage) => SendDisposition) => drafts.submit(key, deliver),
   };
 }
 export type DraftEditorState = ReturnType<typeof useDraftEditor>;
