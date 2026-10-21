@@ -12,6 +12,10 @@ import type { Dialog, Snapshot } from "./wire.ts";
  * `live` is a running host's snapshot; otherwise it is saved history, with the closure Piano
  * remembers for this server process, if any. Saved history alone proves an ending only when its
  * last message is a reply whose turn ended; anything else is unknown, never a guess.
+ *
+ * A live session is settled only when its host publishes `isQuiescent`, the one answer to "is
+ * this session done?" that the wait tool also waits for. An idle Pi whose last input or dialog
+ * answer Piano could not confirm delivering may never become quiescent, nor do anything: unknown.
  */
 export function dispositionOf(
   snapshot: Snapshot,
@@ -28,10 +32,19 @@ export function dispositionOf(
       (state.queuedMessages?.length ?? 0) > 0
     )
       return { disposition: "running" };
-    return { disposition: "settled" };
+    if (
+      state.submission?.outcome === "uncertain" ||
+      state.dialogResolution?.delivery === "uncertain"
+    )
+      return { disposition: "unknown" };
+    // Pi looks idle, but Piano may still be delivering an answer, awaiting an acknowledgement or
+    // catching up on output: running until the host says otherwise.
+    return { disposition: state.isQuiescent === true ? "settled" : "running" };
   }
   if (state.closure)
-    return { disposition: state.closure._tag === "released" ? "settled" : "exited" };
+    return {
+      disposition: state.closure._tag === "released" ? "settled" : "exited",
+    };
   const last = snapshot.messages.at(-1);
   return {
     disposition:

@@ -129,8 +129,10 @@ export interface StatusArguments {
 
 /**
  * What a session is doing, from what Piano holds now. `settled` is execution stopped, never task
- * success (INV-03); `exited` is a Pi child that stopped without settling; `unknown` is a session
- * whose live facts are gone (Piano restarted) and whose history proves no ending.
+ * success (INV-03): for a live session, the host's published quiescence; `exited` is a Pi child
+ * that stopped without settling; `unknown` is a session whose live facts are gone (Piano
+ * restarted) and whose history proves no ending, or an idle one whose last input or dialog answer
+ * Piano could not confirm delivering.
  */
 export const DISPOSITIONS = ["running", "needs_input", "settled", "exited", "unknown"] as const;
 export type Disposition = (typeof DISPOSITIONS)[number];

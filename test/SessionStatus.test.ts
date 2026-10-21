@@ -1,6 +1,7 @@
 /**
- * Status read from saved history, as after a restart: what Pi's file proves, and what it does not.
- * The live dispositions and the worktree journey are covered end to end in DispatchFanOut.test.ts.
+ * Status read from saved history, as after a restart: what Pi's file proves, and what it does not;
+ * and from a live host that looks idle but still has work Piano cannot vouch for. The other live
+ * dispositions and the worktree journey are covered end to end in DispatchFanOut.test.ts.
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -13,7 +14,9 @@ import { Effect, Layer } from "effect";
 import { GitHubPullRequests, PullRequestError } from "../server/GitHubPullRequests.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
+import { PiRequestTimeoutMs, type PiSession } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
+import { SessionHosts } from "../server/SessionHosts.ts";
 import { SessionStatus, SessionStatusLive } from "../server/SessionStatus.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
@@ -85,7 +88,7 @@ const github = Layer.succeed(GitHubPullRequests, {
 } as unknown as GitHubPullRequests["Service"]);
 
 let databases = 0;
-const run = <A, E>(effect: Effect.Effect<A, E, SessionStatus | Registry>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, SessionStatus | Registry | SessionHosts>) =>
   Effect.runPromise(
     effect.pipe(
       Effect.scoped,
@@ -193,5 +196,45 @@ test("a session's changes name its branch and linked pull request, with state on
       const unknownProject = yield* status.read({ projectId: "nope" }).pipe(Effect.flip);
       assert.equal(unknownProject.detail, "Piano has no project nope.");
     }),
+  );
+});
+
+test("a live session that looks idle reads settled only once Piano has nothing pending for it", async () => {
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      const hosts = yield* SessionHosts;
+      const status = yield* SessionStatus;
+      const disposition = (sessionId: string) =>
+        status.read({ sessionId }).pipe(Effect.map(([s]) => s!.disposition));
+      const quiescent = Effect.fn(function* (session: PiSession) {
+        for (let n = 0; n < 200 && !(yield* session.state).isQuiescent; n++)
+          yield* Effect.sleep("10 millis");
+        assert.equal((yield* session.state).isQuiescent, true);
+      });
+      const live = Effect.fn(function* (sessionId: string) {
+        yield* registry.addSession(plain, sessionId);
+        const session = yield* hosts.open({ cwd: plain, sessionId });
+        yield* quiescent(session);
+        assert.equal(yield* disposition(sessionId), "settled", "an idle host with nothing pending");
+        return session;
+      });
+
+      // A command Pi applied but never acknowledged may still be running: not idle, not proven.
+      const renamed = yield* live("live-rename");
+      const rename = yield* renamed
+        .act({ _tag: "set_name", name: "withhold acknowledgement" })
+        .pipe(Effect.flip);
+      assert.equal(rename.reason, "timeout");
+      assert.equal((yield* renamed.state).isStreaming, false);
+      assert.equal(yield* disposition("live-rename"), "running");
+
+      // A prompt Pi never acknowledged, on an idle Pi: Piano cannot tell whether it will run.
+      const ignored = yield* live("live-ignored");
+      yield* ignored.act({ _tag: "prompt", text: "ignore input" }).pipe(Effect.flip);
+      assert.equal((yield* ignored.state).submission?.outcome, "uncertain");
+      assert.equal((yield* ignored.state).isStreaming, false);
+      assert.equal(yield* disposition("live-ignored"), "unknown");
+    }).pipe(Effect.provideService(PiRequestTimeoutMs, 1000)),
   );
 });
