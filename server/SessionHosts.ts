@@ -20,7 +20,7 @@ import type {
 import { Directories } from "./Directories.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
-import { Registry, RegistryError, type RegistryLookupError } from "./Registry.ts";
+import { Registry, RegistryError } from "./Registry.ts";
 import { makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
 import {
   checkoutMissing,
@@ -67,6 +67,15 @@ interface Resolved {
   readonly ref: SessionLocation;
   readonly host: SessionHost | undefined;
 }
+/**
+ * A creation that failed before any session was registered or Pi started, so its first message
+ * was never sent. `detail` is written for people; `checkoutUnconfirmed` when Worktrunk ran and
+ * may have left a checkout behind.
+ */
+export class SessionNotCreated extends Data.TaggedError("SessionNotCreated")<{
+  readonly detail: string;
+  readonly checkoutUnconfirmed: boolean;
+}> {}
 /** Slash commands a session could not answer with; `detail` is written for people. */
 export class SessionCommandsError extends Data.TaggedError("SessionCommandsError")<{
   readonly detail: string;
@@ -95,13 +104,12 @@ export class SessionHosts extends Context.Service<
     /**
      * Start a new session under a fresh server-generated ID. The project is checked before the
      * folder is registered; the folder, reference and project are written before Pi starts.
+     * Every failure before then is `SessionNotCreated`; a PiSessionError comes once a reference
+     * may exist and Pi may have saved history.
      */
     readonly create: (
       spec: CreateSpec,
-    ) => Effect.Effect<
-      PiSession,
-      PiSessionError | RegistryError | RegistryLookupError | WorktreeError
-    >;
+    ) => Effect.Effect<PiSession, PiSessionError | SessionNotCreated>;
     /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
     readonly rename: (
       cwd: string,
@@ -352,12 +360,26 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         return created.path;
       });
 
+      /** Where a new session goes, registering only its folder or worktree: no session yet. */
+      const destination = Effect.fn("SessionHosts.destination")(
+        function* (spec: CreateSpec) {
+          // Registry writes run before the ownership lock; an unavailable project registers nothing.
+          if (spec.projectId !== undefined) yield* registry.requireActiveProject(spec.projectId);
+          return spec.worktree
+            ? yield* placeWorktree(spec.cwd, spec.worktree)
+            : yield* place(spec.cwd);
+        },
+        Effect.mapError(
+          (e) =>
+            new SessionNotCreated({
+              detail: e.detail,
+              checkoutUnconfirmed: e instanceof WorktreeError && e.unconfirmed === true,
+            }),
+        ),
+      );
+
       const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
-        // Registry writes run before the ownership lock; an unavailable project registers nothing.
-        if (spec.projectId !== undefined) yield* registry.requireActiveProject(spec.projectId);
-        const cwd = spec.worktree
-          ? yield* placeWorktree(spec.cwd, spec.worktree)
-          : yield* place(spec.cwd);
+        const cwd = yield* destination(spec);
         const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
         // Only a fresh server-generated ID may create a reference. Registration and initial
         // membership survive a disconnected requester, as acquisition is server-owned.

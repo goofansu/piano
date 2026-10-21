@@ -335,6 +335,23 @@ test("a shell fans out into fresh worktrees and reads each child's status, acros
     assert.equal(fanned.creation, "created", JSON.stringify(fanned));
     assert.equal(fanned.worktree?.branch, "task-e");
     assert.equal(git(fanned.cwd, "branch", "--show-current"), "task-e");
+    // A missing directory refuses a start without a worktree just as one with a worktree.
+    const missing = join(root, "missing");
+    const typo = (
+      await tools
+        .get("piano_start_session")!
+        .execute(
+          "call-4",
+          { prompt: "should not start", cwd: missing },
+          undefined,
+          undefined,
+          parent,
+        )
+    ).details as StartToolResult;
+    assert.deepEqual(
+      [typo.creation, typo.submission, typo.handle, typo.detail],
+      ["refused", "not_sent", null, `Not a directory: ${missing}`],
+    );
     const read = (
       await tools
         .get("piano_session_status")!
