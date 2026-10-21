@@ -67,6 +67,18 @@ test("a reader who scrolled up is never moved by new output", () => {
   assert.equal(viewport.atBottom(), false);
 });
 
+test("a small step up from the bottom unpins the view, so new output does not undo it", () => {
+  const { viewport, el } = setup();
+  scroll(el, viewport, 1460);
+  el.scrollHeight = 2600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1460);
+  scroll(el, viewport, 2100);
+  el.scrollHeight = 2700;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2200, "reaching the end pins the view again");
+});
+
 test("scrolling back within 80px of the bottom pins the view again", () => {
   const { viewport, el } = setup();
   scroll(el, viewport, 1300);

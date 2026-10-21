@@ -1,15 +1,17 @@
 /**
  * Where the reader is in the transcript, and whether it follows new output. One viewport per
  * transcript: the transcript reports its scrolls, renders and resizes, and the jump list asks
- * where the reader is and moves them. A reader who scrolled up is never moved by new output; a
- * pinned reader stays on the bottom when content grows or the container shrinks, and a jump to
- * the end pins the reader there even if content grows afterwards. The DOM is read only through
- * `ViewportElement`, so the policy runs in Node.
+ * where the reader is and moves them. A reader who scrolled up, by however little, is never moved
+ * by new output; a pinned reader stays on the bottom when content grows or the container shrinks,
+ * and a jump to the end pins the reader there even if content grows afterwards. The DOM is read
+ * only through `ViewportElement`, so the policy runs in Node.
  */
 import { type JumpEntry, messageAnchorId } from "./transcript.ts";
 
-/** Within this many pixels of the bottom counts as at the bottom, and pins the view there. */
+/** Within this many pixels of the bottom counts as at the bottom; scrolling down into it pins the view. */
 const NEAR_BOTTOM = 80;
+/** Within this many pixels of the bottom is the end itself, where the view is always pinned. */
+const AT_END = 1;
 /** Within this many pixels of the top counts as at the top. */
 const NEAR_TOP = 40;
 /** A message whose top is above this line under the container's top edge is the one being read. */
@@ -30,7 +32,10 @@ export interface ViewportElement {
 export interface TranscriptViewport {
   /** The transcript's container mounted (a fresh view starts pinned) or unmounted (`null`). */
   attach: (element: ViewportElement | null) => void;
-  /** The reader scrolled: pinned exactly when they ended near the bottom. */
+  /**
+   * The reader scrolled: pinned when they reached the end, or moved down to near it. Any move up
+   * short of the end unpins, so small steps up from the bottom are not undone by new output.
+   */
   scrolled: () => void;
   /** The transcript re-rendered: a pinned view follows the bottom. */
   rendered: () => void;
@@ -83,6 +88,7 @@ export function createTranscriptViewport(): TranscriptViewport {
   let element: ViewportElement | null = null;
   let stick = true;
   let bottom = true;
+  let lastTop = 0;
   const listeners = new Set<() => void>();
 
   const near = (el: ViewportElement) =>
@@ -93,7 +99,9 @@ export function createTranscriptViewport(): TranscriptViewport {
     for (const listener of listeners) listener();
   };
   const follow = (el: ViewportElement) => {
-    if (stick) el.scrollTop = el.scrollHeight;
+    if (!stick) return;
+    el.scrollTop = el.scrollHeight;
+    lastTop = el.scrollTop;
   };
 
   return {
@@ -101,12 +109,16 @@ export function createTranscriptViewport(): TranscriptViewport {
       element = el;
       if (!el) return;
       stick = true;
+      lastTop = el.scrollTop;
       setBottom(true);
     },
     scrolled: () => {
       if (!element) return;
-      stick = near(element);
-      setBottom(stick);
+      const top = element.scrollTop;
+      const end = element.scrollHeight - top - element.clientHeight < AT_END;
+      stick = end || (near(element) && top >= lastTop);
+      lastTop = top;
+      setBottom(near(element));
     },
     rendered: () => {
       if (element) follow(element);
