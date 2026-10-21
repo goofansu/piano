@@ -172,8 +172,11 @@ test("a shell fans out into fresh worktrees and reads each child's status, acros
     assert.notEqual(echo.cwd, repo, "never the parent's checkout");
     assert.equal(git(echo.cwd, "branch", "--show-current"), "task-a");
     assert.equal(echo.link, `${base}/s/${echo.handle.sessionId}`);
-    // From inside a linked worktree, the next worktree still belongs to the main checkout's folder.
-    const asks = await start("b", "ask for a value", echo.cwd, "--worktree", "task-b");
+    // From a subdirectory of a linked worktree, the next worktree still belongs to the main
+    // checkout's folder.
+    const inside = join(echo.cwd, "server");
+    mkdirSync(inside);
+    const asks = await start("b", "ask for a value", inside, "--worktree", "task-b");
     assert.equal(asks.worktree?.branch, "task-b");
     assert.equal(git(asks.cwd, "branch", "--show-current"), "task-b");
     const crash = await start("c", "crash now", repo, "--worktree", "task-c");
