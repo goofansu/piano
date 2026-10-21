@@ -15,15 +15,22 @@ export interface ProjectHomeSession extends SessionEntry {
 }
 
 export interface ProjectHome {
+  kind: "home";
   project: Project;
   /** Member sessions, newest activity first; archived ones stay out. */
   sessions: ProjectHomeSession[];
 }
 
-/** The home of `projectId`, or undefined when the registry has no such project. */
-export function projectHome(state: AppState, projectId: string): ProjectHome | undefined {
+/**
+ * What a project's address shows: `loading` until the first registry message says which projects
+ * exist, then the project's home, or `missing` when the registry has no such project.
+ */
+export type ProjectHomeView = { kind: "loading" } | { kind: "missing" } | ProjectHome;
+
+export function projectHome(state: AppState, projectId: string): ProjectHomeView {
+  if (!state.registryLoaded) return { kind: "loading" };
   const project = findProject(state, projectId);
-  if (!project) return undefined;
+  if (!project) return { kind: "missing" };
   const links = new Map(state.sessionReferences.map((r) => [sessionKey(r), r.pullRequest]));
   const sessions = sessionCatalog(state)
     .filter((entry) => entry.projectId === projectId)
@@ -35,7 +42,7 @@ export function projectHome(state: AppState, projectId: string): ProjectHome | u
         pullRequest: link ? pullRequestView({ link, pullRequest: null })?.number : undefined,
       };
     });
-  return { project, sessions };
+  return { kind: "home", project, sessions };
 }
 
 /**

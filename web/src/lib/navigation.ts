@@ -7,6 +7,7 @@
  */
 import { type AppState, sessionKey } from "../store.ts";
 import type { Client } from "./client.ts";
+import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { catalogEntry } from "./sessionCatalog.ts";
 
@@ -137,10 +138,9 @@ export function addressFor(
     : state.view.kind === "missing-session"
       ? "Session not found"
       : route.kind === "project"
-        ? state.projects.find((p) => p.id === route.projectId)?.name || "Project"
+        ? findProject(state, route.projectId)?.name || "Project"
         : route.kind === "new"
-          ? (route.projectId && state.projects.find((p) => p.id === route.projectId)?.name) ||
-            "New session"
+          ? findProject(state, route.projectId)?.name || "New session"
           : catalogEntry(state, route.sessionId)?.title || "Session";
   return { path, mode, title: `${title} - Piano` };
 }
