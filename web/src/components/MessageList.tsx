@@ -48,7 +48,6 @@ import {
   type DispatchFacts,
   messageAnchorId,
   nestedStatus,
-  type SubagentFacts,
   type ToolOutcome,
   type ToolRow,
   type TranscriptRow,
@@ -231,7 +230,6 @@ function Row({
 }
 
 function TranscriptRowView({ row }: { row: TranscriptRow }) {
-  if (row.kind === "subagent") return <SubagentCardView {...row.subagent} />;
   if (row.kind === "context") return <ContextCard msg={row.msg} />;
   if (row.kind === "user")
     return (
@@ -298,7 +296,7 @@ const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
 
 /**
  * A transcript row that folds: a gutter glyph, a header that opens and closes it, and a body under
- * the header. Context rows, subagent cards, tool calls and skill expansions all fold through it,
+ * the header. Context rows, tool calls, dispatched sessions and skill expansions all fold through it,
  * so the header's out-of-flow padding (`disclosureRow`), the chevron, the body's indent and its
  * open and close animation are decided here once. Without a glyph the row sits inside another
  * row's content (a skill in its prompt bubble), so neither header nor body takes a gutter.
@@ -605,73 +603,6 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
   );
 }
 
-const SUBAGENT_DOT: Record<SubagentFacts["dot"], string> = {
-  err: "bg-err",
-  ok: "bg-ok",
-  idle: "bg-ink-3",
-};
-
-/** Structured pi-subagent facts use the standard disclosure primitive. The
- * transcript row itself is intentionally quiet; identity and output stay on demand. */
-function SubagentCardView({
-  card,
-  title,
-  ariaLabel,
-  isResult,
-  profile,
-  runId,
-  statusLabel,
-  badge,
-  dot,
-  failed,
-  body,
-  hasDetails,
-}: SubagentFacts) {
-  return (
-    <FoldRow
-      glyph={<span className={cn("block size-2 rounded-full", SUBAGENT_DOT[dot])} />}
-      header={
-        <>
-          {/* One line at every width: the title keeps a few words and the profile truncates, so
-              the pill, which never wraps or shrinks, lines up with its neighbours' pills. A phone
-              has room for the title and the status, not the profile. */}
-          <span className="min-w-20 flex-1 truncate font-medium text-ink">
-            {isResult && <span className="font-normal text-ink-3">Result · </span>}
-            {title}
-          </span>
-          {profile && (
-            <span className="max-w-28 shrink truncate text-ink-3 max-sm:hidden">{profile}</span>
-          )}
-          <Badge variant={badge}>{statusLabel}</Badge>
-        </>
-      }
-      label={ariaLabel}
-      canOpen={hasDetails}
-      bodyClassName="flex flex-col gap-3"
-      data={{
-        "data-slot": card.kind === "delegation" ? "delegation-card" : "subagent-result-card",
-        "data-run-id": runId,
-      }}
-    >
-      {body.status && <p className="text-xs text-ink-3">{body.status}</p>}
-      {body.input && (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-fill px-3 py-2 text-ink-2">
-          {clamp(body.input, 8000)}
-        </pre>
-      )}
-      {body.outputs.map((output, i) => (
-        <div key={output.label ?? i} className="flex flex-col gap-1">
-          {output.label && <p className="font-mono text-xs text-ink-3">{output.label}</p>}
-          {output.text && (
-            <FoldedOutput text={output.text} markdown={output.markdown} failed={failed} />
-          )}
-        </div>
-      ))}
-      {body.meta && <p className="font-mono text-xs text-ink-3">{body.meta}</p>}
-    </FoldRow>
-  );
-}
-
 /** A session a dispatch tool started or waited on: the call's arguments, what the parent observed, and a way
  * to open it beside the header, so reaching the session never needs the row unfolded. */
 function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: ToolOutcome }) {
@@ -763,7 +694,7 @@ function ParentLink({ sessionId, cwd, title }: SessionDestination) {
 const PREVIEW_LINES = 5;
 
 /** Output folded to its first lines, with the rest on demand: a tool's text as it came, or a
- * subagent's answer as Markdown. */
+ * session's answer as Markdown. */
 function FoldedOutput({
   text,
   markdown,
@@ -837,10 +768,8 @@ function Tool({
   verb,
   knownTool,
   summary,
-  subagent,
   dispatch,
 }: ToolRow) {
-  if (subagent) return <SubagentCardView {...subagent} />;
   if (dispatch)
     return dispatch.map((session, i) => (
       <DispatchRow key={session.sessionId ?? i} session={session} outcome={outcome} />

@@ -261,7 +261,7 @@ const openSession = (spec: PiSessionSpec) =>
     const generation = randomUUID();
     const recoveryMs = yield* PiDialogRecoveryMs;
 
-    // Every entry so far, for Runs' spend and the dispatching session. Pi's get_entries answers in
+    // Every entry so far, for the dispatching session. Pi's get_entries answers in
     // one RPC line, which a long compacted history pushes past the line limit, closing the child.
     // Once Pi has saved the session, its file is read as `history` reads it; before that, Pi holds
     // no conversation and its reply is small.
@@ -272,8 +272,7 @@ const openSession = (spec: PiSessionSpec) =>
 
     // Ready check, then entries from the file Pi opened, racing the child exiting early. The
     // transcript is not read here: the context refresh below reads it once, after records are
-    // drained. Entries are best effort, as usage readbacks are: a failed read opens without Runs'
-    // spend or the dispatching session, and usage readbacks then count every entry.
+    // drained. Entries are best effort: a failed read opens without the dispatching session.
     const [state, entries] = yield* child.read(piReadbacks.state).pipe(
       Effect.flatMap((state) =>
         allEntries(state.sessionFile).pipe(
@@ -368,8 +367,6 @@ const openSession = (spec: PiSessionSpec) =>
       progress,
       context: (messages) => ({ _tag: "context", messages: projector.history(messages) }),
       publication,
-      entries,
-      allEntries: Effect.flatMap(publication.state, (current) => allEntries(current.sessionFile)),
     });
 
     const onRecord = Effect.fnUntraced(function* ({

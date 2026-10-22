@@ -55,48 +55,6 @@ const messages = [
   assistant([call("run", "bash", { command: "npm test" })]),
   result("run", "bash", "ok"),
   assistant([
-    call("start", "agent_start", {
-      agent: "general-purpose",
-      description: "Find CSS regression test seam",
-      prompt: "Look",
-    }),
-  ]),
-  result("start", "agent_start", "Started run-1", {
-    kind: "start",
-    rowPhrase: "Started",
-    tone: "toolTitle",
-    agent: "general-purpose",
-    runId: "run-1",
-    subagentId: "subagent-1",
-  }),
-  {
-    role: "custom",
-    customType: "subagent-notification",
-    display: true,
-    content: "Found it in test/css.ts",
-    details: {
-      runId: "run-1",
-      subagentId: "subagent-1",
-      agent: "general-purpose",
-      label: "Find CSS regression test seam",
-      status: "completed",
-      durationMillis: 1200,
-    },
-    timestamp,
-  },
-  assistant([
-    call("resume", "agent_resume", {
-      id: "subagent-gone",
-      description: "Analyze the HAR capture",
-      prompt: "Again",
-    }),
-  ]),
-  result("resume", "agent_resume", "No such subagent", {
-    kind: "resume",
-    rowPhrase: "Resume refused · unknown Subagent",
-    tone: "error",
-  }),
-  assistant([
     call("dispatch", "piano_start_session", {
       prompt: "Review the login fix.",
       worktree: { branch: "review-login" },
@@ -143,9 +101,6 @@ const expected = [
   "Question: why does login fail?",
   "Reply: the CSRF token is stale.",
   "Ran",
-  "Find CSS regression test seam",
-  "Result ·",
-  "Analyze the HAR capture",
   "Review the login fix.",
   "Session",
   "/skill:",

@@ -293,7 +293,6 @@ function handle(cmd) {
       // rejected-entries: Pi refuses to read its entries, as a failing extension could.
       if (sessionId.startsWith("rejected-entries"))
         return respond(cmd, undefined, "entries unavailable");
-      // A Pi without pi-subagent: ordinary entries, plus near misses another extension could write.
       const entries = [
         // Piano's extension records the dispatching session once, as it does for a new child.
         ...(dispatchedFrom
@@ -306,44 +305,9 @@ function handle(cmd) {
               },
             ]
           : []),
-        {
-          type: "custom_message",
-          id: "e-other",
-          customType: "todo-reminder",
-          content: "Remember",
-          display: true,
-          details: {
-            runId: "r",
-            agent: "a",
-            usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 1 },
-          },
-        },
-        {
-          type: "message",
-          id: "e-read",
-          message: {
-            role: "toolResult",
-            toolCallId: "t",
-            toolName: "read",
-            content: [{ type: "text", text: "file" }],
-            usage: {
-              input: 1,
-              output: 1,
-              cacheRead: 0,
-              cacheWrite: 0,
-              totalTokens: 2,
-              cost: { total: 1 },
-            },
-            details: { kind: "collection", runs: [] },
-          },
-        },
         ...messages.map((message, i) => ({ type: "message", id: `e-${i}`, message })),
       ];
-      const since =
-        cmd.since === undefined ? -1 : entries.findIndex((entry) => entry.id === cmd.since);
-      if (cmd.since !== undefined && since === -1)
-        return respond(cmd, undefined, `Entry not found: ${cmd.since}`);
-      return respond(cmd, { entries: entries.slice(since + 1), leafId: entries.at(-1).id });
+      return respond(cmd, { entries, leafId: entries.at(-1)?.id });
     }
     case "get_session_stats":
       // held-usage: Pi never answers a usage readback, as if it were slow.

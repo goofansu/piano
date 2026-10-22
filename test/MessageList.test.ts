@@ -188,49 +188,35 @@ test("every folding row folds the same way: context starts open, a card without 
     },
     { id: "res", role: "tool_result", toolCallId: "t", text: "tool output text", isError: false },
     {
-      id: "bare",
-      role: "tool_result",
+      id: "status",
+      role: "assistant",
       text: "",
-      subagent: { kind: "result", source: "tool", status: "unknown Run", attention: true },
-    },
-    {
-      id: "answered",
-      role: "context",
-      text: "**Found it**",
-      subagent: {
-        kind: "result",
-        source: "notification",
-        label: "Find it",
-        status: "Done",
-        attention: false,
-      },
+      toolCalls: [{ id: "s", name: "piano_session_status", args: '{"sessionId":"s1"}' }],
     },
   ]);
   const context = fold(html, "Shell");
   const skill = fold(html, "review skill");
   const tool = fold(html, "bash tool call");
-  const bare = fold(html, "Subagent result: Subagent result");
-  const answered = fold(html, "Subagent result: Find it");
+  const bare = fold(html, "Dispatched session: Session");
   // One header shape for every kind: padding out of flow, a sidebar swipe passes through it.
-  for (const row of [context, skill, tool, bare, answered]) {
+  for (const row of [context, skill, tool, bare]) {
     assert.match(row.header, /class="-ml-2 -my-1 flex /);
     assert.match(row.header, /data-sidebar-swipe="true"/);
     assert.equal(row.chevron, row.canOpen, "a chevron exactly when the row can open");
   }
   assert.deepEqual(
-    [context, skill, tool, answered].map((row) => [row.open, row.canOpen, row.bodyHidden]),
+    [context, skill, tool].map((row) => [row.open, row.canOpen, row.bodyHidden]),
     [
       [true, true, false],
       [false, true, true],
       [false, true, true],
-      [false, true, true],
     ],
-    "context starts open; a skill, a tool and a subagent card start closed",
+    "context starts open; a skill and a tool start closed",
   );
   assert.match(context.markup, /data-slot="collapsible-content".*shell says hi/s);
   assert.equal(bare.canOpen, false, "a card without details cannot open");
   assert.equal(bare.body, undefined, "a card without details has no body");
-  assert.doesNotMatch(html, /tool output text|Found it/, "a closed body renders nothing");
+  assert.doesNotMatch(html, /tool output text/, "a closed body renders nothing");
   // A skill folds inside its prompt bubble: no gutter of its own.
   assert.match(html, /<article[^>]*>(?:(?!<\/article>).)*aria-label="review skill"/s);
   assert.doesNotMatch(

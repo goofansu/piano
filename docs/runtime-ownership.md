@@ -17,7 +17,6 @@ second session implementation or a new registry store.
 | `PiSessions` shutdown | Transport termination settles callers; record consumer completion signals `recordsDrained`. Only then announce closure once, resolving remaining dialog/submission uncertainty. The consumer finalizer signals completion but never waits on a later child finalizer. Scope release judges retained state and transport uncertainty, not already-interrupted action fibers. |
 | `PiRecords` | Translates Pi payloads, readbacks and commands. One projection turns Pi's facts into every Snapshot, an open child's first one and a saved file's peek. Projector correlation is accessed under the publication lock; it does not own a process, deadline policy or fiber, or subscriber: a dialog leaves it as Pi's request (timeout, receipt time). |
 | `PiHistory` (internal) | Saved sessions without a child, exposed as `PiSessions.history`: locate a file across checkout spellings, list a directory's session IDs, read a file's facts for PiRecords to project, and export its active branch. Never moves, merges or repairs history (INV-01). |
-| `Subagents` | The pi-subagent extension contract: subagent cards from tool and notification `details`, and the `RunLedger` that folds raw session entries into a compact per-Run spend record. PiRecords asks it about subagent payloads. |
 | `SessionReferences` | Where a session reference's Pi history is and whether it can be opened: the checkout spelling rule (registry, caller and physical spellings, with observed aliases remembered for the server's lifetime), resolution to the owning reference, Pi file, last known statistics and missing checkout, the sidebar's availability judged from the same observation, the saved view and branch export through `PiSessions.history`, archive and removal of Pi's file. Never starts Pi or takes an ownership lock (INV-01). |
 | `SessionHost` | One running session from start to close: its child's scope, input admission under its key's lock (activity recorded first, checkout required, in-flight actions counted), the one busy rule idle release and branch export share, the registry mirror of Pi's name and statistics, and reporting its own exit to SessionHosts. |
 | `SessionHosts` | Canonical checkout/session identity, keyed by the physical checkout SessionReferences returns, under one lock per key; creating or reusing a SessionHost, replacement/retirement, idle retirement and running-host announcements. Browser disconnect only releases its attachment, not this host's child (INV-02). |
@@ -30,8 +29,7 @@ left after caller timeout so retirement cannot infer false quiescence.
 Publication, dialogs and readbacks share one atomicity boundary: SessionDialogs and
 SessionReadbacks take the session's `SessionPublication` itself, its lock and gates included,
 rather than a bag of functions, so the boundary has one owner and readback tests use the real
-one. PiRecords is not split by size; `Subagents` is a split by concept (the pi-subagent extension contract versus
-the Pi RPC protocol), so the run ledger reads Pi entries without serializing a transcript. These are explicit ownership choices, not deferred mechanical
+one. PiRecords is not split by size. These are explicit ownership choices, not deferred mechanical
 file splitting.
 
 ## Publication mutation contract (PIN-28)

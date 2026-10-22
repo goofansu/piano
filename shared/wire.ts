@@ -61,161 +61,6 @@ export const Usage = Schema.Struct({
 });
 export type Usage = typeof Usage.Type;
 
-/** One Subagent Run's spend as pi-subagent delivers it: no `totalTokens`, cost in unrounded USD. */
-export const RunUsage = Schema.Struct({
-  input: Schema.Number,
-  output: Schema.Number,
-  cacheRead: Schema.Number,
-  cacheWrite: Schema.Number,
-  cost: Schema.Number,
-});
-export type RunUsage = typeof RunUsage.Type;
-const RunSpend = { usage: Schema.optional(RunUsage), model: Schema.optional(Schema.String) };
-/** Delivered Runs' spend summed, with its token total and how many Runs it counts. */
-const RunTotal = Schema.Struct({
-  ...RunUsage.fields,
-  totalTokens: Schema.Number,
-  runs: Schema.Number,
-});
-export const ProfileUsage = Schema.Struct({
-  ...RunTotal.fields,
-  profile: Schema.String,
-  /** Models the Profile's Runs reported; a Run without one adds nothing here. */
-  models: Schema.Array(Schema.String),
-  /** Every Run named a model, and all named the same one. */
-  model: Schema.optional(Schema.String),
-});
-export type ProfileUsage = typeof ProfileUsage.Type;
-export const SubagentUsage = Schema.Struct({
-  /** In order of each Profile's first delivered Run, including Runs that spent nothing. */
-  profiles: Schema.Array(ProfileUsage),
-  total: RunTotal,
-});
-export type SubagentUsage = typeof SubagentUsage.Type;
-
-const SubagentIdentity = {
-  runId: Schema.optional(Schema.String),
-  subagentId: Schema.optional(Schema.String),
-  label: Schema.optional(Schema.String),
-  profile: Schema.optional(Schema.String),
-};
-const TerminalSubagentStatus = Schema.Literals(["completed", "failed", "cancelled"]);
-/** What became of a delivered Run's final output, in pi-subagent's four retention words. A
- * retained value is the whole text, or only a one-line preview when a notification could not
- * inline it (the whole value then lives in the Run's Result, read with `agent_result`). */
-export const FinalOutput = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("absent"), hasTranscriptEvidence: Schema.Boolean }),
-  Schema.Struct({
-    kind: Schema.Literal("removed"),
-    removedBytes: Schema.Number,
-    hasTranscriptEvidence: Schema.Boolean,
-  }),
-  Schema.Struct({ kind: Schema.Literal("retained"), text: Schema.String }),
-  Schema.Struct({ kind: Schema.Literal("retained"), preview: Schema.String }),
-  Schema.Struct({
-    kind: Schema.Literal("retained-prefix"),
-    removedBytes: Schema.Number,
-    text: Schema.String,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("retained-prefix"),
-    removedBytes: Schema.Number,
-    preview: Schema.String,
-  }),
-]);
-export type FinalOutput = typeof FinalOutput.Type;
-/** How a delivered Run ended and what it answered (pi-subagent ADR-0040), on a notification, an
- * `agent_result` Run and each Run a wait delivered. Every key is optional: an older extension
- * wrote none, and a reader then falls back to the raw text. */
-const RunDelivery = {
-  finalOutput: Schema.optional(FinalOutput),
-  /** A failed Run's reason, when it reported one. */
-  failure: Schema.optional(Schema.String),
-  /** Present exactly when the Run was cancelled. */
-  cancellationReason: Schema.optional(Schema.Literals(["requested", "shutdown", "timeout"])),
-  durationMillis: Schema.optional(Schema.Number),
-};
-/** The card reports something left unresolved for the reader: a Run still running or unknown, a
- * result unavailable, a cancellation not yet settled, or Control refused for an unknown or
- * cancelled Run. Subagents derives it from the card's facts so readers never parse `status`. */
-const attention = Schema.Boolean;
-
-/** Validated presentation facts from pi-subagent. This is a historical projection,
- * not a live child registry: "Started" means last observed admission, never "Running".
- */
-export const SubagentCard = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal("delegation"),
-    action: Schema.Literals(["start", "resume"]),
-    ...SubagentIdentity,
-    prompt: Schema.optional(Schema.String),
-    /** As pi-subagent reported the call; the transcript settles its Run from later cards. */
-    status: Schema.String,
-    admitted: Schema.Boolean,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("control"),
-    action: Schema.Literal("steer"),
-    ...SubagentIdentity,
-    message: Schema.optional(Schema.String),
-    status: Schema.String,
-    attention,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("collection"),
-    scope: Schema.Literals(["named", "all-active"]),
-    ...SubagentIdentity,
-    status: Schema.String,
-    terminalStatus: Schema.optional(TerminalSubagentStatus),
-    runs: Schema.Array(
-      Schema.Struct({
-        ...SubagentIdentity,
-        runId: Schema.String,
-        profile: Schema.String,
-        status: TerminalSubagentStatus,
-        ...RunSpend,
-        ...RunDelivery,
-      }),
-    ),
-    /** The one delivered Run's delivery, when the collection is exactly that Run. */
-    ...RunDelivery,
-    stillRunning: Schema.Number,
-    unknown: Schema.Number,
-    unavailable: Schema.Number,
-    noActiveRuns: Schema.Boolean,
-    attention,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("result"),
-    source: Schema.Literals(["tool", "notification"]),
-    ...SubagentIdentity,
-    status: Schema.String,
-    terminalStatus: Schema.optional(TerminalSubagentStatus),
-    ...RunSpend,
-    ...RunDelivery,
-    attention,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("cancellation"),
-    status: Schema.String,
-    outcomes: Schema.Array(
-      Schema.Union([
-        Schema.Struct({
-          kind: Schema.Literals(["requested", "already requested", "unknown"]),
-          runId: Schema.String,
-        }),
-        Schema.Struct({
-          kind: Schema.Literal("already terminal"),
-          runId: Schema.String,
-          phase: TerminalSubagentStatus,
-        }),
-      ]),
-    ),
-    attention,
-  }),
-]);
-export type SubagentCard = typeof SubagentCard.Type;
-
 /** Execution preview, not a transcript message or an additional billable result. */
 export const ToolExecution = Schema.Struct({
   id: Schema.String,
@@ -226,7 +71,6 @@ export const ToolExecution = Schema.Struct({
   text: Schema.String,
   status: Schema.Literals(["running", "success", "error", "incomplete"]),
   outputKind: Schema.Literals(["latest-update", "final", "unavailable"]),
-  subagent: Schema.optional(SubagentCard),
 });
 export type ToolExecution = typeof ToolExecution.Type;
 
@@ -271,7 +115,6 @@ export const RenderMsg = Schema.Struct({
   label: Schema.optional(Schema.String),
   nestedCalls: Schema.optional(Schema.Array(ToolExecution)),
   nestedCallsComplete: Schema.optional(Schema.Boolean),
-  subagent: Schema.optional(SubagentCard),
 });
 export type RenderMsg = typeof RenderMsg.Type;
 
@@ -385,9 +228,6 @@ export const SessionState = Schema.Struct({
   /** Full-session totals from Pi, not a sum of displayed current-context messages. */
   cost: SessionStats.fields.cost,
   tokens: SessionStats.fields.tokens,
-  /** Run usage delivered anywhere in the session file, compacted or on another branch, as Pi counts
-   * its own totals; absent until a delivery carries usage. */
-  subagents: Schema.optional(SubagentUsage),
   /** The session that dispatched this one, as recorded in its Pi history; absent when not dispatched. */
   dispatchedFrom: Schema.optional(Schema.String),
   extension: Schema.optional(ExtensionState),

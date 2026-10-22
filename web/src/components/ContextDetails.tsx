@@ -19,13 +19,11 @@ import {
   type HistoryMetric,
   responseHistory,
   type SessionUsage,
-  subagentRows,
   usageBreakdown,
 } from "@/lib/contextUsage";
 
 interface Props {
   figures: ContextFigures;
-  /** Subagent usage is the server's count over the whole session, not only the messages in context. */
   usage?: SessionUsage;
   messages: ReadonlyArray<RenderMsg>;
 }
@@ -40,7 +38,6 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
     selectedId,
   );
   const breakdown = usageBreakdown(selected?.usage, session);
-  const subagents = subagentRows(session?.subagents);
   const totals = session?.tokens;
   const chartRef = useRef<HTMLDivElement>(null);
   const chartWidth = responses.length * 12;
@@ -182,48 +179,6 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
           </TableBody>
         </Table>
         {totals && <p className="sr-only">Session total: {totals.total.toLocaleString()} tokens</p>}
-        {subagents && (
-          <Table
-            className="table-fixed text-right text-xs tabular-nums"
-            aria-label="Subagent usage by profile"
-          >
-            <TableHeader>
-              <TableRow className="text-ink-2">
-                <TableHead className="w-2/5 text-left font-normal">Subagents</TableHead>
-                <TableHead className="text-right font-normal">Tokens</TableHead>
-                <TableHead className="text-right font-normal">Cost</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {/* A Profile row may wrap to two lines: pad it and keep the figures on the Profile's line. */}
-              {subagents.rows.map((row) => (
-                <TableRow key={row.profile} className="*:py-2.5 *:align-top">
-                  <TableHead
-                    scope="row"
-                    className="h-auto whitespace-normal text-left font-normal text-ink-2"
-                  >
-                    <span className="block wrap-anywhere">{row.profile}</span>
-                    {/* The model ID alone; the provider stays in the tooltip. */}
-                    {row.model && (
-                      <span className="mt-1 block wrap-anywhere text-ink-3" title={row.modelRef}>
-                        {row.model}
-                      </span>
-                    )}
-                  </TableHead>
-                  <TableCell className="break-all">{row.tokens}</TableCell>
-                  <TableCell className="break-all">{row.cost}</TableCell>
-                </TableRow>
-              ))}
-              <TableRow>
-                <TableHead scope="row" className="text-left font-normal text-ink-2">
-                  All subagents
-                </TableHead>
-                <TableCell className="break-all">{subagents.total.tokens}</TableCell>
-                <TableCell className="break-all">{subagents.total.cost}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
       </section>
     </div>
   );

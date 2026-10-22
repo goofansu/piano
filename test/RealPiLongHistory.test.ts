@@ -32,19 +32,9 @@ test("a compacted session beyond the RPC line limit previews, resumes and runs a
   process.env.PI_CODING_AGENT_SESSION_DIR = fixture.sessionDir;
   const cwd = fixture.project("long-history");
   try {
-    // Legitimate history through Pi's own SDK: a dispatch record and one Run delivery, then
-    // repeated groups of large prompts each closed by a compaction.
+    // Legitimate history through Pi's own SDK: a dispatch record, then repeated groups of large prompts each closed by a compaction.
     const manager = SessionManager.create(cwd, fixture.sessionDir);
     manager.appendCustomEntry(DISPATCH_ENTRY, { parentSessionId: "parent-session" });
-    manager.appendCustomMessageEntry("subagent-notification", "Result", true, {
-      runId: "run-1",
-      subagentId: "sub-run-1",
-      agent: "reviewer",
-      label: "probe",
-      status: "completed",
-      durationMillis: 10,
-      usage: { input: 1200, output: 34, cacheRead: 0, cacheWrite: 0, cost: 0.25 },
-    });
     let peakContext = 0;
     for (let group = 0; group < groups; group++) {
       for (let i = 0; i < perGroup; i++)
@@ -84,10 +74,6 @@ test("a compacted session beyond the RPC line limit previews, resumes and runs a
         assert.equal(state.closure, undefined);
         assert.equal(state.sessionFile, file);
         assert.equal(state.dispatchedFrom, "parent-session");
-        assert.deepEqual(
-          state.subagents?.profiles.map((p) => [p.profile, p.totalTokens, p.cost]),
-          [["reviewer", 1234, 0.25]],
-        );
         assert.equal(state.statsRefreshError, undefined);
 
         yield* session.act({ _tag: "prompt", text: "/phase0-facts" });

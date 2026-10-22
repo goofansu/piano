@@ -29,7 +29,6 @@ import type {
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
 import { compileRedaction, type DisplayRedaction } from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
-import { RunLedger, SubagentProjection } from "./Subagents.ts";
 
 interface RawContent {
   type: string;
@@ -141,7 +140,6 @@ function writtenPath(name: string | undefined, args: unknown): string | undefine
 export function serializeMessage(
   id: string,
   msg: RawMessage,
-  projection = new SubagentProjection(),
   redaction: DisplayRedaction = compileRedaction(),
 ): RenderMsg | null {
   let result: RenderMsg;
@@ -205,7 +203,6 @@ export function serializeMessage(
         outputKind: "unavailable",
       })),
       nestedCallsComplete: msg.nestedCalls?.complete,
-      subagent: projection.tool(msg.toolCallId, msg.toolName, msg.details),
     };
   else if (msg.role === "compactionSummary" || msg.role === "branchSummary")
     result = {
@@ -220,29 +217,19 @@ export function serializeMessage(
       role: "context",
       label: msg.customType ?? "Extension context",
       text: textOf(msg.content),
-      subagent:
-        msg.customType === "subagent-notification"
-          ? projection.notification(msg.details)
-          : undefined,
     };
   else if (msg.role === "bashExecution")
     result = { id, role: "context", label: `Shell: ${msg.command ?? ""}`, text: msg.output ?? "" };
   else return null; // System declarations and thinking are outside this display scope.
-  const projected = redaction.wire(result);
-  if (projected.role === "assistant") projection.assistant(projected);
-  return projected;
+  return redaction.wire(result);
 }
 /** A message's id is its position in Pi's message list, so a live message and the readback that
  * later contains it name it alike, and the browser keeps its row. */
 const messageId = (index: number) => `m${index}`;
-function serializeWithProjection(
-  msgs: ReadonlyArray<RawMessage>,
-  projection: SubagentProjection,
-): RenderMsg[] {
-  projection.reset();
+function serializeMessages(msgs: ReadonlyArray<RawMessage>): RenderMsg[] {
   const redaction = compileRedaction();
   return msgs.flatMap((m, i) => {
-    const result = serializeMessage(messageId(i), m, projection, redaction);
+    const result = serializeMessage(messageId(i), m, redaction);
     return result ? [result] : [];
   });
 }
@@ -370,18 +357,15 @@ export interface PiSessionFacts {
   readonly source: "live" | "saved";
   readonly state: RawState;
   readonly messages: ReadonlyArray<RawMessage>;
-  /** Every entry, on any branch: Run spend counts all of them, as Pi's totals do, and the
-   * dispatching session is recorded once in them. A live session reads later ones incrementally. */
+  /** Every entry, on any branch: the dispatching session is recorded once in them. */
   readonly entries: ReadonlyArray<unknown>;
 }
 
-/** The one projection of a Pi session into a Snapshot, with its Runs' spend and the session that
- * dispatched it. A live session adds its run's own state (compacting only if Pi says so, nothing
+/** The one projection of a Pi session into a Snapshot, with the session that dispatched it. A live session adds its run's own state (compacting only if Pi says so, nothing
  * queued). */
-const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Snapshot => {
+export const snapshotOf = (facts: PiSessionFacts): Snapshot => {
   const state = {
     ...stateFactsOf(facts.state),
-    subagents: new RunLedger().add(facts.entries).usage,
     dispatchedFrom: dispatchedFromOf(facts.entries),
   };
   return {
@@ -394,14 +378,10 @@ const snapshotFrom = (facts: PiSessionFacts, projection: SubagentProjection): Sn
             queuedMessages: [],
           }
         : state,
-    messages: serializeWithProjection(facts.messages, projection),
+    messages: serializeMessages(facts.messages),
     dialogs: [],
   };
 };
-
-/** A session as a Snapshot from Pi's facts, with no projector to seed for later records. */
-export const snapshotOf = (facts: PiSessionFacts): Snapshot =>
-  snapshotFrom(facts, new SubagentProjection());
 
 /** Pi's steering and follow-up queue, from `queue_update` or `clear_queue`. Undefined when malformed. */
 const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
@@ -523,9 +503,9 @@ export const piReadbacks = {
       ),
     invalid: "Pi returned invalid session statistics.",
   } satisfies PiReadback<Pick<SessionState, "context" | "cost" | "tokens">>,
-  /** Session entries after `since`, or all of them; RunLedger reads each entry defensively. */
-  entries: (since?: string): PiReadback<ReadonlyArray<unknown>> => ({
-    command: { type: "get_entries", ...(since ? { since } : {}) },
+  /** Every session entry; readers check each entry defensively. */
+  entries: (): PiReadback<ReadonlyArray<unknown>> => ({
+    command: { type: "get_entries" },
     decode: (data) => {
       const entries = fieldOf(data, "entries");
       return Array.isArray(entries) ? entries : undefined;
@@ -740,7 +720,7 @@ const notice = (level: "info" | "warning" | "error", message: string): SessionEv
 
 /**
  * One Pi child's records in the browser's vocabulary. Owns everything a record sequence
- * implies: the streaming partial, tool executions, subagent correlation, retry flags,
+ * implies: the streaming partial, tool executions, retry flags,
  * extension status/widgets and dialog requests. Pure and synchronous; callers serialize
  * `record`, `history` and `closed` under their snapshot lock.
  */
@@ -750,7 +730,6 @@ export class PiProjector {
   private partial: RenderMsg | undefined;
   private blocks = new Map<number, Block>();
   private tools = new Map<string, ToolExecution>();
-  private projection = new SubagentProjection();
   /** Pi's message count as last read back plus the messages ended since: the next one's position. */
   private messages = 0;
   private turnRetry = false;
@@ -772,18 +751,18 @@ export class PiProjector {
     this.options = options;
   }
 
-  /** The opening Snapshot from Pi's facts, before any record arrives. Retains its correlation
-   * facts for subsequent live records. */
+  /** The opening Snapshot from Pi's facts, before any record arrives. Retains its message count
+   * for subsequent live records. */
   snapshot(facts: PiSessionFacts): Snapshot {
     this.messages = facts.messages.length;
-    return snapshotFrom(facts, this.projection);
+    return snapshotOf(facts);
   }
 
-  /** Seed or replace authoritative history (`get_messages`) and retain its correlation facts
+  /** Seed or replace authoritative history (`get_messages`) and retain its message count
    * for subsequent live records. The messages themselves remain owned by Pi. */
   history(msgs: ReadonlyArray<RawMessage>): RenderMsg[] {
     this.messages = msgs.length;
-    return serializeWithProjection(msgs, this.projection);
+    return serializeMessages(msgs);
   }
 
   record(raw: PiRecord, receivedAt: number): RecordProjection {
@@ -1006,7 +985,7 @@ export class PiProjector {
           this.blocks.clear();
         }
         if (!event.message) return [];
-        const message = serializeMessage(reserved ?? this.nextId(), event.message, this.projection);
+        const message = serializeMessage(reserved ?? this.nextId(), event.message);
         return message ? [{ _tag: "message_end", message }] : [];
       }
       case "tool_execution_start":
@@ -1034,14 +1013,6 @@ export class PiProjector {
           text: result ? redaction.text(textOf(result.content), !ended) : (old?.text ?? ""),
           status: ended ? (event.isError ? "error" : "success") : "running",
           outputKind: ended ? "final" : "latest-update",
-          subagent: ended
-            ? this.projection.tool(
-                id,
-                event.toolName ?? old?.name,
-                result?.details,
-                event.args === undefined ? old?.args : argsOf(event.args),
-              )
-            : old?.subagent,
         });
         // Only unfinished executions need correlation for later updates/settlement. Publication
         // owns completed previews; retaining them here keeps obsolete output after compaction.

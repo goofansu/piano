@@ -1,8 +1,8 @@
 import type { ModelCatalog, RenderMsg, SessionState, SessionStats, Usage } from "@shared/wire";
 import { formatTokenCount } from "./format.ts";
 
-/** What Pi reports about a session's spending: current context, full-session totals and Run usage. */
-export type SessionUsage = Pick<SessionState, "context" | "cost" | "tokens" | "subagents">;
+/** What Pi reports about a session's spending: current context and full-session totals. */
+export type SessionUsage = Pick<SessionState, "context" | "cost" | "tokens">;
 
 /** The context figures the usage button and its popover show, derived once from the same inputs. */
 export interface ContextFigures {
@@ -132,7 +132,7 @@ export interface BreakdownRow {
   readonly session: string;
 }
 
-/** The inspected response's usage beside Pi's main-session totals, which exclude subagents. */
+/** The inspected response's usage beside Pi's full-session totals. */
 export function usageBreakdown(
   response: Usage | undefined,
   session: Pick<SessionUsage, "tokens" | "cost"> | undefined,
@@ -158,41 +158,4 @@ export function usageBreakdown(
     row("Total tokens", number, response?.totalTokens, totals?.total),
     row("Cost", dollars, response?.cost, session?.cost),
   ];
-}
-
-/** One Profile's row in the subagents table, formatted. */
-export interface SubagentRow {
-  readonly profile: string;
-  /** The model ID without its provider, when every Run named the same model. */
-  readonly model?: string;
-  /** The full model reference, provider included, for the tooltip. */
-  readonly modelRef?: string;
-  readonly tokens: string;
-  readonly cost: string;
-}
-
-/** The subagents table: Profiles that spent anything, then the total over every Run. */
-export interface SubagentTable {
-  readonly rows: ReadonlyArray<SubagentRow>;
-  readonly total: { readonly tokens: string; readonly cost: string };
-}
-
-/** The subagents table, or `null` when no Profile spent anything and the table stays hidden. */
-export function subagentRows(subagents: SessionUsage["subagents"]): SubagentTable | null {
-  // A Run that spent nothing is still a Run, but not a row worth reading.
-  const spent =
-    subagents?.profiles.filter((profile) => profile.totalTokens > 0 || profile.cost > 0) ?? [];
-  if (!subagents || spent.length === 0) return null;
-  return {
-    rows: spent.map((profile) => ({
-      profile: profile.profile,
-      ...(profile.model && {
-        model: profile.model.slice(profile.model.indexOf("/") + 1),
-        modelRef: profile.model,
-      }),
-      tokens: number(profile.totalTokens),
-      cost: dollars(profile.cost),
-    })),
-    total: { tokens: number(subagents.total.totalTokens), cost: dollars(subagents.total.cost) },
-  };
 }

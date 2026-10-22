@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { RunLedger } from "../server/Subagents.ts";
 import type { ModelCatalog, ModelChoice, RenderMsg } from "../shared/wire.ts";
 import {
   cacheHit,
   contextFigures,
   responseHistory,
-  subagentRows,
   usageBreakdown,
 } from "../web/src/lib/contextUsage.ts";
 
@@ -127,7 +125,6 @@ test("the breakdown formats each figure and shows — where one is unknown", () 
     { label: "Cache read", response: "—", session: "0" },
     { label: "Cache write", response: "—", session: "0" },
     { label: "Cache hit", response: "—", session: "0%" },
-    // The Session column stays Pi's main-session figure, without subagents.
     { label: "Total tokens", response: "—", session: "120" },
     { label: "Cost", response: "—", session: "$0.5000" },
   ]);
@@ -148,95 +145,4 @@ test("the breakdown formats each figure and shows — where one is unknown", () 
     { label: "Total tokens", response: "2,540", session: "—" },
     { label: "Cost", response: "$0.1235", session: "—" },
   ]);
-});
-
-// The server folds deliveries into `subagents`; the table shows what it is given.
-const subagents = (deliveries: unknown[]) => subagentRows(new RunLedger().add(deliveries).usage);
-const result = (
-  runId: string,
-  profile: string,
-  usage: Record<string, number> | undefined,
-  model?: string,
-) => ({
-  type: "custom_message",
-  id: runId + profile,
-  customType: "subagent-notification",
-  content: "",
-  details: {
-    runId,
-    subagentId: `subagent-${runId}`,
-    agent: profile,
-    label: profile,
-    status: "completed",
-    durationMillis: 1,
-    ...(usage ? { usage } : {}),
-    ...(model ? { model } : {}),
-  },
-});
-
-test("subagent rows list each Profile that spent anything, by model ID, then all subagents", () => {
-  const table = subagents([
-    result(
-      "run-qbdd-1",
-      "usage-probe-pi",
-      { input: 3518, output: 6, cacheRead: 0, cacheWrite: 0, cost: 0.007096 },
-      "openai/gpt-6.1-sol",
-    ),
-    result(
-      "run-qbdd-2",
-      "usage-probe-claude",
-      { input: 10, output: 106, cacheRead: 0, cacheWrite: 20786, cost: 0.042112 },
-      "claude-haiku-4-5-20251001",
-    ),
-    result("run-idle", "usage-probe-idle", {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      cost: 0,
-    }),
-    result(
-      "run-mixed-1",
-      "mixed",
-      { input: 1, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-      "one",
-    ),
-    result(
-      "run-mixed-2",
-      "mixed",
-      { input: 1, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-      "two",
-    ),
-  ]);
-  assert.deepEqual(table, {
-    rows: [
-      {
-        profile: "usage-probe-pi",
-        model: "gpt-6.1-sol",
-        modelRef: "openai/gpt-6.1-sol",
-        tokens: "3,524",
-        cost: "$0.0071",
-      },
-      {
-        profile: "usage-probe-claude",
-        model: "claude-haiku-4-5-20251001",
-        modelRef: "claude-haiku-4-5-20251001",
-        tokens: "20,902",
-        cost: "$0.0421",
-      },
-      // Runs that named different models show no model.
-      { profile: "mixed", tokens: "2", cost: "$0.0000" },
-    ],
-    // The idle Run's Profile has no row, but the total still counts every Run.
-    total: { tokens: "24,428", cost: "$0.0492" },
-  });
-});
-
-test("the subagents table is hidden without usage or when every Run spent nothing", () => {
-  assert.equal(subagentRows(undefined), null);
-  assert.equal(subagents([result("r1", "a", undefined)]), null);
-  assert.equal(
-    subagents([result("r1", "a", { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 })]),
-    null,
-  );
 });
