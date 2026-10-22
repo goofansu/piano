@@ -1,0 +1,68 @@
+# Changes and files
+
+From a session the user sees what changed in its workspace: the Changes pane shows the Git diff of
+the session's folder or worktree against HEAD (per-file additions and removals, new files, a diff
+per file), and the composer's Files list shows the files Pi wrote or edited in this session, each
+opening a file viewer.
+
+## Sub-features
+
+- `changes-open`: header menu "Session information and actions" → "Changes" opens the pane.
+- `changes-list`: list "Changed files" with one collapsible row per file
+  (`<path>, <n> added, <n> removed: collapse`), "New file" for untracked files, and the diff.
+- `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
+- `changes-close`: "Close changes" closes the pane.
+- `files-list`: the composer's "Files" button (`<n> file(s)`) lists files written in the session.
+- `file-viewer`: a Files row opens the file viewer (heading = path, "Close file viewer").
+
+## How to get to it (user POV)
+
+- Session page header menu → Changes.
+- Session page composer footer → Files → a file.
+- The same diff over HTTP: `POST /api/workspace/changes?workspaceId=<id>` with an allowed Origin.
+
+## Driving it with agent-browser
+
+Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
+`ab() { $S/ab.sh "$RUN" "$@"; }`. Make the workspace dirty through the files, as Pi would:
+`echo 'export const answer = 5;' > "$REPO/src/answer.ts"; echo note > "$REPO/new.txt"`.
+The seeded "Plan the verification" history contains one successful Pi `write` of `src/answer.ts`.
+
+- `changes-open` and `changes-list`
+  - Action: `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
+    ab find role button click --name "Session information and actions" --exact;
+    ab find role menuitem click --name "Changes" --exact; ab wait --text "new.txt"`
+  - Result: heading "Changes"; buttons `new.txt, 1 added, 0 removed: collapse` and
+    `src/answer.ts, 1 added, 1 removed: collapse`; cells `− export const answer = 4;` and
+    `+ export const answer = 5;`. `ab eval "document.querySelector('[aria-label=\"Changed files\"]').innerText"`
+    shows `New file` under `new.txt`. Capture `01-changes`.
+  - Side effect (same answer over HTTP): take the root workspace ID from
+    `curl -s "$API_URL/api/folders"` (`folders[0].worktrees[0].workspace.id`), then
+    `curl -s -X POST -H "Origin: $ORIGIN" "$API_URL/api/workspace/changes?workspaceId=<id>"`
+    returns `result.status` `ready`, `branch` `main` and `files` `new.txt` (1/0) and
+    `src/answer.ts` (1/1). Without the Origin header it is 403.
+- `changes-refresh`
+  - Action: `rm "$REPO/new.txt"; ab find role button click --name "Refresh changes" --exact`
+  - Result: `new.txt` leaves the list; `src/answer.ts` stays. Capture `02-refreshed`.
+- `changes-close`
+  - Action: `ab find role button click --name "Close changes" --exact`
+  - Result: `document.querySelector('aside[aria-label=Changes]')` is null.
+- `files-list` and `file-viewer`
+  - Action: `ab find role button click --name "Files" --exact`
+  - Result: `ab eval "document.querySelector('[role=dialog]')?.innerText"` is `Files` /
+    `answer.ts` / `src`. Then `ab find role button click --name "answer.ts src" --exact` opens
+    heading `src/answer.ts` with the file's current contents and "Close file viewer". Capture
+    `03-file-viewer`.
+
+## Gotchas
+
+- Fake Pi makes no tool calls, so the Files list is only reachable through the seeded, hand-written
+  history; report it as such. A real Pi write is not exercised.
+- The Files list hides paths ignored by the workspace's `.gitignore` (the throwaway repo ignores
+  `ignored/`).
+- The Changes pane is an `aside` with `aria-label="Changes"`, not a `role=complementary`
+  attribute; select it by that.
+- "Changes" is in the session header's menu; the sidebar's "Session menu for <title>" has no
+  Changes item.
+- `changes-refresh` was written from the visible button; it was not run in the skill's first proof
+  run.
