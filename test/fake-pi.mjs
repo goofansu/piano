@@ -1,6 +1,6 @@
 // A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
 // exercise PiSessions through its interface. Behaviour is driven by the prompt text.
-import { closeSync, existsSync } from "node:fs";
+import { closeSync, existsSync, readdirSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
@@ -257,6 +257,10 @@ function handle(cmd) {
           },
           { name: "review", description: "Review changes", source: "prompt" },
           { name: args.includes("--no-session") ? "probe-only" : "live-only", source: "extension" },
+          // Like Pi, the project's templates as they were on disk when this child started.
+          ...(existsSync(".pi/prompts") ? readdirSync(".pi/prompts") : [])
+            .filter((file) => file.endsWith(".md"))
+            .map((file) => ({ name: file.slice(0, -3), source: "prompt" })),
         ],
       });
     case "get_messages":

@@ -5,8 +5,9 @@
  * has one cache entry. Pi stays the authority (INV-12): trust is read and saved through Pi's own
  * store, and the catalog and commands come from a one-shot Pi probe, already in wire terms,
  * cached per directory until something that changes Pi's resources (trust, credentials,
- * defaults, packages, MCP config) invalidates it. A running session's commands come from that
- * session, not from here.
+ * defaults, packages, MCP config) invalidates it. Commands always probe afresh, because Piano is not
+ * told when a skill or prompt template file changes; the probe replaces the cached entry. A running
+ * session's commands come from that session, not from here.
  */
 import { homedir } from "node:os";
 import { Context, Data, Effect, Layer, PubSub, Semaphore, Stream } from "effect";
@@ -38,7 +39,7 @@ export class DirectoryFacts extends Context.Service<
     ) => Effect.Effect<ModelCatalog>;
     /** Global resources only, for machine-wide settings. */
     readonly global: Effect.Effect<ModelCatalog>;
-    /** Slash commands from the directory's cached probe, for a session not yet started. */
+    /** Slash commands from a fresh probe, for a session not yet started; it also refreshes the catalog. */
     readonly commands: (
       raw: string,
     ) => Effect.Effect<ReadonlyArray<SlashCommand>, DirectoryCommandsError>;
@@ -145,7 +146,7 @@ export const DirectoryFactsLive = Layer.effect(
       catalog,
       global: locked(null),
       commands: Effect.fn("DirectoryFacts.commands")(function* (raw) {
-        const probed = yield* locked(directoryPath(raw));
+        const probed = yield* locked(directoryPath(raw), true);
         if (probed.error) return yield* new DirectoryCommandsError({ detail: probed.error });
         return probed.commands ?? [];
       }),

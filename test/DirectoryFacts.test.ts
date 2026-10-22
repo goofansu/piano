@@ -75,14 +75,14 @@ test("one directory, however a caller spells it, has one catalog entry and one t
   );
 });
 
-test("commands before a session starts come from the directory's cached probe, models in wire terms", async () => {
+test("commands before a session starts come from a probe, models in wire terms", async () => {
   await run((facts, probes) =>
     Effect.gen(function* () {
       // The fake Pi lists `probe-only` when started without a session and `live-only` in a session.
       const probed = (yield* facts.commands("~/checkout")).map((c) => c.name);
       assert.ok(probed.includes("probe-only") && !probed.includes("live-only"), probed.join());
       const catalog = yield* facts.catalog(cwd);
-      assert.equal(probes(), 1, "commands and catalog share one probe");
+      assert.equal(probes(), 1, "the catalog reuses the commands' probe");
       // Pi's effort table, already translated: minimal is mapped off and xhigh is mapped in.
       assert.deepEqual(
         catalog.models.map((m) => [m.ref, m.thinkingLevels]),
@@ -91,6 +91,19 @@ test("commands before a session starts come from the directory's cached probe, m
           ["fake/beta", ["off"]],
         ],
       );
+    }),
+  );
+});
+
+test("each commands request probes again, so a template added on disk is offered", async () => {
+  const dir = join(root, "templates");
+  mkdirSync(join(dir, ".pi/prompts"), { recursive: true });
+  await run((facts) =>
+    Effect.gen(function* () {
+      const names = () => Effect.map(facts.commands(dir), (all) => all.map((c) => c.name));
+      assert.ok(!(yield* names()).includes("added"));
+      writeFileSync(join(dir, ".pi/prompts/added.md"), "Added template\n");
+      assert.ok((yield* names()).includes("added"), "the second request sees the new file");
     }),
   );
 });
