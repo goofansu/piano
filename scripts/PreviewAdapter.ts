@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import {
+  access,
   mkdir,
   open,
   readdir,
@@ -25,6 +27,8 @@ export interface PreviewRequest {
   readyPath?: string;
   timeoutSeconds?: number;
   instanceId?: string;
+  /** The exact current instanceId to stop and launch again, with this request's launch. */
+  replace?: string;
 }
 export interface PreviewConfig {
   origin?: string;
@@ -55,6 +59,8 @@ type Run = (args: string[], timeout?: number) => Promise<string>;
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const code = (error: unknown) => (error as NodeJS.ErrnoException).code;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+/** Longer than any bounded submission, so an orphaned systemd-run has finished or failed. */
+const SUBMISSION_GRACE_SECONDS = 120;
 const unsupported =
   "Managed previews unsupported: require Linux and an unprivileged account with a lingering systemd user manager. No detached fallback.";
 
@@ -151,7 +157,15 @@ async function ownedBinding(record: Intent, state: UnitState) {
   if (!group || state.ActiveState !== "active") return false;
   const inodes = new Set<string>();
   for (const table of ["tcp", "tcp6"]) {
-    for (const row of (await readFile(`/proc/net/${table}`, "utf8")).trim().split("\n").slice(1)) {
+    let rows: string[];
+    try {
+      rows = (await readFile(`/proc/net/${table}`, "utf8")).trim().split("\n").slice(1);
+    } catch (error) {
+      // A kernel booted without IPv6 has no tcp6 table, hence no IPv6 listener to check.
+      if (table === "tcp6" && code(error) === "ENOENT") continue;
+      throw error;
+    }
+    for (const row of rows) {
       const fields = row.trim().split(/\s+/);
       const [address, port] = fields[1].split(":");
       if (fields[3] !== "0A" || Number.parseInt(port, 16) !== record.port) continue;
@@ -181,11 +195,12 @@ async function ownedBinding(record: Intent, state: UnitState) {
   return [...inodes].every((inode) => owned.has(inode));
 }
 
-function httpStatus(port: number, path: string): Promise<number> {
+/** Sends the Host a browser sends through the preview URL, so a framework's host check is seen. */
+function httpStatus(port: number, path: string, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
     // Absolute wall deadline, not a socket inactivity timeout (a slow responder must not extend it).
     const request = httpRequest(
-      { hostname: "127.0.0.1", port, path, method: "GET", agent: false },
+      { hostname: "127.0.0.1", port, path, method: "GET", agent: false, headers: { host } },
       (response) => {
         resolve(response.statusCode ?? 0);
         response.destroy();
@@ -213,7 +228,12 @@ async function choosePort(config: PreviewConfig, root: string) {
     const ipv6 = createServer();
     try {
       await listen(ipv4, { host: "0.0.0.0", port });
-      await listen(ipv6, { host: "::", port, ipv6Only: true });
+      try {
+        await listen(ipv6, { host: "::", port, ipv6Only: true });
+      } catch (error) {
+        // A host without IPv6 cannot conflict on it; only a busy address disqualifies the port.
+        if (!["EAFNOSUPPORT", "EADDRNOTAVAIL"].includes(code(error) ?? "")) throw error;
+      }
       return port;
     } catch {
       /* A busy or unavailable address is not a candidate. */
@@ -227,7 +247,25 @@ async function choosePort(config: PreviewConfig, root: string) {
   );
 }
 
-function launchSpec(request: PreviewRequest, config: PreviewConfig): LaunchSpec {
+/** A bare name resolves against the app's own PATH, so the saved launch names an absolute file. */
+async function executable(name: string, path: string) {
+  if (name.includes("/")) {
+    if (!isAbsolute(name)) throw new Error("command[0] must be a bare name or an absolute path");
+    return name;
+  }
+  for (const directory of path.split(":").filter(isAbsolute)) {
+    const candidate = join(directory, name);
+    try {
+      await access(candidate, constants.X_OK);
+      if ((await stat(candidate)).isFile()) return candidate;
+    } catch {
+      /* Not in this directory. */
+    }
+  }
+  throw new Error(`command[0] "${name}" is not an executable on the app's PATH (${path})`);
+}
+
+async function launchSpec(request: PreviewRequest, config: PreviewConfig): Promise<LaunchSpec> {
   const origin = config.origin ?? "";
   if (!/^https:\/\/[a-zA-Z0-9-]+\.exe\.xyz$/.test(origin))
     throw new Error(
@@ -242,7 +280,8 @@ function launchSpec(request: PreviewRequest, config: PreviewConfig): LaunchSpec 
     throw new Error(
       "command must be a nonempty argv array; use {port} and strict binding, not shell backgrounding",
     );
-  if (!isAbsolute(command[0])) throw new Error("command[0] must be an absolute executable path");
+  // `env` would read a first argument containing "=" as an assignment, not the executable.
+  if (command[0].includes("=")) throw new Error("command[0] must not contain '='");
   const env = request.env ?? {};
   if (
     typeof env !== "object" ||
@@ -256,9 +295,17 @@ function launchSpec(request: PreviewRequest, config: PreviewConfig): LaunchSpec 
   if (Object.hasOwn(env, "PORT"))
     throw new Error("PORT is allocated by Piano; use {port} in argv or the injected PORT");
   const readyPath = request.readyPath ?? "/";
-  if (typeof readyPath !== "string" || !readyPath.startsWith("/") || /[\r\n]/.test(readyPath))
+  // Node's HTTP client rejects a path outside \x21–\xff, which could never become ready.
+  if (typeof readyPath !== "string" || !readyPath.startsWith("/") || /[^\x21-\xff]/.test(readyPath))
     throw new Error("readyPath must be an HTTP path");
-  return { command, env, readyPath, origin, path: config.path ?? "/usr/local/bin:/usr/bin:/bin" };
+  const path = config.path ?? "/usr/local/bin:/usr/bin:/bin";
+  return {
+    command: [await executable(command[0], path), ...command.slice(1)],
+    env,
+    readyPath,
+    origin,
+    path,
+  };
 }
 
 /** The only substituted boundary is the host: supervisor commands and platform facts.
@@ -346,7 +393,8 @@ export class PreviewAdapter {
     }
   }
 
-  private async observe(record: Intent, path: string) {
+  /** The unit's state, refusing a supervisor invocation other than the one this intent adopted. */
+  private async current(record: Intent, path: string) {
     const state = await this.unitState(record);
     const invocation = state.InvocationID;
     if (record.invocation && invocation && invocation !== record.invocation)
@@ -355,19 +403,28 @@ export class PreviewAdapter {
       record.invocation = invocation;
       await save(path, record);
     }
+    return state;
+  }
+
+  private async observe(record: Intent, path: string, withLogs = true) {
+    const state = await this.current(record, path);
     let ready = false;
     let detail =
       "No owned loopback listener at the selected port. Inspect logs; stop this instance before retrying.";
     if (await ownedBinding(record, state)) {
       try {
-        const status = await httpStatus(record.port, record.spec.readyPath);
+        const hostname = new URL(record.spec.origin).hostname;
+        const host = `${hostname}:${record.port}`;
+        const status = await httpStatus(record.port, record.spec.readyPath, host);
         const after = await this.unitState(record);
         ready =
           status >= 200 &&
           status < 400 &&
           after.InvocationID === state.InvocationID &&
           (await ownedBinding(record, after));
-        detail = `Local GET ${record.spec.readyPath}: HTTP ${status}`;
+        detail = `Local GET ${record.spec.readyPath} with Host ${host}: HTTP ${status}`;
+        if (status === 403 || status === 421)
+          detail += `. The app may reject the preview hostname; allow ${hostname} in its host check (Vite: env __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS).`;
       } catch (error) {
         detail = `Local readiness: ${message(error)}`;
       }
@@ -382,7 +439,7 @@ export class PreviewAdapter {
       url: ready ? `${record.spec.origin}:${record.port}/` : null,
       externalAccess: "unverified",
       observedAt: Date.now() / 1000,
-      logs: await this.logs(record),
+      logs: withLogs ? await this.logs(record) : "",
     };
   }
 
@@ -397,6 +454,38 @@ export class PreviewAdapter {
     } finally {
       await close(mutex);
     }
+  }
+
+  /** Stops exactly this record's unit, or clears the record when the unit is gone. */
+  private async stop(record: Intent, path: string, serviceId: string) {
+    const before = await this.current(record, path);
+    if (before.LoadState === "not-found") {
+      // Gone after reboot or a failed submission: nothing to stop. An intent never seen running
+      // may still have an orphaned systemd-run submitting it, so it waits out a grace period.
+      if (!record.invocation && Date.now() / 1000 - record.createdAt < SUBMISSION_GRACE_SECONDS)
+        throw new Error(
+          `Unit not loaded yet; its submission may still be in flight. Re-observe after ${SUBMISSION_GRACE_SECONDS} seconds.`,
+        );
+      await unlink(path);
+      return {
+        serviceId,
+        instanceId: record.instanceId,
+        status: "cleared",
+        stopped: false,
+        cleared: true,
+        detail: "Unit no longer loaded; nothing was running. Saved launch cleared.",
+      };
+    }
+    await this.run(["systemctl", "--user", "stop", record.unit], 15000);
+    const state = await this.unitState(record);
+    if (!["inactive", "failed"].includes(state.ActiveState))
+      throw new Error(
+        "Stop has not completed; retain identity and re-observe before another launch.",
+      );
+    if (state.ActiveState === "failed")
+      await this.run(["systemctl", "--user", "reset-failed", record.unit]);
+    await unlink(path);
+    return { serviceId, instanceId: record.instanceId, status: "stopped", stopped: true };
   }
 
   private async handle(request: PreviewRequest, root: string, config: PreviewConfig) {
@@ -417,26 +506,39 @@ export class PreviewAdapter {
         throw new Error("stop requires the exact instanceId returned by start/status");
       if (!record || request.instanceId !== record.instanceId)
         return { serviceId, status: "not-current", stopped: false };
-      await this.observe(record, path);
-      await this.run(["systemctl", "--user", "stop", record.unit], 15000);
-      const state = await this.unitState(record);
-      if (!["inactive", "failed"].includes(state.ActiveState))
-        throw new Error(
-          "Stop has not completed; retain identity and re-observe before another launch.",
-        );
-      if (state.ActiveState === "failed")
-        await this.run(["systemctl", "--user", "reset-failed", record.unit]);
-      await unlink(path);
-      return { serviceId, instanceId: record.instanceId, status: "stopped", stopped: true };
+      return this.stop(record, path, serviceId);
     }
     if (request.action !== "start") throw new Error("action must be start, status or stop");
-    const spec = launchSpec(request, config);
+    // Without a command, a start means "the launch this workspace already has".
+    const requested =
+      record && request.command === undefined
+        ? {
+            ...request,
+            command: record.spec.command,
+            env: request.env ?? record.spec.env,
+            readyPath: request.readyPath ?? record.spec.readyPath,
+          }
+        : request;
+    if (request.replace !== undefined) {
+      if (!record || request.replace !== record.instanceId)
+        return { serviceId, status: "not-current", replaced: false };
+    } else if (record) {
+      // Reuse never depends on the caller restating the launch exactly; a difference is reported.
+      const result = await this.observe(record, path);
+      if (isDeepStrictEqual(record.spec, await launchSpec(requested, config)))
+        return { ...result, reused: true };
+      return {
+        ...result,
+        reused: true,
+        specChanged: true,
+        detail: `${result.detail} Kept the running launch, which differs from this request. To switch, start again with replace: "${record.instanceId}".`,
+      };
+    }
+    const spec = await launchSpec(requested, config);
+    let replaced: string | undefined;
     if (record) {
-      if (!isDeepStrictEqual(record.spec, spec))
-        throw new Error(
-          `Launch spec changed. Explicitly stop instance ${record.instanceId} before replacement.`,
-        );
-      return { ...(await this.observe(record, path)), reused: true };
+      const stopped = await this.stop(record, path, serviceId);
+      replaced = stopped.instanceId;
     }
     const timeout = request.timeoutSeconds ?? 15;
     if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 1 || timeout > 30)
@@ -486,17 +588,24 @@ export class PreviewAdapter {
         ...(await this.observe(record, path)),
         launchError: this.redact(message(error), record),
         reused: false,
+        ...(replaced && { replaced }),
       };
     }
     const deadline = performance.now() + timeout * 1000;
     for (;;) {
-      const result = await this.observe(record, path);
+      // Logs are read once, for the observation returned, not on every poll.
+      const result = await this.observe(record, path, false);
       if (
         result.ready ||
         ["failed", "inactive"].includes(result.state.ActiveState) ||
         performance.now() >= deadline
       )
-        return { ...result, reused: false };
+        return {
+          ...result,
+          logs: await this.logs(record),
+          reused: false,
+          ...(replaced && { replaced }),
+        };
       await delay(100);
     }
   }

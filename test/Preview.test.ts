@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,7 +34,11 @@ async function fixture(t: TestContext) {
   const launches: string[][] = [];
   const stops: string[][] = [];
   const host = {
-    state: { ActiveState: "failed", InvocationID: "original", ControlGroup: "/owned" },
+    state: {
+      ActiveState: "failed",
+      InvocationID: "original",
+      ControlGroup: "/owned",
+    } as Record<string, string>,
     journal: "failed command",
     unavailable: false,
     lostReply: false,
@@ -79,7 +84,10 @@ test("preview identity, reuse, changed spec and stale/repeated stop", linux, asy
   assert.equal(second.instanceId, first.instanceId);
   assert.ok("reused" in second && second.reused);
   assert.equal(f.launches.length, 1);
-  await assert.rejects(f.call({ command: ["/bin/true"] }), /Launch spec changed/);
+  const changed = observation(await f.call({ command: ["/bin/true"] }));
+  assert.equal(changed.instanceId, first.instanceId);
+  assert.ok("specChanged" in changed && changed.specChanged);
+  assert.equal(f.launches.length, 1);
   assert.equal(stopped(await f.call({ action: "stop", instanceId: "stale" })), false);
   assert.equal(f.stops.length, 0);
   assert.equal(stopped(await f.call({ action: "stop", instanceId: first.instanceId })), true);
@@ -89,6 +97,130 @@ test("preview identity, reuse, changed spec and stale/repeated stop", linux, asy
   assert.notEqual(replacement.instanceId, first.instanceId);
   assert.equal(stopped(await f.call({ action: "stop", instanceId: first.instanceId })), false);
   assert.equal(f.stops.length, 1);
+});
+
+test("start without a command returns the workspace's app unchanged", linux, async (t) => {
+  const f = await fixture(t);
+  const first = observation(await f.call({ env: { MODE: "dev" }, readyPath: "/health" }));
+  const again = observation(await f.call({ command: undefined }));
+  assert.equal(again.instanceId, first.instanceId);
+  assert.ok(!("specChanged" in again));
+  assert.equal(f.launches.length, 1);
+});
+
+test("replace stops only the exact current instance and launches once", linux, async (t) => {
+  const f = await fixture(t);
+  const first = observation(await f.call());
+  assert.deepEqual(await f.call({ command: ["/bin/true"], replace: "stale" }), {
+    serviceId: first.serviceId,
+    status: "not-current",
+    replaced: false,
+  });
+  assert.equal(f.stops.length, 0);
+  assert.equal(f.launches.length, 1);
+  const second = observation(await f.call({ command: ["/bin/true"], replace: first.instanceId }));
+  assert.notEqual(second.instanceId, first.instanceId);
+  assert.ok("replaced" in second && second.replaced === first.instanceId);
+  assert.deepEqual(second.spec.command, ["/bin/true"]);
+  assert.equal(f.stops.length, 1);
+  assert.equal(f.launches.length, 2);
+  // Without a command, replace restarts the same launch.
+  const third = observation(await f.call({ command: undefined, replace: second.instanceId }));
+  assert.notEqual(third.instanceId, second.instanceId);
+  assert.deepEqual(third.spec.command, ["/bin/true"]);
+  assert.equal(f.launches.length, 3);
+  const status = observation(await f.call({ action: "status" }));
+  assert.equal(status.instanceId, third.instanceId);
+});
+
+test(
+  "a bare executable resolves on the app's PATH; an unknown one launches nothing",
+  linux,
+  async (t) => {
+    const f = await fixture(t);
+    f.config.path = "/usr/bin:/bin";
+    await assert.rejects(
+      f.call({ command: ["no-such-preview-executable"] }),
+      /not an executable on the app's PATH/,
+    );
+    assert.equal(f.launches.length, 0);
+    assert.deepEqual(await readdir(f.stateRoot), []);
+    const first = observation(await f.call({ command: ["true"] }));
+    assert.equal(first.spec.command[0], "/usr/bin/true");
+    assert.ok(f.launches[0].includes("/usr/bin/true"));
+    const again = observation(await f.call({ command: ["true"] }));
+    assert.equal(again.instanceId, first.instanceId);
+    assert.ok(!("specChanged" in again));
+  },
+);
+
+test("readiness requires the app to answer the preview hostname", linux, async (t) => {
+  const f = await fixture(t);
+  let allowed = false;
+  const server = createHttpServer((request, response) => {
+    response.statusCode = allowed && request.headers.host?.startsWith("test.exe.xyz:") ? 200 : 403;
+    response.end();
+  });
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const first = observation(await f.call());
+  const path = join(f.stateRoot, `${first.serviceId}.json`);
+  const record = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(path, JSON.stringify({ ...record, port: address.port }));
+  const ownGroup = (await readFile("/proc/self/cgroup", "utf8")).trim().split("::").at(-1);
+  f.host.state = { ActiveState: "active", InvocationID: "original", ControlGroup: ownGroup ?? "" };
+  const rejected = observation(await f.call({ action: "status" }));
+  assert.equal(rejected.ready, false);
+  assert.equal(rejected.url, null);
+  assert.match(rejected.detail, /HTTP 403.*allow test\.exe\.xyz/);
+  allowed = true;
+  const accepted = observation(await f.call({ action: "status" }));
+  assert.equal(accepted.ready, true);
+  assert.equal(accepted.url, `https://test.exe.xyz:${address.port}/`);
+});
+
+test(
+  "stop clears a preview whose unit is gone, so the workspace can launch again",
+  linux,
+  async (t) => {
+    const f = await fixture(t);
+    const first = observation(await f.call());
+    f.host.state = { LoadState: "not-found", ActiveState: "inactive", InvocationID: "" };
+    const cleared = await f.call({ action: "stop", instanceId: first.instanceId });
+    assert.equal(stopped(cleared), false);
+    assert.ok("cleared" in cleared && cleared.cleared);
+    assert.equal(f.stops.length, 0);
+    assert.deepEqual(await f.call({ action: "status" }), {
+      serviceId: first.serviceId,
+      workspace: first.workspace,
+      status: "absent",
+    });
+    const replacement = observation(await f.call({ command: ["/bin/true"] }));
+    assert.notEqual(replacement.instanceId, first.instanceId);
+    assert.equal(f.launches.length, 2);
+  },
+);
+
+test("stop keeps a never-seen launch until its submission can no longer land", linux, async (t) => {
+  const f = await fixture(t);
+  f.host.state = { LoadState: "not-found", ActiveState: "inactive", InvocationID: "" };
+  f.host.lostReply = true;
+  const first = observation(await f.call());
+  f.host.lostReply = false;
+  await assert.rejects(
+    f.call({ action: "stop", instanceId: first.instanceId }),
+    /submission may still be in flight/,
+  );
+  assert.equal(observation(await f.call({ action: "status" })).instanceId, first.instanceId);
+  const path = join(f.stateRoot, `${first.serviceId}.json`);
+  const record = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(path, JSON.stringify({ ...record, createdAt: record.createdAt - 121 }));
+  const cleared = await f.call({ action: "stop", instanceId: first.instanceId });
+  assert.ok("cleared" in cleared && cleared.cleared);
+  assert.equal(f.stops.length, 0);
 });
 
 test("preview uncertain submission reconciles without replay", linux, async (t) => {

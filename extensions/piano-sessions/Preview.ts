@@ -22,7 +22,10 @@ export function previewRequest(request: unknown, signal?: AbortSignal): Promise<
     );
     let output = "";
     let error = "";
-    child.stdout.on("data", (data) => {
+    // Decode across chunk boundaries, so a multi-byte character in app logs stays intact.
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (data: string) => {
       if (output.length + data.length > 32_768) {
         child.kill();
         reject(new Error("Preview output exceeded 32 KiB. Read status before another start."));
@@ -52,11 +55,12 @@ export function registerPreview(pi: ExtensionAPI) {
       label: "Piano preview",
       promptSnippet: "Start, inspect or explicitly stop a managed app in this session's workspace",
       promptGuidelines: [
-        "When asked to run an app for the user, inspect repository scripts/instructions and use piano_preview. It fixes cwd to this session's workspace. Use an absolute executable and strict 127.0.0.1 binding with {port} in argv or injected PORT; no silent port fallback. Pass only required app environment, never Piano credentials.",
-        "Report observed local readiness and a Markdown preview link; authenticated external browser access and hot reload are separate checks. Keep the app running after your reply. On interruption or uncertain completion read status before starting again. Changed launch configuration requires user-authorized stop of the exact instanceId before replacement. If the supervisor/configuration is unavailable, report the limitation; do not fall back to an unowned process.",
+        "When asked to run an app for the user, inspect repository scripts/instructions and use piano_preview. It fixes cwd to this session's workspace. command[0] may be a bare name such as node or npx. Use strict 127.0.0.1 binding with {port} in argv or injected PORT; no silent port fallback. Pass only required app environment, never Piano credentials.",
+        "If the workspace already has an app, start without command returns it. To run a different command or restart, pass replace with the exact current instanceId, only when the user asked for a restart or a change, or the current instance failed or never became ready.",
+        "Report observed local readiness and a Markdown preview link; authenticated external browser access and hot reload are separate checks. A 403 at readiness usually means the framework rejects the preview hostname. Keep the app running after your reply. On interruption or uncertain completion read status before starting again. If the supervisor/configuration is unavailable, report the limitation; do not fall back to an unowned process.",
       ],
       description:
-        "One managed app per canonical workspace, owned outside Pi/Piano by Linux user systemd. start chooses a supported free port and waits up to timeoutSeconds for an owned loopback HTTP listener; identical starts reuse, changed specifications refuse replacement. command is argv (no shell interpretation), with {port} substitution; PORT is injected. status reconciles saved intent and returns bounded startup logs, identities, cwd, selected port, local readiness and a URL from deployment configuration. stop requires the exact instanceId from start/status and explicit user authorization. Abort ends observation, not the app. Requires configured private exe.dev origin and a lingering user manager; see docs/live-previews.md.",
+        "One managed app per canonical workspace, owned outside Pi/Piano by Linux user systemd. start chooses a supported free port and waits up to timeoutSeconds for an owned loopback HTTP listener that answers the preview hostname. When an app exists, start returns it (specChanged if the request differs) and launches nothing; replace with its exact instanceId stops it and launches this request, or the same launch when command is omitted. command is argv (no shell interpretation), with {port} substitution; PORT is injected; a bare command[0] resolves on the app's PATH. status reconciles saved intent and returns bounded startup logs, identities, cwd, selected port, local readiness and a URL from deployment configuration. stop requires the exact instanceId from start/status and explicit user authorization. Abort ends observation, not the app. Requires configured private exe.dev origin and a lingering user manager; see docs/live-previews.md.",
       parameters: Type.Object({
         action: Type.Union([Type.Literal("start"), Type.Literal("status"), Type.Literal("stop")]),
         command: Type.Optional(Type.Array(Type.String(), { minItems: 1 })),
@@ -64,6 +68,7 @@ export function registerPreview(pi: ExtensionAPI) {
         readyPath: Type.Optional(Type.String()),
         timeoutSeconds: Type.Optional(Type.Number({ minimum: 1, maximum: 30 })),
         instanceId: Type.Optional(Type.String()),
+        replace: Type.Optional(Type.String()),
       }),
       async execute(_id, params, signal, _update, ctx) {
         const text = await previewRequest({ ...params, workspace: ctx.cwd }, signal);

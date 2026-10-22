@@ -41,14 +41,15 @@ the agent silently does. Source changes alone do not configure or restart a depl
 ## Agent recipe and CLI
 
 1. Inspect the repository instructions and scripts. Choose a foreground command with strict
-   `127.0.0.1` binding and no silent port fallback. Use an absolute executable; arguments are an
-   array, not a shell command. `{port}` in each argument is replaced with the selected port; `PORT`
-   is also injected. A Vite example (substitute the installation's absolute paths):
+   `127.0.0.1` binding and no silent port fallback. Arguments are an array, not a shell command.
+   `command[0]` is an absolute path or a bare name, which the helper resolves on the app's `PATH`
+   (the configured `path`) and saves as an absolute path. `{port}` in each argument is replaced
+   with the selected port; `PORT` is also injected. A Vite example:
 
    ```json
    {
      "action": "start",
-     "command": ["/home/exedev/node/bin/node", "/path/to/node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "{port}", "--strictPort"],
+     "command": ["node", "node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "{port}", "--strictPort"],
      "env": {"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": "<vm>.exe.xyz"},
      "readyPath": "/",
      "timeoutSeconds": 15
@@ -64,27 +65,38 @@ the agent silently does. Source changes alone do not configure or restart a depl
    omitted from observations; commands and app logs are not a secret-storage interface.
 2. Check `ready`, `detail`, `state`, and bounded `logs`, not merely helper exit status. Startup waits
    1–30 seconds for an owned listener and a 2xx/3xx GET at `readyPath`, without following redirects.
+   The GET sends the Host a browser sends through the preview URL (`<vm>.exe.xyz:<port>`), so an app
+   whose host check rejects the preview hostname is reported unready (usually HTTP 403), not as a
+   working link.
    Missing executables, bind failures, wrong ports and readiness failures retain their exact identity
    and logs. A listener not owned by this unit never establishes readiness. No automatic retry on a
-   different port: fix the command and deliberately replace the instance.
+   different port: fix the command and replace the instance (step 4).
 3. Report the canonical workspace, port, local observation and Markdown `url` when ready. Say that
    authenticated browser load is unverified until actually observed. Check dev-server hot reload
    independently: edit a page and watch it update **without manual reload**. Framework host checking,
    WebSocket proxying, authentication and application-specific HMR may require configuration.
-4. After lost/aborted tool output, call `{"action":"status"}`. Repeated matching starts return the
-   original instance, even if unhealthy; they never silently replace it. Changed argv, environment,
-   readiness path, origin or PATH refuses reuse. Source edits intentionally do not replace a dev
-   server; it owns watching them. A changed build/config file which needs restart requires explicit
-   stop/start even if argv is unchanged.
+4. After lost/aborted tool output, call `{"action":"status"}`. When the workspace already has an
+   app, `start` returns it, even if unhealthy, and launches nothing. `command` may be omitted;
+   if it is given and differs in argv, environment, readiness path, origin or PATH, the result has
+   `specChanged: true` and the running app is kept. To switch, call
+   `{"action":"start","replace":"<exact current instanceId>", ...}`: it stops that instance and
+   launches the request in one call, or the same launch again when `command` is omitted (a restart).
+   A stale ID returns `not-current` and launches nothing. The agent replaces only when the user asked
+   for a restart or a change, or the current instance failed or never became ready. Source edits
+   intentionally do not need a restart; the dev server watches them. A changed build/config file
+   which needs restart needs `replace` even if argv is unchanged.
 5. On user-authorized cleanup call `{"action":"stop","instanceId":"<exact returned ID>"}`.
    CLI requests also include the workspace. A stale ID returns `not-current` and cannot stop a
    replacement. Never kill by PID or port. `stop` kills only the unit's cgroup (TERM then KILL after
    five seconds); it does not stop other previews or Piano.
 
 A deadline/abort can interrupt observation or submission. Intent is written before submission, so
-another start reconciles it instead of replaying it. If the unit never appeared, status remains
-unready and stop may report “unit not loaded”; retain this evidence and ask the host operator to
-reconcile the missing unit before removing that intent. Do not delete state to force a retry.
+another start reconciles it instead of replaying it. If the unit is gone (a host reboot, or a
+submission that never produced it), status remains unready and stop returns `cleared`: nothing was
+running, and the saved launch is removed so the workspace can start again. A launch never seen
+running is kept for 120 seconds after creation, in case an interrupted submission still lands.
+Do not delete state by hand to force a retry, and stop previews with this helper, not
+`systemctl --user stop`.
 
 ## Ownership decision (PIN-94)
 
