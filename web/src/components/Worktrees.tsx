@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { folderFor } from "@/lib/sessionContext";
+import { folderFor } from "@/lib/sessionCatalog";
 import {
   type WorktreeOperation,
   type WorktreeOperationState,

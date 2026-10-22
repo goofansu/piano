@@ -18,13 +18,10 @@ import { directoryTrust } from "./directoryTrust.ts";
 import { abbrevHome } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
-import { folderFor, sessionLocator } from "./sessionCatalog.ts";
+import { folderFor, sessionDirectories } from "./sessionCatalog.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
 type SessionRef = { cwd: string; sessionId: string };
-
-// Where a session runs is the catalog's to decide; the folder lookup is re-exported for its callers.
-export { folderFor };
 
 /** What the New session directory picker's trigger names. */
 export type DirectoryTrigger =
@@ -228,8 +225,9 @@ export function sessionContext(state: AppState): SessionContext {
   // Before the session exists, a first message is on its way in the directory it starts in.
   const cwd = session?.cwd ?? state.pendingCreate?.cwd;
   const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
-  const location = sessionLocator(state)(cwd, ref && sessionReference(state, ref));
-  const { folder, checkout } = location;
+  const reference = ref && sessionReference(state, ref);
+  const directory = sessionDirectories(state)(cwd);
+  const { folder, checkout } = directory;
   const workspace = workspaceFor(state, session?.cwd);
   const checkoutMissing = !!session?.state.checkoutMissing;
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
@@ -238,13 +236,13 @@ export function sessionContext(state: AppState): SessionContext {
     cwd,
     folder,
     checkout,
-    folderName: location.folderName,
-    worktreeName: location.worktreeName,
-    branch: location.branch,
+    folderName: directory.folderName,
+    worktreeName: directory.worktreeName,
+    branch: reference?.branch ?? undefined,
     // Pi's live name outranks the registry's saved title.
-    title: session?.state.sessionName || location.title || "Untitled",
+    title: session?.state.sessionName || reference?.title || "Untitled",
     sessionId: session?.sessionId ?? undefined,
-    project: location.project,
+    project: findProject(state, reference?.projectId),
     workspace,
     changesWorkspace,
     canOpenChanges: !!changesWorkspace && !checkoutMissing,
