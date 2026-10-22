@@ -69,7 +69,7 @@ variable, the origin policy, and backup steps, see
 
 ## Develop
 
-1. Install dependencies and Python 3 (used by preview contract tests). `npm install` also installs
+1. Install dependencies. `npm install` also installs
    the pre-commit hook that runs lint.
 2. Start the backend and the UI together:
 

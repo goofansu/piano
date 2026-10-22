@@ -8,7 +8,7 @@ No service manifest, skill collection, framework or header control is required.
 
 ## Host configuration
 
-Prerequisites: Linux unified cgroups, Python 3 standard library, systemd 255+ (`systemd-run`,
+Prerequisites: Node 24, Linux unified cgroups, systemd 255+ (`systemd-run`,
 `systemctl`, `journalctl`), `loginctl`, and an already running **lingering user manager** for the
 unprivileged Piano account. The helper refuses unsupported supervision rather than falling back to
 `nohup`, shell backgrounding, or a process whose lifetime belongs to Pi.
@@ -55,7 +55,7 @@ the agent silently does. Source changes alone do not configure or restart a depl
    ```
 
    The tool supplies `workspace` from `ctx.cwd`; the model cannot substitute another workspace.
-   CLI users pass the same JSON plus `workspace` on stdin to `python3 /path/to/piano/scripts/preview.py`.
+   CLI users pass the same JSON plus `workspace` on stdin to `node /path/to/piano/scripts/preview.ts`.
    The CLI is also a recovery path when the conversation is gone. The executable gets only `PATH`,
    `PORT` and explicitly requested `env`. Add `HOME` only if the application needs it. Never forward
    Piano's environment or credentials. Explicit app environment values are stored privately, but
@@ -86,10 +86,11 @@ reconcile the missing unit before removing that intent. Do not delete state to f
 
 ## Ownership decision (PIN-94)
 
-The helper is a short-lived Python adapter because Linux `flock`, `/proc` socket ownership and
-bounded subprocess calls are available in its standard library. It has no process daemon, database,
-package dependency, model call, or competing transcript store. The TypeScript Pi extension supplies
-session cwd and calls that adapter; the existing PiSessions protocol seam is unchanged.
+The helper is a short-lived TypeScript adapter using Node 24 built-ins for `/proc` socket ownership,
+bounded subprocess calls and serialization. It has no process daemon, database, new package
+dependency, model call, or competing transcript store. The TypeScript Pi extension supplies session
+cwd and calls it with the same Node executable; the PiSessions protocol seam is unchanged.
+Non-Linux hosts report managed previews as unsupported without affecting the rest of Piano.
 
 On yejun-dev, the live `piano.service` runs as uid 1000 in `/system.slice/piano.service` with
 `KillMode=control-group`. Its actual environment has no XDG runtime or D-Bus address. A read-only
@@ -102,9 +103,13 @@ that account's runtime bus; it does not require an interactive shell's environme
 - `serviceId`: stable hash of the canonical directory, reusable by slice 2.
 - `instanceId`: random UUID for one launch intent; part of its unique systemd unit name, never reused.
 - `invocation`: systemd's observed invocation ID. An unexpected replacement refuses adoption/stop.
-- `workspace`, `spec`, `port`, `createdAt`: retained before submission, with an account-wide flock
-  for allocation/start/reuse/stop. State replacement is atomic and fsynced. Abandoned intent holds its
-  port until explicit reconciliation; it is safer to refuse than duplicate an uncertain launch.
+- `workspace`, `spec`, `port`, `createdAt`: retained before submission, with an account-wide kernel lock
+  for allocation/start/reuse/stop. Exclusive binding of a Linux abstract Unix socket keyed by UID
+  and canonical state directory serializes helpers. The kernel releases it on exit, including
+  SIGKILL: no stale file, PID reuse or concurrent stale-owner deletion race. No client connects
+  to the socket, and it does not own the app. Do not mix old and new helper versions during upgrade.
+  State replacement is atomic and fsynced. Abandoned intent holds its port until explicit
+  reconciliation; it is safer to refuse than duplicate an uncertain launch.
 - systemd owns execution: `Restart=no`, `KillMode=control-group`, no idle expiry or browser lifetime.
   `RemainAfterExit` retains normally exited units until explicit stop. Logs go to journald with rate
   limiting; observations return only the last 30 entries / 6000 characters.

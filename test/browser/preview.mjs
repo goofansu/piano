@@ -45,7 +45,7 @@ let repo;
 const env = { PIANO_PREVIEW_CONFIG: config, PIANO_PREVIEW_STATE: state };
 const request = (args) =>
   JSON.parse(
-    execFileSync("python3", [join(ROOT, "scripts/preview.py")], {
+    execFileSync(process.execPath, [join(ROOT, "scripts/preview.ts")], {
       env: { PATH: "/usr/bin:/bin", ...env },
       input: JSON.stringify({ ...args, workspace: repo }),
       encoding: "utf8",

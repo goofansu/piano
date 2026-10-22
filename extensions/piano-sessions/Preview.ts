@@ -7,8 +7,8 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 export function previewRequest(request: unknown, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(
-      "/usr/bin/python3",
-      [fileURLToPath(new URL("../../scripts/preview.py", import.meta.url))],
+      process.execPath,
+      [fileURLToPath(new URL("../../scripts/preview.ts", import.meta.url))],
       {
         env: {
           HOME: process.env.HOME,
