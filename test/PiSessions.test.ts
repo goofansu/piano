@@ -317,6 +317,21 @@ for (const sessionId of ["startup-read-failure", "startup-churn", "startup-read-
   });
 }
 
+test("a submission names the caller's input, for a steer as for a prompt", async () => {
+  await run(
+    Effect.gen(function* () {
+      const sessions = yield* PiSessions;
+      const t = yield* sessions.open({ cwd: process.cwd(), sessionId: "input-ids" });
+      yield* t.act({ _tag: "prompt", text: "handled queue", inputId: "prompted" });
+      assert.equal((yield* t.state).submission?.inputId, "prompted");
+      yield* t.act({ _tag: "steer", text: "handled queue", inputId: "steered" });
+      const submission = (yield* t.state).submission;
+      assert.equal(submission?.outcome, "handled");
+      assert.equal(submission?.inputId, "steered");
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
+
 test("snapshot first, then a streamed turn", async () => {
   const seen = await run(
     Effect.gen(function* () {

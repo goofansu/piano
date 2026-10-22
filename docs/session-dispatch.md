@@ -31,6 +31,10 @@ node scripts/dispatch-session.ts /tmp/piano-brief.txt "$HOME/work/my-repo" --wor
 # Read a session's status by its ID, or the status of every active session in a project.
 node scripts/dispatch-session.ts status 0b6f…-session-id
 node scripts/dispatch-session.ts list --project my-project-id
+
+# Send a session a follow-up, or steer its current run.
+node scripts/dispatch-session.ts follow-up 0b6f…-session-id /tmp/piano-change.txt
+node scripts/dispatch-session.ts follow-up 0b6f…-session-id /tmp/piano-change.txt --steer
 ```
 
 The two examples are alternatives: running both starts two sessions. The prompt argument is a
@@ -224,6 +228,33 @@ never starts Pi and stores nothing.
 An unknown session or project is an error (exit code `2` from the script, a failed tool call in a
 session). After a restart a session reads `unknown`, or `settled` when its saved history ends with
 a finished reply; it never reads `running` from history.
+
+## Follow-up to a session
+
+`node scripts/dispatch-session.ts follow-up <sessionId> <prompt-file>` sends the file's text to a
+session Piano lists, as a person's message from its composer: while Pi is working it waits until the
+current run finishes, and on an idle session it starts a new run. Add `--steer` to deliver it at Pi's
+next tool boundary instead, redirecting the current run. A stopped session is started first with its
+own model and effort, as continuing it in Piano does. The script prints one JSON object:
+
+```json
+{
+  "sessionId": "0b6f…",
+  "delivery": "follow-up",
+  "submission": "queued",
+  "link": "http://127.0.0.1:7070/s/0b6f…"
+}
+```
+
+`submission` is Pi's handling of the message: `started` (it began a run), `queued` (it waits behind
+the current run, or for the next tool boundary when steering), `handled` (a command Pi handled
+without a run) or `rejected`, with the reason in `detail`. `not_sent` means Piano never received the
+message. `uncertain` means it may have reached Pi (a lost connection, a failure Piano reported
+without Pi's verdict, or no answer within 30 seconds). The script never sends a message twice: after
+`uncertain`, read the session's [status](#status-by-session-id) and its transcript before deciding
+to send again. Accepted is not done; read the status for what the session did with it.
+
+An unknown session or a blank prompt file is invalid input (exit code `2`), and nothing is sent.
 
 ## Connection failures
 

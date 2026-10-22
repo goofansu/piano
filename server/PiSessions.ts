@@ -513,7 +513,7 @@ const openSession = (spec: PiSessionSpec) =>
                     inputFingerprint: proof,
                     outcome,
                     detail,
-                    inputId: action._tag === "prompt" ? action.inputId : undefined,
+                    inputId: action.inputId,
                   },
                 },
               ]);

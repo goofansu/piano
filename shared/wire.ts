@@ -504,7 +504,11 @@ export const SessionAction = Schema.Union([
     attachments: attachmentInput,
     inputId: Schema.optional(Schema.String),
   }),
-  Schema.TaggedStruct("steer", { text: Schema.String, attachments: attachmentInput }),
+  Schema.TaggedStruct("steer", {
+    text: Schema.String,
+    attachments: attachmentInput,
+    inputId: Schema.optional(Schema.String),
+  }),
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("stop", {}),
   Schema.TaggedStruct("restore_queue", {}),

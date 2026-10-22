@@ -10,6 +10,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import {
   type SessionHandle,
+  sendFollowUp,
   startSession,
   waitSessions,
 } from "../extensions/piano-sessions/SessionDispatch.ts";
@@ -1407,5 +1408,161 @@ test(
     assert.ok(results.every((r) => r.ending === "observed"));
     assert.equal(h.sentOf("act").length, 0);
     assert.equal(h.pendingTimers(), 0);
+  },
+);
+
+// ── Following up ────────────────────────────────────────────────────────────
+
+const running = () =>
+  snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started", inputId: "earlier" } });
+
+for (const [delivery, action] of [
+  ["follow-up", "prompt"],
+  ["steer", "steer"],
+] as const) {
+  test(
+    `a ${delivery} is sent once on the session's selection and reports Pi's handling`,
+    bounded,
+    async () => {
+      const h = world();
+      const sent = sendFollowUp({ cwd, sessionId, text: "change of plan", delivery }, h.env);
+      h.last().accept();
+      const socket = h.last();
+      const selection = socket.selection();
+      assert.deepEqual(h.sentOf("select")[0], {
+        _tag: "select",
+        selectionId: selection,
+        cwd,
+        sessionId,
+      });
+      assert.equal(h.sentOf("act").length, 0, "nothing is sent before Piano opens the session");
+      socket.frame(selected(selection, running()));
+      const acts = h.sentOf("act");
+      assert.equal(acts.length, 1);
+      assert.equal(acts[0]!.selectionId, selection, "the act reuses the selection's claim");
+      assert.equal(acts[0]!.action._tag, action);
+      assert.ok(acts[0]!.action._tag === "prompt" || acts[0]!.action._tag === "steer");
+      assert.equal(acts[0]!.action.text, "change of plan");
+      assert.deepEqual(acts[0]!.start, {}, "a stopped session is started, as the composer does");
+      socket.frame(
+        frameOf(selection, { _tag: "submission", submission: { id: 2, outcome: "submitting" } }),
+      );
+      socket.frame(
+        frameOf(
+          selection,
+          { _tag: "submission", submission: { id: 2, outcome: "queued" } },
+          { sequence: 3 },
+        ),
+      );
+      assert.deepEqual(await sent, { sessionId, delivery, submission: "queued" });
+      assert.ok(socket.isClosed());
+      assert.equal(h.pendingTimers(), 0);
+    },
+  );
+}
+
+test("a follow-up never adopts another input's submission", bounded, async () => {
+  const h = world();
+  const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+  h.last().accept();
+  const socket = h.last();
+  socket.frame(selected(socket.selection(), running()));
+  socket.frame(
+    frameOf(socket.selection(), {
+      _tag: "submission",
+      submission: { id: 2, outcome: "started", inputId: "someone-else" },
+    }),
+  );
+  h.advance(30_000);
+  const result = await sent;
+  assert.equal(result.submission, "uncertain");
+  assert.match(result.detail ?? "", /status before sending again/);
+});
+
+test(
+  "a follow-up re-selects after a loss before sending, and never resends after",
+  bounded,
+  async () => {
+    const h = world();
+    const early = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+    h.last().accept();
+    h.last().serverClose(1006);
+    h.advance(2_000);
+    const second = h.last();
+    second.accept();
+    second.frame(selected(second.selection(), running()));
+    second.frame(
+      frameOf(second.selection(), { _tag: "submission", submission: { id: 2, outcome: "queued" } }),
+    );
+    assert.equal((await early).submission, "queued");
+    assert.equal(h.sentOf("act").length, 1);
+
+    const g = world();
+    const late = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, g.env);
+    g.last().accept();
+    const first = g.last();
+    first.frame(selected(first.selection(), running()));
+    first.serverClose(1006);
+    g.advance(2_000);
+    g.last().accept();
+    const result = await late;
+    assert.equal(result.submission, "uncertain");
+    assert.equal(g.sentOf("act").length, 1, "a message Pi may hold is never sent twice");
+    assert.equal(g.pendingTimers(), 0);
+  },
+);
+
+test("a refused selection sends nothing", bounded, async () => {
+  const h = world();
+  const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "steer" }, h.env);
+  h.last().accept();
+  const socket = h.last();
+  socket.frame({
+    _tag: "selection_rejected",
+    selectionId: socket.selection(),
+    message: "Client input capacity is full.",
+  });
+  assert.deepEqual(await sent, {
+    sessionId,
+    delivery: "steer",
+    submission: "not_sent",
+    detail: "Client input capacity is full.",
+  });
+  assert.equal(h.sentOf("act").length, 0);
+});
+
+test(
+  "a failed send reports Pi's own verdict when it follows, otherwise uncertain",
+  bounded,
+  async () => {
+    const h = world();
+    const rejected = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+    h.last().accept();
+    const socket = h.last();
+    socket.frame(selected(socket.selection(), running()));
+    socket.frame({ _tag: "error", selectionId: socket.selection(), message: "Pi refused it." });
+    socket.frame(
+      frameOf(socket.selection(), {
+        _tag: "submission",
+        submission: { id: 2, outcome: "rejected", detail: "Pi refused it." },
+      }),
+    );
+    assert.deepEqual(await rejected, {
+      sessionId,
+      delivery: "follow-up",
+      submission: "rejected",
+      detail: "Pi refused it.",
+    });
+
+    const g = world();
+    const unknown = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, g.env);
+    g.last().accept();
+    const other = g.last();
+    other.frame(selected(other.selection(), running()));
+    other.frame({ _tag: "error", selectionId: other.selection(), message: "Pi has stopped." });
+    await g.advanceAsync(1_000);
+    const result = await unknown;
+    assert.equal(result.submission, "uncertain");
+    assert.match(result.detail ?? "", /^Pi has stopped\. Read the session's status/);
   },
 );

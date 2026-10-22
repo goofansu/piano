@@ -151,6 +151,20 @@ export interface SessionStatus extends Omit<SessionStatusFacts, "needs"> {
   readonly needs: (NonNullable<SessionStatusFacts["needs"]> & { readonly link: string }) | null;
 }
 
+/** How a message reaches a session, as the composer offers it: `follow-up` waits for the current
+ * run to finish (or starts one when Pi is idle); `steer` is delivered at Pi's next tool boundary. */
+export type FollowUpDelivery = "follow-up" | "steer";
+
+/** A follow-up's result: Pi's handling of the message, in the start's submission words. `not_sent`
+ * means Piano never received it; `uncertain` means it may have reached Pi, so read the session's
+ * status before sending again. */
+export interface FollowUpResult {
+  readonly sessionId: string;
+  readonly delivery: FollowUpDelivery;
+  readonly submission: Exclude<SessionSubmission, "waiting_for_input">;
+  readonly detail?: string;
+}
+
 /** Pi's custom entry naming the session that dispatched this one; never part of model context. */
 export const DISPATCH_ENTRY = "piano.dispatch";
 /** Piano passes it when it creates a dispatched session, and only then. */
