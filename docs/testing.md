@@ -111,6 +111,17 @@ assert what a user sees and what Pi receives, not markup. Add a journey only for
 path; cover rules and edge cases with module tests. Earlier documents cite `test/browser-*.mjs`
 scripts as the evidence of their time; those scripts were removed for these two journeys.
 
+### Managed preview host journey
+
+`node test/browser/preview.mjs <evidence-directory>` is an opt-in Linux/systemd journey, separate
+from portable CI: it needs an existing lingering user manager, Python 3 and free ports 9400–9479.
+It uses the real installed Pi with a scripted loopback model (no credentials), scratch HOME/Pi
+history/database, and unique managed services. It checks prompt → tool → preview link, local browser
+load and HMR, then original-instance survival through settlement, abort, browser disconnect and a
+scratch Piano restart/Pi release, followed by exact-instance stop. Only its scratch services stop.
+Authenticated external exe.dev access is a separate manual observation; this journey does not grant
+access or change proxy configuration. See [managed previews](live-previews.md).
+
 ## Alignment
 
 Every transcript row is a gutter glyph beside its content (`Row` in `MessageList.tsx`). The glyph

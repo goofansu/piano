@@ -71,7 +71,7 @@ function history(sessions, { sessionId, cwd, messages }) {
  * `setup({ repository, history })` creates folders and Pi history and returns the registry seed.
  * `journey(page)` drives the browser; a thrown error fails the run after capturing the page.
  */
-export async function run(name, setup, journey) {
+export async function run(name, setup, journey, options = {}) {
   const evidence = resolve(process.argv[2] ?? join(ROOT, ".scratch/browser", name));
   mkdirSync(evidence, { recursive: true });
   const root = mkdtempSync(join(tmpdir(), `piano-${name}-`));
@@ -82,6 +82,7 @@ export async function run(name, setup, journey) {
   seedRegistry(
     database,
     await setup({
+      root,
       repository: (folder) => repository(root, folder),
       history: (session) => history(sessions, session),
     }),
@@ -97,10 +98,12 @@ export async function run(name, setup, journey) {
     PIANO_TEST_AUDIT: audit,
   };
   let log = "";
+  const relaunch = new WeakMap();
   const start = (args, options) => {
     const child = spawn(process.execPath, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
     child.stdout.on("data", (d) => (log += d));
     child.stderr.on("data", (d) => (log += d));
+    relaunch.set(child, () => start(args, options));
     return child;
   };
   const children = [
@@ -116,6 +119,7 @@ export async function run(name, setup, journey) {
         PIANO_PI_ARGS: "",
         PI_CODING_AGENT_DIR: join(root, "agent"),
         PI_CODING_AGENT_SESSION_DIR: sessions,
+        ...options.backendEnv,
       },
     }),
     start(
@@ -162,6 +166,21 @@ export async function run(name, setup, journey) {
   let mod;
   const page = {
     ab,
+    /** Restart only this harness's recorded backend; retain its isolated database and Pi history. */
+    restartBackend: async () => {
+      const previous = children[0];
+      const exited = new Promise((done) => previous.once("exit", done));
+      previous.kill("SIGTERM");
+      await exited;
+      children[0] = relaunch.get(previous)();
+      for (let attempt = 0; ; attempt++) {
+        try {
+          if ((await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok) break;
+        } catch {}
+        assert.ok(attempt < 300, `scratch Piano did not restart:\n${log}`);
+        await delay(100);
+      }
+    },
     open: (path) => ab("open", `${web}${path}`),
     evaluate: async (js) => JSON.parse(await ab("eval", js)),
     /** Click the control a user would: by its role and accessible name. */

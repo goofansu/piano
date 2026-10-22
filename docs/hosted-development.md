@@ -158,6 +158,14 @@ ssh exe.dev share port yejun-dev 8000
 This is trusted-developer hosting, not general remote-product security compliance.
 The proxy port remains 8000; the public URL does not change.
 
+## Managed app previews
+
+For session-launched apps, use the [managed live-preview helper](live-previews.md): it owns apps
+through the existing lingering systemd user manager, outside Piano's service cgroup. Configure its
+explicit private exe.dev origin and reserved ports before use. It does not modify the primary proxy
+route or sharing, and local readiness is separate from authenticated browser access. Setup and
+restart remain user-authorized deployment actions.
+
 ## Origin configuration
 
 `PIANO_ALLOWED_ORIGINS` names the browser-facing origins explicitly. The production unit contains

@@ -23,6 +23,8 @@ Projects from Repositories while existing directory-based `project` fields retai
 
 Use the [domain glossary](glossary.md) to distinguish sessions, tasks, evidence and verification.
 [Local file previews](file-previews.md) describes supported formats, limits and disposable workspace-scoped ownership.
+[Managed live previews](live-previews.md) describes session-launched apps, independent supervisor
+ownership, private exe.dev configuration, and exact-instance status/stop.
 [Configuration and storage](configuration.md), [provider sign-in](provider-sign-in.md) and
 [development checks and policy](development.md) hold the detail the root README links to.
 Contributor skill preferences are optional; see the development handoff.

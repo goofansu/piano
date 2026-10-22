@@ -46,6 +46,12 @@ Click a local file link in a session to read it beside the conversation. Markdow
 saves the file as it is on disk. Click the link again to reread. See
 [supported formats, limits and privacy](docs/file-previews.md).
 
+### Run an app preview
+
+On a configured private exe.dev host, ask **“Run this app so I can try it.”** The agent launches
+an app in the session's workspace and returns a preview link. It keeps running after the reply;
+ask the agent to stop the exact instance when finished. See [setup and limits](docs/live-previews.md).
+
 ### Dispatch work to another session
 
 Ask **“Dispatch this work in a new session.”** The agent starts a fresh, visible session with a
@@ -63,7 +69,8 @@ variable, the origin policy, and backup steps, see
 
 ## Develop
 
-1. Install dependencies. `npm install` also installs the pre-commit hook that runs lint.
+1. Install dependencies and Python 3 (used by preview contract tests). `npm install` also installs
+   the pre-commit hook that runs lint.
 2. Start the backend and the UI together:
 
 	```bash
