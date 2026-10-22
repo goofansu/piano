@@ -540,6 +540,48 @@ test(
   },
 );
 
+test(
+  "a start into a new worktree waits through Piano's creation budget before giving up",
+  bounded,
+  async () => {
+    const h = world();
+    const start = startSession(
+      { cwd: asked, prompt: "do the thing", worktree: { branch: "task-a" } },
+      h.env,
+    );
+    h.last().accept();
+    // Past a plain start's deadline, Worktrunk may still be creating the checkout.
+    h.advance(30_000 + 1);
+    const socket = h.last();
+    assert.ok(!socket.isClosed(), "a worktree start is still observing");
+    socket.frame(selected(socket.selection(), snapshotOf()));
+    socket.frame(
+      frameOf(socket.selection(), {
+        _tag: "submission",
+        submission: { id: 1, outcome: "started" },
+      }),
+    );
+    const result = await start;
+    assert.equal(result.creation, "created");
+    assert.equal(result.submission, "started");
+    assert.deepEqual(result.worktree, { path: cwd, branch: "task-a" });
+    assert.equal(h.pendingTimers(), 0);
+
+    // Piano's creation budget is 60 seconds: a start that hears nothing by then is uncertain.
+    const g = world();
+    const silent = startSession(
+      { cwd: asked, prompt: "do the thing", worktree: { branch: "task-b" } },
+      g.env,
+    );
+    g.last().accept();
+    g.advance(60_000 + 30_000);
+    const unanswered = await silent;
+    assert.equal(unanswered.creation, "uncertain");
+    assert.equal(unanswered.handle, null);
+    assert.ok(g.last().isClosed());
+  },
+);
+
 // ── Waiting ─────────────────────────────────────────────────────────────────
 
 test(

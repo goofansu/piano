@@ -14,7 +14,7 @@ import {
   type WaitStatus,
   type WaitToolResult,
 } from "../../../shared/dispatch.ts";
-import { abbrevHome, stripAnsi, toolArgsText } from "./format.ts";
+import { abbrevHome, DETACHED_HEAD, stripAnsi, toolArgsText } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
 /** DOM id of a message's article, so a jump can find it without a shared ref. */
@@ -108,7 +108,8 @@ export interface DispatchFacts {
   sessionId: string | null;
   /** The brief's first line: what the session was asked to do. */
   title: string;
-  /** The branch of the worktree the session works in, when the parent knows it. */
+  /** The branch of the worktree the session works in, when the parent knows it; the detached
+   * label once a status read finds the checkout on no branch. */
   branch?: string;
   /** The parent's observation, never the child's current state. */
   status: string;
@@ -279,6 +280,11 @@ const startResultOf = (text: string | undefined): Recovered<StartToolResult> | u
     }
   );
 };
+/** A status's Git view: absent outside a checkout, and named as Changes names a detached one. */
+const changesOf = (value: unknown) => {
+  const changes = recordOf(value);
+  return changes && { branch: changes.branch === null ? DETACHED_HEAD : stringOf(changes.branch) };
+};
 /** Undefined when the output is not the tool's JSON (an unknown session). */
 const statusResultOf = (text: string | undefined): Recovered<SessionStatus> | undefined => {
   const r = parsed(text);
@@ -288,7 +294,7 @@ const statusResultOf = (text: string | undefined): Recovered<SessionStatus> | un
       disposition: oneOf(DISPOSITION, r.disposition),
       needs: { title: stringOf(recordOf(r.needs)?.title) },
       lastAnswer: stringOf(r.lastAnswer),
-      changes: { branch: stringOf(recordOf(r.changes)?.branch) },
+      changes: changesOf(r.changes),
     }
   );
 };

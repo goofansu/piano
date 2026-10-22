@@ -115,6 +115,13 @@ When Worktrunk ran but failed, `detail` says that creation was not confirmed: a 
 and the folder's worktrees are discovered again so it shows. Piano never removes a worktree, merges
 it or opens a pull request for it.
 
+Piano gives Worktrunk 60 seconds to create the worktree, approved hooks included, and a start that
+asks for one waits that much longer than a plain start (90 seconds in all) before reporting an
+uncertain creation. Creation is Piano's own work from its first step: a start that stops observing
+while Worktrunk runs (a cancelled tool call, a closed terminal) does not interrupt it. The worktree,
+its registration and the session complete, and `piano_session_status` or `list` finds the session;
+only its first prompt is not sent, since the caller was no longer attached to observe it.
+
 The optional `model` uses the normal `provider/model` selection;
 omitting it uses the new session's normal defaults, not necessarily the parent's model.
 The optional `thinkingLevel` sets reasoning effort: `off`, `minimal`, `low`, `medium`, `high`,
@@ -207,11 +214,11 @@ never starts Pi and stores nothing.
 | Field | Meaning |
 | --- | --- |
 | `sessionId`, `cwd`, `projectId` | The session, the directory Piano placed it in, and its project; `projectId` is `null` outside a project. |
-| `disposition` | `running`: Pi is working, stopping or holding queued input, or Piano still has work in flight for it (a dialog answer being delivered, an input or command Pi has not acknowledged yet). `needs_input`: Pi waits on a dialog only a person can answer. `settled`: execution stopped (Pi is idle with nothing pending, the same point `piano_wait_sessions` waits for; was released idle; or its history ends with a finished reply); **not** that the task succeeded (INV-03). `exited`: Pi stopped during work or on its own while this Piano ran. `unknown`: live facts are gone (Piano restarted, or the session was never readable) and its history proves no ending; or Pi is idle but Piano could not confirm delivering its last input or dialog answer, so whether Pi will act on it cannot be known. |
+| `disposition` | `running`: Pi is working, stopping or holding queued input, or Piano still has work in flight for it (a dialog answer being delivered, an input or command Pi has not acknowledged yet). `needs_input`: Pi waits on a dialog only a person can answer. `settled`: execution stopped (Pi is idle with nothing pending, the same point `piano_wait_sessions` waits for; was released idle; or its history ends with a finished reply); **not** that the task succeeded (INV-03). `exited`: Pi stopped during work or on its own while this Piano ran; a Pi that has stopped reads so whatever it was doing when it stopped. `unknown`: live facts are gone (Piano restarted, or the session was never readable) and its history proves no ending; or Pi is idle but Piano could not confirm delivering its last input or dialog answer, so whether Pi will act on it cannot be known. |
 | `since` | When the dialog arrived for `needs_input`; otherwise the session's last recorded activity in Piano. |
 | `needs` | For `needs_input` only: the dialog's title (or message), the kind of answer it wants (`select`, `confirm`, `input` or `editor`) and the link that opens it. `null` otherwise. |
-| `lastAnswer` | The final reply of the last turn: the last assistant message after the last prompt, when it has text and is not a step toward a tool call, an interrupted or a failed reply. At most the first 2000 characters. `null` mid-turn, after a failure, or with no reply. |
-| `changes` | The live Git view **Changes** shows for that directory: the checked-out `branch` (`null` when detached), the number of changed `files`, and the session's linked `pullRequest` (`number`, `url` and GitHub's `state`: `open`, `draft`, `merged` or `closed`, `null` when GitHub could not be read in 5 seconds). `pullRequest` is `null` without a link. `changes` is `null` when the directory is not a Git checkout Piano can read. |
+| `lastAnswer` | The final reply of the last turn: the last assistant message after the last prompt, when it has text and its turn completed (a reply cut off at the token limit included). At most the first 2000 characters. `null` while a reply is still being written, for a step toward a tool call, after an interruption or a failure, or with no reply. |
+| `changes` | The live Git view **Changes** shows for that directory: the checked-out `branch` (`null` when detached), the number of changed `files`, and the session's linked `pullRequest` (`number`, `url` and GitHub's `state`: `open`, `draft`, `merged` or `closed`, `null` when GitHub could not be read in 5 seconds). `pullRequest` is `null` without a link. `changes` is `null` when the directory is not a Git checkout Piano can read, or when Git had not answered for it within the read's 10-second budget, which one read shares among all of a project's sessions; the other fields do not wait for Git. |
 | `link` | Opens the session in Piano. |
 
 An unknown session or project is an error (exit code `2` from the script, a failed tool call in a

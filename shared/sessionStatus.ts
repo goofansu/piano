@@ -43,9 +43,11 @@ export function liveActivityOf({ state, dialogs }: Snapshot): LiveActivity {
 }
 
 /**
- * `live` is a running host's snapshot; otherwise it is saved history, with the closure Piano
- * remembers for this server process, if any. Saved history alone proves an ending only when its
- * last message is a reply whose turn ended; anything else is unknown, never a guess.
+ * A closure decides first: a Pi that stopped reads exited, or settled when it was released idle,
+ * whatever its snapshot shows beside that. `live` is a running host's snapshot; otherwise it is
+ * saved history, with the closure Piano remembers for this server process, if any. Saved history
+ * alone proves an ending only when its last message is a reply whose turn ended; anything else is
+ * unknown, never a guess.
  *
  * A live session is settled only when idle and its host publishes `isQuiescent`, the point the
  * wait tool also waits for; uncertain delivery reads unknown, as the wait tool reports it.
@@ -55,6 +57,12 @@ export function dispositionOf(
   live: boolean,
 ): { readonly disposition: Disposition; readonly dialog?: Dialog } {
   const { state } = snapshot;
+  // Pi has stopped, whether or not its host is retired yet: what it was doing when it stopped,
+  // or whether it looked quiescent, no longer says anything about it.
+  if (state.closure)
+    return {
+      disposition: state.closure._tag === "released" ? "settled" : "exited",
+    };
   if (live) {
     const activity = liveActivityOf(snapshot);
     switch (activity._tag) {
@@ -70,10 +78,6 @@ export function dispositionOf(
         return { disposition: state.isQuiescent === true ? "settled" : "running" };
     }
   }
-  if (state.closure)
-    return {
-      disposition: state.closure._tag === "released" ? "settled" : "exited",
-    };
   const last = snapshot.messages.at(-1);
   return {
     disposition:
@@ -83,15 +87,15 @@ export function dispositionOf(
 
 /**
  * The last turn's final reply, at most LAST_ANSWER_CHARS: the last assistant message after the
- * last user message, when it has text and is neither a step toward a tool call nor an
- * interrupted or failed reply. Null otherwise, including mid-turn.
+ * last user message, when it has text and its turn completed (a reply cut off at the token limit
+ * included). Null otherwise: a step toward a tool call, an interrupted or failed reply, or a
+ * reply still being written, whose text is not yet an answer.
  */
 export function lastAnswerOf(snapshot: Snapshot): string | null {
   const messages = snapshot.messages;
   const turn = messages.slice(messages.findLastIndex((m) => m.role === "user") + 1);
   const last = turn.findLast((m) => m.role === "assistant");
-  if (!last?.text.trim() || last.stopReason === "toolUse" || last.isError) return null;
-  const ending = turnEnding(last.stopReason);
-  if (ending === "cancelled" || ending === "failed") return null;
+  if (!last?.text.trim() || last.isError || turnEnding(last.stopReason) !== "completed")
+    return null;
   return last.text.slice(0, LAST_ANSWER_CHARS);
 }

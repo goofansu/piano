@@ -5,6 +5,7 @@
 import type { ChangeFile, RenderMsg, Workspace, WorkspaceChanges } from "@shared/wire";
 import { CHANGES_FILE_PATCH_BYTES } from "../../../shared/wire.ts";
 import { type DiffFile, lineCount, parseUnifiedDiff } from "./diff.ts";
+import { DETACHED_HEAD } from "./format.ts";
 
 export type ReadyResult = Extract<WorkspaceChanges["result"], { status: "ready" }>;
 export type ReadyChanges = WorkspaceChanges & { result: ReadyResult };
@@ -171,7 +172,7 @@ export function changesSheet({
     return {
       status,
       changes,
-      branch: result.branch ?? "Detached HEAD",
+      branch: result.branch ?? DETACHED_HEAD,
       refreshing: busy,
       staleNote: error
         ? { text: "Refresh failed. Showing previous changes.", detail: error }

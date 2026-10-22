@@ -12,30 +12,32 @@
  * kept: later interference cannot retract what this call saw.
  */
 import { createHash } from "node:crypto";
-import type {
-  Attribution,
-  CreatedWorktree,
-  SessionCreation,
-  SessionHandle,
-  SessionObservation,
-  SessionStatus,
-  SessionSubmission,
-  StartResult,
-  WaitEnding,
-  WaitStatus,
-  WorktreeRequest,
+import {
+  type Attribution,
+  type CreatedWorktree,
+  type SessionCreation,
+  type SessionHandle,
+  type SessionObservation,
+  type SessionStatus,
+  type SessionSubmission,
+  STATUS_DEADLINE_MS,
+  type StartResult,
+  type WaitEnding,
+  type WaitStatus,
+  type WorktreeRequest,
 } from "../../shared/dispatch.ts";
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
 import { liveActivityOf } from "../../shared/sessionStatus.ts";
 import { turnEnding } from "../../shared/turnEnding.ts";
-import type {
-  ClientMessage,
-  RenderMsg,
-  ServerMessage,
-  SessionClosure,
-  SessionStatusFacts,
-  Snapshot,
-  ThinkingLevel,
+import {
+  type ClientMessage,
+  type RenderMsg,
+  type ServerMessage,
+  type SessionClosure,
+  type SessionStatusFacts,
+  type Snapshot,
+  type ThinkingLevel,
+  WORKTREE_CREATION_MS,
 } from "../../shared/wire.ts";
 import { type Connection, openConnection, type SocketEnvironment } from "../../web/src/lib/ws.ts";
 
@@ -66,7 +68,8 @@ export type {
 export const WAIT_DEFAULT_MS = 30_000;
 export const WAIT_MIN_MS = 1_000;
 export const WAIT_MAX_MS = 60_000;
-/** A start waits this long for creation and the input's acknowledgement. */
+/** A start waits this long for creation and the input's acknowledgement, plus Piano's worktree
+ * creation budget when it asks for one. */
 const START_DEADLINE_MS = 30_000;
 /** Re-selects allowed to confirm quiescence after the session looks finished. */
 const QUIESCENCE_RECHECKS = 3;
@@ -202,7 +205,7 @@ export function startSession(
   const { cwd, prompt, model, thinkingLevel, dispatchedFrom, worktree } = request;
   return observe<StartResult>(
     environment,
-    { deadlineMs: START_DEADLINE_MS, signal },
+    { deadlineMs: START_DEADLINE_MS + (worktree ? WORKTREE_CREATION_MS : 0), signal },
     (link, settle) => {
       let selectionId: string | null = null;
       let inputId: string | null = null;
@@ -923,9 +926,6 @@ export function waitSessions(
 }
 
 // ── Reading status ──────────────────────────────────────────────────────────
-
-/** A status read waits this long for Piano's answer, which may include a GitHub lookup. */
-const STATUS_DEADLINE_MS = 30_000;
 
 export type StatusTarget = { readonly sessionId: string } | { readonly projectId: string };
 

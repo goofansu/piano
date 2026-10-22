@@ -803,6 +803,10 @@ export const WorktreeRequest = Schema.Struct({
   hooks: Schema.optional(Schema.Boolean),
 });
 export type WorktreeRequest = typeof WorktreeRequest.Type;
+/** How long Piano gives Worktrunk to create a worktree, approved hooks included. A start that
+ * asks for a worktree waits this much longer for its answer, so a creation Piano allows is one
+ * the start observes rather than gives up on. */
+export const WORKTREE_CREATION_MS = 60_000;
 
 /** One session's status as the server reads it; the caller adds the links it knows how to build. */
 export const SessionStatusFacts = Schema.Struct({
