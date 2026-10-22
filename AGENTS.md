@@ -60,12 +60,13 @@ encodes the scratch path.
 
 ## Committing
 
-After a change passes verification, commit it on the branch that is checked out (usually `main`)
-and push that branch. Stay on that branch; create or switch branches only when the user asks.
-If the remote branch has advanced, fetch it, rebase onto it, resolve conflicts, verify the resulting
-revision and push without asking for permission. Preserve unrelated local changes and use a normal
-push (never force-push). Report the commit and push outcome; completion requires the remote branch
-to match HEAD.
+Do agent work on a work branch; if the checkout is on `main`, create a work branch before editing.
+Never commit or push directly to `main`. After a change passes verification, commit and push the
+work branch, then open or update a ready (non-draft) PR against `main`.
+If the remote work branch has advanced, fetch it, rebase onto it, resolve conflicts, verify the
+resulting revision and push without asking for permission. Preserve unrelated local changes and
+use a normal push (never force-push). Report the commit, push outcome and PR link; completion
+requires the remote work branch to match HEAD and a ready PR against `main`.
 
 ## Design
 
@@ -170,18 +171,22 @@ the integration before reporting a blocked push. Keep the configured remote unch
 GH_HOST=github.int.exe.xyz gh repo view goofansu/piano --json nameWithOwner
 GH_HOST=github.int.exe.xyz gh auth setup-git --hostname github.int.exe.xyz
 branch=$(git branch --show-current)
+case "$branch" in main|"") echo "Switch to a work branch before publishing." >&2; exit 1 ;; esac
 url=https://github.int.exe.xyz/goofansu/piano.git
 git fetch "$url" "$branch:refs/remotes/origin/$branch"
 # Follow the Committing policy above if the remote branch has advanced.
 git push "$url" "$branch:$branch"
 git ls-remote "$url" "refs/heads/$branch"
 git rev-parse HEAD
+# For a new ready PR; update an existing PR instead if one already exists.
+GH_HOST=github.int.exe.xyz gh pr create --repo goofansu/piano --base main --head "$branch" --fill
 ```
 
 Use the explicit URL, not a temporary `-c remote.origin.url=…` override, which can leave Git using
-an existing SSH URL. Completion requires a successful push and a remote branch hash matching HEAD;
-report an integration permission/setup failure if this path also fails. The integration supplies
-authentication; try it before asking for `gh auth login`, a token or SSH setup.
+an existing SSH URL. Completion requires a successful work-branch push, a remote branch hash
+matching HEAD and a ready PR against `main`; report an integration permission/setup failure if this
+path also fails. The integration supplies authentication; try it before asking for `gh auth login`,
+a token or SSH setup.
 
 Prefix GitHub CLI commands with `GH_HOST=github.int.exe.xyz`. Pass `--repo goofansu/piano` where
 supported; `gh repo view` takes `goofansu/piano` as a positional argument. Setup and permission

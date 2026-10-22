@@ -14,7 +14,7 @@ Read the installed `herdr` skill in full. Follow its instructions for CLI discov
 
 Run five rounds unless the user gives a different finite round count. Ask for a finite count if the request is unbounded.
 
-Tell the user that Claude organizes improvements as a dependency-ordered stack of branches and worktrees, integrates the stack into local `main`, and pushes `main` without pull requests. Do not ask again for choices the user already supplied.
+Tell the user that Claude organizes improvements as a dependency-ordered stack of branches and worktrees, integrates the stack into a work branch, and opens a ready PR against `main`. Do not ask again for choices the user already supplied.
 
 Create a sibling pane in the caller's current tab. Preserve the working directory and use `--no-focus`. Start a uniquely named Claude agent in the returned pane with permission prompts disabled:
 
@@ -41,7 +41,7 @@ Confirm that the reset completed. A reset can change the session identity withou
 Then send exactly this single-line prompt:
 
 ```text
-/mattpocock-skills:improve-codebase-architecture find strong points, organize improvements as a dependency-ordered stack of branches and worktrees, parallelize only independent non-overlapping changes, base dependent changes on their prerequisite branches, verify according to repository instructions, integrate the stack into local main in dependency order, verify the combined result, and push main without creating pull requests
+/mattpocock-skills:improve-codebase-architecture find strong points, organize improvements as a dependency-ordered stack of branches and worktrees, parallelize only independent non-overlapping changes, base dependent changes on their prerequisite branches, verify according to repository instructions, integrate the stack into a non-main work branch in dependency order, verify the combined result, push the work branch, and open or update a ready non-draft pull request against main
 ```
 
 Use `herdr agent prompt <target> <text> --wait --timeout <milliseconds>` with a finite timeout. Do not append instructions or round metadata.
@@ -52,7 +52,7 @@ Wait until Claude reports completion, no useful candidates, or a blocker. A sett
 
 ## 3. Reset and repeat
 
-A round is complete when Claude reports that the changes are integrated into local `main`, verification passed, and the remote `main` matches HEAD with no outstanding work. If Claude reports partial integration, a failed push, or another blocker, stop and preserve the session. Leave verification of those results to Claude.
+A round is complete when Claude reports that verification passed, the remote work branch matches HEAD, and a ready (non-draft) PR against `main` is open, with its link. If Claude reports partial integration, a failed push, a missing or draft PR, or another blocker, stop and preserve the session. Leave verification of those results to Claude.
 
 After a completed round, send this prompt separately:
 
@@ -64,4 +64,4 @@ Confirm the reset and record the current session identity. If rounds remain, sen
 
 Stop when the round count is exhausted, Claude reports no useful candidates, a blocker remains, or the user intervenes. Do not deploy or send `/sync-exe-dev`.
 
-Report the completed rounds, the commits and `main` push results Claude reported, and any blocker. Label results as Claude-reported. Do not claim independent review or verification.
+Report the completed rounds, the commits, work-branch push results and ready PR links Claude reported, and any blocker. Label results as Claude-reported. Do not claim independent review or verification.
