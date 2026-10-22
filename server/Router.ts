@@ -5,6 +5,7 @@ import {
   Endpoints,
   type IdParam,
   type Json,
+  LegacyEndpoints,
   type RefusedStatus,
   type SignInEndpoints,
 } from "../shared/http.ts";
@@ -13,6 +14,7 @@ import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
+import { legacyIgnoredFiles, projectLegacyIgnoredFiles } from "./LegacyIgnoredFiles.ts";
 import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { PiSettings } from "./PiSettings.ts";
@@ -251,6 +253,12 @@ export const AppRouter = HttpRouter.use((router) =>
     );
     yield* serve(Endpoints.workspaceWrittenFiles, ({ workspace, body }) =>
       Effect.flatMap(WorkspaceChanges, (changes) => changes.written(workspace, body.paths)),
+    );
+    // Tabs built before 1b9e6b6 still ask here; see LegacyEndpoints for when this goes.
+    yield* serve(
+      LegacyEndpoints.workspaceIgnoredFiles,
+      ({ workspace, body }) => legacyIgnoredFiles(workspace, body.paths),
+      (answer) => respond(projectLegacyIgnoredFiles(answer), 200, { redact: false }),
     );
 
     yield* serve(Endpoints.sessionPullRequest, ({ session }) =>
