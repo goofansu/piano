@@ -23,6 +23,7 @@ import {
 } from "../../shared/dispatch.ts";
 import { ThinkingLevel } from "../../shared/wire.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
+import { registerPreview } from "./Preview.ts";
 import { readStatus, startSession, waitSessions, withLinks } from "./SessionDispatch.ts";
 
 /** The schema one of these literals has. */
@@ -155,6 +156,7 @@ export type SchemaChecks = [
 ];
 
 export default function pianoSessions(pi: ExtensionAPI) {
+  registerPreview(pi);
   // Registered before the configuration check, so Pi always knows the flag Piano may pass.
   pi.registerFlag(DISPATCHED_FROM_FLAG, {
     type: "string",
