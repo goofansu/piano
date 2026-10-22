@@ -1,6 +1,6 @@
 ---
 name: verify-piano
-description: Launch an isolated scratch Piano (own database, Pi dirs and HOME, fake Pi, throwaway Git repo, backend plus Vite UI on free loopback ports), check it with a read-only doctor, drive the web UI with the repo's browser harness or npx agent-browser and the dispatch CLI, keep evidence that survives cleanup, and tear down by recorded PID. Also read-only health checks for a deployed instance on an exe.dev VM. Use whenever a Piano change needs its user-visible behavior proved.
+description: Launch an isolated scratch Piano (own database, Pi dirs and HOME, fake Pi, throwaway Git repo, backend plus Vite UI on free loopback ports), check it with a read-only doctor, drive the web UI with the repo's browser harness or a pinned npx agent-browser and the dispatch CLI, keep evidence that survives cleanup, and tear down by recorded PID. Also read-only health checks for a deployed instance on an exe.dev VM. Use whenever a Piano change needs its user-visible behavior proved.
 ---
 
 # Verify Piano
@@ -122,8 +122,9 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    They do not need `launch.sh`. `npm run test:browser` runs all three into `.scratch/browser/`.
 
 2. **Then `agent-browser` on the launched instance** for anything the harness does not cover,
-   through `$S/ab.sh`, which runs `npx -y agent-browser --session "$AB_SESSION"` (npx cache only;
-   never `npm i -g`, never a system package):
+   through `$S/ab.sh`, which runs `npx -y "agent-browser@${AB_VERSION}" --session "$AB_SESSION"`
+   (npx cache only; never `npm i -g`, never a system package). `AB_VERSION` is pinned once, in
+   `scripts/lib.sh`, and `cleanup.sh` closes the session with the same version:
 
    ```bash
    $S/ab.sh "$RUN" set viewport 1280 800
@@ -189,6 +190,12 @@ user's Piano run the same `node server/main.ts`. Run Cleanup after every failed 
 harness journeys clean up their own instance and browser.
 
 ## Gotchas
+
+- agent-browser is pinned (`AB_VERSION` in `scripts/lib.sh`) so a new release never changes a
+  journey under you. To bump it: `npm view agent-browser version`, set that exact version in
+  `lib.sh`, check it with `VERIFY_AB_VERSION=<new> $S/ab.sh "$RUN" --version` and one proof run
+  (launch, doctor, a drive, cleanup), then commit `lib.sh` alone. The repo harness
+  (`test/browser/harness.mjs`) has its own `npx agent-browser` call outside this skill.
 
 - Radix menus and popovers open on pointer events: use `ab.sh ... click` / `find ... click`, never
   a DOM `.click()` from `eval`. After choosing, wait for
