@@ -17,7 +17,7 @@ and `web/vite.config.ts`.
 | `PIANO_PI_ARGS` | none | Extra Pi arguments, split on whitespace, such as `-e ./ext.ts`. |
 | `PIANO_WT_CLI` | `wt` | Worktrunk command. |
 | `PIANO_DEBUG` | unset | Any value prints Pi transport messages to stderr, prefixed `[PiTransport]`. |
-| `PIANO_PREVIEW_CONFIG` | unset (launch unavailable) | Absolute path to private JSON deployment configuration for [managed previews](live-previews.md), including the explicit exe.dev origin and reserved ports. |
+| `PIANO_PREVIEW_CONFIG` | unset (macOS: previews on `http://localhost`; Linux: unavailable) | Absolute path to private JSON deployment configuration for [managed previews](live-previews.md): the explicit exe.dev origin (required on Linux), reserved ports and the app's `PATH`. |
 | `PIANO_PREVIEW_STATE` | `~/.local/state/piano/previews` | Durable preview intents and allocation lock. Override only for isolated scratch verification; all production sessions must share one directory. |
 | `PIANO_DEV_BACKEND` | `http://127.0.0.1:7070` | Backend that the Vite development server proxies to. |
 

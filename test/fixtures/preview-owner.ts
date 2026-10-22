@@ -1,21 +1,16 @@
 // A separate helper killed after durable intent and during uncertain supervisor submission.
-import { PreviewAdapter } from "../../scripts/PreviewAdapter.ts";
+import { fakeAdapter, type Platform } from "./preview-host.ts";
 
-await new PreviewAdapter({
-  platform: "linux",
-  uid: 1000,
-  callerGroup: async () => "/caller",
-  run: async (args) => {
-    if (args[0] === "loginctl") return "yes";
-    if (args.includes("--value")) return "/user.slice/manager";
-    if (args[0] === "systemd-run") {
-      process.stdout.write("submitted\n");
-      await new Promise(() => {});
-    }
-    return "";
-  },
-}).request(
-  { action: "start", workspace: process.argv[2], command: ["/bin/false"] },
-  process.argv[3],
-  { origin: "https://test.exe.xyz" },
-);
+const [platform, workspace, stateRoot] = process.argv.slice(2) as [Platform, string, string];
+const { adapter } = fakeAdapter(platform, stateRoot, {
+  phase: "failed",
+  runs: 1,
+  owner: "other",
+  journal: "",
+  unavailable: false,
+  lostReply: false,
+  hangOnSubmit: true,
+});
+await adapter.request({ action: "start", workspace, command: ["/bin/false"] }, stateRoot, {
+  origin: "https://test.exe.xyz",
+});

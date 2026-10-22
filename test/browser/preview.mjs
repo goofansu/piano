@@ -1,4 +1,5 @@
-// Opt-in Linux/systemd critical path. Real installed Pi + scripted loopback model (no credentials).
+// Opt-in critical path on Linux/systemd or macOS/launchd. Real installed Pi + scripted loopback
+// model (no credentials).
 // node test/browser/preview.mjs [evidence-directory]
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -8,6 +9,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -21,8 +23,12 @@ const ROOT = resolve(import.meta.dirname, "../..");
 const previewConfig = process.env.PIANO_PREVIEW_CONFIG
   ? JSON.parse(readFileSync(process.env.PIANO_PREVIEW_CONFIG, "utf8"))
   : {};
-const origin = previewConfig.origin ?? `https://${hostname()}.exe.xyz`;
-const allowedHost = new URL(origin).hostname;
+// A Mac previews on localhost; a Linux VM on its private exe.dev origin.
+const local = process.platform === "darwin";
+const origin =
+  previewConfig.origin ?? (local ? "http://localhost" : `https://${hostname()}.exe.xyz`);
+// Vite allows localhost already; a remote origin's hostname must be allowed explicitly.
+const appEnv = local ? {} : { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname };
 const evidence = resolve(process.argv[2] ?? ".scratch/browser/preview");
 mkdirSync(evidence, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), "piano-preview-model-"));
@@ -86,11 +92,7 @@ const model = createServer(async (req, res) => {
             arguments: JSON.stringify(
               prompt === "status"
                 ? { action: "status" }
-                : {
-                    action: "start",
-                    command,
-                    env: { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: allowedHost },
-                  },
+                : { action: "start", command, env: appEnv },
             ),
           },
         },
@@ -170,12 +172,15 @@ try {
       try {
         await page.open("/new");
         await page.ab("fill", '[aria-label="First message"]', "Run this app so I can try it.");
+        // Send enables once real Pi has reported its models; a click before that is ignored.
+        await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
         await page.click("button", "Send");
         await page.see("PREVIEW_READY");
         await page.until(
           "!!document.querySelector('[aria-label=Message]') && !document.querySelector('[aria-label=Stop]')",
         );
-        assert.equal(app.workspace, repo);
+        // The helper records the canonical path (macOS's /var is /private/var).
+        assert.equal(app.workspace, realpathSync(repo));
         assert.equal(app.url, `${origin}:${app.port}/`);
         const identity = app.instanceId;
         await page.capture("1-settled-preview-link");
@@ -185,8 +190,9 @@ try {
         assert.ok(link.includes(app.url), link);
         assert.ok(link.includes('target="_blank"'), link);
 
-        // External exe.dev login is intentionally not bypassed: local browser load is a separate claim.
-        await page.ab("tab", "new", `http://127.0.0.1:${app.port}/`);
+        // On a Mac the link itself is opened. External exe.dev login is intentionally not bypassed:
+        // there, local browser load is a separate claim.
+        await page.ab("tab", "new", local ? app.url : `http://127.0.0.1:${app.port}/`);
         await page.see("Preview journey v1");
         await page.capture("2-app-load");
         writeFileSync(join(repo, "index.html"), "<h1>Preview journey v2 HMR</h1>");
@@ -210,14 +216,7 @@ try {
           after: "settlement, abort, browser disconnect, Pi release, Piano restart",
           ...status,
         });
-        assert.equal(
-          request({
-            action: "start",
-            command,
-            env: { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: allowedHost },
-          }).instanceId,
-          identity,
-        );
+        assert.equal(request({ action: "start", command, env: appEnv }).instanceId, identity);
         await page.open("/new");
         await page.capture("4-scratch-piano-restarted");
       } finally {
@@ -225,10 +224,11 @@ try {
         for (const file of existsSync(state)
           ? readdirSync(state).filter((file) => file.endsWith(".json"))
           : []) {
+          // Stop first: an assertion must never leave a scratch app running.
           const record = JSON.parse(readFileSync(join(state, file), "utf8"));
-          assert.equal(record.workspace, repo);
           observations.push(request({ action: "stop", instanceId: record.instanceId }));
           assert.equal(request({ action: "stop", instanceId: record.instanceId }).stopped, false);
+          assert.equal(record.workspace, realpathSync(repo));
         }
         writeFileSync(join(evidence, "observations.json"), JSON.stringify(observations, null, 2));
       }

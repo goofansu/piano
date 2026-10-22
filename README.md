@@ -48,8 +48,9 @@ saves the file as it is on disk. Click the link again to reread. See
 
 ### Run an app preview
 
-On a configured private exe.dev host, ask **“Run this app so I can try it.”** The agent launches
-an app in the session's workspace and returns a preview link. It keeps running after the reply;
+On macOS, or on a configured private exe.dev host, ask **“Run this app so I can try it.”** The
+agent launches an app in the session's workspace and returns a preview link (on a Mac,
+`http://localhost:<port>/`). It keeps running after the reply;
 ask the agent to stop the exact instance when finished. See [setup and limits](docs/live-previews.md).
 
 ### Dispatch work to another session
