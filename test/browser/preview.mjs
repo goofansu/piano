@@ -12,11 +12,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { run } from "./harness.mjs";
 
 const ROOT = resolve(import.meta.dirname, "../..");
+// Reuse the deployment origin override, but keep ports and state isolated for this journey.
+const previewConfig = process.env.PIANO_PREVIEW_CONFIG
+  ? JSON.parse(readFileSync(process.env.PIANO_PREVIEW_CONFIG, "utf8"))
+  : {};
+const origin = previewConfig.origin ?? `https://${hostname()}.exe.xyz`;
+const allowedHost = new URL(origin).hostname;
 const evidence = resolve(process.argv[2] ?? ".scratch/browser/preview");
 mkdirSync(evidence, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), "piano-preview-model-"));
@@ -25,7 +31,7 @@ const state = join(scratch, "state");
 writeFileSync(
   config,
   JSON.stringify({
-    origin: "https://yejun-dev.exe.xyz",
+    origin,
     ports: Array.from({ length: 80 }, (_, i) => 9400 + i),
   }),
 );
@@ -83,7 +89,7 @@ const model = createServer(async (req, res) => {
                 : {
                     action: "start",
                     command,
-                    env: { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: "yejun-dev.exe.xyz" },
+                    env: { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: allowedHost },
                   },
             ),
           },
@@ -170,6 +176,7 @@ try {
           "!!document.querySelector('[aria-label=Message]') && !document.querySelector('[aria-label=Stop]')",
         );
         assert.equal(app.workspace, repo);
+        assert.equal(app.url, `${origin}:${app.port}/`);
         const identity = app.instanceId;
         await page.capture("1-settled-preview-link");
         const link = await page.evaluate(
@@ -207,7 +214,7 @@ try {
           request({
             action: "start",
             command,
-            env: { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: "yejun-dev.exe.xyz" },
+            env: { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: allowedHost },
           }).instanceId,
           identity,
         );

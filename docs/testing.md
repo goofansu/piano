@@ -115,6 +115,9 @@ scripts as the evidence of their time; those scripts were removed for these two 
 
 `node test/browser/preview.mjs <evidence-directory>` is an opt-in Linux/systemd journey, separate
 from portable CI: it needs an existing lingering user manager and free ports 9400–9479.
+It reads the origin from `PIANO_PREVIEW_CONFIG` when set, otherwise uses
+`https://<os.hostname()>.exe.xyz`; Vite's allowed host comes from that origin. Only the origin is
+reused: ports and state remain scratch-only.
 It uses the real installed Pi with a scripted loopback model (no credentials), scratch HOME/Pi
 history/database, and unique managed services. It checks prompt → tool → preview link, local browser
 load and HMR, then original-instance survival through settlement, abort, browser disconnect and a

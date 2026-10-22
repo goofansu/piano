@@ -17,14 +17,15 @@ Set `PIANO_PREVIEW_CONFIG` for Piano to an absolute path to a private JSON file,
 
 ```json
 {
-  "origin": "https://yejun-dev.exe.xyz",
+  "origin": "https://<vm>.exe.xyz",
   "reservedPorts": [7171, 7172],
   "path": "/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin"
 }
 ```
 
-This is deployment configuration, **not request headers**. An optional `ports` array narrows the
-allocation pool; otherwise it is 3000–9999. Ports 7070, 8000 and 8001 are always reserved. Add other
+Replace `<vm>` with your VM hostname. This is deployment configuration, **not request headers**.
+An optional `ports` array narrows the allocation pool; otherwise it is 3000–9999.
+Ports 7070, 8000 and 8001 are always reserved. Add other
 Piano/scratch listeners and any host-specific reservations. Do not change exe.dev's primary route
 or sharing: its additional-port proxy uses `https://<vm>.exe.xyz:<port>/` and private authentication.
 Local HTTP readiness does not establish authenticated external access.
@@ -48,12 +49,13 @@ the agent silently does. Source changes alone do not configure or restart a depl
    {
      "action": "start",
      "command": ["/home/exedev/node/bin/node", "/path/to/node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "{port}", "--strictPort"],
-     "env": {"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": "yejun-dev.exe.xyz"},
+     "env": {"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": "<vm>.exe.xyz"},
      "readyPath": "/",
      "timeoutSeconds": 15
    }
    ```
 
+   Use the configured origin's hostname for `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS`.
    The tool supplies `workspace` from `ctx.cwd`; the model cannot substitute another workspace.
    CLI users pass the same JSON plus `workspace` on stdin to `node /path/to/piano/scripts/preview.ts`.
    The CLI is also a recovery path when the conversation is gone. The executable gets only `PATH`,
