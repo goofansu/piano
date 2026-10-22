@@ -107,6 +107,17 @@ async function preview(
   }
 }
 
+/** Whether `path` (relative to the workspace, or absolute) names something on disk; a dangling
+ * symlink does. Fails on anything but the path's absence. */
+export const exists = (workspace: Workspace, path: string): Promise<boolean> =>
+  lstat(resolve(workspace.path, path)).then(
+    () => true,
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+      return false;
+    },
+  );
+
 /** Each path placed as the Files list places it, then `git check-ignore` over the placed names of
  * those inside (it exits 1 when none is ignored). A path inside that names nothing on disk (a file a
  * later command removed) is missing; a dangling symlink still exists. */
@@ -131,16 +142,12 @@ async function written(
     const name = placed[i];
     if (name === undefined) files.push({ path, verdict: "outside" });
     else if (hits.has(name)) files.push({ path, verdict: "ignored", placed: name });
-    else {
-      const exists = await lstat(resolve(workspace.path, path)).then(
-        () => true,
-        (error: NodeJS.ErrnoException) => {
-          if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
-          return false;
-        },
-      );
-      files.push({ path, verdict: exists ? "listed" : "missing", placed: name });
-    }
+    else
+      files.push({
+        path,
+        verdict: (await exists(workspace, path)) ? "listed" : "missing",
+        placed: name,
+      });
   }
   return { status: "ready", files };
 }
