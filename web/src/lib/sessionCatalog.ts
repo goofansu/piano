@@ -52,8 +52,12 @@ const HINTS = {
   checkout: "Folder missing. History can be read; restore the folder to continue.",
 } as const;
 
-/** Where a session runs and what the registry calls it: the one reading of a session reference. */
-export interface SessionLocation {
+/**
+ * Where a session runs: its directory placed among the registered folders. Only that; project
+ * membership is independent of the directory (see the glossary), so callers read the project,
+ * title and saved branch from the session's reference.
+ */
+export interface SessionDirectory {
   /** The registered folder holding the directory; undefined once that folder is closed. */
   folder: FolderView | undefined;
   /** The folder's checkout at the directory. */
@@ -62,12 +66,6 @@ export interface SessionLocation {
   folderName: string;
   /** A linked worktree's directory name; undefined for the folder's own checkout. */
   worktreeName: string | undefined;
-  /** The reference's branch (Git's, or the one saved for a worktree Git no longer lists). */
-  branch: string | undefined;
-  /** The project the session belongs to, when that project exists. */
-  project: Project | undefined;
-  /** The registry's title, if any. */
-  title: string | undefined;
 }
 
 /** A worktree's directory without the `folder.` prefix Worktrunk gives it, since the folder is named beside it. */
@@ -77,18 +75,16 @@ export function worktreeName(folder: string, path: string): string {
 }
 
 /**
- * Locates sessions in `state`: catalog rows and the selected session's header both read where a
- * session runs from this. `cwd` is the session's directory, known before its reference is (a first
- * message on its way); `ref` is its registry reference once there is one.
+ * Places session directories among `state`'s folders: catalog rows and the selected session's
+ * header both read where a session runs from this. A directory is known before the session's
+ * reference is (a first message on its way), so this takes the directory alone.
  */
-export function sessionLocator(
-  state: AppState,
-): (cwd: string | undefined, ref: SessionReference | undefined) => SessionLocation {
+export function sessionDirectories(state: AppState): (cwd: string | undefined) => SessionDirectory {
   const folderOf = new Map<string, FolderView>();
   // The first folder listing a directory holds it, as `folderFor` answers.
   for (const f of state.folders)
     for (const w of f.worktrees) if (!folderOf.has(w.path)) folderOf.set(w.path, f);
-  return (cwd, ref) => {
+  return (cwd) => {
     const folder = cwd === undefined ? undefined : folderOf.get(cwd);
     const checkout = folder?.worktrees.find((w) => w.path === cwd);
     const folderName = folder?.name ?? cwd?.split("/").pop() ?? "";
@@ -98,36 +94,40 @@ export function sessionLocator(
       folderName,
       worktreeName:
         checkout && !checkout.root ? worktreeName(folderName, checkout.path) : undefined,
-      branch: ref?.branch ?? undefined,
-      project: findProject(state, ref?.projectId),
-      title: ref?.title,
     };
   };
 }
 
-/** The registered folder whose worktrees include `cwd`; undefined once that folder is closed. */
+/**
+ * The registered folder whose worktrees include `cwd`, the first one listing it, as
+ * `sessionDirectories` places it; undefined once that folder is closed. One lookup scans the
+ * folders instead of indexing them all.
+ */
 export function folderFor(state: AppState, cwd: string | undefined): FolderView | undefined {
-  return sessionLocator(state)(cwd, undefined).folder;
+  return cwd === undefined
+    ? undefined
+    : state.folders.find((f) => f.worktrees.some((w) => w.path === cwd));
 }
 
 function entries(state: AppState): SessionEntry[] {
-  const locate = sessionLocator(state);
+  const directoryOf = sessionDirectories(state);
   const hosts = new Map(state.hosts.map((h) => [sessionKey(h), h]));
   const done = new Set(state.done);
   const current = state.session ?? state.selecting;
   return state.sessionReferences.map((ref) => {
     const key = sessionKey(ref);
-    const { folder, folderName, worktreeName, branch, project, title } = locate(ref.cwd, ref);
+    const { folder, folderName, worktreeName } = directoryOf(ref.cwd);
+    const project = findProject(state, ref.projectId);
     const host = hosts.get(key);
     return {
       cwd: ref.cwd,
       sessionId: ref.sessionId,
-      title,
+      title: ref.title,
       createdAt: ref.createdAt,
       updatedAt: ref.updatedAt,
       folderPath: folder?.path,
       folder: folderName,
-      branch: branch ?? "",
+      branch: ref.branch ?? "",
       inWorktree: worktreeName !== undefined,
       projectId: ref.projectId,
       project,

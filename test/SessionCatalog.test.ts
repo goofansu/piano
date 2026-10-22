@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { FolderView, WorktreeView } from "../shared/wire.ts";
 import {
   catalogEntry,
+  folderFor,
   recentSessions,
   sessionCatalog,
   sessionDestination,
@@ -215,4 +216,18 @@ test("the palette lists newest first by creation time, a closed folder's session
   );
   assert.equal(order[0]!.createdAt, "2026-10-05T00:00:00Z");
   assert.equal(order[0]!.folderPath, undefined);
+});
+
+test("a directory two folders list belongs to the first, for one lookup and for the catalog", () => {
+  const shared = worktree("/work/shared", "topic", false);
+  const first: FolderView = { ...folder, path: "/a", name: "a", worktrees: [shared] };
+  const second: FolderView = { ...folder, path: "/b", name: "b", worktrees: [shared] };
+  const both: AppState = {
+    ...state,
+    folders: [first, second],
+    sessionReferences: [ref("/work/shared", "s", "Shared")],
+  };
+  assert.equal(folderFor(both, "/work/shared")?.path, "/a");
+  assert.equal(catalogEntry(both, "s")?.folderPath, "/a");
+  assert.equal(folderFor(both, "/elsewhere"), undefined);
 });

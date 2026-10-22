@@ -14,8 +14,8 @@ import {
   parseJson,
 } from "./preference.ts";
 import { activeProjects } from "./projectCommands.ts";
-import { type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
-import { folderFor, sessionReference } from "./sessionContext.ts";
+import { folderFor, type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
+import { sessionReference } from "./sessionContext.ts";
 import {
   dateGroups,
   folderGroups,

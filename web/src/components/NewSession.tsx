@@ -49,7 +49,8 @@ import {
   projectCommand,
   projectDestinations,
 } from "@/lib/projectCommands";
-import { completionTarget, directoryChoices, folderFor } from "@/lib/sessionContext";
+import { folderFor } from "@/lib/sessionCatalog";
+import { completionTarget, directoryChoices } from "@/lib/sessionContext";
 import { composerAction, composerInput, picker } from "@/lib/styles";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
