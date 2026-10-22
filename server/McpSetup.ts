@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { McpServerConfig, McpServerEntry } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-// Pi 1.1.0 exports neither its MCP credential store nor its sign-in flow. Keep these pinned
+// Pi 1.4.0 exports neither its MCP credential store nor its sign-in flow. Keep these pinned
 // compatibility dependencies here; McpSetup tests exercise the installed helpers. Recheck on
 // every Pi upgrade and replace with a public interface when one exists (INV-12). McpConfigEntries
 // holds the configuration helpers.

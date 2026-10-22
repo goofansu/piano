@@ -12,7 +12,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
-// Pi 1.1.0 exports neither its MCP configuration loader nor its writer. This is the only import of
+// Pi 1.4.0 exports neither its MCP configuration loader nor its writer. This is the only import of
 // these pinned compatibility dependencies; McpConfigEntries tests exercise the installed helpers.
 // Recheck on every Pi upgrade and replace with a public interface when one exists. Do not
 // reproduce Pi's loader or move configuration into Registry (INV-01/12).
