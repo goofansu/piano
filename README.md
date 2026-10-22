@@ -69,8 +69,7 @@ variable, the origin policy, and backup steps, see
 
 ## Develop
 
-1. Install dependencies. `npm install` also installs
-   the pre-commit hook that runs lint.
+1. Install dependencies. `npm install` also installs the pre-commit hook that runs lint.
 2. Start the backend and the UI together:
 
 	```bash
