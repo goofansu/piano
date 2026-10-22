@@ -24,11 +24,6 @@ export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
 const nameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 export const byName = (a: string, b: string) => nameCollator.compare(a, b);
 /** ISO timestamps order as text; nothing known sorts last. */
-const latest = (times: Iterable<string | undefined>) => {
-  let max = "";
-  for (const time of times) if (time && time > max) max = time;
-  return max;
-};
 const byActivity = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
 
 function order<T>(
@@ -61,7 +56,7 @@ export function sortSessions<T extends SessionLike>(sessions: readonly T[], sort
   );
 }
 
-/** Folders in the chosen order, each with its listed sessions in that order. A folder's activity is its latest session. */
+/** Folders always A–Z; the selected sort applies only to sessions inside each folder. */
 export function folderGroups<
   F extends Pick<FolderView, "path" | "name">,
   S extends SessionLike & { folderPath?: string },
@@ -77,12 +72,7 @@ export function folderGroups<
       sort,
     ),
   }));
-  return order(
-    groups,
-    sort,
-    (g) => g.folder.name,
-    (g) => latest(g.sessions.map((s) => s.updatedAt)),
-  );
+  return groups.sort((a, b) => byName(a.folder.name, b.folder.name));
 }
 
 export interface SessionGroup<P, S> {
@@ -90,7 +80,7 @@ export interface SessionGroup<P, S> {
   sessions: S[];
 }
 /**
- * Projects in the chosen order, then one group for the listed sessions that belong to no project.
+ * Projects always A–Z, then No project; the selected sort applies only to sessions inside each group.
  * A member whose folder was closed is still listed (see the session catalog), so it still appears.
  */
 export function projectGroups<
@@ -114,12 +104,7 @@ export function projectGroups<
     ),
   };
   return [
-    ...order(
-      groups,
-      sort,
-      (g) => g.project?.name ?? "",
-      (g) => latest(g.sessions.map((s) => s.updatedAt)),
-    ),
+    ...groups.sort((a, b) => byName(a.project?.name ?? "", b.project?.name ?? "")),
     ungrouped,
   ];
 }
