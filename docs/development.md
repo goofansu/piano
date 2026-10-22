@@ -40,7 +40,12 @@ the checksum file published with it. A second job runs `npm run test:browser`. C
 secrets.
 
 No branch protection enforces these jobs: the owner canceled it (PIN-17). Before you merge, check
-that **Quality gates** passed on the latest commit. Keep the repository private.
+that **Quality gates** passed on the latest commit.
+
+The Piano host must be private: reachable only by its trusted developer, on loopback or through a
+private authenticated proxy such as exe.dev's (INV-11). Development has no privacy requirement;
+the repository can be public. See [browser origins](configuration.md#browser-origins) for the
+access model.
 
 ## Dependency security
 
