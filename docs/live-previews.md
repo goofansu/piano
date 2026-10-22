@@ -43,12 +43,31 @@ Set `PIANO_PREVIEW_CONFIG` for Piano to an absolute path to a private JSON file,
 ```json
 {
   "origin": "https://<vm>.exe.xyz",
-  "reservedPorts": [7171, 7172],
+  "reservedPorts": [],
   "path": "/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin"
 }
 ```
 
-Replace `<vm>` with your VM hostname. This is deployment configuration, **not request headers**.
+The [systemd unit template](../deploy/systemd/piano.service) sets
+`PIANO_PREVIEW_CONFIG=/home/exedev/.config/piano/preview.json`. Before installing that unit,
+create the file as the `exedev` account from the [example](../deploy/preview.example.json).
+For first-time setup only (preserve an existing configuration):
+
+```bash
+install -d -m 700 /home/exedev/.config/piano
+install -m 600 deploy/preview.example.json /home/exedev/.config/piano/preview.json
+```
+
+Edit that private file: replace `<vm>` with the VM hostname and adapt `path` to the app's toolchain.
+Leave `reservedPorts` empty unless you want to keep additional host-specific ports out of preview
+allocation; add those port numbers to the array.
+Do not overwrite an existing configuration during upgrades. The account must already have a
+lingering systemd user manager; setting the variable does not create one. Install/reload the unit
+and restart Piano only through an explicitly authorized [deployment](hosted-development.md#deliberate-updates).
+New Pi children then inherit the setting. Do not add preview origins to Piano's production
+`PIANO_ALLOWED_ORIGINS`.
+
+This is deployment configuration, **not request headers**.
 Do not change exe.dev's primary route or sharing: its additional-port proxy uses
 `https://<vm>.exe.xyz:<port>/` and private authentication. Local HTTP readiness does not establish
 authenticated external access.

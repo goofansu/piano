@@ -893,14 +893,14 @@ export class PreviewAdapter {
       };
     }
     const spec = await launchSpec(requested, config, this.platform);
+    const timeout = request.timeoutSeconds ?? 15;
+    if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 1 || timeout > 30)
+      throw new Error("timeoutSeconds must be between 1 and 30");
     let replaced: string | undefined;
     if (record) {
       const stopped = await this.stop(supervisor, record, path, root, serviceId);
       replaced = stopped.instanceId;
     }
-    const timeout = request.timeoutSeconds ?? 15;
-    if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 1 || timeout > 30)
-      throw new Error("timeoutSeconds must be between 1 and 30");
     const port = await choosePort(config, root, spec.origin);
     const instanceId = randomUUID().replaceAll("-", "");
     record = {

@@ -13,6 +13,8 @@ Environment=HOST=127.0.0.1
 Environment=PORT=8001
 # Replace before installing: the browser-facing HTTPS origin, without a trailing slash.
 Environment=PIANO_ALLOWED_ORIGINS=https://<your-piano-domain>
+# Create this private config before installing; see docs/live-previews.md.
+Environment=PIANO_PREVIEW_CONFIG=/home/exedev/.config/piano/preview.json
 ExecStart=/home/exedev/.local/bin/node server/main.ts
 Restart=on-failure
 RestartSec=2

@@ -1,0 +1,5 @@
+{
+  "origin": "https://<vm>.exe.xyz",
+  "reservedPorts": [],
+  "path": "/home/exedev/.local/bin:/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin"
+}
