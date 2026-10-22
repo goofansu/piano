@@ -26,8 +26,11 @@ Start a **new session** after a change; running Pi children are not reloaded.
 
 - `server/McpSetup.ts` owns this policy. Pi owns configuration parsing, OAuth and credential
   storage; no registry records, token values or session history are added (INV-01/02/11/12).
-- Pi 1.1.0 exports neither its MCP config writer nor its sign-in flow, so the module imports
-  the pinned `dist` helpers, as `RadiusSetup` does. Recheck them on every Pi upgrade.
+- Pi 1.4.0 still exports neither its MCP config writer nor its sign-in flow publicly, so
+  `McpConfigEntries` and `McpSetup` import the pinned `dist` helpers, as Radius setup does.
+  Rechecked against 1.4.0: config exports/signatures, MCP runtime and auth-storage helpers
+  are unchanged from 1.3.0; config reads and edits now strip a UTF-8 BOM. Recheck these
+  imports on every Pi upgrade.
 - An unrelated server already using the catalog name, several entries for the same endpoint or
   local command and arguments,
   invalid configuration and disabled/hidden entries are reported, not overwritten. An entry with

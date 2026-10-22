@@ -139,13 +139,14 @@ test("INV-01/12: only the global file counts, so a project entry cannot claim or
   );
 });
 
-test("INV-12: saving merges under the existing name, keeps unrelated configuration and invalidates only after a write", async () => {
+test("INV-12: saving BOM-prefixed config merges under the existing name, preserves unrelated data and invalidates only after a write", async () => {
   await fixture((entries, file, probes) =>
     Effect.gen(function* () {
       save(file, {
         custom: { untouched: true },
         mcpServers: { other: { command: "do-not-run" }, mine: { url: `${URL}/`, timeout: 30 } },
       });
+      writeFileSync(file, `\uFEFF${readFileSync(file, "utf8")}`);
       assert.equal(yield* probes(), 1);
       const before = readFileSync(file, "utf8");
       // The caller is satisfied with the existing entry: nothing is written and the catalog stays cached.

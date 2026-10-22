@@ -82,8 +82,10 @@ also lose newer associations; the stable-link guarantee depends on keeping Piano
   even when `pi auth check --provider radius` is ready. This page does not use that
   CLI result to claim connectivity or ask for a redundant OAuth login.
 - Pi does not export its provider-auth MCP writer publicly. The adapter deliberately
-  imports the **pinned 1.1.0** configuration helper, rather than reimplementing Pi's
-  loader. `test/RadiusSetup.test.ts` exercises the installed helper. Recheck this
+  imports the **locked 1.4.0** configuration helper through `McpConfigEntries`, rather
+  than reimplementing Pi's loader. Its exports/signatures are unchanged from 1.3.0;
+  reads and edits now accept a UTF-8 BOM. `test/RadiusSetup.test.ts` exercises the
+  installed helper; `test/McpConfigEntries.test.ts` covers BOM-prefixed config. Recheck this
   dependency on every Pi upgrade and replace it with a public interface when one
   is available. Public SDK settings/package APIs and the locked CLI handle the rest.
 - A single matching Radius endpoint is updated in place, retaining its name,
