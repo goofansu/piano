@@ -27,8 +27,10 @@ continues sessions across your folders and their Git worktrees.
 
 3. Open <http://127.0.0.1:7070>.
 
-Piano has no login and runs commands as your user. Keep it on loopback, or reach it through a
-private authenticated proxy such as exe.dev's. Never expose it publicly. See
+Piano has no login and runs commands as your user. The Piano host must be private: reachable only
+by its trusted developer, on loopback or through a private authenticated proxy such as exe.dev's.
+Never expose it publicly. This is a host-access rule, not a repository-privacy requirement;
+development and the repository can be public. See
 [browser origins](docs/configuration.md#browser-origins) for the access model.
 
 ### Sign in to a model provider

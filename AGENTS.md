@@ -17,12 +17,10 @@ the claim, the relevant invariant and the smallest useful check. Add a regressio
 meaningful failure not already protected, testing observable contracts rather than private helpers
 or mock choreography. Documentation-only changes need document/link review, not tests or an app run.
 
-- **Code or dependency changes:** before committing, run `npm run typecheck` and `npm test`
-  (module tests against `test/fake-pi.mjs`, no credentials); the pre-commit hook runs lint. Commit
-  only when all three pass.
+- **Code or dependency changes:** run `npm run typecheck`, `npm run lint` and `npm test`
+  (module tests against `test/fake-pi.mjs`, no credentials). All three must pass.
 - **Application behavior:** observe the affected journey through `npx agent-browser` on a
-  [scratch instance](#scratch-instance) and keep the output as PR evidence; the browser script
-  stays uncommitted.
+  [scratch instance](#scratch-instance) and keep the output as PR evidence.
 - **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
   journey there only for a new critical path. `test/browser/style-shots.mjs` is evidence, not a
   journey: run it before and after a shadcn upgrade, a style change or an edit to the `Piano*`
@@ -57,15 +55,6 @@ can print other processes' environment variables, secrets included. When a check
 worktrees or pi session files, remove them afterwards: `git worktree remove --force` plus
 `git branch -D` in the scratch repo, and the directory under `~/.pi/agent/sessions` whose name
 encodes the scratch path.
-
-## Committing
-
-After a change passes verification, commit it on the branch that is checked out (usually `main`)
-and push that branch. Stay on that branch; create or switch branches only when the user asks.
-If the remote branch has advanced, fetch it, rebase onto it, resolve conflicts, verify the resulting
-revision and push without asking for permission. Preserve unrelated local changes and use a normal
-push (never force-push). Report the commit and push outcome; completion requires the remote branch
-to match HEAD.
 
 ## Design
 
@@ -161,27 +150,6 @@ machine, the user runs the `sync-exe-dev` skill (user-invoked only). On exe.dev 
 authentication: it stays on loopback behind exe.dev private access (INV-11).
 
 ## GitHub on exe.dev
-
-On an exe.dev VM, use the HTTPS GitHub integration for fetch and push **even when `origin` is
-`git@github.com:goofansu/piano.git`**. An SSH host-key failure is a transport mismatch: retry through
-the integration before reporting a blocked push. Keep the configured remote unchanged:
-
-```bash
-GH_HOST=github.int.exe.xyz gh repo view goofansu/piano --json nameWithOwner
-GH_HOST=github.int.exe.xyz gh auth setup-git --hostname github.int.exe.xyz
-branch=$(git branch --show-current)
-url=https://github.int.exe.xyz/goofansu/piano.git
-git fetch "$url" "$branch:refs/remotes/origin/$branch"
-# Follow the Committing policy above if the remote branch has advanced.
-git push "$url" "$branch:$branch"
-git ls-remote "$url" "refs/heads/$branch"
-git rev-parse HEAD
-```
-
-Use the explicit URL, not a temporary `-c remote.origin.url=…` override, which can leave Git using
-an existing SSH URL. Completion requires a successful push and a remote branch hash matching HEAD;
-report an integration permission/setup failure if this path also fails. The integration supplies
-authentication; try it before asking for `gh auth login`, a token or SSH setup.
 
 Prefix GitHub CLI commands with `GH_HOST=github.int.exe.xyz`. Pass `--repo goofansu/piano` where
 supported; `gh repo view` takes `goofansu/piano` as a positional argument. Setup and permission
