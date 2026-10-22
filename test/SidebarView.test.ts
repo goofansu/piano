@@ -4,6 +4,7 @@ import {
   dateGroups,
   folderGroups,
   projectGroups,
+  SORT_BY,
   sortSessions,
 } from "../web/src/lib/sidebarView.ts";
 
@@ -167,28 +168,34 @@ test("sidebar view: sessions sort by title with untitled last, or by last activi
   );
 });
 
-test("sidebar view: folders order by name (case-insensitive, numeric-aware) or by their latest session, empty folders last", () => {
-  assert.deepEqual(
-    folderGroups(folders, sessions, "name").map((g) => g.folder.name),
-    ["Alpha", "beta-2", "beta-10", "zeta"],
-  );
-  const recent = folderGroups(folders, sessions, "recent");
-  assert.deepEqual(
-    recent.map((g) => g.folder.name),
-    ["beta-10", "beta-2", "zeta", "Alpha"],
-    "ties on activity fall back to name",
-  );
-  assert.deepEqual(
-    titles(recent[0]!.sessions),
-    [undefined, "Beta titled"],
-    "sessions inside a folder follow the same sort",
-  );
-  assert.deepEqual(
-    folders.map((f) => f.name),
-    ["zeta", "Alpha", "beta-10", "beta-2"],
-    "the input is not reordered in place",
-  );
-});
+for (const { value: sort } of SORT_BY) {
+  test(`sidebar view: folders stay A–Z with ${sort} session sort, including empty folders`, () => {
+    const groups = folderGroups(folders, sessions, sort);
+    assert.deepEqual(
+      groups.map((g) => g.folder.name),
+      ["Alpha", "beta-2", "beta-10", "zeta"],
+      "group names are case-insensitive and numeric-aware, independent of activity",
+    );
+    assert.deepEqual(
+      groups.map((g) => titles(g.sessions)),
+      [
+        [],
+        ["Carol"],
+        {
+          name: ["Beta titled", undefined],
+          recent: [undefined, "Beta titled"],
+        }[sort],
+        ["Zeta new", "Zeta old"],
+      ],
+      "only sessions inside each folder follow the selected sort",
+    );
+    assert.deepEqual(
+      folders.map((f) => f.name),
+      ["zeta", "Alpha", "beta-10", "beta-2"],
+      "the input is not reordered in place",
+    );
+  });
+}
 
 test("sidebar view: project groups hold their members, then a No project group holds the sessions filed nowhere", () => {
   const projects = [
@@ -204,19 +211,35 @@ test("sidebar view: project groups hold their members, then a No project group h
     session("/beta-2", "c1", "Carol", 7),
     session("/beta-10", "b1", undefined, 8),
   ];
-  const recent = projectGroups(projects, listed, "recent");
+  for (const { value: sort } of SORT_BY) {
+    const groups = projectGroups(projects, listed, sort);
+    assert.deepEqual(
+      groups.map((g) => g.project?.name ?? null),
+      ["Empty project", "Improve accessibility", "Launch subscriptions", null],
+      `project groups stay A–Z with ${sort} session sort; No project stays last`,
+    );
+    assert.deepEqual(
+      groups.map((g) => titles(g.sessions)),
+      {
+        name: [
+          [],
+          ["Beta titled", "Closed folder member"],
+          ["Zeta new", "Zeta old"],
+          ["Carol", undefined],
+        ],
+        recent: [
+          [],
+          ["Closed folder member", "Beta titled"],
+          ["Zeta new", "Zeta old"],
+          [undefined, "Carol"],
+        ],
+      }[sort],
+      `members, including closed-folder and unfiled sessions, follow ${sort} sort`,
+    );
+  }
   assert.deepEqual(
-    recent.map((g) => g.project?.name ?? null),
-    ["Improve accessibility", "Launch subscriptions", "Empty project", null],
-  );
-  assert.deepEqual(titles(recent[0]!.sessions), ["Closed folder member", "Beta titled"]);
-  assert.deepEqual(
-    titles(recent.at(-1)!.sessions),
-    [undefined, "Carol"],
-    "unfiled listed sessions, in the same sort",
-  );
-  assert.deepEqual(
-    projectGroups(projects, listed, "name").map((g) => g.project?.name ?? null),
-    ["Empty project", "Improve accessibility", "Launch subscriptions", null],
+    projects.map((p) => p.id),
+    ["launch", "a11y", "empty"],
+    "input order is preserved",
   );
 });
