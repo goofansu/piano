@@ -20,6 +20,7 @@ import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive, SessionNotCreated } from "../server/SessionHosts.ts";
+import { WorktrunkCommand } from "../server/Worktrees.ts";
 import type { SessionEvent } from "../shared/wire.ts";
 
 const root = mkdtempSync(join(tmpdir(), "piano-hosts-"));
@@ -908,5 +909,96 @@ test("INV-01/06: a new session in a linked worktree is listed under its main che
       ]);
     }),
     { fakePi: "place-alias" },
+  );
+});
+
+test("INV-02/06: a requester that leaves while Worktrunk runs cannot interrupt creation into a half-made checkout", {
+  timeout: 30_000,
+}, async () => {
+  const git = (dir: string, ...args: string[]) => {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const repo = join(root, "slow-repo");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet", "-b", "main");
+  git(
+    repo,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--quiet",
+    "--allow-empty",
+    "-m",
+    "baseline",
+  );
+  // The installed Worktrunk, isolated from the user's configuration, and slow to start creating.
+  const config = join(root, "wt-config", "worktrunk");
+  mkdirSync(config, { recursive: true });
+  writeFileSync(join(config, "config.toml"), "");
+  const isolated = {
+    HOME: join(root, "wt-home"),
+    XDG_CONFIG_HOME: join(root, "wt-config"),
+    XDG_CACHE_HOME: join(root, "wt-cache"),
+    XDG_STATE_HOME: join(root, "wt-state"),
+    WORKTRUNK_CONFIG_PATH: join(config, "config.toml"),
+  };
+  mkdirSync(isolated.HOME);
+  const real = spawnSync("which", ["wt"], { encoding: "utf8" }).stdout.trim();
+  const started = join(root, "wt-started");
+  const wt = join(root, "slow-wt");
+  writeFileSync(
+    wt,
+    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';
+const a=process.argv.slice(2);
+if(a.includes('switch')){writeFileSync(${JSON.stringify(started)},'');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
+const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env,...${JSON.stringify(isolated)}}});process.exit(r.status??1);\n`,
+    { mode: 0o755 },
+  );
+  const until = <A>(read: Effect.Effect<A | undefined>, what: string) =>
+    Effect.gen(function* () {
+      for (let n = 0; n < 500; n++) {
+        const value = yield* read;
+        if (value !== undefined) return value;
+        yield* Effect.sleep("20 millis");
+      }
+      return yield* Effect.die(new Error(`never observed: ${what}`));
+    });
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      const requester = yield* hosts
+        .create({ cwd: repo, options: {}, worktree: { branch: "slow" } })
+        .pipe(Effect.forkChild);
+      yield* until(
+        Effect.sync(() => (existsSync(started) ? true : undefined)),
+        "Worktrunk running",
+      );
+      yield* Fiber.interrupt(requester);
+      // Without its requester, the creation still completes: the worktree, its registration
+      // under the repository's folder, the session's reference and its running child.
+      const entry = yield* until(
+        Effect.map(registry.get, (data) => data.sessions.find((s) => s.cwd !== repo)),
+        "a session registered in the new worktree",
+      );
+      assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${entry.cwd}\n`));
+      assert.equal(git(entry.cwd, "branch", "--show-current"), "slow");
+      // Git reports physical paths; the fixture root may be reached through a symlink (macOS /var).
+      assert.deepEqual((yield* registry.get).worktrees, [
+        { folder: realpathSync(repo), path: entry.cwd, branch: "slow" },
+      ]);
+      yield* until(
+        Effect.map(hosts.list, (list) =>
+          list.some((h) => h.sessionId === entry.sessionId) ? true : undefined,
+        ),
+        "the session's child running",
+      );
+      yield* hosts.release(entry.cwd, entry.sessionId);
+    }).pipe(Effect.provideService(WorktrunkCommand, wt)),
+    { fakePi: "slow-worktree" },
   );
 });

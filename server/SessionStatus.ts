@@ -5,7 +5,8 @@
  * checkout as Changes shows it, and GitHub for a linked pull request. Nothing is stored and Pi is
  * never started.
  */
-import { Context, Data, Effect, Layer, Stream } from "effect";
+import { Clock, Context, Data, Effect, Layer, Option, Stream } from "effect";
+import { STATUS_CHANGES_MS } from "../shared/dispatch.ts";
 import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import type { SessionStatusFacts, Snapshot } from "../shared/wire.ts";
 import { GitHubPullRequests, pullRequestIdentity } from "./GitHubPullRequests.ts";
@@ -22,6 +23,10 @@ export type StatusTarget = { readonly sessionId: string } | { readonly projectId
 
 /** How long a linked pull request's state may take before the status reports it unknown. */
 const PULL_REQUEST_TIMEOUT = "5 seconds";
+/** The budget one read shares among its sessions' `changes`; tests shorten it. */
+export const StatusChangesMs = Context.Reference<number>("piano/StatusChangesMs", {
+  defaultValue: () => STATUS_CHANGES_MS,
+});
 
 export class SessionStatus extends Context.Service<
   SessionStatus,
@@ -60,11 +65,22 @@ export const SessionStatusLive = Layer.effect(
         Effect.orElseSucceed(() => undefined),
       );
 
-    const changesOf = Effect.fn("SessionStatus.changesOf")(function* (entry: SessionEntry) {
+    /**
+     * The Git view, within the read's shared budget: a session whose checkout Git or GitHub did
+     * not answer for by `deadline` (a clock time) carries null, and its other facts still arrive.
+     * The patch Changes would render is never generated for a status.
+     */
+    const changesOf = Effect.fn("SessionStatus.changesOf")(function* (
+      entry: SessionEntry,
+      deadline: number,
+    ) {
       const workspace = (yield* registry.get).workspaces.find((w) => w.path === entry.cwd);
       if (!workspace) return null;
-      const observed = yield* changes.preview(workspace);
-      if (observed.result.status !== "ready") return null;
+      const remaining = Math.max(0, deadline - (yield* Clock.currentTimeMillis));
+      const observed = yield* changes
+        .summary(workspace)
+        .pipe(Effect.timeoutOption(remaining), Effect.map(Option.getOrNull));
+      if (observed?.result.status !== "ready") return null;
       const link = entry.pullRequest;
       const identity = link ? pullRequestIdentity(link.url) : null;
       const state =
@@ -84,8 +100,9 @@ export const SessionStatusLive = Layer.effect(
 
     const statusOf = Effect.fn("SessionStatus.statusOf")(function* (
       entry: SessionEntry,
+      deadline: number,
     ): Effect.fn.Return<SessionStatusFacts> {
-      const [read, changed] = yield* Effect.all([snapshotOf(entry), changesOf(entry)], {
+      const [read, changed] = yield* Effect.all([snapshotOf(entry), changesOf(entry, deadline)], {
         concurrency: 2,
       });
       const { disposition, dialog } = read
@@ -111,6 +128,9 @@ export const SessionStatusLive = Layer.effect(
 
     const read = Effect.fn("SessionStatus.read")(function* (target: StatusTarget) {
       const data = yield* registry.get;
+      // One budget for the whole read, so a project's answer arrives within it however many
+      // sessions it has; the core facts come from what Piano holds and are not bounded by it.
+      const deadline = (yield* Clock.currentTimeMillis) + (yield* StatusChangesMs);
       if ("sessionId" in target) {
         // An ID names one session; an active reference wins over an archived one.
         const matches = data.sessions.filter((s) => s.sessionId === target.sessionId);
@@ -119,14 +139,16 @@ export const SessionStatusLive = Layer.effect(
           return yield* new SessionStatusError({
             detail: `Piano lists no session ${target.sessionId}.`,
           });
-        return [yield* statusOf(entry)];
+        return [yield* statusOf(entry, deadline)];
       }
       if (!data.projects.some((p) => p.id === target.projectId))
         return yield* new SessionStatusError({
           detail: `Piano has no project ${target.projectId}.`,
         });
       const members = data.sessions.filter((s) => s.projectId === target.projectId && !s.archived);
-      return yield* Effect.forEach(members, statusOf, { concurrency: 4 });
+      return yield* Effect.forEach(members, (entry) => statusOf(entry, deadline), {
+        concurrency: 4,
+      });
     });
 
     return SessionStatus.of({ read });

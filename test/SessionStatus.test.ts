@@ -17,10 +17,12 @@ import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, type PiSession } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
-import { SessionStatus, SessionStatusLive } from "../server/SessionStatus.ts";
+import { SessionStatus, SessionStatusLive, StatusChangesMs } from "../server/SessionStatus.ts";
+import { GitCommand } from "../server/Subprocess.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
-import type { PullRequest } from "../shared/wire.ts";
+import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
+import type { PullRequest, RenderMsg, Snapshot } from "../shared/wire.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-status-")));
 mkdirSync(join(root, "sessions"));
@@ -237,4 +239,85 @@ test("a live session that looks idle reads settled only once Piano has nothing p
       assert.equal(yield* disposition("live-ignored"), "unknown");
     }).pipe(Effect.provideService(PiRequestTimeoutMs, 1000)),
   );
+});
+
+test("a status answers within its changes budget: a Git that is slower leaves changes null beside the other facts", async () => {
+  // Real Git, except that a diff takes longer than the read allows for changes.
+  const slowGit = join(root, "slow-git");
+  writeFileSync(
+    slowGit,
+    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';
+const a=process.argv.slice(2);if(a.includes('diff'))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,3000);
+const r=spawnSync('git',a,{stdio:'inherit'});process.exit(r.status??1);\n`,
+    { mode: 0o755 },
+  );
+  saved(repo, "slow", [user("fix it"), reply("Done.")]);
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      const status = yield* SessionStatus;
+      yield* registry.addSession(repo, "slow");
+      const started = Date.now();
+      const [s] = yield* status.read({ sessionId: "slow" });
+      assert.ok(Date.now() - started < 2000, "the read does not wait for Git");
+      assert.deepEqual(
+        [s!.disposition, s!.lastAnswer, s!.changes],
+        ["settled", "Done.", null],
+        "what Piano holds arrives; the Git view it could not read in time is null",
+      );
+    }).pipe(
+      Effect.provideService(GitCommand, slowGit),
+      Effect.provideService(StatusChangesMs, 300),
+    ),
+  );
+});
+
+test("the shared reading: a stopped Pi reads from its closure, and only a completed reply is an answer", () => {
+  const snapshot = (
+    state: Partial<Snapshot["state"]>,
+    messages: ReadonlyArray<RenderMsg> = [],
+  ): Snapshot => ({
+    state: { sessionId: "s", isStreaming: false, ...state },
+    messages,
+    dialogs: [],
+  });
+  const working = { isStreaming: true };
+  // Pi exited mid-run and its host has not been retired yet: exited, not running; one Piano
+  // released idle before exiting reads settled, whatever the host had not confirmed yet.
+  for (const closure of [
+    { _tag: "exited", code: 1, detail: "Pi exited (code 1)" },
+    { _tag: "failed", detail: "exit not observed" },
+    { _tag: "released_during_work", detail: "released while working" },
+  ] as const)
+    assert.equal(dispositionOf(snapshot({ ...working, closure }), true).disposition, "exited");
+  assert.equal(
+    dispositionOf(
+      snapshot({ isQuiescent: false, closure: { _tag: "released", detail: "idle" } }),
+      true,
+    ).disposition,
+    "settled",
+  );
+  assert.equal(dispositionOf(snapshot(working), true).disposition, "running");
+
+  const reply = (text: string, over: Partial<RenderMsg>): RenderMsg => ({
+    id: "a1",
+    role: "assistant",
+    text,
+    ...over,
+  });
+  const prompt: RenderMsg = { id: "u1", role: "user", text: "fix it" };
+  const answerOf = (over: Partial<RenderMsg>) =>
+    lastAnswerOf(snapshot({}, [prompt, reply("Half an answer", over)]));
+  assert.equal(answerOf({ stopReason: "stop" }), "Half an answer");
+  assert.equal(answerOf({ stopReason: "length" }), "Half an answer", "cut off, but finished");
+  // Still being written, waiting on a tool, interrupted or failed: text that is not an answer.
+  for (const over of [
+    {},
+    { stopReason: "pending" },
+    { stopReason: "toolUse" },
+    { stopReason: "aborted" },
+    { stopReason: "error" },
+    { stopReason: "stop", isError: true },
+  ])
+    assert.equal(answerOf(over), null, JSON.stringify(over));
 });

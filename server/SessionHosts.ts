@@ -378,17 +378,23 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         ),
       );
 
-      const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
-        const cwd = yield* destination(spec);
-        const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
-        // Only a fresh server-generated ID may create a reference. Registration and initial
-        // membership survive a disconnected requester, as acquisition is server-owned.
-        const { session } = yield* start(
-          { cwd, sessionId: randomUUID(), model, thinkingLevel, name, dispatchedFrom },
-          { projectId: spec.projectId },
-        );
-        return session;
-      });
+      const create = Effect.fn("SessionHosts.create")(
+        function* (spec: CreateSpec) {
+          const cwd = yield* destination(spec);
+          const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
+          // Only a fresh server-generated ID may create a reference. Registration and initial
+          // membership survive a disconnected requester, as acquisition is server-owned.
+          const { session } = yield* start(
+            { cwd, sessionId: randomUUID(), model, thinkingLevel, name, dispatchedFrom },
+            { projectId: spec.projectId },
+          );
+          return session;
+        },
+        // Creation is server-owned from its first step: a requester that leaves while Worktrunk
+        // runs cannot interrupt it into a half-made checkout; the worktree, the registration and
+        // the launch complete, and the session is found by the ID the registry holds.
+        owned,
+      );
 
       const get = (cwd: string, id: string) =>
         resolved(cwd, id, ({ host }) => Effect.succeed(host?.session));

@@ -139,6 +139,11 @@ export type Disposition = (typeof DISPOSITIONS)[number];
 
 /** How many characters of the last answer a status carries. */
 export const LAST_ANSWER_CHARS = 2000;
+/** How long one status read gives Git and GitHub for its sessions' `changes`, all together; a
+ * session whose Git view is not read by then carries `changes: null` beside its other facts. */
+export const STATUS_CHANGES_MS = 10_000;
+/** A status read waits this long for Piano's answer: the changes budget, and the rest. */
+export const STATUS_DEADLINE_MS = 30_000;
 
 /** A status as the tool and the script report it. */
 export interface SessionStatus extends Omit<SessionStatusFacts, "needs"> {

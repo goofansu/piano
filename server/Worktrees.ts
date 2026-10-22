@@ -5,7 +5,11 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { Context, Data, Effect, Schema } from "effect";
-import type { WorktreeDiscovery, WorktreeFacts } from "../shared/wire.ts";
+import {
+  WORKTREE_CREATION_MS,
+  type WorktreeDiscovery,
+  type WorktreeFacts,
+} from "../shared/wire.ts";
 import { gitText, observeGit } from "./GitCheckout.ts";
 import { gitEnvironment } from "./GitEnvironment.ts";
 import { run as runProcess } from "./Subprocess.ts";
@@ -260,7 +264,7 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
           "--no-cd",
           ...(options.hooks ? [] : ["--no-hooks"]),
         ],
-        60_000,
+        WORKTREE_CREATION_MS,
       ),
     );
     if (!isAbsolute(result.path) || result.branch !== branch || !result.base_branch)

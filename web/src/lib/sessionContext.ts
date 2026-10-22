@@ -15,7 +15,7 @@ import type {
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
 import { directoryTrust } from "./directoryTrust.ts";
-import { abbrevHome } from "./format.ts";
+import { abbrevHome, DETACHED_HEAD } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
 import { folderFor, sessionDirectories } from "./sessionCatalog.ts";
@@ -60,7 +60,7 @@ export function directoryChoices(state: AppState, cwd: string): DirectoryChoices
           folder: folder.name,
           ...(!checkout.root && {
             branchLabel:
-              checkout.branch ?? (checkout.facts?.detached ? "Detached HEAD" : "Unknown branch"),
+              checkout.branch ?? (checkout.facts?.detached ? DETACHED_HEAD : "Unknown branch"),
           }),
         }
       : { kind: "path", label: abbrevHome(cwd) };

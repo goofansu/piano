@@ -14,13 +14,20 @@ import {
   type WrittenFile,
   type WorkspaceWrittenFiles as WrittenObservation,
 } from "../shared/wire.ts";
-import { type Checkout, observeCheckout } from "./GitCheckout.ts";
+import { type Checkout, type CheckoutObservation, observeCheckout } from "./GitCheckout.ts";
 import { place } from "./WorkspaceFiles.ts";
+
+type Ready = Extract<Observation["result"], { readonly status: "ready" }>;
+type Summary = Omit<Ready, "diff" | "truncated">;
+/** A preview's facts without its patch: what a status read carries. */
+export type ChangesSummary = CheckoutObservation<Summary>;
 
 export class WorkspaceChanges extends Context.Service<
   WorkspaceChanges,
   {
     readonly preview: (workspace: Workspace, path?: string) => Effect.Effect<Observation>;
+    /** The branch and changed files `preview` would show, read without rendering any patch. */
+    readonly summary: (workspace: Workspace) => Effect.Effect<ChangesSummary>;
     /** Where each of `paths` (as a session's tool calls named them: relative to the workspace, or
      * absolute) stands: outside the workspace, ignored by Git, no longer existing, or listed. A
      * tracked file is never ignored. */
@@ -31,10 +38,14 @@ export class WorkspaceChanges extends Context.Service<
   }
 >()("piano/WorkspaceChanges") {}
 
+/** The checkout's changes against HEAD, with the patch only when asked for. */
+function preview(checkout: Checkout, path: string | undefined, patch: true): Promise<Ready>;
+function preview(checkout: Checkout, path: string | undefined, patch: false): Promise<Summary>;
 async function preview(
   checkout: Checkout,
   path: string | undefined,
-): Promise<Observation["result"]> {
+  patch: boolean,
+): Promise<Ready | Summary> {
   if (path !== undefined) checkout.safePath(path);
   const head = await checkout.head();
   const branch = await checkout.branch();
@@ -97,11 +108,19 @@ async function preview(
         deletions: Number(match[2]) || 0,
       };
     });
-    const patch = await git.excerpt(
+    if (!patch) return { status: "ready", head, branch, files };
+    const excerpt = await git.excerpt(
       [...diffArgs, "--patch", base, "--", ...pathArgs],
       path === undefined ? CHANGES_INITIAL_PATCH_BYTES : CHANGES_FILE_PATCH_BYTES,
     );
-    return { status: "ready", head, branch, files, diff: patch.text, truncated: patch.truncated };
+    return {
+      status: "ready",
+      head,
+      branch,
+      files,
+      diff: excerpt.text,
+      truncated: excerpt.truncated,
+    };
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -157,22 +176,21 @@ export const WorkspaceChangesLive = Layer.effect(
   Effect.gen(function* () {
     // Expanding many files must not spawn an unbounded number of Git processes/index copies.
     const slots = yield* Semaphore.make(4);
+    const changes = {
+      slots,
+      limit: 16 * 1024 * 1024,
+      writes: "index",
+      messages: {
+        root: "Changes requires the Git checkout root.",
+        limit: "Git metadata exceeds 16 MiB; no partial file list is shown.",
+        path: () => "Unsupported repository path (including embedded repositories).",
+      },
+    } as const;
     return WorkspaceChanges.of({
       preview: (workspace, path) =>
-        observeCheckout(
-          workspace,
-          {
-            slots,
-            limit: 16 * 1024 * 1024,
-            writes: "index",
-            messages: {
-              root: "Changes requires the Git checkout root.",
-              limit: "Git metadata exceeds 16 MiB; no partial file list is shown.",
-              path: () => "Unsupported repository path (including embedded repositories).",
-            },
-          },
-          (checkout) => preview(checkout, path),
-        ),
+        observeCheckout(workspace, changes, (checkout) => preview(checkout, path, true)),
+      summary: (workspace) =>
+        observeCheckout(workspace, changes, (checkout) => preview(checkout, undefined, false)),
       written: (workspace, paths) =>
         observeCheckout(
           workspace,

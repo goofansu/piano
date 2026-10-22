@@ -106,6 +106,7 @@ const settle = (last) => {
       content: [{ type: "text", text: `echo: ${text}` }],
       model: model.id,
       provider: model.provider,
+      stopReason: "stop",
       timestamp: Date.now(),
     };
     out({ type: "agent_start" });
@@ -710,6 +711,8 @@ function handle(cmd) {
         content: [{ type: "text", text }],
         model: model.id,
         provider: model.provider,
+        // Pi ends every finished reply with its stop reason; a reply without one is still being written.
+        stopReason: "stop",
         timestamp: Date.now(),
       };
       if (cmd.message === "identity files")

@@ -1163,7 +1163,11 @@ test("a dispatch into a new worktree names its branch, and a status read reports
   } satisfies StartToolResult);
   const wait = call("w", "piano_wait_sessions", { sessions: [handle] } satisfies WaitArguments);
   const status = call("q", "piano_session_status", { sessionId: "child-a" });
-  const read = (needs: SessionStatus["needs"], lastAnswer: string | null) =>
+  const read = (
+    needs: SessionStatus["needs"],
+    lastAnswer: string | null,
+    changes: SessionStatus["changes"] = { branch: "task-a", files: 2, pullRequest: null },
+  ) =>
     result("q", {
       sessionId: "child-a",
       cwd: handle.cwd,
@@ -1172,7 +1176,7 @@ test("a dispatch into a new worktree names its branch, and a status read reports
       since: "2026-10-21T00:00:00.000Z",
       needs,
       lastAnswer,
-      changes: { branch: "task-a", files: 2, pullRequest: null },
+      changes,
       link: "http://x/s/child-a",
     } satisfies SessionStatus);
   const dispatch = (messages: RenderMsg[], id: string) =>
@@ -1207,6 +1211,17 @@ test("a dispatch into a new worktree names its branch, and a status read reports
     [settled?.sessionId, settled?.title, settled?.status, settled?.answer],
     ["child-a", "Session", "Finished", "Fixed."],
     "a session this transcript did not start is still named by its ID's row",
+  );
+  const detached = { branch: null, files: 0, pullRequest: null };
+  assert.equal(
+    dispatch([start, started, status, read(null, "Fixed.", detached)], "q")?.branch,
+    "Detached HEAD",
+    "a checkout Git lists on no branch is labelled as Changes labels it, not by the dispatched branch",
+  );
+  assert.equal(
+    dispatch([start, started, status, read(null, "Fixed.", null)], "q")?.branch,
+    "task-a",
+    "outside a Git checkout the dispatched branch still names the row",
   );
   assert.equal(
     dispatch([status, { ...read(null, null), text: "Piano lists no session child-a." }], "q"),

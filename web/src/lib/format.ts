@@ -103,3 +103,6 @@ export function timeAgo(iso: string, now: number): string {
     if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
   return "just now";
 }
+
+/** How a checkout Git lists on no branch is named wherever a branch label would be. */
+export const DETACHED_HEAD = "Detached HEAD";
