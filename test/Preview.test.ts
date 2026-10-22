@@ -126,6 +126,20 @@ for (const [platform, name] of supervisors) {
     assert.equal(status.instanceId, third.instanceId);
   });
 
+  contract("an invalid replacement timeout leaves the current instance untouched", async (t) => {
+    const f = await fixture(t);
+    const first = observation(await f.call());
+    await assert.rejects(
+      f.call({ replace: first.instanceId, timeoutSeconds: 0 }),
+      /timeoutSeconds must be between 1 and 30/,
+    );
+    assert.equal(f.stops.length, 0);
+    assert.equal(f.launched.length, 1);
+    const current = observation(await f.call({ action: "status" }));
+    assert.equal(current.instanceId, first.instanceId);
+    assert.equal(current.state, first.state);
+  });
+
   contract(
     "a bare executable resolves on the app's PATH; an unknown one launches nothing",
     async (t) => {
