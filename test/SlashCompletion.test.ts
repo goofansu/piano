@@ -6,7 +6,7 @@ import {
   commandToken,
   completionRange,
   initialSlashState,
-  rankSkills,
+  rankCommands,
   type SlashKey,
   type SlashState,
   type SlashView,
@@ -41,26 +41,42 @@ test("marks the leading token only while it still names the accepted command", (
   assert.equal(commandToken("/skill:review", undefined), null);
 });
 
-test("offers skills only, prefix matches before substring matches, ignoring case", () => {
-  const ranked = rankSkills(
+test("offers skills and templates, prefix matches on the typed name first, ignoring case", () => {
+  const ranked = rankCommands(
     [
       skill("skill:preview"),
       { name: "review", source: "prompt" },
       { name: "skill:reviewer", source: "extension" },
       skill("skill:Review"),
+      { name: "prev", source: "prompt" },
       skill("skill:commit"),
     ],
     "REV",
   );
   assert.deepEqual(
     ranked.map((command) => command.name),
-    ["skill:Review", "skill:preview"],
+    ["review", "skill:Review", "prev", "skill:preview"],
+  );
+});
+
+test("does not offer a template shadowed by an earlier command of the same name", () => {
+  const ranked = rankCommands(
+    [
+      { name: "handled", source: "extension" },
+      { name: "handled", source: "prompt" },
+      { name: "review", source: "prompt" },
+    ],
+    "",
+  );
+  assert.deepEqual(
+    ranked.map((command) => command.name),
+    ["review"],
   );
 });
 
 test("offers at most fifty suggestions", () => {
   const many = Array.from({ length: 60 }, (_, i) => skill(`skill:s${String(i).padStart(2, "0")}`));
-  const ranked = rankSkills(many, "");
+  const ranked = rankCommands(many, "");
   assert.equal(ranked.length, 50);
   assert.equal(ranked[0]?.name, "skill:s00");
   assert.equal(ranked[49]?.name, "skill:s49");

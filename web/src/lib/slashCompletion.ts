@@ -47,21 +47,25 @@ export function commandToken(
 }
 
 /**
- * Skills whose name contains the query, those whose name without `skill:` starts with it first,
- * then by name, capped at {@link MAX_SUGGESTIONS}.
+ * Skills and prompt templates whose name contains the query, those whose name without `skill:`
+ * starts with it first, then by that name, capped at {@link MAX_SUGGESTIONS}. `commands` is in
+ * invocation precedence, so a name runs its first entry: a template shadowed by an extension is not
+ * offered. Extension commands stay executable when typed but are not offered.
  */
-export function rankSkills(commands: readonly SlashCommand[], query: string): SlashCommand[] {
+export function rankCommands(commands: readonly SlashCommand[], query: string): SlashCommand[] {
   const needle = query.toLowerCase();
-  const rank = (command: SlashCommand) =>
-    command.name
-      .replace(/^skill:/, "")
-      .toLowerCase()
-      .startsWith(needle)
-      ? 0
-      : 1;
-  return commands
-    .filter((command) => command.source === "skill" && command.name.toLowerCase().includes(needle))
-    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  const bare = (command: SlashCommand) => command.name.replace(/^skill:/, "").toLowerCase();
+  const rank = (command: SlashCommand) => (bare(command).startsWith(needle) ? 0 : 1);
+  const invoked = new Map<string, SlashCommand>();
+  for (const command of commands)
+    if (!invoked.has(command.name)) invoked.set(command.name, command);
+  return [...invoked.values()]
+    .filter(
+      (command) => command.source !== "extension" && command.name.toLowerCase().includes(needle),
+    )
+    .sort(
+      (a, b) => rank(a) - rank(b) || bare(a).localeCompare(bare(b)) || a.name.localeCompare(b.name),
+    )
     .slice(0, MAX_SUGGESTIONS);
 }
 

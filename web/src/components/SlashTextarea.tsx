@@ -15,7 +15,7 @@ import {
   commandToken,
   completionRange,
   initialSlashState,
-  rankSkills,
+  rankCommands,
   type SlashEvent,
   type SlashView,
   slashAccept,
@@ -132,7 +132,7 @@ export function SlashTextarea({
     : catalog.error
       ? { commands: [], error: catalog.error }
       : undefined;
-  const commands = rankSkills(current?.commands ?? [], range?.query ?? "");
+  const commands = rankCommands(current?.commands ?? [], range?.query ?? "");
   const active = slashActive(state, view, commands.length);
   useLayoutEffect(() => {
     if (open) list.current?.children[active]?.scrollIntoView({ block: "nearest" });
